@@ -9,7 +9,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. MCP Server Foundation | 0/1 | Not started | - |
+| 1. MCP Server Foundation | 0/1 | Planned | 01-01 |
 | 2. Task CRUD + Data Model | 0/1 | Not started | - |
 | 3. Auto-schedule Engine | 0/1 | Not started | - |
 | 4. Testing & Validation | 0/1 | Not started | - |
@@ -36,7 +36,10 @@
 2. Server registers at least one tool visible to MCP client
 3. Server responds to tool calls with proper MCP response format
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Initialize TypeScript project with MCP SDK and stdio transport
 
 ---
 
