@@ -1,0 +1,22 @@
+{
+  "name": "gantt-lib-mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server for Gantt chart management using gantt-lib",
+  "scripts": {
+    "build": "tspc",
+    "start": "node dist/index.js",
+    "dev": "tspc && node dist/index.js"
+  },
+  "keywords": ["mcp", "gantt", "model-context-protocol"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "typescript-esm": "^2.0.0"
+  }
+}
