@@ -4,9 +4,9 @@
   "type": "module",
   "description": "MCP server for Gantt chart management using gantt-lib",
   "scripts": {
-    "build": "tspc",
+    "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tspc && node dist/index.js"
+    "dev": "tsc && node dist/index.js"
   },
   "keywords": ["mcp", "gantt", "model-context-protocol"],
   "author": "",
