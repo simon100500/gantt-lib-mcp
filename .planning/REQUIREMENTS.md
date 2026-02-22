@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### MCP Core
 
-- [ ] **MCP-01**: MCP-сервер инициализируется с @modelcontextprotocol/sdk на TypeScript
-- [ ] **MCP-02**: Сервер запускается через stdio (стандартный MCP transport)
-- [ ] **MCP-03**: Сервер регистрирует tools для операций с задачами
+- [x] **MCP-01**: MCP-сервер инициализируется с @modelcontextprotocol/sdk на TypeScript
+- [x] **MCP-02**: Сервер запускается через stdio (стандартный MCP transport)
+- [x] **MCP-03**: Сервер регистрирует tools для операций с задачами
 
 ### Task Management
 
@@ -71,9 +71,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MCP-01 | Phase 1 | Pending |
-| MCP-02 | Phase 1 | Pending |
-| MCP-03 | Phase 1 | Pending |
+| MCP-01 | Phase 1 | Complete |
+| MCP-02 | Phase 1 | Complete |
+| MCP-03 | Phase 1 | Complete |
 | TASK-01 | Phase 2 | Pending |
 | TASK-02 | Phase 2 | Pending |
 | TASK-03 | Phase 2 | Pending |
