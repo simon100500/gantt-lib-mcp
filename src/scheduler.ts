@@ -98,8 +98,8 @@ export class TaskScheduler {
     const lag = dep.lag || 0;
 
     switch (dep.type) {
-      case 'FS': // Finish-Start: dependent starts when predecessor finishes
-        return { startDate: this.addDays(predecessor.endDate, lag) };
+      case 'FS': // Finish-Start: dependent starts the day after predecessor finishes
+        return { startDate: this.addDays(predecessor.endDate, (lag || 0) + 1) };
       case 'SS': // Start-Start: dependent starts when predecessor starts
         return { startDate: this.addDays(predecessor.startDate, lag) };
       case 'FF': // Finish-Finish: dependent ends when predecessor finishes
@@ -137,8 +137,8 @@ export class TaskScheduler {
       const lag = dep.lag || 0;
 
       switch (dep.type) {
-        case 'FS': // Finish-Start: dependent starts when predecessor finishes
-          return { startDate: this.addDays(predecessor.endDate, lag) };
+        case 'FS': // Finish-Start: dependent starts the day after predecessor finishes
+          return { startDate: this.addDays(predecessor.endDate, (lag || 0) + 1) };
         case 'SS': // Start-Start: dependent starts when predecessor starts
           return { startDate: this.addDays(predecessor.startDate, lag) };
         case 'FF': // Finish-Finish: dependent ends when predecessor finishes
