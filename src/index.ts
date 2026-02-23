@@ -213,6 +213,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['id'],
       },
     },
+    {
+      name: 'export_tasks',
+      description: 'Export all tasks to JSON format',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+    },
+    {
+      name: 'import_tasks',
+      description: 'Import tasks from JSON data (replaces all existing tasks)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          jsonData: {
+            type: 'string',
+            description: 'JSON string containing array of tasks to import',
+          },
+        },
+        required: ['jsonData'],
+      },
+    },
   ],
 }));
 
@@ -441,6 +463,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         },
       ],
     };
+  }
+
+  // export_tasks tool
+  if (name === 'export_tasks') {
+    const json = taskStore.exportTasks();
+    return {
+      content: [
+        {
+          type: 'text',
+          text: json,
+        },
+      ],
+    };
+  }
+
+  // import_tasks tool
+  if (name === 'import_tasks') {
+    const { jsonData } = args as { jsonData: string };
+    if (!jsonData) {
+      throw new Error('Missing required parameter: jsonData');
+    }
+
+    try {
+      const count = taskStore.importTasks(jsonData);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: true, imported: count, message: `Imported ${count} tasks successfully` }, null, 2),
+          },
+        ],
+      };
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${errorMessage}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   throw new Error(`Unknown tool: ${name}`);

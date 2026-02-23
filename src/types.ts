@@ -83,3 +83,19 @@ export interface UpdateTaskInput {
   /** Optional task dependencies */
   dependencies?: TaskDependency[];
 }
+
+/**
+ * Input type for import/export operations
+ */
+export interface FilePathInput {
+  /** File path for export/import */
+  filePath: string;
+}
+
+/**
+ * Input type for import_tasks tool
+ */
+export interface ImportTasksInput {
+  /** JSON string containing array of tasks */
+  jsonData: string;
+}
