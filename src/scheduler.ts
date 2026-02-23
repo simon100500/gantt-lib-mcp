@@ -117,9 +117,10 @@ export class TaskScheduler {
    * Recalculate dates for a task and all dependent tasks (cascade)
    *
    * @param startTaskId - ID of task to start recalculation from
+   * @param skipStartTask - If true, don't recalculate the start task itself (default: false)
    * @returns Map of task IDs to their updated task objects
    */
-  recalculateDates(startTaskId: string): Map<string, Task> {
+  recalculateDates(startTaskId: string, skipStartTask = false): Map<string, Task> {
     const updates = new Map<string, Task>();
     const visited = new Set<string>();
 
@@ -156,7 +157,25 @@ export class TaskScheduler {
       visited.add(taskId);
 
       const task = this.taskStore.get(taskId);
-      if (!task || !task.dependencies || task.dependencies.length === 0) return;
+      if (!task) return;
+
+      // Skip processing the start task itself if requested
+      // (its dates have been explicitly set by the user)
+      if (skipStartTask && taskId === startTaskId) {
+        // Just mark as visited and add to updates, then cascade to downstream tasks
+        updates.set(taskId, task);
+
+        // Find and process all tasks that depend on this one
+        const allTasks = this.taskStore.list();
+        for (const t of allTasks) {
+          if (t.dependencies?.some(d => d.taskId === taskId)) {
+            processTask(t.id);
+          }
+        }
+        return;
+      }
+
+      if (!task.dependencies || task.dependencies.length === 0) return;
 
       // Apply all dependencies, using latest dates
       let newStartDate: string | undefined;

@@ -354,4 +354,69 @@ describe('TaskScheduler', () => {
       assert.strictEqual(updates.size, 0);
     });
   });
+
+  describe('Skip start task option', () => {
+    it('does not recalculate dates of start task when skipStartTask is true', () => {
+      const taskA: Task = {
+        id: '1',
+        name: 'A',
+        startDate: '2026-02-01',
+        endDate: '2026-02-05'
+      };
+      const taskB: Task = {
+        id: '2',
+        name: 'B',
+        startDate: '2026-02-15', // User explicitly moved this
+        endDate: '2026-02-20',
+        dependencies: [{ taskId: '1', type: 'FS' }]
+      };
+      const taskC: Task = {
+        id: '3',
+        name: 'C',
+        startDate: '2026-02-21',
+        endDate: '2026-02-25',
+        dependencies: [{ taskId: '2', type: 'FS' }]
+      };
+
+      const mockStore = createMockStore([taskA, taskB, taskC]);
+      const scheduler = new TaskScheduler(mockStore);
+
+      // When skipStartTask is true, task B's dates should not be recalculated
+      const updates = scheduler.recalculateDates('2', true);
+
+      // B should keep its original dates (not be moved back to A's end)
+      const updatedB = updates.get('2');
+      assert.strictEqual(updatedB?.startDate, '2026-02-15');
+      assert.strictEqual(updatedB?.endDate, '2026-02-20');
+
+      // C should still be recalculated based on B's position
+      const updatedC = updates.get('3');
+      assert.strictEqual(updatedC?.startDate, '2026-02-20'); // Starts when B ends
+    });
+
+    it('recalculates start task dates when skipStartTask is false', () => {
+      const taskA: Task = {
+        id: '1',
+        name: 'A',
+        startDate: '2026-02-01',
+        endDate: '2026-02-05'
+      };
+      const taskB: Task = {
+        id: '2',
+        name: 'B',
+        startDate: '2026-02-15',
+        endDate: '2026-02-20',
+        dependencies: [{ taskId: '1', type: 'FS' }]
+      };
+
+      const mockStore = createMockStore([taskA, taskB]);
+      const scheduler = new TaskScheduler(mockStore);
+
+      // When skipStartTask is false (default), task B's dates are recalculated
+      const updates = scheduler.recalculateDates('2', false);
+
+      // B should be moved back to A's end date
+      assert.strictEqual(updates.get('2')?.startDate, '2026-02-05');
+    });
+  });
 });

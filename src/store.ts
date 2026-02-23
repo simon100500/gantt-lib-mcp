@@ -111,12 +111,85 @@ export class TaskStore {
     // If dates or dependencies changed, recalculate dependent tasks
     const datesChanged = input.startDate !== undefined || input.endDate !== undefined;
     if (datesChanged || dependenciesUpdated) {
-      const updates = this.recalculateTaskDates(id);
+      // If user explicitly changed dates, update lag in dependencies first
+      // and skip recalculating the start task itself
+      const skipStartTask = datesChanged && !dependenciesUpdated;
+
+      if (datesChanged && !dependenciesUpdated && updated.dependencies && updated.dependencies.length > 0) {
+        this.updateLagsForMovedTask(updated, input);
+      }
+
+      const updates = this.recalculateTaskDates(id, skipStartTask);
       // Return the updated task with cascade info
       return this.tasks.get(id);
     }
 
     return updated;
+  }
+
+  /**
+   * Update lag values in dependencies when a task is explicitly moved
+   * @param task - The task that was moved
+   * @param input - The update input containing the new dates
+   */
+  private updateLagsForMovedTask(task: Task, input: UpdateTaskInput): void {
+    if (!task.dependencies) return;
+
+    const newStartDate = input.startDate ?? task.startDate;
+    const newEndDate = input.endDate ?? task.endDate;
+
+    for (let i = 0; i < task.dependencies.length; i++) {
+      const dep = task.dependencies[i];
+      const predecessor = this.get(dep.taskId);
+      if (!predecessor) continue;
+
+      let newLag = dep.lag ?? 0;
+
+      // Calculate new lag based on dependency type
+      switch (dep.type) {
+        case 'FS': {
+          // Task starts after predecessor finishes
+          const currentStart = this.dayDiff(predecessor.endDate, newStartDate);
+          newLag = currentStart;
+          break;
+        }
+        case 'SS': {
+          // Task starts when predecessor starts
+          const currentStart = this.dayDiff(predecessor.startDate, newStartDate);
+          newLag = currentStart;
+          break;
+        }
+        case 'FF': {
+          // Task ends when predecessor ends
+          const currentEnd = this.dayDiff(predecessor.endDate, newEndDate);
+          newLag = currentEnd;
+          break;
+        }
+        case 'SF': {
+          // Task ends when predecessor starts
+          const currentEnd = this.dayDiff(predecessor.startDate, newEndDate);
+          newLag = currentEnd;
+          break;
+        }
+      }
+
+      task.dependencies[i] = { ...dep, lag: newLag };
+    }
+
+    // Update the task with modified dependencies
+    this.tasks.set(task.id, { ...task, dependencies: task.dependencies });
+  }
+
+  /**
+   * Calculate the difference in days between two dates
+   * @param start - Start date string
+   * @param end - End date string
+   * @returns Number of days
+   */
+  private dayDiff(start: string, end: string): number {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    return Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   }
 
   /**
@@ -131,9 +204,10 @@ export class TaskStore {
   /**
    * Recalculate dates for a task and all dependent tasks
    * @param taskId - ID of the task that changed
+   * @param skipStartTask - If true, don't recalculate the start task itself
    * @returns Map of updated task IDs to their new state
    */
-  recalculateTaskDates(taskId: string): Map<string, Task> {
+  recalculateTaskDates(taskId: string, skipStartTask = false): Map<string, Task> {
     // Validate no circular dependencies before recalculation
     const task = this.get(taskId);
     if (!task) {
@@ -149,7 +223,7 @@ export class TaskStore {
     }
 
     // Perform cascading date recalculation
-    const updates = this.scheduler.recalculateDates(taskId);
+    const updates = this.scheduler.recalculateDates(taskId, skipStartTask);
 
     // Apply updates to the store
     for (const [id, updatedTask] of updates.entries()) {
