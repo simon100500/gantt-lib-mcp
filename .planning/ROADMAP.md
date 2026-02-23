@@ -11,14 +11,14 @@
 |-------|----------------|--------|-----------|
 | 1. MCP Server Foundation | 1/1 | Complete | 01-01 |
 | 2. Task CRUD + Data Model | 1/1 | Complete    | 2026-02-22 |
-| 3. Auto-schedule Engine | 1/2 | In Progress | 03-01 |
+| 3. Auto-schedule Engine | 2/2 | Complete | 03-01, 03-02 |
 | 4. Testing & Validation | 0/1 | Not started | - |
 
 ## Phases
 
 - [x] **Phase 1: MCP Server Foundation** - Initialize TypeScript MCP server with stdio transport
 - [x] **Phase 2: Task CRUD + Data Model** - Complete task management with gantt-lib compatible types
-- [ ] **Phase 3: Auto-schedule Engine** - Cascading date recalculation with dependency validation
+- [x] **Phase 3: Auto-schedule Engine** - Cascading date recalculation with dependency validation
 - [ ] **Phase 4: Testing & Validation** - Claude Code CLI integration verification
 
 ## Phase Details
@@ -87,7 +87,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Implement auto-schedule engine with TDD (FS/SS/FF/SF dependencies, cycle detection, validation) (Complete)
-- [ ] 03-02-PLAN.md — Integrate scheduler into TaskStore and MCP tools for automatic recalculation
+- [x] 03-02-PLAN.md — Integrate scheduler into TaskStore and MCP tools for automatic recalculation (Complete)
 
 ---
 
