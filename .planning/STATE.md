@@ -82,6 +82,13 @@ None
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | сделай просто сохранение json | 2026-02-23 | cd4c4f0 | [1-json](./quick/1-json/) |
+| 2 | автосохранение в json файл | 2026-02-23 | d383228 | [2-json](./quick/2-json/) |
+
+### Quick Tasks Pending
+
+| # | Description | Plan |
+|---|-------------|------|
+| 2 | автосохранение в json файл | [2-PLAN.md](./quick/2-json/2-PLAN.md) |
 
 ### Notes
 
@@ -100,8 +107,9 @@ Phase 3 Plan 2 completed: Integrated TaskScheduler into TaskStore and MCP tools.
 
 ### Next Session Actions
 
-1. Execute Phase 4 plan to test MCP server with Claude Code CLI
-2. Verify all tools work end-to-end
+1. Execute Quick Task 2: autosave to JSON file
+2. Execute Phase 4 plan to test MCP server with Claude Code CLI
+3. Verify all tools work end-to-end
 
 ### Context Handoff
 
@@ -110,6 +118,6 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 ---
 
 *STATE initialized: 2026-02-23*
-*Last updated: 2026-02-23 after completing Phase 3 Plan 2*
+*Last updated: 2026-02-23 after creating Quick Task 2 plan*
 
-Last activity: 2026-02-23 - Completed quick task 1: сделай просто сохранение json
+Last activity: 2026-02-23 - Created quick task 2 plan: автосохранение в json файл
