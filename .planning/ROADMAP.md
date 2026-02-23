@@ -11,7 +11,7 @@
 |-------|----------------|--------|-----------|
 | 1. MCP Server Foundation | 1/1 | Complete | 01-01 |
 | 2. Task CRUD + Data Model | 1/1 | Complete    | 2026-02-22 |
-| 3. Auto-schedule Engine | 0/2 | Not started | - |
+| 3. Auto-schedule Engine | 1/2 | In Progress | 03-01 |
 | 4. Testing & Validation | 0/1 | Not started | - |
 
 ## Phases
@@ -86,7 +86,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Implement auto-schedule engine with TDD (FS/SS/FF/SF dependencies, cycle detection, validation)
+- [x] 03-01-PLAN.md — Implement auto-schedule engine with TDD (FS/SS/FF/SF dependencies, cycle detection, validation) (Complete)
 - [ ] 03-02-PLAN.md — Integrate scheduler into TaskStore and MCP tools for automatic recalculation
 
 ---

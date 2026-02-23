@@ -24,10 +24,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Auto-schedule
 
-- [ ] **SCHED-01**: При изменении задачи пересчитываются даты зависимых задач
-- [ ] **SCHED-02**: Поддерживаются все типы зависимостей: FS, SS, FF, SF
-- [ ] **SCHED-03**: Валидация зависимостей обнаруживает циклы
-- [ ] **SCHED-04**: Валидация зависимостей обнаруживает missing task references
+- [x] **SCHED-01**: При изменении задачи пересчитываются даты зависимых задач
+- [x] **SCHED-02**: Поддерживаются все типы зависимостей: FS, SS, FF, SF
+- [x] **SCHED-03**: Валидация зависимостей обнаруживает циклы
+- [x] **SCHED-04**: Валидация зависимостей обнаруживает missing task references
 
 ### Data Model
 
@@ -80,10 +80,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TASK-04 | Phase 2 | Complete |
 | TASK-05 | Phase 2 | Complete |
 | TASK-06 | Phase 2 | Complete |
-| SCHED-01 | Phase 3 | Pending |
-| SCHED-02 | Phase 3 | Pending |
-| SCHED-03 | Phase 3 | Pending |
-| SCHED-04 | Phase 3 | Pending |
+| SCHED-01 | Phase 3 | Complete |
+| SCHED-02 | Phase 3 | Complete |
+| SCHED-03 | Phase 3 | Complete |
+| SCHED-04 | Phase 3 | Complete |
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after roadmap creation*
+*Last updated: 2026-02-23 after completing Phase 3 Plan 1*
