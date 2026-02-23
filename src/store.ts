@@ -232,6 +232,43 @@ export class TaskStore {
 
     return updates;
   }
+
+  /**
+   * Export all tasks to JSON format
+   * @returns JSON string of all tasks
+   */
+  exportTasks(): string {
+    const tasks = Array.from(this.tasks.values());
+    return JSON.stringify(tasks, null, 2);
+  }
+
+  /**
+   * Import tasks from JSON data (replaces all existing tasks)
+   * @param jsonData - JSON string containing array of tasks
+   * @returns Number of tasks imported
+   */
+  importTasks(jsonData: string): number {
+    let tasks: Task[];
+    try {
+      tasks = JSON.parse(jsonData) as Task[];
+    } catch (e) {
+      throw new Error(`Invalid JSON data: ${(e as Error).message}`);
+    }
+
+    if (!Array.isArray(tasks)) {
+      throw new Error('Import data must be an array of tasks');
+    }
+
+    // Clear existing tasks
+    this.tasks.clear();
+
+    // Import each task
+    for (const task of tasks) {
+      this.tasks.set(task.id, task);
+    }
+
+    return tasks.length;
+  }
 }
 
 /**
