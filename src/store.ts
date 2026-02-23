@@ -2,9 +2,10 @@
  * In-memory task storage for MCP server
  *
  * Uses Map-based storage for task CRUD operations.
- * Per STATE.md decision: In-memory only, no file persistence.
+ * Supports optional autosave to JSON file for persistence.
  */
 
+import * as fs from 'node:fs/promises';
 import { Task, CreateTaskInput, UpdateTaskInput } from './types.js';
 import { TaskScheduler } from './scheduler.js';
 
@@ -14,10 +15,74 @@ import { TaskScheduler } from './scheduler.js';
 export class TaskStore {
   private tasks: Map<string, Task>;
   private scheduler: TaskScheduler;
+  private autoSavePath: string | null = null;
+  private savePromise: Promise<void> | null = null;
 
   constructor() {
     this.tasks = new Map();
     this.scheduler = new TaskScheduler(this);
+  }
+
+  /**
+   * Configure autosave path and load existing data if file exists
+   * @param path - File path for autosave (e.g., './gantt-data.json')
+   */
+  setAutoSavePath(path: string): void {
+    this.autoSavePath = path;
+    // Load existing data if file exists
+    this.loadFromFile().catch(err => {
+      console.error(`Failed to load from file: ${err.message}`);
+    });
+  }
+
+  /**
+   * Save current tasks to JSON file asynchronously
+   * Errors are logged but don't break operations
+   */
+  private async saveToFile(): Promise<void> {
+    if (!this.autoSavePath) return;
+
+    // Wait for any pending save to complete
+    if (this.savePromise) {
+      await this.savePromise;
+    }
+
+    // Queue the save operation
+    this.savePromise = (async () => {
+      try {
+        const json = this.exportTasks();
+        if (this.autoSavePath) {
+          await fs.writeFile(this.autoSavePath, json, 'utf-8');
+        }
+      } catch (error) {
+        const err = error as Error;
+        console.error(`Failed to save tasks to ${this.autoSavePath}:`, err.message);
+      } finally {
+        this.savePromise = null;
+      }
+    })();
+
+    await this.savePromise;
+  }
+
+  /**
+   * Load tasks from JSON file
+   * Silently ignores if file doesn't exist
+   */
+  private async loadFromFile(): Promise<void> {
+    if (!this.autoSavePath) return;
+
+    try {
+      const json = await fs.readFile(this.autoSavePath, 'utf-8');
+      this.importTasks(json);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === 'ENOENT') {
+        // File doesn't exist yet, silently ignore
+        return;
+      }
+      console.error(`Failed to load tasks from ${this.autoSavePath}:`, err.message);
+    }
   }
 
   /**
@@ -54,6 +119,11 @@ export class TaskStore {
         this.tasks.set(updateId, updatedTask);
       }
     }
+
+    // Autosave after creating task
+    this.saveToFile().catch(err => {
+      console.error(`Failed to autosave after create: ${err.message}`);
+    });
 
     return task;
   }
@@ -120,9 +190,20 @@ export class TaskStore {
       }
 
       const updates = this.recalculateTaskDates(id, skipStartTask);
+
+      // Autosave after updating task
+      this.saveToFile().catch(err => {
+        console.error(`Failed to autosave after update: ${err.message}`);
+      });
+
       // Return the updated task with cascade info
       return this.tasks.get(id);
     }
+
+    // Autosave after updating task (even if no date/dependency changes)
+    this.saveToFile().catch(err => {
+      console.error(`Failed to autosave after update: ${err.message}`);
+    });
 
     return updated;
   }
@@ -197,8 +278,15 @@ export class TaskStore {
    * @param id - Task ID
    * @returns true if deleted, false if not found
    */
-  delete(id: string): boolean {
-    return this.tasks.delete(id);
+  async delete(id: string): Promise<boolean> {
+    const deleted = this.tasks.delete(id);
+
+    if (deleted) {
+      // Autosave after deleting task
+      await this.saveToFile();
+    }
+
+    return deleted;
   }
 
   /**
