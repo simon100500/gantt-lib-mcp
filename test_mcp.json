@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_task","arguments":{"name":"Test Task","startDate":"2026-02-23","endDate":"2026-02-25"}}}
