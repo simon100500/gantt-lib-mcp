@@ -8,11 +8,16 @@
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js"
   },
-  "keywords": ["mcp", "gantt", "model-context-protocol"],
+  "keywords": [
+    "mcp",
+    "gantt",
+    "model-context-protocol"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4"
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^17.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
