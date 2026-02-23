@@ -52,10 +52,10 @@ describe('TaskScheduler', () => {
       // When we recalculate dates for task B
       const updates = scheduler.recalculateDates('2');
 
-      // B should start at '2026-02-05' (A's end date)
-      assert.strictEqual(updates.get('2')?.startDate, '2026-02-05');
+      // B should start at '2026-02-06' (A's end date + 1 day)
+      assert.strictEqual(updates.get('2')?.startDate, '2026-02-06');
       // Duration should be preserved (4 days)
-      assert.strictEqual(updates.get('2')?.endDate, '2026-02-09');
+      assert.strictEqual(updates.get('2')?.endDate, '2026-02-10');
     });
   });
 
@@ -158,8 +158,8 @@ describe('TaskScheduler', () => {
 
       const updates = scheduler.recalculateDates('2');
 
-      // B should start at '2026-02-12' (A's end + 2 days)
-      assert.strictEqual(updates.get('2')?.startDate, '2026-02-12');
+      // B should start at '2026-02-13' (A's end + 1 + 2 lag days)
+      assert.strictEqual(updates.get('2')?.startDate, '2026-02-13');
     });
   });
 
@@ -194,11 +194,11 @@ describe('TaskScheduler', () => {
 
       // B should be updated
       assert.strictEqual(updates.has('2'), true);
-      assert.strictEqual(updates.get('2')?.startDate, '2026-02-05');
+      assert.strictEqual(updates.get('2')?.startDate, '2026-02-06');
 
       // C should also be updated (cascade through B)
       assert.strictEqual(updates.has('3'), true);
-      assert.strictEqual(updates.get('3')?.startDate, '2026-02-09');
+      assert.strictEqual(updates.get('3')?.startDate, '2026-02-11');
     });
   });
 
@@ -303,8 +303,8 @@ describe('TaskScheduler', () => {
 
       const updates = scheduler.recalculateDates('3');
 
-      // C should start at '2026-02-15' (later of A's end and B's end)
-      assert.strictEqual(updates.get('3')?.startDate, '2026-02-15');
+      // C should start at '2026-02-16' (later of A's end+1 and B's end+1)
+      assert.strictEqual(updates.get('3')?.startDate, '2026-02-16');
     });
   });
 
@@ -391,7 +391,7 @@ describe('TaskScheduler', () => {
 
       // C should still be recalculated based on B's position
       const updatedC = updates.get('3');
-      assert.strictEqual(updatedC?.startDate, '2026-02-20'); // Starts when B ends
+      assert.strictEqual(updatedC?.startDate, '2026-02-21'); // Starts when B ends + 1
     });
 
     it('recalculates start task dates when skipStartTask is false', () => {
@@ -415,8 +415,8 @@ describe('TaskScheduler', () => {
       // When skipStartTask is false (default), task B's dates are recalculated
       const updates = scheduler.recalculateDates('2', false);
 
-      // B should be moved back to A's end date
-      assert.strictEqual(updates.get('2')?.startDate, '2026-02-05');
+      // B should be moved back to A's end date + 1
+      assert.strictEqual(updates.get('2')?.startDate, '2026-02-06');
     });
   });
 });
