@@ -7,6 +7,7 @@ import {
 import { taskStore } from './store.js';
 import { TaskScheduler } from './scheduler.js';
 import type { Task, CreateTaskInput, UpdateTaskInput } from './types.js';
+import { getAutoSavePath } from './config.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -543,7 +544,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Start server with stdio transport
 async function main() {
   // Check for default autosave path from environment variable
-  const defaultPath = process.env.GANTT_AUTOSAVE_PATH || null;
+  const defaultPath = getAutoSavePath();
   if (defaultPath) {
     taskStore.setAutoSavePath(defaultPath);
   }
