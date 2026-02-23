@@ -70,7 +70,7 @@ Each task was committed atomically following TDD workflow:
 1. **Task 1: Create scheduler test file with failing tests** - `7eb2d7c` (test)
 2. **Task 2: Implement TaskScheduler class to pass tests** - `6579f95` (feat)
 
-**Plan metadata:** (pending - docs commit to follow)
+**Plan metadata:** `97a0edd` (docs)
 
 _Note: TDD workflow included RED (failing tests) and GREEN (implementation) phases. No refactoring was needed as implementation was clean._
 
