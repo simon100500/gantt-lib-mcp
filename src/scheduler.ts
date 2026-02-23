@@ -1,0 +1,232 @@
+/**
+ * Auto-schedule engine for Gantt chart task dependencies
+ *
+ * Implements cascading date recalculation with support for all four
+ * gantt-lib dependency types: FS, SS, FF, SF with circular dependency
+ * detection and missing task validation.
+ */
+
+import { Task, TaskDependency, DependencyType } from './types.js';
+
+/**
+ * Task store interface for dependency resolution
+ */
+interface TaskStore {
+  get(id: string): Task | undefined;
+  list(): Task[];
+}
+
+/**
+ * Result of applying a single dependency
+ */
+interface DateCalculation {
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * TaskScheduler provides automatic date recalculation based on task dependencies.
+ *
+ * Supports all four gantt-lib dependency types:
+ * - FS (Finish-Start): dependent starts when predecessor finishes
+ * - SS (Start-Start): dependent starts when predecessor starts
+ * - FF (Finish-Finish): dependent finishes when predecessor finishes
+ * - SF (Start-Finish): dependent finishes when predecessor starts
+ */
+export class TaskScheduler {
+  constructor(private taskStore: TaskStore) {}
+
+  /**
+   * Validate all dependency references exist
+   * @throws Error if any dependency references a non-existent task
+   */
+  validateDependencies(task: Task): void {
+    if (!task.dependencies) return;
+    for (const dep of task.dependencies) {
+      if (!this.taskStore.get(dep.taskId)) {
+        throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
+      }
+    }
+  }
+
+  /**
+   * Detect circular dependencies using DFS traversal
+   * @param taskId - Task ID to start detection from
+   * @param visited - Set of visited task IDs (for external use)
+   * @param recStack - Recursion stack for cycle detection (internal)
+   * @param path - Current path for error message (internal)
+   * @returns true if circular dependency detected
+   * @throws Error if circular dependency is detected
+   */
+  detectCycle(
+    taskId: string,
+    visited = new Set<string>(),
+    recStack = new Set<string>(),
+    path: string[] = []
+  ): boolean {
+    visited.add(taskId);
+    recStack.add(taskId);
+    path.push(taskId);
+
+    const task = this.taskStore.get(taskId);
+    if (task?.dependencies) {
+      for (const dep of task.dependencies) {
+        if (!visited.has(dep.taskId)) {
+          if (this.detectCycle(dep.taskId, visited, recStack, [...path])) return true;
+        } else if (recStack.has(dep.taskId)) {
+          // Cycle detected - throw error
+          const cyclePath = [...path, dep.taskId].join(' -> ');
+          throw new Error(`Circular dependency detected: ${cyclePath}`);
+        }
+      }
+    }
+
+    recStack.delete(taskId);
+    return false;
+  }
+
+  /**
+   * Calculate new dates based on a single dependency
+   * @param task - Task being calculated
+   * @param dep - Dependency to apply
+   * @returns Date calculation result
+   */
+  private applyDependency(task: Task, dep: TaskDependency): DateCalculation {
+    const predecessor = this.taskStore.get(dep.taskId);
+    if (!predecessor) throw new Error(`Task not found: ${dep.taskId}`);
+
+    const lag = dep.lag || 0;
+
+    switch (dep.type) {
+      case 'FS': // Finish-Start: dependent starts when predecessor finishes
+        return { startDate: this.addDays(predecessor.endDate, lag) };
+      case 'SS': // Start-Start: dependent starts when predecessor starts
+        return { startDate: this.addDays(predecessor.startDate, lag) };
+      case 'FF': // Finish-Finish: dependent ends when predecessor finishes
+        return { endDate: this.addDays(predecessor.endDate, lag) };
+      case 'SF': // Start-Finish: dependent ends when predecessor starts
+        return { endDate: this.addDays(predecessor.startDate, lag) };
+      default:
+        // Validate dependency type at compile time
+        const _exhaustiveCheck: never = dep.type;
+        throw new Error(`Unknown dependency type: ${_exhaustiveCheck}`);
+    }
+  }
+
+  /**
+   * Recalculate dates for a task and all dependent tasks (cascade)
+   *
+   * @param startTaskId - ID of task to start recalculation from
+   * @returns Map of task IDs to their updated task objects
+   */
+  recalculateDates(startTaskId: string): Map<string, Task> {
+    const updates = new Map<string, Task>();
+    const visited = new Set<string>();
+
+    // Helper to get task (prefer updates over original store)
+    const getTask = (id: string): Task | undefined => {
+      return updates.get(id) || this.taskStore.get(id);
+    };
+
+    // Helper to apply dependency with access to updates map
+    const applyDependencyWithUpdates = (task: Task, dep: TaskDependency): DateCalculation => {
+      const predecessor = getTask(dep.taskId);
+      if (!predecessor) throw new Error(`Task not found: ${dep.taskId}`);
+
+      const lag = dep.lag || 0;
+
+      switch (dep.type) {
+        case 'FS': // Finish-Start: dependent starts when predecessor finishes
+          return { startDate: this.addDays(predecessor.endDate, lag) };
+        case 'SS': // Start-Start: dependent starts when predecessor starts
+          return { startDate: this.addDays(predecessor.startDate, lag) };
+        case 'FF': // Finish-Finish: dependent ends when predecessor finishes
+          return { endDate: this.addDays(predecessor.endDate, lag) };
+        case 'SF': // Start-Finish: dependent ends when predecessor starts
+          return { endDate: this.addDays(predecessor.startDate, lag) };
+        default:
+          // Validate dependency type at compile time
+          const _exhaustiveCheck: never = dep.type;
+          throw new Error(`Unknown dependency type: ${_exhaustiveCheck}`);
+      }
+    };
+
+    const processTask = (taskId: string): void => {
+      if (visited.has(taskId)) return;
+      visited.add(taskId);
+
+      const task = this.taskStore.get(taskId);
+      if (!task || !task.dependencies || task.dependencies.length === 0) return;
+
+      // Apply all dependencies, using latest dates
+      let newStartDate: string | undefined;
+      let newEndDate: string | undefined;
+
+      for (const dep of task.dependencies) {
+        const result = applyDependencyWithUpdates(task, dep);
+        if (result.startDate) {
+          newStartDate = newStartDate
+            ? (result.startDate > newStartDate ? result.startDate : newStartDate)
+            : result.startDate;
+        }
+        if (result.endDate) {
+          newEndDate = newEndDate
+            ? (result.endDate > newEndDate ? result.endDate : newEndDate)
+            : result.endDate;
+        }
+      }
+
+      // Calculate duration to preserve if only start/end changes
+      const originalDuration = this.dayDiff(task.startDate, task.endDate);
+      let updatedTask: Task = { ...task };
+
+      if (newStartDate && newStartDate !== task.startDate) {
+        updatedTask.startDate = newStartDate;
+        if (!newEndDate) {
+          // Preserve duration
+          updatedTask.endDate = this.addDays(newStartDate, originalDuration);
+        }
+      }
+      if (newEndDate) {
+        updatedTask.endDate = newEndDate;
+      }
+
+      updates.set(taskId, updatedTask);
+
+      // Find and process all tasks that depend on this one
+      const allTasks = this.taskStore.list();
+      for (const t of allTasks) {
+        if (t.dependencies?.some(d => d.taskId === taskId)) {
+          processTask(t.id);
+        }
+      }
+    };
+
+    processTask(startTaskId);
+    return updates;
+  }
+
+  /**
+   * Calculate the difference in days between two dates
+   * @param start - Start date string
+   * @param end - End date string
+   * @returns Number of days (inclusive)
+   */
+  private dayDiff(start: string, end: string): number {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    return Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  /**
+   * Add days to a date string
+   * @param date - Date string in YYYY-MM-DD format
+   * @param days - Number of days to add (can be negative)
+   * @returns New date string in YYYY-MM-DD format
+   */
+  private addDays(date: string, days: number): string {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  }
+}
