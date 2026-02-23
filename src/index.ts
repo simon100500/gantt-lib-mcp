@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { taskStore } from './store.js';
+import { TaskScheduler } from './scheduler.js';
 import type { Task, CreateTaskInput, UpdateTaskInput } from './types.js';
 
 // Create MCP server instance
@@ -259,11 +260,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const task = taskStore.create(input);
+
+    // Return the task with cascade info
+    const allTasks = taskStore.list();
+    const dependentTasks = allTasks.filter(t =>
+      t.dependencies?.some(d => d.taskId === task.id) ||
+      task.dependencies?.some(d => d.taskId === t.id)
+    );
+
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(task, null, 2),
+          text: JSON.stringify({
+            task,
+            message: 'Task created successfully',
+            affectedTasks: dependentTasks.length
+          }, null, 2),
         },
       ],
     };
@@ -354,9 +367,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
+    const existingTaskForCascade = taskStore.get(id);
+    const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
+    const hasDependencyChanges = input.dependencies !== undefined;
+
     const updatedTask = taskStore.update(id, input);
     if (!updatedTask) {
       throw new Error(`Task not found: ${id}`);
+    }
+
+    // If dates or dependencies changed, show what was affected
+    if (hasDateChanges || hasDependencyChanges) {
+      const allTasks = taskStore.list();
+
+      // Find all tasks that were affected by the cascade
+      // Tasks that depend on this one directly or indirectly
+      const affectedTasks = allTasks.filter(t => {
+        if (t.id === id) return false;
+        // Simple heuristic: check if task appears after this one in any dependency chain
+        // (In production, you'd track this more precisely)
+        return t.dependencies?.some(d => {
+          const depTask = taskStore.get(d.taskId);
+          return depTask && (
+            depTask.id === id ||
+            depTask.dependencies?.some(dd => dd.taskId === id)
+          );
+        });
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              task: updatedTask,
+              message: 'Task updated successfully',
+              affectedTasks: affectedTasks.length,
+              affectedTaskIds: affectedTasks.map(t => t.id),
+              allTasks
+            }, null, 2),
+          },
+        ],
+      };
     }
 
     return {
