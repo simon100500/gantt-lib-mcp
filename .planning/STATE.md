@@ -45,6 +45,7 @@
 
 ---
 | Phase 03 P02 | 12 min | 2 tasks | 2 files |
+| Phase quick-4 P4 | 1 minute | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,7 @@ None
 | 1 | сделай просто сохранение json | 2026-02-23 | cd4c4f0 | [1-json](./quick/1-json/) |
 | 2 | автосохранение в json файл | 2026-02-23 | dfb01ee, dc9a1e6 | [2-json](./quick/2-json/) |
 | 3 | Add .env file support | 2026-02-23 | 08e1d68, 3dd3d91 | [3-add-env-support](./quick/3-add-env-support/) |
+| 4 | Fix FS dependency date overlap | 2026-02-24 | 544f428, b21608b | [4-fix-fs-dependency-date-overlap-when-task](./quick/4-fix-fs-dependency-date-overlap-when-task/) |
 
 ### Quick Tasks Pending
 
@@ -121,6 +123,6 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 ---
 
 *STATE initialized: 2026-02-23*
-*Last updated: 2026-02-23 after completing Quick Task 3*
+*Last updated: 2026-02-24 after completing Quick Task 4*
 
-Last activity: 2026-02-23 - Completed quick task 3: Add .env file support (dotenv integration with centralized config module)
+Last activity: 2026-02-24 - Completed quick task 4: Fix FS dependency date overlap (added +1 day offset to prevent visual overlap on Gantt charts)
