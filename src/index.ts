@@ -235,6 +235,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['jsonData'],
       },
     },
+    {
+      name: 'set_autosave_path',
+      description: 'Enable automatic saving of tasks to a JSON file. If no path provided, uses ./gantt-data.json. Loads existing data if file exists.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          filePath: {
+            type: 'string',
+            description: 'Optional file path for autosave (default: ./gantt-data.json)',
+          },
+        },
+      },
+    },
   ],
 }));
 
@@ -509,11 +522,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
+  // set_autosave_path tool
+  if (name === 'set_autosave_path') {
+    const { filePath } = args as { filePath?: string };
+    const path = filePath || './gantt-data.json';
+    taskStore.setAutoSavePath(path);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ success: true, autoSavePath: path, message: `Autosave enabled: ${path}` }, null, 2),
+        },
+      ],
+    };
+  }
+
   throw new Error(`Unknown tool: ${name}`);
 });
 
 // Start server with stdio transport
 async function main() {
+  // Check for default autosave path from environment variable
+  const defaultPath = process.env.GANTT_AUTOSAVE_PATH || null;
+  if (defaultPath) {
+    taskStore.setAutoSavePath(defaultPath);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Server runs via stdio, no explicit listen needed

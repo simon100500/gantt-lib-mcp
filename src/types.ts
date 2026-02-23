@@ -99,3 +99,11 @@ export interface ImportTasksInput {
   /** JSON string containing array of tasks */
   jsonData: string;
 }
+
+/**
+ * Input type for set_autosave_path tool
+ */
+export interface AutoSaveInput {
+  /** Optional file path for autosave (default: ./gantt-data.json) */
+  filePath?: string;
+}
