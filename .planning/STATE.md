@@ -126,3 +126,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *Last updated: 2026-02-24 after completing Quick Task 4*
 
 Last activity: 2026-02-24 - Completed quick task 4: Fix FS dependency date overlap (added +1 day offset to prevent visual overlap on Gantt charts)
+
+### Roadmap Evolution
+
+- Phase 5 added: batch-tasks Сделать пакетное добавление работ (например, сразу на несколько этажей или секций), особенно связанных один за другим

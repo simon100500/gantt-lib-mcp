@@ -1,0 +1,86 @@
+[
+  {
+    "id": "881e526d-4f8f-4c68-9040-9f860a7b4def",
+    "name": "Фундамент",
+    "startDate": "2026-03-01",
+    "endDate": "2026-03-06",
+    "color": "#8b5cf6",
+    "progress": 0,
+    "dependencies": []
+  },
+  {
+    "id": "984b8b87-7f5f-4669-9cdf-b9517d6ee239",
+    "name": "Возведение стен",
+    "startDate": "2026-03-07",
+    "endDate": "2026-03-14",
+    "color": "#3b82f6",
+    "progress": 0,
+    "dependencies": [
+      {
+        "lag": 0,
+        "taskId": "881e526d-4f8f-4c68-9040-9f860a7b4def",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "8b978622-268f-433d-931f-02652fd01d8c",
+    "name": "Кровля",
+    "startDate": "2026-03-15",
+    "endDate": "2026-03-20",
+    "color": "#ef4444",
+    "progress": 0,
+    "dependencies": [
+      {
+        "lag": 0,
+        "taskId": "984b8b87-7f5f-4669-9cdf-b9517d6ee239",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "6ab16405-3862-436f-ad4f-4feb9a52c6ad",
+    "name": "Окна и двери",
+    "startDate": "2026-03-21",
+    "endDate": "2026-03-24",
+    "color": "#10b981",
+    "progress": 0,
+    "dependencies": [
+      {
+        "lag": 0,
+        "taskId": "8b978622-268f-433d-931f-02652fd01d8c",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "8e11da40-1028-4c4f-b6da-f217528aa4fa",
+    "name": "Внутренняя отделка",
+    "startDate": "2026-03-25",
+    "endDate": "2026-03-31",
+    "color": "#f59e0b",
+    "progress": 0,
+    "dependencies": [
+      {
+        "lag": 0,
+        "taskId": "6ab16405-3862-436f-ad4f-4feb9a52c6ad",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "dc1e69ae-60f7-47f2-ab6a-899a1f86d85a",
+    "name": "Сдача объекта",
+    "startDate": "2026-03-31",
+    "endDate": "2026-03-31",
+    "color": "#06b6d4",
+    "progress": 0,
+    "dependencies": [
+      {
+        "lag": 0,
+        "taskId": "8e11da40-1028-4c4f-b6da-f217528aa4fa",
+        "type": "FS"
+      }
+    ]
+  }
+]

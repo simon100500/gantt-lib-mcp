@@ -138,5 +138,14 @@ Phase 4 (Testing & Validation)
 **No orphaned requirements.**
 **No duplicates.**
 
+### Phase 5: batch-tasks Сделать пакетное добавление работ (например, сразу на несколько этажей или секций), особенно связанных один за другим
+
+**Goal:** [To be planned]
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 5 to break down)
+
 ---
 *Roadmap created: 2026-02-23*
