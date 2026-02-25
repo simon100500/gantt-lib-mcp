@@ -13,7 +13,7 @@
 | 2. Task CRUD + Data Model | 1/1 | Complete    | 2026-02-22 |
 | 3. Auto-schedule Engine | 2/2 | Complete | 03-01, 03-02 |
 | 4. Testing & Validation | 0/1 | Not started | - |
-| 5. Batch Tasks | 1/1 | Complete | 05-01 |
+| 5. Batch Tasks | 1/1 | Complete    | 2026-02-25 |
 
 ## Phases
 
@@ -153,7 +153,7 @@ Phase 4 (Testing & Validation)
 5. Partial success returns both created and failed tasks
 6. Different streams operate in parallel without dependencies
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [x] 05-01-PLAN.md — Implement batch task creation tool with work types, repeat parameters, and streams (Complete)
