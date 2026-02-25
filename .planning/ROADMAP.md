@@ -13,6 +13,7 @@
 | 2. Task CRUD + Data Model | 1/1 | Complete    | 2026-02-22 |
 | 3. Auto-schedule Engine | 2/2 | Complete | 03-01, 03-02 |
 | 4. Testing & Validation | 0/1 | Not started | - |
+| 5. Batch Tasks | 1/1 | Complete | 05-01 |
 
 ## Phases
 
@@ -155,7 +156,7 @@ Phase 4 (Testing & Validation)
 **Plans:** 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Implement batch task creation tool with work types, repeat parameters, and streams
+- [x] 05-01-PLAN.md — Implement batch task creation tool with work types, repeat parameters, and streams (Complete)
 
 ---
 *Roadmap created: 2026-02-23*
