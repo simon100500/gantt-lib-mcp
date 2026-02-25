@@ -6,7 +6,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { taskStore } from './store.js';
 import { TaskScheduler } from './scheduler.js';
-import type { Task, CreateTaskInput, UpdateTaskInput } from './types.js';
+import type { Task, CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
 import { getAutoSavePath } from './config.js';
 
 // Create MCP server instance
@@ -247,6 +247,58 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: 'Optional file path for autosave (default: ./gantt-data.json)',
           },
         },
+      },
+    },
+    {
+      name: 'create_tasks_batch',
+      description: 'Create multiple Gantt chart tasks from a template with repeat parameters. Automatically generates task names, dates, and sequential FS dependencies within streams.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          baseStartDate: {
+            type: 'string',
+            description: 'Base start date for the first task in each stream (YYYY-MM-DD)',
+            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+          },
+          workTypes: {
+            type: 'array',
+            description: 'Array of work types with their durations',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Name of the work type' },
+                duration: { type: 'number', description: 'Duration in days' },
+              },
+              required: ['name', 'duration'],
+            },
+          },
+          repeatBy: {
+            type: 'object',
+            description: 'Parameters for repeating tasks (sections, floors, etc.)',
+            properties: {
+              sections: {
+                type: 'array',
+                items: { type: 'number' },
+                description: 'Array of section numbers',
+              },
+              floors: {
+                type: 'array',
+                items: { type: 'number' },
+                description: 'Array of floor numbers',
+              },
+            },
+          },
+          streams: {
+            type: 'number',
+            description: 'Number of parallel streams (default: 1)',
+            minimum: 1,
+          },
+          nameTemplate: {
+            type: 'string',
+            description: 'Optional name template with placeholders: {workType}, {section}, {floor}',
+          },
+        },
+        required: ['baseStartDate', 'workTypes', 'repeatBy'],
       },
     },
   ],
@@ -533,6 +585,126 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: 'text',
           text: JSON.stringify({ success: true, autoSavePath: path, message: `Autosave enabled: ${path}` }, null, 2),
+        },
+      ],
+    };
+  }
+
+  // create_tasks_batch tool
+  if (name === 'create_tasks_batch') {
+    const input = args as unknown as CreateTasksBatchInput;
+
+    // Validate baseStartDate format
+    if (!isValidDateFormat(input.baseStartDate)) {
+      throw new Error(`Invalid baseStartDate format: ${input.baseStartDate}. Expected format: YYYY-MM-DD`);
+    }
+
+    // Validate workTypes
+    if (!input.workTypes || input.workTypes.length === 0) {
+      throw new Error('workTypes must be a non-empty array');
+    }
+
+    // Validate repeatBy has at least one repeat parameter
+    const repeatKeys = Object.keys(input.repeatBy);
+    if (repeatKeys.length === 0) {
+      throw new Error('repeatBy must contain at least one repeat parameter (e.g., sections, floors)');
+    }
+
+    const streams = input.streams || 1;
+    const nameTemplate = input.nameTemplate || '{workType} {section} секция {floor} этаж';
+
+    // Calculate total combinations for stream distribution
+    const sections = input.repeatBy.sections || [1];
+    const floors = input.repeatBy.floors || [1];
+    const totalCombinations = sections.length * floors.length * input.workTypes.length;
+    const combinationsPerStream = Math.ceil(totalCombinations / streams);
+
+    const createdTasks: string[] = [];
+    const failedTasks: Array<{ index: number; error: string }> = [];
+    let combinationIndex = 0;
+    let previousTaskIds: string[] = new Array(streams).fill(null);
+
+    // Generate all task combinations
+    for (const section of sections) {
+      for (const floor of floors) {
+        for (const workType of input.workTypes) {
+          const streamIndex = Math.floor(combinationIndex / combinationsPerStream);
+          const currentStream = Math.min(streamIndex, streams - 1);
+
+          try {
+            // Calculate task dates
+            const startDate = combinationIndex === 0 || previousTaskIds[currentStream] === null
+              ? input.baseStartDate
+              : // Calculate from previous task's end date + 1 day
+                (() => {
+                  const prevTask = taskStore.get(previousTaskIds[currentStream]);
+                  if (!prevTask) return input.baseStartDate;
+                  const prevEnd = new Date(prevTask.endDate);
+                  prevEnd.setDate(prevEnd.getDate() + 1);
+                  return prevEnd.toISOString().split('T')[0];
+                })();
+
+            // Calculate end date from duration
+            const start = new Date(startDate);
+            const end = new Date(start);
+            end.setDate(start.getDate() + workType.duration - 1);
+            const endDate = end.toISOString().split('T')[0];
+
+            // Generate task name from template
+            const taskName = nameTemplate
+              .replace('{workType}', workType.name)
+              .replace('{section}', String(section))
+              .replace('{floor}', String(floor));
+
+            // Create dependencies (FS link to previous task in same stream)
+            const dependencies: TaskDependency[] = [];
+            if (previousTaskIds[currentStream]) {
+              dependencies.push({
+                taskId: previousTaskIds[currentStream],
+                type: 'FS',
+              });
+            }
+
+            // Create the task
+            const task = taskStore.create({
+              name: taskName,
+              startDate,
+              endDate,
+              dependencies,
+            });
+
+            createdTasks.push(task.id);
+            previousTaskIds[currentStream] = task.id;
+
+          } catch (error) {
+            failedTasks.push({
+              index: combinationIndex,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+
+          combinationIndex++;
+        }
+      }
+    }
+
+    const result: BatchCreateResult = {
+      created: createdTasks.length,
+      taskIds: createdTasks,
+    };
+
+    if (failedTasks.length > 0) {
+      result.failed = failedTasks;
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            ...result,
+            message: `Batch creation complete: ${createdTasks.length} tasks created${failedTasks.length > 0 ? `, ${failedTasks.length} failed` : ''}`,
+          }, null, 2),
         },
       ],
     };
