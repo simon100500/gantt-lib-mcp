@@ -140,12 +140,22 @@ Phase 4 (Testing & Validation)
 
 ### Phase 5: batch-tasks Сделать пакетное добавление работ (например, сразу на несколько этажей или секций), особенно связанных один за другим
 
-**Goal:** [To be planned]
+**Goal:** Create MCP tool for batch task creation with repeat parameters and automatic sequential dependencies
+
 **Depends on:** Phase 4
-**Plans:** 0 plans
+
+**Success Criteria** (what must be TRUE):
+1. User can create multiple tasks from a single batch operation
+2. Tasks are created with sequential FS dependencies within each stream
+3. Task names are auto-generated from work type and repeat parameters
+4. Task dates are calculated sequentially within each stream
+5. Partial success returns both created and failed tasks
+6. Different streams operate in parallel without dependencies
+
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 5 to break down)
+- [ ] 05-01-PLAN.md — Implement batch task creation tool with work types, repeat parameters, and streams
 
 ---
 *Roadmap created: 2026-02-23*
