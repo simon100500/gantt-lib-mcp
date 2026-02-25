@@ -107,3 +107,53 @@ export interface AutoSaveInput {
   /** Optional file path for autosave (default: ./gantt-data.json) */
   filePath?: string;
 }
+
+/**
+ * Work type definition for batch task creation
+ */
+export interface WorkType {
+  /** Name of the work type (e.g., "Бетонирование стен") */
+  name: string;
+  /** Duration in days */
+  duration: number;
+}
+
+/**
+ * Repeat parameters for batch task generation
+ */
+export interface RepeatBy {
+  /** Array of section numbers (e.g., [1, 2, 3, 4, 5, 6]) */
+  sections?: number[];
+  /** Array of floor numbers (e.g., [1, 2, 3, 4]) */
+  floors?: number[];
+  /** Additional repeat parameters (e.g., phases, zones) */
+  [key: string]: number[] | undefined;
+}
+
+/**
+ * Input type for creating tasks in batch
+ */
+export interface CreateTasksBatchInput {
+  /** Base start date for the first task in each stream (YYYY-MM-DD) */
+  baseStartDate: string;
+  /** Array of work types with their durations */
+  workTypes: WorkType[];
+  /** Parameters for repeating tasks */
+  repeatBy: RepeatBy;
+  /** Number of parallel streams (default: 1) */
+  streams?: number;
+  /** Optional name template (use placeholders: {workType}, {section}, {floor}) */
+  nameTemplate?: string;
+}
+
+/**
+ * Result of batch task creation
+ */
+export interface BatchCreateResult {
+  /** Number of tasks successfully created */
+  created: number;
+  /** IDs of created tasks */
+  taskIds: string[];
+  /** Tasks that failed to create (if any) */
+  failed?: Array<{ index: number; error: string }>;
+}
