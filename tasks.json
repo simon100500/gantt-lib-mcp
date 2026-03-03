@@ -1,0 +1,194 @@
+```json
+[
+  {
+    "id": "314f31c2-8bf3-48cc-8f69-1f0a632b4628",
+    "name": "Site preparation and clearing",
+    "startDate": "2026-03-04",
+    "endDate": "2026-03-08",
+    "progress": 0,
+    "dependencies": []
+  },
+  {
+    "id": "e055a4d3-fa65-47cd-a591-b84553bc3a5f",
+    "name": "Excavation",
+    "startDate": "2026-03-09",
+    "endDate": "2026-03-15",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "314f31c2-8bf3-48cc-8f69-1f0a632b4628",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "c44c751f-af58-400f-9780-ece23930cbda",
+    "name": "Foundation formwork",
+    "startDate": "2026-03-16",
+    "endDate": "2026-03-20",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "e055a4d3-fa65-47cd-a591-b84553bc3a5f",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "56fba6ea-efd6-447f-914c-5198818ac13d",
+    "name": "Foundation reinforcement (rebar)",
+    "startDate": "2026-03-21",
+    "endDate": "2026-03-23",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "c44c751f-af58-400f-9780-ece23930cbda",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "d86a213f-65dd-45b3-b9e8-1a00871df3e9",
+    "name": "Pouring concrete foundation",
+    "startDate": "2026-03-24",
+    "endDate": "2026-03-24",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "56fba6ea-efd6-447f-914c-5198818ac13d",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "4c1288af-7c18-437e-9d96-ebdbba118f55",
+    "name": "Foundation curing time",
+    "startDate": "2026-03-25",
+    "endDate": "2026-04-04",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "d86a213f-65dd-45b3-b9e8-1a00871df3e9",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "e592826d-f64a-4eee-8e9d-7c6b68a5c068",
+    "name": "Foundation waterproofing",
+    "startDate": "2026-04-05",
+    "endDate": "2026-04-07",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "4c1288af-7c18-437e-9d96-ebdbba118f55",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "392c1ee9-1949-43e1-9b0a-bd9d0612fab7",
+    "name": "Floor 1 framing",
+    "startDate": "2026-04-08",
+    "endDate": "2026-04-17",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "e592826d-f64a-4eee-8e9d-7c6b68a5c068",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "273a3018-0d78-4324-ab37-523946b14550",
+    "name": "Floor 2 framing",
+    "startDate": "2026-04-18",
+    "endDate": "2026-04-27",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "392c1ee9-1949-43e1-9b0a-bd9d0612fab7",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "9eb764d8-c78b-44ff-8c16-075d11c998b6",
+    "name": "Floor 3 framing",
+    "startDate": "2026-04-28",
+    "endDate": "2026-05-07",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "273a3018-0d78-4324-ab37-523946b14550",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "0b85501c-0e31-4a52-b89d-e8995def5614",
+    "name": "Interior framing and partitions",
+    "startDate": "2026-05-08",
+    "endDate": "2026-05-14",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "9eb764d8-c78b-44ff-8c16-075d11c998b6",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "48982186-30e5-414b-87be-2463c84f0204",
+    "name": "Roof structure/rafters",
+    "startDate": "2026-05-15",
+    "endDate": "2026-05-21",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "0b85501c-0e31-4a52-b89d-e8995def5614",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "b7be72f5-8406-48b6-9466-3ce6ae0327ab",
+    "name": "Roof sheathing",
+    "startDate": "2026-05-22",
+    "endDate": "2026-05-24",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "48982186-30e5-414b-87be-2463c84f0204",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "039b15a2-3ea8-40bc-b1f0-686a3713ec88",
+    "name": "Roof underlayment",
+    "startDate": "2026-05-25",
+    "endDate": "2026-05-26",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "b7be72f5-8406-48b6-9466-3ce6ae0327ab",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "id": "129871ca-ba2b-45c3-ae77-ceb9ac2a977b",
+    "name": "Roof covering (shingles/tiles)",
+    "startDate": "2026-05-27",
+    "endDate": "2026-05-31",
+    "progress": 0,
+    "dependencies": [
+      {
+        "taskId": "039b15a2-3ea8-40bc-b1f0-686a3713ec88",
+        "type": "FS"
+      }
+    ]
+  }
+]
+```

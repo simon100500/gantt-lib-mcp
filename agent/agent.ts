@@ -10,8 +10,8 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Project root is one level up from agent/
-const PROJECT_ROOT = join(__dirname, '..');
+// Project root: dist/agent/agent.js → up two levels → project root
+const PROJECT_ROOT = join(__dirname, '../..');
 
 // Load .env from project root
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
