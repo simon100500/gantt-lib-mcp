@@ -14,6 +14,7 @@
 | 3. Auto-schedule Engine | 2/2 | Complete | 03-01, 03-02 |
 | 4. Testing & Validation | 0/1 | Not started | - |
 | 5. Batch Tasks | 1/1 | Complete    | 2026-02-25 |
+| 6. qwen-agent | 0/2 | Planned | - |
 
 ## Phases
 
@@ -157,6 +158,17 @@ Phase 4 (Testing & Validation)
 
 Plans:
 - [x] 05-01-PLAN.md — Implement batch task creation tool with work types, repeat parameters, and streams (Complete)
+
+### Phase 6: qwen-agent
+
+**Goal:** TypeScript CLI agent using @qwen-code/sdk that accepts a project description and generates a Gantt schedule by calling the existing MCP server tools, writing the result to tasks.json
+**Requirements:** AGENT-01, AGENT-02, AGENT-03, AGENT-04, AGENT-05, AGENT-06
+**Depends on:** Phase 5
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Wave 0 scaffold: unit test stubs, system prompt, agent tsconfig
+- [ ] 06-02-PLAN.md — Implement agent/agent.ts with @qwen-code/sdk + Z.AI integration
 
 ---
 *Roadmap created: 2026-02-23*
