@@ -4,19 +4,24 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..');
 
+// Convert Windows absolute paths to file:// URLs for dynamic import compatibility
+function toFileUrl(absPath) {
+  return pathToFileURL(absPath).href;
+}
+
 describe('AGENT-01: CLI arg validation', () => {
   it('should export a validateArgs function that throws when no prompt given', async () => {
     // Dynamic import — will fail until dist/agent/agent.js is compiled
     let mod;
     try {
-      mod = await import(join(PROJECT_ROOT, 'dist/agent/agent.js'));
+      mod = await import(toFileUrl(join(PROJECT_ROOT, 'dist/agent/agent.js')));
     } catch (e) {
       throw new Error('dist/agent/agent.js not found — run: npm run build:agent');
     }
@@ -28,7 +33,7 @@ describe('AGENT-01: CLI arg validation', () => {
 describe('AGENT-02: Module imports without crash', () => {
   it('dist/agent/agent.js resolves or rejects with known error (not a crash)', async () => {
     try {
-      await import(join(PROJECT_ROOT, 'dist/agent/agent.js'));
+      await import(toFileUrl(join(PROJECT_ROOT, 'dist/agent/agent.js')));
       // If import succeeds — good (module loaded without side-effect crash)
     } catch (e) {
       // Only acceptable error: missing compiled output
