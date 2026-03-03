@@ -18,6 +18,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@qwen-code/sdk": "^0.1.5",
     "dotenv": "^17.3.1",
     "xlsx": "^0.18.5"
   },
