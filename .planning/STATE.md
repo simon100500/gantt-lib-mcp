@@ -129,8 +129,9 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-02-25 after completing Phase 05 Plan 01*
 
-Last activity: 2026-02-25 - Completed Phase 05 Plan 01: Batch task creation tool with sequential FS dependencies and stream-based parallel distribution
+Last activity: 2026-03-03 - Phase 06 context gathered: qwen-agent Python CLI с GLM-4.7 через Z.AI, qwen-agent SDK, MCP через stdio
 
 ### Roadmap Evolution
 
 - Phase 5 added: batch-tasks Сделать пакетное добавление работ (например, сразу на несколько этажей или секций), особенно связанных один за другим
+- Phase 6 added: qwen-agent
