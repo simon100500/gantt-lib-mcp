@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-03-03T23:07:30.014Z"
-last_activity: "2026-03-03 - Phase 06 context gathered: qwen-agent Python CLI с GLM-4.7 через Z.AI, qwen-agent SDK, MCP через stdio"
+status: executing
+last_updated: "2026-03-03T23:11:23.305Z"
+last_activity: "2026-03-03 - Phase 06 Plan 01 complete: Wave 0 scaffold (agent.test.js, prompts/system.md, tsconfig.json) with 3 test contracts, AGENT-06 passing, AGENT-01 in red state"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # STATE: gantt-lib MCP Server
@@ -61,6 +61,7 @@ progress:
 ---
 | Phase 05 P01 | 2 min | 3 tasks | 2 files |
 | Phase 06 P01 | 8 | 2 tasks | 4 files |
+| Phase 06 P06-02 | 12 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,8 @@ progress:
 - [Phase 06]: pathToFileURL for Windows ESM dynamic import compatibility
 - [Phase 06]: System prompt stored in agent/prompts/system.md separate from code
 - [Phase 06]: agent/tsconfig.json extends root tsconfig, overrides rootDir/outDir for agent compilation
+- [Phase 06]: query({ prompt, options }) not flat args — actual SDK v0.1.5 signature wraps config in options object
+- [Phase 06]: SDKAssistantMessage.message.content not .content — content nested in .message property
 
 ### Active Todos
 
