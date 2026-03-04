@@ -56,7 +56,7 @@ Wired the `onChange` handler from App.tsx to the GanttChart component, enabling 
 
 | Task | Name | Commit | Files |
 | ---- | ---- | ------ | ----- |
-| 1 | Wire onChange handler in App.tsx | 550e1fb | packages/web/src/App.tsx |
+| 1 | Wire onChange handler in App.tsx | 0f4555d | packages/web/src/App.tsx |
 | 2 | Manual verification of drag-to-edit and WebSocket sync | - | - |
 
 ## Deviations from Plan
