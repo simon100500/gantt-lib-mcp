@@ -1,96 +1,119 @@
 /**
- * In-memory task storage for MCP server
+ * SQLite-backed task storage for MCP server
  *
- * Uses Map-based storage for task CRUD operations.
- * Supports optional autosave to JSON file for persistence.
+ * Replaces the in-memory Map-based store with a persistent SQLite store.
+ * All public methods are async. TaskScheduler is supplied an in-memory snapshot
+ * loaded from the DB before each operation that requires date recalculation.
  */
 
-import * as fs from 'node:fs/promises';
-import { Task, CreateTaskInput, UpdateTaskInput } from './types.js';
+import { Task, CreateTaskInput, UpdateTaskInput, Message } from './types.js';
 import { TaskScheduler } from './scheduler.js';
+import { getDb } from './db.js';
+import type { Row } from '@libsql/client';
+
+// ---------------------------------------------------------------------------
+// Row helpers
+// ---------------------------------------------------------------------------
 
 /**
- * TaskStore provides in-memory storage and CRUD operations for Gantt tasks
+ * Convert a dependency DB row to a TaskDependency object
+ */
+function rowToDependency(row: Row): { taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag: number } {
+  return {
+    taskId: String(row['dep_task_id']),
+    type: String(row['type']) as 'FS' | 'SS' | 'FF' | 'SF',
+    lag: Number(row['lag'] ?? 0),
+  };
+}
+
+/**
+ * Convert a task DB row (without dependencies) to a partial Task object
+ */
+function rowToTaskBase(row: Row): Omit<Task, 'dependencies'> {
+  return {
+    id: String(row['id']),
+    name: String(row['name']),
+    startDate: String(row['start_date']),
+    endDate: String(row['end_date']),
+    color: row['color'] != null ? String(row['color']) : undefined,
+    progress: Number(row['progress'] ?? 0),
+  };
+}
+
+/**
+ * Fetch dependencies for a task from the DB
+ */
+async function fetchDependencies(db: Awaited<ReturnType<typeof getDb>>, taskId: string) {
+  const result = await db.execute({
+    sql: 'SELECT dep_task_id, type, lag FROM dependencies WHERE task_id = ?',
+    args: [taskId],
+  });
+  return result.rows.map(rowToDependency);
+}
+
+/**
+ * Write updated task fields back to the DB (no dependency changes)
+ */
+async function writeTaskFields(
+  db: Awaited<ReturnType<typeof getDb>>,
+  task: Task
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, progress = ? WHERE id = ?`,
+    args: [task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0, task.id],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// TaskStore
+// ---------------------------------------------------------------------------
+
+/**
+ * TaskStore provides async CRUD operations for Gantt tasks backed by SQLite.
+ * Also manages AI dialog history (messages table).
  */
 export class TaskStore {
-  private tasks: Map<string, Task>;
-  private scheduler: TaskScheduler;
-  private autoSavePath: string | null = null;
-  private savePromise: Promise<void> | null = null;
-
-  constructor() {
-    this.tasks = new Map();
-    this.scheduler = new TaskScheduler(this);
-  }
-
   /**
-   * Configure autosave path and load existing data if file exists
-   * @param path - File path for autosave (e.g., './gantt-data.json')
+   * Load all tasks from DB into a Map (used as scheduler snapshot)
    */
-  setAutoSavePath(path: string): void {
-    this.autoSavePath = path;
-    // Load existing data if file exists
-    this.loadFromFile().catch(err => {
-      console.error(`Failed to load from file: ${err.message}`);
-    });
-  }
+  private async loadSnapshot(): Promise<Map<string, Task>> {
+    const db = await getDb();
+    const result = await db.execute('SELECT * FROM tasks');
+    const map = new Map<string, Task>();
 
-  /**
-   * Save current tasks to JSON file asynchronously
-   * Errors are logged but don't break operations
-   */
-  private async saveToFile(): Promise<void> {
-    if (!this.autoSavePath) return;
-
-    // Wait for any pending save to complete
-    if (this.savePromise) {
-      await this.savePromise;
+    for (const row of result.rows) {
+      const base = rowToTaskBase(row);
+      const deps = await fetchDependencies(db, base.id);
+      const task: Task = { ...base, dependencies: deps };
+      map.set(task.id, task);
     }
 
-    // Queue the save operation
-    this.savePromise = (async () => {
-      try {
-        const json = this.exportTasks();
-        if (this.autoSavePath) {
-          await fs.writeFile(this.autoSavePath, json, 'utf-8');
-        }
-      } catch (error) {
-        const err = error as Error;
-        console.error(`Failed to save tasks to ${this.autoSavePath}:`, err.message);
-      } finally {
-        this.savePromise = null;
-      }
-    })();
-
-    await this.savePromise;
+    return map;
   }
 
   /**
-   * Load tasks from JSON file
-   * Silently ignores if file doesn't exist
+   * Run scheduler recalculation after a task change.
+   * Reloads all tasks from DB, runs scheduler in memory, writes back changed tasks.
    */
-  private async loadFromFile(): Promise<void> {
-    if (!this.autoSavePath) return;
+  private async runScheduler(changedTaskId: string, skipStart = false): Promise<void> {
+    const snapshot = await this.loadSnapshot();
+    const scheduler = new TaskScheduler(snapshot);
+    const updates = scheduler.recalculateDates(changedTaskId, skipStart);
 
-    try {
-      const json = await fs.readFile(this.autoSavePath, 'utf-8');
-      this.importTasks(json);
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code === 'ENOENT') {
-        // File doesn't exist yet, silently ignore
-        return;
-      }
-      console.error(`Failed to load tasks from ${this.autoSavePath}:`, err.message);
+    const db = await getDb();
+    for (const [, updated] of updates) {
+      await writeTaskFields(db, updated);
     }
   }
+
+  // --------------------------------------------------------------------------
+  // Task CRUD
+  // --------------------------------------------------------------------------
 
   /**
    * Create a new task with auto-generated UUID
-   * @param input - Task creation input
-   * @returns Created task with generated ID
    */
-  create(input: CreateTaskInput): Task {
+  async create(input: CreateTaskInput): Promise<Task> {
     const id = crypto.randomUUID();
     const task: Task = {
       id,
@@ -102,60 +125,88 @@ export class TaskStore {
       dependencies: input.dependencies ?? [],
     };
 
-    // Validate dependencies before storing
-    this.scheduler.validateDependencies(task);
+    const db = await getDb();
 
-    // Check for circular dependencies
-    if (this.scheduler.detectCycle(id)) {
-      throw new Error(`Circular dependency detected: cannot create task with these dependencies`);
-    }
-
-    this.tasks.set(id, task);
-
-    // If task has dependencies, recalculate its dates based on predecessors
+    // Validate dependencies against existing tasks
     if (task.dependencies && task.dependencies.length > 0) {
-      const updates = this.scheduler.recalculateDates(id);
-      for (const [updateId, updatedTask] of updates.entries()) {
-        this.tasks.set(updateId, updatedTask);
+      for (const dep of task.dependencies) {
+        const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [dep.taskId] });
+        if (check.rows.length === 0) {
+          throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
+        }
       }
     }
 
-    // Autosave after creating task
-    this.saveToFile().catch(err => {
-      console.error(`Failed to autosave after create: ${err.message}`);
+    // Insert task row
+    await db.execute({
+      sql: `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
     });
 
-    return task;
+    // Insert dependency rows
+    if (task.dependencies && task.dependencies.length > 0) {
+      for (const dep of task.dependencies) {
+        await db.execute({
+          sql: `INSERT INTO dependencies (id, task_id, dep_task_id, type, lag) VALUES (?, ?, ?, ?, ?)`,
+          args: [crypto.randomUUID(), id, dep.taskId, dep.type, dep.lag ?? 0],
+        });
+      }
+    }
+
+    // Validate no circular dependencies
+    const snapshot = await this.loadSnapshot();
+    const scheduler = new TaskScheduler(snapshot);
+    if (scheduler.detectCycle(id)) {
+      // Rollback — remove what we just inserted
+      await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] });
+      throw new Error('Circular dependency detected: cannot create task with these dependencies');
+    }
+
+    // Recalculate dates if task has dependencies
+    if (task.dependencies && task.dependencies.length > 0) {
+      await this.runScheduler(id);
+    }
+
+    // Return the current state of the task from DB
+    const created = await this.get(id);
+    return created ?? task;
   }
 
   /**
    * List all tasks
-   * @returns Array of all tasks
    */
-  list(): Task[] {
-    return Array.from(this.tasks.values());
+  async list(): Promise<Task[]> {
+    const db = await getDb();
+    const result = await db.execute('SELECT * FROM tasks');
+    const tasks: Task[] = [];
+    for (const row of result.rows) {
+      const base = rowToTaskBase(row);
+      const deps = await fetchDependencies(db, base.id);
+      tasks.push({ ...base, dependencies: deps });
+    }
+    return tasks;
   }
 
   /**
    * Get a task by ID
-   * @param id - Task ID
-   * @returns Task if found, undefined otherwise
    */
-  get(id: string): Task | undefined {
-    return this.tasks.get(id);
+  async get(id: string): Promise<Task | undefined> {
+    const db = await getDb();
+    const result = await db.execute({ sql: 'SELECT * FROM tasks WHERE id = ?', args: [id] });
+    if (result.rows.length === 0) return undefined;
+    const base = rowToTaskBase(result.rows[0]);
+    const deps = await fetchDependencies(db, id);
+    return { ...base, dependencies: deps };
   }
 
   /**
-   * Update a task
-   * @param id - Task ID
-   * @param input - Update input with optional fields
-   * @returns Updated task if found, undefined otherwise
+   * Update a task. Replaces dependency rows if dependencies are provided.
+   * Runs scheduler recalculation if dates or dependencies changed.
    */
-  update(id: string, input: UpdateTaskInput): Task | undefined {
-    const task = this.tasks.get(id);
+  async update(id: string, input: UpdateTaskInput): Promise<Task | undefined> {
+    const task = await this.get(id);
     if (!task) return undefined;
 
-    // Check if dependencies are being updated
     const dependenciesUpdated = input.dependencies !== undefined;
 
     const updated: Task = {
@@ -168,104 +219,104 @@ export class TaskStore {
       ...(input.dependencies !== undefined && { dependencies: input.dependencies }),
     };
 
-    // Validate new dependencies
-    this.scheduler.validateDependencies(updated);
+    const db = await getDb();
 
-    // Check for circular dependencies with new dependencies
-    if (this.scheduler.detectCycle(id)) {
-      throw new Error(`Circular dependency detected: cannot update task with these dependencies`);
-    }
-
-    this.tasks.set(id, updated);
-
-    // If dates or dependencies changed, recalculate dependent tasks
-    const datesChanged = input.startDate !== undefined || input.endDate !== undefined;
-    if (datesChanged || dependenciesUpdated) {
-      // If user explicitly changed dates, update lag in dependencies first
-      // and skip recalculating the start task itself
-      const skipStartTask = datesChanged && !dependenciesUpdated;
-
-      if (datesChanged && !dependenciesUpdated && updated.dependencies && updated.dependencies.length > 0) {
-        this.updateLagsForMovedTask(updated, input);
+    // Validate new dependencies exist
+    if (input.dependencies) {
+      for (const dep of input.dependencies) {
+        const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [dep.taskId] });
+        if (check.rows.length === 0) {
+          throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
+        }
       }
-
-      const updates = this.recalculateTaskDates(id, skipStartTask);
-
-      // Autosave after updating task
-      this.saveToFile().catch(err => {
-        console.error(`Failed to autosave after update: ${err.message}`);
-      });
-
-      // Return the updated task with cascade info
-      return this.tasks.get(id);
     }
 
-    // Autosave after updating task (even if no date/dependency changes)
-    this.saveToFile().catch(err => {
-      console.error(`Failed to autosave after update: ${err.message}`);
+    // Write updated task fields
+    await db.execute({
+      sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, progress = ? WHERE id = ?`,
+      args: [updated.name, updated.startDate, updated.endDate, updated.color ?? null, updated.progress ?? 0, id],
     });
 
-    return updated;
+    // Replace dependency rows if updated
+    if (dependenciesUpdated) {
+      await db.execute({ sql: 'DELETE FROM dependencies WHERE task_id = ?', args: [id] });
+      if (updated.dependencies && updated.dependencies.length > 0) {
+        for (const dep of updated.dependencies) {
+          await db.execute({
+            sql: `INSERT INTO dependencies (id, task_id, dep_task_id, type, lag) VALUES (?, ?, ?, ?, ?)`,
+            args: [crypto.randomUUID(), id, dep.taskId, dep.type, dep.lag ?? 0],
+          });
+        }
+      }
+    }
+
+    // Validate no circular dependencies
+    const snapshot = await this.loadSnapshot();
+    const scheduler = new TaskScheduler(snapshot);
+    if (scheduler.detectCycle(id)) {
+      throw new Error('Circular dependency detected: cannot update task with these dependencies');
+    }
+
+    // Recalculate if dates or dependencies changed
+    const datesChanged = input.startDate !== undefined || input.endDate !== undefined;
+    if (datesChanged || dependenciesUpdated) {
+      const skipStartTask = datesChanged && !dependenciesUpdated;
+
+      // If dates explicitly changed, update lags in dependencies
+      if (datesChanged && !dependenciesUpdated && updated.dependencies && updated.dependencies.length > 0) {
+        await this.updateLagsForMovedTask(updated, input);
+      }
+
+      await this.runScheduler(id, skipStartTask);
+    }
+
+    return await this.get(id);
   }
 
   /**
-   * Update lag values in dependencies when a task is explicitly moved
-   * @param task - The task that was moved
-   * @param input - The update input containing the new dates
+   * Update lag values in dependency rows when a task is explicitly moved
    */
-  private updateLagsForMovedTask(task: Task, input: UpdateTaskInput): void {
-    if (!task.dependencies) return;
+  private async updateLagsForMovedTask(task: Task, input: UpdateTaskInput): Promise<void> {
+    if (!task.dependencies || task.dependencies.length === 0) return;
 
     const newStartDate = input.startDate ?? task.startDate;
     const newEndDate = input.endDate ?? task.endDate;
+    const db = await getDb();
 
-    for (let i = 0; i < task.dependencies.length; i++) {
-      const dep = task.dependencies[i];
-      const predecessor = this.get(dep.taskId);
+    for (const dep of task.dependencies) {
+      const predecessor = await this.get(dep.taskId);
       if (!predecessor) continue;
 
       let newLag = dep.lag ?? 0;
 
-      // Calculate new lag based on dependency type
       switch (dep.type) {
         case 'FS': {
-          // Task starts after predecessor finishes
-          const currentStart = this.dayDiff(predecessor.endDate, newStartDate);
-          newLag = currentStart;
+          newLag = this.dayDiff(predecessor.endDate, newStartDate);
           break;
         }
         case 'SS': {
-          // Task starts when predecessor starts
-          const currentStart = this.dayDiff(predecessor.startDate, newStartDate);
-          newLag = currentStart;
+          newLag = this.dayDiff(predecessor.startDate, newStartDate);
           break;
         }
         case 'FF': {
-          // Task ends when predecessor ends
-          const currentEnd = this.dayDiff(predecessor.endDate, newEndDate);
-          newLag = currentEnd;
+          newLag = this.dayDiff(predecessor.endDate, newEndDate);
           break;
         }
         case 'SF': {
-          // Task ends when predecessor starts
-          const currentEnd = this.dayDiff(predecessor.startDate, newEndDate);
-          newLag = currentEnd;
+          newLag = this.dayDiff(predecessor.startDate, newEndDate);
           break;
         }
       }
 
-      task.dependencies[i] = { ...dep, lag: newLag };
+      await db.execute({
+        sql: 'UPDATE dependencies SET lag = ? WHERE task_id = ? AND dep_task_id = ?',
+        args: [newLag, task.id, dep.taskId],
+      });
     }
-
-    // Update the task with modified dependencies
-    this.tasks.set(task.id, { ...task, dependencies: task.dependencies });
   }
 
   /**
-   * Calculate the difference in days between two dates
-   * @param start - Start date string
-   * @param end - End date string
-   * @returns Number of days
+   * Calculate the difference in days between two date strings
    */
   private dayDiff(start: string, end: string): number {
     const startDate = new Date(start);
@@ -274,68 +325,28 @@ export class TaskStore {
   }
 
   /**
-   * Delete a task
-   * @param id - Task ID
+   * Delete a task by ID. CASCADE removes its dependency rows.
    * @returns true if deleted, false if not found
    */
   async delete(id: string): Promise<boolean> {
-    const deleted = this.tasks.delete(id);
-
-    if (deleted) {
-      // Autosave after deleting task
-      await this.saveToFile();
-    }
-
-    return deleted;
+    const db = await getDb();
+    const result = await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] });
+    return (result.rowsAffected ?? 0) > 0;
   }
 
   /**
-   * Recalculate dates for a task and all dependent tasks
-   * @param taskId - ID of the task that changed
-   * @param skipStartTask - If true, don't recalculate the start task itself
-   * @returns Map of updated task IDs to their new state
+   * Export all tasks to JSON string
    */
-  recalculateTaskDates(taskId: string, skipStartTask = false): Map<string, Task> {
-    // Validate no circular dependencies before recalculation
-    const task = this.get(taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
-
-    // Validate all dependencies exist
-    this.scheduler.validateDependencies(task);
-
-    // Check for circular dependencies starting from this task
-    if (this.scheduler.detectCycle(taskId)) {
-      throw new Error(`Circular dependency detected involving task: ${taskId}`);
-    }
-
-    // Perform cascading date recalculation
-    const updates = this.scheduler.recalculateDates(taskId, skipStartTask);
-
-    // Apply updates to the store
-    for (const [id, updatedTask] of updates.entries()) {
-      this.tasks.set(id, updatedTask);
-    }
-
-    return updates;
-  }
-
-  /**
-   * Export all tasks to JSON format
-   * @returns JSON string of all tasks
-   */
-  exportTasks(): string {
-    const tasks = Array.from(this.tasks.values());
+  async exportTasks(): Promise<string> {
+    const tasks = await this.list();
     return JSON.stringify(tasks, null, 2);
   }
 
   /**
-   * Import tasks from JSON data (replaces all existing tasks)
-   * @param jsonData - JSON string containing array of tasks
-   * @returns Number of tasks imported
+   * Import tasks from JSON string (replaces all existing tasks).
+   * @returns number of tasks imported
    */
-  importTasks(jsonData: string): number {
+  async importTasks(jsonData: string): Promise<number> {
     let tasks: Task[];
     try {
       tasks = JSON.parse(jsonData) as Task[];
@@ -347,15 +358,63 @@ export class TaskStore {
       throw new Error('Import data must be an array of tasks');
     }
 
-    // Clear existing tasks
-    this.tasks.clear();
+    const db = await getDb();
 
-    // Import each task
+    // Clear all tasks (CASCADE removes deps)
+    await db.execute('DELETE FROM tasks');
+
+    // Insert each task and its dependencies
     for (const task of tasks) {
-      this.tasks.set(task.id, task);
+      await db.execute({
+        sql: `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [task.id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
+      });
+
+      if (task.dependencies && task.dependencies.length > 0) {
+        for (const dep of task.dependencies) {
+          await db.execute({
+            sql: `INSERT INTO dependencies (id, task_id, dep_task_id, type, lag) VALUES (?, ?, ?, ?, ?)`,
+            args: [crypto.randomUUID(), task.id, dep.taskId, dep.type, dep.lag ?? 0],
+          });
+        }
+      }
     }
 
     return tasks.length;
+  }
+
+  // --------------------------------------------------------------------------
+  // Message history
+  // --------------------------------------------------------------------------
+
+  /**
+   * Add a message to the dialog history
+   */
+  async addMessage(role: 'user' | 'assistant', content: string): Promise<Message> {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+
+    const db = await getDb();
+    await db.execute({
+      sql: `INSERT INTO messages (id, role, content, created_at) VALUES (?, ?, ?, ?)`,
+      args: [id, role, content, createdAt],
+    });
+
+    return { id, role, content, createdAt };
+  }
+
+  /**
+   * Get all messages ordered by creation time
+   */
+  async getMessages(): Promise<Message[]> {
+    const db = await getDb();
+    const result = await db.execute('SELECT * FROM messages ORDER BY created_at ASC');
+    return result.rows.map(row => ({
+      id: String(row['id']),
+      role: String(row['role']) as 'user' | 'assistant',
+      content: String(row['content']),
+      createdAt: String(row['created_at']),
+    }));
   }
 }
 

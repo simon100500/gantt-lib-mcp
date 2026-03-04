@@ -1,33 +1,19 @@
 /**
- * Test suite for TaskScheduler (TDD RED phase)
+ * Test suite for TaskScheduler
  *
- * This file contains failing tests for the auto-schedule engine.
- * Tests will fail initially because TaskScheduler class doesn't exist yet.
+ * Tests for the auto-schedule engine using Map<string, Task> snapshots.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { Task, TaskDependency, DependencyType } from './types.js';
-
-// Mock task store for testing
-interface MockTaskStore {
-  get(id: string): Task | undefined;
-  list(): Task[];
-}
-
-// This import will fail initially - TaskScheduler doesn't exist yet
-// @ts-ignore - will be fixed in GREEN phase
 import { TaskScheduler } from './scheduler.js';
 
 describe('TaskScheduler', () => {
 
-  // Helper function to create mock store
-  function createMockStore(tasks: Task[]): MockTaskStore {
-    const taskMap = new Map(tasks.map(t => [t.id, t]));
-    return {
-      get: (id: string) => taskMap.get(id),
-      list: () => tasks
-    };
+  // Helper function to create a task Map snapshot
+  function createTaskMap(tasks: Task[]): Map<string, Task> {
+    return new Map(tasks.map(t => [t.id, t]));
   }
 
   describe('FS (Finish-Start) dependency', () => {
@@ -46,8 +32,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       // When we recalculate dates for task B
       const updates = scheduler.recalculateDates('2');
@@ -75,8 +60,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'SS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       const updates = scheduler.recalculateDates('2');
 
@@ -101,8 +85,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FF' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       const updates = scheduler.recalculateDates('2');
 
@@ -127,8 +110,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'SF' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       const updates = scheduler.recalculateDates('2');
 
@@ -153,8 +135,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FS', lag: 2 }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       const updates = scheduler.recalculateDates('2');
 
@@ -186,8 +167,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '2', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB, taskC]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB, taskC]));
 
       // When A changes and we recalculate
       const updates = scheduler.recalculateDates('2');
@@ -219,8 +199,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       // Should throw error for circular dependency
       assert.throws(() => {
@@ -244,8 +223,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       assert.throws(() => {
         scheduler.detectCycle('1');
@@ -263,8 +241,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '999', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA]));
 
       // Should throw error for missing task
       assert.throws(() => {
@@ -298,8 +275,7 @@ describe('TaskScheduler', () => {
         ]
       };
 
-      const mockStore = createMockStore([taskA, taskB, taskC]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB, taskC]));
 
       const updates = scheduler.recalculateDates('3');
 
@@ -324,8 +300,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       const updates = scheduler.recalculateDates('2');
       const updatedTask = updates.get('2');
@@ -345,8 +320,7 @@ describe('TaskScheduler', () => {
         endDate: '2026-02-05'
       };
 
-      const mockStore = createMockStore([taskA]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA]));
 
       const updates = scheduler.recalculateDates('1');
 
@@ -378,8 +352,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '2', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB, taskC]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB, taskC]));
 
       // When skipStartTask is true, task B's dates should not be recalculated
       const updates = scheduler.recalculateDates('2', true);
@@ -409,8 +382,7 @@ describe('TaskScheduler', () => {
         dependencies: [{ taskId: '1', type: 'FS' }]
       };
 
-      const mockStore = createMockStore([taskA, taskB]);
-      const scheduler = new TaskScheduler(mockStore);
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]));
 
       // When skipStartTask is false (default), task B's dates are recalculated
       const updates = scheduler.recalculateDates('2', false);

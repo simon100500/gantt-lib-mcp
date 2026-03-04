@@ -5,9 +5,8 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { taskStore } from './store.js';
-import { TaskScheduler } from './scheduler.js';
+import { getDb } from './db.js';
 import type { Task, CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
-import { getAutoSavePath } from './config.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -238,13 +237,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'set_autosave_path',
-      description: 'Enable automatic saving of tasks to a JSON file. If no path provided, uses ./gantt-data.json. Loads existing data if file exists.',
+      description: 'No-op (kept for backward compatibility). Tasks are now persisted automatically via SQLite.',
       inputSchema: {
         type: 'object',
         properties: {
           filePath: {
             type: 'string',
-            description: 'Optional file path for autosave (default: ./gantt-data.json)',
+            description: 'Ignored — SQLite persistence is always active',
           },
         },
       },
@@ -347,10 +346,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    const task = taskStore.create(input);
+    const task = await taskStore.create(input);
 
     // Return the task with cascade info
-    const allTasks = taskStore.list();
+    const allTasks = await taskStore.list();
     const dependentTasks = allTasks.filter(t =>
       t.dependencies?.some(d => d.taskId === task.id) ||
       task.dependencies?.some(d => d.taskId === t.id)
@@ -372,7 +371,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_tasks tool
   if (name === 'get_tasks') {
-    const tasks = taskStore.list();
+    const tasks = await taskStore.list();
     return {
       content: [
         {
@@ -390,7 +389,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error('Missing required parameter: id');
     }
 
-    const task = taskStore.get(id);
+    const task = await taskStore.get(id);
     if (!task) {
       throw new Error(`Task not found: ${id}`);
     }
@@ -436,7 +435,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // Validate date range if both dates are provided
-    const existingTask = taskStore.get(id);
+    const existingTask = await taskStore.get(id);
     if (existingTask) {
       const startDate = input.startDate ?? existingTask.startDate;
       const endDate = input.endDate ?? existingTask.endDate;
@@ -455,31 +454,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    const existingTaskForCascade = taskStore.get(id);
     const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
     const hasDependencyChanges = input.dependencies !== undefined;
 
-    const updatedTask = taskStore.update(id, input);
+    const updatedTask = await taskStore.update(id, input);
     if (!updatedTask) {
       throw new Error(`Task not found: ${id}`);
     }
 
     // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
-      const allTasks = taskStore.list();
+      const allTasks = await taskStore.list();
 
       // Find all tasks that were affected by the cascade
-      // Tasks that depend on this one directly or indirectly
       const affectedTasks = allTasks.filter(t => {
         if (t.id === id) return false;
-        // Simple heuristic: check if task appears after this one in any dependency chain
-        // (In production, you'd track this more precisely)
         return t.dependencies?.some(d => {
-          const depTask = taskStore.get(d.taskId);
-          return depTask && (
-            depTask.id === id ||
-            depTask.dependencies?.some(dd => dd.taskId === id)
-          );
+          const depTaskId = d.taskId;
+          return depTaskId === id ||
+            allTasks.find(x => x.id === depTaskId)?.dependencies?.some(dd => dd.taskId === id);
         });
       });
 
@@ -516,7 +509,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error('Missing required parameter: id');
     }
 
-    const deleted = taskStore.delete(id);
+    const deleted = await taskStore.delete(id);
     if (!deleted) {
       throw new Error(`Task not found: ${id}`);
     }
@@ -533,7 +526,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // export_tasks tool
   if (name === 'export_tasks') {
-    const json = taskStore.exportTasks();
+    const json = await taskStore.exportTasks();
     return {
       content: [
         {
@@ -552,7 +545,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     try {
-      const count = taskStore.importTasks(jsonData);
+      const count = await taskStore.importTasks(jsonData);
       return {
         content: [
           {
@@ -575,16 +568,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  // set_autosave_path tool
+  // set_autosave_path tool — no-op for backward compatibility
+  // Tasks are now persisted automatically via SQLite
   if (name === 'set_autosave_path') {
     const { filePath } = args as { filePath?: string };
     const path = filePath || './gantt-data.json';
-    taskStore.setAutoSavePath(path);
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ success: true, autoSavePath: path, message: `Autosave enabled: ${path}` }, null, 2),
+          text: JSON.stringify({
+            success: true,
+            autoSavePath: path,
+            message: 'Note: SQLite persistence is always active. set_autosave_path is a no-op kept for backward compatibility.',
+          }, null, 2),
         },
       ],
     };
@@ -622,7 +619,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const createdTasks: string[] = [];
     const failedTasks: Array<{ index: number; error: string }> = [];
     let combinationIndex = 0;
-    let previousTaskIds: string[] = new Array(streams).fill(null);
+    const previousTaskIds: (string | null)[] = new Array(streams).fill(null);
 
     // Generate all task combinations
     for (const section of sections) {
@@ -633,16 +630,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
           try {
             // Calculate task dates
-            const startDate = combinationIndex === 0 || previousTaskIds[currentStream] === null
-              ? input.baseStartDate
-              : // Calculate from previous task's end date + 1 day
-                (() => {
-                  const prevTask = taskStore.get(previousTaskIds[currentStream]);
-                  if (!prevTask) return input.baseStartDate;
-                  const prevEnd = new Date(prevTask.endDate);
-                  prevEnd.setDate(prevEnd.getDate() + 1);
-                  return prevEnd.toISOString().split('T')[0];
-                })();
+            let startDate: string;
+            if (combinationIndex === 0 || previousTaskIds[currentStream] === null) {
+              startDate = input.baseStartDate;
+            } else {
+              const prevTask = await taskStore.get(previousTaskIds[currentStream]!);
+              if (!prevTask) {
+                startDate = input.baseStartDate;
+              } else {
+                const prevEnd = new Date(prevTask.endDate);
+                prevEnd.setDate(prevEnd.getDate() + 1);
+                startDate = prevEnd.toISOString().split('T')[0];
+              }
+            }
 
             // Calculate end date from duration
             const start = new Date(startDate);
@@ -660,13 +660,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const dependencies: TaskDependency[] = [];
             if (previousTaskIds[currentStream]) {
               dependencies.push({
-                taskId: previousTaskIds[currentStream],
+                taskId: previousTaskIds[currentStream]!,
                 type: 'FS',
               });
             }
 
             // Create the task
-            const task = taskStore.create({
+            const task = await taskStore.create({
               name: taskName,
               startDate,
               endDate,
@@ -715,11 +715,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server with stdio transport
 async function main() {
-  // Check for default autosave path from environment variable
-  const defaultPath = getAutoSavePath();
-  if (defaultPath) {
-    taskStore.setAutoSavePath(defaultPath);
-  }
+  // Initialize the SQLite database (creates tables if needed)
+  await getDb();
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

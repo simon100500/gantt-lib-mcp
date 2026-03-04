@@ -157,3 +157,17 @@ export interface BatchCreateResult {
   /** Tasks that failed to create (if any) */
   failed?: Array<{ index: number; error: string }>;
 }
+
+/**
+ * Dialog message for AI conversation history
+ */
+export interface Message {
+  /** Unique identifier */
+  id: string;
+  /** Message role */
+  role: 'user' | 'assistant';
+  /** Message content */
+  content: string;
+  /** ISO timestamp of creation */
+  createdAt: string;
+}

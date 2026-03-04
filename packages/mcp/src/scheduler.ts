@@ -9,14 +9,6 @@
 import { Task, TaskDependency, DependencyType } from './types.js';
 
 /**
- * Task store interface for dependency resolution
- */
-interface TaskStore {
-  get(id: string): Task | undefined;
-  list(): Task[];
-}
-
-/**
  * Result of applying a single dependency
  */
 interface DateCalculation {
@@ -27,6 +19,8 @@ interface DateCalculation {
 /**
  * TaskScheduler provides automatic date recalculation based on task dependencies.
  *
+ * Accepts a Map<string, Task> snapshot for all operations — no async store access needed.
+ *
  * Supports all four gantt-lib dependency types:
  * - FS (Finish-Start): dependent starts when predecessor finishes
  * - SS (Start-Start): dependent starts when predecessor starts
@@ -34,7 +28,17 @@ interface DateCalculation {
  * - SF (Start-Finish): dependent finishes when predecessor starts
  */
 export class TaskScheduler {
-  constructor(private taskStore: TaskStore) {}
+  /**
+   * @param taskMap - Snapshot of all tasks (Map<id, Task>)
+   */
+  constructor(private taskMap: Map<string, Task>) {}
+
+  /**
+   * Replace the internal task snapshot (used after DB reloads)
+   */
+  setTaskMap(taskMap: Map<string, Task>): void {
+    this.taskMap = taskMap;
+  }
 
   /**
    * Validate all dependency references exist
@@ -43,7 +47,7 @@ export class TaskScheduler {
   validateDependencies(task: Task): void {
     if (!task.dependencies) return;
     for (const dep of task.dependencies) {
-      if (!this.taskStore.get(dep.taskId)) {
+      if (!this.taskMap.get(dep.taskId)) {
         throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
       }
     }
@@ -68,7 +72,7 @@ export class TaskScheduler {
     recStack.add(taskId);
     path.push(taskId);
 
-    const task = this.taskStore.get(taskId);
+    const task = this.taskMap.get(taskId);
     if (task?.dependencies) {
       for (const dep of task.dependencies) {
         if (!visited.has(dep.taskId)) {
@@ -86,34 +90,6 @@ export class TaskScheduler {
   }
 
   /**
-   * Calculate new dates based on a single dependency
-   * @param task - Task being calculated
-   * @param dep - Dependency to apply
-   * @returns Date calculation result
-   */
-  private applyDependency(task: Task, dep: TaskDependency): DateCalculation {
-    const predecessor = this.taskStore.get(dep.taskId);
-    if (!predecessor) throw new Error(`Task not found: ${dep.taskId}`);
-
-    const lag = dep.lag || 0;
-
-    switch (dep.type) {
-      case 'FS': // Finish-Start: dependent starts the day after predecessor finishes
-        return { startDate: this.addDays(predecessor.endDate, (lag || 0) + 1) };
-      case 'SS': // Start-Start: dependent starts when predecessor starts
-        return { startDate: this.addDays(predecessor.startDate, lag) };
-      case 'FF': // Finish-Finish: dependent ends when predecessor finishes
-        return { endDate: this.addDays(predecessor.endDate, lag) };
-      case 'SF': // Start-Finish: dependent ends when predecessor starts
-        return { endDate: this.addDays(predecessor.startDate, lag) };
-      default:
-        // Validate dependency type at compile time
-        const _exhaustiveCheck: never = dep.type;
-        throw new Error(`Unknown dependency type: ${_exhaustiveCheck}`);
-    }
-  }
-
-  /**
    * Recalculate dates for a task and all dependent tasks (cascade)
    *
    * @param startTaskId - ID of task to start recalculation from
@@ -124,9 +100,9 @@ export class TaskScheduler {
     const updates = new Map<string, Task>();
     const visited = new Set<string>();
 
-    // Helper to get task (prefer updates over original store)
+    // Helper to get task (prefer updates over original snapshot)
     const getTask = (id: string): Task | undefined => {
-      return updates.get(id) || this.taskStore.get(id);
+      return updates.get(id) || this.taskMap.get(id);
     };
 
     // Helper to apply dependency with access to updates map
@@ -147,7 +123,7 @@ export class TaskScheduler {
           return { endDate: this.addDays(predecessor.startDate, lag) };
         default:
           // Validate dependency type at compile time
-          const _exhaustiveCheck: never = dep.type;
+          const _exhaustiveCheck: never = dep.type as never;
           throw new Error(`Unknown dependency type: ${_exhaustiveCheck}`);
       }
     };
@@ -156,7 +132,7 @@ export class TaskScheduler {
       if (visited.has(taskId)) return;
       visited.add(taskId);
 
-      const task = this.taskStore.get(taskId);
+      const task = this.taskMap.get(taskId);
       if (!task) return;
 
       // Skip processing the start task itself if requested
@@ -166,8 +142,7 @@ export class TaskScheduler {
         updates.set(taskId, task);
 
         // Find and process all tasks that depend on this one
-        const allTasks = this.taskStore.list();
-        for (const t of allTasks) {
+        for (const [, t] of this.taskMap) {
           if (t.dependencies?.some(d => d.taskId === taskId)) {
             processTask(t.id);
           }
@@ -213,8 +188,7 @@ export class TaskScheduler {
       updates.set(taskId, updatedTask);
 
       // Find and process all tasks that depend on this one
-      const allTasks = this.taskStore.list();
-      for (const t of allTasks) {
+      for (const [, t] of this.taskMap) {
         if (t.dependencies?.some(d => d.taskId === taskId)) {
           processTask(t.id);
         }
