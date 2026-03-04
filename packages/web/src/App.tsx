@@ -64,7 +64,7 @@ export default function App() {
         {loading ? (
           <div style={{ padding: 20 }}>Loading...</div>
         ) : (
-          <GanttChart tasks={tasks} />
+          <GanttChart tasks={tasks} onChange={setTasks} />
         )}
       </main>
       <aside style={{ width: 360, borderLeft: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column' }}>
