@@ -201,5 +201,15 @@ Plans:
 - [x] 07-05-PLAN.md — Web package: Chat sidebar + WebSocket integration + real-time Gantt updates (Complete)
 - [x] 07-06-PLAN.md — CapRover deploy: Dockerfile (multi-stage) + nginx.conf + captain-definition (Complete)
 
+### Phase 8: Integrate gantt-lib library
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 8 to break down)
+
 ---
 *Roadmap created: 2026-02-23*

@@ -180,6 +180,7 @@ Last activity: 2026-03-03 - Phase 06 Plan 01 complete: Wave 0 scaffold (agent.te
 - Phase 5 added: batch-tasks Сделать пакетное добавление работ (например, сразу на несколько этажей или секций), особенно связанных один за другим
 - Phase 6 added: qwen-agent
 - Phase 7 added: Web UI with real-time Gantt editing via AI dialogue
+- Phase 8 added: Integrate gantt-lib library
 
 ### Phase 7 Architecture Context
 
