@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-03-04T10:36:51.368Z"
+last_updated: "2026-03-04T10:40:23.124Z"
 last_activity: "2026-03-03 - Phase 06 Plan 01 complete: Wave 0 scaffold (agent.test.js, prompts/system.md, tsconfig.json) with 3 test contracts, AGENT-06 passing, AGENT-01 in red state"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # STATE: gantt-lib MCP Server
@@ -66,6 +66,7 @@ progress:
 | Phase 07 P02 | 20 | 2 tasks | 6 files |
 | Phase 07 P03 | 25 | 2 tasks | 6 files |
 | Phase 07 P04 | 10 | 2 tasks | 5 files |
+| Phase 07 P05 | 1 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ progress:
 - [Phase 07]: dhtmlx-gantt integration via useRef+useEffect: init once on mount, clearAll+parse on tasks change
 - [Phase 07]: Empty state rendered as JSX div to avoid gantt init race when no tasks on first render
 - [Phase 07]: setTasks exposed from useTasks hook for 07-05 WebSocket updates without prop drilling
+- [Phase 07]: useRef for onMessage callback — avoids recreating WebSocket on every render while still calling latest handler
+- [Phase 07]: streaming accumulation pattern: append tokens to streaming string, commit to messages[] on 'done' event
 
 ### Active Todos
 
