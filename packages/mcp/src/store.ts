@@ -335,6 +335,16 @@ export class TaskStore {
   }
 
   /**
+   * Clear all tasks from the database. CASCADE removes dependencies.
+   * @returns number of tasks deleted
+   */
+  async deleteAll(): Promise<number> {
+    const db = await getDb();
+    const result = await db.execute('DELETE FROM tasks');
+    return result.rowsAffected ?? 0;
+  }
+
+  /**
    * Export all tasks to JSON string
    */
   async exportTasks(): Promise<string> {
