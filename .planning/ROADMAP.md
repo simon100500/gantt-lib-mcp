@@ -129,6 +129,15 @@ Phase 3 (Auto-schedule Engine)
     |
     v
 Phase 4 (Testing & Validation)
+    |
+    v
+Phase 5 (Batch Tasks)
+    |
+    v
+Phase 6 (qwen-agent)
+    |
+    v
+Phase 7 (Web UI + CapRover deploy)
 ```
 
 ## Coverage
@@ -185,12 +194,12 @@ Plans:
 **Plans:** 6/6 plans complete
 
 Plans:
-- [ ] 07-01-PLAN.md — Monorepo scaffold: npm workspaces with packages/mcp, packages/server, packages/web
-- [ ] 07-02-PLAN.md — MCP DB migration: TaskStore to SQLite via @libsql/client (tasks, dependencies, messages tables)
-- [ ] 07-03-PLAN.md — Server package: Fastify + WebSocket + agent runner with streaming
-- [ ] 07-04-PLAN.md — Web package: React + dhtmlx-gantt render + useTasks hook
-- [ ] 07-05-PLAN.md — Web package: Chat sidebar + WebSocket integration + real-time Gantt updates
-- [ ] 07-06-PLAN.md — CapRover deploy: Dockerfile (multi-stage) + nginx.conf + captain-definition
+- [x] 07-01-PLAN.md — Monorepo scaffold: npm workspaces with packages/mcp, packages/server, packages/web (Complete)
+- [x] 07-02-PLAN.md — MCP DB migration: TaskStore to SQLite via @libsql/client (tasks, dependencies, messages tables) (Complete)
+- [x] 07-03-PLAN.md — Server package: Fastify + WebSocket + agent runner with streaming (Complete)
+- [x] 07-04-PLAN.md — Web package: React stub + useTasks hook (Complete)
+- [x] 07-05-PLAN.md — Web package: Chat sidebar + WebSocket integration + real-time Gantt updates (Complete)
+- [x] 07-06-PLAN.md — CapRover deploy: Dockerfile (multi-stage) + nginx.conf + captain-definition (Complete)
 
 ---
 *Roadmap created: 2026-02-23*
