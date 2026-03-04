@@ -107,6 +107,7 @@ export async function runAgentWithHistory(userMessage: string): Promise<void> {
       options: {
         model: env.OPENAI_MODEL,
         cwd: PROJECT_ROOT,
+        permissionMode: 'yolo',
         env: {
           ...env,
           DB_PATH: dbPath,
