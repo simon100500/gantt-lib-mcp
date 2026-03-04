@@ -1,0 +1,10 @@
+# Gantt MCP Server Configuration
+GANTT_AUTOSAVE_PATH=D:\Projects\gantt-lib\packages\website\public\tasks.json
+
+ANTHROPIC_AUTH_TOKEN=d2786f1a180f46a6b434a8588c1445a8.DZNmPp9hyPX7GNyK
+OPENAI_API_KEY=d2786f1a180f46a6b434a8588c1445a8.DZNmPp9hyPX7GNyK
+OPENAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+OPENAI_MODEL=glm-4.7
+
+
+# sk-OFFp4DEO_WURav1jYl3usN6HVWoLqTwK

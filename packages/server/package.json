@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
-    "@gantt/mcp": "*",
+    "@gantt/mcp": "^0.1.0",
     "@libsql/client": "^0.14.0",
     "fastify": "^5.2.1"
   },
