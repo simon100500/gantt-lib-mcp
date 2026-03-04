@@ -71,6 +71,7 @@ progress:
 | Phase 07 P07-06 | 360 | 2 tasks | 8 files |
 | Phase 08-integrate-gantt-lib-library P01 | 81 | 3 tasks | 4 files |
 | Phase 08-integrate-gantt-lib-library P02 | 5 | 1 tasks | 1 files |
+| Quick 05-add-gantt-lib-features | 79 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,9 @@ progress:
 - [Phase 08]: Alias gantt-lib import as GanttLibChart to avoid name collision with wrapper component
 - [Phase 08]: Update Task type to allow string | Date for gantt-lib compatibility
 - [Phase 08-integrate-gantt-lib-library]: Pass setTasks directly to onChange prop - gantt-lib emits functional updaters to avoid stale closure bugs
+- [Quick 05]: Add forwardRef pattern to expose scrollToToday and scrollToTask methods from gantt-lib wrapper
+- [Quick 05]: Use imperative handle for ref methods in React components
+- [Quick 05]: Set highlightExpiredTasks default to true for better UX
 
 ### Active Todos
 
@@ -145,6 +149,7 @@ None
 | 2 | автосохранение в json файл | 2026-02-23 | dfb01ee, dc9a1e6 | [2-json](./quick/2-json/) |
 | 3 | Add .env file support | 2026-02-23 | 08e1d68, 3dd3d91 | [3-add-env-support](./quick/3-add-env-support/) |
 | 4 | Fix FS dependency date overlap | 2026-02-24 | 544f428, b21608b | [4-fix-fs-dependency-date-overlap-when-task](./quick/4-fix-fs-dependency-date-overlap-when-task/) |
+| 5 | Add missing gantt-lib features | 2026-03-04 | ca18eb1, e80e116, 1baebf5 | [5-https-github-com-simon100500-gantt-lib-b](./quick/5-https-github-com-simon100500-gantt-lib-b/) |
 
 ### Quick Tasks Pending
 
