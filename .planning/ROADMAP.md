@@ -16,7 +16,7 @@
 | 5. Batch Tasks | 1/1 | Complete | 2026-02-25 |
 | 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
-| 8. Integrate gantt-lib library | 0/2 | Planned | 2026-03-04 |
+| 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
 
 ## Phases
 
@@ -27,7 +27,7 @@
 - [x] **Phase 5: Batch Tasks** - Batch task creation with streams and sequential dependencies
 - [x] **Phase 6: qwen-agent** - CLI agent using @qwen-code/sdk with Z.AI integration
 - [x] **Phase 7: Web UI with real-time Gantt editing via AI dialogue** - React + Fastify + WebSocket + SQLite monorepo, CapRover deploy (completed 2026-03-04)
-- [ ] **Phase 8: Integrate gantt-lib library** - Replace placeholder Gantt component with gantt-lib React library (planned 2026-03-04)
+- [x] **Phase 8: Integrate gantt-lib library** - Replace placeholder Gantt component with gantt-lib React library (completed 2026-03-04)
 
 ## Phase Details
 
@@ -215,9 +215,9 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Install gantt-lib package, add CSS import, replace placeholder component with gantt-lib integration
-- [ ] 08-02-PLAN.md — Wire onChange handler for drag-to-edit persistence, verify drag interactions and WebSocket sync
+- [x] 08-01-PLAN.md — Install gantt-lib package, add CSS import, replace placeholder component with gantt-lib integration
+- [x] 08-02-PLAN.md — Wire onChange handler for drag-to-edit persistence, verify drag interactions and WebSocket sync
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-04 adding Phase 8*
+*Last updated: 2026-03-04 after completing Phase 8*
