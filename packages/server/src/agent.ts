@@ -31,8 +31,9 @@ import { broadcast } from './ws.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// dist/agent.js → packages/server → project root (packages/server/../../..)
-const PROJECT_ROOT = join(__dirname, '../../..');
+// In container: GANTT_PROJECT_ROOT=/app is set by docker-entrypoint.sh
+// In dev: resolve from dist/agent.js → packages/server/dist → packages/server → project root
+const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
 
 // Load .env from project root (OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL)
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
@@ -68,7 +69,10 @@ export async function runAgentWithHistory(userMessage: string): Promise<void> {
     const messages = await taskStore.getMessages();
 
     // 3. Load system prompt (optional fallback if file missing)
-    const systemPromptPath = join(PROJECT_ROOT, 'packages/mcp/agent/prompts/system.md');
+    // GANTT_MCP_PROMPTS_DIR allows override for container deployments where paths differ
+    const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
+      ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
+      : join(PROJECT_ROOT, 'packages/mcp/agent/prompts/system.md');
     const systemPrompt = existsSync(systemPromptPath)
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
@@ -92,7 +96,9 @@ export async function runAgentWithHistory(userMessage: string): Promise<void> {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
 
-    const mcpServerPath = join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
+    // GANTT_MCP_SERVER_PATH allows override for container deployments
+    const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
+      ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
     const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
 
     // 6. Run agent session
