@@ -170,5 +170,15 @@ Plans:
 - [ ] 06-01-PLAN.md — Wave 0 scaffold: unit test stubs, system prompt, agent tsconfig
 - [ ] 06-02-PLAN.md — Implement agent/agent.ts with @qwen-code/sdk + Z.AI integration
 
+### Phase 7: Web UI with real-time Gantt editing via AI dialogue
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 7 to break down)
+
 ---
 *Roadmap created: 2026-02-23*

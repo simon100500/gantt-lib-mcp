@@ -156,3 +156,35 @@ Last activity: 2026-03-03 - Phase 06 Plan 01 complete: Wave 0 scaffold (agent.te
 
 - Phase 5 added: batch-tasks Сделать пакетное добавление работ (например, сразу на несколько этажей или секций), особенно связанных один за другим
 - Phase 6 added: qwen-agent
+- Phase 7 added: Web UI with real-time Gantt editing via AI dialogue
+
+### Phase 7 Architecture Context
+
+Обсуждение от 2026-03-04. Цель — полноценный онлайн-редактор Ганта с диалоговым AI-управлением.
+
+**Структура (монорепо, npm workspaces):**
+```
+packages/
+  web/     — React + Gantt-рендер + Chat sidebar
+  server/  — Fastify + WebSocket + agent runner
+  mcp/     — текущий gantt-lib-mcp (рефактор на БД)
+```
+
+**Деплой:** CapRover, один контейнер (Nginx → статика + Fastify), SQLite в Persistent Directory.
+
+**БД:** SQLite через `@libsql/client` (WASM, без компиляции — работает на Windows/Linux без Build Tools).
+- Таблицы: `tasks`, `dependencies`, `messages` (история диалога)
+- Даты как TEXT (YYYY-MM-DD), зависимости в отдельной таблице (не JSON-колонка)
+
+**Поток данных:**
+1. Пользователь пишет в чат → WS → backend
+2. Backend достаёт историю из БД, запускает `query()` с историей
+3. Модель вызывает MCP-инструменты → MCP пишет в БД
+4. Backend делает WS broadcast → Gantt обновляется в реальном времени
+
+**Ключевые решения:**
+- MCP-сервер работает с БД напрямую (не in-memory)
+- Backend тоже работает с БД напрямую для REST/WS (не через MCP)
+- История диалога в БД — модель помнит контекст между сессиями
+- Стриминг ответа модели по WS в чат
+- Локальная разработка: `dev:server` на :3000, `dev:web` на :5173 с прокси
