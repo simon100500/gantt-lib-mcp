@@ -200,7 +200,7 @@ export default function App() {
             rowHeight={36}
             containerHeight={800}
             showTaskList={true}
-            taskListWidth={500}
+            taskListWidth={650}
             onValidateDependencies={handleValidation}
             enableAutoSchedule={enableAutoSchedule}
             onCascade={handleCascade}

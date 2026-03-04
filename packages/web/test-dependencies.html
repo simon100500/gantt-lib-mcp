@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Dependencies Column</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/gantt-lib@0.3.2/dist/styles.css">
+  <script src="https://unpkg.com/gantt-lib@0.3.2/dist/index.js"></script>
+  <style>
+    body { margin: 0; padding: 20px; font-family: sans-serif; }
+    .container { width: 100%; height: 600px; }
+  </style>
+</head>
+<body>
+  <h1>Test Dependencies Column</h1>
+  <p>Should see columns: № | Name | Start Date | End Date | <strong>Dependencies</strong></p>
+  <div class="container" id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+    const { GanttChart } = GanttLib;
+
+    const testTasks = [
+      { id: '1', name: 'Task 1', startDate: '2026-03-01', endDate: '2026-03-05', color: '#3b82f6' },
+      { id: '2', name: 'Task 2', startDate: '2026-03-06', endDate: '2026-03-10', color: '#22c55e', dependencies: [{ taskId: '1', type: 'FS', lag: 0 }] },
+      { id: '3', name: 'Task 3', startDate: '2026-03-11', endDate: '2026-03-15', color: '#f59e0b', dependencies: [{ taskId: '2', type: 'SS', lag: 2 }] },
+    ];
+
+    function App() {
+      const [tasks, setTasks] = useState(testTasks);
+      return (
+        <GanttChart
+          tasks={tasks}
+          onChange={setTasks}
+          showTaskList={true}
+          taskListWidth={650}
+          dayWidth={40}
+          rowHeight={40}
+        />
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
