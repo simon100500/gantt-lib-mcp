@@ -59,7 +59,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif' }}>
+    <div style={{ display: 'flex', height: '98vh', fontFamily: 'sans-serif' }}>
       <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         {loading ? (
           <div style={{ padding: 20 }}>Loading...</div>
