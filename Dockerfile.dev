@@ -1,0 +1,40 @@
+# ── Development image with hot reload ───────────────────────────────────────
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/server/package.json ./packages/server/
+COPY packages/web/package.json ./packages/web/
+
+# Install all dependencies
+RUN npm ci
+
+# Install tsx for TypeScript hot reload and nodemon for file watching
+RUN npm install -g tsx nodemon
+
+# Dev environment variables
+ARG OPENAI_API_KEY
+ARG OPENAI_BASE_URL=https://api.z.ai/api/paas/v4/
+ARG OPENAI_MODEL=glm-4.7
+ARG DB_PATH=/data/gantt.db
+ARG PORT=3000
+
+ENV OPENAI_API_KEY=${OPENAI_API_KEY}
+ENV OPENAI_BASE_URL=${OPENAI_BASE_URL}
+ENV OPENAI_MODEL=${OPENAI_MODEL}
+ENV DB_PATH=${DB_PATH}
+ENV PORT=${PORT}
+ENV NODE_ENV=development
+
+VOLUME /data
+
+EXPOSE 3000 5173
+
+# Start both vite dev server and backend with tsx watch
+COPY docker-dev-entrypoint.sh /docker-dev-entrypoint.sh
+RUN chmod +x /docker-dev-entrypoint.sh
+
+CMD ["/docker-dev-entrypoint.sh"]

@@ -1,0 +1,33 @@
+services:
+  gantt-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"  # Vite dev server
+      - "3000:3000"  # API backend
+    volumes:
+      - gantt-data:/data
+      - ./packages/web:/app/packages/web:rw
+      - ./packages/server:/app/packages/server:rw
+      - ./packages/mcp:/app/packages/mcp:rw
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
+      - web_node_modules:/app/packages/web/node_modules
+      - server_node_modules:/app/packages/server/node_modules
+      - mcp_node_modules:/app/packages/mcp/node_modules
+      - root_node_modules:/app/node_modules
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+
+volumes:
+  gantt-data:
+  web_node_modules:
+  server_node_modules:
+  mcp_node_modules:
+  root_node_modules:

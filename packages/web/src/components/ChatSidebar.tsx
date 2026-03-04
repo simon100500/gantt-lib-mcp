@@ -48,7 +48,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected }
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #e0e0e0', fontWeight: 600 }}>
-        AI Assistant
+        AI Gantt Assistant
         <span style={{ float: 'right', fontSize: 12, color: connected ? '#22c55e' : '#ef4444' }}>
           {connected ? 'connected' : 'reconnecting...'}
         </span>
