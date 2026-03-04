@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-03-04T10:40:23.124Z"
+last_updated: "2026-03-04T10:46:43.620Z"
 last_activity: "2026-03-03 - Phase 06 Plan 01 complete: Wave 0 scaffold (agent.test.js, prompts/system.md, tsconfig.json) with 3 test contracts, AGENT-06 passing, AGENT-01 in red state"
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # STATE: gantt-lib MCP Server
@@ -67,6 +67,7 @@ progress:
 | Phase 07 P03 | 25 | 2 tasks | 6 files |
 | Phase 07 P04 | 10 | 2 tasks | 5 files |
 | Phase 07 P05 | 1 | 2 tasks | 3 files |
+| Phase 07 P07-06 | 3 | 1 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ progress:
 - [Phase 07]: setTasks exposed from useTasks hook for 07-05 WebSocket updates without prop drilling
 - [Phase 07]: useRef for onMessage callback — avoids recreating WebSocket on every render while still calling latest handler
 - [Phase 07]: streaming accumulation pattern: append tokens to streaming string, commit to messages[] on 'done' event
+- [Phase 07]: GANTT_PROJECT_ROOT/MCP_SERVER_PATH/MCP_PROMPTS_DIR env vars allow container path overrides without breaking dev workflow
+- [Phase 07]: MCP dist copied to both /app/mcp/dist and /app/packages/mcp/dist to satisfy npm workspace symlink AND direct env var path
 
 ### Active Todos
 
