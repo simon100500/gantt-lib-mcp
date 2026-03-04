@@ -72,6 +72,7 @@ progress:
 | Phase 08-integrate-gantt-lib-library P01 | 81 | 3 tasks | 4 files |
 | Phase 08-integrate-gantt-lib-library P02 | 5 | 1 tasks | 1 files |
 | Quick 05-add-gantt-lib-features | 79 | 3 tasks | 3 files |
+| Quick 06-add-clear-db-button | 1 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,9 @@ progress:
 - [Quick 05]: Add forwardRef pattern to expose scrollToToday and scrollToTask methods from gantt-lib wrapper
 - [Quick 05]: Use imperative handle for ref methods in React components
 - [Quick 05]: Set highlightExpiredTasks default to true for better UX
+- [Quick 06]: Add TaskStore.deleteAll() method for clearing all tasks with CASCADE delete
+- [Quick 06]: Use DELETE HTTP method for /api/tasks endpoint (RESTful convention)
+- [Quick 06]: Add confirmation dialog before clearing database to prevent accidental data loss
 
 ### Active Todos
 
@@ -150,6 +154,7 @@ None
 | 3 | Add .env file support | 2026-02-23 | 08e1d68, 3dd3d91 | [3-add-env-support](./quick/3-add-env-support/) |
 | 4 | Fix FS dependency date overlap | 2026-02-24 | 544f428, b21608b | [4-fix-fs-dependency-date-overlap-when-task](./quick/4-fix-fs-dependency-date-overlap-when-task/) |
 | 5 | Add missing gantt-lib features | 2026-03-04 | ca18eb1, e80e116, 1baebf5 | [5-https-github-com-simon100500-gantt-lib-b](./quick/5-https-github-com-simon100500-gantt-lib-b/) |
+| 6 | Add Clear Database button | 2026-03-04 | 740b1d1, 89a6a49, 8a2d5c4 | [6-add-clear-db-button](./quick/6-add-clear-db-button/) |
 
 ### Quick Tasks Pending
 
@@ -185,7 +190,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-04 - Completed quick task 5: Add missing gantt-lib features (validation, cascade, UI controls)
+Last activity: 2026-03-04 - Completed quick task 6: Add Clear Database button with DELETE /api/tasks endpoint and confirmation dialog
 
 ### Roadmap Evolution
 
