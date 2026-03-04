@@ -98,7 +98,7 @@ export async function runAgent(userPrompt: string): Promise<void> {
       // SDKAssistantMessage wraps APIAssistantMessage in .message
       for (const block of message.message.content) {
         if (block.type === 'text' && block.text) {
-          process.stdout.write(block.text);
+          process.stdout.write(block.text.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
           // Try to extract JSON from text output (agent may embed it)
           const jsonMatch = block.text.match(/```json\n([\s\S]*?)\n```/);
           if (jsonMatch) {
@@ -118,7 +118,8 @@ export async function runAgent(userPrompt: string): Promise<void> {
   // Write output
   const outputPath = join(PROJECT_ROOT, 'tasks.json');
   if (capturedJson) {
-    await writeFile(outputPath, capturedJson, 'utf-8');
+    const cleanJson = capturedJson.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
+    await writeFile(outputPath, cleanJson, 'utf-8');
     console.log(`[agent] Output written to ${outputPath}`);
   } else {
     console.warn('[agent] Warning: No JSON output captured. tasks.json not updated.');
