@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-03-04T10:46:43.620Z"
+last_updated: "2026-03-04T15:45:34.929Z"
 last_activity: "2026-03-03 - Phase 06 Plan 01 complete: Wave 0 scaffold (agent.test.js, prompts/system.md, tsconfig.json) with 3 test contracts, AGENT-06 passing, AGENT-01 in red state"
 progress:
   total_phases: 7
@@ -39,10 +39,10 @@ progress:
 ## Current Position
 
 **Phase:** Phase 07 - web-ui-with-real-time-gantt-editing-via-ai-dialogue
-**Plan:** 07-04 (Complete)
-**Status:** In Progress
+**Plan:** 07-06 (Complete)
+**Status:** Complete — all phases and plans done
 
-**Progress Bar:** `[█████████░] 85% (11/13 plans complete)`
+**Progress Bar:** `[██████████] 100% (13/13 plans complete)`
 
 ---
 
@@ -68,6 +68,7 @@ progress:
 | Phase 07 P04 | 10 | 2 tasks | 5 files |
 | Phase 07 P05 | 1 | 2 tasks | 3 files |
 | Phase 07 P07-06 | 3 | 1 tasks | 8 files |
+| Phase 07 P07-06 | 360 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ progress:
 - [Phase 07]: streaming accumulation pattern: append tokens to streaming string, commit to messages[] on 'done' event
 - [Phase 07]: GANTT_PROJECT_ROOT/MCP_SERVER_PATH/MCP_PROMPTS_DIR env vars allow container path overrides without breaking dev workflow
 - [Phase 07]: MCP dist copied to both /app/mcp/dist and /app/packages/mcp/dist to satisfy npm workspace symlink AND direct env var path
+- [Phase 07]: Use 127.0.0.1 instead of localhost in nginx proxy_pass — Alpine resolves localhost to ::1 (IPv6) first, causing 502 when Fastify only binds IPv4
+- [Phase 07]: permissionMode: 'yolo' in query() options — Docker has no TTY so qwen-code SDK hangs awaiting interactive tool permission prompts without this flag
 
 ### Active Todos
 
