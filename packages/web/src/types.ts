@@ -4,6 +4,18 @@ export interface TaskDependency {
   lag?: number;
 }
 
+export interface DependencyError {
+  type: 'cycle' | 'constraint' | 'missing-task';
+  taskId: string;
+  message: string;
+  relatedTaskIds?: string[];
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  errors: DependencyError[];
+}
+
 export interface Task {
   id: string;
   name: string;
@@ -11,5 +23,8 @@ export interface Task {
   endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)
   color?: string;
   progress?: number;
+  accepted?: boolean;        // Controls progress bar color at 100% (green vs yellow)
+  locked?: boolean;          // Prevents drag/resize/edit
+  divider?: 'top' | 'bottom'; // Visual grouping lines
   dependencies?: TaskDependency[];
 }
