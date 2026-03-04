@@ -1,10 +1,13 @@
+import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task } from '../types.ts';
 
 interface GanttChartProps {
   tasks: Task[];
+  onChange?: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
 }
 
-export function GanttChart({ tasks }: GanttChartProps) {
+export function GanttChart({ tasks, onChange }: GanttChartProps) {
+  // Preserve empty state for better UX
   if (tasks.length === 0) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' }}>
@@ -14,8 +17,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <p style={{ color: '#888' }}>{tasks.length} task(s) loaded. Gantt chart coming soon.</p>
-    </div>
+    <GanttLibChart
+      tasks={tasks}
+      onChange={onChange}
+    />
   );
 }

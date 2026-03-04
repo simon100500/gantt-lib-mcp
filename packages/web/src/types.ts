@@ -7,8 +7,8 @@ export interface TaskDependency {
 export interface Task {
   id: string;
   name: string;
-  startDate: string;   // YYYY-MM-DD
-  endDate: string;     // YYYY-MM-DD
+  startDate: string | Date;   // YYYY-MM-DD string or Date object (gantt-lib compatible)
+  endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)
   color?: string;
   progress?: number;
   dependencies?: TaskDependency[];
