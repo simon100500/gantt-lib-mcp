@@ -12,16 +12,18 @@
 | 1. MCP Server Foundation | 1/1 | Complete | 01-01 |
 | 2. Task CRUD + Data Model | 1/1 | Complete    | 2026-02-22 |
 | 3. Auto-schedule Engine | 2/2 | Complete | 03-01, 03-02 |
-| 4. Testing & Validation | 0/1 | Not started | - |
-| 5. Batch Tasks | 1/1 | Complete    | 2026-02-25 |
-| 6. qwen-agent | 2/2 | Complete   | 2026-03-03 |
+| 4. Testing & Validation | 1/1 | Complete | 2026-02-25 |
+| 5. Batch Tasks | 1/1 | Complete | 2026-02-25 |
+| 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
 
 ## Phases
 
 - [x] **Phase 1: MCP Server Foundation** - Initialize TypeScript MCP server with stdio transport
 - [x] **Phase 2: Task CRUD + Data Model** - Complete task management with gantt-lib compatible types
 - [x] **Phase 3: Auto-schedule Engine** - Cascading date recalculation with dependency validation
-- [ ] **Phase 4: Testing & Validation** - Claude Code CLI integration verification
+- [x] **Phase 4: Testing & Validation** - Claude Code CLI integration verification
+- [x] **Phase 5: Batch Tasks** - Batch task creation with streams and sequential dependencies
+- [x] **Phase 6: qwen-agent** - CLI agent using @qwen-code/sdk with Z.AI integration
 
 ## Phase Details
 
@@ -105,7 +107,10 @@ Plans:
 1. Claude Code CLI can connect to server via stdio transport
 2. Each tool can be invoked from Claude Code CLI with example usage
 
-**Plans:** TBD
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 04-01-PLAN.md — Claude Code CLI integration verification (Complete)
 
 ---
 
@@ -167,8 +172,8 @@ Plans:
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 06-01-PLAN.md — Wave 0 scaffold: unit test stubs, system prompt, agent tsconfig
-- [ ] 06-02-PLAN.md — Implement agent/agent.ts with @qwen-code/sdk + Z.AI integration
+- [x] 06-01-PLAN.md — Wave 0 scaffold: unit test stubs, system prompt, agent tsconfig (Complete)
+- [x] 06-02-PLAN.md — Implement agent/agent.ts with @qwen-code/sdk + Z.AI integration (Complete)
 
 ### Phase 7: Web UI with real-time Gantt editing via AI dialogue
 
