@@ -15,7 +15,7 @@
 | 4. Testing & Validation | 1/1 | Complete | 2026-02-25 |
 | 5. Batch Tasks | 1/1 | Complete | 2026-02-25 |
 | 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
-| 7. Web UI with real-time Gantt editing | 3/6 | In Progress|  |
+| 7. Web UI with real-time Gantt editing | 4/6 | In Progress|  |
 
 ## Phases
 
@@ -182,7 +182,7 @@ Plans:
 **Goal:** Full-stack web application — React Gantt editor with AI chat sidebar, real-time updates via WebSocket, SQLite persistence, deployable to CapRover as a single container
 **Requirements:** WEB-01, WEB-02, WEB-03, WEB-04, WEB-05, WEB-06
 **Depends on:** Phase 6
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [ ] 07-01-PLAN.md — Monorepo scaffold: npm workspaces with packages/mcp, packages/server, packages/web
