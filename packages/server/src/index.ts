@@ -44,6 +44,12 @@ fastify.post('/api/chat', async (req, reply) => {
   return reply.send({ status: 'processing' });
 });
 
+fastify.delete('/api/tasks', async (_req, reply) => {
+  const count = await taskStore.deleteAll();
+  broadcast({ type: 'tasks', tasks: [] });
+  return reply.send({ deleted: count });
+});
+
 // ---------------------------------------------------------------------------
 // WebSocket routes
 // ---------------------------------------------------------------------------
