@@ -51,8 +51,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Gantt Chart Integration (Phase 8)
 
-- [ ] **WEB-GANTT-01**: gantt-lib package (v0.1.1) installed in packages/web with CSS import
-- [ ] **WEB-GANTT-02**: GanttChart component replaced with gantt-lib's GanttChart component
+- [x] **WEB-GANTT-01**: gantt-lib package (v0.1.1) installed in packages/web with CSS import
+- [x] **WEB-GANTT-02**: GanttChart component replaced with gantt-lib's GanttChart component
 - [ ] **WEB-GANTT-03**: Drag-to-edit functionality (move and resize) with onChange handler persistence
 
 ## v2 Requirements
@@ -110,8 +110,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WEB-04 | Phase 7 | Complete |
 | WEB-05 | Phase 7 | Complete |
 | WEB-06 | Phase 7 | Complete |
-| WEB-GANTT-01 | Phase 8 | Pending |
-| WEB-GANTT-02 | Phase 8 | Pending |
+| WEB-GANTT-01 | Phase 8 | Complete |
+| WEB-GANTT-02 | Phase 8 | Complete |
 | WEB-GANTT-03 | Phase 8 | Pending |
 
 **Coverage:**
