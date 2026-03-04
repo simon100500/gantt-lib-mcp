@@ -1,0 +1,13 @@
+services:
+  gantt:
+    build: .
+    ports:
+      - "8080:80"
+    volumes:
+      - gantt-data:/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  gantt-data:
