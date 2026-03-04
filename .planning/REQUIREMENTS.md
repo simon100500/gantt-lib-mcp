@@ -40,6 +40,21 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **TEST-01**: MCP-сервер можно подключить к Claude Code CLI
 - [ ] **TEST-02**: Пример вызова каждого tool через MCP
 
+### Web UI (Phase 7)
+
+- [x] **WEB-01**: Monorepo structure with npm workspaces (packages/web, packages/server, packages/mcp)
+- [x] **WEB-02**: SQLite database via @libsql/client for task persistence
+- [x] **WEB-03**: Fastify server with WebSocket support for real-time updates
+- [x] **WEB-04**: React frontend with useTasks hook for data fetching
+- [x] **WEB-05**: Chat sidebar with AI agent integration via WebSocket
+- [x] **WEB-06**: CapRover deployment with Dockerfile and nginx configuration
+
+### Gantt Chart Integration (Phase 8)
+
+- [ ] **WEB-GANTT-01**: gantt-lib package (v0.1.1) installed in packages/web with CSS import
+- [ ] **WEB-GANTT-02**: GanttChart component replaced with gantt-lib's GanttChart component
+- [ ] **WEB-GANTT-03**: Drag-to-edit functionality (move and resize) with onChange handler persistence
+
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
@@ -89,12 +104,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-03 | Phase 2 | Complete |
 | TEST-01 | Phase 4 | Pending |
 | TEST-02 | Phase 4 | Pending |
+| WEB-01 | Phase 7 | Complete |
+| WEB-02 | Phase 7 | Complete |
+| WEB-03 | Phase 7 | Complete |
+| WEB-04 | Phase 7 | Complete |
+| WEB-05 | Phase 7 | Complete |
+| WEB-06 | Phase 7 | Complete |
+| WEB-GANTT-01 | Phase 8 | Pending |
+| WEB-GANTT-02 | Phase 8 | Pending |
+| WEB-GANTT-03 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 17 total
-- Mapped to phases: 17 (100%)
-- Unmapped: 0
+- v2 requirements: 4 total (deferred)
+- Web UI requirements: 6 total
+- Gantt integration requirements: 3 total
+- Mapped to phases: 29 (100%)
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after completing Phase 3 Plan 1*
+*Last updated: 2026-03-04 adding Phase 8 requirements*
