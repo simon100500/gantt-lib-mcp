@@ -15,6 +15,7 @@
 | 4. Testing & Validation | 1/1 | Complete | 2026-02-25 |
 | 5. Batch Tasks | 1/1 | Complete | 2026-02-25 |
 | 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
+| 7. Web UI with real-time Gantt editing | 0/6 | Planned | — |
 
 ## Phases
 
@@ -24,6 +25,7 @@
 - [x] **Phase 4: Testing & Validation** - Claude Code CLI integration verification
 - [x] **Phase 5: Batch Tasks** - Batch task creation with streams and sequential dependencies
 - [x] **Phase 6: qwen-agent** - CLI agent using @qwen-code/sdk with Z.AI integration
+- [ ] **Phase 7: Web UI with real-time Gantt editing via AI dialogue** - React + Fastify + WebSocket + SQLite monorepo, CapRover deploy
 
 ## Phase Details
 
@@ -177,13 +179,18 @@ Plans:
 
 ### Phase 7: Web UI with real-time Gantt editing via AI dialogue
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Full-stack web application — React Gantt editor with AI chat sidebar, real-time updates via WebSocket, SQLite persistence, deployable to CapRover as a single container
+**Requirements:** WEB-01, WEB-02, WEB-03, WEB-04, WEB-05, WEB-06
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 7 to break down)
+- [ ] 07-01-PLAN.md — Monorepo scaffold: npm workspaces with packages/mcp, packages/server, packages/web
+- [ ] 07-02-PLAN.md — MCP DB migration: TaskStore to SQLite via @libsql/client (tasks, dependencies, messages tables)
+- [ ] 07-03-PLAN.md — Server package: Fastify + WebSocket + agent runner with streaming
+- [ ] 07-04-PLAN.md — Web package: React + dhtmlx-gantt render + useTasks hook
+- [ ] 07-05-PLAN.md — Web package: Chat sidebar + WebSocket integration + real-time Gantt updates
+- [ ] 07-06-PLAN.md — CapRover deploy: Dockerfile (multi-stage) + nginx.conf + captain-definition
 
 ---
 *Roadmap created: 2026-02-23*
