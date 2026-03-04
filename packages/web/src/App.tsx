@@ -82,6 +82,18 @@ export default function App() {
     ganttRef.current?.scrollToToday();
   }, []);
 
+  // Clear database button handler
+  const handleClearDatabase = useCallback(async () => {
+    if (!confirm('Are you sure you want to clear all tasks? This cannot be undone.')) return;
+    try {
+      const res = await fetch('/api/tasks', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to clear database');
+      setTasks([]);
+    } catch (err) {
+      alert(`Error clearing database: ${err}`);
+    }
+  }, []);
+
   if (error) {
     return (
       <div style={{ padding: 20, color: 'red' }}>
@@ -173,6 +185,22 @@ export default function App() {
             }}
           >
             Scroll to Today
+          </button>
+
+          <button
+            onClick={handleClearDatabase}
+            style={{
+              padding: '6px 12px',
+              backgroundColor: '#ef4444',
+              color: 'white',
+              border: '1px solid #dc2626',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              marginLeft: '8px'
+            }}
+          >
+            Clear Database
           </button>
 
           {validationErrors.length > 0 && (
