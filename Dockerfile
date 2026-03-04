@@ -66,6 +66,19 @@ COPY --from=build-server /build/node_modules ./node_modules
 # Stored in ./mcp/agent/prompts (referenced by GANTT_MCP_PROMPTS_DIR=/app/mcp/agent/prompts)
 COPY --from=build-server /build/packages/mcp/agent/prompts ./mcp/agent/prompts
 
+# CapRover / Docker environment variables
+ARG OPENAI_API_KEY
+ARG OPENAI_BASE_URL=https://api.z.ai/api/paas/v4/
+ARG OPENAI_MODEL=glm-4.7
+ARG DB_PATH=/data/gantt.db
+ARG PORT=3000
+
+ENV OPENAI_API_KEY=${OPENAI_API_KEY}
+ENV OPENAI_BASE_URL=${OPENAI_BASE_URL}
+ENV OPENAI_MODEL=${OPENAI_MODEL}
+ENV DB_PATH=${DB_PATH}
+ENV PORT=${PORT}
+
 # Nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
