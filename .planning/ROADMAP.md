@@ -2,8 +2,8 @@
 
 **Created:** 2026-02-23
 **Depth:** Quick
-**Phases:** 8
-**Coverage:** 17/17 v1 requirements + Web UI enhancements
+**Phases:** 9
+**Coverage:** 17/17 v1 requirements + Web UI enhancements + Session control
 
 ## Progress
 
@@ -17,6 +17,7 @@
 | 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
 | 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
+| 9. session-control | 0/5 | Planning | — |
 
 ## Phases
 
@@ -28,6 +29,7 @@
 - [x] **Phase 6: qwen-agent** - CLI agent using @qwen-code/sdk with Z.AI integration
 - [x] **Phase 7: Web UI with real-time Gantt editing via AI dialogue** - React + Fastify + WebSocket + SQLite monorepo, CapRover deploy (completed 2026-03-04)
 - [x] **Phase 8: Integrate gantt-lib library** - Replace placeholder Gantt component with gantt-lib React library (completed 2026-03-04)
+- [ ] **Phase 9: session-control** - Multi-user OTP auth, project isolation, targeted WebSocket broadcast
 
 ## Phase Details
 
@@ -143,6 +145,9 @@ Phase 7 (Web UI + CapRover deploy)
     |
     v
 Phase 8 (Integrate gantt-lib library)
+    |
+    v
+Phase 9 (session-control)
 ```
 
 ## Coverage
@@ -220,14 +225,18 @@ Plans:
 
 ### Phase 9: session-control
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Multi-user OTP email authentication with JWT tokens, project-scoped data isolation, and targeted WebSocket broadcast
+**Requirements:** SESSION-DB-01, SESSION-DB-02, SESSION-DB-03, SESSION-AUTH-01, SESSION-AUTH-02, SESSION-AUTH-03, SESSION-AUTH-04, SESSION-STORE-01, SESSION-WS-01, SESSION-MIDDLEWARE-01, SESSION-AGENT-01, SESSION-UI-01, SESSION-UI-02, SESSION-UI-03
 **Depends on:** Phase 8
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 9 to break down)
+- [ ] 09-01-PLAN.md — DB schema migration: users, projects, sessions, otp_codes tables + project_id on tasks/messages
+- [ ] 09-02-PLAN.md — Auth API: OTP endpoints, JWT utilities, email service, AuthStore
+- [ ] 09-03-PLAN.md — Store + WS refactor: project_id filtering, Map-based session registry, targeted broadcast
+- [ ] 09-04-PLAN.md — Auth middleware + agent refactor: protected routes, project-scoped agent runs
+- [ ] 09-05-PLAN.md — Auth UI: OTP modal (email + 6-digit step), project switcher, useAuth hook
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-04 after completing Phase 8*
+*Last updated: 2026-03-05 after planning Phase 9*
