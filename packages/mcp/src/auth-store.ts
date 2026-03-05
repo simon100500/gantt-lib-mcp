@@ -314,6 +314,21 @@ export class AuthStore {
       args: [sessionId],
     });
   }
+
+  /**
+   * Update session's project (used when switching projects)
+   *
+   * @param sessionId - Session ID to update
+   * @param projectId - New project ID
+   */
+  async updateSessionProject(sessionId: string, projectId: string): Promise<void> {
+    const db = await getDb();
+
+    await db.execute({
+      sql: 'UPDATE sessions SET project_id = ? WHERE id = ?',
+      args: [projectId, sessionId],
+    });
+  }
 }
 
 /**

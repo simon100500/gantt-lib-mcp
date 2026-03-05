@@ -18,6 +18,7 @@ import {
   signRefreshToken,
   verifyToken,
 } from '../auth.js';
+import { authMiddleware } from '../middleware/auth-middleware.js';
 
 /**
  * Register all authentication routes with Fastify
@@ -165,5 +166,70 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     await authStore.deleteSession(session.id);
 
     return reply.send({ ok: true });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/auth/switch-project
+  // ---------------------------------------------------------------------------
+  fastify.post('/api/auth/switch-project', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const body = req.body as { projectId?: string };
+    const { projectId } = body;
+    const { userId, sessionId } = req.user!;
+
+    if (!projectId) {
+      return reply.status(400).send({ error: 'projectId required' });
+    }
+
+    // Verify project belongs to user
+    const projects = await authStore.listProjects(userId);
+    const project = projects.find(p => p.id === projectId);
+
+    if (!project) {
+      return reply.status(403).send({ error: 'Project not found or access denied' });
+    }
+
+    // Create new session for the switched project
+    const tokenPayload = {
+      sub: userId,
+      email: req.user!.email,
+      projectId: project.id,
+      sessionId,
+    };
+
+    const newAccessToken = signAccessToken(tokenPayload);
+    const newRefreshToken = signRefreshToken(tokenPayload);
+
+    // Update session tokens and project
+    await authStore.updateSessionTokens(sessionId, newAccessToken, newRefreshToken);
+    await authStore.updateSessionProject(sessionId, project.id);
+
+    return reply.send({
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      project: { id: project.id, name: project.name },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/projects
+  // ---------------------------------------------------------------------------
+  fastify.get('/api/projects', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const projects = await authStore.listProjects(req.user!.userId);
+    return reply.send({ projects });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/projects
+  // ---------------------------------------------------------------------------
+  fastify.post('/api/projects', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const body = req.body as { name?: string };
+    const { name } = body;
+
+    if (!name || !name.trim()) {
+      return reply.status(400).send({ error: 'name required' });
+    }
+
+    const project = await authStore.createProject(req.user!.userId, name.trim());
+    return reply.send({ project });
   });
 }
