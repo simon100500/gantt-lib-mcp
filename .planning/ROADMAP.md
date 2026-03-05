@@ -17,7 +17,7 @@
 | 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
 | 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
-| 9. session-control | 0/5 | Planning | — |
+| 9. session-control | 1/6 | Active | 09-01 |
 
 ## Phases
 
@@ -231,7 +231,7 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — DB schema migration: users, projects, sessions, otp_codes tables + project_id on tasks/messages
+- [x] 09-01-PLAN.md — DB schema migration: users, projects, sessions, otp_codes tables + project_id on tasks/messages (Complete)
 - [ ] 09-02-PLAN.md — Auth API: OTP endpoints, JWT utilities, email service, AuthStore
 - [ ] 09-03-PLAN.md — Store + WS refactor: project_id filtering, Map-based session registry, targeted broadcast
 - [ ] 09-04-PLAN.md — Auth middleware + agent refactor: protected routes, project-scoped agent runs
@@ -239,4 +239,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-05 after planning Phase 9*
+*Last updated: 2026-03-05 after completing Phase 09 Plan 01*
