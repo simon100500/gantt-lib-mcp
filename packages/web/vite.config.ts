@@ -15,7 +15,7 @@ export default defineConfig({
       // Proxy API and WebSocket to backend
       '/api': 'http://localhost:3000',
       '/ws': {
-        target: 'ws://localhost:3000',
+        target: 'http://localhost:3000',
         ws: true,
       },
     },
