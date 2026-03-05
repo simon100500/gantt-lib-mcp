@@ -164,10 +164,84 @@ export interface BatchCreateResult {
 export interface Message {
   /** Unique identifier */
   id: string;
+  /** Optional project ID for multi-user context */
+  projectId?: string;
   /** Message role */
   role: 'user' | 'assistant';
   /** Message content */
   content: string;
   /** ISO timestamp of creation */
   createdAt: string;
+}
+
+/**
+ * User account for authentication and authorization
+ */
+export interface User {
+  /** Unique identifier */
+  id: string;
+  /** Email address (unique) */
+  email: string;
+  /** ISO timestamp of account creation */
+  createdAt: string;
+}
+
+/**
+ * Project for organizing tasks and sessions
+ */
+export interface Project {
+  /** Unique identifier */
+  id: string;
+  /** Owner user ID */
+  userId: string;
+  /** Project name */
+  name: string;
+  /** ISO timestamp of creation */
+  createdAt: string;
+}
+
+/**
+ * User session with access and refresh tokens
+ */
+export interface Session {
+  /** Unique identifier */
+  id: string;
+  /** User ID */
+  userId: string;
+  /** Active project ID */
+  projectId: string;
+  /** JWT access token */
+  accessToken: string;
+  /** JWT refresh token */
+  refreshToken: string;
+  /** ISO timestamp of token expiration */
+  expiresAt: string;
+  /** ISO timestamp of session creation */
+  createdAt: string;
+}
+
+/**
+ * OTP code entry for email-based authentication
+ */
+export interface OtpEntry {
+  /** Unique identifier */
+  id: string;
+  /** Email address for OTP delivery */
+  email: string;
+  /** OTP code */
+  code: string;
+  /** ISO timestamp of code expiration */
+  expiresAt: string;
+  /** Whether the code has been used */
+  used: boolean;
+}
+
+/**
+ * Authentication token pair
+ */
+export interface AuthToken {
+  /** JWT access token */
+  accessToken: string;
+  /** JWT refresh token */
+  refreshToken: string;
 }
