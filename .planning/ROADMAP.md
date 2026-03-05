@@ -17,7 +17,7 @@
 | 6. qwen-agent | 2/2 | Complete | 2026-03-04 |
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
 | 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
-| 9. session-control | 1/6 | Active | 09-01 |
+| 9. session-control | 5/6 | Active | 09-01, 09-02, 09-03, 09-04, 09-05 |
 
 ## Phases
 
@@ -228,14 +228,15 @@ Plans:
 **Goal:** Multi-user OTP email authentication with JWT tokens, project-scoped data isolation, and targeted WebSocket broadcast
 **Requirements:** SESSION-DB-01, SESSION-DB-02, SESSION-DB-03, SESSION-AUTH-01, SESSION-AUTH-02, SESSION-AUTH-03, SESSION-AUTH-04, SESSION-STORE-01, SESSION-WS-01, SESSION-MIDDLEWARE-01, SESSION-AGENT-01, SESSION-UI-01, SESSION-UI-02, SESSION-UI-03
 **Depends on:** Phase 8
-**Plans:** 5 plans
+**Plans:** 6 plans
 
 Plans:
 - [x] 09-01-PLAN.md — DB schema migration: users, projects, sessions, otp_codes tables + project_id on tasks/messages (Complete)
-- [ ] 09-02-PLAN.md — Auth API: OTP endpoints, JWT utilities, email service, AuthStore
-- [ ] 09-03-PLAN.md — Store + WS refactor: project_id filtering, Map-based session registry, targeted broadcast
-- [ ] 09-04-PLAN.md — Auth middleware + agent refactor: protected routes, project-scoped agent runs
-- [ ] 09-05-PLAN.md — Auth UI: OTP modal (email + 6-digit step), project switcher, useAuth hook
+- [x] 09-02-PLAN.md — Auth API: OTP endpoints, JWT utilities, email service, AuthStore (Complete)
+- [x] 09-03-PLAN.md — Store + WS refactor: project_id filtering, Map-based session registry, targeted broadcast (Complete)
+- [x] 09-04-PLAN.md — Auth middleware + agent refactor: protected routes, project-scoped agent runs (Complete)
+- [x] 09-05-PLAN.md — Tailwind CSS + shadcn/ui: install components with @/ path alias for Auth UI (Complete)
+- [ ] 09-06-PLAN.md — Auth UI: OTP modal (email + 6-digit step), project switcher, useAuth hook
 
 ---
 *Roadmap created: 2026-02-23*

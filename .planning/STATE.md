@@ -82,10 +82,10 @@ progress:
 ## Current Position
 
 **Phase:** Phase 09 - session-control
-**Plan:** 09-04 (Complete)
+**Plan:** 09-05 (Complete)
 **Status:** In Progress
 
-**Progress Bar:** `[█████████░] 90% (19/21 plans complete)`
+**Progress Bar:** `[█████████░] 95% (20/21 plans complete)`
 
 ---
 
@@ -121,7 +121,7 @@ progress:
 | Phase 09 P01 | 85 | 2 tasks | 2 files |
 | Phase 09 P02 | 248 | 2 tasks | 4 files |
 | Phase 09 P04 | 2 | 2 tasks | 4 files |
-| Phase 09 P04 | 2 | 2 tasks | 4 files |
+| Phase 09 P05 | 2 | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -198,6 +198,10 @@ progress:
 - [Phase 09]: 7-day refresh token expiry
 - [Phase 09]: Console OTP fallback when EMAIL_HOST not configured
 - [Phase 09]: Fail fast if JWT_SECRET env var missing
+- [Phase 09-05]: Tailwind CSS v3 with shadcn/ui for Auth UI components
+- [Phase 09-05]: CSS variable-based theming with hsl() format for semantic colors
+- [Phase 09-05]: @/ path alias for clean component imports (requires both vite.config.ts and tsconfig.json)
+- [Phase 09-05]: cn() utility for class merging using clsx + tailwind-merge
 
 ### Active Todos
 
@@ -256,7 +260,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-05 - Completed Phase 09 Plan 04: Wire auth middleware into request pipeline with project-scoped agent runner
+Last activity: 2026-03-05 - Completed Phase 09 Plan 05: Tailwind CSS + shadcn/ui installation with @/ path alias
 
 ### Roadmap Evolution
 
