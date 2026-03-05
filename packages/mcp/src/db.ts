@@ -27,16 +27,7 @@ export async function getDb(): Promise<Client> {
   const dbPath = process.env.DB_PATH ?? './gantt.db';
   _db = createClient({ url: `file:${dbPath}` });
 
-  // WIPE: Drop all existing tables in FK-safe order for Phase 9 development
-  await _db.execute(`DROP TABLE IF EXISTS messages`);
-  await _db.execute(`DROP TABLE IF EXISTS dependencies`);
-  await _db.execute(`DROP TABLE IF EXISTS tasks`);
-  await _db.execute(`DROP TABLE IF EXISTS sessions`);
-  await _db.execute(`DROP TABLE IF EXISTS otp_codes`);
-  await _db.execute(`DROP TABLE IF EXISTS projects`);
-  await _db.execute(`DROP TABLE IF EXISTS users`);
-
-  // Create all tables in FK-safe order
+  // Create all tables in FK-safe order (tables are created with IF NOT EXISTS, so safe to run on every startup)
   await _db.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,

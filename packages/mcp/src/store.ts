@@ -193,15 +193,27 @@ export class TaskStore {
   /**
    * List all tasks, optionally filtered by project ID
    * @param projectId - Optional project ID to filter tasks by
+   * @param includeGlobal - If true, also include tasks with project_id=null (only works when projectId is specified)
    */
-  async list(projectId?: string): Promise<Task[]> {
+  async list(projectId?: string, includeGlobal = false): Promise<Task[]> {
     const db = await getDb();
-    const sql = projectId
-      ? 'SELECT * FROM tasks WHERE project_id = ?'
-      : 'SELECT * FROM tasks';
-    const result = projectId
-      ? await db.execute({ sql, args: [projectId] })
-      : await db.execute(sql);
+    let sql: string;
+    let result: Awaited<ReturnType<typeof db.execute>>;
+
+    if (projectId && includeGlobal) {
+      // Get both project-specific tasks AND global tasks (project_id=null)
+      sql = 'SELECT * FROM tasks WHERE project_id = ? OR project_id IS NULL';
+      result = await db.execute({ sql, args: [projectId] });
+    } else if (projectId) {
+      // Get only project-specific tasks
+      sql = 'SELECT * FROM tasks WHERE project_id = ?';
+      result = await db.execute({ sql, args: [projectId] });
+    } else {
+      // Get all tasks
+      sql = 'SELECT * FROM tasks';
+      result = await db.execute(sql);
+    }
+
     const tasks: Task[] = [];
     for (const row of result.rows) {
       const base = rowToTaskBase(row);

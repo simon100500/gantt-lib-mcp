@@ -31,7 +31,9 @@ await registerAdminRoutes(fastify);
 fastify.get('/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const tasks = await taskStore.list(req.user!.projectId);
+  // Get both project-specific tasks and global tasks (project_id=null)
+  // This allows tasks created via MCP (without projectId) to be visible in the web UI
+  const tasks = await taskStore.list(req.user!.projectId, true); // includeGlobal = true
   return reply.send(tasks);
 });
 

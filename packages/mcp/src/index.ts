@@ -112,6 +112,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
               required: ['taskId', 'type'],
             },
           },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to associate the task with. If not provided, task will be global (visible to all projects)',
+          },
         },
         required: ['name', 'startDate', 'endDate'],
       },
@@ -322,6 +326,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // create_task tool
   if (name === 'create_task') {
     const input = args as unknown as CreateTaskInput;
+    const { projectId } = args as { projectId?: string };
 
     // Validate date format
     if (!isValidDateFormat(input.startDate)) {
@@ -346,7 +351,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    const task = await taskStore.create(input);
+    const task = await taskStore.create(input, projectId);
 
     // Return the task with cascade info
     const allTasks = await taskStore.list();

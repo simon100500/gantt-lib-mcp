@@ -11,6 +11,8 @@ import * as dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+// When running from dist/, __dirname is .../packages/server/dist
+// Going up 3 levels: dist/ -> server/ -> packages/ -> project root
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
 
 // Load .env BEFORE any server imports (auth.ts validates JWT_SECRET at import time)

@@ -62,6 +62,8 @@ export interface CreateTaskInput {
   progress?: number;
   /** Optional task dependencies */
   dependencies?: TaskDependency[];
+  /** Optional project ID to associate the task with */
+  projectId?: string;
 }
 
 /**
