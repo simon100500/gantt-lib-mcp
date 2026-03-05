@@ -112,7 +112,7 @@ export default function App() {
     }
   }, [auth.accessToken]);
 
-  if (error) {
+  if (error && auth.isAuthenticated) {
     return (
       <div style={{ padding: 20, color: 'red' }}>
         Failed to load tasks: {error}. Is the server running on :3000?

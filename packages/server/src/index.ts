@@ -6,6 +6,8 @@
  * - GET  /api/tasks   — return current tasks from SQLite
  * - POST /api/chat    — fire-and-forget agent run (streaming goes via WebSocket)
  * - GET  /ws          — WebSocket endpoint (streaming tokens + task snapshots)
+ *
+ * NOTE: This file is imported via bootstrap.ts which loads .env first.
  */
 
 import Fastify from 'fastify';

@@ -14,8 +14,14 @@ export function useTasks(accessToken: string | null): UseTasksResult {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Don't fetch tasks if not authenticated
+    if (!accessToken) {
+      setLoading(false);
+      return;
+    }
+
     fetch('/api/tasks', {
-      headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
+      headers: { 'Authorization': `Bearer ${accessToken}` },
     })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

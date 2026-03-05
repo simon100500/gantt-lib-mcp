@@ -9,13 +9,8 @@ COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
 
-# Install all dependencies (root for workspaces)
+# Install all dependencies (root npm ci covers all workspaces via hoisting)
 RUN npm ci
-
-# Install dependencies in each workspace explicitly (workspaces don't hoist in Docker)
-RUN cd /app/packages/mcp && npm install
-RUN cd /app/packages/server && npm install
-RUN cd /app/packages/web && npm install
 
 # Install tsx for TypeScript hot reload and nodemon for file watching
 RUN npm install -g tsx nodemon
