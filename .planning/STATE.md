@@ -53,10 +53,10 @@ progress:
 ## Current Position
 
 **Phase:** Phase 09 - session-control
-**Plan:** 09-01 (Complete)
+**Plan:** 09-03 (Complete)
 **Status:** In Progress
 
-**Progress Bar:** `[████████░░] 94% (16/17 plans complete)`
+**Progress Bar:** `[████████░░] 95% (17/18 plans complete)`
 
 ---
 
@@ -88,6 +88,7 @@ progress:
 | Quick 05-add-gantt-lib-features | 79 | 3 tasks | 3 files |
 | Quick 06-add-clear-db-button | 1 | 3 tasks | 3 files |
 | Phase 09-session-control P01 | 85 | 2 tasks | 2 files |
+| Phase 09-session-control P03 | 3 | 2 tasks | 2 files |
 | Phase 09 P01 | 85 | 2 tasks | 2 files |
 
 ## Accumulated Context
@@ -152,6 +153,11 @@ progress:
 - [Phase 09-01]: Foreign key constraints with CASCADE delete for automatic cleanup
 - [Phase 09-01]: TypeScript types for auth (User, Project, Session, OtpEntry, AuthToken) exported from @gantt/mcp/types
 - [Phase 09-01]: Drop all tables on every getDb() call during Phase 9 development (WIPE decision for clean slate)
+- [Phase 09-03]: TaskStore with project_id filtering for data isolation between users
+- [Phase 09-03]: WebSocket Map-based session registry (sessionId → Set<WebSocket>)
+- [Phase 09-03]: broadcastToSession() for targeted AI response delivery
+- [Phase 09-03]: Auth handshake pattern (first message must be { type: 'auth', token })
+- [Phase 09-03]: projectId optional throughout TaskStore for backward compatibility
 
 ### Active Todos
 
@@ -210,7 +216,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-05 - Completed Phase 09 Plan 01: Multi-user database schema with 7 tables (users, projects, sessions, otp_codes, tasks, dependencies, messages) and TypeScript auth types
+Last activity: 2026-03-05 - Completed Phase 09 Plan 03: Data isolation via project_id filtering and WebSocket session registry with targeted broadcasts
 
 ### Roadmap Evolution
 
