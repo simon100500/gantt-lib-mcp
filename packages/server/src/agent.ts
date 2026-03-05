@@ -22,7 +22,7 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { taskStore } from '@gantt/mcp/store';
-import { broadcast } from './ws.js';
+import { broadcastToSession } from './ws.js';
 
 // ---------------------------------------------------------------------------
 // Path resolution
@@ -56,17 +56,25 @@ function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI
 
 /**
  * Run one agent turn:
- * - persists user/assistant messages in DB
- * - streams tokens via WebSocket broadcast
- * - broadcasts task snapshot after each turn
+ * - persists user/assistant messages in DB (project-scoped)
+ * - streams tokens via WebSocket broadcast to specific session
+ * - broadcasts task snapshot after each turn (session-scoped)
+ *
+ * @param userMessage - User's chat message
+ * @param projectId - Project ID for scoping data
+ * @param sessionId - Session ID for targeting WebSocket broadcasts
  */
-export async function runAgentWithHistory(userMessage: string): Promise<void> {
+export async function runAgentWithHistory(
+  userMessage: string,
+  projectId: string,
+  sessionId: string
+): Promise<void> {
   try {
-    // 1. Save user message to DB
-    await taskStore.addMessage('user', userMessage);
+    // 1. Save user message to DB (project-scoped)
+    await taskStore.addMessage('user', userMessage, projectId);
 
-    // 2. Load full conversation history from DB
-    const messages = await taskStore.getMessages();
+    // 2. Load full conversation history from DB (project-scoped)
+    const messages = await taskStore.getMessages(projectId);
 
     // 3. Load system prompt (optional fallback if file missing)
     // GANTT_MCP_PROMPTS_DIR allows override for container deployments where paths differ
@@ -122,7 +130,7 @@ export async function runAgentWithHistory(userMessage: string): Promise<void> {
       },
     });
 
-    // 7. Stream tokens to WebSocket
+    // 7. Stream tokens to WebSocket (session-scoped)
     let assistantResponse = '';
 
     for await (const event of session) {
@@ -131,7 +139,7 @@ export async function runAgentWithHistory(userMessage: string): Promise<void> {
         for (const block of event.message.content) {
           if (block.type === 'text' && block.text) {
             assistantResponse += block.text;
-            broadcast({ type: 'token', content: block.text });
+            broadcastToSession(sessionId, { type: 'token', content: block.text });
           }
         }
       }
@@ -140,20 +148,20 @@ export async function runAgentWithHistory(userMessage: string): Promise<void> {
       }
     }
 
-    // 8. Save assistant response to DB (if any text was produced)
+    // 8. Save assistant response to DB (project-scoped)
     if (assistantResponse) {
-      await taskStore.addMessage('assistant', assistantResponse);
+      await taskStore.addMessage('assistant', assistantResponse, projectId);
     }
 
-    // 9. Broadcast updated tasks snapshot
-    const tasks = await taskStore.list();
-    broadcast({ type: 'tasks', tasks });
+    // 9. Broadcast updated tasks snapshot (session-scoped)
+    const tasks = await taskStore.list(projectId);
+    broadcastToSession(sessionId, { type: 'tasks', tasks });
 
-    // 10. Signal turn complete
-    broadcast({ type: 'done' });
+    // 10. Signal turn complete (session-scoped)
+    broadcastToSession(sessionId, { type: 'done' });
 
   } catch (err) {
-    broadcast({ type: 'error', message: String(err) });
+    broadcastToSession(sessionId, { type: 'error', message: String(err) });
     throw err;
   }
 }
