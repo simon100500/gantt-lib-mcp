@@ -18,13 +18,16 @@ export interface UseWebSocketResult {
 }
 
 export function useWebSocket(
-  onMessage: (msg: ServerMessage) => void
+  onMessage: (msg: ServerMessage) => void,
+  getAccessToken: () => string | null
 ): UseWebSocketResult {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const retryDelay = useRef(1000);
   const onMessageRef = useRef(onMessage);
+  const getAccessTokenRef = useRef(getAccessToken);
   onMessageRef.current = onMessage; // always latest callback
+  getAccessTokenRef.current = getAccessToken; // always latest callback
 
   const connect = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -32,13 +35,20 @@ export function useWebSocket(
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setConnected(true);
-      retryDelay.current = 1000; // reset backoff
+      const token = getAccessTokenRef.current();
+      if (token) {
+        ws.send(JSON.stringify({ type: 'auth', token }));
+      }
+      // Don't set connected=true here — wait for server confirmation
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string) as ServerMessage;
+        if (msg.type === 'connected') {
+          setConnected(true);
+          retryDelay.current = 1000; // reset backoff
+        }
         onMessageRef.current(msg);
       } catch {
         // ignore malformed messages

@@ -8,13 +8,15 @@ export interface UseTasksResult {
   error: string | null;
 }
 
-export function useTasks(): UseTasksResult {
+export function useTasks(accessToken: string | null): UseTasksResult {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/tasks')
+    fetch('/api/tasks', {
+      headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
+    })
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<Task[]>;
@@ -27,7 +29,7 @@ export function useTasks(): UseTasksResult {
         setError(String(err));
         setLoading(false);
       });
-  }, []);
+  }, [accessToken]);
 
   return { tasks, setTasks, loading, error };
 }

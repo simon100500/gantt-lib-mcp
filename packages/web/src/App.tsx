@@ -3,12 +3,17 @@ import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import { useAuth } from './hooks/useAuth.ts';
+import { OtpModal } from './components/OtpModal.tsx';
+import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
+import { Button } from './components/ui/button.tsx';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
 
 let msgCounter = 0;
 
 export default function App() {
-  const { tasks, setTasks, loading, error } = useTasks();
+  const auth = useAuth();
+  const { tasks, setTasks, loading, error } = useTasks(auth.accessToken);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
@@ -50,13 +55,23 @@ export default function App() {
     }
   }, [setTasks]);
 
-  const { send, connected } = useWebSocket(handleWsMessage);
+  const { send, connected } = useWebSocket(handleWsMessage, () => auth.accessToken);
 
   const handleSend = useCallback((text: string) => {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
     setAiThinking(true);
     send({ type: 'chat', message: text });
   }, [send]);
+
+  // Handle auth success from OTP modal
+  const handleAuthSuccess = useCallback((result: {
+    accessToken: string;
+    refreshToken: string;
+    user: { id: string; email: string };
+    project: { id: string; name: string };
+  }) => {
+    auth.login(result, result.user, result.project);
+  }, [auth]);
 
   // Handle validation errors from dependency validation
   const handleValidation = useCallback((result: ValidationResult) => {
@@ -86,13 +101,16 @@ export default function App() {
   const handleClearDatabase = useCallback(async () => {
     if (!confirm('Are you sure you want to clear all tasks? This cannot be undone.')) return;
     try {
-      const res = await fetch('/api/tasks', { method: 'DELETE' });
+      const res = await fetch('/api/tasks', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${auth.accessToken ?? ''}` }
+      });
       if (!res.ok) throw new Error('Failed to clear database');
       setTasks([]);
     } catch (err) {
       alert(`Error clearing database: ${err}`);
     }
-  }, []);
+  }, [auth.accessToken]);
 
   if (error) {
     return (
@@ -104,6 +122,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', height: '98vh', fontFamily: 'sans-serif' }}>
+      {!auth.isAuthenticated && <OtpModal onSuccess={handleAuthSuccess} />}
       <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         {/* Control Bar */}
         <div style={{
@@ -115,6 +134,15 @@ export default function App() {
           alignItems: 'center',
           flexWrap: 'wrap'
         }}>
+          {auth.isAuthenticated && auth.project && (
+            <ProjectSwitcher
+              currentProject={auth.project}
+              projects={auth.projects}
+              onSwitch={auth.switchProject}
+              onCreateNew={auth.createProject}
+            />
+          )}
+
           <button
             onClick={() => setEnableAutoSchedule(!enableAutoSchedule)}
             style={{
@@ -202,6 +230,12 @@ export default function App() {
           >
             Clear Database
           </button>
+
+          {auth.isAuthenticated && (
+            <Button variant="ghost" size="sm" onClick={auth.logout} style={{ marginLeft: '8px' }}>
+              Logout
+            </Button>
+          )}
 
           {validationErrors.length > 0 && (
             <span style={{
