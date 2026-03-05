@@ -14,9 +14,11 @@ import { taskStore } from '@gantt/mcp/store';
 import { registerWsRoutes, broadcast, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { registerAdminRoutes } from './admin.js';
+import { registerAuthRoutes } from './routes/auth-routes.js';
 
 const fastify = Fastify({ logger: true });
 await fastify.register(websocket);
+await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
 
 // ---------------------------------------------------------------------------
