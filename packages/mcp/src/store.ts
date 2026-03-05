@@ -28,6 +28,8 @@ function rowToDependency(row: Row): { taskId: string; type: 'FS' | 'SS' | 'FF' |
 
 /**
  * Convert a task DB row (without dependencies) to a partial Task object
+ * Note: project_id is read from the row but not included in the Task interface
+ * (it's a DB concern only, not part of the gantt-lib Task shape)
  */
 function rowToTaskBase(row: Row): Omit<Task, 'dependencies'> {
   return {
@@ -75,10 +77,16 @@ async function writeTaskFields(
 export class TaskStore {
   /**
    * Load all tasks from DB into a Map (used as scheduler snapshot)
+   * @param projectId - Optional project ID to filter tasks by
    */
-  private async loadSnapshot(): Promise<Map<string, Task>> {
+  private async loadSnapshot(projectId?: string): Promise<Map<string, Task>> {
     const db = await getDb();
-    const result = await db.execute('SELECT * FROM tasks');
+    const sql = projectId
+      ? 'SELECT * FROM tasks WHERE project_id = ?'
+      : 'SELECT * FROM tasks';
+    const result = projectId
+      ? await db.execute({ sql, args: [projectId] })
+      : await db.execute(sql);
     const map = new Map<string, Task>();
 
     for (const row of result.rows) {
@@ -94,9 +102,10 @@ export class TaskStore {
   /**
    * Run scheduler recalculation after a task change.
    * Reloads all tasks from DB, runs scheduler in memory, writes back changed tasks.
+   * @param projectId - Optional project ID to filter recalculation by
    */
-  private async runScheduler(changedTaskId: string, skipStart = false): Promise<void> {
-    const snapshot = await this.loadSnapshot();
+  private async runScheduler(changedTaskId: string, skipStart = false, projectId?: string): Promise<void> {
+    const snapshot = await this.loadSnapshot(projectId);
     const scheduler = new TaskScheduler(snapshot);
     const updates = scheduler.recalculateDates(changedTaskId, skipStart);
 
@@ -112,8 +121,10 @@ export class TaskStore {
 
   /**
    * Create a new task with auto-generated UUID
+   * @param input - Task creation input
+   * @param projectId - Optional project ID to associate the task with
    */
-  async create(input: CreateTaskInput): Promise<Task> {
+  async create(input: CreateTaskInput, projectId?: string): Promise<Task> {
     const id = crypto.randomUUID();
     const task: Task = {
       id,
@@ -127,7 +138,7 @@ export class TaskStore {
 
     const db = await getDb();
 
-    // Validate dependencies against existing tasks
+    // Validate dependencies against existing tasks (any task can be a dependency, regardless of project)
     if (task.dependencies && task.dependencies.length > 0) {
       for (const dep of task.dependencies) {
         const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [dep.taskId] });
@@ -137,10 +148,17 @@ export class TaskStore {
       }
     }
 
-    // Insert task row
+    // Insert task row (project_id is nullable)
+    const insertSql = projectId
+      ? `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`;
+    const insertArgs = projectId
+      ? [id, projectId, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0]
+      : [id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0];
+
     await db.execute({
-      sql: `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
+      sql: insertSql,
+      args: insertArgs,
     });
 
     // Insert dependency rows
@@ -164,7 +182,7 @@ export class TaskStore {
 
     // Recalculate dates if task has dependencies
     if (task.dependencies && task.dependencies.length > 0) {
-      await this.runScheduler(id);
+      await this.runScheduler(id, false, projectId);
     }
 
     // Return the current state of the task from DB
@@ -173,11 +191,17 @@ export class TaskStore {
   }
 
   /**
-   * List all tasks
+   * List all tasks, optionally filtered by project ID
+   * @param projectId - Optional project ID to filter tasks by
    */
-  async list(): Promise<Task[]> {
+  async list(projectId?: string): Promise<Task[]> {
     const db = await getDb();
-    const result = await db.execute('SELECT * FROM tasks');
+    const sql = projectId
+      ? 'SELECT * FROM tasks WHERE project_id = ?'
+      : 'SELECT * FROM tasks';
+    const result = projectId
+      ? await db.execute({ sql, args: [projectId] })
+      : await db.execute(sql);
     const tasks: Task[] = [];
     for (const row of result.rows) {
       const base = rowToTaskBase(row);
@@ -267,7 +291,12 @@ export class TaskStore {
         await this.updateLagsForMovedTask(updated, input);
       }
 
-      await this.runScheduler(id, skipStartTask);
+      // Load projectId from the task for scheduler scope
+      const db = await getDb();
+      const taskRow = await db.execute({ sql: 'SELECT project_id FROM tasks WHERE id = ?', args: [id] });
+      const projectId = taskRow.rows.length > 0 ? (taskRow.rows[0]['project_id'] as string | undefined) : undefined;
+
+      await this.runScheduler(id, skipStartTask, projectId);
     }
 
     return await this.get(id);
@@ -335,12 +364,18 @@ export class TaskStore {
   }
 
   /**
-   * Clear all tasks from the database. CASCADE removes dependencies.
+   * Clear all tasks from the database, optionally filtered by project ID. CASCADE removes dependencies.
+   * @param projectId - Optional project ID to filter deletions by
    * @returns number of tasks deleted
    */
-  async deleteAll(): Promise<number> {
+  async deleteAll(projectId?: string): Promise<number> {
     const db = await getDb();
-    const result = await db.execute('DELETE FROM tasks');
+    const sql = projectId
+      ? 'DELETE FROM tasks WHERE project_id = ?'
+      : 'DELETE FROM tasks';
+    const result = projectId
+      ? await db.execute({ sql, args: [projectId] })
+      : await db.execute(sql);
     return result.rowsAffected ?? 0;
   }
 
@@ -399,28 +434,45 @@ export class TaskStore {
 
   /**
    * Add a message to the dialog history
+   * @param role - Message role ('user' or 'assistant')
+   * @param content - Message content
+   * @param projectId - Optional project ID to associate the message with
    */
-  async addMessage(role: 'user' | 'assistant', content: string): Promise<Message> {
+  async addMessage(role: 'user' | 'assistant', content: string, projectId?: string): Promise<Message> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
     const db = await getDb();
+    const insertSql = projectId
+      ? `INSERT INTO messages (id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
+      : `INSERT INTO messages (id, role, content, created_at) VALUES (?, ?, ?, ?)`;
+    const insertArgs = projectId
+      ? [id, projectId, role, content, createdAt]
+      : [id, role, content, createdAt];
+
     await db.execute({
-      sql: `INSERT INTO messages (id, role, content, created_at) VALUES (?, ?, ?, ?)`,
-      args: [id, role, content, createdAt],
+      sql: insertSql,
+      args: insertArgs,
     });
 
-    return { id, role, content, createdAt };
+    return { id, projectId, role, content, createdAt };
   }
 
   /**
-   * Get all messages ordered by creation time
+   * Get all messages ordered by creation time, optionally filtered by project ID
+   * @param projectId - Optional project ID to filter messages by
    */
-  async getMessages(): Promise<Message[]> {
+  async getMessages(projectId?: string): Promise<Message[]> {
     const db = await getDb();
-    const result = await db.execute('SELECT * FROM messages ORDER BY created_at ASC');
+    const sql = projectId
+      ? 'SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC'
+      : 'SELECT * FROM messages ORDER BY created_at ASC';
+    const result = projectId
+      ? await db.execute({ sql, args: [projectId] })
+      : await db.execute(sql);
     return result.rows.map(row => ({
       id: String(row['id']),
+      projectId: row['project_id'] != null ? String(row['project_id']) : undefined,
       role: String(row['role']) as 'user' | 'assistant',
       content: String(row['content']),
       createdAt: String(row['created_at']),
