@@ -104,6 +104,15 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', height: '98vh', fontFamily: 'sans-serif' }}>
+      <aside style={{ width: 360, borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column' }}>
+        <ChatSidebar
+          messages={messages}
+          streaming={streaming}
+          onSend={handleSend}
+          disabled={aiThinking}
+          connected={connected}
+        />
+      </aside>
       <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         {/* Control Bar */}
         <div style={{
@@ -239,15 +248,6 @@ export default function App() {
           />
         )}
       </main>
-      <aside style={{ width: 360, borderLeft: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column' }}>
-        <ChatSidebar
-          messages={messages}
-          streaming={streaming}
-          onSend={handleSend}
-          disabled={aiThinking}
-          connected={connected}
-        />
-      </aside>
     </div>
   );
 }
