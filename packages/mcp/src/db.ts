@@ -1,8 +1,12 @@
 /**
  * SQLite database initialization for MCP server
  *
- * Initializes the database with tables for tasks, dependencies, and messages.
+ * Multi-user schema with support for users, projects, sessions, and OTP codes.
  * Uses @libsql/client for SQLite access (no native compilation required).
+ *
+ * IMPORTANT: During Phase 9 development, all tables are dropped and recreated
+ * on every getDb() call to provide a clean slate. This will be removed after
+ * Phase 9 is complete.
  */
 
 import { createClient, type Client } from '@libsql/client';
@@ -23,9 +27,59 @@ export async function getDb(): Promise<Client> {
   const dbPath = process.env.DB_PATH ?? './gantt.db';
   _db = createClient({ url: `file:${dbPath}` });
 
+  // WIPE: Drop all existing tables in FK-safe order for Phase 9 development
+  await _db.execute(`DROP TABLE IF EXISTS messages`);
+  await _db.execute(`DROP TABLE IF EXISTS dependencies`);
+  await _db.execute(`DROP TABLE IF EXISTS tasks`);
+  await _db.execute(`DROP TABLE IF EXISTS sessions`);
+  await _db.execute(`DROP TABLE IF EXISTS otp_codes`);
+  await _db.execute(`DROP TABLE IF EXISTS projects`);
+  await _db.execute(`DROP TABLE IF EXISTS users`);
+
+  // Create all tables in FK-safe order
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      access_token TEXT NOT NULL UNIQUE,
+      refresh_token TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      code TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
   await _db.execute(`
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
+      project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       start_date TEXT NOT NULL,
       end_date TEXT NOT NULL,
@@ -47,6 +101,7 @@ export async function getDb(): Promise<Client> {
   await _db.execute(`
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
+      project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
       role TEXT NOT NULL CHECK(role IN ('user','assistant')),
       content TEXT NOT NULL,
       created_at TEXT NOT NULL
