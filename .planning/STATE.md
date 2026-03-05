@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 last_updated: "2026-03-05T07:42:51.291Z"
-last_activity: "2026-03-04 - Completed quick task 6: Add Clear Database button with DELETE /api/tasks endpoint and confirmation dialog"
+last_activity: "2026-03-05 - Completed quick task 7: перенеси чат налево, слева от графика"
 progress:
   total_phases: 8
   completed_phases: 7
@@ -158,7 +158,7 @@ None
 | 4 | Fix FS dependency date overlap | 2026-02-24 | 544f428, b21608b | [4-fix-fs-dependency-date-overlap-when-task](./quick/4-fix-fs-dependency-date-overlap-when-task/) |
 | 5 | Add missing gantt-lib features | 2026-03-04 | ca18eb1, e80e116, 1baebf5 | [5-https-github-com-simon100500-gantt-lib-b](./quick/5-https-github-com-simon100500-gantt-lib-b/) |
 | 6 | Add Clear Database button | 2026-03-04 | 740b1d1, 89a6a49, 8a2d5c4 | [6-add-clear-db-button](./quick/6-add-clear-db-button/) |
-| 7 | Move chat sidebar to left | 2026-03-05 | 9f00ce2 | [7-move-chat-left](./quick/7-move-chat-left/) |
+| 7 | перенеси чат налево, слева от графика | 2026-03-05 | 9f00ce2 | [7-move-chat-left](./quick/7-move-chat-left/) |
 
 ### Quick Tasks Pending
 
@@ -194,7 +194,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-04 - Completed quick task 6: Add Clear Database button with DELETE /api/tasks endpoint and confirmation dialog
+Last activity: 2026-03-05 - Completed quick task 7: перенеси чат налево, слева от графика
 
 ### Roadmap Evolution
 
