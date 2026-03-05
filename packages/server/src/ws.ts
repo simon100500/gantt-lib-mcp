@@ -41,7 +41,7 @@ export type WsClientMessage =
 // ---------------------------------------------------------------------------
 
 const sessionConnections = new Map<string, Set<WebSocket>>();
-const chatHandlers: Array<(msg: string, sessionId: string) => void> = [];
+const chatHandlers: Array<(msg: string, userId: string, projectId: string, sessionId: string) => void> = [];
 
 /**
  * Broadcast a JSON-serialised ServerMessage to all open WebSocket connections.
@@ -82,9 +82,9 @@ export function broadcastToSession(sessionId: string, msg: ServerMessage): void 
  * Register a handler that is called whenever a client sends a chat message
  * over WebSocket. Decouples the WS layer from the agent runner.
  *
- * @param handler - Callback function receiving (message, sessionId)
+ * @param handler - Callback function receiving (message, userId, projectId, sessionId)
  */
-export function onChatMessage(handler: (msg: string, sessionId: string) => void): void {
+export function onChatMessage(handler: (msg: string, userId: string, projectId: string, sessionId: string) => void): void {
   chatHandlers.push(handler);
 }
 
@@ -107,6 +107,7 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
   fastify.get('/ws', { websocket: true }, (socket: WebSocket) => {
     let isAuthenticated = false;
     let currentSessionId: string | null = null;
+    let authUser: JwtPayload | null = null;
 
     socket.on('message', (raw: Buffer | string) => {
       try {
@@ -119,6 +120,7 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
               const payload: JwtPayload = verifyToken(data.token);
               isAuthenticated = true;
               currentSessionId = payload.sessionId;
+              authUser = payload;
 
               // Add socket to session registry
               if (!sessionConnections.has(currentSessionId)) {
@@ -145,9 +147,9 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
         }
 
         // After auth: handle chat messages
-        if (data.type === 'chat' && data.message && currentSessionId) {
+        if (data.type === 'chat' && data.message && authUser) {
           for (const h of chatHandlers) {
-            h(data.message, currentSessionId);
+            h(data.message, authUser.sub, authUser.projectId, authUser.sessionId);
           }
         }
       } catch {
