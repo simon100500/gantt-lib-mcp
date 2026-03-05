@@ -3,14 +3,28 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-03-05T14:18:30.292Z"
-last_activity: "2026-03-05 - Completed Phase 09 Plan 03: Data isolation via project_id filtering and WebSocket session registry with targeted broadcasts"
+last_updated: "2026-03-05T14:21:03.091Z"
+last_activity: "2026-03-05 - Completed Phase 09 Plan 04: Wire auth middleware into request pipeline with project-scoped agent runner"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 21
-  completed_plans: 18
-  percent: 86
+  completed_plans: 19
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+last_updated: "2026-03-05T14:31:00.000Z"
+last_activity: "2026-03-05 - Completed Phase 09 Plan 04: Wire auth middleware into request pipeline with project-scoped agent runner"
+progress:
+  total_phases: 9
+  completed_phases: 7
+  total_plans: 21
+  completed_plans: 19
+  percent: 90
 ---
 
 ---
@@ -68,10 +82,10 @@ progress:
 ## Current Position
 
 **Phase:** Phase 09 - session-control
-**Plan:** 09-03 (Complete)
+**Plan:** 09-04 (Complete)
 **Status:** In Progress
 
-**Progress Bar:** `[████████░░] 95% (17/18 plans complete)`
+**Progress Bar:** `[█████████░] 90% (19/21 plans complete)`
 
 ---
 
@@ -106,6 +120,8 @@ progress:
 | Phase 09-session-control P03 | 3 | 2 tasks | 2 files |
 | Phase 09 P01 | 85 | 2 tasks | 2 files |
 | Phase 09 P02 | 248 | 2 tasks | 4 files |
+| Phase 09 P04 | 2 | 2 tasks | 4 files |
+| Phase 09 P04 | 2 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -174,6 +190,10 @@ progress:
 - [Phase 09-03]: broadcastToSession() for targeted AI response delivery
 - [Phase 09-03]: Auth handshake pattern (first message must be { type: 'auth', token })
 - [Phase 09-03]: projectId optional throughout TaskStore for backward compatibility
+- [Phase 09-04]: Fastify preHandler hooks for route-level authentication
+- [Phase 09-04]: Module augmentation for TypeScript request typing (req.user)
+- [Phase 09-04]: Session-scoped WebSocket broadcasts via Map registry
+- [Phase 09-04]: Validate session exists in DB on each request (authStore.findSessionByAccessToken)
 - [Phase 09]: 15-minute access token expiry
 - [Phase 09]: 7-day refresh token expiry
 - [Phase 09]: Console OTP fallback when EMAIL_HOST not configured
@@ -236,7 +256,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-05 - Completed Phase 09 Plan 03: Data isolation via project_id filtering and WebSocket session registry with targeted broadcasts
+Last activity: 2026-03-05 - Completed Phase 09 Plan 04: Wire auth middleware into request pipeline with project-scoped agent runner
 
 ### Roadmap Evolution
 
