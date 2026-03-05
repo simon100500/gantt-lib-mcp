@@ -218,6 +218,16 @@ Plans:
 - [x] 08-01-PLAN.md — Install gantt-lib package, add CSS import, replace placeholder component with gantt-lib integration
 - [x] 08-02-PLAN.md — Wire onChange handler for drag-to-edit persistence, verify drag interactions and WebSocket sync
 
+### Phase 9: session-control
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 9 to break down)
+
 ---
 *Roadmap created: 2026-02-23*
 *Last updated: 2026-03-04 after completing Phase 8*

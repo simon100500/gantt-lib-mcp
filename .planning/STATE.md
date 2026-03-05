@@ -198,6 +198,7 @@ Last activity: 2026-03-04 - Completed quick task 6: Add Clear Database button wi
 - Phase 6 added: qwen-agent
 - Phase 7 added: Web UI with real-time Gantt editing via AI dialogue
 - Phase 8 added: Integrate gantt-lib library
+- Phase 9 added: session-control
 
 ### Phase 7 Architecture Context
 
