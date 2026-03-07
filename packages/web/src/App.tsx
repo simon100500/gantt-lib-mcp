@@ -30,7 +30,6 @@ export default function App() {
     if (msg.type === 'tasks') {
       setTasks(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
-      setAiThinking(true);
       setStreaming(prev => prev + (msg.content ?? ''));
     } else if (msg.type === 'done') {
       setAiThinking(false);
@@ -95,6 +94,11 @@ export default function App() {
   // Load chat history from server when authenticated and project is selected
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id) return;
+
+    // Clear messages and reset AI state when project changes
+    setMessages([]);
+    setStreaming('');
+    setAiThinking(false);
 
     fetch('/api/messages', {
       headers: { 'Authorization': `Bearer ${auth.accessToken}` },
