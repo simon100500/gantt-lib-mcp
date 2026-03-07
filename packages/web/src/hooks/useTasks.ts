@@ -29,6 +29,7 @@ export function useTasks(
     if (!accessToken) {
       setLoading(false);
       setTasks([]);
+      lastProcessedToken.current = null;
       return;
     }
 
@@ -39,33 +40,42 @@ export function useTasks(
     }
 
     let cancelled = false;
+    // Track if this is the first attempt with this token (to detect fresh token change)
+    const isFirstAttemptWithToken = accessToken !== lastProcessedToken.current;
 
-    const fetchTasks = async (token: string) => {
+    const fetchTasks = async (token: string, isRetry: boolean = false) => {
       const res = await fetch('/api/tasks', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (res.status === 401) {
-        // Only attempt refresh if this isn't a freshly changed token
-        // This prevents the race condition where:
-        // 1. switchProject sets new accessToken
-        // 2. useTasks triggers with new token
-        // 3. API returns 401 (maybe JWT not yet valid in server's cache)
-        // 4. We call refreshAccessToken which uses OLD refresh token
-        // 5. refreshAccessToken gets 401 and calls logout()
-        console.log('[useTasks] Got 401, checking if we should refresh...');
-        const shouldSkipRefresh = token !== lastProcessedToken.current;
-        console.log('[useTasks] Skip refresh?', shouldSkipRefresh, '(token just changed)');
+        // Only attempt refresh if:
+        // 1. This is NOT the first attempt with a new token (isRetry is true)
+        // OR
+        // 2. We've already successfully processed this token before
+        const shouldAttemptRefresh = isRetry || token === lastProcessedToken.current;
+        console.log('[useTasks] Got 401, shouldAttemptRefresh:', shouldAttemptRefresh, 'isRetry:', isRetry, 'token matches lastProcessed:', token === lastProcessedToken.current);
 
-        if (shouldSkipRefresh) {
-          // Token just changed, don't try to refresh - it might be a timing issue
-          // Set the token as processed and return empty results
-          // The next render cycle will re-fetch with the same token
-          console.log('[useTasks] Token just changed, skipping refresh to avoid race condition');
-          return [] as Task[];
+        if (!shouldAttemptRefresh) {
+          // This is a fresh token change (e.g., from switchProject)
+          // Don't call refreshAccessToken because it might have the old refresh token
+          // Instead, just retry once with the same token after a brief delay
+          // This handles cases where the JWT needs a moment to be valid on the server
+          console.log('[useTasks] Fresh token, retrying once without refresh...');
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (cancelled) return null;
+          const retryRes = await fetch('/api/tasks', {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (!retryRes.ok) {
+            console.log('[useTasks] Retry also failed:', retryRes.status);
+            throw new Error(`HTTP ${retryRes.status}`);
+          }
+          return retryRes.json() as Promise<Task[]>;
         }
 
-        // Token expired and it's not a fresh change — attempt refresh
+        // Token expired and we've already tried once, or it's an old token — attempt refresh
+        console.log('[useTasks] Attempting token refresh...');
         const newToken = await refreshAccessToken();
         if (!newToken || cancelled) return null; // logout() already called inside refreshAccessToken
         const retryRes = await fetch('/api/tasks', {
@@ -81,7 +91,7 @@ export function useTasks(
 
     setLoading(true);
     setError(null);
-    fetchTasks(accessToken)
+    fetchTasks(accessToken, false)
       .then(data => {
         if (cancelled) return;
         if (data) {
