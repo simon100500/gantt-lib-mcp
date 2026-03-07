@@ -11,10 +11,13 @@ interface ProjectSwitcherProps {
 }
 
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
-  const handleCreateNew = () => {
+  const handleCreateNew = async () => {
     const name = window.prompt('New project name:');
     if (name?.trim()) {
-      onCreateNew(name.trim());
+      const result = await onCreateNew(name.trim());
+      if (!result) {
+        alert('Failed to create project. Please try again.');
+      }
     }
   };
 
