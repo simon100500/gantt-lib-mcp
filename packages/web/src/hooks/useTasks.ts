@@ -44,6 +44,8 @@ export function useTasks(
       return res.json() as Promise<Task[]>;
     };
 
+    setLoading(true);
+    setError(null);
     fetchTasks(accessToken)
       .then(data => {
         if (cancelled || !data) return;
