@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-03-07T08:22:37.996Z"
+last_updated: "2026-03-07T08:23:08.373Z"
 last_activity: "2026-03-05 - Completed Phase 09 Plan 05: Tailwind CSS + shadcn/ui installation with @/ path alias"
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 91
 ---
 
@@ -138,6 +138,7 @@ progress:
 | Phase 09 P04 | 2 | 2 tasks | 4 files |
 | Phase 09 P05 | 2 | 2 tasks | 17 files |
 | Phase 10-work-stability P02 | 10 | 3 tasks | 4 files |
+| Phase 10-work-stability P10-01 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,9 @@ progress:
 - [Phase 10-work-stability]: refreshAccessToken passed as parameter to useTasks to keep auth dependency explicit
 - [Phase 10-work-stability]: useWebSocket useEffect depends on [accessToken] not [connect] for correct token-reactive reconnect
 - [Phase 10-work-stability]: ws.onclose = null before intentional close to prevent backoff loop racing with deliberate reconnect
+- [Phase 10-work-stability]: MCP env injection: pass PROJECT_ID as child process env var, read via process.env.PROJECT_ID with argProjectId as override
+- [Phase 10-work-stability]: streamedContent boolean flag to skip final AssistantMessage if streaming tokens already broadcast — prevents duplicate AI response
+- [Phase 10-work-stability]: taskStore.list(projectId, true) with includeGlobal=true in agent broadcast to match HTTP GET behavior
 
 ### Active Todos
 
