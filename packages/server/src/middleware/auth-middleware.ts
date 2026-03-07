@@ -54,28 +54,35 @@ export async function authMiddleware(
 
   // 2. Validate format
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('[AUTH MIDDLEWARE] Missing or invalid Authorization header');
     reply.status(401).send({ error: 'Unauthorized' });
     return;
   }
 
   // 3. Extract token
   const token = authHeader.slice(7);
+  const tokenPrefix = token.substring(0, 20) + '...';
 
   // 4. Verify JWT
   let payload: JwtPayload;
   try {
     payload = verifyToken(token);
-  } catch {
+    console.log('[AUTH MIDDLEWARE] JWT verified:', { userId: payload.sub, projectId: payload.projectId, sessionId: payload.sessionId });
+  } catch (err) {
+    console.log('[AUTH MIDDLEWARE] JWT verification failed:', err);
     reply.status(401).send({ error: 'Unauthorized' });
     return;
   }
 
   // 5. (Optional) Verify session still exists in DB
+  console.log('[AUTH MIDDLEWARE] Looking up session by access token:', tokenPrefix);
   const session = await authStore.findSessionByAccessToken(token);
   if (!session) {
+    console.log('[AUTH MIDDLEWARE] Session not found in database for token:', tokenPrefix);
     reply.status(401).send({ error: 'Unauthorized' });
     return;
   }
+  console.log('[AUTH MIDDLEWARE] Session found:', { sessionId: session.id, projectId: session.projectId });
 
   // 6. Attach decoded payload to req.user
   request.user = {
