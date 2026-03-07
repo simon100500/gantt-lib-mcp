@@ -43,6 +43,27 @@ export function useAuth(): UseAuthResult {
     projects: [],
   });
 
+  // Wrapped setState to log all state changes (no dependencies to avoid recreation)
+  const loggedSetState = useCallback((updater: React.SetStateAction<AuthState>, source: string) => {
+    console.log(`[useAuth] setState from ${source}:`, {
+      isFunction: typeof updater === 'function',
+    });
+    setState(prev => {
+      const newState = typeof updater === 'function' ? (updater as (prev: AuthState) => AuthState)(prev) : updater;
+      console.log(`[useAuth] setState result from ${source}:`, {
+        prevToken: prev.accessToken?.substring(0, 20) + '...',
+        newToken: newState.accessToken?.substring(0, 20) + '...',
+        hasPrevToken: !!prev.accessToken,
+        hasNewToken: !!newState.accessToken,
+        prevIsAuthenticated: prev.isAuthenticated,
+        newIsAuthenticated: newState.isAuthenticated,
+        prevProject: prev.project?.id,
+        newProject: newState.project?.id,
+      });
+      return newState;
+    });
+  }, []);
+
   // Initialize from localStorage on mount
   useEffect(() => {
     const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -56,13 +77,13 @@ export function useAuth(): UseAuthResult {
         const project = JSON.parse(projectStr) as AuthProject;
         const projects = projectsStr ? JSON.parse(projectsStr) as AuthProject[] : [project];
 
-        setState({
+        loggedSetState({
           isAuthenticated: true,
           user,
           project,
           accessToken,
           projects,
-        });
+        }, 'initialization');
       } catch {
         // Invalid stored data, clear everything
         localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -93,26 +114,26 @@ export function useAuth(): UseAuthResult {
       })
       .then(data => {
         localStorage.setItem(PROJECTS_KEY, JSON.stringify(data.projects));
-        setState(prev => ({
+        loggedSetState(prev => ({
           ...prev,
           isAuthenticated: true,
           user,
           project,
           accessToken: tokens.accessToken,
           projects: data.projects,
-        }));
+        }), 'login-fetch-projects');
       })
       .catch(err => {
         console.error('Failed to fetch projects:', err);
         // Still log in with just the current project
-        setState(prev => ({
+        loggedSetState(prev => ({
           ...prev,
           isAuthenticated: true,
           user,
           project,
           accessToken: tokens.accessToken,
           projects: [project],
-        }));
+        }), 'login-catch-fallback');
       });
   }, []);
 
@@ -125,47 +146,63 @@ export function useAuth(): UseAuthResult {
     localStorage.removeItem(PROJECTS_KEY);
 
     // Reset state
-    setState({
+    loggedSetState({
       isAuthenticated: false,
       user: null,
       project: null,
       accessToken: null,
       projects: [],
-    });
+    }, 'logout');
   }, []);
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    console.log('[useAuth] refreshAccessToken called');
     const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    console.log('[useAuth] refreshAccessToken: refresh token from localStorage:', refreshToken ? refreshToken.substring(0, 20) + '...' : 'null');
     if (!refreshToken) {
+      console.log('[useAuth] refreshAccessToken: no refresh token, logging out');
       logout();
       return null;
     }
 
     try {
+      console.log('[useAuth] refreshAccessToken: calling /api/auth/refresh');
       const res = await fetch('/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
 
+      console.log('[useAuth] refreshAccessToken: response status:', res.status, res.statusText);
       if (!res.ok) {
+        console.log('[useAuth] refreshAccessToken: response not OK, logging out');
+        const errorBody = await res.text();
+        console.log('[useAuth] refreshAccessToken: error body:', errorBody);
         logout();
         return null;
       }
 
       const data = await res.json() as { accessToken: string; refreshToken: string };
+      console.log('[useAuth] refreshAccessToken: got new tokens');
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
 
-      setState(prev => ({ ...prev, accessToken: data.accessToken }));
+      loggedSetState(prev => ({ ...prev, accessToken: data.accessToken }), 'refreshAccessToken');
       return data.accessToken;
-    } catch {
+    } catch (err) {
+      console.log('[useAuth] refreshAccessToken: exception, logging out', err);
       logout();
       return null;
     }
   }, [logout]);
 
   const switchProject = useCallback(async (projectId: string): Promise<void> => {
+    console.log('[useAuth] switchProject called with projectId:', projectId);
+    console.log('[useAuth] switchProject closure state:', {
+      closureToken: state.accessToken?.substring(0, 20) + '...',
+      closureProject: state.project?.id,
+      hasClosureToken: !!state.accessToken,
+    });
     const currentToken = state.accessToken;
     if (!currentToken) {
       logout();
@@ -187,15 +224,33 @@ export function useAuth(): UseAuthResult {
       }
 
       const data = await res.json() as { accessToken: string; refreshToken: string; project: AuthProject };
+      console.log('[useAuth] switchProject response:', {
+        projectId: data.project.id,
+        projectName: data.project.name,
+        hasAccessToken: !!data.accessToken,
+        accessTokenPrefix: data.accessToken?.substring(0, 20) + '...',
+      });
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
       localStorage.setItem(PROJECT_KEY, JSON.stringify(data.project));
 
-      setState(prev => ({
-        ...prev,
-        accessToken: data.accessToken,
-        project: data.project,
-      }));
+      // Update state atomically - use functional form to prevent stale closure issues
+      loggedSetState(prev => {
+        console.log('[useAuth] switchProject setState callback:', {
+          prevAccessToken: prev.accessToken?.substring(0, 20) + '...',
+          newAccessToken: data.accessToken?.substring(0, 20) + '...',
+          hasPrevAccessToken: !!prev.accessToken,
+          hasNewAccessToken: !!data.accessToken,
+          prevIsAuthenticated: prev.isAuthenticated,
+          prevProjectId: prev.project?.id,
+          newProjectId: data.project.id,
+        });
+        return {
+          ...prev,
+          accessToken: data.accessToken,
+          project: data.project,
+        };
+      }, 'switchProject');
     } catch (err) {
       console.error('Failed to switch project:', err);
       throw err;
@@ -226,7 +281,7 @@ export function useAuth(): UseAuthResult {
       const newProjects = [...state.projects, data.project];
 
       localStorage.setItem(PROJECTS_KEY, JSON.stringify(newProjects));
-      setState(prev => ({ ...prev, projects: newProjects }));
+      loggedSetState(prev => ({ ...prev, projects: newProjects }), 'createProject');
 
       return data.project;
     } catch (err) {
