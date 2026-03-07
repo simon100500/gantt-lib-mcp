@@ -18,7 +18,7 @@
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
 | 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
 | 9. session-control | 5/6 | Active | 09-01, 09-02, 09-03, 09-04, 09-05 |
-| 10. work-stability | 2/2 | Complete   | 2026-03-07 |
+| 10. work-stability | 2/2 | Complete    | 2026-03-07 |
 
 ## Phases
 
