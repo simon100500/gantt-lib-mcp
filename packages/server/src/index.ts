@@ -33,7 +33,9 @@ fastify.get('/health', async () => ({ status: 'ok' }));
 fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   // Get both project-specific tasks and global tasks (project_id=null)
   // This allows tasks created via MCP (without projectId) to be visible in the web UI
+  console.log('[TASKS DEBUG] GET /api/tasks - projectId from JWT:', req.user!.projectId, 'includeGlobal: true');
   const tasks = await taskStore.list(req.user!.projectId, true); // includeGlobal = true
+  console.log('[TASKS DEBUG] Returning tasks:', tasks.length, 'tasks');
   return reply.send(tasks);
 });
 

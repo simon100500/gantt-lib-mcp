@@ -222,6 +222,10 @@ export class AuthStore {
   async findSessionByAccessToken(accessToken: string): Promise<Session | undefined> {
     const db = await getDb();
 
+    console.log('[AUTH-STORE] findSessionByAccessToken called:', {
+      tokenPrefix: accessToken.substring(0, 20) + '...'
+    });
+
     const result = await db.execute({
       sql: `
         SELECT id, user_id, project_id, access_token, refresh_token, expires_at, created_at
@@ -229,6 +233,11 @@ export class AuthStore {
         WHERE access_token = ?
       `,
       args: [accessToken],
+    });
+
+    console.log('[AUTH-STORE] findSessionByAccessToken result:', {
+      rowsFound: result.rows.length,
+      sessionId: result.rows.length > 0 ? result.rows[0].id : 'none'
     });
 
     if (result.rows.length === 0) {
@@ -295,10 +304,18 @@ export class AuthStore {
   ): Promise<void> {
     const db = await getDb();
 
-    await db.execute({
+    console.log('[AUTH-STORE] updateSessionTokens called:', {
+      sessionId,
+      accessTokenPrefix: accessToken.substring(0, 20) + '...',
+      refreshTokenPrefix: refreshToken.substring(0, 20) + '...'
+    });
+
+    const result = await db.execute({
       sql: 'UPDATE sessions SET access_token = ?, refresh_token = ? WHERE id = ?',
       args: [accessToken, refreshToken, sessionId],
     });
+
+    console.log('[AUTH-STORE] updateSessionTokens result:', { rowsAffected: result.rowsAffected });
   }
 
   /**

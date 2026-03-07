@@ -300,6 +300,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Optional name template with placeholders: {workType}, {section}, {floor}',
           },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to associate the tasks with. If not provided, tasks will be global (visible to all projects)',
+          },
         },
         required: ['baseStartDate', 'workTypes', 'repeatBy'],
       },
@@ -328,6 +332,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const input = args as unknown as CreateTaskInput;
     const { projectId: argProjectId } = args as { projectId?: string };
     const resolvedProjectId = argProjectId ?? process.env.PROJECT_ID;
+
+    // DEBUG: Log projectId resolution
+    console.error('[CREATE_TASK DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
 
     // Validate date format
     if (!isValidDateFormat(input.startDate)) {
@@ -596,6 +603,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // create_tasks_batch tool
   if (name === 'create_tasks_batch') {
     const input = args as unknown as CreateTasksBatchInput;
+    const { projectId: argProjectId } = args as { projectId?: string };
+    const resolvedProjectId = argProjectId ?? process.env.PROJECT_ID;
+
+    console.error('[CREATE_TASKS_BATCH DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
 
     // Validate baseStartDate format
     if (!isValidDateFormat(input.baseStartDate)) {
@@ -677,7 +688,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               startDate,
               endDate,
               dependencies,
-            }, process.env.PROJECT_ID);
+            }, resolvedProjectId);
 
             createdTasks.push(task.id);
             previousTaskIds[currentStream] = task.id;

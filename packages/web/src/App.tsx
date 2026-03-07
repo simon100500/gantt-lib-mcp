@@ -91,6 +91,12 @@ export default function App() {
     });
   }, [setTasks]);
 
+  // Clear tasks when project changes
+  useEffect(() => {
+    console.log('[App] Clearing tasks on project change:', auth.project?.id);
+    setTasks([]);
+  }, [auth.project?.id, setTasks]);
+
   // Load chat history from server when authenticated and project is selected
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id) return;

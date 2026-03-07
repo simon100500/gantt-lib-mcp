@@ -200,6 +200,8 @@ export class TaskStore {
     let sql: string;
     let result: Awaited<ReturnType<typeof db.execute>>;
 
+    console.log('[STORE DEBUG] list() called with:', { projectId, includeGlobal });
+
     if (projectId && includeGlobal) {
       // Get both project-specific tasks AND global tasks (project_id=null)
       sql = 'SELECT * FROM tasks WHERE project_id = ? OR project_id IS NULL';
@@ -214,12 +216,15 @@ export class TaskStore {
       result = await db.execute(sql);
     }
 
+    console.log('[STORE DEBUG] SQL executed, rows returned:', result.rows.length);
+
     const tasks: Task[] = [];
     for (const row of result.rows) {
       const base = rowToTaskBase(row);
       const deps = await fetchDependencies(db, base.id);
       tasks.push({ ...base, dependencies: deps });
     }
+    console.log('[STORE DEBUG] Returning tasks:', tasks.length, 'tasks');
     return tasks;
   }
 

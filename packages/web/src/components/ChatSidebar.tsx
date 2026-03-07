@@ -36,7 +36,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    endRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, streaming]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

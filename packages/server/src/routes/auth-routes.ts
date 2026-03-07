@@ -80,20 +80,22 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     const project = projects[0]!;
 
-    // Generate session ID and tokens
-    const sessionId = randomUUID();
+    // Create session first to get the actual session ID from database
+    const session = await authStore.createSession(user.id, project.id, '', '');
+
+    // Generate tokens with the actual session ID
     const tokenPayload = {
       sub: user.id,
       email: user.email,
       projectId: project.id,
-      sessionId,
+      sessionId: session.id,
     };
 
     const accessToken = signAccessToken(tokenPayload);
     const refreshToken = signRefreshToken(tokenPayload);
 
-    // Create session
-    await authStore.createSession(user.id, project.id, accessToken, refreshToken);
+    // Update session with the actual tokens
+    await authStore.updateSessionTokens(session.id, accessToken, refreshToken);
 
     return reply.send({
       accessToken,
@@ -175,9 +177,11 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // POST /api/auth/switch-project
   // ---------------------------------------------------------------------------
   fastify.post('/api/auth/switch-project', { preHandler: [authMiddleware] }, async (req, reply) => {
+    console.log('[SWITCH-PROJECT DEBUG] Request received');
     const body = req.body as { projectId?: string };
     const { projectId } = body;
     const { userId, sessionId } = req.user!;
+    console.log('[SWITCH-PROJECT DEBUG] userId:', userId, 'requested projectId:', projectId, 'current projectId:', req.user!.projectId);
 
     if (!projectId) {
       return reply.status(400).send({ error: 'projectId required' });
@@ -202,9 +206,32 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const newAccessToken = signAccessToken(tokenPayload);
     const newRefreshToken = signRefreshToken(tokenPayload);
 
+    console.log('[SWITCH-PROJECT DEBUG] About to update session tokens in DB');
+    console.log('[SWITCH-PROJECT DEBUG] Session ID:', sessionId);
+    console.log('[SWITCH-PROJECT DEBUG] New access token prefix:', newAccessToken.substring(0, 20) + '...');
+
     // Update session tokens and project
     await authStore.updateSessionTokens(sessionId, newAccessToken, newRefreshToken);
+
+    console.log('[SWITCH-PROJECT DEBUG] Session tokens updated, now updating project');
     await authStore.updateSessionProject(sessionId, project.id);
+
+    console.log('[SWITCH-PROJECT DEBUG] Verifying session exists with new token...');
+    const verifySession = await authStore.findSessionByAccessToken(newAccessToken);
+    if (verifySession) {
+      console.log('[SWITCH-PROJECT DEBUG] VERIFIED: Session found with new token!', {
+        sessionId: verifySession.id,
+        projectId: verifySession.projectId
+      });
+    } else {
+      console.log('[SWITCH-PROJECT DEBUG] ERROR: Session NOT found with new token!');
+    }
+
+    console.log('[SWITCH-PROJECT DEBUG] Sending response:', {
+      projectId: project.id,
+      projectName: project.name,
+      accessTokenPrefix: newAccessToken.substring(0, 20) + '...'
+    });
 
     return reply.send({
       accessToken: newAccessToken,
