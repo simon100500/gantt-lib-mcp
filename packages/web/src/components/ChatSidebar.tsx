@@ -1,5 +1,22 @@
 import { useRef, useEffect } from 'react';
 
+// Inject shimmer animation styles
+if (typeof document !== 'undefined' && !document.getElementById('shimmer-styles')) {
+  const style = document.createElement('style');
+  style.id = 'shimmer-styles';
+  style.textContent = `
+    @keyframes shimmer {
+      0% {
+        background-position: -200% center;
+      }
+      100% {
+        background-position: 200% center;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -12,9 +29,10 @@ interface ChatSidebarProps {
   onSend: (text: string) => void;
   disabled: boolean;
   connected: boolean;
+  loading?: boolean;        // Show loading shimmer indicator when AI is thinking
 }
 
-export function ChatSidebar({ messages, streaming, onSend, disabled, connected }: ChatSidebarProps) {
+export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading }: ChatSidebarProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,7 +74,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected }
 
       {/* Message list */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', padding: '8px 0' }}>
-        {messages.length === 0 && !streaming && (
+        {messages.length === 0 && !streaming && !loading && (
           <div style={{ padding: 20, color: '#888', textAlign: 'center', fontSize: 14 }}>
             Ask me to create a Gantt chart for your project.
           </div>
@@ -66,6 +84,25 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected }
             {msg.content}
           </div>
         ))}
+        {/* Loading shimmer indicator */}
+        {loading && !streaming && (
+          <div style={{
+            padding: '8px 12px',
+            margin: '4px 8px',
+            borderRadius: 8,
+            maxWidth: '85%',
+            alignSelf: 'flex-start',
+            background: 'linear-gradient(90deg, #999 25%, #ccc 50%, #999 75%)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 2s infinite',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            fontSize: 14,
+          }}>
+            AI думает...
+          </div>
+        )}
         {/* Streaming partial response */}
         {streaming && (
           <div style={{ ...msgStyle('assistant'), opacity: 0.8 }}>
