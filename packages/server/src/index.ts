@@ -51,6 +51,11 @@ fastify.post('/api/chat', { preHandler: [authMiddleware] }, async (req, reply) =
   return reply.send({ status: 'processing' });
 });
 
+fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply) => {
+  const messages = await taskStore.getMessages(req.user!.projectId);
+  return reply.send(messages.slice(-50));
+});
+
 fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   const count = await taskStore.deleteAll(req.user!.projectId);
   broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks: [] });
