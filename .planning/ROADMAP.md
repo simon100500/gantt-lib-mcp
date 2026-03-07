@@ -18,6 +18,7 @@
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
 | 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
 | 9. session-control | 5/6 | Active | 09-01, 09-02, 09-03, 09-04, 09-05 |
+| 10. work-stability | 0/2 | Planned | — |
 
 ## Phases
 
@@ -30,6 +31,7 @@
 - [x] **Phase 7: Web UI with real-time Gantt editing via AI dialogue** - React + Fastify + WebSocket + SQLite monorepo, CapRover deploy (completed 2026-03-04)
 - [x] **Phase 8: Integrate gantt-lib library** - Replace placeholder Gantt component with gantt-lib React library (completed 2026-03-04)
 - [ ] **Phase 9: session-control** - Multi-user OTP auth, project isolation, targeted WebSocket broadcast
+- [ ] **Phase 10: work-stability** - Fix 6 stability bugs: token refresh, WS reconnect, MCP project scope, streaming dedup, system prompt, chat history
 
 ## Phase Details
 
@@ -148,6 +150,9 @@ Phase 8 (Integrate gantt-lib library)
     |
     v
 Phase 9 (session-control)
+    |
+    v
+Phase 10 (work-stability)
 ```
 
 ## Coverage
@@ -238,6 +243,17 @@ Plans:
 - [x] 09-05-PLAN.md — Tailwind CSS + shadcn/ui: install components with @/ path alias for Auth UI (Complete)
 - [ ] 09-06-PLAN.md — Auth UI: OTP modal (email + 6-digit step), project switcher, useAuth hook
 
+### Phase 10: work-stability
+
+**Goal:** Stabilize the application after Phase 9 auth integration — fix 6 bugs causing 401 errors, WebSocket authentication failures, MCP project-id scoping, streaming duplicates, raw JSON in chat, and lost chat history
+**Requirements:** Bug1, Bug2, Bug3, Bug4, Bug5, Bug6
+**Depends on:** Phase 9
+**Plans:** 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Server/MCP fixes: system prompt rewrite (Bug5), MCP PROJECT_ID env + includeGlobal broadcast (Bug3), streaming dedup (Bug4)
+- [ ] 10-02-PLAN.md — Frontend/API fixes: useTasks 401 refresh retry (Bug1), useWebSocket accessToken reconnect (Bug2), GET /api/messages + history load (Bug6)
+
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-05 after completing Phase 09 Plan 01*
+*Last updated: 2026-03-07 after planning Phase 10*
