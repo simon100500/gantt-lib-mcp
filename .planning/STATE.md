@@ -3,10 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
+last_updated: "2026-03-07T08:22:37.996Z"
+last_activity: "2026-03-05 - Completed Phase 09 Plan 05: Tailwind CSS + shadcn/ui installation with @/ path alias"
+progress:
+  total_phases: 10
+  completed_phases: 7
+  total_plans: 23
+  completed_plans: 21
+  percent: 91
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
 last_updated: "2026-03-05T14:21:03.091Z"
 last_activity: "2026-03-05 - Completed Phase 09 Plan 04: Wire auth middleware into request pipeline with project-scoped agent runner"
 progress:
-  total_phases: 9
+  [█████████░] 91%
   completed_phases: 7
   total_plans: 21
   completed_plans: 19
@@ -122,6 +137,7 @@ progress:
 | Phase 09 P02 | 248 | 2 tasks | 4 files |
 | Phase 09 P04 | 2 | 2 tasks | 4 files |
 | Phase 09 P05 | 2 | 2 tasks | 17 files |
+| Phase 10-work-stability P02 | 10 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -202,6 +218,9 @@ progress:
 - [Phase 09-05]: CSS variable-based theming with hsl() format for semantic colors
 - [Phase 09-05]: @/ path alias for clean component imports (requires both vite.config.ts and tsconfig.json)
 - [Phase 09-05]: cn() utility for class merging using clsx + tailwind-merge
+- [Phase 10-work-stability]: refreshAccessToken passed as parameter to useTasks to keep auth dependency explicit
+- [Phase 10-work-stability]: useWebSocket useEffect depends on [accessToken] not [connect] for correct token-reactive reconnect
+- [Phase 10-work-stability]: ws.onclose = null before intentional close to prevent backoff loop racing with deliberate reconnect
 
 ### Active Todos
 
@@ -269,6 +288,7 @@ Last activity: 2026-03-05 - Completed Phase 09 Plan 05: Tailwind CSS + shadcn/ui
 - Phase 7 added: Web UI with real-time Gantt editing via AI dialogue
 - Phase 8 added: Integrate gantt-lib library
 - Phase 9 added: session-control
+- Phase 10 added: work-stability
 
 ### Phase 7 Architecture Context
 

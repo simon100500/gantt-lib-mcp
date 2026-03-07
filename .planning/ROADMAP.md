@@ -18,7 +18,7 @@
 | 7. Web UI with real-time Gantt editing | 6/6 | Complete   | 2026-03-04 |
 | 8. Integrate gantt-lib library | 2/2 | Complete | 2026-03-04 |
 | 9. session-control | 5/6 | Active | 09-01, 09-02, 09-03, 09-04, 09-05 |
-| 10. work-stability | 0/2 | Planned | — |
+| 10. work-stability | 2/2 | Complete   | 2026-03-07 |
 
 ## Phases
 
@@ -31,7 +31,7 @@
 - [x] **Phase 7: Web UI with real-time Gantt editing via AI dialogue** - React + Fastify + WebSocket + SQLite monorepo, CapRover deploy (completed 2026-03-04)
 - [x] **Phase 8: Integrate gantt-lib library** - Replace placeholder Gantt component with gantt-lib React library (completed 2026-03-04)
 - [ ] **Phase 9: session-control** - Multi-user OTP auth, project isolation, targeted WebSocket broadcast
-- [ ] **Phase 10: work-stability** - Fix 6 stability bugs: token refresh, WS reconnect, MCP project scope, streaming dedup, system prompt, chat history
+- [x] **Phase 10: work-stability** - Fix 6 stability bugs: token refresh, WS reconnect, MCP project scope, streaming dedup, system prompt, chat history (completed 2026-03-07)
 
 ## Phase Details
 
@@ -248,7 +248,7 @@ Plans:
 **Goal:** Stabilize the application after Phase 9 auth integration — fix 6 bugs causing 401 errors, WebSocket authentication failures, MCP project-id scoping, streaming duplicates, raw JSON in chat, and lost chat history
 **Requirements:** Bug1, Bug2, Bug3, Bug4, Bug5, Bug6
 **Depends on:** Phase 9
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 10-01-PLAN.md — Server/MCP fixes: system prompt rewrite (Bug5), MCP PROJECT_ID env + includeGlobal broadcast (Bug3), streaming dedup (Bug4)
