@@ -124,7 +124,7 @@ export async function runAgentWithHistory(
           gantt: {
             command: 'node',
             args: [mcpServerPath],
-            env: { DB_PATH: dbPath },
+            env: { DB_PATH: dbPath, PROJECT_ID: projectId },
           },
         },
       },
@@ -132,14 +132,19 @@ export async function runAgentWithHistory(
 
     // 7. Stream tokens to WebSocket (session-scoped)
     let assistantResponse = '';
+    let streamedContent = false;
 
     for await (const event of session) {
       if (isSDKAssistantMessage(event)) {
+        // Guard: if we have already streamed tokens from earlier iterations,
+        // this is the final summary AssistantMessage — skip it to avoid duplicate broadcast.
+        if (streamedContent) continue;
         // event.message.content is ContentBlock[] — extract text blocks
         for (const block of event.message.content) {
           if (block.type === 'text' && block.text) {
             assistantResponse += block.text;
             broadcastToSession(sessionId, { type: 'token', content: block.text });
+            streamedContent = true;
           }
         }
       }
@@ -154,7 +159,7 @@ export async function runAgentWithHistory(
     }
 
     // 9. Broadcast updated tasks snapshot (session-scoped)
-    const tasks = await taskStore.list(projectId);
+    const tasks = await taskStore.list(projectId, true);
     broadcastToSession(sessionId, { type: 'tasks', tasks });
 
     // 10. Signal turn complete (session-scoped)
