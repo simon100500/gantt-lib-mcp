@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -13,7 +13,7 @@ let msgCounter = 0;
 
 export default function App() {
   const auth = useAuth();
-  const { tasks, setTasks, loading, error } = useTasks(auth.accessToken);
+  const { tasks, setTasks, loading, error } = useTasks(auth.accessToken, auth.refreshAccessToken);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
@@ -55,7 +55,7 @@ export default function App() {
     }
   }, [setTasks]);
 
-  const { send, connected } = useWebSocket(handleWsMessage, () => auth.accessToken);
+  const { send, connected } = useWebSocket(handleWsMessage, () => auth.accessToken, auth.accessToken);
 
   const handleSend = useCallback((text: string) => {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
@@ -91,6 +91,27 @@ export default function App() {
       return prev.map(t => map.get(t.id) ?? t);
     });
   }, [setTasks]);
+
+  // Load chat history from server when authenticated and project is selected
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id) return;
+
+    fetch('/api/messages', {
+      headers: { 'Authorization': `Bearer ${auth.accessToken}` },
+    })
+      .then(res => (res.ok ? (res.json() as Promise<Array<{ role: string; content: string }>>) : Promise.resolve([])))
+      .then(data => {
+        const history: ChatMessage[] = data.map(m => ({
+          id: String(++msgCounter),
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        }));
+        setMessages(history);
+      })
+      .catch(() => {
+        // Ignore errors — fresh session is fine
+      });
+  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id]);
 
   // Scroll to today button handler
   const handleScrollToToday = useCallback(() => {
