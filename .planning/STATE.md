@@ -139,6 +139,7 @@ progress:
 | Phase 09 P05 | 2 | 2 tasks | 17 files |
 | Phase 10-work-stability P02 | 10 | 3 tasks | 4 files |
 | Phase 10-work-stability P10-01 | 2 | 3 tasks | 3 files |
+| Phase 10-work-stability P10-verif-bugfix | 15 | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,10 @@ progress:
 - [Phase 10-work-stability]: MCP env injection: pass PROJECT_ID as child process env var, read via process.env.PROJECT_ID with argProjectId as override
 - [Phase 10-work-stability]: streamedContent boolean flag to skip final AssistantMessage if streaming tokens already broadcast — prevents duplicate AI response
 - [Phase 10-work-stability]: taskStore.list(projectId, true) with includeGlobal=true in agent broadcast to match HTTP GET behavior
+- [Phase 10-verif-bugfix]: Remove redundant setAiThinking(true) on token arrival — already set in handleSend, done event properly clears it
+- [Phase 10-verif-bugfix]: Add user-facing error alert when project creation fails — API was working but failures were silent
+- [Phase 10-verif-bugfix]: Clear all AI-related state (messages, streaming, aiThinking) when project changes — fresh start for new project context
+- [Phase 10-verif-bugfix]: Strengthen AI system prompt with CRITICAL past-tense instruction and explicit BAD examples — model ignores weak instructions
 
 ### Active Todos
 
@@ -283,7 +288,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-05 - Completed Phase 09 Plan 05: Tailwind CSS + shadcn/ui installation with @/ path alias
+Last activity: 2026-03-08 - Fixed 4 verification bugs: loading state stuck, project creation error handling, project switching state reset, AI verbose future-tense messages
 
 ### Roadmap Evolution
 
