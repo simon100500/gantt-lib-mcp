@@ -326,7 +326,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // create_task tool
   if (name === 'create_task') {
     const input = args as unknown as CreateTaskInput;
-    const { projectId } = args as { projectId?: string };
+    const { projectId: argProjectId } = args as { projectId?: string };
+    const resolvedProjectId = argProjectId ?? process.env.PROJECT_ID;
 
     // Validate date format
     if (!isValidDateFormat(input.startDate)) {
@@ -351,7 +352,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    const task = await taskStore.create(input, projectId);
+    const task = await taskStore.create(input, resolvedProjectId);
 
     // Return the task with cascade info
     const allTasks = await taskStore.list();
@@ -676,7 +677,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               startDate,
               endDate,
               dependencies,
-            });
+            }, process.env.PROJECT_ID);
 
             createdTasks.push(task.id);
             previousTaskIds[currentStream] = task.id;
