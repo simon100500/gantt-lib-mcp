@@ -301,6 +301,7 @@ export default function App() {
           onSend={handleSend}
           disabled={aiThinking}
           connected={connected}
+          loading={aiThinking}
         />
       </aside>
     </div>
