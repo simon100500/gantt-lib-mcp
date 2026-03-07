@@ -19,7 +19,8 @@ export interface UseWebSocketResult {
 
 export function useWebSocket(
   onMessage: (msg: ServerMessage) => void,
-  getAccessToken: () => string | null
+  getAccessToken: () => string | null,
+  accessToken: string | null   // NEW: reactive trigger — reconnect when this changes
 ): UseWebSocketResult {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -72,11 +73,23 @@ export function useWebSocket(
   }, []);
 
   useEffect(() => {
+    // If an existing connection is open, close it without triggering auto-reconnect.
+    // Setting onclose = null prevents the exponential backoff handler from racing
+    // with this intentional reconnect.
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+      setConnected(false);
+    }
     connect();
     return () => {
-      wsRef.current?.close();
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
     };
-  }, [connect]);
+  }, [accessToken]); // Re-run when token changes (null → value after OTP login)
 
   const send = useCallback((msg: ClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
