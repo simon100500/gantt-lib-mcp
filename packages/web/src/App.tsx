@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Trash2, PanelLeft } from 'lucide-react';
+import { CalendarDays, Trash2, PanelLeft, Sparkles, Clock, AlertTriangle, Lock, Link } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -36,12 +36,13 @@ function ToolbarToggle({
       aria-pressed={active}
       aria-label={ariaLabel}
       className={cn(
-        'h-7 px-2.5 text-xs rounded border font-medium transition-colors select-none',
+        'h-7 w-7 flex items-center justify-center rounded border transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
         active
           ? activeClass
           : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
       )}
+      title={ariaLabel}
     >
       {children}
     </button>
@@ -241,28 +242,38 @@ export default function App() {
             <ToolbarSep />
 
             {/* Feature toggles */}
-            <ToolbarToggle active={enableAutoSchedule} onClick={() => setEnableAutoSchedule(v => !v)}>
-              Авто-планирование
+            <ToolbarToggle
+              active={enableAutoSchedule}
+              onClick={() => setEnableAutoSchedule(v => !v)}
+              aria-label="Авто-планирование"
+            >
+              <Clock className="w-3.5 h-3.5" />
             </ToolbarToggle>
 
-            <ToolbarToggle active={highlightExpiredTasks} onClick={() => setHighlightExpiredTasks(v => !v)}>
-              Просроченные
+            <ToolbarToggle
+              active={highlightExpiredTasks}
+              onClick={() => setHighlightExpiredTasks(v => !v)}
+              aria-label="Просроченные"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
             </ToolbarToggle>
 
             <ToolbarToggle
               active={disableTaskNameEditing}
               onClick={() => setDisableTaskNameEditing(v => !v)}
               activeClass="bg-amber-500 text-white border-amber-500"
+              aria-label="Блок. названия"
             >
-              Блок. названия
+              <Lock className="w-3.5 h-3.5" />
             </ToolbarToggle>
 
             <ToolbarToggle
               active={disableDependencyEditing}
               onClick={() => setDisableDependencyEditing(v => !v)}
               activeClass="bg-amber-500 text-white border-amber-500"
+              aria-label="Блок. связи"
             >
-              Блок. связи
+              <Link className="w-3.5 h-3.5" />
             </ToolbarToggle>
 
             <div className="flex-1" />
