@@ -284,25 +284,24 @@ export default function App() {
               Сегодня
             </Button>
 
-            {/* Chat toggle button */}
-            <button
-              type="button"
-              onClick={() => setChatSidebarVisible(!chatSidebarVisible)}
-              aria-pressed={chatSidebarVisible}
-              aria-label={chatSidebarVisible ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
-              className={cn(
-                'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                chatSidebarVisible
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
-                'text-xs font-medium',
-              )}
-              title={chatSidebarVisible ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              {chatSidebarVisible ? 'AI' : 'AI'}
-            </button>
+            {/* Chat toggle button - only show when chat is hidden */}
+            {!chatSidebarVisible && (
+              <button
+                type="button"
+                onClick={() => setChatSidebarVisible(true)}
+                aria-label="Показать AI ассистента"
+                className={cn(
+                  'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                  'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
+                  'text-xs font-medium',
+                )}
+                title="Показать AI ассистента"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                AI
+              </button>
+            )}
           </div>
 
           {/* ── Gantt Chart ─────────────────────────────────────────────── */}
