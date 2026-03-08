@@ -337,6 +337,7 @@ export default function App() {
               connected={connected}
               loading={aiThinking}
               onClose={() => setChatSidebarVisible(false)}
+              isAuthenticated={auth.isAuthenticated}
             />
           </aside>
         )}

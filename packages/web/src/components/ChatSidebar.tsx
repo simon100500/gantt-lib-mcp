@@ -16,11 +16,12 @@ interface ChatSidebarProps {
   connected: boolean;
   loading?: boolean;
   onClose?: () => void;
+  isAuthenticated?: boolean;
 }
 
 const QUICK_CHIPS = ['Добавить задачу', 'Сдвинуть сроки', 'Связать задачи', 'Показать сводку'];
 
-export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading, onClose }: ChatSidebarProps) {
+export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading, onClose, isAuthenticated = true }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +82,16 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
                 Попросите создать или изменить расписание проекта
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Auth required notice for unauthenticated users */}
+        {!isAuthenticated && isEmpty && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 mx-3 mt-2">
+            <p className="text-xs text-amber-800 leading-relaxed">
+              Для работы AI-ассистента требуется{' '}
+              <span className="font-medium">вход в аккаунт</span>
+            </p>
           </div>
         )}
 
