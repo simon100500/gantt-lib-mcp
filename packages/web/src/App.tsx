@@ -210,7 +210,7 @@ export default function App() {
         <main className="flex flex-col flex-1 overflow-hidden min-w-0">
           {/* ── Gantt Toolbar ────────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
-            {/* Show/hide task list - accent button with label */}
+            {/* Show/hide task list - accent button when visible, outline when hidden */}
             <button
               type="button"
               onClick={() => setShowTaskList(!showTaskList)}
@@ -219,7 +219,9 @@ export default function App() {
               className={cn(
                 'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
+                showTaskList
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90'
+                  : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                 'text-xs font-medium',
               )}
               title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
@@ -262,7 +264,9 @@ export default function App() {
               Сегодня
             </Button>
 
-            {/* Chat toggle button - only show when chat is hidden */}
+            <div className="flex-1" />
+
+            {/* Chat toggle button - only show when chat is hidden, on the right */}
             {!chatSidebarVisible && (
               <button
                 type="button"
@@ -277,11 +281,9 @@ export default function App() {
                 title="Показать AI ассистента"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                AI
+                AI ассистент
               </button>
             )}
-
-            <div className="flex-1" />
 
             {/* Validation errors badge */}
             {validationErrors.length > 0 && (
