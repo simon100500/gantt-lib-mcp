@@ -36,11 +36,12 @@ function ToolbarToggle({
       aria-pressed={active}
       aria-label={ariaLabel}
       className={cn(
-        'h-7 w-7 flex items-center justify-center rounded border transition-colors',
+        'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
         active
           ? activeClass
           : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
+        'text-xs font-medium',
       )}
       title={ariaLabel}
     >
@@ -146,7 +147,7 @@ export default function App() {
           data.map(m => ({ id: String(++msgCounter), role: m.role as 'user' | 'assistant', content: m.content })),
         );
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [auth.isAuthenticated, auth.accessToken, auth.project?.id]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
@@ -172,7 +173,7 @@ export default function App() {
         {/* Logo */}
         <div className="flex items-center gap-2 text-sm font-semibold tracking-tight select-none">
           <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-          <span className="text-slate-900">GanttAI</span>
+          <span className="text-slate-900">GetGantt</span>
         </div>
 
         <span className="w-px h-4 bg-slate-200" />
@@ -234,6 +235,7 @@ export default function App() {
               aria-label="Авто-планирование"
             >
               <Clock className="w-3.5 h-3.5" />
+              Авто-планирование
             </ToolbarToggle>
 
             <ToolbarToggle
@@ -242,6 +244,7 @@ export default function App() {
               aria-label="Просроченные"
             >
               <AlertTriangle className="w-3.5 h-3.5" />
+              Просроченные
             </ToolbarToggle>
 
             <ToolbarToggle
@@ -251,6 +254,7 @@ export default function App() {
               aria-label="Блок. названия"
             >
               <Lock className="w-3.5 h-3.5" />
+              Блок. названия
             </ToolbarToggle>
 
             <ToolbarToggle
@@ -260,20 +264,12 @@ export default function App() {
               aria-label="Блок. связи"
             >
               <Link className="w-3.5 h-3.5" />
+              Блок. связи
             </ToolbarToggle>
-
-            <div className="flex-1" />
-
-            {/* Validation errors badge */}
-            {validationErrors.length > 0 && (
-              <span className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-0.5 font-medium">
-                {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
-              </span>
-            )}
 
             <ToolbarSep />
 
-            {/* Action buttons */}
+            {/* Action buttons - centered */}
             <Button
               size="sm"
               variant="outline"
@@ -301,6 +297,15 @@ export default function App() {
                 <Sparkles className="w-3.5 h-3.5" />
                 AI
               </button>
+            )}
+
+            <div className="flex-1" />
+
+            {/* Validation errors badge */}
+            {validationErrors.length > 0 && (
+              <span className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-0.5 font-medium">
+                {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
+              </span>
             )}
           </div>
 
