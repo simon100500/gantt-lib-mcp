@@ -214,12 +214,12 @@ export class AuthStore {
       return null;
     }
 
-    const row = result.rows[0] as { id: string; user_id: string; name: string; created_at: string };
+    const row = result.rows[0];
     return {
-      id: row.id,
-      userId: row.user_id,
-      name: row.name,
-      createdAt: row.created_at,
+      id: row.id as string,
+      userId: row.user_id as string,
+      name: row.name as string,
+      createdAt: row.created_at as string,
     };
   }
 
