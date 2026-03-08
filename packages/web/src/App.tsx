@@ -143,11 +143,8 @@ export default function App() {
   }, [auth.accessToken]);
 
   const handleEditDemoProject = useCallback(async (projectId: string, currentName: string) => {
-    const newName = window.prompt('Название проекта:', currentName);
-    if (newName?.trim()) {
-      localTasks.setProjectName(newName.trim());
-    }
-  }, [localTasks]);
+    setShowEditProjectModal(true);
+  }, []);
 
   const handleCreateProject = useCallback(async () => {
     const name = window.prompt('Название нового проекта:');
@@ -156,6 +153,13 @@ export default function App() {
   }, [auth.createProject]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
+    // For demo mode, save to localStorage
+    if (!auth.isAuthenticated) {
+      localTasks.setProjectName(newName);
+      return;
+    }
+
+    // For authenticated users, save to server
     if (!auth.accessToken || !auth.project || !auth.user) {
       throw new Error('Not authenticated');
     }
@@ -182,7 +186,7 @@ export default function App() {
       auth.user,
       data.project
     );
-  }, [auth]);
+  }, [auth, localTasks]);
 
   // Clear tasks when project changes (only for authenticated users)
   useEffect(() => {
@@ -435,9 +439,9 @@ export default function App() {
       )}
 
       {/* ── Edit Project Modal ───────────────────────────────────────────────── */}
-      {showEditProjectModal && auth.project && (
+      {showEditProjectModal && (
         <EditProjectModal
-          projectName={auth.project.name}
+          projectName={auth.isAuthenticated && auth.project ? auth.project.name : localTasks.projectName}
           onSave={handleSaveProjectName}
           onClose={() => setShowEditProjectModal(false)}
         />
