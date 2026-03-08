@@ -6,6 +6,7 @@ import { useTasks } from './hooks/useTasks.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
+import { useAutoSave } from './hooks/useAutoSave.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { CreateProjectModal } from './components/CreateProjectModal.tsx';
@@ -66,6 +67,9 @@ export default function App() {
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
   const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
+
+  // Autosave to server on any chart change (authenticated only; demo mode saves to localStorage in useLocalTasks)
+  useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
