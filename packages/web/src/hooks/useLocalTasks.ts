@@ -102,12 +102,22 @@ export function useLocalTasks(): UseLocalTasksResult {
     return state;
   });
 
+  console.log('[useLocalTasks] Render:', { taskCount: tasks.length, isDemoMode });
+
+  // Track why this hook re-renders
+  useEffect(() => {
+    console.log('[useLocalTasks] useEffect - state changed:', { taskCount: tasks.length, isDemoMode });
+  }, [tasks, isDemoMode]);
+
   const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
+    console.log('[useLocalTasks] setTasks called');
     setState(prev => {
       const newTasks = typeof updater === 'function' ? (updater as (prev: Task[]) => Task[])(prev.tasks) : updater;
+      console.log('[useLocalTasks] setState callback:', { prevTaskCount: prev.tasks.length, prevIsDemo: prev.isDemoMode, newTaskCount: newTasks.length });
 
       // If we're in demo mode and tasks changed, exit demo mode
       if (prev.isDemoMode && JSON.stringify(newTasks) !== JSON.stringify(DEMO_TASKS)) {
+        console.log('[useLocalTasks] Exiting demo mode');
         localStorage.setItem(DEMO_MODE_KEY, 'false');
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
         return { tasks: newTasks, isDemoMode: false };
