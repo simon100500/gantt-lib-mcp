@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, PanelLeft, Sparkles, Clock, AlertTriangle, Lock, Link } from 'lucide-react';
+import { CalendarDays, PanelLeft, Sparkles, Clock, AlertTriangle } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -67,10 +67,12 @@ export default function App() {
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
   const [enableAutoSchedule, setEnableAutoSchedule] = useState(false);
-  const [disableTaskNameEditing, setDisableTaskNameEditing] = useState(false);
-  const [disableDependencyEditing, setDisableDependencyEditing] = useState(false);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
   const [showTaskList, setShowTaskList] = useState(true);
+
+  // Always allow editing (removed toggle buttons)
+  const disableTaskNameEditing = false;
+  const disableDependencyEditing = false;
 
   const ganttRef = useRef<GanttChartRef>(null);
 
@@ -245,26 +247,6 @@ export default function App() {
             >
               <AlertTriangle className="w-3.5 h-3.5" />
               Просроченные
-            </ToolbarToggle>
-
-            <ToolbarToggle
-              active={disableTaskNameEditing}
-              onClick={() => setDisableTaskNameEditing(v => !v)}
-              activeClass="bg-amber-500 text-white border-amber-500"
-              aria-label="Блок. названия"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              Блок. названия
-            </ToolbarToggle>
-
-            <ToolbarToggle
-              active={disableDependencyEditing}
-              onClick={() => setDisableDependencyEditing(v => !v)}
-              activeClass="bg-amber-500 text-white border-amber-500"
-              aria-label="Блок. связи"
-            >
-              <Link className="w-3.5 h-3.5" />
-              Блок. связи
             </ToolbarToggle>
 
             <ToolbarSep />
