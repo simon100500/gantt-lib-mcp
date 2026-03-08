@@ -268,7 +268,7 @@ None
 | 5 | Add missing gantt-lib features | 2026-03-04 | ca18eb1, e80e116, 1baebf5 | [5-https-github-com-simon100500-gantt-lib-b](./quick/5-https-github-com-simon100500-gantt-lib-b/) |
 | 6 | Add Clear Database button | 2026-03-04 | 740b1d1, 89a6a49, 8a2d5c4 | [6-add-clear-db-button](./quick/6-add-clear-db-button/) |
 | 7 | AI response loader with shimmer + bugfixes | 2026-03-08 | 6378c29, 1f12bae, acda762, 6f60a38, cf58995, a245b2e | [7-ai-response-loader](./quick/7-ai-response-loader/) |
-| 8 | Russian UI with agent panel toggle | 2026-03-08 | ebf941e, 5d27246, e1c4ec1, d3a5a3e, 0fcad80, 554aabf, 8964094 | [8-russian-ui-agent-panel](./quick/008-russian-ui-agent-panel/) |
+| 8 | Russian UI with agent panel toggle | 2026-03-08 | ebf941e, 5d27246, e1c4ec1, d3a5a3e, 0fcad80, 554aabf, 8964094, 40f7aa4, 9a19b2c | [8-russian-ui-agent-panel](./quick/008-russian-ui-agent-panel/) |
 
 ### Quick Tasks Pending
 
