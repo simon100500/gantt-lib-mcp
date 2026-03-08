@@ -96,6 +96,19 @@ export function useAuth(): UseAuthResult {
     }
   }, []);
 
+  // Refresh projects (with taskCount) after mount or whenever accessToken changes
+  useEffect(() => {
+    const token = state.accessToken;
+    if (!token) return;
+    fetch('/api/projects', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(res => res.ok ? res.json() as Promise<{ projects: AuthProject[] }> : Promise.reject())
+      .then(data => {
+        localStorage.setItem(PROJECTS_KEY, JSON.stringify(data.projects));
+        loggedSetState(prev => ({ ...prev, projects: data.projects }), 'refresh-projects');
+      })
+      .catch(() => { /* silently ignore, stale data is fine */ });
+  }, [state.accessToken]);
+
   const login = useCallback((tokens: { accessToken: string; refreshToken: string }, user: AuthUser, project: AuthProject) => {
     // Save to localStorage
     localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
