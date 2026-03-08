@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Trash2, PanelLeft, Sparkles, Clock, AlertTriangle, Lock, Link } from 'lucide-react';
+import { CalendarDays, PanelLeft, Sparkles, Clock, AlertTriangle, Lock, Link } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -151,20 +151,6 @@ export default function App() {
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
-  const handleClearDatabase = useCallback(async () => {
-    if (!confirm('Очистить все задачи? Это действие нельзя отменить.')) return;
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${auth.accessToken ?? ''}` },
-      });
-      if (!res.ok) throw new Error('Failed to clear');
-      setTasks([]);
-    } catch (err) {
-      alert(`Ошибка: ${err}`);
-    }
-  }, [auth.accessToken, setTasks]);
-
   // ── Error state ──────────────────────────────────────────────────────────
   if (error && auth.isAuthenticated) {
     return (
@@ -298,15 +284,25 @@ export default function App() {
               Сегодня
             </Button>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleClearDatabase}
-              className="h-7 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+            {/* Chat toggle button */}
+            <button
+              type="button"
+              onClick={() => setChatSidebarVisible(!chatSidebarVisible)}
+              aria-pressed={chatSidebarVisible}
+              aria-label={chatSidebarVisible ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
+              className={cn(
+                'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                chatSidebarVisible
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
+                'text-xs font-medium',
+              )}
+              title={chatSidebarVisible ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Очистить
-            </Button>
+              <Sparkles className="w-3.5 h-3.5" />
+              {chatSidebarVisible ? 'AI' : 'AI'}
+            </button>
           </div>
 
           {/* ── Gantt Chart ─────────────────────────────────────────────── */}
@@ -348,17 +344,6 @@ export default function App() {
               onClose={() => setChatSidebarVisible(false)}
             />
           </aside>
-        )}
-
-        {/* ── Show chat button (when sidebar hidden) ─────────────────────────────────────── */}
-        {!chatSidebarVisible && (
-          <button
-            onClick={() => setChatSidebarVisible(true)}
-            className="fixed top-14 right-4 z-40 bg-primary text-primary-foreground p-2.5 rounded-lg shadow-lg hover:bg-primary/90 transition-colors"
-            title="Показать AI ассистента"
-          >
-            <Sparkles className="w-5 h-5" />
-          </button>
         )}
       </div>
 
