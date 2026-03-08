@@ -73,9 +73,12 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
   const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
   const demoMode = localStorage.getItem(DEMO_MODE_KEY);
 
+  console.log('[useLocalTasks] loadInitialState:', { stored, demoMode, demoTaskCount: DEMO_TASKS.length });
+
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Task[];
+      console.log('[useLocalTasks] loaded from storage:', parsed.length, 'tasks');
       return { tasks: parsed, isDemoMode: demoMode === 'true' };
     } catch (err) {
       console.error('Failed to parse local tasks:', err);
@@ -86,13 +89,18 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
   }
 
   // No local data or invalid data, show demo project
+  console.log('[useLocalTasks] loading demo tasks:', DEMO_TASKS.length, 'tasks');
   localStorage.setItem(DEMO_MODE_KEY, 'true');
   return { tasks: DEMO_TASKS, isDemoMode: true };
 }
 
 export function useLocalTasks(): UseLocalTasksResult {
   // Single lazy initialization call - more reliable
-  const [{ tasks, isDemoMode }, setState] = useState(() => loadInitialState());
+  const [{ tasks, isDemoMode }, setState] = useState(() => {
+    const state = loadInitialState();
+    console.log('[useLocalTasks] useState init:', { taskCount: state.tasks.length, isDemoMode: state.isDemoMode });
+    return state;
+  });
 
   const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
     setState(prev => {

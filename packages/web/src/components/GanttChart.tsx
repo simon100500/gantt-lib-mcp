@@ -49,6 +49,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
 
   // Preserve empty state for better UX
   if (tasks.length === 0) {
+    console.log('[GanttChart] Showing empty state - tasks.length is 0');
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400">
         <p className="text-sm">No tasks yet.</p>
@@ -56,6 +57,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       </div>
     );
   }
+
+  console.log('[GanttChart] Rendering gantt with', tasks.length, 'tasks');
 
   return (
     <GanttLibChart

@@ -65,6 +65,15 @@ export default function App() {
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
   const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
+
+  // Log for debugging demo mode issue
+  console.log('[App] Render:', {
+    isAuthenticated: auth.isAuthenticated,
+    taskSource: auth.isAuthenticated ? 'authenticated' : 'local',
+    taskCount: tasks.length,
+    isDemoMode,
+    tasks: tasks.slice(0, 2).map(t => ({ id: t.id, name: t.name }))
+  });
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
