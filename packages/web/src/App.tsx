@@ -149,8 +149,14 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(async () => {
+    // For demo mode, show login modal
+    if (!auth.isAuthenticated) {
+      setShowOtpModal(true);
+      return;
+    }
+    // For authenticated users, show create project modal
     setShowCreateProjectModal(true);
-  }, []);
+  }, [auth.isAuthenticated]);
 
   const handleSaveNewProject = useCallback(async (name: string) => {
     return await auth.createProject(name);
