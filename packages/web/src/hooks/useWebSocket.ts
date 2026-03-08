@@ -91,6 +91,12 @@ export function useWebSocket(
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
+
+    // Don't connect if no token (unauthenticated user)
+    if (!accessToken) {
+      return;
+    }
+
     connect();
     return () => {
       if (wsRef.current) {
