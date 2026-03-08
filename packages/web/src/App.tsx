@@ -3,10 +3,12 @@ import { CalendarDays, PanelLeft, Sparkles, Clock, AlertTriangle } from 'lucide-
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
+import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
+import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
 import { cn } from '@/lib/utils';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
@@ -58,7 +60,10 @@ function ToolbarSep() {
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const auth = useAuth();
-  const { tasks, setTasks, loading, error } = useTasks(auth.accessToken, auth.refreshAccessToken);
+  const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
+  const localTasks = useLocalTasks();
+  const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
+  const [showOtpModal, setShowOtpModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
@@ -168,7 +173,6 @@ export default function App() {
   // ── Layout ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
-      {!auth.isAuthenticated && <OtpModal onSuccess={handleAuthSuccess} />}
 
       {/* ── Top Bar ──────────────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
@@ -192,7 +196,12 @@ export default function App() {
 
         <div className="flex-1" />
 
-        {auth.isAuthenticated && (
+        {!auth.isAuthenticated ? (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">Войдите, чтобы сохранить график</span>
+            <LoginButton onClick={() => setShowOtpModal(true)} />
+          </div>
+        ) : (
           <Button
             variant="ghost"
             size="sm"
@@ -348,6 +357,17 @@ export default function App() {
           {connected ? 'Подключено' : 'Переподключение…'}
         </span>
       </footer>
+
+      {/* ── OTP Modal (controlled) ──────────────────────────────────────────── */}
+      {showOtpModal && (
+        <OtpModal
+          onSuccess={(result) => {
+            auth.login(result, result.user, result.project);
+            setShowOtpModal(false);
+          }}
+          onClose={() => setShowOtpModal(false)}
+        />
+      )}
     </div>
   );
 }
