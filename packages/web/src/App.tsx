@@ -180,10 +180,12 @@ export default function App() {
     );
   }, [auth]);
 
-  // Clear tasks when project changes
+  // Clear tasks when project changes (only for authenticated users)
   useEffect(() => {
+    // Don't clear tasks for unauthenticated users (demo mode)
+    if (!auth.isAuthenticated) return;
     setTasks([]);
-  }, [auth.project?.id, setTasks]);
+  }, [auth.project?.id, setTasks, auth.isAuthenticated]);
 
   // Load chat history on auth/project change
   useEffect(() => {
