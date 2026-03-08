@@ -13,13 +13,9 @@ interface ProjectSwitcherProps {
 
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onEdit }: ProjectSwitcherProps) {
   const handleCreateNew = async () => {
-    const name = window.prompt('Название нового проекта:');
-    if (name?.trim()) {
-      const result = await onCreateNew(name.trim());
-      if (!result) {
-        alert('Не удалось создать проект. Попробуйте снова.');
-      }
-    }
+    // For demo mode, onCreateNew will show login modal
+    // For authenticated mode, caller should handle prompting
+    await onCreateNew('');
   };
 
   return (
@@ -31,7 +27,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-52">
-          {projects.map(p => (
+          {projects.length > 0 && projects.map(p => (
             <DropdownMenuItem
               key={p.id}
               onClick={() => onSwitch(p.id)}
@@ -47,7 +43,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
               )}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuSeparator />
+          {projects.length > 0 && <DropdownMenuSeparator />}
           <DropdownMenuItem onClick={handleCreateNew} className="text-primary font-medium">
             <Plus className="mr-2 h-4 w-4" /> Новый проект
           </DropdownMenuItem>

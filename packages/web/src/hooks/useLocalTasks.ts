@@ -3,6 +3,7 @@ import type { Task } from '../types.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
 const DEMO_MODE_KEY = 'gantt_demo_mode';
+const PROJECT_NAME_KEY = 'gantt_project_name';
 
 // Demo project tasks with realistic dependencies
 const DEMO_TASKS: Task[] = [
@@ -61,6 +62,8 @@ export interface UseLocalTasksResult {
   loading: boolean;  // Always false (local)
   error: string | null;  // Always null (local)
   isDemoMode: boolean;
+  projectName: string;
+  setProjectName: (name: string) => void;
 }
 
 /**
@@ -69,14 +72,15 @@ export interface UseLocalTasksResult {
  * Shows demo project when no local data exists.
  */
 // Helper function to load initial state (synchronous)
-function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
+function loadInitialState(): { tasks: Task[]; isDemoMode: boolean; projectName: string } {
   const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
   const demoMode = localStorage.getItem(DEMO_MODE_KEY);
+  const projectName = localStorage.getItem(PROJECT_NAME_KEY) || 'Мой проект';
 
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Task[];
-      return { tasks: parsed, isDemoMode: demoMode === 'true' };
+      return { tasks: parsed, isDemoMode: demoMode === 'true', projectName };
     } catch (err) {
       console.error('Failed to parse local tasks:', err);
       // Clear invalid data
@@ -87,12 +91,12 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
 
   // No local data or invalid data, show demo project
   localStorage.setItem(DEMO_MODE_KEY, 'true');
-  return { tasks: DEMO_TASKS, isDemoMode: true };
+  return { tasks: DEMO_TASKS, isDemoMode: true, projectName };
 }
 
 export function useLocalTasks(): UseLocalTasksResult {
   // Single lazy initialization call - more reliable
-  const [{ tasks, isDemoMode }, setState] = useState(() => loadInitialState());
+  const [{ tasks, isDemoMode, projectName }, setState] = useState(() => loadInitialState());
 
   const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
     setState(prev => {
@@ -102,7 +106,7 @@ export function useLocalTasks(): UseLocalTasksResult {
       if (prev.isDemoMode && JSON.stringify(newTasks) !== JSON.stringify(DEMO_TASKS)) {
         localStorage.setItem(DEMO_MODE_KEY, 'false');
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
-        return { tasks: newTasks, isDemoMode: false };
+        return { tasks: newTasks, isDemoMode: false, projectName: prev.projectName };
       }
 
       // Persist tasks if not in demo mode
@@ -110,8 +114,13 @@ export function useLocalTasks(): UseLocalTasksResult {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
       }
 
-      return { tasks: newTasks, isDemoMode: prev.isDemoMode };
+      return { tasks: newTasks, isDemoMode: prev.isDemoMode, projectName: prev.projectName };
     });
+  }, []);
+
+  const setProjectName = useCallback((name: string) => {
+    localStorage.setItem(PROJECT_NAME_KEY, name);
+    setState(prev => ({ ...prev, projectName: name }));
   }, []);
 
   return {
@@ -120,5 +129,7 @@ export function useLocalTasks(): UseLocalTasksResult {
     loading: false,  // No async operation
     error: null,     // No network errors
     isDemoMode,
+    projectName,
+    setProjectName,
   };
 }

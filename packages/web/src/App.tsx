@@ -142,6 +142,19 @@ export default function App() {
     setShowEditProjectModal(true);
   }, [auth.accessToken]);
 
+  const handleEditDemoProject = useCallback(async (projectId: string, currentName: string) => {
+    const newName = window.prompt('Название проекта:', currentName);
+    if (newName?.trim()) {
+      localTasks.setProjectName(newName.trim());
+    }
+  }, [localTasks]);
+
+  const handleCreateProject = useCallback(async () => {
+    const name = window.prompt('Название нового проекта:');
+    if (!name?.trim()) return null;
+    return await auth.createProject(name.trim());
+  }, [auth.createProject]);
+
   const handleSaveProjectName = useCallback(async (newName: string) => {
     if (!auth.accessToken || !auth.project || !auth.user) {
       throw new Error('Not authenticated');
@@ -224,24 +237,23 @@ export default function App() {
 
         <span className="w-px h-4 bg-slate-200" />
 
-        {/* Project switcher or demo badge */}
+        {/* Project switcher - works for both authenticated and demo mode */}
         {auth.isAuthenticated && auth.project ? (
           <ProjectSwitcher
             currentProject={auth.project}
             projects={auth.projects}
             onSwitch={auth.switchProject}
-            onCreateNew={auth.createProject}
+            onCreateNew={handleCreateProject}
             onEdit={handleEditProject}
           />
         ) : isDemoMode && (
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" className="font-medium" disabled>
-              Демо-проект
-            </Button>
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-              Демо-режим
-            </span>
-          </div>
+          <ProjectSwitcher
+            currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
+            projects={[]}
+            onSwitch={() => {}}
+            onCreateNew={async () => setShowOtpModal(true)}
+            onEdit={handleEditDemoProject}
+          />
         )}
 
         <div className="flex-1" />
