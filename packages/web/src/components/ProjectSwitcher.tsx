@@ -7,15 +7,13 @@ interface ProjectSwitcherProps {
   currentProject: { id: string; name: string; taskCount?: number };
   projects: { id: string; name: string; taskCount?: number }[];
   onSwitch: (projectId: string) => void;
-  onCreateNew: (name: string) => Promise<{ id: string; name: string } | null>;
+  onCreateNew: () => void;
   onEdit?: (projectId: string, currentName: string) => Promise<void>;
 }
 
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onEdit }: ProjectSwitcherProps) {
-  const handleCreateNew = async () => {
-    // For demo mode, onCreateNew will show login modal
-    // For authenticated mode, caller should handle prompting
-    await onCreateNew('');
+  const handleCreateNew = () => {
+    onCreateNew();
   };
 
   return (

@@ -8,6 +8,7 @@ import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
+import { CreateProjectModal } from './components/CreateProjectModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
 import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
@@ -67,6 +68,7 @@ export default function App() {
   const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
@@ -147,9 +149,11 @@ export default function App() {
   }, []);
 
   const handleCreateProject = useCallback(async () => {
-    const name = window.prompt('Название нового проекта:');
-    if (!name?.trim()) return null;
-    return await auth.createProject(name.trim());
+    setShowCreateProjectModal(true);
+  }, []);
+
+  const handleSaveNewProject = useCallback(async (name: string) => {
+    return await auth.createProject(name);
   }, [auth.createProject]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
@@ -251,6 +255,14 @@ export default function App() {
             onEdit={handleEditProject}
           />
         ) : isDemoMode && (
+          <ProjectSwitcher
+            currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
+            projects={[]}
+            onSwitch={() => {}}
+            onCreateNew={handleCreateProject}
+            onEdit={handleEditDemoProject}
+          />
+        )}
           <ProjectSwitcher
             currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
             projects={[]}
@@ -444,6 +456,14 @@ export default function App() {
           projectName={auth.isAuthenticated && auth.project ? auth.project.name : localTasks.projectName}
           onSave={handleSaveProjectName}
           onClose={() => setShowEditProjectModal(false)}
+        />
+      )}
+
+      {/* ── Create Project Modal ───────────────────────────────────────────────── */}
+      {showCreateProjectModal && (
+        <CreateProjectModal
+          onSave={handleSaveNewProject}
+          onClose={() => setShowCreateProjectModal(false)}
         />
       )}
     </div>
