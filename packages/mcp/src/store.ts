@@ -405,10 +405,11 @@ export class TaskStore {
   }
 
   /**
-   * Import tasks from JSON string (replaces all existing tasks).
+   * Import tasks from JSON string (replaces existing tasks for the given project).
+   * @param projectId - If provided, only tasks for this project are deleted before import
    * @returns number of tasks imported
    */
-  async importTasks(jsonData: string): Promise<number> {
+  async importTasks(jsonData: string, projectId?: string): Promise<number> {
     let tasks: Task[];
     try {
       tasks = JSON.parse(jsonData) as Task[];
@@ -422,14 +423,18 @@ export class TaskStore {
 
     const db = await getDb();
 
-    // Clear all tasks (CASCADE removes deps)
-    await db.execute('DELETE FROM tasks');
+    // Clear only the project's tasks (CASCADE removes deps); never touch other projects
+    if (projectId) {
+      await db.execute({ sql: 'DELETE FROM tasks WHERE project_id = ?', args: [projectId] });
+    } else {
+      await db.execute('DELETE FROM tasks');
+    }
 
     // Insert each task and its dependencies
     for (const task of tasks) {
       await db.execute({
-        sql: `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [task.id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
+        sql: `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [task.id, projectId ?? null, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
       });
 
       if (task.dependencies && task.dependencies.length > 0) {

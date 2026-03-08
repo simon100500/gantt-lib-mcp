@@ -557,8 +557,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error('Missing required parameter: jsonData');
     }
 
+    const resolvedProjectId = process.env.PROJECT_ID;
+
     try {
-      const count = await taskStore.importTasks(jsonData);
+      const count = await taskStore.importTasks(jsonData, resolvedProjectId);
       return {
         content: [
           {
