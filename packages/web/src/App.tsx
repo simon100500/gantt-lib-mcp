@@ -143,7 +143,7 @@ export default function App() {
   }, [auth.accessToken]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
-    if (!auth.accessToken || !auth.project) {
+    if (!auth.accessToken || !auth.project || !auth.user) {
       throw new Error('Not authenticated');
     }
 
