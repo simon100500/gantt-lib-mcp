@@ -221,40 +221,23 @@ export default function App() {
         <main className="flex flex-col flex-1 overflow-hidden min-w-0">
           {/* ── Gantt Toolbar ────────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
-            {/* Show/hide task list - accent button when hidden */}
-            {showTaskList ? (
-              <button
-                type="button"
-                onClick={() => setShowTaskList(false)}
-                aria-pressed={true}
-                aria-label="Скрыть задачи"
-                className={cn(
-                  'h-7 w-7 flex items-center justify-center rounded border transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                  'bg-primary text-primary-foreground border-primary',
-                )}
-                title="Скрыть задачи"
-              >
-                <PanelLeft className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowTaskList(true)}
-                aria-pressed={false}
-                aria-label="Показать задачи"
-                className={cn(
-                  'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                  'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
-                  'text-xs font-medium',
-                )}
-                title="Показать задачи"
-              >
-                <PanelLeft className="w-3.5 h-3.5" />
-                Показать задачи
-              </button>
-            )}
+            {/* Show/hide task list - accent button with label */}
+            <button
+              type="button"
+              onClick={() => setShowTaskList(!showTaskList)}
+              aria-pressed={showTaskList}
+              aria-label={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
+              className={cn(
+                'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
+                'text-xs font-medium',
+              )}
+              title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
+            >
+              <PanelLeft className="w-3.5 h-3.5" />
+              {showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
+            </button>
 
             <ToolbarSep />
 
@@ -371,7 +354,7 @@ export default function App() {
         {!chatSidebarVisible && (
           <button
             onClick={() => setChatSidebarVisible(true)}
-            className="fixed bottom-8 right-4 z-40 bg-primary text-primary-foreground p-2.5 rounded-lg shadow-lg hover:bg-primary/90 transition-colors"
+            className="fixed top-14 right-4 z-40 bg-primary text-primary-foreground p-2.5 rounded-lg shadow-lg hover:bg-primary/90 transition-colors"
             title="Показать AI ассистента"
           >
             <Sparkles className="w-5 h-5" />
