@@ -254,6 +254,16 @@ Plans:
 - [ ] 10-01-PLAN.md — Server/MCP fixes: system prompt rewrite (Bug5), MCP PROJECT_ID env + includeGlobal broadcast (Bug3), streaming dedup (Bug4)
 - [ ] 10-02-PLAN.md — Frontend/API fixes: useTasks 401 refresh retry (Bug1), useWebSocket accessToken reconnect (Bug2), GET /api/messages + history load (Bug6)
 
+### Phase 11: complete-deisgn-system
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 10
+**Plans:** 0/0 plans complete
+
+Plans:
+- [x] TBD (run /gsd:plan-phase 11 to break down) (completed 2026-03-08)
+
 ---
 *Roadmap created: 2026-02-23*
 *Last updated: 2026-03-07 after planning Phase 10*
