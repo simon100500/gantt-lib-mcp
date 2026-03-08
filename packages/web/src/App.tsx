@@ -269,14 +269,6 @@ export default function App() {
             onEdit={handleEditDemoProject}
           />
         )}
-          <ProjectSwitcher
-            currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
-            projects={[]}
-            onSwitch={() => {}}
-            onCreateNew={async () => setShowOtpModal(true)}
-            onEdit={handleEditDemoProject}
-          />
-        )}
 
         <div className="flex-1" />
 
