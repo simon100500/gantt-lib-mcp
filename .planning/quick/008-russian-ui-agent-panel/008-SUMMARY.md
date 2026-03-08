@@ -102,10 +102,11 @@ const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
 1. `ebf941e` - feat(quick-008): translate UI to Russian language
 2. `5d27246` - feat(quick-008): add agent panel close button with accent show button
 3. `e1c4ec1` - fix(quick-008): make mode toggle buttons icon-only (Clock, AlertTriangle, Lock, Link icons)
+4. `0fcad80` - fix(quick-008): correct button positions and translations
 
 ## Post-Completion Fixes
 
-**Issue:** Mode toggle buttons had text labels instead of icons.
+**Issue 1:** Mode toggle buttons had text labels instead of icons.
 
 **Fix:** Changed ToolbarToggle component to icon-only square buttons (w-7 h-7):
 - Auto-Schedule → Clock icon
@@ -113,6 +114,17 @@ const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
 - Lock Names → Lock icon
 - Lock Deps → Link icon
 - Added aria-label and title for accessibility
+
+**Issue 2:** Wrong button positions and labels.
+- "Показать задачи" was on chat button (should be task list)
+- Chat button was on left side (should be right side)
+
+**Fix:**
+- Task list button: accent style with "Показать задачи" label when hidden
+- Chat button: moved to right side (right-4), Sparkles icon only
+- Validation errors: Russian pluralization (ошибк-а/и/-)
+- Error messages translated to Russian
+- Clear database confirmation translated
 
 ## Self-Check: PASSED
 
