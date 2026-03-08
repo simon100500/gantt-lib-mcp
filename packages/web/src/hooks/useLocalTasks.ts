@@ -68,35 +68,33 @@ export interface UseLocalTasksResult {
  * Provides the same interface as useTasks but works entirely client-side.
  * Shows demo project when no local data exists.
  */
-export function useLocalTasks(): UseLocalTasksResult {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+// Helper function to load initial state (synchronous)
+function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
+  const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+  const demoMode = localStorage.getItem(DEMO_MODE_KEY);
 
-  // Load tasks from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    const demoMode = localStorage.getItem(DEMO_MODE_KEY);
-
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Task[];
-        setTasks(parsed);
-        setIsDemoMode(demoMode === 'true');
-      } catch (err) {
-        console.error('Failed to parse local tasks:', err);
-        // Clear invalid data and load demo
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        localStorage.removeItem(DEMO_MODE_KEY);
-        setTasks(DEMO_TASKS);
-        setIsDemoMode(true);
-      }
-    } else {
-      // No local data, show demo project
-      setTasks(DEMO_TASKS);
-      setIsDemoMode(true);
-      localStorage.setItem(DEMO_MODE_KEY, 'true');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as Task[];
+      return { tasks: parsed, isDemoMode: demoMode === 'true' };
+    } catch (err) {
+      console.error('Failed to parse local tasks:', err);
+      // Clear invalid data
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.removeItem(DEMO_MODE_KEY);
     }
-  }, []);
+  }
+
+  // No local data or invalid data, show demo project
+  localStorage.setItem(DEMO_MODE_KEY, 'true');
+  return { tasks: DEMO_TASKS, isDemoMode: true };
+}
+
+export function useLocalTasks(): UseLocalTasksResult {
+  // Lazy initialization with synchronous localStorage read
+  const initialState = loadInitialState();
+  const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
+  const [isDemoMode, setIsDemoMode] = useState(initialState.isDemoMode);
 
   // Persist tasks to localStorage whenever they change
   useEffect(() => {
