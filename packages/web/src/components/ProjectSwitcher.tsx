@@ -12,11 +12,11 @@ interface ProjectSwitcherProps {
 
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
   const handleCreateNew = async () => {
-    const name = window.prompt('New project name:');
+    const name = window.prompt('Название нового проекта:');
     if (name?.trim()) {
       const result = await onCreateNew(name.trim());
       if (!result) {
-        alert('Failed to create project. Please try again.');
+        alert('Не удалось создать проект. Попробуйте снова.');
       }
     }
   };
@@ -47,7 +47,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleCreateNew} className="text-primary font-medium">
-          <Plus className="mr-2 h-4 w-4" /> New project
+          <Plus className="mr-2 h-4 w-4" /> Новый проект
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

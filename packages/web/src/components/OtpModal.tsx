@@ -30,14 +30,14 @@ export function OtpModal({ onSuccess }: OtpModalProps) {
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setError('Email required');
+      setError('Требуется email');
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
-      setError('Invalid email address');
+      setError('Неверный email адрес');
       return;
     }
 
@@ -105,7 +105,7 @@ export function OtpModal({ onSuccess }: OtpModalProps) {
     const code = digits.join('');
 
     if (code.length !== 6) {
-      setError('Please enter all 6 digits');
+      setError('Введите все 6 цифр');
       return;
     }
 
@@ -152,13 +152,13 @@ export function OtpModal({ onSuccess }: OtpModalProps) {
       {step === 'email' ? (
         <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl font-semibold">Sign in to Gantt</CardTitle>
-            <CardDescription>Enter your email to receive a one-time code</CardDescription>
+            <CardTitle className="text-xl font-semibold">Вход в Gantt</CardTitle>
+            <CardDescription>Введите email для получения кода</CardDescription>
           </CardHeader>
           <form onSubmit={handleRequestOtp}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Email адрес</Label>
                 <Input
                   id="email"
                   type="email"
@@ -182,7 +182,7 @@ export function OtpModal({ onSuccess }: OtpModalProps) {
                 size="lg"
                 disabled={loading}
               >
-                {loading ? 'Sending...' : 'Send code'}
+                {loading ? 'Отправка...' : 'Отправить код'}
               </Button>
             </CardFooter>
           </form>
@@ -193,12 +193,12 @@ export function OtpModal({ onSuccess }: OtpModalProps) {
             onClick={() => setStep('email')}
             className="text-sm text-primary hover:underline mb-4 flex items-center gap-1 relative z-10"
           >
-            ← Change email
+            ← Изменить email
           </button>
           <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl">
             <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-xl font-semibold">Check your email</CardTitle>
-              <CardDescription>We sent a 6-digit code to {email}</CardDescription>
+              <CardTitle className="text-xl font-semibold">Проверьте email</CardTitle>
+              <CardDescription>Мы отправили 6-значный код на {email}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2 justify-center my-4">
@@ -226,12 +226,12 @@ export function OtpModal({ onSuccess }: OtpModalProps) {
               {error && <p className="text-sm text-destructive text-center">{error}</p>}
               {!loading && (
                 <p className="text-sm text-muted-foreground text-center mt-3">
-                  Didn't get it?{' '}
+                  Не получили?{' '}
                   <button
                     className="text-primary hover:underline"
                     onClick={() => setStep('email')}
                   >
-                    Resend
+                    Отправить снова
                   </button>
                 </p>
               )}

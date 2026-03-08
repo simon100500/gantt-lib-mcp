@@ -208,7 +208,7 @@ export default function App() {
             onClick={auth.logout}
             className="text-slate-500 hover:text-slate-900 text-xs h-7"
           >
-            Logout
+            Выйти
           </Button>
         )}
       </header>
@@ -241,11 +241,11 @@ export default function App() {
 
             {/* Feature toggles */}
             <ToolbarToggle active={enableAutoSchedule} onClick={() => setEnableAutoSchedule(v => !v)}>
-              Auto-Schedule
+              Авто-планирование
             </ToolbarToggle>
 
             <ToolbarToggle active={highlightExpiredTasks} onClick={() => setHighlightExpiredTasks(v => !v)}>
-              Highlight Expired
+              Просроченные
             </ToolbarToggle>
 
             <ToolbarToggle
@@ -253,7 +253,7 @@ export default function App() {
               onClick={() => setDisableTaskNameEditing(v => !v)}
               activeClass="bg-amber-500 text-white border-amber-500"
             >
-              Lock Names
+              Блок. названия
             </ToolbarToggle>
 
             <ToolbarToggle
@@ -261,7 +261,7 @@ export default function App() {
               onClick={() => setDisableDependencyEditing(v => !v)}
               activeClass="bg-amber-500 text-white border-amber-500"
             >
-              Lock Deps
+              Блок. связи
             </ToolbarToggle>
 
             <div className="flex-1" />
@@ -283,7 +283,7 @@ export default function App() {
               className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
             >
               <CalendarDays className="w-3.5 h-3.5" />
-              Today
+              Сегодня
             </Button>
 
             <Button
@@ -293,14 +293,14 @@ export default function App() {
               className="h-7 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Clear
+              Очистить
             </Button>
           </div>
 
           {/* ── Gantt Chart ─────────────────────────────────────────────── */}
           {loading ? (
             <div className="flex items-center justify-center flex-1 text-sm text-slate-400">
-              Loading…
+              Загрузка…
             </div>
           ) : (
             <GanttChart
@@ -339,7 +339,7 @@ export default function App() {
       {/* ── Status Bar ───────────────────────────────────────────────────── */}
       <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
         <span className="font-mono text-[11px] text-slate-400">
-          {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+          {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
         </span>
         <span
           className={cn(
@@ -348,7 +348,7 @@ export default function App() {
           )}
         >
           <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', connected ? 'bg-emerald-500' : 'bg-amber-400')} />
-          {connected ? 'Connected' : 'Reconnecting…'}
+          {connected ? 'Подключено' : 'Переподключение…'}
         </span>
       </footer>
     </div>

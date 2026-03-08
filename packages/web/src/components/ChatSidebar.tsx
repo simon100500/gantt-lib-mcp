@@ -17,7 +17,7 @@ interface ChatSidebarProps {
   loading?: boolean;
 }
 
-const QUICK_CHIPS = ['Add a task', 'Shift deadlines', 'Link dependencies', 'Show summary'];
+const QUICK_CHIPS = ['Добавить задачу', 'Сдвинуть сроки', 'Связать задачи', 'Показать сводку'];
 
 export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState('');
@@ -49,7 +49,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
         <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center shrink-0">
           <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
         </div>
-        <span className="text-sm font-semibold tracking-tight text-slate-800">AI Assistant</span>
+        <span className="text-sm font-semibold tracking-tight text-slate-800">AI Ассистент</span>
         <span
           className={cn(
             'ml-auto w-2 h-2 rounded-full shrink-0 transition-colors',
@@ -68,9 +68,9 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-700">AI Gantt Assistant</p>
+              <p className="text-sm font-medium text-slate-700">AI Гант-ассистент</p>
               <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                Ask me to create or edit your project schedule
+                Попросите создать или изменить расписание проекта
               </p>
             </div>
           </div>
@@ -152,7 +152,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
           type="text"
           value={inputValue}
           onChange={e => setInputValue(e.target.value)}
-          placeholder={disabled ? 'AI is thinking…' : 'Message AI…'}
+          placeholder={disabled ? 'AI думает…' : 'Сообщение AI…'}
           disabled={disabled || !connected}
           autoComplete="off"
           spellCheck={false}
