@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 last_updated: "2026-03-08T12:59:18.456Z"
-last_activity: "2026-03-08 - Completed quick task 007: AI response loader with shimmer animation, fixed 4 bugs (loading stuck, project creation, project switching, AI verbose responses)"
+last_activity: "2026-03-08 - Completed quick task 008: Russian UI localization with collapsible agent sidebar featuring accent 'Show tasks' button"
 progress:
   total_phases: 11
   completed_phases: 8
@@ -304,7 +304,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-08 - Completed quick task 008: Russian UI localization with collapsible agent sidebar
+Last activity: 2026-03-08 - Completed quick task 008: Russian UI with agent panel toggle
 
 ### Roadmap Evolution
 
