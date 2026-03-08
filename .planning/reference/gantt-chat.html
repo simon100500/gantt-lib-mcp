@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gantt AI</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface2: #f0f1f4;
+    --border: #e2e4eb;
+    --accent: #6355e8;
+    --accent2: #0ea89a;
+    --accent3: #f6ad55;
+    --text: #1a1d2e;
+    --muted: #8a90a8;
+    --gantt-h: 36px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* TOP BAR */
+  .topbar {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .topbar-sep { flex: 1; }
+
+  .project-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+  }
+
+  .topbar-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 5px 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .topbar-btn:hover { background: var(--border); }
+  .topbar-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .topbar-btn.primary:hover { opacity: 0.85; }
+
+  /* MAIN LAYOUT */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* GANTT PANEL */
+  .gantt-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .gantt-toolbar {
+    height: 44px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .gantt-toolbar-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-right: 6px;
+  }
+
+  .view-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .view-btn.active, .view-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .gantt-toolbar-sep { flex: 1; }
+
+  .range-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* GANTT GRID */
+  .gantt-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* LEFT: task names */
+  .gantt-tasks {
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    background: var(--surface);
+  }
+
+  .gantt-tasks::-webkit-scrollbar { width: 4px; }
+  .gantt-tasks::-webkit-scrollbar-track { background: transparent; }
+  .gantt-tasks::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .tasks-header {
+    height: 48px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 2;
+  }
+
+  .task-row {
+    height: var(--gantt-h);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .task-row:hover { background: var(--surface2); }
+  .task-row.selected { background: rgba(124,106,247,0.12); }
+
+  .task-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .task-name {
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .task-row.group .task-name { font-weight: 500; color: var(--text); font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 0.5px; }
+  .task-row.group { background: rgba(230,231,238,0.7); }
+
+  /* RIGHT: timeline */
+  .gantt-timeline {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .gantt-timeline::-webkit-scrollbar { height: 4px; width: 4px; }
+  .gantt-timeline::-webkit-scrollbar-track { background: transparent; }
+  .gantt-timeline::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .timeline-inner {
+    min-width: 900px;
+  }
+
+  /* Month/week header */
+  .timeline-header {
+    height: 48px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .month-col {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .month-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 6px 10px 2px;
+    font-family: 'Syne', sans-serif;
+  }
+
+  .weeks {
+    display: flex;
+    flex: 1;
+  }
+
+  .week-col {
+    flex: 1;
+    border-right: 1px solid rgba(42,45,62,0.5);
+    display: flex;
+    align-items: flex-end;
+    padding: 0 0 5px 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+  }
+
+  /* Bar rows */
+  .bar-row {
+    height: var(--gantt-h);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .bar-row.group-row { background: rgba(230,231,238,0.5); }
+
+  /* Column lines */
+  .col-line {
+    position: absolute;
+    top: 0; bottom: 0;
+    border-right: 1px solid rgba(42,45,62,0.4);
+  }
+
+  /* Today line */
+  .today-line {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: var(--accent);
+    opacity: 0.6;
+    z-index: 3;
+  }
+
+  /* Gantt bar */
+  .bar {
+    position: absolute;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.9);
+    cursor: grab;
+    transition: filter 0.15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .bar:hover { filter: brightness(1.15); }
+
+  .bar-progress {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.15);
+  }
+
+  .bar-label { position: relative; z-index: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .bar-handle {
+    position: absolute;
+    right: 4px; top: 50%; transform: translateY(-50%);
+    width: 4px; height: 12px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.4);
+  }
+
+  /* CHAT PANEL */
+  .chat-panel {
+    width: 320px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+  }
+
+  .chat-header {
+    height: 44px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .chat-header-icon {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+
+  .chat-header-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .chat-header-status {
+    margin-left: auto;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 8px var(--accent2);
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .chat-messages::-webkit-scrollbar { width: 3px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    animation: fadeUp 0.25s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg.ai { align-items: flex-start; }
+  .msg.user { align-items: flex-end; }
+
+  .msg-bubble {
+    max-width: 86%;
+    padding: 9px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .msg.ai .msg-bubble {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 3px;
+  }
+
+  .msg.user .msg-bubble {
+    background: var(--accent);
+    border-bottom-right-radius: 3px;
+    color: white;
+  }
+
+  .msg-tag {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    padding: 0 4px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* Suggestion chips */
+  .chips {
+    padding: 8px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-top: 1px solid var(--border);
+  }
+
+  .chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Chat input */
+  .chat-input-area {
+    border-top: 1px solid var(--border);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .chat-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    padding: 9px 12px;
+    resize: none;
+    outline: none;
+    min-height: 40px;
+    max-height: 100px;
+    transition: border-color 0.2s;
+    line-height: 1.5;
+  }
+
+  .chat-input:focus { border-color: var(--accent); }
+  .chat-input::placeholder { color: var(--muted); }
+
+  .send-btn {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .send-btn:hover { opacity: 0.85; transform: scale(1.05); }
+
+  .send-btn svg { width: 15px; height: 15px; fill: white; }
+
+  /* Bottom bar */
+  .bottombar {
+    height: 28px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  .bar-row.highlighted { background: rgba(99,85,232,0.05); }
+
+  /* CHAT COLLAPSE */
+  .chat-panel {
+    transition: width 0.28s cubic-bezier(0.4,0,0.2,1), border-width 0.28s;
+    overflow: hidden;
+  }
+  .chat-panel.collapsed {
+    width: 0;
+    border-left: none;
+  }
+
+  .toggle-chat-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 24px;
+    border-radius: 5px;
+    margin-left: auto;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .toggle-chat-btn:hover { background: var(--surface2); color: var(--text); }
+  .toggle-chat-btn svg { width: 14px; height: 14px; }
+
+  /* Open chat button in toolbar */
+  .open-chat-btn {
+    display: none;
+    align-items: center;
+    gap: 7px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 14px 5px 10px;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s;
+    letter-spacing: 0.2px;
+    box-shadow: 0 2px 8px rgba(99,85,232,0.25);
+  }
+  .open-chat-btn:hover { opacity: 0.88; transform: scale(1.02); }
+  .open-chat-btn .btn-icon { font-size: 14px; line-height: 1; }
+  .chat-collapsed .open-chat-btn { display: flex; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    GanttAI
+  </div>
+  <div class="project-name">Запуск продукта · Q2 2025</div>
+  <div class="topbar-sep"></div>
+  <button class="topbar-btn">↩ Отменить</button>
+  <button class="topbar-btn">Экспорт</button>
+  <button class="topbar-btn primary">+ Задача</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- GANTT PANEL -->
+  <div class="gantt-panel">
+
+    <div class="gantt-toolbar">
+      <span class="gantt-toolbar-label">Вид</span>
+      <button class="view-btn">День</button>
+      <button class="view-btn active">Неделя</button>
+      <button class="view-btn">Месяц</button>
+      <div class="gantt-toolbar-sep"></div>
+      <span class="range-label">1 апр — 30 июн 2025</span>
+      <button class="open-chat-btn" id="openChat">
+        <span class="btn-icon">✦</span> AI Ассистент
+      </button>
+    </div>
+
+    <div class="gantt-content">
+
+      <!-- TASK NAMES -->
+      <div class="gantt-tasks" id="taskNames">
+        <div class="tasks-header">Задача</div>
+
+        <div class="task-row group">
+          <div class="task-dot" style="background:#7c6af7"></div>
+          <span class="task-name">▸ Исследование</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#7c6af7"></div>
+          <span class="task-name">Анализ рынка</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#9f8ff9"></div>
+          <span class="task-name">Интервью с пользователями</span>
+        </div>
+
+        <div class="task-row group">
+          <div class="task-dot" style="background:#4fd1c5"></div>
+          <span class="task-name">▸ Дизайн</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#4fd1c5"></div>
+          <span class="task-name">Прототипирование</span>
+        </div>
+        <div class="task-row selected" style="padding-left:28px">
+          <div class="task-dot" style="background:#38b2ac"></div>
+          <span class="task-name">UI Kit</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#4fd1c5"></div>
+          <span class="task-name">Тестирование дизайна</span>
+        </div>
+
+        <div class="task-row group">
+          <div class="task-dot" style="background:#f6ad55"></div>
+          <span class="task-name">▸ Разработка</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#f6ad55"></div>
+          <span class="task-name">Backend API</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#ed8936"></div>
+          <span class="task-name">Frontend</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#f6ad55"></div>
+          <span class="task-name">Интеграции</span>
+        </div>
+
+        <div class="task-row group">
+          <div class="task-dot" style="background:#fc8181"></div>
+          <span class="task-name">▸ Запуск</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#fc8181"></div>
+          <span class="task-name">QA тестирование</span>
+        </div>
+        <div class="task-row" style="padding-left:28px">
+          <div class="task-dot" style="background:#e53e3e"></div>
+          <span class="task-name">Релиз</span>
+        </div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="gantt-timeline">
+        <div class="timeline-inner" style="width:1100px;">
+
+          <!-- Header -->
+          <div class="timeline-header">
+            <!-- April -->
+            <div class="month-col" style="width:275px">
+              <div class="month-label">Апрель</div>
+              <div class="weeks">
+                <div class="week-col">W1</div>
+                <div class="week-col">W2</div>
+                <div class="week-col">W3</div>
+                <div class="week-col">W4</div>
+              </div>
+            </div>
+            <!-- May -->
+            <div class="month-col" style="width:275px">
+              <div class="month-label">Май</div>
+              <div class="weeks">
+                <div class="week-col">W1</div>
+                <div class="week-col">W2</div>
+                <div class="week-col">W3</div>
+                <div class="week-col">W4</div>
+              </div>
+            </div>
+            <!-- June -->
+            <div class="month-col" style="width:275px">
+              <div class="month-label">Июнь</div>
+              <div class="weeks">
+                <div class="week-col">W1</div>
+                <div class="week-col">W2</div>
+                <div class="week-col">W3</div>
+                <div class="week-col">W4</div>
+              </div>
+            </div>
+            <!-- July -->
+            <div class="month-col" style="width:275px; border-right: none;">
+              <div class="month-label">Июль</div>
+              <div class="weeks">
+                <div class="week-col">W1</div>
+                <div class="week-col">W2</div>
+                <div class="week-col">W3</div>
+                <div class="week-col">W4</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bars area -->
+          <div style="position:relative;">
+
+            <!-- Today line -->
+            <div class="today-line" style="left: 330px; top:0; bottom:0; position:absolute;"></div>
+
+            <!-- Group row -->
+            <div class="bar-row group-row" style="height:36px">
+              <div class="bar" style="left:10px; width:230px; background:linear-gradient(90deg,#7c6af7,#9f8ff9);">
+                <div class="bar-progress" style="width:70%"></div>
+                <span class="bar-label">Исследование</span>
+                <div class="bar-handle"></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:10px; width:110px; background:#5a4fcf;">
+                <div class="bar-progress" style="width:100%"></div>
+                <span class="bar-label">Анализ рынка</span>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:130px; width:110px; background:#7c6af7;">
+                <div class="bar-progress" style="width:40%"></div>
+                <span class="bar-label">Интервью</span>
+              </div>
+            </div>
+
+            <!-- Design -->
+            <div class="bar-row group-row">
+              <div class="bar" style="left:200px; width:310px; background:linear-gradient(90deg,#2c9a8e,#4fd1c5);">
+                <div class="bar-progress" style="width:30%"></div>
+                <span class="bar-label">Дизайн</span>
+                <div class="bar-handle"></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:200px; width:130px; background:#2c9a8e;">
+                <div class="bar-progress" style="width:60%"></div>
+                <span class="bar-label">Прото...</span>
+              </div>
+            </div>
+            <div class="bar-row highlighted">
+              <div class="bar" style="left:250px; width:160px; background:#4fd1c5; box-shadow: 0 0 0 2px rgba(124,106,247,0.8), 0 2px 8px rgba(0,0,0,0.3);">
+                <div class="bar-progress" style="width:20%"></div>
+                <span class="bar-label">UI Kit</span>
+                <div class="bar-handle"></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:400px; width:110px; background:#38b2ac;">
+                <span class="bar-label">Тест. дизайна</span>
+              </div>
+            </div>
+
+            <!-- Dev -->
+            <div class="bar-row group-row">
+              <div class="bar" style="left:370px; width:380px; background:linear-gradient(90deg,#c07030,#f6ad55);">
+                <span class="bar-label">Разработка</span>
+                <div class="bar-handle"></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:370px; width:200px; background:#c07030;">
+                <span class="bar-label">Backend API</span>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:450px; width:200px; background:#ed8936;">
+                <span class="bar-label">Frontend</span>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:600px; width:150px; background:#f6ad55;">
+                <span class="bar-label">Интеграции</span>
+              </div>
+            </div>
+
+            <!-- Launch -->
+            <div class="bar-row group-row">
+              <div class="bar" style="left:700px; width:250px; background:linear-gradient(90deg,#c53030,#fc8181);">
+                <span class="bar-label">Запуск</span>
+                <div class="bar-handle"></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:700px; width:170px; background:#e53e3e;">
+                <span class="bar-label">QA тестирование</span>
+              </div>
+            </div>
+            <div class="bar-row">
+              <div class="bar" style="left:900px; width:50px; background:#fc8181; border-radius: 4px 20px 20px 4px;">
+                <span class="bar-label">🚀</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT PANEL -->
+  <div class="chat-panel">
+    <div class="chat-header" id="chatHeader">
+      <div class="chat-header-icon">✦</div>
+      <div class="chat-header-title">AI Ассистент</div>
+      <div class="chat-header-status"></div>
+      <button class="toggle-chat-btn" id="toggleChat" title="Свернуть чат">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+
+    <div class="chat-messages">
+
+      <div class="msg ai">
+        <span class="msg-tag">AI · только что</span>
+        <div class="msg-bubble">
+          Привет! Я помогу вам редактировать график. Напишите, что нужно изменить — добавить задачу, перенести сроки или перестроить зависимости.
+        </div>
+      </div>
+
+      <div class="msg user">
+        <span class="msg-tag">Вы · 14:22</span>
+        <div class="msg-bubble">
+          Добавь задачу «UI Kit» в блок Дизайн, с 15 апр по 10 мая
+        </div>
+      </div>
+
+      <div class="msg ai">
+        <span class="msg-tag">AI · 14:22</span>
+        <div class="msg-bubble">
+          ✓ Задача <strong>«UI Kit»</strong> добавлена в группу Дизайн.<br><br>
+          Сроки: 15 апр — 10 мая<br>
+          Зависимость: после «Прото...»<br><br>
+          Хотите назначить исполнителя?
+        </div>
+      </div>
+
+      <div class="msg user">
+        <span class="msg-tag">Вы · 14:24</span>
+        <div class="msg-bubble">
+          Перенеси релиз на 2 недели позже
+        </div>
+      </div>
+
+      <div class="msg ai">
+        <span class="msg-tag">AI · 14:24</span>
+        <div class="msg-bubble">
+          ✓ Релиз перенесён.<br>Новая дата: <strong>14 июля</strong><br><br>
+          Автоматически сдвинуто: QA тестирование +2 нед.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Chips -->
+    <div class="chips">
+      <div class="chip">+ Добавить задачу</div>
+      <div class="chip">↕ Сдвинуть сроки</div>
+      <div class="chip">🔗 Зависимость</div>
+      <div class="chip">📊 Сводка</div>
+    </div>
+
+    <!-- Input -->
+    <div class="chat-input-area">
+      <div class="input-row">
+        <textarea class="chat-input" placeholder="Напишите команду для графика..."></textarea>
+        <button class="send-btn">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottombar">
+  <div class="status-item">
+    <div class="status-dot" style="background:#4fd1c5"></div>
+    14 задач
+  </div>
+  <div class="status-item">
+    <div class="status-dot" style="background:#f6ad55"></div>
+    3 группы
+  </div>
+  <div class="status-item">
+    <div class="status-dot" style="background:#7c6af7"></div>
+    Прогресс: 38%
+  </div>
+  <div style="flex:1"></div>
+  <div class="status-item">Сохранено 14:24</div>
+</div>
+
+<script>
+  // Auto-resize textarea
+  const ta = document.querySelector('.chat-input');
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 100) + 'px';
+  });
+
+  // Send on Enter (Shift+Enter = newline)
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+    }
+  });
+
+  // Highlight task rows on click
+  document.querySelectorAll('.task-row:not(.group)').forEach(row => {
+    row.addEventListener('click', () => {
+      document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
+      row.classList.add('selected');
+    });
+  });
+
+  // Chat collapse toggle
+  const chatPanel = document.querySelector('.chat-panel');
+  const toggleBtn = document.getElementById('toggleChat');
+  const openBtn = document.getElementById('openChat');
+  const ganttPanel = document.querySelector('.gantt-panel');
+
+  function closeChat() {
+    chatPanel.classList.add('collapsed');
+    ganttPanel.classList.add('chat-collapsed');
+  }
+
+  function openChat() {
+    chatPanel.classList.remove('collapsed');
+    ganttPanel.classList.remove('chat-collapsed');
+  }
+
+  toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); closeChat(); });
+  openBtn.addEventListener('click', () => openChat());
+</script>
+</body>
+</html>

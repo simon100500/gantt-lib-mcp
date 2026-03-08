@@ -1,8 +1,8 @@
 ---
-status: verifying
+status: resolved
 trigger: "Fix taskStore.list() SQL query - it's not filtering by project_id"
 created: 2026-03-08T00:00:00.000Z
-updated: 2026-03-08T20:15:00.000Z
+updated: 2026-03-08T13:30:00.000Z
 ---
 
 ## Current Focus
