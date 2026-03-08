@@ -7,6 +7,7 @@ import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
 import { OtpModal } from './components/OtpModal.tsx';
+import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
 import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
@@ -65,6 +66,7 @@ export default function App() {
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
   const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
   const [showOtpModal, setShowOtpModal] = useState(false);
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
@@ -134,6 +136,41 @@ export default function App() {
     });
   }, [setTasks]);
 
+  const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
+    if (!auth.accessToken) return;
+
+    setShowEditProjectModal(true);
+  }, [auth.accessToken]);
+
+  const handleSaveProjectName = useCallback(async (newName: string) => {
+    if (!auth.accessToken || !auth.project) {
+      throw new Error('Not authenticated');
+    }
+
+    const res = await fetch(`/api/projects/${auth.project.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.accessToken}`,
+      },
+      body: JSON.stringify({ name: newName }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json() as { error?: string };
+      throw new Error(data.error || 'Failed to update project name');
+    }
+
+    const data = await res.json() as { project: { id: string; name: string } };
+
+    // Update local state
+    auth.login(
+      { accessToken: auth.accessToken, refreshToken: localStorage.getItem('gantt_refresh_token') || '' },
+      auth.user,
+      data.project
+    );
+  }, [auth]);
+
   // Clear tasks when project changes
   useEffect(() => {
     setTasks([]);
@@ -192,6 +229,7 @@ export default function App() {
             projects={auth.projects}
             onSwitch={auth.switchProject}
             onCreateNew={auth.createProject}
+            onEdit={handleEditProject}
           />
         ) : isDemoMode && (
           <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
@@ -374,6 +412,15 @@ export default function App() {
             setShowOtpModal(false);
           }}
           onClose={() => setShowOtpModal(false)}
+        />
+      )}
+
+      {/* ── Edit Project Modal ───────────────────────────────────────────────── */}
+      {showEditProjectModal && auth.project && (
+        <EditProjectModal
+          projectName={auth.project.name}
+          onSave={handleSaveProjectName}
+          onClose={() => setShowEditProjectModal(false)}
         />
       )}
     </div>

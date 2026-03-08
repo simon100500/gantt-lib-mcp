@@ -178,6 +178,52 @@ export class AuthStore {
   }
 
   /**
+   * Update project name
+   *
+   * @param projectId - Project ID to update
+   * @param userId - User ID for ownership verification
+   * @param name - New project name
+   * @returns Updated Project or null if not found
+   */
+  async updateProject(projectId: string, userId: string, name: string): Promise<Project | null> {
+    const db = await getDb();
+
+    // Verify project belongs to user
+    const checkResult = await db.execute({
+      sql: 'SELECT id, user_id, name, created_at FROM projects WHERE id = ? AND user_id = ?',
+      args: [projectId, userId],
+    });
+
+    if (checkResult.rows.length === 0) {
+      return null;
+    }
+
+    // Update project name
+    await db.execute({
+      sql: 'UPDATE projects SET name = ? WHERE id = ?',
+      args: [name, projectId],
+    });
+
+    // Fetch and return updated project
+    const result = await db.execute({
+      sql: 'SELECT id, user_id, name, created_at FROM projects WHERE id = ?',
+      args: [projectId],
+    });
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0] as { id: string; user_id: string; name: string; created_at: string };
+    return {
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      createdAt: row.created_at,
+    };
+  }
+
+  /**
    * Create a new session with JWT tokens
    *
    * @param userId - User ID for the session

@@ -262,4 +262,25 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const project = await authStore.createProject(req.user!.userId, name.trim());
     return reply.send({ project });
   });
+
+  // ---------------------------------------------------------------------------
+  // PATCH /api/projects/:id
+  // ---------------------------------------------------------------------------
+  fastify.patch<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const body = req.body as { name?: string };
+    const { name } = body;
+
+    if (!name || !name.trim()) {
+      return reply.status(400).send({ error: 'name required' });
+    }
+
+    const project = await authStore.updateProject(projectId, req.user!.userId, name.trim());
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ project });
+  });
 }
