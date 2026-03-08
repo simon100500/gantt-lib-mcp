@@ -270,6 +270,7 @@ None
 | 7 | AI response loader with shimmer + bugfixes | 2026-03-08 | 6378c29, 1f12bae, acda762, 6f60a38, cf58995, a245b2e | [7-ai-response-loader](./quick/7-ai-response-loader/) |
 | 8 | Russian UI with agent panel toggle | 2026-03-08 | ebf941e, 5d27246, e1c4ec1, d3a5a3e, 0fcad80, 554aabf, 8964094, 40f7aa4, 9a19b2c, 58f64f2, 892bbc4, 0432d8e, 8a2f943, df8fa42, 2b0f614, a8f2ac2, a2ed481, db7decf, 74e5618, 97dd00a, c618683, 23b3da7, 9a818f3 | [8-russian-ui-agent-panel](./quick/008-russian-ui-agent-panel/) |
 | 9 | Fix OTP flicker, add local storage, demo project, edit project name | 2026-03-09 | cdbc262, 25f52f3, 8ed46b0, b069c92, cb6f3ce, a32b31d, fe1168a, 03883a1, ab5da65 | [9-otp](./quick/9-otp/) |
+| 10 | Autosave on chart change (debounced PUT /api/tasks for authenticated users) | 2026-03-09 | f28a6af, 0712d1a, 6c1da46 | [010-autosave-on-chart-change](./quick/010-autosave-on-chart-change/) |
 
 ### Quick Tasks Pending
 
@@ -305,7 +306,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 009: Fix OTP flicker, add local storage, demo project, edit project name
+Last activity: 2026-03-09 - Completed quick task 010: Autosave on chart change (debounced PUT /api/tasks for authenticated users)
 
 ### Roadmap Evolution
 
