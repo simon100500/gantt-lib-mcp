@@ -91,39 +91,32 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
 }
 
 export function useLocalTasks(): UseLocalTasksResult {
-  // Lazy initialization with synchronous localStorage read (function runs once on mount)
-  const [tasks, setTasks] = useState<Task[]>(() => loadInitialState().tasks);
-  const [isDemoMode, setIsDemoMode] = useState(() => loadInitialState().isDemoMode);
+  // Single lazy initialization call - more reliable
+  const [{ tasks, isDemoMode }, setState] = useState(() => loadInitialState());
 
-  // Persist tasks to localStorage whenever they change
-  useEffect(() => {
-    if (isDemoMode) {
-      // Don't persist demo tasks to localStorage
-      // They stay as the default until user makes changes
-      return;
-    }
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks, isDemoMode]);
-
-  // Transition out of demo mode when tasks are modified
-  const wrappedSetTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
-    setTasks(prev => {
-      const newTasks = typeof updater === 'function' ? (updater as (prev: Task[]) => Task[])(prev) : updater;
+  const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
+    setState(prev => {
+      const newTasks = typeof updater === 'function' ? (updater as (prev: Task[]) => Task[])(prev.tasks) : updater;
 
       // If we're in demo mode and tasks changed, exit demo mode
-      if (isDemoMode && JSON.stringify(newTasks) !== JSON.stringify(DEMO_TASKS)) {
-        setIsDemoMode(false);
+      if (prev.isDemoMode && JSON.stringify(newTasks) !== JSON.stringify(DEMO_TASKS)) {
         localStorage.setItem(DEMO_MODE_KEY, 'false');
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
+        return { tasks: newTasks, isDemoMode: false };
+      }
+
+      // Persist tasks if not in demo mode
+      if (!prev.isDemoMode) {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
       }
 
-      return newTasks;
+      return { tasks: newTasks, isDemoMode: prev.isDemoMode };
     });
-  }, [isDemoMode]);
+  }, []);
 
   return {
     tasks,
-    setTasks: wrappedSetTasks,
+    setTasks,
     loading: false,  // No async operation
     error: null,     // No network errors
     isDemoMode,

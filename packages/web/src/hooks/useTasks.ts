@@ -28,7 +28,8 @@ export function useTasks(
 
     if (!accessToken) {
       setLoading(false);
-      setTasks([]);
+      // Don't setTasks([]) here - let the UI handle empty state
+      // This prevents clearing demo tasks in local mode
       lastProcessedToken.current = null;
       return;
     }
