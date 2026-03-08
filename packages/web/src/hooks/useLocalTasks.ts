@@ -110,7 +110,9 @@ export function useLocalTasks(): UseLocalTasksResult {
   }, [tasks, isDemoMode]);
 
   const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
-    console.log('[useLocalTasks] setTasks called');
+    console.log('[useLocalTasks] setTasks called, updater:', typeof updater === 'function' ? 'function' : `array(${updater.length})`);
+    console.trace('[useLocalTasks] setTasks call stack');
+
     setState(prev => {
       const newTasks = typeof updater === 'function' ? (updater as (prev: Task[]) => Task[])(prev.tasks) : updater;
       console.log('[useLocalTasks] setState callback:', { prevTaskCount: prev.tasks.length, prevIsDemo: prev.isDemoMode, newTaskCount: newTasks.length });
