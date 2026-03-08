@@ -27,6 +27,7 @@ export function useWebSocket(
   const retryDelay = useRef(1000);
   const onMessageRef = useRef(onMessage);
   const getAccessTokenRef = useRef(getAccessToken);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   onMessageRef.current = onMessage; // always latest callback
   getAccessTokenRef.current = getAccessToken; // always latest callback
 
@@ -49,6 +50,9 @@ export function useWebSocket(
         if (msg.type === 'connected') {
           setConnected(true);
           retryDelay.current = 1000; // reset backoff
+        } else if (msg.type === 'error') {
+          // Auth failed - server will close connection, triggering onclose
+          console.warn('[ws] Authentication failed:', msg.message);
         }
         onMessageRef.current(msg);
       } catch {
@@ -60,7 +64,7 @@ export function useWebSocket(
       setConnected(false);
       wsRef.current = null;
       // Reconnect with backoff
-      setTimeout(() => {
+      reconnectTimeoutRef.current = setTimeout(() => {
         retryDelay.current = Math.min(retryDelay.current * 2, 16000);
         connect();
       }, retryDelay.current);
@@ -82,14 +86,22 @@ export function useWebSocket(
       wsRef.current = null;
       setConnected(false);
     }
+    // Clear any pending reconnection timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     connect();
     return () => {
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
       }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
     };
-  }, [accessToken]); // Re-run when token changes (null → value after OTP login)
+  }, [accessToken, connect]); // Re-run when token changes (null → value after OTP login)
 
   const send = useCallback((msg: ClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

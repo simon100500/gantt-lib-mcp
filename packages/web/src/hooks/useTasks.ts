@@ -40,48 +40,31 @@ export function useTasks(
     }
 
     let cancelled = false;
-    // Track if this is the first attempt with this token (to detect fresh token change)
-    const isFirstAttemptWithToken = accessToken !== lastProcessedToken.current;
-
-    const fetchTasks = async (token: string, isRetry: boolean = false) => {
+    const fetchTasks = async (token: string) => {
       const res = await fetch('/api/tasks', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (res.status === 401) {
-        // Only attempt refresh if:
-        // 1. This is NOT the first attempt with a new token (isRetry is true)
-        // OR
-        // 2. We've already successfully processed this token before
-        const shouldAttemptRefresh = isRetry || token === lastProcessedToken.current;
-        console.log('[useTasks] Got 401, shouldAttemptRefresh:', shouldAttemptRefresh, 'isRetry:', isRetry, 'token matches lastProcessed:', token === lastProcessedToken.current);
+        // When we get a 401, always attempt to refresh the token first.
+        // The refreshAccessToken function will handle logging out if refresh token is invalid.
+        // This handles both cases:
+        // 1. Token expired after idle period (refresh token should be valid)
+        // 2. Server restart (session may be invalid, refresh will fail and logout)
+        console.log('[useTasks] Got 401, attempting token refresh...');
 
-        if (!shouldAttemptRefresh) {
-          // This is a fresh token change (e.g., from switchProject)
-          // Don't call refreshAccessToken because it might have the old refresh token
-          // Instead, just retry once with the same token after a brief delay
-          // This handles cases where the JWT needs a moment to be valid on the server
-          console.log('[useTasks] Fresh token, retrying once without refresh...');
-          await new Promise(resolve => setTimeout(resolve, 100));
-          if (cancelled) return null;
-          const retryRes = await fetch('/api/tasks', {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
-          if (!retryRes.ok) {
-            console.log('[useTasks] Retry also failed:', retryRes.status);
-            throw new Error(`HTTP ${retryRes.status}`);
-          }
-          return retryRes.json() as Promise<Task[]>;
-        }
-
-        // Token expired and we've already tried once, or it's an old token — attempt refresh
-        console.log('[useTasks] Attempting token refresh...');
         const newToken = await refreshAccessToken();
         if (!newToken || cancelled) return null; // logout() already called inside refreshAccessToken
+
+        // Retry with the new token
         const retryRes = await fetch('/api/tasks', {
           headers: { 'Authorization': `Bearer ${newToken}` },
         });
-        if (!retryRes.ok) throw new Error(`HTTP ${retryRes.status}`);
+        if (!retryRes.ok) {
+          console.log('[useTasks] Retry with refreshed token also failed:', retryRes.status);
+          throw new Error(`HTTP ${retryRes.status}`);
+        }
+        console.log('[useTasks] Successfully refreshed token and retried request');
         return retryRes.json() as Promise<Task[]>;
       }
 
@@ -91,7 +74,7 @@ export function useTasks(
 
     setLoading(true);
     setError(null);
-    fetchTasks(accessToken, false)
+    fetchTasks(accessToken)
       .then(data => {
         if (cancelled) return;
         if (data) {
