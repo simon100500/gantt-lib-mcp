@@ -159,8 +159,13 @@ export default function App() {
   }, [auth.isAuthenticated]);
 
   const handleSaveNewProject = useCallback(async (name: string) => {
-    return await auth.createProject(name);
-  }, [auth.createProject]);
+    const newProject = await auth.createProject(name);
+    if (newProject) {
+      // Switch to the newly created project
+      auth.switchProject(newProject.id);
+    }
+    return newProject;
+  }, [auth.createProject, auth.switchProject]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     // For demo mode, save to localStorage
