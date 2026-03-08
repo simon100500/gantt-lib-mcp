@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface ProjectSwitcherProps {
-  currentProject: { id: string; name: string };
-  projects: { id: string; name: string }[];
+  currentProject: { id: string; name: string; taskCount?: number };
+  projects: { id: string; name: string; taskCount?: number }[];
   onSwitch: (projectId: string) => void;
   onCreateNew: (name: string) => Promise<{ id: string; name: string } | null>;
 }
@@ -33,10 +33,16 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
           <DropdownMenuItem
             key={p.id}
             onClick={() => onSwitch(p.id)}
-            className={cn(p.id === currentProject.id && "font-medium text-primary")}
+            className={cn("flex items-center justify-between", p.id === currentProject.id && "font-medium text-primary")}
           >
-            {p.id === currentProject.id && <Check className="mr-2 h-4 w-4" />}
-            {p.name}
+            <span className="flex items-center gap-2">
+              {p.id === currentProject.id && <Check className="h-4 w-4 shrink-0" />}
+              {p.id !== currentProject.id && <span className="w-4 shrink-0" />}
+              {p.name}
+            </span>
+            {p.taskCount !== undefined && (
+              <span className="ml-3 text-xs text-muted-foreground">{p.taskCount}</span>
+            )}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />

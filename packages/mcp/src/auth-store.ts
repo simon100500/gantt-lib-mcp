@@ -138,11 +138,13 @@ export class AuthStore {
    * @param userId - User ID to list projects for
    * @returns Array of user's projects
    */
-  async listProjects(userId: string): Promise<Project[]> {
+  async listProjects(userId: string): Promise<(Project & { taskCount: number })[]> {
     const db = await getDb();
 
     const result = await db.execute({
-      sql: 'SELECT id, user_id, name, created_at FROM projects WHERE user_id = ? ORDER BY created_at ASC',
+      sql: `SELECT p.id, p.user_id, p.name, p.created_at,
+              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count
+            FROM projects p WHERE p.user_id = ? ORDER BY p.created_at ASC`,
       args: [userId],
     });
 
@@ -151,6 +153,7 @@ export class AuthStore {
       userId: row.user_id as string,
       name: row.name as string,
       createdAt: row.created_at as string,
+      taskCount: Number(row.task_count ?? 0),
     }));
   }
 

@@ -16,6 +16,7 @@ export interface AuthUser {
 export interface AuthProject {
   id: string;
   name: string;
+  taskCount?: number;
 }
 
 export interface AuthState {
