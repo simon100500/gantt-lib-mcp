@@ -64,6 +64,17 @@ fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply
   return reply.send({ deleted: count });
 });
 
+fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
+  const tasks = req.body as unknown[];
+  if (!Array.isArray(tasks)) {
+    return reply.status(400).send({ error: 'body must be an array of tasks' });
+  }
+  const count = await taskStore.importTasks(JSON.stringify(tasks), req.user!.projectId);
+  // Broadcast updated tasks to all sessions for this project so other browser tabs sync
+  broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks });
+  return reply.send({ saved: count });
+});
+
 // ---------------------------------------------------------------------------
 // WebSocket routes
 // ---------------------------------------------------------------------------
