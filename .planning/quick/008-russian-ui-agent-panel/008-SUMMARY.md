@@ -101,6 +101,18 @@ const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
 
 1. `ebf941e` - feat(quick-008): translate UI to Russian language
 2. `5d27246` - feat(quick-008): add agent panel close button with accent show button
+3. `e1c4ec1` - fix(quick-008): make mode toggle buttons icon-only (Clock, AlertTriangle, Lock, Link icons)
+
+## Post-Completion Fixes
+
+**Issue:** Mode toggle buttons had text labels instead of icons.
+
+**Fix:** Changed ToolbarToggle component to icon-only square buttons (w-7 h-7):
+- Auto-Schedule → Clock icon
+- Highlight Expired → AlertTriangle icon
+- Lock Names → Lock icon
+- Lock Deps → Link icon
+- Added aria-label and title for accessibility
 
 ## Self-Check: PASSED
 
