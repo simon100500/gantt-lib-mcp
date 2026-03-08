@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Sparkles } from 'lucide-react';
+import { ArrowUp, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ChatMessage {
@@ -15,11 +15,12 @@ interface ChatSidebarProps {
   disabled: boolean;
   connected: boolean;
   loading?: boolean;
+  onClose?: () => void;
 }
 
 const QUICK_CHIPS = ['Добавить задачу', 'Сдвинуть сроки', 'Связать задачи', 'Показать сводку'];
 
-export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading }: ChatSidebarProps) {
+export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading, onClose }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,8 +56,17 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
             'ml-auto w-2 h-2 rounded-full shrink-0 transition-colors',
             connected ? 'bg-emerald-500' : 'bg-amber-400',
           )}
-          title={connected ? 'Connected' : 'Reconnecting…'}
+          title={connected ? 'Подключено' : 'Переподключение…'}
         />
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="ml-2 p-1 hover:bg-slate-100 rounded transition-colors"
+            aria-label="Закрыть"
+          >
+            <X className="w-4 h-4 text-slate-500" />
+          </button>
+        )}
       </div>
 
       {/* ── Messages ─────────────────────────────── */}

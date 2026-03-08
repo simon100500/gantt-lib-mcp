@@ -60,6 +60,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
+  const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
 
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
@@ -324,16 +325,30 @@ export default function App() {
         </main>
 
         {/* ── Chat sidebar ─────────────────────────────────────────────── */}
-        <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col">
-          <ChatSidebar
-            messages={messages}
-            streaming={streaming}
-            onSend={handleSend}
-            disabled={aiThinking}
-            connected={connected}
-            loading={aiThinking}
-          />
-        </aside>
+        {chatSidebarVisible && (
+          <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col">
+            <ChatSidebar
+              messages={messages}
+              streaming={streaming}
+              onSend={handleSend}
+              disabled={aiThinking}
+              connected={connected}
+              loading={aiThinking}
+              onClose={() => setChatSidebarVisible(false)}
+            />
+          </aside>
+        )}
+
+        {/* ── Show chat button (when sidebar hidden) ─────────────────────────────────────── */}
+        {!chatSidebarVisible && (
+          <button
+            onClick={() => setChatSidebarVisible(true)}
+            className="fixed bottom-8 left-4 z-40 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg shadow-lg hover:bg-primary/90 transition-colors flex items-center gap-2 text-sm font-medium"
+          >
+            <Sparkles className="w-4 h-4" />
+            Показать задачи
+          </button>
+        )}
       </div>
 
       {/* ── Status Bar ───────────────────────────────────────────────────── */}
