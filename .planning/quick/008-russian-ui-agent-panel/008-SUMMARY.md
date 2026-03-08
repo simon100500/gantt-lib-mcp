@@ -117,15 +117,15 @@ const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
 
 **Issue 2:** Wrong button positions and labels.
 - "Показать задачи" was on chat button (should be task list)
-- Chat button was on left side (should be right side)
-- Task list button had no label when visible
+- Chat button was floating (should be in toolbar)
+- "Очистить" button should be removed
 
 **Fix:**
 - Task list button: always shows "Скрыть задачи" / "Показать задачи" text
-- Chat button: moved to top-right (top-14 right-4), Sparkles icon only
+- Chat toggle button: in toolbar next to "Сегодня", Sparkles + "AI" text
+- Removed "Очистить" button and handleClearDatabase callback
 - Validation errors: Russian pluralization (ошибк-а/и/-)
 - Error messages translated to Russian
-- Clear database confirmation translated
 
 ## Self-Check: PASSED
 
