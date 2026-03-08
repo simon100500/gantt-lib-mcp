@@ -50,8 +50,9 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   // Preserve empty state for better UX
   if (tasks.length === 0) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' }}>
-        <p>No tasks yet. Start a conversation to create your Gantt chart.</p>
+      <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400">
+        <p className="text-sm">No tasks yet.</p>
+        <p className="text-xs">Start a conversation to create your Gantt chart.</p>
       </div>
     );
   }

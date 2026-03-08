@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { CalendarDays, Trash2, PanelLeft } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -7,10 +8,52 @@ import { useAuth } from './hooks/useAuth.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
 import { Button } from './components/ui/button.tsx';
+import { cn } from '@/lib/utils';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
 
 let msgCounter = 0;
 
+// ── Reusable toolbar toggle ────────────────────────────────────────────────
+interface ToolbarToggleProps {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  activeClass?: string;
+  'aria-label'?: string;
+}
+
+function ToolbarToggle({
+  active,
+  onClick,
+  children,
+  activeClass = 'bg-primary text-primary-foreground border-primary',
+  'aria-label': ariaLabel,
+}: ToolbarToggleProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={ariaLabel}
+      className={cn(
+        'h-7 px-2.5 text-xs rounded border font-medium transition-colors select-none',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+        active
+          ? activeClass
+          : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Toolbar separator ──────────────────────────────────────────────────────
+function ToolbarSep() {
+  return <span className="w-px h-4 bg-slate-200 shrink-0" />;
+}
+
+// ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const auth = useAuth();
   const { tasks, setTasks, loading, error } = useTasks(auth.accessToken, auth.refreshAccessToken);
@@ -18,14 +61,17 @@ export default function App() {
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
 
-  // New gantt-lib feature states
+  // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
   const [enableAutoSchedule, setEnableAutoSchedule] = useState(false);
   const [disableTaskNameEditing, setDisableTaskNameEditing] = useState(false);
   const [disableDependencyEditing, setDisableDependencyEditing] = useState(false);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
+  const [showTaskList, setShowTaskList] = useState(true);
+
   const ganttRef = useRef<GanttChartRef>(null);
 
+  // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
       setTasks(msg.tasks as Task[]);
@@ -35,22 +81,17 @@ export default function App() {
       setAiThinking(false);
       setStreaming(prev => {
         if (prev) {
-          setMessages(ms => [...ms, {
-            id: String(++msgCounter),
-            role: 'assistant',
-            content: prev,
-          }]);
+          setMessages(ms => [...ms, { id: String(++msgCounter), role: 'assistant', content: prev }]);
         }
         return '';
       });
     } else if (msg.type === 'error') {
       setAiThinking(false);
       setStreaming('');
-      setMessages(ms => [...ms, {
-        id: String(++msgCounter),
-        role: 'assistant',
-        content: `Error: ${msg.message ?? 'unknown error'}`,
-      }]);
+      setMessages(ms => [
+        ...ms,
+        { id: String(++msgCounter), role: 'assistant', content: `Error: ${msg.message ?? 'unknown error'}` },
+      ]);
     }
   }, [setTasks]);
 
@@ -62,7 +103,6 @@ export default function App() {
     send({ type: 'chat', message: text });
   }, [send]);
 
-  // Handle auth success from OTP modal
   const handleAuthSuccess = useCallback((result: {
     accessToken: string;
     refreshToken: string;
@@ -72,18 +112,10 @@ export default function App() {
     auth.login(result, result.user, result.project);
   }, [auth]);
 
-  // Handle validation errors from dependency validation
   const handleValidation = useCallback((result: ValidationResult) => {
-    if (!result.isValid) {
-      console.error('Dependency validation errors:', result.errors);
-      setValidationErrors(result.errors);
-      // TODO: Display errors in UI (toast, status bar, etc.)
-    } else {
-      setValidationErrors([]);
-    }
+    setValidationErrors(result.isValid ? [] : result.errors);
   }, []);
 
-  // Handle cascade updates from auto-schedule mode
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
     setTasks(prev => {
       const map = new Map(shiftedTasks.map(t => [t.id, t]));
@@ -93,227 +125,232 @@ export default function App() {
 
   // Clear tasks when project changes
   useEffect(() => {
-    console.log('[App] Clearing tasks on project change:', auth.project?.id);
     setTasks([]);
   }, [auth.project?.id, setTasks]);
 
-  // Load chat history from server when authenticated and project is selected
+  // Load chat history on auth/project change
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id) return;
-
-    // Clear messages and reset AI state when project changes
     setMessages([]);
     setStreaming('');
     setAiThinking(false);
 
     fetch('/api/messages', {
-      headers: { 'Authorization': `Bearer ${auth.accessToken}` },
+      headers: { Authorization: `Bearer ${auth.accessToken}` },
     })
       .then(res => (res.ok ? (res.json() as Promise<Array<{ role: string; content: string }>>) : Promise.resolve([])))
       .then(data => {
-        const history: ChatMessage[] = data.map(m => ({
-          id: String(++msgCounter),
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        }));
-        setMessages(history);
+        setMessages(
+          data.map(m => ({ id: String(++msgCounter), role: m.role as 'user' | 'assistant', content: m.content })),
+        );
       })
-      .catch(() => {
-        // Ignore errors — fresh session is fine
-      });
+      .catch(() => {});
   }, [auth.isAuthenticated, auth.accessToken, auth.project?.id]);
 
-  // Scroll to today button handler
-  const handleScrollToToday = useCallback(() => {
-    ganttRef.current?.scrollToToday();
-  }, []);
+  const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
-  // Clear database button handler
   const handleClearDatabase = useCallback(async () => {
-    if (!confirm('Are you sure you want to clear all tasks? This cannot be undone.')) return;
+    if (!confirm('Clear all tasks? This cannot be undone.')) return;
     try {
       const res = await fetch('/api/tasks', {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${auth.accessToken ?? ''}` }
+        headers: { Authorization: `Bearer ${auth.accessToken ?? ''}` },
       });
-      if (!res.ok) throw new Error('Failed to clear database');
+      if (!res.ok) throw new Error('Failed to clear');
       setTasks([]);
     } catch (err) {
-      alert(`Error clearing database: ${err}`);
+      alert(`Error: ${err}`);
     }
-  }, [auth.accessToken]);
+  }, [auth.accessToken, setTasks]);
 
+  // ── Error state ──────────────────────────────────────────────────────────
   if (error && auth.isAuthenticated) {
     return (
-      <div style={{ padding: 20, color: 'red' }}>
-        Failed to load tasks: {error}. Is the server running on :3000?
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 max-w-sm text-center">
+          Failed to load tasks: {error}
+        </div>
       </div>
     );
   }
 
+  // ── Layout ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '98vh', fontFamily: 'sans-serif' }}>
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
       {!auth.isAuthenticated && <OtpModal onSuccess={handleAuthSuccess} />}
-      <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-        {/* Control Bar */}
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          padding: '8px 16px',
-          borderBottom: '1px solid #e0e0e0',
-          backgroundColor: '#f5f5f5',
-          alignItems: 'center',
-          flexWrap: 'wrap'
-        }}>
-          {auth.isAuthenticated && auth.project && (
-            <ProjectSwitcher
-              currentProject={auth.project}
-              projects={auth.projects}
-              onSwitch={auth.switchProject}
-              onCreateNew={auth.createProject}
-            />
-          )}
 
-          <button
-            onClick={() => setEnableAutoSchedule(!enableAutoSchedule)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: enableAutoSchedule ? '#22c55e' : '#e5e7eb',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px'
-            }}
-          >
-            {enableAutoSchedule ? 'Auto-Schedule: ON' : 'Auto-Schedule: OFF'}
-          </button>
-
-          <button
-            onClick={() => setHighlightExpiredTasks(!highlightExpiredTasks)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: highlightExpiredTasks ? '#22c55e' : '#e5e7eb',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px'
-            }}
-          >
-            {highlightExpiredTasks ? 'Highlight Expired: ON' : 'Highlight Expired: OFF'}
-          </button>
-
-          <button
-            onClick={() => setDisableTaskNameEditing(!disableTaskNameEditing)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: disableTaskNameEditing ? '#ef4444' : '#e5e7eb',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px'
-            }}
-          >
-            {disableTaskNameEditing ? 'Name Editing: OFF' : 'Name Editing: ON'}
-          </button>
-
-          <button
-            onClick={() => setDisableDependencyEditing(!disableDependencyEditing)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: disableDependencyEditing ? '#ef4444' : '#e5e7eb',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px'
-            }}
-          >
-            {disableDependencyEditing ? 'Dependency Editing: OFF' : 'Dependency Editing: ON'}
-          </button>
-
-          <button
-            onClick={handleScrollToToday}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: '1px solid #2563eb',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              marginLeft: 'auto'
-            }}
-          >
-            Scroll to Today
-          </button>
-
-          <button
-            onClick={handleClearDatabase}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#ef4444',
-              color: 'white',
-              border: '1px solid #dc2626',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              marginLeft: '8px'
-            }}
-          >
-            Clear Database
-          </button>
-
-          {auth.isAuthenticated && (
-            <Button variant="ghost" size="sm" onClick={auth.logout} style={{ marginLeft: '8px' }}>
-              Logout
-            </Button>
-          )}
-
-          {validationErrors.length > 0 && (
-            <span style={{
-              padding: '4px 8px',
-              backgroundColor: '#fef2f2',
-              color: '#dc2626',
-              border: '1px solid #fecaca',
-              borderRadius: '4px',
-              fontSize: '12px'
-            }}>
-              {validationErrors.length} validation error(s)
-            </span>
-          )}
+      {/* ── Top Bar ──────────────────────────────────────────────────────── */}
+      <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
+        {/* Logo */}
+        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight select-none">
+          <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+          <span className="text-slate-900">GanttAI</span>
         </div>
 
-        {loading ? (
-          <div style={{ padding: 20 }}>Loading...</div>
-        ) : (
-          <GanttChart
-            ref={ganttRef}
-            tasks={tasks}
-            onChange={setTasks}
-            dayWidth={24}
-            rowHeight={36}
-            containerHeight={800}
-            showTaskList={true}
-            taskListWidth={650}
-            onValidateDependencies={handleValidation}
-            enableAutoSchedule={enableAutoSchedule}
-            onCascade={handleCascade}
-            disableTaskNameEditing={disableTaskNameEditing}
-            disableDependencyEditing={disableDependencyEditing}
-            highlightExpiredTasks={highlightExpiredTasks}
-            headerHeight={40}
+        <span className="w-px h-4 bg-slate-200" />
+
+        {/* Project switcher */}
+        {auth.isAuthenticated && auth.project && (
+          <ProjectSwitcher
+            currentProject={auth.project}
+            projects={auth.projects}
+            onSwitch={auth.switchProject}
+            onCreateNew={auth.createProject}
           />
         )}
-      </main>
-      <aside style={{ width: 360, borderLeft: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column' }}>
-        <ChatSidebar
-          messages={messages}
-          streaming={streaming}
-          onSend={handleSend}
-          disabled={aiThinking}
-          connected={connected}
-          loading={aiThinking}
-        />
-      </aside>
+
+        <div className="flex-1" />
+
+        {auth.isAuthenticated && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={auth.logout}
+            className="text-slate-500 hover:text-slate-900 text-xs h-7"
+          >
+            Logout
+          </Button>
+        )}
+      </header>
+
+      {/* ── Main ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Gantt panel */}
+        <main className="flex flex-col flex-1 overflow-hidden min-w-0">
+          {/* ── Gantt Toolbar ────────────────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+            {/* Show/hide task list */}
+            <button
+              type="button"
+              onClick={() => setShowTaskList(!showTaskList)}
+              aria-pressed={showTaskList}
+              aria-label={showTaskList ? 'Hide task list' : 'Show task list'}
+              className={cn(
+                'h-7 w-7 flex items-center justify-center rounded border transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                showTaskList
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
+              )}
+              title={showTaskList ? 'Hide task list' : 'Show task list'}
+            >
+              <PanelLeft className="w-3.5 h-3.5" />
+            </button>
+
+            <ToolbarSep />
+
+            {/* Feature toggles */}
+            <ToolbarToggle active={enableAutoSchedule} onClick={() => setEnableAutoSchedule(v => !v)}>
+              Auto-Schedule
+            </ToolbarToggle>
+
+            <ToolbarToggle active={highlightExpiredTasks} onClick={() => setHighlightExpiredTasks(v => !v)}>
+              Highlight Expired
+            </ToolbarToggle>
+
+            <ToolbarToggle
+              active={disableTaskNameEditing}
+              onClick={() => setDisableTaskNameEditing(v => !v)}
+              activeClass="bg-amber-500 text-white border-amber-500"
+            >
+              Lock Names
+            </ToolbarToggle>
+
+            <ToolbarToggle
+              active={disableDependencyEditing}
+              onClick={() => setDisableDependencyEditing(v => !v)}
+              activeClass="bg-amber-500 text-white border-amber-500"
+            >
+              Lock Deps
+            </ToolbarToggle>
+
+            <div className="flex-1" />
+
+            {/* Validation errors badge */}
+            {validationErrors.length > 0 && (
+              <span className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-0.5 font-medium">
+                {validationErrors.length} error{validationErrors.length > 1 ? 's' : ''}
+              </span>
+            )}
+
+            <ToolbarSep />
+
+            {/* Action buttons */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleScrollToToday}
+              className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              Today
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleClearDatabase}
+              className="h-7 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear
+            </Button>
+          </div>
+
+          {/* ── Gantt Chart ─────────────────────────────────────────────── */}
+          {loading ? (
+            <div className="flex items-center justify-center flex-1 text-sm text-slate-400">
+              Loading…
+            </div>
+          ) : (
+            <GanttChart
+              ref={ganttRef}
+              tasks={tasks}
+              onChange={setTasks}
+              dayWidth={24}
+              rowHeight={36}
+              containerHeight="calc(100vh - 120px)"
+              showTaskList={showTaskList}
+              taskListWidth={650}
+              onValidateDependencies={handleValidation}
+              enableAutoSchedule={enableAutoSchedule}
+              onCascade={handleCascade}
+              disableTaskNameEditing={disableTaskNameEditing}
+              disableDependencyEditing={disableDependencyEditing}
+              highlightExpiredTasks={highlightExpiredTasks}
+              headerHeight={40}
+            />
+          )}
+        </main>
+
+        {/* ── Chat sidebar ─────────────────────────────────────────────── */}
+        <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col">
+          <ChatSidebar
+            messages={messages}
+            streaming={streaming}
+            onSend={handleSend}
+            disabled={aiThinking}
+            connected={connected}
+            loading={aiThinking}
+          />
+        </aside>
+      </div>
+
+      {/* ── Status Bar ───────────────────────────────────────────────────── */}
+      <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
+        <span className="font-mono text-[11px] text-slate-400">
+          {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+        </span>
+        <span
+          className={cn(
+            'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+            connected ? 'text-emerald-600' : 'text-amber-600',
+          )}
+        >
+          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', connected ? 'bg-emerald-500' : 'bg-amber-400')} />
+          {connected ? 'Connected' : 'Reconnecting…'}
+        </span>
+      </footer>
     </div>
   );
 }
