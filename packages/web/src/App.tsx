@@ -65,15 +65,6 @@ export default function App() {
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
   const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
-
-  // Log for debugging demo mode issue
-  console.log('[App] Render:', {
-    isAuthenticated: auth.isAuthenticated,
-    taskSource: auth.isAuthenticated ? 'authenticated' : 'local',
-    taskCount: tasks.length,
-    isDemoMode,
-    tasks: tasks.slice(0, 2).map(t => ({ id: t.id, name: t.name }))
-  });
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -243,9 +234,14 @@ export default function App() {
             onEdit={handleEditProject}
           />
         ) : isDemoMode && (
-          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-            Демо-проект
-          </span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" className="font-medium" disabled>
+              Демо-проект
+            </Button>
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+              Демо-режим
+            </span>
+          </div>
         )}
 
         <div className="flex-1" />
@@ -253,7 +249,7 @@ export default function App() {
         {!auth.isAuthenticated ? (
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500">
-              {isDemoMode ? 'Демо-режим. ' : ''}Войдите, чтобы сохранить график
+              Войдите, чтобы сохранить график
             </span>
             <LoginButton onClick={() => setShowOtpModal(true)} />
           </div>

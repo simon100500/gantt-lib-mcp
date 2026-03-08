@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { Task } from '../types.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
@@ -73,12 +73,9 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
   const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
   const demoMode = localStorage.getItem(DEMO_MODE_KEY);
 
-  console.log('[useLocalTasks] loadInitialState:', { stored, demoMode, demoTaskCount: DEMO_TASKS.length });
-
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Task[];
-      console.log('[useLocalTasks] loaded from storage:', parsed.length, 'tasks');
       return { tasks: parsed, isDemoMode: demoMode === 'true' };
     } catch (err) {
       console.error('Failed to parse local tasks:', err);
@@ -89,37 +86,20 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
   }
 
   // No local data or invalid data, show demo project
-  console.log('[useLocalTasks] loading demo tasks:', DEMO_TASKS.length, 'tasks');
   localStorage.setItem(DEMO_MODE_KEY, 'true');
   return { tasks: DEMO_TASKS, isDemoMode: true };
 }
 
 export function useLocalTasks(): UseLocalTasksResult {
   // Single lazy initialization call - more reliable
-  const [{ tasks, isDemoMode }, setState] = useState(() => {
-    const state = loadInitialState();
-    console.log('[useLocalTasks] useState init:', { taskCount: state.tasks.length, isDemoMode: state.isDemoMode });
-    return state;
-  });
-
-  console.log('[useLocalTasks] Render:', { taskCount: tasks.length, isDemoMode });
-
-  // Track why this hook re-renders
-  useEffect(() => {
-    console.log('[useLocalTasks] useEffect - state changed:', { taskCount: tasks.length, isDemoMode });
-  }, [tasks, isDemoMode]);
+  const [{ tasks, isDemoMode }, setState] = useState(() => loadInitialState());
 
   const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
-    console.log('[useLocalTasks] setTasks called, updater:', typeof updater === 'function' ? 'function' : `array(${updater.length})`);
-    console.trace('[useLocalTasks] setTasks call stack');
-
     setState(prev => {
       const newTasks = typeof updater === 'function' ? (updater as (prev: Task[]) => Task[])(prev.tasks) : updater;
-      console.log('[useLocalTasks] setState callback:', { prevTaskCount: prev.tasks.length, prevIsDemo: prev.isDemoMode, newTaskCount: newTasks.length });
 
       // If we're in demo mode and tasks changed, exit demo mode
       if (prev.isDemoMode && JSON.stringify(newTasks) !== JSON.stringify(DEMO_TASKS)) {
-        console.log('[useLocalTasks] Exiting demo mode');
         localStorage.setItem(DEMO_MODE_KEY, 'false');
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
         return { tasks: newTasks, isDemoMode: false };
