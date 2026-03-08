@@ -91,10 +91,9 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean } {
 }
 
 export function useLocalTasks(): UseLocalTasksResult {
-  // Lazy initialization with synchronous localStorage read
-  const initialState = loadInitialState();
-  const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
-  const [isDemoMode, setIsDemoMode] = useState(initialState.isDemoMode);
+  // Lazy initialization with synchronous localStorage read (function runs once on mount)
+  const [tasks, setTasks] = useState<Task[]>(() => loadInitialState().tasks);
+  const [isDemoMode, setIsDemoMode] = useState(() => loadInitialState().isDemoMode);
 
   // Persist tasks to localStorage whenever they change
   useEffect(() => {
