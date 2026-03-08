@@ -63,6 +63,7 @@ export default function App() {
   const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
+  const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
@@ -184,21 +185,27 @@ export default function App() {
 
         <span className="w-px h-4 bg-slate-200" />
 
-        {/* Project switcher */}
-        {auth.isAuthenticated && auth.project && (
+        {/* Project switcher or demo badge */}
+        {auth.isAuthenticated && auth.project ? (
           <ProjectSwitcher
             currentProject={auth.project}
             projects={auth.projects}
             onSwitch={auth.switchProject}
             onCreateNew={auth.createProject}
           />
+        ) : isDemoMode && (
+          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+            Демо-проект
+          </span>
         )}
 
         <div className="flex-1" />
 
         {!auth.isAuthenticated ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500">Войдите, чтобы сохранить график</span>
+            <span className="text-xs text-slate-500">
+              {isDemoMode ? 'Демо-режим. ' : ''}Войдите, чтобы сохранить график
+            </span>
             <LoginButton onClick={() => setShowOtpModal(true)} />
           </div>
         ) : (
