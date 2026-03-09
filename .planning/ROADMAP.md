@@ -274,6 +274,16 @@ Plans:
 Plans:
 - [ ] 12-01-PLAN.md — Add deep comparison to useAutoSave, add session cache to authStore, remove excessive console.log (Complete)
 
+### Phase 13: start-screen давай сделаем вместо надписи No tasks yet. Start a conversation to create your Gantt chart.  - поле ввода промпта и кнопку "Пустой график". Чат при этом будет скрыт. А то у нас при создании нового проекта создаётся пустое поле и график вручную не создать. А так я либо пишу промпт и он попадает как первое сообщение чата (показывается чат) или я нажимаю "Пустой график" и создаётся график с одной задачей. Сделай примерно как в Sonnet стартовый экран, только кнопка синяя.
+
+**Goal:** Replace empty state with a Sonnet-style centered start screen — headline, textarea, example chips, Пустой график button; chat sidebar hidden until user acts
+**Requirements**: START-01, START-02, START-03, START-04, START-05
+**Depends on:** Phase 12
+**Plans:** 1 plan
+
+Plans:
+- [ ] 13-01-PLAN.md — Create StartScreen component and wire into App.tsx with conditional rendering on tasks.length === 0
+
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-09 after planning Phase 12*
+*Last updated: 2026-03-09 after planning Phase 13*
