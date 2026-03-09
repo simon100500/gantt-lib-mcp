@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 last_updated: "2026-03-09T14:16:48.495Z"
-last_activity: "2026-03-09 - Completed quick task 019: добавь global.css и --gantt-container-border-radius = 0px"
+last_activity: "2026-03-09 - Completed quick task 020: Авто-план и Просроченные — свитчи справа, Авто-план исправлен (disableConstraints)"
 progress:
   total_phases: 11
   completed_phases: 8
@@ -312,6 +312,7 @@ None
 | 17 | Show footer conditionally based on chart presence | 2026-03-09 | 22100eb, e9ef746 | [17-show-footer-conditionally-based-on-chart](./quick/17-show-footer-conditionally-based-on-chart/) |
 | 18 | прочти доки на новую версию и добавь добавление задач (вручную) | 2026-03-09 | 0026085 | [18-https-github-com-simon100500-gantt-lib-b](./quick/18-https-github-com-simon100500-gantt-lib-b/) |
 | 19 | добавь global.css и --gantt-container-border-radius = 0px | 2026-03-09 | cb61672 | [19-global-css-gantt-container-border-radius](./quick/19-global-css-gantt-container-border-radius/) |
+| 20 | Авто-план и Просроченные — свитчи справа, Авто-план исправлен (disableConstraints) | 2026-03-09 | 996484e | [020-auto-plan-overdue-to-switches](./quick/020-auto-plan-overdue-to-switches/) |
 
 ### Quick Tasks Pending
 
