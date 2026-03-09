@@ -3,10 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
+last_updated: "2026-03-09T13:44:47.352Z"
+last_activity: "2026-03-09 - Completed quick task 017: Show footer conditionally based on chart presence"
+progress:
+  total_phases: 11
+  completed_phases: 8
+  total_plans: 23
+  completed_plans: 23
+  percent: 100
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: completed
 last_updated: "2026-03-08T12:59:18.456Z"
 last_activity: "2026-03-08 - Completed quick task 008: Russian UI localization with collapsible agent sidebar featuring accent 'Show tasks' button"
 progress:
-  total_phases: 11
+  [██████████] 100%
   completed_phases: 8
   total_plans: 23
   completed_plans: 23
@@ -154,6 +169,7 @@ progress:
 | Phase 10-work-stability P02 | 10 | 3 tasks | 4 files |
 | Phase 10-work-stability P10-01 | 2 | 3 tasks | 3 files |
 | Phase 10-work-stability P10-verif-bugfix | 15 | 4 tasks | 4 files |
+| Phase quick P18 | 2 minutes | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -278,6 +294,7 @@ None
 | 15 | WS indicator always green for guests, chips never disabled | 2026-03-09 | 16642a9, 4aa36a5 | [15-ws-connected-ws](./quick/15-ws-connected-ws/) |
 | 16 | Fix modal close on text-selection drag (onMouseDown+target guard on backdrops) | 2026-03-09 | f596e9e | [16-input](./quick/16-input/) |
 | 17 | Show footer conditionally based on chart presence | 2026-03-09 | 22100eb, e9ef746 | [17-show-footer-conditionally-based-on-chart](./quick/17-show-footer-conditionally-based-on-chart/) |
+| 18 | прочти доки на новую версию и добавь добавление задач (вручную) | 2026-03-09 | 0026085 | [18-https-github-com-simon100500-gantt-lib-b](./quick/18-https-github-com-simon100500-gantt-lib-b/) |
 
 ### Quick Tasks Pending
 
@@ -313,7 +330,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 017: Show footer conditionally based on chart presence
+Last activity: 2026-03-09 - Completed quick task 018: прочти доки на новую версию и добавь добавление задач (вручную)
 
 ### Roadmap Evolution
 
