@@ -264,6 +264,16 @@ Plans:
 Plans:
 - [x] TBD (run /gsd:plan-phase 11 to break down) (completed 2026-03-08)
 
+### Phase 12: fix-auto-save-infinite-loop
+
+**Goal:** Fix infinite loop in auto-save mechanism that causes PUT /api/tasks requests every ~1 second even when user is not editing tasks
+**Requirements**: None (bug fix phase)
+**Depends on:** Phase 11
+**Plans:** 1 plan
+
+Plans:
+- [ ] 12-01-PLAN.md — Add deep comparison to useAutoSave, add session cache to authStore, remove excessive console.log (Complete)
+
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-07 after planning Phase 10*
+*Last updated: 2026-03-09 after planning Phase 12*
