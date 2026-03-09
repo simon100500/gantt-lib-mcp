@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, PanelLeft, Sparkles, Clock, AlertTriangle } from 'lucide-react';
+import { CalendarDays, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -23,17 +23,18 @@ interface SwitchControlProps {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
-  icon?: React.ReactNode;
 }
 
-function SwitchControl({ checked, onChange, label, icon }: SwitchControlProps) {
+function SwitchControl({ checked, onChange, label }: SwitchControlProps) {
   return (
-    <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+    <label
+      className="flex items-center gap-1.5 cursor-pointer select-none group"
+      onClick={() => onChange(!checked)}
+    >
       {/* Track + thumb */}
       <span
         role="switch"
         aria-checked={checked}
-        onClick={() => onChange(!checked)}
         className={cn(
           'relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -49,12 +50,11 @@ function SwitchControl({ checked, onChange, label, icon }: SwitchControlProps) {
           )}
         />
       </span>
-      {/* Label with icon */}
+      {/* Label */}
       <span className={cn(
-        'flex items-center gap-1 text-xs font-medium transition-colors',
+        'text-xs font-medium transition-colors',
         checked ? 'text-slate-800' : 'text-slate-500',
       )}>
-        {icon}
         {label}
       </span>
     </label>
@@ -368,14 +368,12 @@ export default function App() {
                 checked={autoSchedule}
                 onChange={setAutoSchedule}
                 label="Авто-план"
-                icon={<Clock className="w-3 h-3" />}
               />
               <ToolbarSep />
               <SwitchControl
                 checked={highlightExpiredTasks}
                 onChange={setHighlightExpiredTasks}
                 label="Просроченные"
-                icon={<AlertTriangle className="w-3 h-3" />}
               />
             </div>
 
