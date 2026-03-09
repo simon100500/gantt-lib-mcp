@@ -82,6 +82,7 @@ export default function App() {
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
   const [chatSidebarVisible, setChatSidebarVisible] = useState(false);
+  const [hasStartedChat, setHasStartedChat] = useState(false);
 
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
@@ -129,6 +130,7 @@ export default function App() {
   }, [send]);
 
   const handleStartScreenSend = useCallback((text: string) => {
+    setHasStartedChat(true);
     setChatSidebarVisible(true);
     handleSend(text);
   }, [handleSend]);
@@ -253,14 +255,16 @@ export default function App() {
     // Don't clear tasks for unauthenticated users (demo mode)
     if (!auth.isAuthenticated) return;
     setTasks([]);
+    setHasStartedChat(false);
   }, [auth.project?.id, setTasks, auth.isAuthenticated]);
 
-  // Reset to start screen state when all tasks are removed
+  // Reset to start screen state when all tasks are removed AND AI is not processing
   useEffect(() => {
-    if (tasks.length === 0 && !loading) {
+    if (tasks.length === 0 && !loading && !aiThinking) {
+      setHasStartedChat(false);
       setChatSidebarVisible(false);
     }
-  }, [tasks.length, loading]);
+  }, [tasks.length, loading, aiThinking]);
 
   // Load chat history on auth/project change
   useEffect(() => {
@@ -350,7 +354,7 @@ export default function App() {
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {tasks.length === 0 && !loading ? (
+        {tasks.length === 0 && !loading && !hasStartedChat ? (
           /* ── Start Screen ─────────────────────────────────────────────── */
           <StartScreen
             onSend={handleStartScreenSend}
