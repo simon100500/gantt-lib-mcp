@@ -272,6 +272,7 @@ None
 | 9 | Fix OTP flicker, add local storage, demo project, edit project name | 2026-03-09 | cdbc262, 25f52f3, 8ed46b0, b069c92, cb6f3ce, a32b31d, fe1168a, 03883a1, ab5da65 | [9-otp](./quick/9-otp/) |
 | 10 | Autosave on chart change (debounced PUT /api/tasks for authenticated users) | 2026-03-09 | f28a6af, 0712d1a, 6c1da46 | [010-autosave-on-chart-change](./quick/010-autosave-on-chart-change/) |
 | 11 | Guest behaviour: fix ProjectSwitcher visibility + save local edits on login | 2026-03-09 | e2a69d2, d3b8192 | [11-guest-behaviour-local-storage](./quick/11-guest-behaviour-local-storage/) |
+| 12 | Fix project name not transferred on guest login via PATCH /api/projects/:id | 2026-03-09 | f4511b1 | [12-fix-project-name-not-transferred-when-gu](./quick/12-fix-project-name-not-transferred-when-gu/) |
 
 ### Quick Tasks Pending
 
@@ -307,7 +308,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 011: Guest behaviour — ProjectSwitcher always visible for unauthenticated users; local edited tasks saved on login
+Last activity: 2026-03-09 - Completed quick task 012: Fix project name not transferred when guest logs in — PATCH /api/projects/:id after OTP login
 
 ### Roadmap Evolution
 
