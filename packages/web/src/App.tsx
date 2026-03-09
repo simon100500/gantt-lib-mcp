@@ -84,7 +84,7 @@ export default function App() {
 
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
-  const [enableAutoSchedule, setEnableAutoSchedule] = useState(false);
+  const [autoSchedule, setAutoSchedule] = useState(false);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
   const [showTaskList, setShowTaskList] = useState(true);
 
@@ -365,8 +365,8 @@ export default function App() {
             {/* Feature switches - right side */}
             <div className="flex items-center gap-2">
               <SwitchControl
-                checked={enableAutoSchedule}
-                onChange={setEnableAutoSchedule}
+                checked={autoSchedule}
+                onChange={setAutoSchedule}
                 label="Авто-план"
                 icon={<Clock className="w-3 h-3" />}
               />
@@ -424,8 +424,8 @@ export default function App() {
               showTaskList={showTaskList}
               taskListWidth={650}
               onValidateDependencies={handleValidation}
-              enableAutoSchedule={enableAutoSchedule}
-              onCascade={handleCascade}
+              disableConstraints={!autoSchedule}
+              onCascade={autoSchedule ? handleCascade : undefined}
               disableTaskNameEditing={disableTaskNameEditing}
               disableDependencyEditing={disableDependencyEditing}
               highlightExpiredTasks={highlightExpiredTasks}

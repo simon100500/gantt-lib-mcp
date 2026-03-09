@@ -11,7 +11,7 @@ export interface GanttChartProps {
   showTaskList?: boolean;
   taskListWidth?: number;
   onValidateDependencies?: (result: ValidationResult) => void;
-  enableAutoSchedule?: boolean;
+  disableConstraints?: boolean;
   onCascade?: (tasks: Task[]) => void;
   disableTaskNameEditing?: boolean;
   disableDependencyEditing?: boolean;
@@ -36,7 +36,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   showTaskList,
   taskListWidth,
   onValidateDependencies,
-  enableAutoSchedule,
+  disableConstraints,
   onCascade,
   disableTaskNameEditing,
   disableDependencyEditing,
@@ -74,7 +74,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       showTaskList={showTaskList}
       taskListWidth={taskListWidth}
       onValidateDependencies={onValidateDependencies}
-      enableAutoSchedule={enableAutoSchedule}
+      disableConstraints={disableConstraints}
       onCascade={onCascade}
       disableTaskNameEditing={disableTaskNameEditing}
       disableDependencyEditing={disableDependencyEditing}
