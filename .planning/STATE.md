@@ -273,6 +273,7 @@ None
 | 10 | Autosave on chart change (debounced PUT /api/tasks for authenticated users) | 2026-03-09 | f28a6af, 0712d1a, 6c1da46 | [010-autosave-on-chart-change](./quick/010-autosave-on-chart-change/) |
 | 11 | Guest behaviour: fix ProjectSwitcher visibility + save local edits on login | 2026-03-09 | e2a69d2, d3b8192 | [11-guest-behaviour-local-storage](./quick/11-guest-behaviour-local-storage/) |
 | 12 | Fix project name not transferred on guest login via PATCH /api/projects/:id | 2026-03-09 | f4511b1 | [12-fix-project-name-not-transferred-when-gu](./quick/12-fix-project-name-not-transferred-when-gu/) |
+| 13 | AI input: auto-growing textarea (1–5 rows), auth-on-send pattern for guests | 2026-03-09 | 5b2ef02, f2677d0 | [13-ai-one-line-input-textarea-5](./quick/13-ai-one-line-input-textarea-5/) |
 
 ### Quick Tasks Pending
 
@@ -308,7 +309,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 012: Fix project name not transferred when guest logs in — PATCH /api/projects/:id after OTP login
+Last activity: 2026-03-09 - Completed quick task 013: AI input replaced with auto-growing textarea (1–5 rows), auth-on-send pattern for unauthenticated users
 
 ### Roadmap Evolution
 
