@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 last_updated: "2026-03-09T15:36:45.041Z"
-last_activity: "2026-03-09 - Completed quick task 023: Start screen with prompt input instead of 'No tasks yet'"
+last_activity: "2026-03-09 - Completed quick task 024: Redesign start screen in Sonnet style"
 progress:
   total_phases: 12
   completed_phases: 9
@@ -331,6 +331,7 @@ None
 | 20 | Авто-план и Просроченные — свитчи справа, Авто-план исправлен (disableConstraints) | 2026-03-09 | 996484e | [020-auto-plan-overdue-to-switches](./quick/020-auto-plan-overdue-to-switches/) |
 | 22 | Fix scrollbar persisting after clearing chat input | 2026-03-09 | fd83303 | [22-scrollbar-persists-after-clearing](./quick/22-scrollbar-persists-after-clearing/) |
 | 23 | Start screen with prompt input instead of "No tasks yet" | 2026-03-09 | a57d7a0, 9fd6396 | [23-start-screen-no-tasks-yet](./quick/23-start-screen-no-tasks-yet/) |
+| 24 | Redesign start screen in Sonnet style | 2026-03-09 | a44ebaf | [24-start-screen-redesign-in-sonnet-style-he](./quick/24-start-screen-redesign-in-sonnet-style-he/) |
 
 ### Quick Tasks Pending
 
@@ -366,7 +367,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 023: Start screen with prompt input instead of "No tasks yet"
+Last activity: 2026-03-09 - Completed quick task 024: Redesign start screen in Sonnet style
 
 ### Roadmap Evolution
 
