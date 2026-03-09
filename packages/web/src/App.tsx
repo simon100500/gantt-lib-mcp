@@ -18,40 +18,46 @@ import type { Task, ValidationResult, DependencyError } from './types.ts';
 
 let msgCounter = 0;
 
-// ── Reusable toolbar toggle ────────────────────────────────────────────────
-interface ToolbarToggleProps {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  activeClass?: string;
-  'aria-label'?: string;
+// ── Switch control (track + thumb) ────────────────────────────────────────
+interface SwitchControlProps {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  icon?: React.ReactNode;
 }
 
-function ToolbarToggle({
-  active,
-  onClick,
-  children,
-  activeClass = 'bg-primary text-primary-foreground border-primary',
-  'aria-label': ariaLabel,
-}: ToolbarToggleProps) {
+function SwitchControl({ checked, onChange, label, icon }: SwitchControlProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={ariaLabel}
-      className={cn(
-        'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-        active
-          ? activeClass
-          : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-800',
-        'text-xs font-medium',
-      )}
-      title={ariaLabel}
-    >
-      {children}
-    </button>
+    <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+      {/* Track + thumb */}
+      <span
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          checked
+            ? 'bg-primary border-primary'
+            : 'bg-slate-200 border-slate-300',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute left-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform',
+            checked ? 'translate-x-3' : 'translate-x-0',
+          )}
+        />
+      </span>
+      {/* Label with icon */}
+      <span className={cn(
+        'flex items-center gap-1 text-xs font-medium transition-colors',
+        checked ? 'text-slate-800' : 'text-slate-500',
+      )}>
+        {icon}
+        {label}
+      </span>
+    </label>
   );
 }
 
@@ -343,28 +349,7 @@ export default function App() {
 
             <ToolbarSep />
 
-            {/* Feature toggles */}
-            <ToolbarToggle
-              active={enableAutoSchedule}
-              onClick={() => setEnableAutoSchedule(v => !v)}
-              aria-label="Авто-планирование"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              Авто-планирование
-            </ToolbarToggle>
-
-            <ToolbarToggle
-              active={highlightExpiredTasks}
-              onClick={() => setHighlightExpiredTasks(v => !v)}
-              aria-label="Просроченные"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              Просроченные
-            </ToolbarToggle>
-
-            <ToolbarSep />
-
-            {/* Action buttons - centered */}
+            {/* Action buttons - left side */}
             <Button
               size="sm"
               variant="outline"
@@ -376,6 +361,25 @@ export default function App() {
             </Button>
 
             <div className="flex-1" />
+
+            {/* Feature switches - right side */}
+            <div className="flex items-center gap-2">
+              <SwitchControl
+                checked={enableAutoSchedule}
+                onChange={setEnableAutoSchedule}
+                label="Авто-план"
+                icon={<Clock className="w-3 h-3" />}
+              />
+              <ToolbarSep />
+              <SwitchControl
+                checked={highlightExpiredTasks}
+                onChange={setHighlightExpiredTasks}
+                label="Просроченные"
+                icon={<AlertTriangle className="w-3 h-3" />}
+              />
+            </div>
+
+            <ToolbarSep />
 
             {/* Chat toggle button - only show when chat is hidden, on the right */}
             {!chatSidebarVisible && (
