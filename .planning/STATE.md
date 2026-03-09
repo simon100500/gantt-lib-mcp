@@ -274,6 +274,7 @@ None
 | 11 | Guest behaviour: fix ProjectSwitcher visibility + save local edits on login | 2026-03-09 | e2a69d2, d3b8192 | [11-guest-behaviour-local-storage](./quick/11-guest-behaviour-local-storage/) |
 | 12 | Fix project name not transferred on guest login via PATCH /api/projects/:id | 2026-03-09 | f4511b1 | [12-fix-project-name-not-transferred-when-gu](./quick/12-fix-project-name-not-transferred-when-gu/) |
 | 13 | AI input: auto-growing textarea (1–5 rows), auth-on-send pattern for guests | 2026-03-09 | 5b2ef02, f2677d0 | [13-ai-one-line-input-textarea-5](./quick/13-ai-one-line-input-textarea-5/) |
+| 14 | Unlock quick-access chips for all users, add trailing space on activation | 2026-03-09 | d24628e | [14-unlock-quick-access-buttons](./quick/14-unlock-quick-access-buttons/) |
 
 ### Quick Tasks Pending
 
@@ -309,7 +310,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 013: AI input replaced with auto-growing textarea (1–5 rows), auth-on-send pattern for unauthenticated users
+Last activity: 2026-03-09 - Completed quick task 014: Unlock quick-access chip buttons for all users (guests + AI-thinking), trailing space appended on activation
 
 ### Roadmap Evolution
 
