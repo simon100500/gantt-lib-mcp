@@ -431,6 +431,13 @@ export default function App() {
               onAdd={handleAddTask}
               onDelete={handleDeleteTask}
               onInsertAfter={handleInsertAfterTask}
+              onPromptSubmit={(prompt) => {
+                handleSend(prompt);
+                setChatSidebarVisible(true);
+              }}
+              onStartEmpty={() => {
+                setShowTaskList(true);
+              }}
             />
           )}
 
