@@ -276,6 +276,7 @@ None
 | 13 | AI input: auto-growing textarea (1–5 rows), auth-on-send pattern for guests | 2026-03-09 | 5b2ef02, f2677d0 | [13-ai-one-line-input-textarea-5](./quick/13-ai-one-line-input-textarea-5/) |
 | 14 | Unlock quick-access chips for all users, add trailing space on activation | 2026-03-09 | d24628e | [14-unlock-quick-access-buttons](./quick/14-unlock-quick-access-buttons/) |
 | 15 | WS indicator always green for guests, chips never disabled | 2026-03-09 | 16642a9, 4aa36a5 | [15-ws-connected-ws](./quick/15-ws-connected-ws/) |
+| 16 | Fix modal close on text-selection drag (onMouseDown+target guard on backdrops) | 2026-03-09 | f596e9e | [16-input](./quick/16-input/) |
 
 ### Quick Tasks Pending
 
@@ -311,7 +312,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 015: WS indicator always green for guests, quick-access chips never gated on WS connection
+Last activity: 2026-03-09 - Completed quick task 016: Fix modal close on text-selection drag — onMouseDown+target guard on all modal backdrops
 
 ### Roadmap Evolution
 
