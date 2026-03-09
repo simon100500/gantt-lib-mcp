@@ -122,10 +122,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_tasks',
-      description: 'Get a list of all Gantt chart tasks',
+      description: 'Get a list of Gantt chart tasks for the current project. Always call this before modifying tasks so you know what tasks exist and their IDs.',
       inputSchema: {
         type: 'object',
-        properties: {},
+        properties: {
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to filter tasks by. If not provided, uses the current session project (PROJECT_ID env var). Pass null to get all tasks across all projects.',
+          },
+        },
       },
     },
     {
@@ -361,8 +366,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const task = await taskStore.create(input, resolvedProjectId);
 
-    // Return the task with cascade info
-    const allTasks = await taskStore.list();
+    // Return the task with cascade info (scoped to same project)
+    const allTasks = await taskStore.list(resolvedProjectId, false);
     const dependentTasks = allTasks.filter(t =>
       t.dependencies?.some(d => d.taskId === task.id) ||
       task.dependencies?.some(d => d.taskId === t.id)
@@ -384,7 +389,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_tasks tool
   if (name === 'get_tasks') {
-    const tasks = await taskStore.list();
+    const { projectId: argProjectId } = args as { projectId?: string | null };
+    // If caller explicitly passes null, return all tasks; otherwise default to PROJECT_ID env
+    const resolvedProjectId = argProjectId === null
+      ? undefined
+      : (argProjectId ?? process.env.PROJECT_ID);
+    const tasks = await taskStore.list(resolvedProjectId, false);
+
+    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', tasks.length);
+
     return {
       content: [
         {
@@ -477,7 +490,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
-      const allTasks = await taskStore.list();
+      const allTasks = await taskStore.list(process.env.PROJECT_ID, false);
 
       // Find all tasks that were affected by the cascade
       const affectedTasks = allTasks.filter(t => {
