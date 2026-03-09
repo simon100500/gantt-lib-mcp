@@ -141,6 +141,24 @@ export default function App() {
     });
   }, [setTasks]);
 
+  const handleAddTask = useCallback((newTask: Task) => {
+    setTasks(prev => [...prev, newTask]);
+  }, [setTasks]);
+
+  const handleDeleteTask = useCallback((taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }, [setTasks]);
+
+  const handleInsertAfterTask = useCallback((taskId: string, newTask: Task) => {
+    setTasks(prev => {
+      const index = prev.findIndex(t => t.id === taskId);
+      if (index === -1) return prev;
+      const newTasks = [...prev];
+      newTasks.splice(index + 1, 0, newTask);
+      return newTasks;
+    });
+  }, [setTasks]);
+
   const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
     if (!auth.accessToken) return;
 
@@ -408,6 +426,9 @@ export default function App() {
               disableDependencyEditing={disableDependencyEditing}
               highlightExpiredTasks={highlightExpiredTasks}
               headerHeight={40}
+              onAdd={handleAddTask}
+              onDelete={handleDeleteTask}
+              onInsertAfter={handleInsertAfterTask}
             />
           )}
 

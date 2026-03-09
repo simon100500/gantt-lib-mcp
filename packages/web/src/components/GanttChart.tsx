@@ -17,6 +17,9 @@ export interface GanttChartProps {
   disableDependencyEditing?: boolean;
   highlightExpiredTasks?: boolean;
   headerHeight?: number;
+  onAdd?: (newTask: Task) => void;
+  onDelete?: (taskId: string) => void;
+  onInsertAfter?: (taskId: string, newTask: Task) => void;
 }
 
 export interface GanttChartRef {
@@ -39,6 +42,9 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   disableDependencyEditing,
   highlightExpiredTasks,
   headerHeight,
+  onAdd,
+  onDelete,
+  onInsertAfter,
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void } | null>(null);
 
@@ -74,6 +80,9 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       disableDependencyEditing={disableDependencyEditing}
       highlightExpiredTasks={highlightExpiredTasks}
       headerHeight={headerHeight}
+      onAdd={onAdd}
+      onDelete={onDelete}
+      onInsertAfter={onInsertAfter}
     />
   );
 });
