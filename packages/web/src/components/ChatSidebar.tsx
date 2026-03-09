@@ -43,6 +43,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
     onSend(text);
     setInputValue('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
+    if (inputRef.current) inputRef.current.style.overflowY = 'hidden';
   }
 
   function handleChip(chip: string) {
@@ -53,7 +54,10 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
   function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
     const el = e.currentTarget;
     el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
+    const newHeight = el.scrollHeight;
+    el.style.height = newHeight + 'px';
+    // Only show scrollbar when content actually overflows
+    el.style.overflowY = newHeight > 120 ? 'auto' : 'hidden';
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
