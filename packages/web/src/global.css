@@ -1,3 +1,7 @@
 :root {
   --gantt-container-border-radius: 0px;
 }
+
+.gantt-container {
+  border: 0;
+}
