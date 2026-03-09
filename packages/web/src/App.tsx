@@ -447,9 +447,29 @@ export default function App() {
       {/* ── OTP Modal (controlled) ──────────────────────────────────────────── */}
       {showOtpModal && (
         <OtpModal
-          onSuccess={(result) => {
+          onSuccess={async (result) => {
             auth.login(result, result.user, result.project);
             setShowOtpModal(false);
+
+            // If user edited local chart (not demo mode) — save to server
+            if (!localTasks.isDemoMode && localTasks.tasks.length > 0) {
+              try {
+                await fetch('/api/tasks', {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${result.accessToken}`,
+                  },
+                  body: JSON.stringify(localTasks.tasks),
+                });
+                // Clear local storage after successful import
+                localStorage.removeItem('gantt_local_tasks');
+                localStorage.removeItem('gantt_demo_mode');
+              } catch (err) {
+                console.error('Failed to import local tasks after login:', err);
+                // Non-critical error — user is already logged in
+              }
+            }
           }}
           onClose={() => setShowOtpModal(false)}
         />
