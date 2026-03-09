@@ -18,12 +18,14 @@ key_files:
 decisions:
   - chatSidebarVisible starts as false — hidden until user interacts (not shown on start screen)
   - handleEmptyChart placed after handleAddTask to avoid TypeScript forward-reference error
-  - useEffect on tasks.length resets sidebar visibility when all tasks removed
+  - hasStartedChat flag gates layout switch independent of tasks.length — ensures chat is visible while AI processes first prompt
+  - useEffect resets hasStartedChat+chatSidebarVisible only when tasks===0 AND aiThinking===false
+  - Project switch resets hasStartedChat so fresh projects always show start screen
   - StartScreen uses same chip pill style as ChatSidebar for visual consistency
 metrics:
-  duration: "~5 min (tasks 1-2 complete; task 3 awaiting human verification)"
-  completed_date: "2026-03-09"
-  tasks_completed: 2
+  duration: "~27 min"
+  completed_date: "2026-03-10"
+  tasks_completed: 3
   tasks_total: 3
   files_modified: 2
 ---
@@ -79,18 +81,27 @@ A full-area centered React component shown when `tasks.length === 0 && !loading`
 - **Files modified:** packages/web/src/App.tsx
 - **Commit:** 5775386
 
+**2. [Rule 1 - Bug] Chat panel not visible while AI processes first prompt**
+- **Found during:** Task 3 (human verification)
+- **Issue:** After StartScreen submits, `handleStartScreenSend` called `setChatSidebarVisible(true)` but the entire main layout including the chat sidebar was gated behind `tasks.length > 0`. The existing `useEffect` also actively reset `chatSidebarVisible` to `false` whenever tasks were empty. Result: user saw nothing until page refresh, even though AI was processing correctly.
+- **Root cause:** Condition `tasks.length === 0 && !loading` showed StartScreen regardless of whether user had just submitted a prompt. `hasStartedChat` flag was missing.
+- **Fix:** Added `hasStartedChat` boolean state. Set to `true` on `handleStartScreenSend`. Main layout condition changed from `tasks.length === 0 && !loading` to `tasks.length === 0 && !loading && !hasStartedChat`. Reset effect now also checks `!aiThinking` so it only fires when AI finishes — keeping layout visible throughout processing. Project switch resets flag for clean state.
+- **Files modified:** `packages/web/src/App.tsx`
+- **Commit:** 500a8b2
+
 ## Task Status
 
 | Task | Name | Status | Commit |
 |------|------|--------|--------|
 | 1 | Create StartScreen component | Done | d3ced5a |
 | 2 | Wire StartScreen into App.tsx | Done | 5775386 |
-| 3 | Human verification of start screen | Awaiting verification | — |
+| 3 | Human verification + bugfix | Done | 500a8b2 |
 
-## Self-Check: PARTIAL (awaiting Task 3 human verification)
+## Self-Check: PASSED
 
 - [x] `packages/web/src/components/StartScreen.tsx` exists
-- [x] `packages/web/src/App.tsx` imports StartScreen and renders conditionally on `tasks.length === 0`
+- [x] `packages/web/src/App.tsx` imports StartScreen and renders conditionally
 - [x] `chatSidebarVisible` initial state is `false` in App.tsx
+- [x] `hasStartedChat` flag added — transitions to main layout on submit regardless of `tasks.length`
 - [x] TypeScript compiles without errors
-- [ ] Task 3 (human-verify checkpoint) not yet completed
+- [x] All 3 task commits exist in git log (d3ced5a, 5775386, 500a8b2)
