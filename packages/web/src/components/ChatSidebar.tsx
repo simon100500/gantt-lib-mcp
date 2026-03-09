@@ -180,7 +180,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
           onChange={e => setInputValue(e.target.value)}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={disabled ? 'AI думает…' : 'Сообщение AI…'}
+          placeholder={disabled ? 'AI думает…' : 'Что хотите сделать?'}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
