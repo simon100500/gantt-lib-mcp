@@ -301,8 +301,8 @@ export default function App() {
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Gantt panel */}
-        <main className="flex flex-col flex-1 overflow-hidden min-w-0">
+        {/* Gantt panel wrapper - includes chart and footer */}
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           {/* ── Gantt Toolbar ────────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
             {/* Show/hide task list - outline style for both states */}
@@ -410,7 +410,25 @@ export default function App() {
               headerHeight={40}
             />
           )}
-        </main>
+
+          {/* ── Status Bar ─────────────────────────────────────────────── */}
+          {tasks.length > 0 && (
+            <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
+              <span className="font-mono text-[11px] text-slate-400">
+                {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
+              </span>
+              <span
+                className={cn(
+                  'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                  displayConnected ? 'text-emerald-600' : 'text-amber-600',
+                )}
+              >
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
+                {displayConnected ? 'Подключено' : 'Переподключение…'}
+              </span>
+            </footer>
+          )}
+        </div>
 
         {/* ── Chat sidebar ─────────────────────────────────────────────── */}
         {chatSidebarVisible && (
@@ -429,24 +447,6 @@ export default function App() {
           </aside>
         )}
       </div>
-
-      {/* ── Status Bar ───────────────────────────────────────────────────── */}
-      {tasks.length > 0 && (
-        <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
-          <span className="font-mono text-[11px] text-slate-400">
-            {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
-          </span>
-          <span
-            className={cn(
-              'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-              displayConnected ? 'text-emerald-600' : 'text-amber-600',
-            )}
-          >
-            <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-            {displayConnected ? 'Подключено' : 'Переподключение…'}
-          </span>
-        </footer>
-      )}
 
       {/* ── OTP Modal (controlled) ──────────────────────────────────────────── */}
       {showOtpModal && (
