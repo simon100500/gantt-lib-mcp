@@ -66,8 +66,6 @@ export default function App() {
   const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
-  const isDemoMode = !auth.isAuthenticated && localTasks.isDemoMode;
-
   // Autosave to server on any chart change (authenticated only; demo mode saves to localStorage in useLocalTasks)
   useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -269,7 +267,7 @@ export default function App() {
             onCreateNew={handleCreateProject}
             onEdit={handleEditProject}
           />
-        ) : isDemoMode && (
+        ) : !auth.isAuthenticated && (
           <ProjectSwitcher
             currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
             projects={[]}
