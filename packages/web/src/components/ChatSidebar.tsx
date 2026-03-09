@@ -17,14 +17,15 @@ interface ChatSidebarProps {
   loading?: boolean;
   onClose?: () => void;
   isAuthenticated?: boolean;
+  onLoginRequired?: () => void;
 }
 
 const QUICK_CHIPS = ['Добавить задачу', 'Сдвинуть сроки', 'Связать задачи', 'Показать сводку'];
 
-export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading, onClose, isAuthenticated = true }: ChatSidebarProps) {
+export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading, onClose, isAuthenticated = true, onLoginRequired }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
 
   useEffect(() => {
@@ -35,13 +36,31 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
     e.preventDefault();
     const text = inputValue.trim();
     if (!text || disabled) return;
+    if (!isAuthenticated) {
+      onLoginRequired?.();
+      return;
+    }
     onSend(text);
     setInputValue('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
   }
 
   function handleChip(chip: string) {
     setInputValue(chip);
     inputRef.current?.focus();
+  }
+
+  function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as unknown as React.FormEvent);
+    }
   }
 
   return (
@@ -82,16 +101,6 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
                 Попросите создать или изменить расписание проекта
               </p>
             </div>
-          </div>
-        )}
-
-        {/* Auth required notice for unauthenticated users */}
-        {!isAuthenticated && isEmpty && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 mx-3 mt-2">
-            <p className="text-xs text-amber-800 leading-relaxed">
-              Для работы AI-ассистента требуется{' '}
-              <span className="font-medium">вход в аккаунт</span>
-            </p>
           </div>
         )}
 
@@ -163,28 +172,32 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
       {/* ── Input area ───────────────────────────── */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-center gap-2 px-3 py-2.5 border-t border-slate-200 shrink-0"
+        className="flex items-end gap-2 px-3 py-2.5 border-t border-slate-200 shrink-0"
       >
-        <input
+        <textarea
           ref={inputRef}
           name="message"
-          type="text"
+          rows={1}
           value={inputValue}
           onChange={e => setInputValue(e.target.value)}
+          onInput={handleTextareaInput}
+          onKeyDown={handleKeyDown}
           placeholder={disabled ? 'AI думает…' : 'Сообщение AI…'}
-          disabled={disabled || !connected}
+          disabled={disabled}
           autoComplete="off"
           spellCheck={false}
+          style={{ maxHeight: '7.5rem' }}
           className={cn(
-            'flex-1 h-9 px-3 text-sm rounded-md',
+            'flex-1 px-3 py-2 text-sm rounded-md',
             'border border-slate-200 bg-slate-50 placeholder:text-slate-400',
             'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:border-transparent',
             'disabled:opacity-50 disabled:cursor-not-allowed',
+            'resize-none overflow-y-auto leading-relaxed',
           )}
         />
         <button
           type="submit"
-          disabled={disabled || !connected || !inputValue.trim()}
+          disabled={disabled || !inputValue.trim()}
           aria-label="Send message"
           className={cn(
             'h-9 w-9 shrink-0 rounded-md bg-primary text-primary-foreground',
