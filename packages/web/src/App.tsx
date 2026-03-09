@@ -84,7 +84,7 @@ export default function App() {
 
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
-  const [autoSchedule, setAutoSchedule] = useState(false);
+  const [autoSchedule, setAutoSchedule] = useState(true);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
   const [showTaskList, setShowTaskList] = useState(true);
 
