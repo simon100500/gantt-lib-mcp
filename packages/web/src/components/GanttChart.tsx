@@ -94,51 +94,44 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-4">
-        <form onSubmit={handleSubmitPrompt} className="flex flex-col items-center gap-3 w-full max-w-[420px]">
+        <form onSubmit={handleSubmitPrompt} className="flex flex-col items-center gap-4 w-full max-w-[420px]">
           <h2 className="text-lg font-semibold text-slate-800">С чего начнём?</h2>
 
-          <textarea
-            ref={textareaRef}
-            name="prompt"
-            rows={1}
-            value={promptValue}
-            onChange={e => setPromptValue(e.target.value)}
-            onInput={handleTextareaInput}
-            onKeyDown={handleKeyDown}
-            placeholder="Опишите ваш проект..."
-            autoComplete="off"
-            spellCheck={false}
-            style={{ maxHeight: '7.5rem' }}
-            className={cn(
-              'w-full px-3 py-2.5 text-sm rounded-md',
-              'border border-slate-200 bg-slate-50 placeholder:text-slate-400',
-              'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:border-transparent',
-              'resize-none overflow-y-auto leading-relaxed',
-            )}
-          />
-
-          <div className="flex items-center gap-2 w-full">
+          <div className="relative w-full">
+            <textarea
+              ref={textareaRef}
+              name="prompt"
+              rows={1}
+              value={promptValue}
+              onChange={e => setPromptValue(e.target.value)}
+              onInput={handleTextareaInput}
+              onKeyDown={handleKeyDown}
+              placeholder="Опишите ваш проект..."
+              autoComplete="off"
+              spellCheck={false}
+              style={{ maxHeight: '7.5rem', minHeight: '48px' }}
+              className={cn(
+                'w-full px-4 py-3 text-base rounded-md pr-12',
+                'border border-slate-200 bg-white placeholder:text-slate-400',
+                'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:border-transparent',
+                'resize-none overflow-y-auto leading-relaxed',
+              )}
+            />
             <Button
               type="submit"
               disabled={!promptValue.trim()}
-              className="flex-1 h-9 gap-1.5"
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
+              size="icon"
             >
-              Создать по описанию
-              <ArrowUp className="w-3.5 h-3.5" />
+              <ArrowUp className="w-4 h-4" />
             </Button>
-          </div>
-
-          <div className="flex items-center gap-2 w-full">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-xs text-slate-400">или</span>
-            <div className="flex-1 h-px bg-slate-200" />
           </div>
 
           <Button
             type="button"
             variant="outline"
             onClick={onStartEmpty}
-            className="w-full h-9 border-slate-200 text-slate-600 hover:text-slate-900"
+            className="w-full h-10 border-slate-200 text-slate-600 hover:text-slate-900"
           >
             Пустой график
           </Button>
