@@ -423,6 +423,7 @@ export default function App() {
               loading={aiThinking}
               onClose={() => setChatSidebarVisible(false)}
               isAuthenticated={auth.isAuthenticated}
+              onLoginRequired={() => setShowOtpModal(true)}
             />
           </aside>
         )}
