@@ -431,20 +431,22 @@ export default function App() {
       </div>
 
       {/* ── Status Bar ───────────────────────────────────────────────────── */}
-      <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
-        <span className="font-mono text-[11px] text-slate-400">
-          {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
-        </span>
-        <span
-          className={cn(
-            'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-            displayConnected ? 'text-emerald-600' : 'text-amber-600',
-          )}
-        >
-          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-          {displayConnected ? 'Подключено' : 'Переподключение…'}
-        </span>
-      </footer>
+      {tasks.length > 0 && (
+        <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
+          <span className="font-mono text-[11px] text-slate-400">
+            {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
+          </span>
+          <span
+            className={cn(
+              'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+              displayConnected ? 'text-emerald-600' : 'text-amber-600',
+            )}
+          >
+            <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
+            {displayConnected ? 'Подключено' : 'Переподключение…'}
+          </span>
+        </footer>
+      )}
 
       {/* ── OTP Modal (controlled) ──────────────────────────────────────────── */}
       {showOtpModal && (
