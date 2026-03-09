@@ -277,6 +277,7 @@ None
 | 14 | Unlock quick-access chips for all users, add trailing space on activation | 2026-03-09 | d24628e | [14-unlock-quick-access-buttons](./quick/14-unlock-quick-access-buttons/) |
 | 15 | WS indicator always green for guests, chips never disabled | 2026-03-09 | 16642a9, 4aa36a5 | [15-ws-connected-ws](./quick/15-ws-connected-ws/) |
 | 16 | Fix modal close on text-selection drag (onMouseDown+target guard on backdrops) | 2026-03-09 | f596e9e | [16-input](./quick/16-input/) |
+| 17 | Show footer conditionally based on chart presence | 2026-03-09 | 22100eb, e9ef746 | [17-show-footer-conditionally-based-on-chart](./quick/17-show-footer-conditionally-based-on-chart/) |
 
 ### Quick Tasks Pending
 
@@ -312,7 +313,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 016: Fix modal close on text-selection drag — onMouseDown+target guard on all modal backdrops
+Last activity: 2026-03-09 - Completed quick task 017: Show footer conditionally based on chart presence
 
 ### Roadmap Evolution
 
