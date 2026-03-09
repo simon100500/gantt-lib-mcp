@@ -70,7 +70,7 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
       <div className="w-full max-w-[640px] px-6">
         {/* Headline */}
         <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">
-          С чего начнём?
+          На что составим график?
         </h1>
 
         {/* Textarea form block */}
