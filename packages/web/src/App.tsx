@@ -113,6 +113,7 @@ export default function App() {
   }, [setTasks]);
 
   const { send, connected } = useWebSocket(handleWsMessage, () => auth.accessToken, auth.accessToken);
+  const displayConnected = auth.isAuthenticated ? connected : true;
 
   const handleSend = useCallback((text: string) => {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
@@ -419,7 +420,7 @@ export default function App() {
               streaming={streaming}
               onSend={handleSend}
               disabled={aiThinking}
-              connected={connected}
+              connected={displayConnected}
               loading={aiThinking}
               onClose={() => setChatSidebarVisible(false)}
               isAuthenticated={auth.isAuthenticated}
@@ -437,11 +438,11 @@ export default function App() {
         <span
           className={cn(
             'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-            connected ? 'text-emerald-600' : 'text-amber-600',
+            displayConnected ? 'text-emerald-600' : 'text-amber-600',
           )}
         >
-          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', connected ? 'bg-emerald-500' : 'bg-amber-400')} />
-          {connected ? 'Подключено' : 'Переподключение…'}
+          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
+          {displayConnected ? 'Подключено' : 'Переподключение…'}
         </span>
       </footer>
 
