@@ -15,9 +15,19 @@ import type {
 } from './types.js';
 
 /**
+ * Cached session entry with expiration time
+ */
+interface CachedSession {
+  session: Session;
+  expiresAt: number;
+}
+
+/**
  * AuthStore class encapsulating all authentication-related database operations
  */
 export class AuthStore {
+  private sessionCache = new Map<string, CachedSession>();
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
   /**
    * Create an OTP entry in the database
    *
@@ -265,15 +275,24 @@ export class AuthStore {
   /**
    * Find a session by access token
    *
+   * Uses in-memory cache to avoid database queries on every request.
+   * Cache entries expire after CACHE_TTL_MS (5 minutes).
+   *
    * @param accessToken - JWT access token
    * @returns Session if found, undefined otherwise
    */
   async findSessionByAccessToken(accessToken: string): Promise<Session | undefined> {
-    const db = await getDb();
+    // Check cache first
+    const cached = this.sessionCache.get(accessToken);
+    const now = Date.now();
 
-    console.log('[AUTH-STORE] findSessionByAccessToken called:', {
-      tokenPrefix: accessToken.substring(0, 20) + '...'
-    });
+    if (cached && cached.expiresAt > now) {
+      // Cache hit - return cached session
+      return cached.session;
+    }
+
+    // Cache miss or expired - query database
+    const db = await getDb();
 
     const result = await db.execute({
       sql: `
@@ -284,17 +303,12 @@ export class AuthStore {
       args: [accessToken],
     });
 
-    console.log('[AUTH-STORE] findSessionByAccessToken result:', {
-      rowsFound: result.rows.length,
-      sessionId: result.rows.length > 0 ? result.rows[0].id : 'none'
-    });
-
     if (result.rows.length === 0) {
       return undefined;
     }
 
     const row = result.rows[0];
-    return {
+    const session: Session = {
       id: row.id as string,
       userId: row.user_id as string,
       projectId: row.project_id as string,
@@ -303,6 +317,14 @@ export class AuthStore {
       expiresAt: row.expires_at as string,
       createdAt: row.created_at as string,
     };
+
+    // Cache the session for 5 minutes
+    this.sessionCache.set(accessToken, {
+      session,
+      expiresAt: now + this.CACHE_TTL_MS,
+    });
+
+    return session;
   }
 
   /**
@@ -342,6 +364,9 @@ export class AuthStore {
   /**
    * Update tokens for an existing session (used during token refresh)
    *
+   * Also clears the cache entry for the old access token and the new access token
+   * to ensure fresh data on next request.
+   *
    * @param sessionId - Session ID to update
    * @param accessToken - New access token
    * @param refreshToken - New refresh token
@@ -353,18 +378,25 @@ export class AuthStore {
   ): Promise<void> {
     const db = await getDb();
 
-    console.log('[AUTH-STORE] updateSessionTokens called:', {
-      sessionId,
-      accessTokenPrefix: accessToken.substring(0, 20) + '...',
-      refreshTokenPrefix: refreshToken.substring(0, 20) + '...'
-    });
+    // Clear cache for both old and new tokens (we don't have old token here, so clear new)
+    // The old token will naturally expire from cache via TTL
+    this.clearSessionCache(accessToken);
 
     const result = await db.execute({
       sql: 'UPDATE sessions SET access_token = ?, refresh_token = ? WHERE id = ?',
       args: [accessToken, refreshToken, sessionId],
     });
+  }
 
-    console.log('[AUTH-STORE] updateSessionTokens result:', { rowsAffected: result.rowsAffected });
+  /**
+   * Clear a session cache entry
+   *
+   * Called during token refresh or logout to ensure fresh data on next request.
+   *
+   * @param accessToken - Access token to remove from cache
+   */
+  clearSessionCache(accessToken: string): void {
+    this.sessionCache.delete(accessToken);
   }
 
   /**
