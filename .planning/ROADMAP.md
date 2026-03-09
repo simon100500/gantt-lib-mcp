@@ -279,7 +279,7 @@ Plans:
 **Goal:** Replace empty state with a Sonnet-style centered start screen — headline, textarea, example chips, Пустой график button; chat sidebar hidden until user acts
 **Requirements**: START-01, START-02, START-03, START-04, START-05
 **Depends on:** Phase 12
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 13-01-PLAN.md — Create StartScreen component and wire into App.tsx with conditional rendering on tasks.length === 0
