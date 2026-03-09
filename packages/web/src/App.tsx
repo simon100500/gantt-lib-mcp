@@ -296,7 +296,7 @@ export default function App() {
           <ProjectSwitcher
             currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
             projects={[]}
-            onSwitch={() => {}}
+            onSwitch={() => { }}
             onCreateNew={handleCreateProject}
             onEdit={handleEditDemoProject}
           />
@@ -367,7 +367,7 @@ export default function App() {
               <SwitchControl
                 checked={autoSchedule}
                 onChange={setAutoSchedule}
-                label="Авто-план"
+                label="Закрепить связи"
               />
               <ToolbarSep />
               <SwitchControl
