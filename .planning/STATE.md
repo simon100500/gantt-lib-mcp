@@ -377,6 +377,7 @@ Last activity: 2026-03-09 - Completed quick task 022: Fix scrollbar persisting a
 - Phase 10 added: work-stability
 - Phase 11 added: complete-deisgn-system
 - Phase 12 added: fix-auto-save-infinite-loop
+- Phase 13 added: start-screen с полем ввода промпта и кнопкой "Пустой график" вместо надписи "No tasks yet"
 
 ### Phase 7 Architecture Context
 
