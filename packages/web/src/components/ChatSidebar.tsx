@@ -155,12 +155,10 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
               key={chip}
               type="button"
               onClick={() => handleChip(chip)}
-              disabled={!connected}
               className={cn(
                 'text-[11px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-500',
                 'transition-colors hover:border-primary hover:text-primary',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                'disabled:opacity-40 disabled:cursor-not-allowed',
               )}
             >
               {chip}
