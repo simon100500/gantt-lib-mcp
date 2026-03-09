@@ -451,8 +451,9 @@ export default function App() {
             auth.login(result, result.user, result.project);
             setShowOtpModal(false);
 
-            // If user edited local chart (not demo mode) — save to server
-            if (!localTasks.isDemoMode && localTasks.tasks.length > 0) {
+            // 1. Import local tasks (if user edited them)
+            const hasLocalEdits = !localTasks.isDemoMode && localTasks.tasks.length > 0;
+            if (hasLocalEdits) {
               try {
                 await fetch('/api/tasks', {
                   method: 'PUT',
@@ -462,12 +463,33 @@ export default function App() {
                   },
                   body: JSON.stringify(localTasks.tasks),
                 });
-                // Clear local storage after successful import
                 localStorage.removeItem('gantt_local_tasks');
                 localStorage.removeItem('gantt_demo_mode');
               } catch (err) {
                 console.error('Failed to import local tasks after login:', err);
-                // Non-critical error — user is already logged in
+              }
+            }
+
+            // 2. Transfer project name if guest renamed it (separate from task import)
+            const DEFAULT_PROJECT_NAME = 'Мой проект';
+            if (localTasks.projectName && localTasks.projectName !== DEFAULT_PROJECT_NAME) {
+              try {
+                await fetch(`/api/projects/${result.project.id}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${result.accessToken}`,
+                  },
+                  body: JSON.stringify({ name: localTasks.projectName }),
+                });
+                // Update auth state so header reflects the new name immediately
+                auth.login(
+                  result,
+                  result.user,
+                  { ...result.project, name: localTasks.projectName }
+                );
+              } catch (err) {
+                console.error('Failed to transfer project name after login:', err);
               }
             }
           }}
