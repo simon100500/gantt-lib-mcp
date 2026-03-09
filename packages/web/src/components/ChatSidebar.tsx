@@ -46,7 +46,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
   }
 
   function handleChip(chip: string) {
-    setInputValue(chip);
+    setInputValue(chip + ' ');
     inputRef.current?.focus();
   }
 
@@ -155,7 +155,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
               key={chip}
               type="button"
               onClick={() => handleChip(chip)}
-              disabled={disabled || !connected}
+              disabled={!connected}
               className={cn(
                 'text-[11px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-500',
                 'transition-colors hover:border-primary hover:text-primary',
