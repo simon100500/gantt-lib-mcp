@@ -17,12 +17,10 @@ import { registerSSERoutes, broadcastToProject } from './sse.js';
 import { startPGListener } from './pg-listener.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
-import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 
 const fastify = Fastify({ logger: true });
 await registerAuthRoutes(fastify);
-await registerAdminRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // REST routes

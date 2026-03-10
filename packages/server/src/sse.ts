@@ -112,17 +112,33 @@ export function broadcastToAI(sessionId: string, data: SSEMessage): void {
 export function registerSSERoutes(fastify: FastifyInstance): void {
   // Task stream endpoint
   fastify.get('/stream/tasks', async (req, reply) => {
-    // Verify JWT from Authorization header
+    // Verify JWT from Authorization header or query parameter (EventSource doesn't support custom headers)
+    let token: string | undefined;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+      console.log('[SSE /stream/tasks] Token from Authorization header');
+    } else {
+      // Fallback to query parameter for EventSource
+      const queryToken = (req.query as { token?: string }).token;
+      if (queryToken) {
+        token = queryToken;
+        console.log('[SSE /stream/tasks] Token from query parameter');
+      }
+    }
+
+    if (!token) {
+      console.log('[SSE /stream/tasks] No token found, returning 401');
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
     let payload: JwtPayload;
     try {
-      const token = authHeader.slice(7);
+      console.log('[SSE /stream/tasks] Verifying token...');
       payload = verifyToken(token);
+      console.log('[SSE /stream/tasks] Token verified successfully, projectId:', payload.projectId);
     } catch (err) {
+      console.error('[SSE /stream/tasks] Token verification failed:', err);
       return reply.status(401).send({ error: 'Invalid token' });
     }
 

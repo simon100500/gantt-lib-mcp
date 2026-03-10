@@ -18,6 +18,18 @@ export default defineConfig({
         target: 'http://localhost:3000',
         ws: true,
       },
+      // Proxy SSE endpoints to backend with proper headers
+      '/stream': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        // Preserve SSE headers
+        headers: {
+          'Accept': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+        // Disable buffering for SSE
+        buffer: false,
+      },
     },
   },
 });

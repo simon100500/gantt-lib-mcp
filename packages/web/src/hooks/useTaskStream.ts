@@ -39,7 +39,9 @@ export function useTaskStream(
       return;
     }
 
+    console.log('[useTaskStream] Connecting with token (first 30 chars):', token.substring(0, 30));
     const url = `/stream/tasks?token=${encodeURIComponent(token)}`;
+    console.log('[useTaskStream] URL:', url);
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 

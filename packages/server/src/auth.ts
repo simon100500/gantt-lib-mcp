@@ -74,8 +74,14 @@ export function signRefreshToken(payload: BasePayload): string {
  * @throws jwt.JsonWebTokenError if token is invalid or expired
  */
 export function verifyToken(token: string): JwtPayload {
-  const decoded = jwt.verify(token, SECRET) as JwtPayload;
-  return decoded;
+  try {
+    const decoded = jwt.verify(token, SECRET) as JwtPayload;
+    console.log('[AUTH verifyToken] Token decoded:', JSON.stringify({ sub: decoded.sub, email: decoded.email, projectId: decoded.projectId, type: decoded.type }));
+    return decoded;
+  } catch (err) {
+    console.error('[AUTH verifyToken] Verification failed:', err);
+    throw err;
+  }
 }
 
 /**
