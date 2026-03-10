@@ -6,12 +6,12 @@
  * 2. Loads full conversation history from DB
  * 3. Builds prompt = system prompt + history context + current user message
  * 4. Runs @qwen-code/sdk query() with the MCP server as a child process
- * 5. Streams assistant text tokens to WebSocket via broadcast({ type: 'token' })
+ * 5. Streams assistant text tokens to SSE via broadcastToProject({ type: 'token' })
  * 6. Saves assistant response to DB
- * 7. Broadcasts updated task snapshot via broadcast({ type: 'tasks' })
+ * 7. Broadcasts updated task snapshot via broadcastToProject({ type: 'tasks' })
  * 8. Broadcasts { type: 'done' } to signal turn complete
  *
- * The MCP child process shares the same DB_PATH as the server, so task
+ * The MCP child process shares the same DATABASE_URL as the server, so task
  * mutations performed by the AI are immediately visible via taskStore.list().
  */
 
@@ -22,7 +22,7 @@ import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { taskStore } from '@gantt/mcp/store';
-import { broadcastToSession } from './ws.js';
+import { broadcastToProject } from './sse.js';
 
 // ---------------------------------------------------------------------------
 // Path resolution
@@ -57,12 +57,12 @@ function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI
 /**
  * Run one agent turn:
  * - persists user/assistant messages in DB (project-scoped)
- * - streams tokens via WebSocket broadcast to specific session
- * - broadcasts task snapshot after each turn (session-scoped)
+ * - streams tokens via SSE broadcast to project
+ * - broadcasts task snapshot after each turn (project-scoped)
  *
  * @param userMessage - User's chat message
  * @param projectId - Project ID for scoping data
- * @param sessionId - Session ID for targeting WebSocket broadcasts
+ * @param sessionId - Session ID (unused but kept for interface compatibility)
  */
 export async function runAgentWithHistory(
   userMessage: string,
@@ -107,9 +107,9 @@ export async function runAgentWithHistory(
     // GANTT_MCP_SERVER_PATH allows override for container deployments
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
       ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
-    const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
 
     // 6. Run agent session
+    const databaseUrl = process.env.DATABASE_URL ?? '';
     const session = query({
       prompt: fullPrompt,
       options: {
@@ -118,19 +118,19 @@ export async function runAgentWithHistory(
         permissionMode: 'yolo',
         env: {
           ...env,
-          DB_PATH: dbPath,
+          DATABASE_URL: databaseUrl,
         },
         mcpServers: {
           gantt: {
             command: 'node',
             args: [mcpServerPath],
-            env: { DB_PATH: dbPath, PROJECT_ID: projectId },
+            env: { DATABASE_URL: databaseUrl, PROJECT_ID: projectId },
           },
         },
       },
     });
 
-    // 7. Stream tokens to WebSocket (session-scoped)
+    // 7. Stream tokens to SSE (project-scoped)
     let assistantResponse = '';
     let streamedContent = false;
 
@@ -143,7 +143,7 @@ export async function runAgentWithHistory(
         for (const block of event.message.content) {
           if (block.type === 'text' && block.text) {
             assistantResponse += block.text;
-            broadcastToSession(sessionId, { type: 'token', content: block.text });
+            broadcastToProject(projectId, { type: 'token', content: block.text });
             streamedContent = true;
           }
         }
@@ -158,15 +158,15 @@ export async function runAgentWithHistory(
       await taskStore.addMessage('assistant', assistantResponse, projectId);
     }
 
-    // 9. Broadcast updated tasks snapshot (session-scoped)
+    // 9. Broadcast updated tasks snapshot (project-scoped)
     const tasks = await taskStore.list(projectId, true);
-    broadcastToSession(sessionId, { type: 'tasks', tasks });
+    broadcastToProject(projectId, { type: 'tasks', tasks });
 
-    // 10. Signal turn complete (session-scoped)
-    broadcastToSession(sessionId, { type: 'done' });
+    // 10. Signal turn complete (project-scoped)
+    broadcastToProject(projectId, { type: 'done' });
 
   } catch (err) {
-    broadcastToSession(sessionId, { type: 'error', message: String(err) });
+    broadcastToProject(projectId, { type: 'error', message: String(err) });
     throw err;
   }
 }
