@@ -284,6 +284,27 @@ Plans:
 Plans:
 - [ ] 13-01-PLAN.md — Create StartScreen component and wire into App.tsx with conditional rendering on tasks.length === 0
 
+### Phase 13.1: sse-architecture (INSERTED)
+
+**Goal:** Replace WebSocket with Server-Sent Events (SSE), migrate SQLite to PostgreSQL with NOTIFY/LISTEN triggers for real-time updates
+**Requirements**: None (architectural migration)
+**Depends on:** Phase 13
+**Plans:** 2 plans
+
+Plans:
+- [ ] 13.1-00-PLAN.md — Wave 0 test scaffold: Vitest setup, SSE endpoint test contracts, client hook test contracts
+- [ ] 13.1-01-PLAN.md — SSE architecture migration: Prisma schema + PostgreSQL triggers, SSE server infrastructure, client hooks, App.tsx wiring
+
+### Phase 14: cost-optimisation
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 13
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 14 to break down)
+
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-09 after planning Phase 13*
+*Last updated: 2026-03-11 after planning Phase 13.1*
