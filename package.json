@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "type": "module",
   "description": "MCP server for Gantt chart management using gantt-lib",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "npm run build --workspaces",
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
     "dev:server": "npm run dev -w packages/server",
-    "dev:web": "npm run dev -w packages/web"
+    "dev:web": "npm run dev -w packages/web",
+    "test": "vitest",
+    "test:run": "vitest --run"
   },
   "keywords": [
     "mcp",
@@ -20,6 +24,8 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "typescript": "^5.7.2"
+    "@vitest/ui": "^4.0.18",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
   }
 }
