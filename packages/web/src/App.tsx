@@ -5,7 +5,8 @@ import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
 import { useTasks } from './hooks/useTasks.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
-import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import { useTaskStream, type TaskStreamMessage } from './hooks/useTaskStream.ts';
+import { useAIStream, type AIStreamMessage } from './hooks/useAIStream.ts';
 import { useAuth } from './hooks/useAuth.ts';
 import { useAutoSave } from './hooks/useAutoSave.ts';
 import { OtpModal } from './components/OtpModal.tsx';
@@ -96,11 +97,18 @@ export default function App() {
 
   const ganttRef = useRef<GanttChartRef>(null);
 
-  // ── WebSocket message handler ────────────────────────────────────────────
-  const handleWsMessage = useCallback((msg: ServerMessage) => {
+  // ── Task stream message handler ────────────────────────────────────────────
+  const handleTaskStreamMessage = useCallback((msg: TaskStreamMessage) => {
     if (msg.type === 'tasks') {
       setTasks(msg.tasks as Task[]);
-    } else if (msg.type === 'token') {
+    } else if (msg.type === 'error') {
+      console.error('[TaskStream] Error:', msg.message);
+    }
+  }, [setTasks]);
+
+  // ── AI stream message handler ───────────────────────────────────────────────
+  const handleAIStreamMessage = useCallback((msg: AIStreamMessage) => {
+    if (msg.type === 'token') {
       setStreaming(prev => prev + (msg.content ?? ''));
     } else if (msg.type === 'done') {
       setAiThinking(false);
@@ -118,16 +126,17 @@ export default function App() {
         { id: String(++msgCounter), role: 'assistant', content: `Error: ${msg.message ?? 'unknown error'}` },
       ]);
     }
-  }, [setTasks]);
+  }, []);
 
-  const { send, connected } = useWebSocket(handleWsMessage, () => auth.accessToken, auth.accessToken);
-  const displayConnected = auth.isAuthenticated ? connected : true;
+  const { connected: tasksConnected } = useTaskStream(handleTaskStreamMessage, () => auth.accessToken);
+  const { streaming: aiStreaming, send: sendAI } = useAIStream(handleAIStreamMessage, () => auth.accessToken);
+  const displayConnected = auth.isAuthenticated ? tasksConnected : true;
 
   const handleSend = useCallback((text: string) => {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
     setAiThinking(true);
-    send({ type: 'chat', message: text });
-  }, [send]);
+    sendAI(text);
+  }, [sendAI]);
 
   const handleStartScreenSend = useCallback((text: string) => {
     setHasStartedChat(true);
@@ -499,9 +508,9 @@ export default function App() {
                   messages={messages}
                   streaming={streaming}
                   onSend={handleSend}
-                  disabled={aiThinking}
+                  disabled={aiThinking || aiStreaming}
                   connected={displayConnected}
-                  loading={aiThinking}
+                  loading={aiThinking || aiStreaming}
                   onClose={() => setChatSidebarVisible(false)}
                   isAuthenticated={auth.isAuthenticated}
                   onLoginRequired={() => setShowOtpModal(true)}
