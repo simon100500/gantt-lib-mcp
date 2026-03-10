@@ -2,7 +2,7 @@
  * AuthStore: Database operations for authentication
  *
  * Handles OTP lifecycle, user/project/session management for multi-user
- * authentication. All operations work with the SQLite database via getDb().
+ * authentication. All operations work with Prisma/PostgreSQL.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -28,6 +28,7 @@ interface CachedSession {
 export class AuthStore {
   private sessionCache = new Map<string, CachedSession>();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   /**
    * Create an OTP entry in the database
    *
@@ -40,9 +41,14 @@ export class AuthStore {
     const id = randomUUID();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
-    await db.execute({
-      sql: 'INSERT INTO otp_codes (id, email, code, expires_at, used) VALUES (?, ?, ?, ?, 0)',
-      args: [id, email, code, expiresAt],
+    await db.otpCode.create({
+      data: {
+        id,
+        email,
+        code,
+        expiresAt,
+        used: false,
+      },
     });
 
     return {
@@ -60,7 +66,7 @@ export class AuthStore {
    * Validates that:
    * - Email matches
    * - Code matches
-   * - Code is not already used (used=0)
+   * - Code is not already used (used=false)
    * - Code is not expired (expires_at > now)
    *
    * @param email - Email address from request
@@ -72,25 +78,23 @@ export class AuthStore {
     const now = new Date().toISOString();
 
     // Find valid OTP
-    const result = await db.execute({
-      sql: `
-        SELECT id, email, code, expires_at, used
-        FROM otp_codes
-        WHERE email = ? AND code = ? AND used = 0 AND expires_at > ?
-      `,
-      args: [email, code, now],
+    const otp = await db.otpCode.findFirst({
+      where: {
+        email,
+        code,
+        used: false,
+        expiresAt: { gt: now },
+      },
     });
 
-    if (result.rows.length === 0) {
+    if (!otp) {
       return false;
     }
 
-    const otpId = result.rows[0].id as string;
-
     // Mark as used
-    await db.execute({
-      sql: 'UPDATE otp_codes SET used = 1 WHERE id = ?',
-      args: [otpId],
+    await db.otpCode.update({
+      where: { id: otp.id },
+      data: { used: true },
     });
 
     return true;
@@ -106,17 +110,15 @@ export class AuthStore {
     const db = await getDb();
 
     // Try to find existing user
-    const existingResult = await db.execute({
-      sql: 'SELECT id, email, created_at FROM users WHERE email = ?',
-      args: [email],
+    let user = await db.user.findUnique({
+      where: { email },
     });
 
-    if (existingResult.rows.length > 0) {
-      const row = existingResult.rows[0];
+    if (user) {
       return {
-        id: row.id as string,
-        email: row.email as string,
-        createdAt: row.created_at as string,
+        id: user.id,
+        email: user.email,
+        createdAt: user.createdAt.toISOString(),
       };
     }
 
@@ -124,12 +126,15 @@ export class AuthStore {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
 
-    await db.execute({
-      sql: 'INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)',
-      args: [id, email, createdAt],
+    user = await db.user.create({
+      data: {
+        id,
+        email,
+        createdAt,
+      },
     });
 
-    return { id, email, createdAt };
+    return { id, email, createdAt: user.createdAt.toISOString() };
   }
 
   /**
@@ -151,20 +156,29 @@ export class AuthStore {
   async listProjects(userId: string): Promise<(Project & { taskCount: number })[]> {
     const db = await getDb();
 
-    const result = await db.execute({
-      sql: `SELECT p.id, p.user_id, p.name, p.created_at,
-              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count
-            FROM projects p WHERE p.user_id = ? ORDER BY p.created_at ASC`,
-      args: [userId],
+    const projects = await db.project.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
     });
 
-    return result.rows.map((row) => ({
-      id: row.id as string,
-      userId: row.user_id as string,
-      name: row.name as string,
-      createdAt: row.created_at as string,
-      taskCount: Number(row.task_count ?? 0),
-    }));
+    // Get task counts for each project
+    const result = await Promise.all(
+      projects.map(async (project) => {
+        const taskCount = await db.task.count({
+          where: { projectId: project.id },
+        });
+
+        return {
+          id: project.id,
+          userId: project.userId,
+          name: project.name,
+          createdAt: project.createdAt.toISOString(),
+          taskCount,
+        };
+      })
+    );
+
+    return result;
   }
 
   /**
@@ -179,9 +193,13 @@ export class AuthStore {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
 
-    await db.execute({
-      sql: 'INSERT INTO projects (id, user_id, name, created_at) VALUES (?, ?, ?, ?)',
-      args: [id, userId, name, createdAt],
+    await db.project.create({
+      data: {
+        id,
+        userId,
+        name,
+        createdAt,
+      },
     });
 
     return { id, userId, name, createdAt };
@@ -199,37 +217,37 @@ export class AuthStore {
     const db = await getDb();
 
     // Verify project belongs to user
-    const checkResult = await db.execute({
-      sql: 'SELECT id, user_id, name, created_at FROM projects WHERE id = ? AND user_id = ?',
-      args: [projectId, userId],
+    const project = await db.project.findFirst({
+      where: {
+        id: projectId,
+        userId,
+      },
     });
 
-    if (checkResult.rows.length === 0) {
+    if (!project) {
       return null;
     }
 
     // Update project name
-    await db.execute({
-      sql: 'UPDATE projects SET name = ? WHERE id = ?',
-      args: [name, projectId],
+    await db.project.update({
+      where: { id: projectId },
+      data: { name },
     });
 
     // Fetch and return updated project
-    const result = await db.execute({
-      sql: 'SELECT id, user_id, name, created_at FROM projects WHERE id = ?',
-      args: [projectId],
+    const updated = await db.project.findUnique({
+      where: { id: projectId },
     });
 
-    if (result.rows.length === 0) {
+    if (!updated) {
       return null;
     }
 
-    const row = result.rows[0];
     return {
-      id: row.id as string,
-      userId: row.user_id as string,
-      name: row.name as string,
-      createdAt: row.created_at as string,
+      id: updated.id,
+      userId: updated.userId,
+      name: updated.name,
+      createdAt: updated.createdAt.toISOString(),
     };
   }
 
@@ -253,12 +271,16 @@ export class AuthStore {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
     const createdAt = new Date().toISOString();
 
-    await db.execute({
-      sql: `
-        INSERT INTO sessions (id, user_id, project_id, access_token, refresh_token, expires_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      args: [id, userId, projectId, accessToken, refreshToken, expiresAt, createdAt],
+    await db.session.create({
+      data: {
+        id,
+        userId,
+        projectId,
+        accessToken,
+        refreshToken,
+        expiresAt,
+        createdAt,
+      },
     });
 
     return {
@@ -294,37 +316,31 @@ export class AuthStore {
     // Cache miss or expired - query database
     const db = await getDb();
 
-    const result = await db.execute({
-      sql: `
-        SELECT id, user_id, project_id, access_token, refresh_token, expires_at, created_at
-        FROM sessions
-        WHERE access_token = ?
-      `,
-      args: [accessToken],
+    const session = await db.session.findUnique({
+      where: { accessToken },
     });
 
-    if (result.rows.length === 0) {
+    if (!session) {
       return undefined;
     }
 
-    const row = result.rows[0];
-    const session: Session = {
-      id: row.id as string,
-      userId: row.user_id as string,
-      projectId: row.project_id as string,
-      accessToken: row.access_token as string,
-      refreshToken: row.refresh_token as string,
-      expiresAt: row.expires_at as string,
-      createdAt: row.created_at as string,
+    const result: Session = {
+      id: session.id,
+      userId: session.userId,
+      projectId: session.projectId,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      expiresAt: session.expiresAt.toISOString(),
+      createdAt: session.createdAt.toISOString(),
     };
 
     // Cache the session for 5 minutes
     this.sessionCache.set(accessToken, {
-      session,
+      session: result,
       expiresAt: now + this.CACHE_TTL_MS,
     });
 
-    return session;
+    return result;
   }
 
   /**
@@ -336,28 +352,22 @@ export class AuthStore {
   async findSessionByRefreshToken(refreshToken: string): Promise<Session | undefined> {
     const db = await getDb();
 
-    const result = await db.execute({
-      sql: `
-        SELECT id, user_id, project_id, access_token, refresh_token, expires_at, created_at
-        FROM sessions
-        WHERE refresh_token = ?
-      `,
-      args: [refreshToken],
+    const session = await db.session.findUnique({
+      where: { refreshToken },
     });
 
-    if (result.rows.length === 0) {
+    if (!session) {
       return undefined;
     }
 
-    const row = result.rows[0];
     return {
-      id: row.id as string,
-      userId: row.user_id as string,
-      projectId: row.project_id as string,
-      accessToken: row.access_token as string,
-      refreshToken: row.refresh_token as string,
-      expiresAt: row.expires_at as string,
-      createdAt: row.created_at as string,
+      id: session.id,
+      userId: session.userId,
+      projectId: session.projectId,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      expiresAt: session.expiresAt.toISOString(),
+      createdAt: session.createdAt.toISOString(),
     };
   }
 
@@ -378,13 +388,16 @@ export class AuthStore {
   ): Promise<void> {
     const db = await getDb();
 
-    // Clear cache for both old and new tokens (we don't have old token here, so clear new)
+    // Clear cache for the new access token
     // The old token will naturally expire from cache via TTL
     this.clearSessionCache(accessToken);
 
-    const result = await db.execute({
-      sql: 'UPDATE sessions SET access_token = ?, refresh_token = ? WHERE id = ?',
-      args: [accessToken, refreshToken, sessionId],
+    await db.session.update({
+      where: { id: sessionId },
+      data: {
+        accessToken,
+        refreshToken,
+      },
     });
   }
 
@@ -407,9 +420,8 @@ export class AuthStore {
   async deleteSession(sessionId: string): Promise<void> {
     const db = await getDb();
 
-    await db.execute({
-      sql: 'DELETE FROM sessions WHERE id = ?',
-      args: [sessionId],
+    await db.session.delete({
+      where: { id: sessionId },
     });
   }
 
@@ -422,9 +434,9 @@ export class AuthStore {
   async updateSessionProject(sessionId: string, projectId: string): Promise<void> {
     const db = await getDb();
 
-    await db.execute({
-      sql: 'UPDATE sessions SET project_id = ? WHERE id = ?',
-      args: [projectId, sessionId],
+    await db.session.update({
+      where: { id: sessionId },
+      data: { projectId },
     });
   }
 }

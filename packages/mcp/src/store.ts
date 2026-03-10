@@ -1,7 +1,7 @@
 /**
- * SQLite-backed task storage for MCP server
+ * Prisma-backed task storage for MCP server
  *
- * Replaces the in-memory Map-based store with a persistent SQLite store.
+ * Replaces SQLite with Prisma/PostgreSQL for multi-user real-time support.
  * All public methods are async. TaskScheduler is supplied an in-memory snapshot
  * loaded from the DB before each operation that requires date recalculation.
  */
@@ -9,61 +9,47 @@
 import { Task, CreateTaskInput, UpdateTaskInput, Message } from './types.js';
 import { TaskScheduler } from './scheduler.js';
 import { getDb } from './db.js';
-import type { Row } from '@libsql/client';
 
 // ---------------------------------------------------------------------------
-// Row helpers
+// Prisma helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Convert a dependency DB row to a TaskDependency object
+ * Convert a Prisma dependency to a TaskDependency object
  */
-function rowToDependency(row: Row): { taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag: number } {
+function prismaToDependency(dep: {
+  depTaskId: string;
+  type: string;
+  lag: number;
+}): { taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag: number } {
   return {
-    taskId: String(row['dep_task_id']),
-    type: String(row['type']) as 'FS' | 'SS' | 'FF' | 'SF',
-    lag: Number(row['lag'] ?? 0),
+    taskId: dep.depTaskId,
+    type: dep.type as 'FS' | 'SS' | 'FF' | 'SF',
+    lag: dep.lag ?? 0,
   };
 }
 
 /**
- * Convert a task DB row (without dependencies) to a partial Task object
+ * Convert a Prisma task (without dependencies) to a partial Task object
  * Note: project_id is read from the row but not included in the Task interface
  * (it's a DB concern only, not part of the gantt-lib Task shape)
  */
-function rowToTaskBase(row: Row): Omit<Task, 'dependencies'> {
+function prismaToTaskBase(task: {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  color: string | null;
+  progress: number;
+}): Omit<Task, 'dependencies'> {
   return {
-    id: String(row['id']),
-    name: String(row['name']),
-    startDate: String(row['start_date']),
-    endDate: String(row['end_date']),
-    color: row['color'] != null ? String(row['color']) : undefined,
-    progress: Number(row['progress'] ?? 0),
+    id: task.id,
+    name: task.name,
+    startDate: task.startDate,
+    endDate: task.endDate,
+    color: task.color ?? undefined,
+    progress: task.progress ?? 0,
   };
-}
-
-/**
- * Fetch dependencies for a task from the DB
- */
-async function fetchDependencies(db: Awaited<ReturnType<typeof getDb>>, taskId: string) {
-  const result = await db.execute({
-    sql: 'SELECT dep_task_id, type, lag FROM dependencies WHERE task_id = ?',
-    args: [taskId],
-  });
-  return result.rows.map(rowToDependency);
-}
-
-/**
- * Write updated task fields back to the DB (no dependency changes)
- */
-async function writeTaskFields(
-  db: Awaited<ReturnType<typeof getDb>>,
-  task: Task
-): Promise<void> {
-  await db.execute({
-    sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, progress = ? WHERE id = ?`,
-    args: [task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0, task.id],
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +57,7 @@ async function writeTaskFields(
 // ---------------------------------------------------------------------------
 
 /**
- * TaskStore provides async CRUD operations for Gantt tasks backed by SQLite.
+ * TaskStore provides async CRUD operations for Gantt tasks backed by Prisma/PostgreSQL.
  * Also manages AI dialog history (messages table).
  */
 export class TaskStore {
@@ -81,19 +67,18 @@ export class TaskStore {
    */
   private async loadSnapshot(projectId?: string): Promise<Map<string, Task>> {
     const db = await getDb();
-    const sql = projectId
-      ? 'SELECT * FROM tasks WHERE project_id = ?'
-      : 'SELECT * FROM tasks';
-    const result = projectId
-      ? await db.execute({ sql, args: [projectId] })
-      : await db.execute(sql);
-    const map = new Map<string, Task>();
+    const tasks = await db.task.findMany({
+      where: projectId
+        ? { projectId }
+        : undefined,
+      include: { dependencies: true },
+    });
 
-    for (const row of result.rows) {
-      const base = rowToTaskBase(row);
-      const deps = await fetchDependencies(db, base.id);
-      const task: Task = { ...base, dependencies: deps };
-      map.set(task.id, task);
+    const map = new Map<string, Task>();
+    for (const task of tasks) {
+      const base = prismaToTaskBase(task);
+      const deps = task.dependencies.map(prismaToDependency);
+      map.set(task.id, { ...base, dependencies: deps });
     }
 
     return map;
@@ -110,8 +95,19 @@ export class TaskStore {
     const updates = scheduler.recalculateDates(changedTaskId, skipStart);
 
     const db = await getDb();
+
+    // Batch update all changed tasks
     for (const [, updated] of updates) {
-      await writeTaskFields(db, updated);
+      await db.task.update({
+        where: { id: updated.id },
+        data: {
+          name: updated.name,
+          startDate: updated.startDate,
+          endDate: updated.endDate,
+          color: updated.color,
+          progress: updated.progress,
+        },
+      });
     }
   }
 
@@ -125,69 +121,75 @@ export class TaskStore {
    * @param projectId - Optional project ID to associate the task with
    */
   async create(input: CreateTaskInput, projectId?: string): Promise<Task> {
-    const id = crypto.randomUUID();
-    const task: Task = {
-      id,
-      name: input.name,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      color: input.color,
-      progress: input.progress ?? 0,
-      dependencies: input.dependencies ?? [],
-    };
-
     const db = await getDb();
+    const id = crypto.randomUUID();
 
     // Validate dependencies against existing tasks (any task can be a dependency, regardless of project)
-    if (task.dependencies && task.dependencies.length > 0) {
-      for (const dep of task.dependencies) {
-        const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [dep.taskId] });
-        if (check.rows.length === 0) {
-          throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
-        }
+    if (input.dependencies && input.dependencies.length > 0) {
+      const depTaskIds = input.dependencies.map(d => d.taskId);
+      const existingTasks = await db.task.findMany({
+        where: { id: { in: depTaskIds } },
+        select: { id: true },
+      });
+
+      const existingIds = new Set(existingTasks.map(t => t.id));
+      const missing = depTaskIds.filter(id => !existingIds.has(id));
+      if (missing.length > 0) {
+        throw new Error(`Dependency references non-existent task(s): ${missing.join(', ')}`);
       }
     }
 
-    // Insert task row (project_id is nullable)
-    const insertSql = projectId
-      ? `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      : `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`;
-    const insertArgs = projectId
-      ? [id, projectId, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0]
-      : [id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0];
-
-    await db.execute({
-      sql: insertSql,
-      args: insertArgs,
+    // Create task with dependencies in a transaction
+    const task = await db.task.create({
+      data: {
+        id,
+        projectId,
+        name: input.name,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        color: input.color,
+        progress: input.progress ?? 0,
+        dependencies: input.dependencies && input.dependencies.length > 0
+          ? {
+              create: input.dependencies.map(dep => ({
+                id: crypto.randomUUID(),
+                depTaskId: dep.taskId,
+                type: dep.type,
+                lag: dep.lag ?? 0,
+              })),
+            }
+          : undefined,
+      },
+      include: { dependencies: true },
     });
 
-    // Insert dependency rows
-    if (task.dependencies && task.dependencies.length > 0) {
-      for (const dep of task.dependencies) {
-        await db.execute({
-          sql: `INSERT INTO dependencies (id, task_id, dep_task_id, type, lag) VALUES (?, ?, ?, ?, ?)`,
-          args: [crypto.randomUUID(), id, dep.taskId, dep.type, dep.lag ?? 0],
-        });
-      }
-    }
-
     // Validate no circular dependencies
-    const snapshot = await this.loadSnapshot();
+    const snapshot = await this.loadSnapshot(projectId);
     const scheduler = new TaskScheduler(snapshot);
     if (scheduler.detectCycle(id)) {
-      // Rollback — remove what we just inserted
-      await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] });
+      // Rollback — delete what we just inserted
+      await db.task.delete({ where: { id } });
       throw new Error('Circular dependency detected: cannot create task with these dependencies');
     }
 
     // Recalculate dates if task has dependencies
     if (task.dependencies && task.dependencies.length > 0) {
       await this.runScheduler(id, false, projectId);
+      // Reload to get updated dates
+      const updated = await db.task.findUnique({
+        where: { id },
+        include: { dependencies: true },
+      });
+      if (updated) {
+        const base = prismaToTaskBase(updated);
+        const deps = updated.dependencies.map(prismaToDependency);
+        return { ...base, dependencies: deps };
+      }
     }
 
-    // Return the current state of the task from DB
-    const created = await this.get(id);
-    return created ?? task;
+    const base = prismaToTaskBase(task);
+    const deps = task.dependencies.map(prismaToDependency);
+    return { ...base, dependencies: deps };
   }
 
   /**
@@ -197,35 +199,28 @@ export class TaskStore {
    */
   async list(projectId?: string, includeGlobal = false): Promise<Task[]> {
     const db = await getDb();
-    let sql: string;
-    let result: Awaited<ReturnType<typeof db.execute>>;
 
     console.log('[STORE DEBUG] list() called with:', { projectId, includeGlobal });
 
-    if (projectId && includeGlobal) {
-      // Get both project-specific tasks AND global tasks (project_id=null)
-      sql = 'SELECT * FROM tasks WHERE project_id = ? OR project_id IS NULL';
-      result = await db.execute({ sql, args: [projectId] });
-    } else if (projectId) {
-      // Get only project-specific tasks
-      sql = 'SELECT * FROM tasks WHERE project_id = ?';
-      result = await db.execute({ sql, args: [projectId] });
-    } else {
-      // Get all tasks
-      sql = 'SELECT * FROM tasks';
-      result = await db.execute(sql);
-    }
+    const tasks = await db.task.findMany({
+      where: (projectId && includeGlobal)
+        ? { OR: [{ projectId }, { projectId: null }] }
+        : projectId
+          ? { projectId }
+          : undefined,
+      include: { dependencies: true },
+    });
 
-    console.log('[STORE DEBUG] SQL executed, rows returned:', result.rows.length);
+    console.log('[STORE DEBUG] Prisma query executed, rows returned:', tasks.length);
 
-    const tasks: Task[] = [];
-    for (const row of result.rows) {
-      const base = rowToTaskBase(row);
-      const deps = await fetchDependencies(db, base.id);
-      tasks.push({ ...base, dependencies: deps });
-    }
-    console.log('[STORE DEBUG] Returning tasks:', tasks.length, 'tasks');
-    return tasks;
+    const result = tasks.map(task => {
+      const base = prismaToTaskBase(task);
+      const deps = task.dependencies.map(prismaToDependency);
+      return { ...base, dependencies: deps };
+    });
+
+    console.log('[STORE DEBUG] Returning tasks:', result.length, 'tasks');
+    return result;
   }
 
   /**
@@ -233,10 +228,15 @@ export class TaskStore {
    */
   async get(id: string): Promise<Task | undefined> {
     const db = await getDb();
-    const result = await db.execute({ sql: 'SELECT * FROM tasks WHERE id = ?', args: [id] });
-    if (result.rows.length === 0) return undefined;
-    const base = rowToTaskBase(result.rows[0]);
-    const deps = await fetchDependencies(db, id);
+    const task = await db.task.findUnique({
+      where: { id },
+      include: { dependencies: true },
+    });
+
+    if (!task) return undefined;
+
+    const base = prismaToTaskBase(task);
+    const deps = task.dependencies.map(prismaToDependency);
     return { ...base, dependencies: deps };
   }
 
@@ -248,7 +248,23 @@ export class TaskStore {
     const task = await this.get(id);
     if (!task) return undefined;
 
+    const db = await getDb();
     const dependenciesUpdated = input.dependencies !== undefined;
+
+    // Validate new dependencies exist
+    if (input.dependencies) {
+      const depTaskIds = input.dependencies.map(d => d.taskId);
+      const existingTasks = await db.task.findMany({
+        where: { id: { in: depTaskIds } },
+        select: { id: true },
+      });
+
+      const existingIds = new Set(existingTasks.map(t => t.id));
+      const missing = depTaskIds.filter(id => !existingIds.has(id));
+      if (missing.length > 0) {
+        throw new Error(`Dependency references non-existent task(s): ${missing.join(', ')}`);
+      }
+    }
 
     const updated: Task = {
       ...task,
@@ -260,34 +276,36 @@ export class TaskStore {
       ...(input.dependencies !== undefined && { dependencies: input.dependencies }),
     };
 
-    const db = await getDb();
-
-    // Validate new dependencies exist
-    if (input.dependencies) {
-      for (const dep of input.dependencies) {
-        const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [dep.taskId] });
-        if (check.rows.length === 0) {
-          throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
-        }
-      }
-    }
-
-    // Write updated task fields
-    await db.execute({
-      sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, progress = ? WHERE id = ?`,
-      args: [updated.name, updated.startDate, updated.endDate, updated.color ?? null, updated.progress ?? 0, id],
+    // Update task
+    await db.task.update({
+      where: { id },
+      data: {
+        name: updated.name,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+        color: updated.color ?? null,
+        progress: updated.progress ?? 0,
+      },
     });
 
-    // Replace dependency rows if updated
+    // Replace dependencies if updated
     if (dependenciesUpdated) {
-      await db.execute({ sql: 'DELETE FROM dependencies WHERE task_id = ?', args: [id] });
+      // Delete existing dependencies
+      await db.dependency.deleteMany({
+        where: { taskId: id },
+      });
+
+      // Create new dependencies
       if (updated.dependencies && updated.dependencies.length > 0) {
-        for (const dep of updated.dependencies) {
-          await db.execute({
-            sql: `INSERT INTO dependencies (id, task_id, dep_task_id, type, lag) VALUES (?, ?, ?, ?, ?)`,
-            args: [crypto.randomUUID(), id, dep.taskId, dep.type, dep.lag ?? 0],
-          });
-        }
+        await db.dependency.createMany({
+          data: updated.dependencies.map(dep => ({
+            id: crypto.randomUUID(),
+            taskId: id,
+            depTaskId: dep.taskId,
+            type: dep.type,
+            lag: dep.lag ?? 0,
+          })),
+        });
       }
     }
 
@@ -308,12 +326,13 @@ export class TaskStore {
         await this.updateLagsForMovedTask(updated, input);
       }
 
-      // Load projectId from the task for scheduler scope
-      const db = await getDb();
-      const taskRow = await db.execute({ sql: 'SELECT project_id FROM tasks WHERE id = ?', args: [id] });
-      const projectId = taskRow.rows.length > 0 ? (taskRow.rows[0]['project_id'] as string | undefined) : undefined;
+      // Get projectId for scheduler scope
+      const taskRecord = await db.task.findUnique({
+        where: { id },
+        select: { projectId: true },
+      });
 
-      await this.runScheduler(id, skipStartTask, projectId);
+      await this.runScheduler(id, skipStartTask, taskRecord?.projectId ?? undefined);
     }
 
     return await this.get(id);
@@ -354,9 +373,12 @@ export class TaskStore {
         }
       }
 
-      await db.execute({
-        sql: 'UPDATE dependencies SET lag = ? WHERE task_id = ? AND dep_task_id = ?',
-        args: [newLag, task.id, dep.taskId],
+      await db.dependency.updateMany({
+        where: {
+          taskId: task.id,
+          depTaskId: dep.taskId,
+        },
+        data: { lag: newLag },
       });
     }
   }
@@ -376,8 +398,12 @@ export class TaskStore {
    */
   async delete(id: string): Promise<boolean> {
     const db = await getDb();
-    const result = await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] });
-    return (result.rowsAffected ?? 0) > 0;
+    try {
+      await db.task.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -387,13 +413,10 @@ export class TaskStore {
    */
   async deleteAll(projectId?: string): Promise<number> {
     const db = await getDb();
-    const sql = projectId
-      ? 'DELETE FROM tasks WHERE project_id = ?'
-      : 'DELETE FROM tasks';
-    const result = projectId
-      ? await db.execute({ sql, args: [projectId] })
-      : await db.execute(sql);
-    return result.rowsAffected ?? 0;
+    const result = await db.task.deleteMany({
+      where: projectId ? { projectId } : undefined,
+    });
+    return result.count;
   }
 
   /**
@@ -424,27 +447,33 @@ export class TaskStore {
     const db = await getDb();
 
     // Clear only the project's tasks (CASCADE removes deps); never touch other projects
-    if (projectId) {
-      await db.execute({ sql: 'DELETE FROM tasks WHERE project_id = ?', args: [projectId] });
-    } else {
-      await db.execute('DELETE FROM tasks');
-    }
+    await db.task.deleteMany({
+      where: projectId ? { projectId } : undefined,
+    });
 
     // Insert each task and its dependencies
     for (const task of tasks) {
-      await db.execute({
-        sql: `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [task.id, projectId ?? null, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
+      await db.task.create({
+        data: {
+          id: task.id,
+          projectId: projectId ?? null,
+          name: task.name,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          color: task.color ?? null,
+          progress: task.progress ?? 0,
+          dependencies: task.dependencies && task.dependencies.length > 0
+            ? {
+                create: task.dependencies.map(dep => ({
+                  id: crypto.randomUUID(),
+                  depTaskId: dep.taskId,
+                  type: dep.type,
+                  lag: dep.lag ?? 0,
+                })),
+              }
+            : undefined,
+        },
       });
-
-      if (task.dependencies && task.dependencies.length > 0) {
-        for (const dep of task.dependencies) {
-          await db.execute({
-            sql: `INSERT INTO dependencies (id, task_id, dep_task_id, type, lag) VALUES (?, ?, ?, ?, ?)`,
-            args: [crypto.randomUUID(), task.id, dep.taskId, dep.type, dep.lag ?? 0],
-          });
-        }
-      }
     }
 
     return tasks.length;
@@ -461,23 +490,27 @@ export class TaskStore {
    * @param projectId - Optional project ID to associate the message with
    */
   async addMessage(role: 'user' | 'assistant', content: string, projectId?: string): Promise<Message> {
+    const db = await getDb();
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
-    const db = await getDb();
-    const insertSql = projectId
-      ? `INSERT INTO messages (id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
-      : `INSERT INTO messages (id, role, content, created_at) VALUES (?, ?, ?, ?)`;
-    const insertArgs = projectId
-      ? [id, projectId, role, content, createdAt]
-      : [id, role, content, createdAt];
-
-    await db.execute({
-      sql: insertSql,
-      args: insertArgs,
+    const message = await db.message.create({
+      data: {
+        id,
+        projectId,
+        role,
+        content,
+        createdAt,
+      },
     });
 
-    return { id, projectId, role, content, createdAt };
+    return {
+      id: message.id,
+      projectId: message.projectId ?? undefined,
+      role: message.role as 'user' | 'assistant',
+      content: message.content,
+      createdAt: message.createdAt.toISOString(),
+    };
   }
 
   /**
@@ -486,18 +519,17 @@ export class TaskStore {
    */
   async getMessages(projectId?: string): Promise<Message[]> {
     const db = await getDb();
-    const sql = projectId
-      ? 'SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC'
-      : 'SELECT * FROM messages ORDER BY created_at ASC';
-    const result = projectId
-      ? await db.execute({ sql, args: [projectId] })
-      : await db.execute(sql);
-    return result.rows.map(row => ({
-      id: String(row['id']),
-      projectId: row['project_id'] != null ? String(row['project_id']) : undefined,
-      role: String(row['role']) as 'user' | 'assistant',
-      content: String(row['content']),
-      createdAt: String(row['created_at']),
+    const messages = await db.message.findMany({
+      where: projectId ? { projectId } : undefined,
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return messages.map(msg => ({
+      id: msg.id,
+      projectId: msg.projectId ?? undefined,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+      createdAt: msg.createdAt.toISOString(),
     }));
   }
 }
