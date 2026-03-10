@@ -23,8 +23,11 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@prisma/client": "^6.19.2",
     "@types/node": "^22.10.2",
     "@vitest/ui": "^4.0.18",
+    "pg": "^8.20.0",
+    "prisma": "^6.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.0.18"
   }

@@ -289,7 +289,7 @@ Plans:
 **Goal:** Replace WebSocket with Server-Sent Events (SSE), migrate SQLite to PostgreSQL with NOTIFY/LISTEN triggers for real-time updates
 **Requirements**: None (architectural migration)
 **Depends on:** Phase 13
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 13.1-00-PLAN.md — Wave 0 test scaffold: Vitest setup, SSE endpoint test contracts, client hook test contracts

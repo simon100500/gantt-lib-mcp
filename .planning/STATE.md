@@ -3,10 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
+last_updated: "2026-03-10T21:21:56.949Z"
+last_activity: "2026-03-09 - Completed quick task 022: Fix scrollbar persisting after clearing chat input"
+progress:
+  total_phases: 15
+  completed_phases: 10
+  total_plans: 27
+  completed_plans: 26
+  percent: 96
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: completed
 last_updated: "2026-03-09T15:36:45.041Z"
 last_activity: "2026-03-09 - Completed quick task 018: прочти доки на новую версию и добавь добавление задач (вручную)"
 progress:
-  total_phases: 12
+  [██████████] 96%
   completed_phases: 9
   total_plans: 24
   completed_plans: 24
@@ -202,6 +217,7 @@ progress:
 | Phase quick P18 | 2 minutes | 1 tasks | 2 files |
 | Phase quick-19 P19 | 30 | 2 tasks | 2 files |
 | Phase 12 P01 | 91 | 3 tasks | 3 files |
+| Phase 13.1 P00 | 8min | 4 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -378,6 +394,8 @@ Last activity: 2026-03-09 - Completed quick task 022: Fix scrollbar persisting a
 - Phase 11 added: complete-deisgn-system
 - Phase 12 added: fix-auto-save-infinite-loop
 - Phase 13 added: start-screen с полем ввода промпта и кнопкой "Пустой график" вместо надписи "No tasks yet"
+- Phase 13.1 inserted after Phase 13: sse-architecture (URGENT)
+- Phase 14 added: cost-optimisation
 
 ### Phase 7 Architecture Context
 

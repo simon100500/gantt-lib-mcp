@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id
+  email     String   @unique
+  createdAt DateTime @map("created_at")
+  projects  Project[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+model Project {
+  id        String   @id
+  userId    String   @map("user_id")
+  name      String
+  createdAt DateTime @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  messages  Message[]
+  sessions  Session[]
+
+  @@map("projects")
+}
+
+model Session {
+  id           String   @id
+  userId       String   @map("user_id")
+  projectId    String   @map("project_id")
+  accessToken  String   @unique @map("access_token")
+  refreshToken String   @unique @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @map("created_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model OtpCode {
+  id        String   @id
+  email     String
+  code      String
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false) @map("used")
+
+  @@map("otp_codes")
+}
+
+model Task {
+  id        String   @id
+  projectId String?  @map("project_id")
+  name      String
+  startDate String   @map("start_date")
+  endDate   String   @map("end_date")
+  color     String?
+  progress  Float    @default(0)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dependencies Dependency[]
+
+  @@map("tasks")
+}
+
+model Dependency {
+  id        String   @id
+  taskId    String   @map("task_id")
+  depTaskId String   @map("dep_task_id")
+  type      String   // 'FS', 'SS', 'FF', 'SF'
+  lag       Float    @default(0)
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("dependencies")
+}
+
+model Message {
+  id        String   @id
+  projectId String?  @map("project_id")
+  role      String   // 'user' or 'assistant'
+  content   String
+  createdAt DateTime @map("created_at")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}

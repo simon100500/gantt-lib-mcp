@@ -17,10 +17,11 @@
     "test": "node --test src/scheduler.test.ts"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@prisma/client": "^6.19.2",
     "@qwen-code/sdk": "^0.1.5",
-    "dotenv": "^17.3.1"
+    "dotenv": "^17.3.1",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
