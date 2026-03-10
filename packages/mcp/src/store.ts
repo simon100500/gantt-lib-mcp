@@ -494,22 +494,17 @@ export class TaskStore {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
-    const message = await db.message.create({
-      data: {
-        id,
-        projectId,
-        role,
-        content,
-        createdAt,
-      },
-    });
+    await db.$executeRaw`
+      INSERT INTO messages (id, project_id, role, content, created_at)
+      VALUES (${id}, ${projectId ?? null}, ${role}, ${content}, ${createdAt})
+    `;
 
     return {
-      id: message.id,
-      projectId: message.projectId ?? undefined,
-      role: message.role as 'user' | 'assistant',
-      content: message.content,
-      createdAt: message.createdAt.toISOString(),
+      id,
+      projectId,
+      role,
+      content,
+      createdAt,
     };
   }
 

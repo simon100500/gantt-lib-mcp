@@ -39,17 +39,14 @@ export class AuthStore {
   async createOtp(email: string, code: string): Promise<OtpEntry> {
     const db = await getDb();
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+    const expiresAtDate = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+    const expiresAt = expiresAtDate.toISOString();
 
-    await db.otpCode.create({
-      data: {
-        id,
-        email,
-        code,
-        expiresAt,
-        used: false,
-      },
-    });
+    // Use $executeRaw to avoid Prisma's DateTime serialization issue with PostgreSQL
+    await db.$executeRaw`
+      INSERT INTO otp_codes (id, email, code, expires_at, used)
+      VALUES (${id}, ${email}, ${code}, ${expiresAt}, false)
+    `;
 
     return {
       id,
@@ -75,7 +72,7 @@ export class AuthStore {
    */
   async consumeOtp(email: string, code: string): Promise<boolean> {
     const db = await getDb();
-    const now = new Date().toISOString();
+    const now = new Date(); // Date object for comparison
 
     // Find valid OTP
     const otp = await db.otpCode.findFirst({
@@ -83,7 +80,7 @@ export class AuthStore {
         email,
         code,
         used: false,
-        expiresAt: { gt: now },
+        expiresAt: { gt: now }, // Compare with Date object
       },
     });
 
@@ -124,17 +121,14 @@ export class AuthStore {
 
     // Create new user
     const id = randomUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = new Date().toISOString(); // ISO string for $executeRaw
 
-    user = await db.user.create({
-      data: {
-        id,
-        email,
-        createdAt,
-      },
-    });
+    await db.$executeRaw`
+      INSERT INTO users (id, email, created_at)
+      VALUES (${id}, ${email}, ${createdAt})
+    `;
 
-    return { id, email, createdAt: user.createdAt.toISOString() };
+    return { id, email, createdAt };
   }
 
   /**
@@ -191,16 +185,12 @@ export class AuthStore {
   async createProject(userId: string, name: string): Promise<Project> {
     const db = await getDb();
     const id = randomUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = new Date().toISOString(); // ISO string for $executeRaw
 
-    await db.project.create({
-      data: {
-        id,
-        userId,
-        name,
-        createdAt,
-      },
-    });
+    await db.$executeRaw`
+      INSERT INTO projects (id, user_id, name, created_at)
+      VALUES (${id}, ${userId}, ${name}, ${createdAt})
+    `;
 
     return { id, userId, name, createdAt };
   }
@@ -268,20 +258,13 @@ export class AuthStore {
   ): Promise<Session> {
     const db = await getDb();
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days - ISO string
+    const createdAt = new Date().toISOString(); // ISO string
 
-    await db.session.create({
-      data: {
-        id,
-        userId,
-        projectId,
-        accessToken,
-        refreshToken,
-        expiresAt,
-        createdAt,
-      },
-    });
+    await db.$executeRaw`
+      INSERT INTO sessions (id, user_id, project_id, access_token, refresh_token, expires_at, created_at)
+      VALUES (${id}, ${userId}, ${projectId}, ${accessToken}, ${refreshToken}, ${expiresAt}, ${createdAt})
+    `;
 
     return {
       id,
