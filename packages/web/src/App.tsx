@@ -218,9 +218,18 @@ export default function App() {
       setShowOtpModal(true);
       return;
     }
-    // For authenticated users, show create project modal
-    setShowCreateProjectModal(true);
-  }, [auth.isAuthenticated]);
+    // For authenticated users, create project with auto-generated name
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    const autoName = `Проект ${day}-${month}-${year}`;
+
+    const newProject = await auth.createProject(autoName);
+    if (newProject) {
+      auth.switchProject(newProject.id);
+    }
+  }, [auth.isAuthenticated, auth.createProject, auth.switchProject]);
 
   const handleSaveNewProject = useCallback(async (name: string) => {
     const newProject = await auth.createProject(name);

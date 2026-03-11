@@ -74,7 +74,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
           className="w-full"
           size="sm"
         >
-          <Plus className="mr-2 h-4 w-4" /> Создать проект
+          <Plus className="mr-2 h-4 w-4" /> Новый проект
         </Button>
       </div>
     </div>
