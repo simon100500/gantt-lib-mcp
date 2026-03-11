@@ -74,7 +74,7 @@ export default function App() {
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
   // Autosave to server on any chart change (authenticated only; demo mode saves to localStorage in useLocalTasks)
-  useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
+  const { savingState } = useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -99,6 +99,7 @@ export default function App() {
   // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
+      console.log('[App] Received tasks via WebSocket, count:', msg.tasks?.length);
       setTasks(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
       setStreaming(prev => prev + (msg.content ?? ''));
@@ -479,6 +480,38 @@ export default function App() {
                   <span className="font-mono text-[11px] text-slate-400">
                     {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
                   </span>
+
+                  {/* Saving status indicator */}
+                  {auth.isAuthenticated && (
+                    <span
+                      className={cn(
+                        'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                        savingState === 'saving' && 'text-amber-600',
+                        savingState === 'saved' && 'text-emerald-600',
+                        savingState === 'error' && 'text-destructive',
+                      )}
+                    >
+                      {savingState === 'saving' && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 animate-pulse" />
+                          Сохранение…
+                        </>
+                      )}
+                      {savingState === 'saved' && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                          Сохранено
+                        </>
+                      )}
+                      {savingState === 'error' && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-destructive" />
+                          Ошибка сохранения
+                        </>
+                      )}
+                    </span>
+                  )}
+
                   <span
                     className={cn(
                       'flex items-center gap-1.5 font-mono text-[11px] transition-colors',

@@ -1,7 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Task, TaskDependency } from '../types.ts';
 
-const DEBOUNCE_MS = 500;
+// Export saving state so components can display it
+export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
+
+export interface UseAutoSaveResult {
+  savingState: SavingState;
+}
+
+// Track saving state globally (single instance)
+let globalSavingState: SavingState = 'idle';
+const listeners = new Set<(state: SavingState) => void>();
+
+function notifyListeners(state: SavingState) {
+  globalSavingState = state;
+  listeners.forEach(listener => listener(state));
+}
 
 /**
  * Computes a stable hash from task data for deep equality comparison.
@@ -36,7 +50,7 @@ function computeTasksHash(tasks: Task[]): string {
 /**
  * Automatically saves tasks to the server whenever the tasks array changes.
  * Only fires for authenticated users (accessToken present).
- * Debounced to avoid sending a request on every keystroke.
+ * Saves immediately without debouncing to ensure changes are persisted.
  *
  * Uses deep comparison via hash to prevent saves when only array references
  * change but data remains identical (fixes infinite loop with gantt-lib onChange).
@@ -47,16 +61,28 @@ function computeTasksHash(tasks: Task[]): string {
 export function useAutoSave(
   tasks: Task[],
   accessToken: string | null,
-): void {
+): UseAutoSaveResult {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevTokenRef = useRef<string | null>(null);
   const skipCountRef = useRef(0);
   const lastSavedHashRef = useRef<string>('');
+  const saveInProgressRef = useRef(false);
+  const [savingState, setSavingState] = useState<SavingState>(globalSavingState);
+
+  // Subscribe to global saving state changes
+  useEffect(() => {
+    const listener = (state: SavingState) => setSavingState(state);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!accessToken) {
       prevTokenRef.current = null;
       lastSavedHashRef.current = '';
+      console.log('[autosave] No access token, skipping save');
       return;
     }
 
@@ -66,10 +92,12 @@ export function useAutoSave(
       prevTokenRef.current = accessToken;
       skipCountRef.current = 2;
       lastSavedHashRef.current = '';
+      console.log('[autosave] Token changed, skipping next 2 updates, token:', accessToken.substring(0, 10) + '...');
       return;
     }
 
     if (skipCountRef.current > 0) {
+      console.log('[autosave] Skipping update due to skipCount, remaining:', skipCountRef.current);
       skipCountRef.current--;
       return;
     }
@@ -79,12 +107,27 @@ export function useAutoSave(
 
     // Skip save if data hasn't changed
     if (currentHash === lastSavedHashRef.current) {
+      console.log('[autosave] Skipping save - data unchanged');
       return;
     }
 
+    // Skip if a save is already in progress for the same data
+    if (saveInProgressRef.current && currentHash === lastSavedHashRef.current) {
+      console.log('[autosave] Save already in progress for this data');
+      return;
+    }
+
+    console.log('[autosave] Saving immediately, tasks:', tasks.length);
+
+    // Clear any pending timer
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    timerRef.current = setTimeout(async () => {
+    // Save immediately (no debounce)
+    const saveTasks = async () => {
+      saveInProgressRef.current = true;
+      notifyListeners('saving');
+
+      console.log('[autosave] Executing save now, tasks:', tasks.length);
       try {
         const response = await fetch('/api/tasks', {
           method: 'PUT',
@@ -98,16 +141,48 @@ export function useAutoSave(
         if (response.ok) {
           // Only update hash after successful save
           lastSavedHashRef.current = currentHash;
+          console.log('[autosave] Save successful');
+          notifyListeners('saved');
+
+          // Reset to 'idle' after 2 seconds
+          setTimeout(() => {
+            if (globalSavingState === 'saved') {
+              notifyListeners('idle');
+            }
+          }, 2000);
         } else {
           console.warn('[autosave] Failed to save tasks:', response.status, response.statusText);
+          notifyListeners('error');
+
+          // Reset to 'idle' after 2 seconds
+          setTimeout(() => {
+            if (globalSavingState === 'error') {
+              notifyListeners('idle');
+            }
+          }, 2000);
         }
       } catch (err) {
         console.warn('[autosave] Failed to save tasks:', err);
+        notifyListeners('error');
+
+        // Reset to 'idle' after 2 seconds
+        setTimeout(() => {
+          if (globalSavingState === 'error') {
+            notifyListeners('idle');
+          }
+        }, 2000);
+      } finally {
+        saveInProgressRef.current = false;
       }
-    }, DEBOUNCE_MS);
+    };
+
+    // Execute the save
+    saveTasks();
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [tasks, accessToken]);
+
+  return { savingState };
 }
