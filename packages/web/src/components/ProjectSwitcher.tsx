@@ -34,7 +34,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
 
       {/* Projects list */}
       <div className="flex flex-col gap-2 mt-4 flex-1 overflow-y-auto">
-        <p className="text-[11px] text-slate-500 font-medium sticky top-0 bg-white py-1">Все проекты</p>
+        <p className="text-xs text-slate-500 font-medium sticky top-0 bg-white py-1">Все проекты</p>
 
         {/* All projects as simple list */}
         {projects.length > 0 ? (
@@ -52,9 +52,9 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 )}
               >
                 <span className="flex items-center gap-2 min-w-0">
-                  {p.id === currentProject.id && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                  {p.id !== currentProject.id && <span className="w-3.5 shrink-0" />}
-                  <span className="truncate text-xs">{p.name}</span>
+                  {p.id === currentProject.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                  {p.id !== currentProject.id && <span className="w-4 shrink-0" />}
+                  <span className="truncate text-sm">{p.name}</span>
                 </span>
                 {p.taskCount !== undefined && (
                   <span className="text-xs text-slate-400 shrink-0">{p.taskCount}</span>
