@@ -74,7 +74,7 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
     .join('');
 }
 
-function isMutationIntent(message: string): boolean {
+export function isMutationIntent(message: string): boolean {
   const normalized = message.toLowerCase();
   const russianMutationMarkers = [
     '\u0434\u043e\u0431\u0430\u0432',
@@ -89,13 +89,19 @@ function isMutationIntent(message: string): boolean {
     '\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d',
     '\u0431\u043b\u043e\u043a \u0440\u0430\u0431\u043e\u0442',
     '\u0440\u0430\u0431\u043e\u0442\u0443 \u0432 \u043a\u043e\u043d\u0435\u0446',
+    '\u0432\u043b\u043e\u0436',
+    '\u043f\u043e\u0434\u0437\u0430\u0434\u0430',
+    '\u0434\u043e\u0447\u0435\u0440\u043d',
+    '\u0432\u043d\u0443\u0442\u0440\u044c',
+    '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u0432',
+    '\u0441\u0434\u0435\u043b\u0430\u0439 \u0438\u0435\u0440\u0430\u0440\u0445',
   ];
 
   if (russianMutationMarkers.some((marker) => normalized.includes(marker))) {
     return true;
   }
 
-  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b)/i.test(message);
+  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b)/i.test(message);
 }
 
 function normalizeTask(task: ComparableTask): ComparableTask {
