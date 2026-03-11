@@ -78,7 +78,7 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
         </h1>
 
         {/* Textarea form block */}
-        <form onSubmit={handleSubmit} className="flex flex-col -mt-8">
+        <form onSubmit={handleSubmit} className="flex flex-col">
           <div className="relative">
             <textarea
               ref={textareaRef}
