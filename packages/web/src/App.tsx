@@ -600,7 +600,7 @@ export default function App() {
                 <GanttChart
                   ref={ganttRef}
                   tasks={tasks}
-                  onChange={hasShareToken ? undefined : setTasks}
+                  onChange={setTasks}
                   dayWidth={24}
                   rowHeight={36}
                   containerHeight="calc(100vh - 120px)"
@@ -608,15 +608,15 @@ export default function App() {
                   taskListWidth={650}
                   onValidateDependencies={handleValidation}
                   disableConstraints={!autoSchedule}
-                  onCascade={hasShareToken || !autoSchedule ? undefined : handleCascade}
-                  disableTaskNameEditing={hasShareToken ? true : disableTaskNameEditing}
-                  disableDependencyEditing={hasShareToken ? true : disableDependencyEditing}
+                  onCascade={!autoSchedule ? undefined : handleCascade}
+                  disableTaskNameEditing={disableTaskNameEditing}
+                  disableDependencyEditing={disableDependencyEditing}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
-                  onAdd={hasShareToken ? undefined : handleAddTask}
-                  onDelete={hasShareToken ? undefined : handleDeleteTask}
-                  onInsertAfter={hasShareToken ? undefined : handleInsertAfterTask}
-                  onReorder={hasShareToken ? undefined : handleReorderTasks}
+                  onAdd={handleAddTask}
+                  onDelete={handleDeleteTask}
+                  onInsertAfter={handleInsertAfterTask}
+                  onReorder={handleReorderTasks}
                 />
               )}
 
