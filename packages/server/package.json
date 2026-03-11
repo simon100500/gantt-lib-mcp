@@ -4,6 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
+    "prebuild": "npm run build -w ../mcp",
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && node --watch dist/bootstrap.js",
     "dev:watch": "concurrently \"tsc -p tsconfig.json --watch\" \"node --watch dist/bootstrap.js\"",
