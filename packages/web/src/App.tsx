@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, ChevronDown, LogOut, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -14,6 +14,7 @@ import { CreateProjectModal } from './components/CreateProjectModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
 import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './components/ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
 
@@ -350,20 +351,34 @@ export default function App() {
 
         {!auth.isAuthenticated ? (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500">
+            <span className="text-sm font-medium text-slate-600">
               Войдите, чтобы сохранить график
             </span>
             <LoginButton onClick={() => setShowOtpModal(true)} />
           </div>
         ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={auth.logout}
-            className="text-slate-500 hover:text-slate-900 text-xs h-7"
-          >
-            Выйти
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
+              >
+                <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="truncate text-slate-700">
+                {auth.user?.email ?? 'Account'}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Выйти</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </header>
 
