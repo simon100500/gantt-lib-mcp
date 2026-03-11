@@ -482,6 +482,7 @@ export default function App() {
 
           {/* Logo */}
           <div className="flex items-center gap-2 text-base font-cascadia tracking-tight select-none">
+            <img src="/favicon.svg" alt="GetGantt" className="h-5 w-5" />
             <span className="text-slate-900">GetGantt</span>
           </div>
 
