@@ -20,6 +20,11 @@ import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 
+const reliableTaskStore = taskStore as typeof taskStore & {
+  deleteAll(projectId?: string, source?: 'api' | 'manual-save' | 'agent' | 'system'): Promise<number>;
+  importTasks(jsonData: string, projectId?: string, source?: 'api' | 'manual-save' | 'agent' | 'system'): Promise<number>;
+};
+
 const fastify = Fastify({ logger: true });
 await fastify.register(websocket);
 await registerAuthRoutes(fastify);
@@ -66,7 +71,7 @@ fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply
 });
 
 fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const count = await taskStore.deleteAll(req.user!.projectId);
+  const count = await reliableTaskStore.deleteAll(req.user!.projectId, 'api');
   broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks: [] });
   return reply.send({ deleted: count });
 });
@@ -76,7 +81,7 @@ fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) =
   if (!Array.isArray(tasks)) {
     return reply.status(400).send({ error: 'body must be an array of tasks' });
   }
-  const count = await taskStore.importTasks(JSON.stringify(tasks), req.user!.projectId);
+  const count = await reliableTaskStore.importTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
   // Broadcast updated tasks to all sessions for this project so other browser tabs sync
   broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks });
   return reply.send({ saved: count });

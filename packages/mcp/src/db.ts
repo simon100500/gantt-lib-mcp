@@ -104,5 +104,26 @@ export async function getDb(): Promise<Client> {
     )
   `);
 
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS task_revisions (
+      project_id TEXT PRIMARY KEY,
+      revision INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS task_mutations (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      run_id TEXT,
+      session_id TEXT,
+      source TEXT NOT NULL CHECK(source IN ('agent', 'manual-save', 'api', 'system')),
+      mutation_type TEXT NOT NULL CHECK(mutation_type IN ('create', 'update', 'delete', 'delete_all', 'import')),
+      task_id TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+
   return _db;
 }

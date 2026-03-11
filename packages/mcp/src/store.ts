@@ -6,7 +6,7 @@
  * loaded from the DB before each operation that requires date recalculation.
  */
 
-import { Task, CreateTaskInput, UpdateTaskInput, Message } from './types.js';
+import { Task, CreateTaskInput, UpdateTaskInput, Message, TaskMutationEvent, TaskMutationSource } from './types.js';
 import { TaskScheduler } from './scheduler.js';
 import { getDb } from './db.js';
 import type { Row } from '@libsql/client';
@@ -67,6 +67,15 @@ async function writeTaskFields(
   });
 }
 
+function resolveMutationSource(source?: TaskMutationSource): TaskMutationSource {
+  if (source) return source;
+  const envSource = process.env.AI_MUTATION_SOURCE;
+  if (envSource === 'agent' || envSource === 'manual-save' || envSource === 'api' || envSource === 'system') {
+    return envSource;
+  }
+  return 'system';
+}
+
 // ---------------------------------------------------------------------------
 // TaskStore
 // ---------------------------------------------------------------------------
@@ -76,6 +85,107 @@ async function writeTaskFields(
  * Also manages AI dialog history (messages table).
  */
 export class TaskStore {
+  private async bumpTaskRevision(projectId?: string): Promise<number> {
+    const db = await getDb();
+    const scopeId = projectId ?? '__global__';
+    const updatedAt = new Date().toISOString();
+    await db.execute({
+      sql: `
+        INSERT INTO task_revisions (project_id, revision, updated_at)
+        VALUES (?, 1, ?)
+        ON CONFLICT(project_id) DO UPDATE SET
+          revision = revision + 1,
+          updated_at = excluded.updated_at
+      `,
+      args: [scopeId, updatedAt],
+    });
+    const result = await db.execute({
+      sql: 'SELECT revision FROM task_revisions WHERE project_id = ?',
+      args: [scopeId],
+    });
+    return Number(result.rows[0]?.['revision'] ?? 0);
+  }
+
+  private async recordMutation(
+    mutationType: TaskMutationEvent['mutationType'],
+    projectId?: string,
+    taskId?: string,
+    source?: TaskMutationSource
+  ): Promise<void> {
+    const db = await getDb();
+    const mutationSource = resolveMutationSource(source);
+    const runId = process.env.AI_RUN_ID;
+    const sessionId = process.env.AI_SESSION_ID;
+    const createdAt = new Date().toISOString();
+
+    await this.bumpTaskRevision(projectId);
+    await db.execute({
+      sql: `
+        INSERT INTO task_mutations (id, project_id, run_id, session_id, source, mutation_type, task_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      args: [crypto.randomUUID(), projectId ?? null, runId ?? null, sessionId ?? null, mutationSource, mutationType, taskId ?? null, createdAt],
+    });
+    await writeMcpDebugLog('task_mutation_recorded', {
+      projectId,
+      runId,
+      sessionId,
+      source: mutationSource,
+      mutationType,
+      taskId,
+    });
+  }
+
+  async getTaskRevision(projectId?: string): Promise<number> {
+    const db = await getDb();
+    const scopeId = projectId ?? '__global__';
+    const result = await db.execute({
+      sql: 'SELECT revision FROM task_revisions WHERE project_id = ?',
+      args: [scopeId],
+    });
+    return Number(result.rows[0]?.['revision'] ?? 0);
+  }
+
+  async getMutationEventsByRun(runId: string, projectId?: string): Promise<TaskMutationEvent[]> {
+    const db = await getDb();
+    const sql = projectId
+      ? 'SELECT * FROM task_mutations WHERE run_id = ? AND project_id = ? ORDER BY created_at ASC'
+      : 'SELECT * FROM task_mutations WHERE run_id = ? ORDER BY created_at ASC';
+    const result = projectId
+      ? await db.execute({ sql, args: [runId, projectId] })
+      : await db.execute({ sql, args: [runId] });
+    return result.rows.map((row) => ({
+      id: String(row['id']),
+      projectId: row['project_id'] != null ? String(row['project_id']) : undefined,
+      runId: row['run_id'] != null ? String(row['run_id']) : undefined,
+      sessionId: row['session_id'] != null ? String(row['session_id']) : undefined,
+      source: String(row['source']) as TaskMutationSource,
+      mutationType: String(row['mutation_type']) as TaskMutationEvent['mutationType'],
+      taskId: row['task_id'] != null ? String(row['task_id']) : undefined,
+      createdAt: String(row['created_at']),
+    }));
+  }
+
+  async getMutationEventsSince(since: string, projectId?: string): Promise<TaskMutationEvent[]> {
+    const db = await getDb();
+    const sql = projectId
+      ? 'SELECT * FROM task_mutations WHERE created_at >= ? AND project_id = ? ORDER BY created_at ASC'
+      : 'SELECT * FROM task_mutations WHERE created_at >= ? ORDER BY created_at ASC';
+    const result = projectId
+      ? await db.execute({ sql, args: [since, projectId] })
+      : await db.execute({ sql, args: [since] });
+    return result.rows.map((row) => ({
+      id: String(row['id']),
+      projectId: row['project_id'] != null ? String(row['project_id']) : undefined,
+      runId: row['run_id'] != null ? String(row['run_id']) : undefined,
+      sessionId: row['session_id'] != null ? String(row['session_id']) : undefined,
+      source: String(row['source']) as TaskMutationSource,
+      mutationType: String(row['mutation_type']) as TaskMutationEvent['mutationType'],
+      taskId: row['task_id'] != null ? String(row['task_id']) : undefined,
+      createdAt: String(row['created_at']),
+    }));
+  }
+
   /**
    * Load all tasks from DB into a Map (used as scheduler snapshot)
    * @param projectId - Optional project ID to filter tasks by
@@ -125,7 +235,7 @@ export class TaskStore {
    * @param input - Task creation input
    * @param projectId - Optional project ID to associate the task with
    */
-  async create(input: CreateTaskInput, projectId?: string): Promise<Task> {
+  async create(input: CreateTaskInput, projectId?: string, source?: TaskMutationSource): Promise<Task> {
     await writeMcpDebugLog('store_create_started', {
       projectId,
       input,
@@ -192,6 +302,7 @@ export class TaskStore {
 
     // Return the current state of the task from DB
     const created = await this.get(id);
+    await this.recordMutation('create', projectId, id, source);
     await writeMcpDebugLog('store_create_completed', {
       projectId,
       taskId: id,
@@ -260,7 +371,7 @@ export class TaskStore {
    * Update a task. Replaces dependency rows if dependencies are provided.
    * Runs scheduler recalculation if dates or dependencies changed.
    */
-  async update(id: string, input: UpdateTaskInput): Promise<Task | undefined> {
+  async update(id: string, input: UpdateTaskInput, source?: TaskMutationSource): Promise<Task | undefined> {
     await writeMcpDebugLog('store_update_started', {
       taskId: id,
       input,
@@ -269,6 +380,9 @@ export class TaskStore {
     if (!task) return undefined;
 
     const dependenciesUpdated = input.dependencies !== undefined;
+    const db = await getDb();
+    const taskRow = await db.execute({ sql: 'SELECT project_id FROM tasks WHERE id = ?', args: [id] });
+    const projectId = taskRow.rows.length > 0 ? (taskRow.rows[0]['project_id'] as string | undefined) : undefined;
 
     const updated: Task = {
       ...task,
@@ -279,8 +393,6 @@ export class TaskStore {
       ...(input.progress !== undefined && { progress: input.progress }),
       ...(input.dependencies !== undefined && { dependencies: input.dependencies }),
     };
-
-    const db = await getDb();
 
     // Validate new dependencies exist
     if (input.dependencies) {
@@ -329,14 +441,11 @@ export class TaskStore {
       }
 
       // Load projectId from the task for scheduler scope
-      const db = await getDb();
-      const taskRow = await db.execute({ sql: 'SELECT project_id FROM tasks WHERE id = ?', args: [id] });
-      const projectId = taskRow.rows.length > 0 ? (taskRow.rows[0]['project_id'] as string | undefined) : undefined;
-
       await this.runScheduler(id, skipStartTask, projectId);
     }
 
     const result = await this.get(id);
+    await this.recordMutation('update', projectId, id, source);
     await writeMcpDebugLog('store_update_completed', {
       taskId: id,
       result,
@@ -399,10 +508,15 @@ export class TaskStore {
    * Delete a task by ID. CASCADE removes its dependency rows.
    * @returns true if deleted, false if not found
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, source?: TaskMutationSource): Promise<boolean> {
     const db = await getDb();
+    const taskRow = await db.execute({ sql: 'SELECT project_id FROM tasks WHERE id = ?', args: [id] });
+    const projectId = taskRow.rows[0]?.['project_id'] as string | undefined;
     const result = await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] });
     const deleted = (result.rowsAffected ?? 0) > 0;
+    if (deleted) {
+      await this.recordMutation('delete', projectId, id, source);
+    }
     await writeMcpDebugLog('store_delete_completed', {
       taskId: id,
       deleted,
@@ -415,7 +529,7 @@ export class TaskStore {
    * @param projectId - Optional project ID to filter deletions by
    * @returns number of tasks deleted
    */
-  async deleteAll(projectId?: string): Promise<number> {
+  async deleteAll(projectId?: string, source?: TaskMutationSource): Promise<number> {
     const db = await getDb();
     const sql = projectId
       ? 'DELETE FROM tasks WHERE project_id = ?'
@@ -424,6 +538,9 @@ export class TaskStore {
       ? await db.execute({ sql, args: [projectId] })
       : await db.execute(sql);
     const deletedCount = result.rowsAffected ?? 0;
+    if (deletedCount > 0) {
+      await this.recordMutation('delete_all', projectId, undefined, source);
+    }
     await writeMcpDebugLog('store_delete_all_completed', {
       projectId,
       deletedCount,
@@ -444,7 +561,7 @@ export class TaskStore {
    * @param projectId - If provided, only tasks for this project are deleted before import
    * @returns number of tasks imported
    */
-  async importTasks(jsonData: string, projectId?: string): Promise<number> {
+  async importTasks(jsonData: string, projectId?: string, source?: TaskMutationSource): Promise<number> {
     await writeMcpDebugLog('store_import_started', {
       projectId,
       jsonLength: jsonData.length,
@@ -491,6 +608,7 @@ export class TaskStore {
       importedCount: tasks.length,
       taskIds: tasks.map((task) => task.id),
     });
+    await this.recordMutation('import', projectId, undefined, source);
     return tasks.length;
   }
 

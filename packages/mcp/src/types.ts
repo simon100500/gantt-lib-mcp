@@ -176,6 +176,19 @@ export interface Message {
   createdAt: string;
 }
 
+export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
+
+export interface TaskMutationEvent {
+  id: string;
+  projectId?: string;
+  runId?: string;
+  sessionId?: string;
+  source: TaskMutationSource;
+  mutationType: 'create' | 'update' | 'delete' | 'delete_all' | 'import';
+  taskId?: string;
+  createdAt: string;
+}
+
 /**
  * User account for authentication and authorization
  */
