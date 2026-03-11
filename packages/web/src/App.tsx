@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, ChevronDown, LogOut, PanelLeft, PanelLeftClose, Sparkles } from 'lucide-react';
+import { CalendarDays, ChevronDown, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -322,17 +322,6 @@ export default function App() {
       {/* ── Project sidebar (full height) ──────────────────────────────────── */}
       {projectSidebarVisible && (
         <aside className="w-72 shrink-0 border-r border-slate-200 bg-white flex flex-col h-full">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-            <h2 className="text-sm font-semibold text-slate-900">Проекты</h2>
-            <button
-              type="button"
-              onClick={() => setProjectSidebarVisible(false)}
-              aria-label="Скрыть проекты"
-              className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
-            >
-              <PanelLeftClose className="w-4 h-4 text-slate-500" />
-            </button>
-          </div>
           <div className="flex-1 overflow-y-auto p-4">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
@@ -360,6 +349,24 @@ export default function App() {
 
         {/* ── Top Bar ──────────────────────────────────────────────────────── */}
         <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
+          {/* Burger menu button */}
+          <button
+            type="button"
+            onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
+            aria-pressed={projectSidebarVisible}
+            aria-label={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            className={cn(
+              'h-8 w-8 flex items-center justify-center rounded transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+              projectSidebarVisible
+                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+            )}
+            title={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
           {/* Logo */}
           <div className="flex items-center gap-2 text-sm font-semibold tracking-tight select-none">
             <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
@@ -374,24 +381,6 @@ export default function App() {
           </span>
 
           <div className="flex-1" />
-
-          {/* Project sidebar toggle button */}
-          <button
-            type="button"
-            onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
-            aria-pressed={projectSidebarVisible}
-            aria-label={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-            className={cn(
-              'h-7 px-2 flex items-center gap-1.5 rounded transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-              projectSidebarVisible
-                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
-            )}
-            title={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-          >
-            <PanelLeftClose className={cn('w-4 h-4 transition-transform', projectSidebarVisible ? 'rotate-0' : 'rotate-180')} />
-          </button>
 
           {!auth.isAuthenticated ? (
             <div className="flex items-center gap-3">
