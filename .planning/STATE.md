@@ -333,6 +333,7 @@ None
 | 23 | Move Пустой график to end of chips and add gantt icon | 2026-03-11 | edab835, ddf67b0 | [23-move-empty-schedule-button](./quick/23-move-empty-schedule-button/) |
 | 24 | добавить в проект поддержку порядка работ и вложенности работ из обновленного gantt-lib | 2026-03-11 | 10528fc | [24-gantt-lib](./quick/24-gantt-lib/) |
 | 25 | добавить в MCP-агент поддержку применения вложенности из gantt-lib | 2026-03-11 | abadda1 | [25-mcp-gantt-lib](./quick/25-mcp-gantt-lib/) |
+| 27 | Replace header ProjectSwitcher with left sidebar panel | 2026-03-11 | 5869635, 9603d5a, 8a677df | [27-replace-header-projectswitcher-with-side](./quick/27-replace-header-projectswitcher-with-side/) |
 
 ### Quick Tasks Pending
 
@@ -368,7 +369,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-11 - Completed quick task 025: добавить в MCP-агент поддержку применения вложенности из gantt-lib
+Last activity: 2026-03-11 - Completed quick task 027: Replace header ProjectSwitcher with left sidebar panel
 
 ### Roadmap Evolution
 
