@@ -43,7 +43,8 @@ export function useAIStream(
       abortControllerRef.current.abort();
     }
 
-    abortControllerRef.current = new AbortController();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setStreaming(true);
 
     try {
@@ -53,7 +54,7 @@ export function useAIStream(
         headers: {
           'Authorization': `Bearer ${token}`,
         },
-        signal: abortControllerRef.current.signal,
+        signal: controller.signal,
       });
 
       if (!streamResponse.ok) {
@@ -73,7 +74,7 @@ export function useAIStream(
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ message }),
-        signal: abortControllerRef.current.signal,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -120,7 +121,9 @@ export function useAIStream(
       }
       setStreaming(false);
     } finally {
-      abortControllerRef.current = null;
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   }, []);
 

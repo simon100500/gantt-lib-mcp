@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, cleanup } from '@testing-library/react'
+import { renderHook, cleanup, act } from '@testing-library/react'
+import { useAIStream, type AIStreamMessage } from './useAIStream'
 
 describe('useTaskStream', () => {
   beforeEach(() => {
@@ -92,5 +93,85 @@ describe('useAIStream', () => {
     // - AbortController.abort() called on unmount
     // - Stream reader cancelled
     expect(true).toBe(true)
+  })
+
+  it('should keep the new controller when a previous send finishes cleanup later', async () => {
+    type Deferred<T> = {
+      promise: Promise<T>
+      resolve: (value: T) => void
+      reject: (reason?: unknown) => void
+    }
+
+    const deferred = <T,>(): Deferred<T> => {
+      let resolve!: (value: T) => void
+      let reject!: (reason?: unknown) => void
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res
+        reject = rej
+      })
+      return { promise, resolve, reject }
+    }
+
+    const firstStream = deferred<Response>()
+    const secondStream = deferred<Response>()
+    const onMessage = vi.fn<(msg: AIStreamMessage) => void>()
+    const reader = {
+      read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+    }
+    let streamFetchCount = 0
+
+    vi.mocked(global.fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url === '/stream/ai') {
+        streamFetchCount += 1
+        if (streamFetchCount === 1) {
+          return firstStream.promise
+        }
+        return secondStream.promise
+      }
+
+      if (url === '/api/chat') {
+        expect(init?.signal).toBeInstanceOf(AbortSignal)
+        return Promise.resolve(new Response(JSON.stringify({ status: 'processing' }), { status: 200 }))
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const { result } = renderHook(() => useAIStream(onMessage, () => 'token'))
+
+    let firstSend: Promise<void> | undefined
+    let secondSend: Promise<void> | undefined
+
+    await act(async () => {
+      firstSend = result.current.send('first')
+      secondSend = result.current.send('second')
+
+      firstStream.reject(new DOMException('Aborted', 'AbortError'))
+      await Promise.resolve()
+
+      secondStream.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: {
+          getReader: () => reader,
+        },
+      } as unknown as Response)
+
+      await Promise.allSettled([firstSend!, secondSend!])
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(3)
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      3,
+      '/api/chat',
+      expect.objectContaining({
+        method: 'POST',
+        signal: expect.any(AbortSignal),
+      }),
+    )
+    expect(onMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }))
   })
 })
