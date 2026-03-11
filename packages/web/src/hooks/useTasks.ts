@@ -6,11 +6,12 @@ export interface UseTasksResult {
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   loading: boolean;
   error: string | null;
+  refetch: () => Promise<void>;
 }
 
 export function useTasks(
   accessToken: string | null,
-  refreshAccessToken: () => Promise<string | null>
+  refreshAccessToken: () => Promise<string | null>,
 ): UseTasksResult {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +19,58 @@ export function useTasks(
 
   // Track the last token we've successfully used to fetch tasks
   const lastProcessedToken = useRef<string | null>(null);
+  const accessTokenRef = useRef<string | null>(accessToken);
+  const refreshAccessTokenRef = useRef(refreshAccessToken);
+
+  accessTokenRef.current = accessToken;
+  refreshAccessTokenRef.current = refreshAccessToken;
+
+  const fetchTasks = async (token: string): Promise<Task[] | null> => {
+    const res = await fetch('/api/tasks', {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (res.status === 401) {
+      const newToken = await refreshAccessTokenRef.current();
+      if (!newToken) return null;
+
+      const retryRes = await fetch('/api/tasks', {
+        headers: { 'Authorization': `Bearer ${newToken}` },
+      });
+      if (!retryRes.ok) {
+        throw new Error(`HTTP ${retryRes.status}`);
+      }
+      return retryRes.json() as Promise<Task[]>;
+    }
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json() as Promise<Task[]>;
+  };
+
+  const applyFetchedTasks = (data: Task[] | null, token: string | null) => {
+    if (!data || !token) return;
+
+    setTasks(data);
+    lastProcessedToken.current = token;
+  };
+
+  const refetch = async (): Promise<void> => {
+    const token = accessTokenRef.current;
+    if (!token) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchTasks(token);
+      const currentToken = accessTokenRef.current;
+      applyFetchedTasks(data, currentToken);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!accessToken) {
@@ -34,43 +87,13 @@ export function useTasks(
     }
 
     let cancelled = false;
-    const fetchTasks = async (token: string) => {
-      const res = await fetch('/api/tasks', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      if (res.status === 401) {
-        // When we get a 401, always attempt to refresh the token first.
-        // The refreshAccessToken function will handle logging out if refresh token is invalid.
-        // This handles both cases:
-        // 1. Token expired after idle period (refresh token should be valid)
-        // 2. Server restart (session may be invalid, refresh will fail and logout)
-        const newToken = await refreshAccessToken();
-        if (!newToken || cancelled) return null; // logout() already called inside refreshAccessToken
-
-        // Retry with the new token
-        const retryRes = await fetch('/api/tasks', {
-          headers: { 'Authorization': `Bearer ${newToken}` },
-        });
-        if (!retryRes.ok) {
-          throw new Error(`HTTP ${retryRes.status}`);
-        }
-        return retryRes.json() as Promise<Task[]>;
-      }
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json() as Promise<Task[]>;
-    };
 
     setLoading(true);
     setError(null);
     fetchTasks(accessToken)
       .then(data => {
         if (cancelled) return;
-        if (data) {
-          setTasks(data);
-          lastProcessedToken.current = accessToken;
-        }
+        applyFetchedTasks(data, accessTokenRef.current);
         setLoading(false);
       })
       .catch(err => {
@@ -82,5 +105,5 @@ export function useTasks(
     return () => { cancelled = true; };
   }, [accessToken, refreshAccessToken]);
 
-  return { tasks, setTasks, loading, error };
+  return { tasks, setTasks, loading, error, refetch };
 }

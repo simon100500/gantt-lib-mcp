@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export interface TaskStreamMessage {
-  type: 'connected' | 'tasks' | 'error';
-  tasks?: unknown[];
+  type: 'connected' | 'error';
   message?: string;
 }
 
@@ -11,8 +10,11 @@ export interface UseTaskStreamResult {
 }
 
 /**
- * SSE hook for real-time task updates using EventSource.
+ * SSE hook for AI streaming only using EventSource.
  * Automatically reconnects with exponential backoff on connection failure.
+ *
+ * Note: This is for AI token streaming only, not task sync.
+ * Task sync uses explicit GET/PUT /api/tasks operations.
  *
  * @param onMessage - Callback called when SSE message received
  * @param getAccessToken - Function to get current access token
@@ -20,7 +22,8 @@ export interface UseTaskStreamResult {
  */
 export function useTaskStream(
   onMessage: (msg: TaskStreamMessage) => void,
-  getAccessToken: () => string | null
+  getAccessToken: () => string | null,
+  clientId?: string,
 ): UseTaskStreamResult {
   const [connected, setConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -40,7 +43,7 @@ export function useTaskStream(
     }
 
     console.log('[useTaskStream] Connecting with token (first 30 chars):', token.substring(0, 30));
-    const url = `/stream/tasks?token=${encodeURIComponent(token)}`;
+    const url = `/stream/ai?token=${encodeURIComponent(token)}`;
     console.log('[useTaskStream] URL:', url);
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;

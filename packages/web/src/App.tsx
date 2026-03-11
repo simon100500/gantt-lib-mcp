@@ -5,7 +5,6 @@ import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
 import { useTasks } from './hooks/useTasks.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
-import { useTaskStream, type TaskStreamMessage } from './hooks/useTaskStream.ts';
 import { useAIStream, type AIStreamMessage } from './hooks/useAIStream.ts';
 import { useAuth } from './hooks/useAuth.ts';
 import { useAutoSave } from './hooks/useAutoSave.ts';
@@ -16,9 +15,19 @@ import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
 import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
 import { cn } from '@/lib/utils';
+import { normalizeTaskOrder, sortTasksByOrder } from './lib/taskOrder.ts';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
 
 let msgCounter = 0;
+
+function getOrCreateClientId(): string {
+  const existing = sessionStorage.getItem('gantt_client_id');
+  if (existing) return existing;
+
+  const next = crypto.randomUUID();
+  sessionStorage.setItem('gantt_client_id', next);
+  return next;
+}
 
 // ── Switch control (track + thumb) ────────────────────────────────────────
 interface SwitchControlProps {
@@ -71,12 +80,24 @@ function ToolbarSep() {
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const auth = useAuth();
-  const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
+  const clientIdRef = useRef<string>(getOrCreateClientId());
+  const authenticatedTasks = useTasks(
+    auth.accessToken,
+    auth.refreshAccessToken,
+  );
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
-  const skipNextAutoSaveRef = useRef(false);
+  const setTasksWithOrder = useCallback((updater: Task[] | ((prev: Task[]) => Task[])) => {
+    setTasks(prev => {
+      const current = sortTasksByOrder(prev);
+      const next = typeof updater === 'function'
+        ? (updater as (prev: Task[]) => Task[])(current)
+        : updater;
+      return normalizeTaskOrder(next);
+    });
+  }, [setTasks]);
   // Autosave to server on any chart change (authenticated only; demo mode saves to localStorage in useLocalTasks)
-  useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null, skipNextAutoSaveRef);
+  useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null, clientIdRef.current);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -99,15 +120,6 @@ export default function App() {
   const ganttRef = useRef<GanttChartRef>(null);
 
   // ── Task stream message handler ────────────────────────────────────────────
-  const handleTaskStreamMessage = useCallback((msg: TaskStreamMessage) => {
-    if (msg.type === 'tasks') {
-      skipNextAutoSaveRef.current = true;
-      setTasks(msg.tasks as Task[]);
-    } else if (msg.type === 'error') {
-      console.error('[TaskStream] Error:', msg.message);
-    }
-  }, [setTasks]);
-
   // ── AI stream message handler ───────────────────────────────────────────────
   const handleAIStreamMessage = useCallback((msg: AIStreamMessage) => {
     if (msg.type === 'token') {
@@ -120,6 +132,9 @@ export default function App() {
         }
         return '';
       });
+      if (auth.isAuthenticated) {
+        void authenticatedTasks.refetch();
+      }
     } else if (msg.type === 'error') {
       setAiThinking(false);
       setStreaming('');
@@ -127,12 +142,14 @@ export default function App() {
         ...ms,
         { id: String(++msgCounter), role: 'assistant', content: `Error: ${msg.message ?? 'unknown error'}` },
       ]);
+      if (auth.isAuthenticated) {
+        void authenticatedTasks.refetch();
+      }
     }
-  }, []);
+  }, [auth.isAuthenticated, authenticatedTasks]);
 
-  const { connected: tasksConnected } = useTaskStream(handleTaskStreamMessage, () => auth.accessToken);
   const { streaming: aiStreaming, send: sendAI } = useAIStream(handleAIStreamMessage, () => auth.accessToken);
-  const displayConnected = auth.isAuthenticated ? tasksConnected : true;
+  const displayConnected = true;
 
   const handleSend = useCallback((text: string) => {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
@@ -160,15 +177,15 @@ export default function App() {
   }, []);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
-    setTasks(prev => {
+    setTasksWithOrder(prev => {
       const map = new Map(shiftedTasks.map(t => [t.id, t]));
       return prev.map(t => map.get(t.id) ?? t);
     });
-  }, [setTasks]);
+  }, [setTasksWithOrder]);
 
   const handleAddTask = useCallback((newTask: Task) => {
-    setTasks(prev => [...prev, newTask]);
-  }, [setTasks]);
+    setTasksWithOrder(prev => [...prev, newTask]);
+  }, [setTasksWithOrder]);
 
   const handleEmptyChart = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -183,18 +200,18 @@ export default function App() {
   }, [handleAddTask]);
 
   const handleDeleteTask = useCallback((taskId: string) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-  }, [setTasks]);
+    setTasksWithOrder(prev => prev.filter(t => t.id !== taskId));
+  }, [setTasksWithOrder]);
 
   const handleInsertAfterTask = useCallback((taskId: string, newTask: Task) => {
-    setTasks(prev => {
+    setTasksWithOrder(prev => {
       const index = prev.findIndex(t => t.id === taskId);
       if (index === -1) return prev;
       const newTasks = [...prev];
       newTasks.splice(index + 1, 0, newTask);
       return newTasks;
     });
-  }, [setTasks]);
+  }, [setTasksWithOrder]);
 
   const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
     if (!auth.accessToken) return;
@@ -265,9 +282,9 @@ export default function App() {
   useEffect(() => {
     // Don't clear tasks for unauthenticated users (demo mode)
     if (!auth.isAuthenticated) return;
-    setTasks([]);
+    setTasksWithOrder([]);
     setHasStartedChat(false);
-  }, [auth.project?.id, setTasks, auth.isAuthenticated]);
+  }, [auth.project?.id, setTasksWithOrder, auth.isAuthenticated]);
 
   // Reset to start screen state when all tasks are removed AND AI is not processing
   useEffect(() => {
@@ -465,7 +482,7 @@ export default function App() {
                 <GanttChart
                   ref={ganttRef}
                   tasks={tasks}
-                  onChange={setTasks}
+                  onChange={setTasksWithOrder}
                   dayWidth={24}
                   rowHeight={36}
                   containerHeight="calc(100vh - 120px)"
