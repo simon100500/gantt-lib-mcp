@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, Copy, Eye, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -431,13 +431,35 @@ export default function App() {
           <span className="text-slate-400">/</span>
 
           {/* Project name breadcrumb */}
-          <span className="text-sm font-medium text-slate-700 truncate">
-            {hasShareToken
-              ? (sharedProject.project?.name || 'Shared project')
-              : auth.isAuthenticated
-                ? auth.project?.name
-                : (localTasks.projectName || 'Мой проект')}
-          </span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium text-slate-700 truncate">
+              {hasShareToken
+                ? (sharedProject.project?.name || 'Shared project')
+                : auth.isAuthenticated
+                  ? auth.project?.name
+                  : (localTasks.projectName || 'Мой проект')}
+            </span>
+            {!hasShareToken && auth.isAuthenticated && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCreateShareLink}
+                disabled={shareStatus === 'creating'}
+                className="h-7 w-7 shrink-0 p-0 text-slate-500 hover:text-slate-900"
+                title={
+                  shareStatus === 'creating'
+                    ? 'Создаём ссылку...'
+                    : shareStatus === 'copied'
+                      ? 'Ссылка скопирована'
+                      : shareStatus === 'error'
+                        ? 'Ошибка ссылки'
+                        : 'Поделиться'
+                }
+              >
+                {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
+              </Button>
+            )}
+          </div>
 
           <div className="flex-1" />
 
@@ -455,23 +477,6 @@ export default function App() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCreateShareLink}
-                disabled={shareStatus === 'creating'}
-                className="h-8 gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
-              >
-                {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                {shareStatus === 'creating'
-                  ? 'Создаём ссылку...'
-                  : shareStatus === 'copied'
-                    ? 'Ссылка скопирована'
-                    : shareStatus === 'error'
-                      ? 'Ошибка ссылки'
-                      : 'Поделиться'}
-              </Button>
-
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -673,7 +678,7 @@ export default function App() {
 
             {/* ── Chat sidebar ───────────────────────────────────────────── */}
             {chatSidebarVisible && !hasShareToken && (
-              <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col">
+              <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col relative z-20">
                 <ChatSidebar
                   messages={messages}
                   streaming={streaming}

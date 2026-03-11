@@ -12,6 +12,7 @@ import type {
   Project,
   Session,
   OtpEntry,
+  ShareLink,
 } from './types.js';
 
 /**
@@ -28,6 +29,15 @@ interface CachedSession {
 export class AuthStore {
   private sessionCache = new Map<string, CachedSession>();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  private generateShareId(length = 8): string {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    let result = '';
+    for (let index = 0; index < length; index += 1) {
+      result += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return result;
+  }
   /**
    * Create an OTP entry in the database
    *
@@ -203,6 +213,45 @@ export class AuthStore {
       id: row.id as string,
       userId: row.user_id as string,
       name: row.name as string,
+      createdAt: row.created_at as string,
+    };
+  }
+
+  async createShareLink(projectId: string): Promise<ShareLink> {
+    const db = await getDb();
+    const createdAt = new Date().toISOString();
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const id = this.generateShareId();
+      try {
+        await db.execute({
+          sql: 'INSERT INTO share_links (id, project_id, created_at) VALUES (?, ?, ?)',
+          args: [id, projectId, createdAt],
+        });
+        return { id, projectId, createdAt };
+      } catch {
+        // Retry on rare primary key collision
+      }
+    }
+
+    throw new Error('Failed to create share link');
+  }
+
+  async findShareLinkById(id: string): Promise<ShareLink | null> {
+    const db = await getDb();
+    const result = await db.execute({
+      sql: 'SELECT id, project_id, created_at FROM share_links WHERE id = ?',
+      args: [id],
+    });
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id as string,
+      projectId: row.project_id as string,
       createdAt: row.created_at as string,
     };
   }

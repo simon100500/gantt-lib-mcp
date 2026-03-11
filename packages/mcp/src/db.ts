@@ -121,6 +121,14 @@ export async function getDb(): Promise<Client> {
   `);
 
   await _db.execute(`
+    CREATE TABLE IF NOT EXISTS share_links (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await _db.execute(`
     CREATE TABLE IF NOT EXISTS task_revisions (
       project_id TEXT PRIMARY KEY,
       revision INTEGER NOT NULL DEFAULT 0,

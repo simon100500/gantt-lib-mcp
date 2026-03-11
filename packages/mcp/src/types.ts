@@ -221,6 +221,12 @@ export interface Project {
   createdAt: string;
 }
 
+export interface ShareLink {
+  id: string;
+  projectId: string;
+  createdAt: string;
+}
+
 /**
  * User session with access and refresh tokens
  */

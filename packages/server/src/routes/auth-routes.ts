@@ -16,9 +16,7 @@ import {
   generateOtp,
   signAccessToken,
   signRefreshToken,
-  signShareToken,
   verifyToken,
-  verifyShareToken,
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 
@@ -248,14 +246,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const token = signShareToken(projectId);
+    const shareLink = await authStore.createShareLink(projectId);
     const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
     const host = req.headers.host ?? 'localhost:3000';
     const origin = req.headers.origin ?? `${proto}://${host}`;
-    const url = `${origin}/?share=${encodeURIComponent(token)}`;
+    const url = `${origin}/?share=${encodeURIComponent(shareLink.id)}`;
 
     return reply.send({
-      token,
+      token: shareLink.id,
       url,
       project: { id: project.id, name: project.name },
     });
@@ -267,14 +265,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'token required' });
     }
 
-    let payload: ReturnType<typeof verifyShareToken>;
-    try {
-      payload = verifyShareToken(token);
-    } catch {
-      return reply.status(401).send({ error: 'Invalid or expired share link' });
+    const shareLink = await authStore.findShareLinkById(token);
+    if (!shareLink) {
+      return reply.status(404).send({ error: 'Share link not found' });
     }
 
-    const project = await authStore.findProjectById(payload.projectId);
+    const project = await authStore.findProjectById(shareLink.projectId);
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
