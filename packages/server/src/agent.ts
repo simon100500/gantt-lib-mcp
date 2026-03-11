@@ -129,6 +129,28 @@ function buildStaleStateMessage(): string {
   return 'График изменился вручную во время ответа агента. Запрос нужно повторить на актуальном состоянии задач.';
 }
 
+function sanitizeAssistantResponse(userMessage: string, response: string): string {
+  const trimmed = response.trim();
+  const userHasCyrillic = /[\u0400-\u04FF]/.test(userMessage);
+  const responseHasCyrillic = /[\u0400-\u04FF]/.test(trimmed);
+
+  if (!userHasCyrillic || !responseHasCyrillic) {
+    return trimmed;
+  }
+
+  const firstCyrillicIndex = trimmed.search(/[\u0400-\u04FF]/);
+  if (firstCyrillicIndex <= 0) {
+    return trimmed;
+  }
+
+  const prefix = trimmed.slice(0, firstCyrillicIndex);
+  if (!/[A-Za-z]/.test(prefix)) {
+    return trimmed;
+  }
+
+  return trimmed.slice(firstCyrillicIndex).trimStart();
+}
+
 function buildPrompt(
   systemPrompt: string,
   projectId: string,
@@ -415,7 +437,7 @@ export async function runAgentWithHistory(
         dbPath,
         env,
       );
-      assistantResponse = attemptResult.assistantResponse;
+      assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);
       streamedContent = streamedContent || attemptResult.streamedContent;
 
       finalVerification = await verifyMutationAttempt(
@@ -441,7 +463,10 @@ export async function runAgentWithHistory(
       }
 
       if (finalVerification.runMutations.length > 0 && finalVerification.tasksChanged) {
-        assistantResponse = assistantResponse.trim() || 'Изменения применены.';
+        assistantResponse = sanitizeAssistantResponse(
+          userMessage,
+          assistantResponse.trim() || 'Изменения применены.',
+        );
         break;
       }
 
@@ -454,6 +479,8 @@ export async function runAgentWithHistory(
         'The previous attempt did not perform any real mutation tool call.',
         'Call `get_tasks` again at the start of this retry.',
         'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, or `delete_task`.',
+        'The final user-visible answer must contain only the completed result, without analysis or narration.',
+        'Do not output English text if the user wrote in Russian.',
         'A text-only success answer is invalid and will be rejected if no mutation event is recorded.',
         'If the request cannot be completed with available tools, say that explicitly and do not claim success.',
         assistantResponse.trim().length > 0 ? `Previous invalid answer: ${assistantResponse.trim()}` : '',
@@ -468,6 +495,8 @@ export async function runAgentWithHistory(
         previousAssistantResponse: assistantResponse,
       });
     }
+
+    assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
 
     if (mutationRequested && assistantResponse) {
       broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
