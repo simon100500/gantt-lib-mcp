@@ -33,7 +33,7 @@ const CHIPS: Array<{ label: string; prompt: string; icon?: React.ComponentType<{
   },
 ];
 
-export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
+export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLoginRequired }: StartScreenProps) {
   const [inputValue, setInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -56,6 +56,10 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
     e?.preventDefault();
     const text = inputValue.trim();
     if (!text) return;
+    if (!isAuthenticated) {
+      onLoginRequired?.();
+      return;
+    }
     onSend(text);
     setInputValue('');
     if (textareaRef.current) {
@@ -92,8 +96,8 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
               spellCheck={false}
               style={{ maxHeight: '12rem', overflowY: 'hidden' }}
               className={cn(
-                'w-full px-4 py-3 pr-12 text-sm bg-white resize-none',
-                'border border-slate-200 rounded-xl shadow-sm',
+                'w-full px-4 py-3 pr-12 text-base leading-6 bg-white resize-none',
+                'border border-slate-200 rounded-xl shadow-md',
                 'focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent focus-visible:outline-none',
               )}
             />
@@ -122,13 +126,13 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
                 type="button"
                 onClick={index === CHIPS.length - 1 ? onEmptyChart : () => handleChipClick(chip.prompt)}
                 className={cn(
-                  'text-[11px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-500',
+                  'text-sm px-3 py-1.5 rounded-full border border-slate-200 text-slate-600',
                   'flex items-center gap-1.5',
                   'transition-colors hover:border-primary hover:text-primary',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                 )}
               >
-                {chip.icon && <chip.icon className="w-3 h-3" />}
+                {chip.icon && <chip.icon className="w-3.5 h-3.5" />}
                 {chip.label}
               </button>
             ))}

@@ -31,7 +31,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   fastify.post('/api/auth/request-otp', async (req, reply) => {
     const body = req.body as { email?: string };
-    const email = body?.email;
+    const email = body?.email?.trim().toLowerCase();
 
     if (!email) {
       return reply.status(400).send({ error: 'email required' });
@@ -53,20 +53,17 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   fastify.post('/api/auth/verify-otp', async (req, reply) => {
     const body = req.body as { email?: string; code?: string };
-    const { email, code } = body;
+    const email = body?.email?.trim().toLowerCase();
+    const code = body?.code?.trim();
 
     if (!email || !code) {
       return reply.status(400).send({ error: 'email and code required' });
     }
 
-    // TODO: Re-enable OTP validation for production
-    // const valid = await authStore.consumeOtp(email, code);
-    // if (!valid) {
-    //   return reply.status(400).send({ error: 'Invalid or expired code' });
-    // }
-
-    // DEV: Accept any OTP code
-    console.log(`[DEV MODE] OTP check bypassed for ${email}, code: ${code}`);
+    const valid = await authStore.consumeOtp(email, code);
+    if (!valid) {
+      return reply.status(400).send({ error: 'Invalid or expired code' });
+    }
 
     // Find or create user
     const user = await authStore.findOrCreateUser(email);

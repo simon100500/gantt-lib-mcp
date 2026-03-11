@@ -149,7 +149,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
   }, [digits]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       {step === 'email' ? (
         <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
           <button
@@ -199,14 +199,14 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
           </form>
         </Card>
       ) : (
-        <>
+        <div className="relative w-[420px] max-w-[calc(100vw-2rem)]">
           <button
             onClick={() => setStep('email')}
-            className="text-sm text-primary hover:underline mb-4 flex items-center gap-1 relative z-10"
+            className="absolute left-0 -top-9 text-sm text-primary hover:underline flex items-center gap-1 z-10"
           >
             ← Изменить email
           </button>
-          <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
+          <Card className="w-full shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={onClose}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -258,7 +258,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
               )}
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );

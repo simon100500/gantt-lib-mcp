@@ -73,7 +73,7 @@ export default function App() {
   const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
-  // Autosave to server on any chart change (authenticated only; demo mode saves to localStorage in useLocalTasks)
+  // Autosave to server on any chart change (guest mode persists in useLocalTasks)
   const { savingState } = useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -125,16 +125,24 @@ export default function App() {
   const displayConnected = auth.isAuthenticated ? connected : true;
 
   const handleSend = useCallback((text: string) => {
+    if (!auth.isAuthenticated) {
+      setShowOtpModal(true);
+      return;
+    }
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
     setAiThinking(true);
     send({ type: 'chat', message: text });
-  }, [send]);
+  }, [auth.isAuthenticated, send]);
 
   const handleStartScreenSend = useCallback((text: string) => {
+    if (!auth.isAuthenticated) {
+      setShowOtpModal(true);
+      return;
+    }
     setHasStartedChat(true);
     setChatSidebarVisible(true);
     handleSend(text);
-  }, [handleSend]);
+  }, [auth.isAuthenticated, handleSend]);
 
   const handleAuthSuccess = useCallback((result: {
     accessToken: string;
@@ -198,12 +206,12 @@ export default function App() {
     setShowEditProjectModal(true);
   }, [auth.accessToken]);
 
-  const handleEditDemoProject = useCallback(async (projectId: string, currentName: string) => {
+  const handleEditGuestProject = useCallback(async (projectId: string, currentName: string) => {
     setShowEditProjectModal(true);
   }, []);
 
   const handleCreateProject = useCallback(async () => {
-    // For demo mode, show login modal
+    // Guests need auth before creating a server-backed project
     if (!auth.isAuthenticated) {
       setShowOtpModal(true);
       return;
@@ -222,7 +230,7 @@ export default function App() {
   }, [auth.createProject, auth.switchProject]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
-    // For demo mode, save to localStorage
+    // For guest mode, save to localStorage
     if (!auth.isAuthenticated) {
       localTasks.setProjectName(newName);
       return;
@@ -259,7 +267,7 @@ export default function App() {
 
   // Clear tasks when project changes (only for authenticated users)
   useEffect(() => {
-    // Don't clear tasks for unauthenticated users (demo mode)
+    // Don't clear tasks for unauthenticated users
     if (!auth.isAuthenticated) return;
     setTasks([]);
     setHasStartedChat(false);
@@ -319,7 +327,7 @@ export default function App() {
 
         <span className="w-px h-4 bg-slate-200" />
 
-        {/* Project switcher - works for both authenticated and demo mode */}
+        {/* Project switcher - works for authenticated and guest mode */}
         {auth.isAuthenticated && auth.project ? (
           <ProjectSwitcher
             currentProject={auth.project}
@@ -334,7 +342,7 @@ export default function App() {
             projects={[]}
             onSwitch={() => { }}
             onCreateNew={handleCreateProject}
-            onEdit={handleEditDemoProject}
+            onEdit={handleEditGuestProject}
           />
         )}
 
@@ -559,8 +567,8 @@ export default function App() {
             auth.login(result, result.user, result.project);
             setShowOtpModal(false);
 
-            // 1. Import local tasks (if user edited them)
-            const hasLocalEdits = !localTasks.isDemoMode && localTasks.tasks.length > 0;
+            // 1. Import local guest tasks (if the user created any)
+            const hasLocalEdits = localTasks.tasks.length > 0;
             if (hasLocalEdits) {
               try {
                 await fetch('/api/tasks', {
