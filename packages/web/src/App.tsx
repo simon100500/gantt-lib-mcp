@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, ChevronDown, LogOut, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, ChevronDown, LogOut, PanelLeft, PanelLeftClose, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -83,6 +83,7 @@ export default function App() {
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
   const [chatSidebarVisible, setChatSidebarVisible] = useState(false);
+  const [projectSidebarVisible, setProjectSidebarVisible] = useState(true);
   const [hasStartedChat, setHasStartedChat] = useState(false);
 
   // Gantt feature toggles
@@ -327,6 +328,24 @@ export default function App() {
         </div>
 
         <span className="w-px h-4 bg-slate-200" />
+
+        {/* Project sidebar toggle button */}
+        <button
+          type="button"
+          onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
+          aria-pressed={projectSidebarVisible}
+          aria-label={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+          className={cn(
+            'h-7 px-2 flex items-center gap-1.5 rounded transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+            projectSidebarVisible
+              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+          )}
+          title={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+        >
+          <PanelLeftClose className={cn('w-4 h-4 transition-transform', projectSidebarVisible ? 'rotate-0' : 'rotate-180')} />
+        </button>
 
         {/* Project switcher - works for authenticated and guest mode */}
         {auth.isAuthenticated && auth.project ? (
