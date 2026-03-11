@@ -321,7 +321,7 @@ export default function App() {
 
       {/* ── Project sidebar (full height) ──────────────────────────────────── */}
       {projectSidebarVisible && (
-        <aside className="w-72 shrink-0 border-r border-slate-200 bg-white flex flex-col h-full">
+        <aside className="w-60 shrink-0 border-r border-slate-200 bg-white flex flex-col h-full">
           <div className="flex-1 overflow-y-auto p-4">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
