@@ -1,4 +1,4 @@
-import { Check, Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -44,18 +44,14 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 key={p.id}
                 onClick={() => onSwitch(p.id)}
                 className={cn(
-                  "flex items-center justify-between gap-2 px-3 py-2 rounded-md text-left transition-colors",
+                  "flex items-center justify-between gap-2 px-2 py-2 rounded-md text-left transition-colors",
                   "hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   p.id === currentProject.id
                     ? "bg-slate-100 text-slate-900 font-medium"
                     : "text-slate-700"
                 )}
               >
-                <span className="flex items-center gap-2 min-w-0">
-                  {p.id === currentProject.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                  {p.id !== currentProject.id && <span className="w-4 shrink-0" />}
-                  <span className="truncate text-sm">{p.name}</span>
-                </span>
+                <span className="truncate text-sm">{p.name}</span>
                 {p.taskCount !== undefined && (
                   <span className="text-xs text-slate-400 shrink-0">{p.taskCount}</span>
                 )}
