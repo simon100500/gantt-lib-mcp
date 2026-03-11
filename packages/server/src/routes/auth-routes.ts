@@ -9,14 +9,16 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { randomUUID } from 'node:crypto';
 import { authStore } from '@gantt/mcp/auth-store';
+import { taskStore } from '@gantt/mcp/store';
 import { sendOtpEmail } from '../email.js';
 import {
   generateOtp,
   signAccessToken,
   signRefreshToken,
+  signShareToken,
   verifyToken,
+  verifyShareToken,
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 
@@ -234,6 +236,53 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
       project: { id: project.id, name: project.name },
+    });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/share', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const projects = await authStore.listProjects(req.user!.userId);
+    const project = projects.find((item) => item.id === projectId);
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const token = signShareToken(projectId);
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
+    const host = req.headers.host ?? 'localhost:3000';
+    const origin = req.headers.origin ?? `${proto}://${host}`;
+    const url = `${origin}/?share=${encodeURIComponent(token)}`;
+
+    return reply.send({
+      token,
+      url,
+      project: { id: project.id, name: project.name },
+    });
+  });
+
+  fastify.get<{ Querystring: { token?: string } }>('/api/share', async (req, reply) => {
+    const token = req.query.token;
+    if (!token) {
+      return reply.status(400).send({ error: 'token required' });
+    }
+
+    let payload: ReturnType<typeof verifyShareToken>;
+    try {
+      payload = verifyShareToken(token);
+    } catch {
+      return reply.status(401).send({ error: 'Invalid or expired share link' });
+    }
+
+    const project = await authStore.findProjectById(payload.projectId);
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const tasks = await taskStore.list(project.id, false);
+    return reply.send({
+      project: { id: project.id, name: project.name },
+      tasks,
     });
   });
 

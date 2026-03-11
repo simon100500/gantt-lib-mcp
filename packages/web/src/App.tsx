@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, ChevronDown, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Copy, Eye, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -8,6 +8,7 @@ import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
 import { useAutoSave } from './hooks/useAutoSave.ts';
+import { useSharedProject } from './hooks/useSharedProject.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { CreateProjectModal } from './components/CreateProjectModal.tsx';
@@ -71,11 +72,17 @@ function ToolbarSep() {
 // ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const auth = useAuth();
-  const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
+  const sharedProject = useSharedProject();
+  const hasShareToken = Boolean(sharedProject.shareToken);
+  const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
   const localTasks = useLocalTasks();
-  const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
+  const { tasks, setTasks, loading, error } = hasShareToken
+    ? sharedProject
+    : auth.isAuthenticated
+      ? authenticatedTasks
+      : localTasks;
   // Autosave to server on any chart change (guest mode persists in useLocalTasks)
-  const { savingState } = useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
+  const { savingState } = useAutoSave(tasks, hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -85,6 +92,7 @@ export default function App() {
   const [chatSidebarVisible, setChatSidebarVisible] = useState(false);
   const [projectSidebarVisible, setProjectSidebarVisible] = useState(true);
   const [hasStartedChat, setHasStartedChat] = useState(false);
+  const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
 
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
@@ -123,10 +131,17 @@ export default function App() {
     }
   }, [setTasks]);
 
-  const { send, connected } = useWebSocket(handleWsMessage, () => auth.accessToken, auth.accessToken);
-  const displayConnected = auth.isAuthenticated ? connected : true;
+  const { send, connected } = useWebSocket(
+    handleWsMessage,
+    () => (hasShareToken ? null : auth.accessToken),
+    hasShareToken ? null : auth.accessToken,
+  );
+  const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
 
   const handleSend = useCallback((text: string) => {
+    if (hasShareToken) {
+      return;
+    }
     if (!auth.isAuthenticated) {
       setShowOtpModal(true);
       return;
@@ -134,9 +149,12 @@ export default function App() {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
     setAiThinking(true);
     send({ type: 'chat', message: text });
-  }, [auth.isAuthenticated, send]);
+  }, [auth.isAuthenticated, hasShareToken, send]);
 
   const handleStartScreenSend = useCallback((text: string) => {
+    if (hasShareToken) {
+      return;
+    }
     if (!auth.isAuthenticated) {
       setShowOtpModal(true);
       return;
@@ -144,7 +162,7 @@ export default function App() {
     setHasStartedChat(true);
     setChatSidebarVisible(true);
     handleSend(text);
-  }, [auth.isAuthenticated, handleSend]);
+  }, [auth.isAuthenticated, handleSend, hasShareToken]);
 
   const handleAuthSuccess = useCallback((result: {
     accessToken: string;
@@ -267,13 +285,46 @@ export default function App() {
     );
   }, [auth, localTasks]);
 
+  const handleCreateShareLink = useCallback(async () => {
+    if (!auth.accessToken || !auth.project) {
+      return;
+    }
+
+    try {
+      setShareStatus('creating');
+      const res = await fetch(`/api/projects/${auth.project.id}/share`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${auth.accessToken}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json() as { url: string };
+      await navigator.clipboard.writeText(data.url);
+      setShareStatus('copied');
+      window.setTimeout(() => {
+        setShareStatus((current) => (current === 'copied' ? 'idle' : current));
+      }, 2500);
+    } catch (err) {
+      console.error('Failed to create share link:', err);
+      setShareStatus('error');
+      window.setTimeout(() => {
+        setShareStatus((current) => (current === 'error' ? 'idle' : current));
+      }, 2500);
+    }
+  }, [auth.accessToken, auth.project]);
+
   // Clear tasks when project changes (only for authenticated users)
   useEffect(() => {
     // Don't clear tasks for unauthenticated users
-    if (!auth.isAuthenticated) return;
+    if (!auth.isAuthenticated || hasShareToken) return;
     setTasks([]);
     setHasStartedChat(false);
-  }, [auth.project?.id, setTasks, auth.isAuthenticated]);
+  }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken]);
 
   // Reset to start screen state when all tasks are removed AND AI is not processing
   useEffect(() => {
@@ -285,7 +336,7 @@ export default function App() {
 
   // Load chat history on auth/project change
   useEffect(() => {
-    if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id) return;
+    if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken) return;
     setMessages([]);
     setStreaming('');
     setAiThinking(false);
@@ -300,16 +351,18 @@ export default function App() {
         );
       })
       .catch(() => { });
-  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id]);
+  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
   // ── Error state ──────────────────────────────────────────────────────────
-  if (error && auth.isAuthenticated) {
+  if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 max-w-sm text-center">
-          Не удалось загрузить задачи: {error}
+          {sharedProject.shareToken
+            ? `Не удалось открыть ссылку: ${error}`
+            : `Не удалось загрузить задачи: ${error}`}
         </div>
       </div>
     );
@@ -320,7 +373,7 @@ export default function App() {
     <div className="flex h-screen bg-background overflow-hidden">
 
       {/* ── Project sidebar (full height) ──────────────────────────────────── */}
-      {projectSidebarVisible && (
+      {projectSidebarVisible && !hasShareToken && (
         <aside className="w-60 shrink-0 border-r border-slate-200 bg-background flex flex-col h-full">
           <div className="flex-1 overflow-y-auto p-4">
             {auth.isAuthenticated && auth.project ? (
@@ -354,15 +407,18 @@ export default function App() {
             type="button"
             onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
             aria-pressed={projectSidebarVisible}
-            aria-label={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            aria-label={hasShareToken ? 'Режим только чтения' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            disabled={hasShareToken}
             className={cn(
               'h-8 w-8 flex items-center justify-center rounded transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-              projectSidebarVisible
+              hasShareToken
+                ? 'cursor-default bg-slate-50 text-slate-300'
+                : projectSidebarVisible
                 ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
             )}
-            title={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            title={hasShareToken ? 'Read-only share' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -376,12 +432,21 @@ export default function App() {
 
           {/* Project name breadcrumb */}
           <span className="text-sm font-medium text-slate-700 truncate">
-            {auth.isAuthenticated ? auth.project?.name : (localTasks.projectName || 'Мой проект')}
+            {hasShareToken
+              ? (sharedProject.project?.name || 'Shared project')
+              : auth.isAuthenticated
+                ? auth.project?.name
+                : (localTasks.projectName || 'Мой проект')}
           </span>
 
           <div className="flex-1" />
 
-          {!auth.isAuthenticated ? (
+          {hasShareToken ? (
+            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              <Eye className="h-3.5 w-3.5" />
+              Только чтение
+            </div>
+          ) : !auth.isAuthenticated ? (
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-slate-600">
                 Войдите, чтобы сохранить график
@@ -389,34 +454,53 @@ export default function App() {
               <LoginButton onClick={() => setShowOtpModal(true)} />
             </div>
           ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
-                >
-                  <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel className="truncate text-slate-700">
-                  {auth.user?.email ?? 'Account'}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Выйти</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCreateShareLink}
+                disabled={shareStatus === 'creating'}
+                className="h-8 gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+              >
+                {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {shareStatus === 'creating'
+                  ? 'Создаём ссылку...'
+                  : shareStatus === 'copied'
+                    ? 'Ссылка скопирована'
+                    : shareStatus === 'error'
+                      ? 'Ошибка ссылки'
+                      : 'Поделиться'}
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
+                  >
+                    <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel className="truncate text-slate-700">
+                    {auth.user?.email ?? 'Account'}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Выйти</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </header>
 
         {/* ── Content ─────────────────────────────────────────────────────── */}
         <div className="flex flex-1 overflow-hidden">
-          {tasks.length === 0 && !loading && !hasStartedChat ? (
+          {tasks.length === 0 && !loading && !hasStartedChat && !hasShareToken ? (
             /* ── Start Screen ─────────────────────────────────────────────── */
             <StartScreen
               onSend={handleStartScreenSend}
@@ -481,7 +565,7 @@ export default function App() {
                 <ToolbarSep />
 
                 {/* Chat toggle button - only show when chat is hidden, on the right */}
-                {!chatSidebarVisible && (
+                {!chatSidebarVisible && !hasShareToken && (
                   <button
                     type="button"
                     onClick={() => setChatSidebarVisible(true)}
@@ -516,7 +600,7 @@ export default function App() {
                 <GanttChart
                   ref={ganttRef}
                   tasks={tasks}
-                  onChange={setTasks}
+                  onChange={hasShareToken ? undefined : setTasks}
                   dayWidth={24}
                   rowHeight={36}
                   containerHeight="calc(100vh - 120px)"
@@ -524,15 +608,15 @@ export default function App() {
                   taskListWidth={650}
                   onValidateDependencies={handleValidation}
                   disableConstraints={!autoSchedule}
-                  onCascade={autoSchedule ? handleCascade : undefined}
-                  disableTaskNameEditing={disableTaskNameEditing}
-                  disableDependencyEditing={disableDependencyEditing}
+                  onCascade={hasShareToken || !autoSchedule ? undefined : handleCascade}
+                  disableTaskNameEditing={hasShareToken ? true : disableTaskNameEditing}
+                  disableDependencyEditing={hasShareToken ? true : disableDependencyEditing}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
-                  onAdd={handleAddTask}
-                  onDelete={handleDeleteTask}
-                  onInsertAfter={handleInsertAfterTask}
-                  onReorder={handleReorderTasks}
+                  onAdd={hasShareToken ? undefined : handleAddTask}
+                  onDelete={hasShareToken ? undefined : handleDeleteTask}
+                  onInsertAfter={hasShareToken ? undefined : handleInsertAfterTask}
+                  onReorder={hasShareToken ? undefined : handleReorderTasks}
                 />
               )}
 
@@ -544,7 +628,7 @@ export default function App() {
                   </span>
 
                   {/* Saving status indicator */}
-                  {auth.isAuthenticated && (
+                  {auth.isAuthenticated && !hasShareToken && (
                     <span
                       className={cn(
                         'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
@@ -581,14 +665,14 @@ export default function App() {
                     )}
                   >
                     <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                    {displayConnected ? 'Подключено' : 'Переподключение…'}
+                    {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
                   </span>
                 </footer>
               )}
             </div>
 
             {/* ── Chat sidebar ───────────────────────────────────────────── */}
-            {chatSidebarVisible && (
+            {chatSidebarVisible && !hasShareToken && (
               <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col">
                 <ChatSidebar
                   messages={messages}

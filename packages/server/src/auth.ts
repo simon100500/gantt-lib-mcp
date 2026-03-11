@@ -33,6 +33,11 @@ export interface JwtPayload {
   type: 'access' | 'refresh';
 }
 
+export interface ShareTokenPayload {
+  projectId: string;
+  type: 'share';
+}
+
 /**
  * Base payload without the type field (for signing functions)
  */
@@ -66,6 +71,14 @@ export function signRefreshToken(payload: BasePayload): string {
   );
 }
 
+export function signShareToken(projectId: string): string {
+  return jwt.sign(
+    { projectId, type: 'share' as const },
+    SECRET,
+    { expiresIn: '30d' }
+  );
+}
+
 /**
  * Verify a JWT token and return its payload
  *
@@ -75,6 +88,14 @@ export function signRefreshToken(payload: BasePayload): string {
  */
 export function verifyToken(token: string): JwtPayload {
   const decoded = jwt.verify(token, SECRET) as JwtPayload;
+  return decoded;
+}
+
+export function verifyShareToken(token: string): ShareTokenPayload {
+  const decoded = jwt.verify(token, SECRET) as ShareTokenPayload;
+  if (decoded.type !== 'share') {
+    throw new Error('Invalid share token');
+  }
   return decoded;
 }
 

@@ -187,6 +187,26 @@ export class AuthStore {
     return { id, userId, name, createdAt };
   }
 
+  async findProjectById(projectId: string): Promise<Project | null> {
+    const db = await getDb();
+    const result = await db.execute({
+      sql: 'SELECT id, user_id, name, created_at FROM projects WHERE id = ?',
+      args: [projectId],
+    });
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id as string,
+      userId: row.user_id as string,
+      name: row.name as string,
+      createdAt: row.created_at as string,
+    };
+  }
+
   /**
    * Update project name
    *
