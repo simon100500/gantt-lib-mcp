@@ -1,120 +1,162 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
-import type { Task, TaskDependency } from '../types.ts';
+import { useEffect, useRef } from 'react';
+import type { Task } from '../types.ts';
 
-const DEBOUNCE_MS = 500;
-
-/**
- * Computes a stable hash from task data for deep equality comparison.
- * Only includes fields that are persisted to the server.
- */
-function computeTasksHash(tasks: Task[]): string {
-  // Normalize dates to strings for consistent hashing
-  const normalizedTasks = tasks.map(t => ({
-    id: t.id,
-    name: t.name,
-    startDate: typeof t.startDate === 'string' ? t.startDate : t.startDate.toISOString().split('T')[0],
-    endDate: typeof t.endDate === 'string' ? t.endDate : t.endDate.toISOString().split('T')[0],
-    color: t.color,
-    progress: t.progress,
-    accepted: t.accepted,
-    locked: t.locked,
-    divider: t.divider,
-    // Sort dependencies for stable order
-    dependencies: t.dependencies?.map(d => ({
-      taskId: d.taskId,
-      type: d.type,
-      lag: d.lag,
-    })).sort((a, b) => a.taskId.localeCompare(b.taskId)) || [],
-  }));
-
-  // Sort tasks by id for stable order
-  normalizedTasks.sort((a, b) => a.id.localeCompare(b.id));
-
-  return JSON.stringify(normalizedTasks);
-}
+type PendingSave = {
+  tasks: Task[];
+  accessToken: string;
+};
 
 /**
  * Automatically saves tasks to the server whenever the tasks array changes.
  * Only fires for authenticated users (accessToken present).
  * Debounced to avoid sending a request on every keystroke.
  *
- * Uses deep comparison via hash to prevent saves when only array references
- * change but data remains identical (fixes infinite loop with gantt-lib onChange).
- *
- * Handles project-switch correctly: skips the next 2 task updates after a
- * token change (empty-reset + server-load) to avoid overwriting server data.
+ * Client-authoritative: PUTs entire task array as source of truth.
+ * Server stores snapshot without recalculation or SSE broadcasts.
  */
 export function useAutoSave(
   tasks: Task[],
   accessToken: string | null,
-  skipNextSaveRef?: MutableRefObject<boolean>,
+  clientId: string,
 ): void {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevTokenRef = useRef<string | null>(null);
-  const skipCountRef = useRef(0);
-  const lastSavedHashRef = useRef<string>('');
+  const lastSavedTasksRef = useRef<Task[]>([]);
+  const pendingSaveRef = useRef<PendingSave | null>(null);
+  const inFlightSaveRef = useRef<Promise<void> | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushPendingSaveRef = useRef<() => Promise<void>>(async () => {});
+  flushPendingSaveRef.current = async () => {
+    const pending = pendingSaveRef.current;
+    if (!pending) return;
+
+    if (inFlightSaveRef.current) {
+      return;
+    }
+
+    pendingSaveRef.current = null;
+
+    const request = fetch('/api/tasks', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${pending.accessToken}`,
+      },
+      body: JSON.stringify(pending.tasks),
+    })
+      .then((response) => {
+        if (response.ok) {
+          lastSavedTasksRef.current = pending.tasks;
+          return;
+        }
+
+        console.warn('[autosave] Failed to save tasks:', response.status, response.statusText);
+        pendingSaveRef.current = pending;
+      })
+      .catch((err) => {
+        console.warn('[autosave] Failed to save tasks:', err);
+        pendingSaveRef.current = pending;
+      })
+      .finally(() => {
+        inFlightSaveRef.current = null;
+      });
+
+    inFlightSaveRef.current = request;
+    await request;
+
+    if (pendingSaveRef.current) {
+      await flushPendingSaveRef.current();
+    }
+  };
 
   useEffect(() => {
-    if (!accessToken) {
-      prevTokenRef.current = null;
-      lastSavedHashRef.current = '';
-      return;
-    }
+    const flushPendingSave = () => {
+      const pending = pendingSaveRef.current;
+      if (!pending || inFlightSaveRef.current) return;
 
-    // When token changes (login or project switch), skip the next 2 task updates
-    // (reset to [] + load from server) to avoid immediately overwriting server data
-    if (accessToken !== prevTokenRef.current) {
-      prevTokenRef.current = accessToken;
-      skipCountRef.current = 2;
-      lastSavedHashRef.current = '';
-      return;
-    }
+      pendingSaveRef.current = null;
+      void fetch('/api/tasks', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${pending.accessToken}`,
+        },
+        body: JSON.stringify(pending.tasks),
+        keepalive: true,
+      })
+        .then((response) => {
+          if (response.ok) {
+            lastSavedTasksRef.current = pending.tasks;
+            return;
+          }
 
-    if (skipCountRef.current > 0) {
-      skipCountRef.current--;
-      return;
-    }
-
-    // Compute hash of current tasks
-    const currentHash = computeTasksHash(tasks);
-
-    if (skipNextSaveRef?.current) {
-      skipNextSaveRef.current = false;
-      lastSavedHashRef.current = currentHash;
-      return;
-    }
-
-    // Skip save if data hasn't changed
-    if (currentHash === lastSavedHashRef.current) {
-      return;
-    }
-
-    if (timerRef.current) clearTimeout(timerRef.current);
-
-    timerRef.current = setTimeout(async () => {
-      try {
-        const response = await fetch('/api/tasks', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(tasks),
+          console.warn('[autosave] Failed to flush pending tasks:', response.status, response.statusText);
+          pendingSaveRef.current = pending;
+        })
+        .catch((err) => {
+          console.warn('[autosave] Failed to flush pending tasks:', err);
+          pendingSaveRef.current = pending;
         });
+    };
 
-        if (response.ok) {
-          // Only update hash after successful save
-          lastSavedHashRef.current = currentHash;
-        } else {
-          console.warn('[autosave] Failed to save tasks:', response.status, response.statusText);
-        }
-      } catch (err) {
-        console.warn('[autosave] Failed to save tasks:', err);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushPendingSave();
       }
-    }, DEBOUNCE_MS);
+    };
+
+    window.addEventListener('pagehide', flushPendingSave);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      window.removeEventListener('pagehide', flushPendingSave);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [tasks, accessToken]);
+  }, []);
+
+  useEffect(() => {
+    // Clear existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (!accessToken) {
+      prevTokenRef.current = null;
+      lastSavedTasksRef.current = [];
+      pendingSaveRef.current = null;
+      inFlightSaveRef.current = null;
+      return;
+    }
+
+    if (accessToken !== prevTokenRef.current) {
+      prevTokenRef.current = accessToken;
+      lastSavedTasksRef.current = [];
+      pendingSaveRef.current = null;
+      inFlightSaveRef.current = null;
+      return;
+    }
+
+    // Skip save if data hasn't changed (simple reference check)
+    if (tasks === lastSavedTasksRef.current) {
+      pendingSaveRef.current = null;
+      return;
+    }
+
+    // Debounce: update pending save, schedule flush after delay
+    pendingSaveRef.current = {
+      tasks,
+      accessToken,
+    };
+
+    debounceTimerRef.current = setTimeout(() => {
+      void flushPendingSaveRef.current();
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [tasks, accessToken, clientId]);
 }
