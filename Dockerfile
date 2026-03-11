@@ -89,6 +89,9 @@ RUN chmod +x /docker-entrypoint.sh
 # Persistent data directory (mount CapRover Persistent Directory here)
 VOLUME /data
 
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6 \
+  CMD wget -q -O /dev/null http://127.0.0.1/health || exit 1
+
 EXPOSE 80
 
 CMD ["/docker-entrypoint.sh"]
