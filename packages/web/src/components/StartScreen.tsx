@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, GanttChart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface StartScreenProps {
@@ -9,11 +9,7 @@ export interface StartScreenProps {
   onLoginRequired?: () => void;
 }
 
-const CHIPS: Array<{ label: string; prompt: string }> = [
-  {
-    label: 'Пустой график',
-    prompt: '',
-  },
+const CHIPS: Array<{ label: string; prompt: string; icon?: React.ComponentType<{ className?: string }> }> = [
   {
     label: 'Загородный дом',
     prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт',
@@ -29,6 +25,11 @@ const CHIPS: Array<{ label: string; prompt: string }> = [
   {
     label: 'Мероприятие',
     prompt: 'Создай график подготовки мероприятия: площадка, кейтеринг, программа, продвижение, проведение',
+  },
+  {
+    label: 'Пустой график',
+    prompt: '',
+    icon: GanttChart,
   },
 ];
 
@@ -119,13 +120,15 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
               <button
                 key={chip.label}
                 type="button"
-                onClick={index === 0 ? onEmptyChart : () => handleChipClick(chip.prompt)}
+                onClick={index === CHIPS.length - 1 ? onEmptyChart : () => handleChipClick(chip.prompt)}
                 className={cn(
                   'text-[11px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-500',
+                  'flex items-center gap-1.5',
                   'transition-colors hover:border-primary hover:text-primary',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                 )}
               >
+                {chip.icon && <chip.icon className="w-3 h-3" />}
                 {chip.label}
               </button>
             ))}
