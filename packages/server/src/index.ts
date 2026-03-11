@@ -14,7 +14,6 @@
 import Fastify from 'fastify';
 import { taskStore } from '@gantt/mcp/store';
 import { registerSSERoutes, broadcastToAI, broadcastToProject } from './sse.js';
-import { startPGListener } from './pg-listener.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
@@ -59,7 +58,6 @@ fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply
 
 fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   const count = await taskStore.deleteAll(req.user!.projectId);
-  broadcastToProject(req.user!.projectId, { type: 'tasks', tasks: [] });
   return reply.send({ deleted: count });
 });
 
@@ -68,9 +66,8 @@ fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) =
   if (!Array.isArray(tasks)) {
     return reply.status(400).send({ error: 'body must be an array of tasks' });
   }
+  // Client-authoritative: server stores snapshot without recalculation
   const count = await taskStore.importTasks(JSON.stringify(tasks), req.user!.projectId);
-  // Broadcast updated tasks to all connections for this project so other browser tabs sync
-  broadcastToProject(req.user!.projectId, { type: 'tasks', tasks });
   return reply.send({ saved: count });
 });
 
@@ -87,8 +84,3 @@ registerSSERoutes(fastify);
 const PORT = Number(process.env.PORT ?? 3000);
 await fastify.listen({ port: PORT, host: '0.0.0.0' });
 console.log(`[server] Listening on :${PORT}`);
-
-// Start PostgreSQL listener after server is listening
-startPGListener().catch((err: unknown) => {
-  console.error('[server] Failed to start PG listener:', err);
-});
