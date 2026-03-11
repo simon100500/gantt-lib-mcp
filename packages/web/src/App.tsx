@@ -11,7 +11,6 @@ import { useAutoSave } from './hooks/useAutoSave.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
-import { CreateProjectModal } from './components/CreateProjectModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
 import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
@@ -85,13 +84,14 @@ export default function App() {
   const { savingState } = useAutoSave(tasks, hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
-  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
   const [chatSidebarVisible, setChatSidebarVisible] = useState(false);
   const [projectSidebarVisible, setProjectSidebarVisible] = useState(true);
   const [hasStartedChat, setHasStartedChat] = useState(false);
+  const [pendingNewProject, setPendingNewProject] = useState(false);
+  const [pendingStartPrompt, setPendingStartPrompt] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
 
   // Gantt feature toggles
@@ -138,6 +138,29 @@ export default function App() {
   );
   const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
 
+  const getDefaultProjectName = useCallback(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `Проект ${year}-${month}-${day}`;
+  }, []);
+
+  const createPendingProject = useCallback(async () => {
+    if (!auth.isAuthenticated || !pendingNewProject) {
+      return true;
+    }
+
+    const newProject = await auth.createProject(getDefaultProjectName());
+    if (!newProject) {
+      return false;
+    }
+
+    await auth.switchProject(newProject.id);
+    setPendingNewProject(false);
+    return true;
+  }, [auth, getDefaultProjectName, pendingNewProject]);
+
   const handleSend = useCallback((text: string) => {
     if (hasShareToken) {
       return;
@@ -151,7 +174,7 @@ export default function App() {
     send({ type: 'chat', message: text });
   }, [auth.isAuthenticated, hasShareToken, send]);
 
-  const handleStartScreenSend = useCallback((text: string) => {
+  const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
       return;
     }
@@ -159,10 +182,23 @@ export default function App() {
       setShowOtpModal(true);
       return;
     }
+    if (pendingNewProject) {
+      setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
+      setHasStartedChat(true);
+      setChatSidebarVisible(true);
+      setAiThinking(true);
+      setPendingStartPrompt(text);
+      const created = await createPendingProject();
+      if (!created) {
+        setPendingStartPrompt(null);
+        setAiThinking(false);
+      }
+      return;
+    }
     setHasStartedChat(true);
     setChatSidebarVisible(true);
     handleSend(text);
-  }, [auth.isAuthenticated, handleSend, hasShareToken]);
+  }, [auth.isAuthenticated, createPendingProject, handleSend, hasShareToken, pendingNewProject]);
 
   const handleAuthSuccess = useCallback((result: {
     accessToken: string;
@@ -188,7 +224,13 @@ export default function App() {
     setTasks(prev => [...prev, newTask]);
   }, [setTasks]);
 
-  const handleEmptyChart = useCallback(() => {
+  const handleEmptyChart = useCallback(async () => {
+    if (auth.isAuthenticated && pendingNewProject) {
+      const created = await createPendingProject();
+      if (!created) {
+        return;
+      }
+    }
     const today = new Date().toISOString().split('T')[0];
     const placeholderTask: Task = {
       id: `task-${Date.now()}`,
@@ -198,7 +240,7 @@ export default function App() {
     };
     handleAddTask(placeholderTask);
     setChatSidebarVisible(true);
-  }, [handleAddTask]);
+  }, [auth.isAuthenticated, createPendingProject, handleAddTask, pendingNewProject]);
 
   const handleDeleteTask = useCallback((taskId: string) => {
     setTasks(prev => prev
@@ -230,24 +272,25 @@ export default function App() {
     setShowEditProjectModal(true);
   }, []);
 
+  const handleSwitchProject = useCallback(async (projectId: string) => {
+    setPendingNewProject(false);
+    setPendingStartPrompt(null);
+    await auth.switchProject(projectId);
+  }, [auth]);
+
   const handleCreateProject = useCallback(async () => {
-    // Just reset to start screen - project will be created on actual activity
+    if (auth.isAuthenticated) {
+      setPendingNewProject(true);
+    }
+
     setTasks([]);
     setMessages([]);
     setStreaming('');
     setAiThinking(false);
     setHasStartedChat(false);
     setChatSidebarVisible(false);
-  }, [setTasks]);
-
-  const handleSaveNewProject = useCallback(async (name: string) => {
-    const newProject = await auth.createProject(name);
-    if (newProject) {
-      // Switch to the newly created project
-      auth.switchProject(newProject.id);
-    }
-    return newProject;
-  }, [auth.createProject, auth.switchProject]);
+    setPendingStartPrompt(null);
+  }, [auth.isAuthenticated, setTasks]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     // For guest mode, save to localStorage
@@ -328,30 +371,44 @@ export default function App() {
 
   // Reset to start screen state when all tasks are removed AND AI is not processing
   useEffect(() => {
-    if (tasks.length === 0 && !loading && !aiThinking) {
+    if (tasks.length === 0 && !loading && !aiThinking && !pendingStartPrompt) {
       setHasStartedChat(false);
       setChatSidebarVisible(false);
     }
-  }, [tasks.length, loading, aiThinking]);
+  }, [tasks.length, loading, aiThinking, pendingStartPrompt]);
 
   // Load chat history on auth/project change
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken) return;
-    setMessages([]);
     setStreaming('');
-    setAiThinking(false);
+    if (!pendingStartPrompt) {
+      setMessages([]);
+      setAiThinking(false);
+    }
 
     fetch('/api/messages', {
       headers: { Authorization: `Bearer ${auth.accessToken}` },
     })
       .then(res => (res.ok ? (res.json() as Promise<Array<{ role: string; content: string }>>) : Promise.resolve([])))
       .then(data => {
+        if (pendingStartPrompt) {
+          return;
+        }
         setMessages(
           data.map(m => ({ id: String(++msgCounter), role: m.role as 'user' | 'assistant', content: m.content })),
         );
       })
       .catch(() => { });
-  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken]);
+  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken, pendingStartPrompt]);
+
+  useEffect(() => {
+    if (!pendingStartPrompt || !auth.isAuthenticated || !connected) {
+      return;
+    }
+
+    send({ type: 'chat', message: pendingStartPrompt });
+    setPendingStartPrompt(null);
+  }, [auth.isAuthenticated, connected, pendingStartPrompt, send]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
@@ -380,7 +437,7 @@ export default function App() {
               <ProjectSwitcher
                 currentProject={auth.project}
                 projects={auth.projects}
-                onSwitch={auth.switchProject}
+                onSwitch={handleSwitchProject}
                 onCreateNew={handleCreateProject}
                 onEdit={handleEditProject}
               />
@@ -760,12 +817,6 @@ export default function App() {
       )}
 
       {/* ── Create Project Modal ───────────────────────────────────────────────── */}
-      {showCreateProjectModal && (
-        <CreateProjectModal
-          onSave={handleSaveNewProject}
-          onClose={() => setShowCreateProjectModal(false)}
-        />
-      )}
     </div>
   );
 }
