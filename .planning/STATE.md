@@ -331,6 +331,7 @@ None
 | 20 | Авто-план и Просроченные — свитчи справа, Авто-план исправлен (disableConstraints) | 2026-03-09 | 996484e | [020-auto-plan-overdue-to-switches](./quick/020-auto-plan-overdue-to-switches/) |
 | 22 | Fix scrollbar persisting after clearing chat input | 2026-03-09 | fd83303 | [22-scrollbar-persists-after-clearing](./quick/22-scrollbar-persists-after-clearing/) |
 | 23 | Move Пустой график to end of chips and add gantt icon | 2026-03-11 | edab835, ddf67b0 | [23-move-empty-schedule-button](./quick/23-move-empty-schedule-button/) |
+| 24 | добавить в проект поддержку порядка работ и вложенности работ из обновленного gantt-lib | 2026-03-11 | 10528fc | [24-gantt-lib](./quick/24-gantt-lib/) |
 
 ### Quick Tasks Pending
 
@@ -366,7 +367,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-11 - Completed quick task 023: Move Пустой график to end of chips and add gantt icon
+Last activity: 2026-03-11 - Completed quick task 024: добавить в проект поддержку порядка работ и вложенности работ из обновленного gantt-lib
 
 ### Roadmap Evolution
 
