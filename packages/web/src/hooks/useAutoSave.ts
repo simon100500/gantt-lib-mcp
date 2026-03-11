@@ -29,6 +29,7 @@ function computeTasksHash(tasks: Task[]): string {
     startDate: typeof t.startDate === 'string' ? t.startDate : t.startDate.toISOString().split('T')[0],
     endDate: typeof t.endDate === 'string' ? t.endDate : t.endDate.toISOString().split('T')[0],
     color: t.color,
+    parentId: t.parentId,
     progress: t.progress,
     accepted: t.accepted,
     locked: t.locked,
@@ -40,9 +41,6 @@ function computeTasksHash(tasks: Task[]): string {
       lag: d.lag,
     })).sort((a, b) => a.taskId.localeCompare(b.taskId)) || [],
   }));
-
-  // Sort tasks by id for stable order
-  normalizedTasks.sort((a, b) => a.id.localeCompare(b.id));
 
   return JSON.stringify(normalizedTasks);
 }

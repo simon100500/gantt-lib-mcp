@@ -20,6 +20,7 @@ export interface GanttChartProps {
   onAdd?: (newTask: Task) => void;
   onDelete?: (taskId: string) => void;
   onInsertAfter?: (taskId: string, newTask: Task) => void;
+  onReorder?: (tasks: Task[], movedTaskId?: string, inferredParentId?: string) => void;
 }
 
 export interface GanttChartRef {
@@ -45,6 +46,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onAdd,
   onDelete,
   onInsertAfter,
+  onReorder,
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void } | null>(null);
 
@@ -73,6 +75,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onAdd={onAdd}
       onDelete={onDelete}
       onInsertAfter={onInsertAfter}
+      onReorder={onReorder}
     />
   );
 });

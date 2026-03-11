@@ -40,6 +40,8 @@ export interface Task {
   endDate: string;
   /** Optional display color */
   color?: string;
+  /** Optional parent task ID for hierarchy */
+  parentId?: string;
   /** Optional progress percentage (0-100) */
   progress?: number;
   /** Optional task dependencies */
@@ -58,6 +60,8 @@ export interface CreateTaskInput {
   endDate: string;
   /** Optional display color */
   color?: string;
+  /** Optional parent task ID for hierarchy */
+  parentId?: string;
   /** Optional progress percentage (0-100) */
   progress?: number;
   /** Optional task dependencies */
@@ -80,6 +84,8 @@ export interface UpdateTaskInput {
   endDate?: string;
   /** Optional display color */
   color?: string;
+  /** Optional parent task ID for hierarchy */
+  parentId?: string;
   /** Optional progress percentage (0-100) */
   progress?: number;
   /** Optional task dependencies */

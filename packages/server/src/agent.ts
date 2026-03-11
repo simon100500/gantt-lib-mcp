@@ -28,6 +28,7 @@ type ComparableTask = {
   name: string;
   startDate: string;
   endDate: string;
+  parentId?: string;
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
 };
 
@@ -103,6 +104,7 @@ function normalizeTask(task: ComparableTask): ComparableTask {
     name: task.name,
     startDate: task.startDate,
     endDate: task.endDate,
+    parentId: task.parentId,
     dependencies: (task.dependencies ?? [])
       .map((dependency) => ({
         taskId: dependency.taskId,
@@ -116,8 +118,8 @@ function normalizeTask(task: ComparableTask): ComparableTask {
 }
 
 function haveTasksChanged(before: ComparableTask[], after: ComparableTask[]): boolean {
-  const beforeJson = JSON.stringify(before.map(normalizeTask).sort((left, right) => left.id.localeCompare(right.id)));
-  const afterJson = JSON.stringify(after.map(normalizeTask).sort((left, right) => left.id.localeCompare(right.id)));
+  const beforeJson = JSON.stringify(before.map(normalizeTask));
+  const afterJson = JSON.stringify(after.map(normalizeTask));
   return beforeJson !== afterJson;
 }
 

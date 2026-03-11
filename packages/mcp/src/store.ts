@@ -39,6 +39,7 @@ function rowToTaskBase(row: Row): Omit<Task, 'dependencies'> {
     startDate: String(row['start_date']),
     endDate: String(row['end_date']),
     color: row['color'] != null ? String(row['color']) : undefined,
+    parentId: row['parent_id'] != null ? String(row['parent_id']) : undefined,
     progress: Number(row['progress'] ?? 0),
   };
 }
@@ -62,8 +63,8 @@ async function writeTaskFields(
   task: Task
 ): Promise<void> {
   await db.execute({
-    sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, progress = ? WHERE id = ?`,
-    args: [task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0, task.id],
+    sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, parent_id = ?, progress = ? WHERE id = ?`,
+    args: [task.name, task.startDate, task.endDate, task.color ?? null, task.parentId ?? null, task.progress ?? 0, task.id],
   });
 }
 
@@ -85,6 +86,46 @@ function resolveMutationSource(source?: TaskMutationSource): TaskMutationSource 
  * Also manages AI dialog history (messages table).
  */
 export class TaskStore {
+  private normalizeTaskDate(date: string | Date): string {
+    return typeof date === 'string' ? date : date.toISOString().split('T')[0];
+  }
+
+  private getListQuery(projectId?: string, includeGlobal = false): { sql: string; args?: string[] } {
+    if (projectId && includeGlobal) {
+      return {
+        sql: `
+          SELECT *
+          FROM tasks
+          WHERE project_id = ? OR project_id IS NULL
+          ORDER BY CASE WHEN project_id = ? THEN 0 ELSE 1 END, sort_order ASC, rowid ASC
+        `,
+        args: [projectId, projectId],
+      };
+    }
+
+    if (projectId) {
+      return {
+        sql: 'SELECT * FROM tasks WHERE project_id = ? ORDER BY sort_order ASC, rowid ASC',
+        args: [projectId],
+      };
+    }
+
+    return {
+      sql: 'SELECT * FROM tasks ORDER BY sort_order ASC, rowid ASC',
+    };
+  }
+
+  private async getNextSortOrder(projectId?: string): Promise<number> {
+    const db = await getDb();
+    const sql = projectId
+      ? 'SELECT COALESCE(MAX(sort_order), -1) AS max_sort_order FROM tasks WHERE project_id = ?'
+      : 'SELECT COALESCE(MAX(sort_order), -1) AS max_sort_order FROM tasks WHERE project_id IS NULL';
+    const result = projectId
+      ? await db.execute({ sql, args: [projectId] })
+      : await db.execute(sql);
+    return Number(result.rows[0]?.['max_sort_order'] ?? -1) + 1;
+  }
+
   private async bumpTaskRevision(projectId?: string): Promise<number> {
     const db = await getDb();
     const scopeId = projectId ?? '__global__';
@@ -192,12 +233,10 @@ export class TaskStore {
    */
   private async loadSnapshot(projectId?: string): Promise<Map<string, Task>> {
     const db = await getDb();
-    const sql = projectId
-      ? 'SELECT * FROM tasks WHERE project_id = ?'
-      : 'SELECT * FROM tasks';
-    const result = projectId
-      ? await db.execute({ sql, args: [projectId] })
-      : await db.execute(sql);
+    const query = this.getListQuery(projectId, false);
+    const result = query.args
+      ? await db.execute({ sql: query.sql, args: query.args })
+      : await db.execute(query.sql);
     const map = new Map<string, Task>();
 
     for (const row of result.rows) {
@@ -244,14 +283,16 @@ export class TaskStore {
     const task: Task = {
       id,
       name: input.name,
-      startDate: input.startDate,
-      endDate: input.endDate,
+      startDate: this.normalizeTaskDate(input.startDate),
+      endDate: this.normalizeTaskDate(input.endDate),
       color: input.color,
+      parentId: input.parentId,
       progress: input.progress ?? 0,
       dependencies: input.dependencies ?? [],
     };
 
     const db = await getDb();
+    const sortOrder = await this.getNextSortOrder(projectId);
 
     // Validate dependencies against existing tasks (any task can be a dependency, regardless of project)
     if (task.dependencies && task.dependencies.length > 0) {
@@ -263,13 +304,23 @@ export class TaskStore {
       }
     }
 
+    if (task.parentId) {
+      if (task.parentId === id) {
+        throw new Error('Task cannot be its own parent');
+      }
+      const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [task.parentId] });
+      if (check.rows.length === 0) {
+        throw new Error(`Parent task references non-existent task: ${task.parentId}`);
+      }
+    }
+
     // Insert task row (project_id is nullable)
     const insertSql = projectId
-      ? `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?, ?)`
-      : `INSERT INTO tasks (id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?)`;
+      ? `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, parent_id, progress, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO tasks (id, name, start_date, end_date, color, parent_id, progress, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
     const insertArgs = projectId
-      ? [id, projectId, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0]
-      : [id, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0];
+      ? [id, projectId, task.name, task.startDate, task.endDate, task.color ?? null, task.parentId ?? null, task.progress ?? 0, sortOrder]
+      : [id, task.name, task.startDate, task.endDate, task.color ?? null, task.parentId ?? null, task.progress ?? 0, sortOrder];
 
     await db.execute({
       sql: insertSql,
@@ -318,24 +369,13 @@ export class TaskStore {
    */
   async list(projectId?: string, includeGlobal = false): Promise<Task[]> {
     const db = await getDb();
-    let sql: string;
     let result: Awaited<ReturnType<typeof db.execute>>;
 
     console.log('[STORE DEBUG] list() called with:', { projectId, includeGlobal });
-
-    if (projectId && includeGlobal) {
-      // Get both project-specific tasks AND global tasks (project_id=null)
-      sql = 'SELECT * FROM tasks WHERE project_id = ? OR project_id IS NULL';
-      result = await db.execute({ sql, args: [projectId] });
-    } else if (projectId) {
-      // Get only project-specific tasks
-      sql = 'SELECT * FROM tasks WHERE project_id = ?';
-      result = await db.execute({ sql, args: [projectId] });
-    } else {
-      // Get all tasks
-      sql = 'SELECT * FROM tasks';
-      result = await db.execute(sql);
-    }
+    const query = this.getListQuery(projectId, includeGlobal);
+    result = query.args
+      ? await db.execute({ sql: query.sql, args: query.args })
+      : await db.execute(query.sql);
 
     console.log('[STORE DEBUG] SQL executed, rows returned:', result.rows.length);
 
@@ -387,9 +427,10 @@ export class TaskStore {
     const updated: Task = {
       ...task,
       ...(input.name !== undefined && { name: input.name }),
-      ...(input.startDate !== undefined && { startDate: input.startDate }),
-      ...(input.endDate !== undefined && { endDate: input.endDate }),
+      ...(input.startDate !== undefined && { startDate: this.normalizeTaskDate(input.startDate) }),
+      ...(input.endDate !== undefined && { endDate: this.normalizeTaskDate(input.endDate) }),
       ...(input.color !== undefined && { color: input.color }),
+      ...(input.parentId !== undefined && { parentId: input.parentId || undefined }),
       ...(input.progress !== undefined && { progress: input.progress }),
       ...(input.dependencies !== undefined && { dependencies: input.dependencies }),
     };
@@ -404,10 +445,20 @@ export class TaskStore {
       }
     }
 
+    if (input.parentId !== undefined && input.parentId !== '') {
+      if (input.parentId === id) {
+        throw new Error('Task cannot be its own parent');
+      }
+      const check = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [input.parentId] });
+      if (check.rows.length === 0) {
+        throw new Error(`Parent task references non-existent task: ${input.parentId}`);
+      }
+    }
+
     // Write updated task fields
     await db.execute({
-      sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, progress = ? WHERE id = ?`,
-      args: [updated.name, updated.startDate, updated.endDate, updated.color ?? null, updated.progress ?? 0, id],
+      sql: `UPDATE tasks SET name = ?, start_date = ?, end_date = ?, color = ?, parent_id = ?, progress = ? WHERE id = ?`,
+      args: [updated.name, updated.startDate, updated.endDate, updated.color ?? null, updated.parentId ?? null, updated.progress ?? 0, id],
     });
 
     // Replace dependency rows if updated
@@ -587,10 +638,12 @@ export class TaskStore {
     }
 
     // Insert each task and its dependencies
-    for (const task of tasks) {
+    for (const [index, task] of tasks.entries()) {
+      const normalizedStartDate = this.normalizeTaskDate(task.startDate);
+      const normalizedEndDate = this.normalizeTaskDate(task.endDate);
       await db.execute({
-        sql: `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, progress) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [task.id, projectId ?? null, task.name, task.startDate, task.endDate, task.color ?? null, task.progress ?? 0],
+        sql: `INSERT INTO tasks (id, project_id, name, start_date, end_date, color, parent_id, progress, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [task.id, projectId ?? null, task.name, normalizedStartDate, normalizedEndDate, task.color ?? null, task.parentId ?? null, task.progress ?? 0, index],
       });
 
       if (task.dependencies && task.dependencies.length > 0) {

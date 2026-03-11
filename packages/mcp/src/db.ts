@@ -16,6 +16,14 @@ let _db: Client | null = null;
 
 export type DbClient = Client;
 
+async function ensureTaskColumn(db: Client, columnName: string, definition: string): Promise<void> {
+  const tableInfo = await db.execute('PRAGMA table_info(tasks)');
+  const hasColumn = tableInfo.rows.some((row) => String(row['name']) === columnName);
+  if (!hasColumn) {
+    await db.execute(`ALTER TABLE tasks ADD COLUMN ${definition}`);
+  }
+}
+
 /**
  * Get (or lazily initialize) the singleton SQLite client.
  * Creates all required tables if they do not exist.
@@ -82,6 +90,14 @@ export async function getDb(): Promise<Client> {
       color TEXT,
       progress REAL DEFAULT 0
     )
+  `);
+
+  await ensureTaskColumn(_db, 'parent_id', 'parent_id TEXT REFERENCES tasks(id) ON DELETE SET NULL');
+  await ensureTaskColumn(_db, 'sort_order', 'sort_order INTEGER NOT NULL DEFAULT 0');
+  await _db.execute(`
+    UPDATE tasks
+    SET sort_order = rowid
+    WHERE sort_order IS NULL OR sort_order = 0
   `);
 
   await _db.execute(`

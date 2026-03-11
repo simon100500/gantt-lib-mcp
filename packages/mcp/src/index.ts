@@ -84,6 +84,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Optional display color (e.g., #ff0000)',
           },
+          parentId: {
+            type: 'string',
+            description: 'Optional parent task ID for hierarchy nesting',
+          },
           progress: {
             type: 'number',
             description: 'Optional progress percentage (0-100)',
@@ -175,6 +179,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           color: {
             type: 'string',
             description: 'Optional display color (e.g., #ff0000)',
+          },
+          parentId: {
+            type: 'string',
+            description: 'Optional parent task ID for hierarchy nesting. Pass empty string to remove nesting.',
           },
           progress: {
             type: 'number',
@@ -481,6 +489,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       input.startDate !== undefined ||
       input.endDate !== undefined ||
       input.color !== undefined ||
+      input.parentId !== undefined ||
       input.progress !== undefined ||
       input.dependencies !== undefined;
 

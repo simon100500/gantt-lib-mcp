@@ -173,7 +173,9 @@ export default function App() {
   }, [handleAddTask]);
 
   const handleDeleteTask = useCallback((taskId: string) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+    setTasks(prev => prev
+      .filter(t => t.id !== taskId)
+      .map(t => (t.parentId === taskId ? { ...t, parentId: undefined } : t)));
   }, [setTasks]);
 
   const handleInsertAfterTask = useCallback((taskId: string, newTask: Task) => {
@@ -184,6 +186,10 @@ export default function App() {
       newTasks.splice(index + 1, 0, newTask);
       return newTasks;
     });
+  }, [setTasks]);
+
+  const handleReorderTasks = useCallback((reorderedTasks: Task[]) => {
+    setTasks(reorderedTasks);
   }, [setTasks]);
 
   const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
@@ -471,6 +477,7 @@ export default function App() {
                   onAdd={handleAddTask}
                   onDelete={handleDeleteTask}
                   onInsertAfter={handleInsertAfterTask}
+                  onReorder={handleReorderTasks}
                 />
               )}
 

@@ -22,6 +22,7 @@ export interface Task {
   startDate: string | Date;   // YYYY-MM-DD string or Date object (gantt-lib compatible)
   endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)
   color?: string;
+  parentId?: string;          // Optional parent task ID for hierarchy
   progress?: number;
   accepted?: boolean;        // Controls progress bar color at 100% (green vs yellow)
   locked?: boolean;          // Prevents drag/resize/edit
