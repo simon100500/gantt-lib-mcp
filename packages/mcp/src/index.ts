@@ -49,8 +49,10 @@ function isValidDependencyType(type: string): type is 'FS' | 'SS' | 'FF' | 'SF' 
 }
 
 // Register list tools handler
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  console.error('[MCP SERVER] ListToolsRequestSchema received, returning tools...');
+  return {
+    tools: [
     {
       name: 'ping',
       description: 'A simple ping tool to test MCP server connectivity',
@@ -314,10 +316,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
   ],
-}));
+  };
+});
 
 // Register call tool handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  console.error('[MCP SERVER] CallToolRequestSchema received:', request.params.name);
   const { name, arguments: args } = request.params;
 
   // Ping tool for connectivity testing
@@ -750,8 +754,15 @@ async function main() {
   // Initialize the SQLite database (creates tables if needed)
   await getDb();
 
+  // Log startup for debugging
+  console.error('[MCP SERVER] Starting MCP server...');
+  console.error('[MCP SERVER] PROJECT_ID from env:', process.env.PROJECT_ID);
+  console.error('[MCP SERVER] DATABASE_URL set:', !!process.env.DATABASE_URL);
+  console.error('[MCP SERVER] Node args:', process.argv);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  console.error('[MCP SERVER] Connected to stdio transport, waiting for requests...');
   // Server runs via stdio, no explicit listen needed
   // Process will stay alive as long as stdio is open
 }
