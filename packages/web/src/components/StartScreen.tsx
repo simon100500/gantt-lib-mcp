@@ -93,7 +93,7 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
               style={{ maxHeight: '12rem', overflowY: 'hidden' }}
               className={cn(
                 'w-full px-4 py-3 pr-12 text-sm bg-white resize-none',
-                'border border-slate-200 rounded-xl',
+                'border border-slate-200 rounded-xl shadow-sm',
                 'focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent focus-visible:outline-none',
               )}
             />
