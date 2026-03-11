@@ -18,6 +18,7 @@ import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
+import { writeServerDebugLog } from './debug-log.js';
 
 const fastify = Fastify({ logger: true });
 await fastify.register(websocket);
@@ -45,6 +46,12 @@ fastify.post('/api/chat', { preHandler: [authMiddleware] }, async (req, reply) =
   if (!message) {
     return reply.status(400).send({ error: 'message required' });
   }
+  await writeServerDebugLog('rest_chat_received', {
+    userId: req.user!.userId,
+    projectId: req.user!.projectId,
+    sessionId: req.user!.sessionId,
+    message,
+  });
   // Fire-and-forget — streaming goes via WebSocket
   runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId).catch((err: unknown) => {
     broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
@@ -83,6 +90,12 @@ registerWsRoutes(fastify);
 
 // Handle chat messages arriving over WebSocket
 onChatMessage((msg, userId, projectId, sessionId) => {
+  void writeServerDebugLog('ws_chat_received', {
+    userId,
+    projectId,
+    sessionId,
+    message: msg,
+  });
   runAgentWithHistory(msg, projectId, sessionId).catch((err: unknown) => {
     broadcastToSession(sessionId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'agent error (ws)');

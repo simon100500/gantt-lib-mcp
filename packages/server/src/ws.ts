@@ -20,6 +20,7 @@ import type { WebSocket } from 'ws';
 import type { FastifyInstance } from 'fastify';
 import { verifyToken } from './auth.js';
 import type { JwtPayload } from './auth.js';
+import { writeServerDebugLog } from './debug-log.js';
 
 // ---------------------------------------------------------------------------
 // Message types (shared protocol between server and web client)
@@ -71,6 +72,14 @@ export function broadcastToSession(sessionId: string, msg: ServerMessage): void 
   if (!sockets) return;
 
   const json = JSON.stringify(msg);
+  void writeServerDebugLog('ws_broadcast', {
+    sessionId,
+    messageType: msg.type,
+    socketCount: sockets.size,
+    contentLength: msg.type === 'token' ? msg.content?.length ?? 0 : undefined,
+    taskCount: msg.type === 'tasks' ? msg.tasks?.length ?? 0 : undefined,
+    errorMessage: msg.type === 'error' ? msg.message : undefined,
+  });
   for (const socket of sockets) {
     if (socket.readyState === 1) {
       socket.send(json);
@@ -129,6 +138,11 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
               sessionConnections.get(currentSessionId)!.add(socket);
 
               socket.send(JSON.stringify({ type: 'connected' }));
+              void writeServerDebugLog('ws_authenticated', {
+                sessionId: currentSessionId,
+                userId: payload.sub,
+                projectId: payload.projectId,
+              });
             } catch (err) {
               socket.send(JSON.stringify({
                 type: 'error',
@@ -148,6 +162,12 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
 
         // After auth: handle chat messages
         if (data.type === 'chat' && data.message && authUser) {
+          void writeServerDebugLog('ws_chat_message', {
+            sessionId: authUser.sessionId,
+            userId: authUser.sub,
+            projectId: authUser.projectId,
+            message: data.message,
+          });
           for (const h of chatHandlers) {
             h(data.message, authUser.sub, authUser.projectId, authUser.sessionId);
           }
@@ -158,6 +178,9 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
     });
 
     socket.on('close', () => {
+      void writeServerDebugLog('ws_closed', {
+        sessionId: currentSessionId,
+      });
       // Remove socket from session registry
       if (currentSessionId) {
         const sockets = sessionConnections.get(currentSessionId);

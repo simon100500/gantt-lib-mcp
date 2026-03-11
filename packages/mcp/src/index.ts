@@ -7,6 +7,7 @@ import {
 import { taskStore } from './store.js';
 import { getDb } from './db.js';
 import type { Task, CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
+import { writeMcpDebugLog } from './debug-log.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -319,9 +320,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 // Register call tool handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  await writeMcpDebugLog('tool_call_received', {
+    tool: name,
+    args,
+    envProjectId: process.env.PROJECT_ID,
+    dbPath: process.env.DB_PATH,
+  });
 
   // Ping tool for connectivity testing
   if (name === 'ping') {
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      result: 'pong',
+    });
     return {
       content: [
         {
@@ -340,6 +351,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // DEBUG: Log projectId resolution
     console.error('[CREATE_TASK DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
+    await writeMcpDebugLog('create_task_resolved_project', {
+      argProjectId,
+      envProjectId: process.env.PROJECT_ID,
+      resolvedProjectId,
+      input,
+    });
 
     // Validate date format
     if (!isValidDateFormat(input.startDate)) {
@@ -372,6 +389,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       t.dependencies?.some(d => d.taskId === task.id) ||
       task.dependencies?.some(d => d.taskId === t.id)
     );
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      resolvedProjectId,
+      createdTaskId: task.id,
+      createdTaskName: task.name,
+      visibleTaskCount: allTasks.length,
+      affectedTasks: dependentTasks.map((t) => ({ id: t.id, name: t.name })),
+    });
 
     return {
       content: [
@@ -397,6 +422,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const tasks = await taskStore.list(resolvedProjectId, false);
 
     console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', tasks.length);
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      argProjectId,
+      resolvedProjectId,
+      taskCount: tasks.length,
+      tasks: tasks.map((task) => ({ id: task.id, name: task.name, startDate: task.startDate, endDate: task.endDate })),
+    });
 
     return {
       content: [
@@ -419,6 +451,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!task) {
       throw new Error(`Task not found: ${id}`);
     }
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      task,
+    });
 
     return {
       content: [
@@ -487,6 +523,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!updatedTask) {
       throw new Error(`Task not found: ${id}`);
     }
+    await writeMcpDebugLog('update_task_completed', {
+      id,
+      input,
+      updatedTask,
+      projectId: process.env.PROJECT_ID,
+    });
 
     // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
@@ -517,6 +559,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ],
       };
     }
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      updatedTask,
+    });
 
     return {
       content: [
@@ -539,6 +585,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!deleted) {
       throw new Error(`Task not found: ${id}`);
     }
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      deletedTaskId: id,
+      projectId: process.env.PROJECT_ID,
+    });
 
     return {
       content: [
@@ -553,6 +604,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // export_tasks tool
   if (name === 'export_tasks') {
     const json = await taskStore.exportTasks();
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      exportLength: json.length,
+    });
     return {
       content: [
         {
@@ -574,6 +629,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     try {
       const count = await taskStore.importTasks(jsonData, resolvedProjectId);
+      await writeMcpDebugLog('tool_call_completed', {
+        tool: name,
+        resolvedProjectId,
+        imported: count,
+      });
       return {
         content: [
           {
@@ -584,6 +644,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
+      await writeMcpDebugLog('tool_call_failed', {
+        tool: name,
+        resolvedProjectId,
+        error: errorMessage,
+      });
       return {
         content: [
           {
@@ -601,6 +666,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'set_autosave_path') {
     const { filePath } = args as { filePath?: string };
     const path = filePath || './gantt-data.json';
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      path,
+    });
     return {
       content: [
         {
@@ -622,6 +691,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const resolvedProjectId = argProjectId ?? process.env.PROJECT_ID;
 
     console.error('[CREATE_TASKS_BATCH DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
+    await writeMcpDebugLog('create_tasks_batch_resolved_project', {
+      argProjectId,
+      envProjectId: process.env.PROJECT_ID,
+      resolvedProjectId,
+      input,
+    });
 
     // Validate baseStartDate format
     if (!isValidDateFormat(input.baseStartDate)) {
@@ -742,6 +817,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  await writeMcpDebugLog('tool_call_failed', {
+    tool: name,
+    error: `Unknown tool: ${name}`,
+  });
   throw new Error(`Unknown tool: ${name}`);
 });
 

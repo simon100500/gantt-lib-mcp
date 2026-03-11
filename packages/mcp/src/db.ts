@@ -10,6 +10,7 @@
  */
 
 import { createClient, type Client } from '@libsql/client';
+import { writeMcpDebugLog } from './debug-log.js';
 
 let _db: Client | null = null;
 
@@ -25,6 +26,10 @@ export async function getDb(): Promise<Client> {
   if (_db) return _db;
 
   const dbPath = process.env.DB_PATH ?? './gantt.db';
+  await writeMcpDebugLog('db_initialized', {
+    dbPath,
+    projectId: process.env.PROJECT_ID,
+  });
   _db = createClient({ url: `file:${dbPath}` });
 
   // Create all tables in FK-safe order (tables are created with IF NOT EXISTS, so safe to run on every startup)

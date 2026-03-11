@@ -10,6 +10,7 @@ import { Task, CreateTaskInput, UpdateTaskInput, Message } from './types.js';
 import { TaskScheduler } from './scheduler.js';
 import { getDb } from './db.js';
 import type { Row } from '@libsql/client';
+import { writeMcpDebugLog } from './debug-log.js';
 
 // ---------------------------------------------------------------------------
 // Row helpers
@@ -125,6 +126,10 @@ export class TaskStore {
    * @param projectId - Optional project ID to associate the task with
    */
   async create(input: CreateTaskInput, projectId?: string): Promise<Task> {
+    await writeMcpDebugLog('store_create_started', {
+      projectId,
+      input,
+    });
     const id = crypto.randomUUID();
     const task: Task = {
       id,
@@ -187,6 +192,11 @@ export class TaskStore {
 
     // Return the current state of the task from DB
     const created = await this.get(id);
+    await writeMcpDebugLog('store_create_completed', {
+      projectId,
+      taskId: id,
+      createdTask: created ?? task,
+    });
     return created ?? task;
   }
 
@@ -225,6 +235,12 @@ export class TaskStore {
       tasks.push({ ...base, dependencies: deps });
     }
     console.log('[STORE DEBUG] Returning tasks:', tasks.length, 'tasks');
+    await writeMcpDebugLog('store_list_completed', {
+      projectId,
+      includeGlobal,
+      taskCount: tasks.length,
+      tasks: tasks.map((task) => ({ id: task.id, name: task.name })),
+    });
     return tasks;
   }
 
@@ -245,6 +261,10 @@ export class TaskStore {
    * Runs scheduler recalculation if dates or dependencies changed.
    */
   async update(id: string, input: UpdateTaskInput): Promise<Task | undefined> {
+    await writeMcpDebugLog('store_update_started', {
+      taskId: id,
+      input,
+    });
     const task = await this.get(id);
     if (!task) return undefined;
 
@@ -316,7 +336,12 @@ export class TaskStore {
       await this.runScheduler(id, skipStartTask, projectId);
     }
 
-    return await this.get(id);
+    const result = await this.get(id);
+    await writeMcpDebugLog('store_update_completed', {
+      taskId: id,
+      result,
+    });
+    return result;
   }
 
   /**
@@ -377,7 +402,12 @@ export class TaskStore {
   async delete(id: string): Promise<boolean> {
     const db = await getDb();
     const result = await db.execute({ sql: 'DELETE FROM tasks WHERE id = ?', args: [id] });
-    return (result.rowsAffected ?? 0) > 0;
+    const deleted = (result.rowsAffected ?? 0) > 0;
+    await writeMcpDebugLog('store_delete_completed', {
+      taskId: id,
+      deleted,
+    });
+    return deleted;
   }
 
   /**
@@ -393,7 +423,12 @@ export class TaskStore {
     const result = projectId
       ? await db.execute({ sql, args: [projectId] })
       : await db.execute(sql);
-    return result.rowsAffected ?? 0;
+    const deletedCount = result.rowsAffected ?? 0;
+    await writeMcpDebugLog('store_delete_all_completed', {
+      projectId,
+      deletedCount,
+    });
+    return deletedCount;
   }
 
   /**
@@ -410,6 +445,10 @@ export class TaskStore {
    * @returns number of tasks imported
    */
   async importTasks(jsonData: string, projectId?: string): Promise<number> {
+    await writeMcpDebugLog('store_import_started', {
+      projectId,
+      jsonLength: jsonData.length,
+    });
     let tasks: Task[];
     try {
       tasks = JSON.parse(jsonData) as Task[];
@@ -447,6 +486,11 @@ export class TaskStore {
       }
     }
 
+    await writeMcpDebugLog('store_import_completed', {
+      projectId,
+      importedCount: tasks.length,
+      taskIds: tasks.map((task) => task.id),
+    });
     return tasks.length;
   }
 
@@ -477,7 +521,14 @@ export class TaskStore {
       args: insertArgs,
     });
 
-    return { id, projectId, role, content, createdAt };
+    const message = { id, projectId, role, content, createdAt };
+    await writeMcpDebugLog('store_add_message_completed', {
+      projectId,
+      role,
+      messageId: id,
+      content,
+    });
+    return message;
   }
 
   /**
@@ -492,13 +543,18 @@ export class TaskStore {
     const result = projectId
       ? await db.execute({ sql, args: [projectId] })
       : await db.execute(sql);
-    return result.rows.map(row => ({
+    const messages = result.rows.map(row => ({
       id: String(row['id']),
       projectId: row['project_id'] != null ? String(row['project_id']) : undefined,
       role: String(row['role']) as 'user' | 'assistant',
       content: String(row['content']),
       createdAt: String(row['created_at']),
     }));
+    await writeMcpDebugLog('store_get_messages_completed', {
+      projectId,
+      count: messages.length,
+    });
+    return messages;
   }
 }
 

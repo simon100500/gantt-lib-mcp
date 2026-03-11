@@ -28,10 +28,7 @@ import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { taskStore } from '@gantt/mcp/store';
 import { broadcastToSession } from './ws.js';
-
-// ---------------------------------------------------------------------------
-// Path resolution
-// ---------------------------------------------------------------------------
+import { writeServerDebugLog } from './debug-log.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,12 +37,15 @@ const __dirname = dirname(__filename);
 // In dev: resolve from dist/agent.js -> packages/server/dist -> packages/server -> project root
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
 
-// Load .env from project root (OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL)
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
 
-// ---------------------------------------------------------------------------
-// Environment resolution
-// ---------------------------------------------------------------------------
+type ComparableTask = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
+};
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -62,9 +62,37 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
     .join('');
 }
 
-// ---------------------------------------------------------------------------
-// Main export
-// ---------------------------------------------------------------------------
+function isMutationIntent(message: string): boolean {
+  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|добав|внес|созда|измени|обнов|удал|убер|разбей|раздели|переимен)/i.test(message);
+}
+
+function normalizeTask(task: ComparableTask): ComparableTask {
+  return {
+    id: task.id,
+    name: task.name,
+    startDate: task.startDate,
+    endDate: task.endDate,
+    dependencies: (task.dependencies ?? [])
+      .map((dependency) => ({
+        taskId: dependency.taskId,
+        type: dependency.type,
+        lag: dependency.lag ?? 0,
+      }))
+      .sort((left, right) =>
+        `${left.taskId}:${left.type}:${left.lag}`.localeCompare(`${right.taskId}:${right.type}:${right.lag}`),
+      ),
+  };
+}
+
+function haveTasksChanged(before: ComparableTask[], after: ComparableTask[]): boolean {
+  const beforeJson = JSON.stringify(before.map(normalizeTask).sort((left, right) => left.id.localeCompare(right.id)));
+  const afterJson = JSON.stringify(after.map(normalizeTask).sort((left, right) => left.id.localeCompare(right.id)));
+  return beforeJson !== afterJson;
+}
+
+function buildMutationFailureMessage(): string {
+  return 'Изменение не применилось: агент ответил как будто задача изменена, но набор задач в базе не изменился.';
+}
 
 /**
  * Run one agent turn:
@@ -82,16 +110,24 @@ export async function runAgentWithHistory(
   sessionId: string
 ): Promise<void> {
   try {
+    const mutationRequested = isMutationIntent(userMessage);
+    const tasksBefore = mutationRequested
+      ? await taskStore.list(projectId, true) as ComparableTask[]
+      : [];
+
     console.log(`[agent-run] start project=${projectId} session=${sessionId} userMessageLength=${userMessage.length}`);
+    await writeServerDebugLog('agent_run_started', {
+      projectId,
+      sessionId,
+      userMessage,
+      mutationRequested,
+      tasksBeforeCount: tasksBefore.length,
+      tasksBeforeNames: tasksBefore.map((task) => task.name),
+    });
 
-    // 1. Save user message to DB (project-scoped)
     await taskStore.addMessage('user', userMessage, projectId);
-
-    // 2. Load full conversation history from DB (project-scoped)
     const messages = await taskStore.getMessages(projectId);
 
-    // 3. Load system prompt (optional fallback if file missing)
-    // GANTT_MCP_PROMPTS_DIR allows override for container deployments where paths differ
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
       ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
       : join(PROJECT_ROOT, 'packages/mcp/agent/prompts/system.md');
@@ -99,8 +135,6 @@ export async function runAgentWithHistory(
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
 
-    // 4. Build prompt with history
-    // Exclude the last message (current user turn - already included in "User: ..." below)
     const historyContext = messages
       .slice(0, -1)
       .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
@@ -111,19 +145,22 @@ export async function runAgentWithHistory(
       historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
       `\n\nUser: ${userMessage}`,
     ].join('');
+    await writeServerDebugLog('agent_prompt_built', {
+      projectId,
+      sessionId,
+      historyCount: messages.length,
+      prompt: fullPrompt,
+    });
 
-    // 5. Validate API key
     const env = resolveEnv();
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
 
-    // GANTT_MCP_SERVER_PATH allows override for container deployments
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
       ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
     const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
 
-    // 6. Run agent session
     const session = query({
       prompt: fullPrompt,
       options: {
@@ -145,10 +182,9 @@ export async function runAgentWithHistory(
       },
     });
 
-    // 7. Stream tokens to WebSocket (session-scoped)
     let assistantResponse = '';
     let streamedContent = false;
-    let streamedPartialContent = false;
+    let capturedPartialContent = false;
 
     for await (const event of session) {
       if (isSDKPartialAssistantMessage(event)) {
@@ -158,9 +194,28 @@ export async function runAgentWithHistory(
           && event.event.delta.text
         ) {
           assistantResponse += event.event.delta.text;
-          broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
-          streamedContent = true;
-          streamedPartialContent = true;
+          capturedPartialContent = true;
+          if (!mutationRequested) {
+            broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
+            streamedContent = true;
+          }
+          await writeServerDebugLog('sdk_text_delta', {
+            sessionId,
+            projectId,
+            text: event.event.delta.text,
+            mutationRequested,
+          });
+        }
+        if (
+          event.event.type === 'content_block_delta'
+          && event.event.delta.type === 'thinking_delta'
+          && event.event.delta.thinking
+        ) {
+          await writeServerDebugLog('sdk_thinking_delta', {
+            sessionId,
+            projectId,
+            thinking: event.event.delta.thinking,
+          });
         }
         continue;
       }
@@ -168,16 +223,23 @@ export async function runAgentWithHistory(
       if (isSDKAssistantMessage(event)) {
         const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
         console.log(
-          `[agent-run] assistant-message session=${sessionId} textLength=${text.length} partial=${streamedPartialContent}`,
+          `[agent-run] assistant-message session=${sessionId} textLength=${text.length} partial=${capturedPartialContent}`,
         );
 
-        // If text deltas were already streamed, the final assistant message usually
-        // repeats the same content. Avoid broadcasting duplicates.
-        if (!streamedPartialContent && text) {
+        if (!capturedPartialContent && text) {
           assistantResponse += text;
-          broadcastToSession(sessionId, { type: 'token', content: text });
-          streamedContent = true;
+          if (!mutationRequested) {
+            broadcastToSession(sessionId, { type: 'token', content: text });
+            streamedContent = true;
+          }
         }
+        await writeServerDebugLog('sdk_assistant_message', {
+          sessionId,
+          projectId,
+          text,
+          capturedPartialContent,
+          mutationRequested,
+        });
       }
 
       if (isSDKResultMessage(event)) {
@@ -185,31 +247,85 @@ export async function runAgentWithHistory(
         console.log(
           `[agent-run] result-message session=${sessionId} subtype=${event.subtype} isError=${event.is_error} resultLength=${resultText.length}`,
         );
-        if (!event.is_error && !streamedContent && resultText.trim().length > 0) {
+        if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
           assistantResponse = resultText;
-          broadcastToSession(sessionId, { type: 'token', content: resultText });
-          streamedContent = true;
+          if (!mutationRequested) {
+            broadcastToSession(sessionId, { type: 'token', content: resultText });
+            streamedContent = true;
+          }
         }
+        await writeServerDebugLog('sdk_result_message', {
+          sessionId,
+          projectId,
+          subtype: event.subtype,
+          isError: event.is_error,
+          result: resultText,
+          error: event.is_error ? event.error : undefined,
+          turns: event.num_turns,
+        });
         break;
       }
     }
 
-    // 8. Save assistant response to DB (project-scoped)
+    const tasksAfter = await taskStore.list(projectId, true) as ComparableTask[];
+    const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
+    await writeServerDebugLog('mutation_verification', {
+      projectId,
+      sessionId,
+      mutationRequested,
+      tasksChanged,
+      tasksBeforeCount: tasksBefore.length,
+      tasksAfterCount: tasksAfter.length,
+      tasksAfterNames: tasksAfter.map((task) => task.name),
+      assistantResponse,
+    });
+
+    if (mutationRequested) {
+      assistantResponse = tasksChanged
+        ? (assistantResponse.trim() || 'Изменения применены.')
+        : buildMutationFailureMessage();
+
+      if (assistantResponse) {
+        broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
+        streamedContent = true;
+      }
+    }
+
     if (assistantResponse) {
       await taskStore.addMessage('assistant', assistantResponse, projectId);
     }
     console.log(
-      `[agent-run] complete session=${sessionId} assistantResponseLength=${assistantResponse.length} streamed=${streamedContent}`,
+      `[agent-run] complete session=${sessionId} assistantResponseLength=${assistantResponse.length} streamed=${streamedContent} tasksChanged=${tasksChanged}`,
     );
+    await writeServerDebugLog('agent_response_saved', {
+      projectId,
+      sessionId,
+      assistantResponse,
+      streamedContent,
+      tasksChanged,
+    });
 
-    // 9. Broadcast updated tasks snapshot (session-scoped)
-    const tasks = await taskStore.list(projectId, true);
-    broadcastToSession(sessionId, { type: 'tasks', tasks });
+    broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter });
+    await writeServerDebugLog('tasks_broadcast', {
+      projectId,
+      sessionId,
+      taskCount: tasksAfter.length,
+      taskIds: tasksAfter.map((task) => task.id),
+      taskNames: tasksAfter.map((task) => task.name),
+    });
 
-    // 10. Signal turn complete (session-scoped)
     broadcastToSession(sessionId, { type: 'done' });
+    await writeServerDebugLog('agent_run_completed', {
+      projectId,
+      sessionId,
+    });
   } catch (err) {
     broadcastToSession(sessionId, { type: 'error', message: String(err) });
+    await writeServerDebugLog('agent_run_failed', {
+      projectId,
+      sessionId,
+      error: String(err),
+    });
     throw err;
   }
 }
