@@ -14,7 +14,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
   return (
     <div className="flex flex-col h-full">
       {/* Current project display */}
-      <div className="flex items-center justify-between gap-2 p-3 bg-white rounded-lg border border-slate-200 shadow-sm shrink-0">
+      <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200 shrink-0">
         <div className="flex-1 min-w-0">
           <p className="text-xs text-slate-500 font-medium mb-0.5">Текущий проект</p>
           <p className="text-sm font-semibold text-slate-900 truncate">{currentProject.name}</p>
@@ -34,7 +34,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
 
       {/* Projects list */}
       <div className="flex flex-col gap-2 mt-4 flex-1 overflow-y-auto">
-        <p className="text-xs text-slate-500 font-medium sticky top-0 bg-slate-50 py-1">Все проекты</p>
+        <p className="text-xs text-slate-500 font-medium sticky top-0 bg-background py-1">Все проекты</p>
 
         {/* All projects as simple list */}
         {projects.length > 0 ? (
