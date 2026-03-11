@@ -317,121 +317,129 @@ export default function App() {
 
   // ── Layout ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden">
 
-      {/* ── Top Bar ──────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
-        {/* Logo */}
-        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight select-none">
-          <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-          <span className="text-slate-900">GetGantt</span>
-        </div>
-
-        <span className="w-px h-4 bg-slate-200" />
-
-        {/* Project sidebar toggle button */}
-        <button
-          type="button"
-          onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
-          aria-pressed={projectSidebarVisible}
-          aria-label={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-          className={cn(
-            'h-7 px-2 flex items-center gap-1.5 rounded transition-colors',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-            projectSidebarVisible
-              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
-          )}
-          title={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-        >
-          <PanelLeftClose className={cn('w-4 h-4 transition-transform', projectSidebarVisible ? 'rotate-0' : 'rotate-180')} />
-        </button>
-
-        <div className="flex-1" />
-
-        {!auth.isAuthenticated ? (
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-600">
-              Войдите, чтобы сохранить график
-            </span>
-            <LoginButton onClick={() => setShowOtpModal(true)} />
+      {/* ── Project sidebar (full height) ──────────────────────────────────── */}
+      {projectSidebarVisible && (
+        <aside className="w-72 shrink-0 border-r border-slate-200 bg-white flex flex-col h-full">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+            <h2 className="text-sm font-semibold text-slate-900">Проекты</h2>
+            <button
+              type="button"
+              onClick={() => setProjectSidebarVisible(false)}
+              aria-label="Скрыть проекты"
+              className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
+            >
+              <PanelLeftClose className="w-4 h-4 text-slate-500" />
+            </button>
           </div>
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
-              >
-                <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel className="truncate text-slate-700">
-                {auth.user?.email ?? 'Account'}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Выйти</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </header>
+          <div className="flex-1 overflow-y-auto p-4">
+            {auth.isAuthenticated && auth.project ? (
+              <ProjectSwitcher
+                currentProject={auth.project}
+                projects={auth.projects}
+                onSwitch={auth.switchProject}
+                onCreateNew={handleCreateProject}
+                onEdit={handleEditProject}
+              />
+            ) : !auth.isAuthenticated && (
+              <ProjectSwitcher
+                currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
+                projects={[]}
+                onSwitch={() => { }}
+                onCreateNew={handleCreateProject}
+                onEdit={handleEditGuestProject}
+              />
+            )}
+          </div>
+        </aside>
+      )}
 
-      {/* ── Main ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* ── Project sidebar ─────────────────────────────────────────── */}
-        {projectSidebarVisible && (
-          <aside className="w-72 shrink-0 border-r border-slate-200 bg-white flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-              <h2 className="text-sm font-semibold text-slate-900">Проекты</h2>
-              <button
-                type="button"
-                onClick={() => setProjectSidebarVisible(false)}
-                aria-label="Скрыть проекты"
-                className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
-              >
-                <PanelLeftClose className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {auth.isAuthenticated && auth.project ? (
-                <ProjectSwitcher
-                  currentProject={auth.project}
-                  projects={auth.projects}
-                  onSwitch={auth.switchProject}
-                  onCreateNew={handleCreateProject}
-                  onEdit={handleEditProject}
-                />
-              ) : !auth.isAuthenticated && (
-                <ProjectSwitcher
-                  currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
-                  projects={[]}
-                  onSwitch={() => { }}
-                  onCreateNew={handleCreateProject}
-                  onEdit={handleEditGuestProject}
-                />
-              )}
-            </div>
-          </aside>
-        )}
+      {/* ── Main content area ─────────────────────────────────────────────── */}
+      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
 
-        {tasks.length === 0 && !loading && !hasStartedChat ? (
-          /* ── Start Screen ─────────────────────────────────────────────── */
-          <StartScreen
-            onSend={handleStartScreenSend}
-            onEmptyChart={handleEmptyChart}
-            isAuthenticated={auth.isAuthenticated}
-            onLoginRequired={() => setShowOtpModal(true)}
-          />
-        ) : (
-          <>
-            {/* Gantt panel wrapper - includes chart and footer */}
-            <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        {/* ── Top Bar ──────────────────────────────────────────────────────── */}
+        <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
+          {/* Logo */}
+          <div className="flex items-center gap-2 text-sm font-semibold tracking-tight select-none">
+            <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+            <span className="text-slate-900">GetGantt</span>
+          </div>
+
+          <span className="text-slate-400">/</span>
+
+          {/* Project name breadcrumb */}
+          <span className="text-sm font-medium text-slate-700 truncate">
+            {auth.isAuthenticated ? auth.project?.name : (localTasks.projectName || 'Мой проект')}
+          </span>
+
+          <div className="flex-1" />
+
+          {/* Project sidebar toggle button */}
+          <button
+            type="button"
+            onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
+            aria-pressed={projectSidebarVisible}
+            aria-label={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            className={cn(
+              'h-7 px-2 flex items-center gap-1.5 rounded transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+              projectSidebarVisible
+                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+            )}
+            title={projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+          >
+            <PanelLeftClose className={cn('w-4 h-4 transition-transform', projectSidebarVisible ? 'rotate-0' : 'rotate-180')} />
+          </button>
+
+          {!auth.isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-slate-600">
+                Войдите, чтобы сохранить график
+              </span>
+              <LoginButton onClick={() => setShowOtpModal(true)} />
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
+                >
+                  <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="truncate text-slate-700">
+                  {auth.user?.email ?? 'Account'}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Выйти</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </header>
+
+        {/* ── Content ─────────────────────────────────────────────────────── */}
+        <div className="flex flex-1 overflow-hidden">
+          {tasks.length === 0 && !loading && !hasStartedChat ? (
+            /* ── Start Screen ─────────────────────────────────────────────── */
+            <StartScreen
+              onSend={handleStartScreenSend}
+              onEmptyChart={handleEmptyChart}
+              isAuthenticated={auth.isAuthenticated}
+              onLoginRequired={() => setShowOtpModal(true)}
+            />
+          ) : (
+            <>
+              {/* Gantt panel wrapper - includes chart and footer */}
+              <div className="flex flex-col flex-1 overflow-hidden min-w-0">
               {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
               <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
                 {/* Show/hide task list - outline style for both states */}
@@ -609,6 +617,7 @@ export default function App() {
             )}
           </>
         )}
+        </div>
       </div>
 
       {/* ── OTP Modal (controlled) ──────────────────────────────────────────── */}
