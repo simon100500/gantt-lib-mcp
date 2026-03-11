@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from './ui/button.tsx';
 
 export interface StartScreenProps {
   onSend: (text: string) => void;
@@ -11,6 +10,10 @@ export interface StartScreenProps {
 }
 
 const CHIPS: Array<{ label: string; prompt: string }> = [
+  {
+    label: 'Пустой график',
+    prompt: '',
+  },
   {
     label: 'Загородный дом',
     prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт',
@@ -112,11 +115,11 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
 
           {/* Chips row */}
           <div className="flex flex-wrap gap-2 mt-3">
-            {CHIPS.map(chip => (
+            {CHIPS.map((chip, index) => (
               <button
                 key={chip.label}
                 type="button"
-                onClick={() => handleChipClick(chip.prompt)}
+                onClick={index === 0 ? onEmptyChart : () => handleChipClick(chip.prompt)}
                 className={cn(
                   'text-[11px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-500',
                   'transition-colors hover:border-primary hover:text-primary',
@@ -128,18 +131,6 @@ export function StartScreen({ onSend, onEmptyChart }: StartScreenProps) {
             ))}
           </div>
         </form>
-
-        {/* Пустой график button */}
-        <div className="flex justify-center mt-4">
-          <Button
-            variant="default"
-            size="sm"
-            type="button"
-            onClick={onEmptyChart}
-          >
-            Пустой график
-          </Button>
-        </div>
       </div>
     </div>
   );
