@@ -47,22 +47,8 @@ export function useAIStream(
     setStreaming(true);
 
     try {
-      // Send chat message
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // Stream AI response from /stream/ai
+      // Open the SSE stream before triggering the agent run, otherwise a fast
+      // response can complete before the client starts reading events.
       const streamResponse = await fetch('/stream/ai', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -77,6 +63,21 @@ export function useAIStream(
       const reader = streamResponse.body?.getReader();
       if (!reader) {
         throw new Error('No response body');
+      }
+
+      // Trigger the agent only after the SSE stream is ready.
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const decoder = new TextDecoder();

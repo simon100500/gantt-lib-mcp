@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { Task, TaskDependency } from '../types.ts';
 
 const DEBOUNCE_MS = 500;
@@ -47,6 +47,7 @@ function computeTasksHash(tasks: Task[]): string {
 export function useAutoSave(
   tasks: Task[],
   accessToken: string | null,
+  skipNextSaveRef?: MutableRefObject<boolean>,
 ): void {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevTokenRef = useRef<string | null>(null);
@@ -76,6 +77,12 @@ export function useAutoSave(
 
     // Compute hash of current tasks
     const currentHash = computeTasksHash(tasks);
+
+    if (skipNextSaveRef?.current) {
+      skipNextSaveRef.current = false;
+      lastSavedHashRef.current = currentHash;
+      return;
+    }
 
     // Skip save if data hasn't changed
     if (currentHash === lastSavedHashRef.current) {

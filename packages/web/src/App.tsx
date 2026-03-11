@@ -74,8 +74,9 @@ export default function App() {
   const authenticatedTasks = useTasks(auth.accessToken, auth.refreshAccessToken);
   const localTasks = useLocalTasks();
   const { tasks, setTasks, loading, error } = auth.isAuthenticated ? authenticatedTasks : localTasks;
+  const skipNextAutoSaveRef = useRef(false);
   // Autosave to server on any chart change (authenticated only; demo mode saves to localStorage in useLocalTasks)
-  useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null);
+  useAutoSave(tasks, auth.isAuthenticated ? auth.accessToken : null, skipNextAutoSaveRef);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
@@ -100,6 +101,7 @@ export default function App() {
   // ── Task stream message handler ────────────────────────────────────────────
   const handleTaskStreamMessage = useCallback((msg: TaskStreamMessage) => {
     if (msg.type === 'tasks') {
+      skipNextAutoSaveRef.current = true;
       setTasks(msg.tasks as Task[]);
     } else if (msg.type === 'error') {
       console.error('[TaskStream] Error:', msg.message);

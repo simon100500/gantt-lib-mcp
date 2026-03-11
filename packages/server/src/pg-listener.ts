@@ -10,6 +10,7 @@
  */
 
 import { Client } from 'pg';
+import { taskStore } from '@gantt/mcp/store';
 import { broadcastToProject } from './sse.js';
 
 let listenerClient: Client | null = null;
@@ -49,7 +50,7 @@ export async function startPGListener(prisma?: unknown): Promise<void> {
     listenerClient = client;
     retryDelay = 1000; // Reset backoff on successful connection
 
-    client.on('notification', (msg: { channel: string; payload?: string }) => {
+    client.on('notification', async (msg: { channel: string; payload?: string }) => {
       if (msg.channel !== 'tasks_channel') return;
       if (!msg.payload) return;
 
@@ -63,15 +64,16 @@ export async function startPGListener(prisma?: unknown): Promise<void> {
           return;
         }
 
-        // Broadcast to SSE clients for this project
-        // Transform payload to match SSE message format
+        // Broadcast the current snapshot so the client never applies a
+        // placeholder empty array as the source of truth.
+        const tasks = await taskStore.list(projectId, true);
         const sseMessage: { type: 'tasks'; tasks: unknown[] } = {
           type: 'tasks',
-          tasks: [], // Will be populated by client fetching updated tasks
+          tasks,
         };
 
         broadcastToProject(projectId, sseMessage);
-        console.log('[pg-listener] Broadcasted to project:', projectId);
+        console.log('[pg-listener] Broadcasted snapshot to project:', projectId, 'tasks:', tasks.length);
       } catch (err) {
         console.error('[pg-listener] Failed to parse notification:', err);
       }

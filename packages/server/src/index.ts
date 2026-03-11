@@ -13,7 +13,7 @@
 
 import Fastify from 'fastify';
 import { taskStore } from '@gantt/mcp/store';
-import { registerSSERoutes, broadcastToProject } from './sse.js';
+import { registerSSERoutes, broadcastToAI, broadcastToProject } from './sse.js';
 import { startPGListener } from './pg-listener.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
@@ -45,6 +45,7 @@ fastify.post('/api/chat', { preHandler: [authMiddleware] }, async (req, reply) =
   }
   // Fire-and-forget — streaming goes via SSE
   runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId).catch((err: unknown) => {
+    broadcastToAI(req.user!.sessionId, { type: 'error', message: String(err) });
     broadcastToProject(req.user!.projectId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'agent error');
   });
