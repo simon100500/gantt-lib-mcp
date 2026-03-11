@@ -368,8 +368,7 @@ export default function App() {
           </button>
 
           {/* Logo */}
-          <div className="flex items-center gap-2 text-sm font-semibold tracking-tight select-none">
-            <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+          <div className="flex items-center gap-2 text-base font-cascadia tracking-tight select-none">
             <span className="text-slate-900">GetGantt</span>
           </div>
 

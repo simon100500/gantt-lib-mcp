@@ -49,6 +49,12 @@
     @apply bg-background text-foreground;
   }
 
+  /* Cascadia Mono for logo */
+  .font-cascadia {
+    font-family: 'Cascadia Mono', 'Consolas', monospace;
+    font-weight: 600;
+  }
+
   /* Thin scrollbars across the app */
   ::-webkit-scrollbar {
     width: 5px;
