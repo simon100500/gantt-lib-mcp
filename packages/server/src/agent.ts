@@ -15,7 +15,12 @@
  * mutations performed by the AI are immediately visible via taskStore.list().
  */
 
-import { query, isSDKResultMessage, isSDKAssistantMessage } from '@qwen-code/sdk';
+import {
+  query,
+  isSDKResultMessage,
+  isSDKAssistantMessage,
+  isSDKPartialAssistantMessage,
+} from '@qwen-code/sdk';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
@@ -32,7 +37,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // In container: GANTT_PROJECT_ROOT=/app is set by docker-entrypoint.sh
-// In dev: resolve from dist/agent.js → packages/server/dist → packages/server → project root
+// In dev: resolve from dist/agent.js -> packages/server/dist -> packages/server -> project root
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
 
 // Load .env from project root (OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL)
@@ -44,10 +49,17 @@ dotenv.config({ path: join(PROJECT_ROOT, '.env') });
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
-    OPENAI_API_KEY:  process.env.OPENAI_API_KEY  ?? process.env.ANTHROPIC_AUTH_TOKEN  ?? '',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
-    OPENAI_MODEL:    process.env.OPENAI_MODEL    ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+    OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
   };
+}
+
+function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
+  return content
+    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
+    .map((block) => block.text ?? '')
+    .join('');
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +82,8 @@ export async function runAgentWithHistory(
   sessionId: string
 ): Promise<void> {
   try {
+    console.log(`[agent-run] start project=${projectId} session=${sessionId} userMessageLength=${userMessage.length}`);
+
     // 1. Save user message to DB (project-scoped)
     await taskStore.addMessage('user', userMessage, projectId);
 
@@ -86,7 +100,7 @@ export async function runAgentWithHistory(
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
 
     // 4. Build prompt with history
-    // Exclude the last message (current user turn — already included in "User: ..." below)
+    // Exclude the last message (current user turn - already included in "User: ..." below)
     const historyContext = messages
       .slice(0, -1)
       .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
@@ -116,6 +130,7 @@ export async function runAgentWithHistory(
         model: env.OPENAI_MODEL,
         cwd: PROJECT_ROOT,
         permissionMode: 'yolo',
+        includePartialMessages: true,
         env: {
           ...env,
           DB_PATH: dbPath,
@@ -133,22 +148,48 @@ export async function runAgentWithHistory(
     // 7. Stream tokens to WebSocket (session-scoped)
     let assistantResponse = '';
     let streamedContent = false;
+    let streamedPartialContent = false;
 
     for await (const event of session) {
+      if (isSDKPartialAssistantMessage(event)) {
+        if (
+          event.event.type === 'content_block_delta'
+          && event.event.delta.type === 'text_delta'
+          && event.event.delta.text
+        ) {
+          assistantResponse += event.event.delta.text;
+          broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
+          streamedContent = true;
+          streamedPartialContent = true;
+        }
+        continue;
+      }
+
       if (isSDKAssistantMessage(event)) {
-        // Guard: if we have already streamed tokens from earlier iterations,
-        // this is the final summary AssistantMessage — skip it to avoid duplicate broadcast.
-        if (streamedContent) continue;
-        // event.message.content is ContentBlock[] — extract text blocks
-        for (const block of event.message.content) {
-          if (block.type === 'text' && block.text) {
-            assistantResponse += block.text;
-            broadcastToSession(sessionId, { type: 'token', content: block.text });
-            streamedContent = true;
-          }
+        const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
+        console.log(
+          `[agent-run] assistant-message session=${sessionId} textLength=${text.length} partial=${streamedPartialContent}`,
+        );
+
+        // If text deltas were already streamed, the final assistant message usually
+        // repeats the same content. Avoid broadcasting duplicates.
+        if (!streamedPartialContent && text) {
+          assistantResponse += text;
+          broadcastToSession(sessionId, { type: 'token', content: text });
+          streamedContent = true;
         }
       }
+
       if (isSDKResultMessage(event)) {
+        const resultText = typeof event.result === 'string' ? event.result : '';
+        console.log(
+          `[agent-run] result-message session=${sessionId} subtype=${event.subtype} isError=${event.is_error} resultLength=${resultText.length}`,
+        );
+        if (!event.is_error && !streamedContent && resultText.trim().length > 0) {
+          assistantResponse = resultText;
+          broadcastToSession(sessionId, { type: 'token', content: resultText });
+          streamedContent = true;
+        }
         break;
       }
     }
@@ -157,6 +198,9 @@ export async function runAgentWithHistory(
     if (assistantResponse) {
       await taskStore.addMessage('assistant', assistantResponse, projectId);
     }
+    console.log(
+      `[agent-run] complete session=${sessionId} assistantResponseLength=${assistantResponse.length} streamed=${streamedContent}`,
+    );
 
     // 9. Broadcast updated tasks snapshot (session-scoped)
     const tasks = await taskStore.list(projectId, true);
@@ -164,7 +208,6 @@ export async function runAgentWithHistory(
 
     // 10. Signal turn complete (session-scoped)
     broadcastToSession(sessionId, { type: 'done' });
-
   } catch (err) {
     broadcastToSession(sessionId, { type: 'error', message: String(err) });
     throw err;
