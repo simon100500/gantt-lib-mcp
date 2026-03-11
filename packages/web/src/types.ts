@@ -18,6 +18,7 @@ export interface ValidationResult {
 
 export interface Task {
   id: string;
+  order?: number;            // Stable row order persisted on the server
   name: string;
   startDate: string | Date;   // YYYY-MM-DD string or Date object (gantt-lib compatible)
   endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)

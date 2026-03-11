@@ -29,6 +29,28 @@ function prismaToDependency(dep: {
   };
 }
 
+function normalizeDependencies(
+  dependencies: Array<{ taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag?: number }> | undefined,
+): Array<{ taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag: number }> {
+  if (!dependencies || dependencies.length === 0) {
+    return [];
+  }
+
+  const deduped = new Map<string, { taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag: number }>();
+
+  for (const dependency of dependencies) {
+    deduped.set(`${dependency.taskId}:${dependency.type}`, {
+      taskId: dependency.taskId,
+      type: dependency.type,
+      lag: dependency.lag ?? 0,
+    });
+  }
+
+  return [...deduped.values()].sort((a, b) =>
+    a.taskId.localeCompare(b.taskId) || a.type.localeCompare(b.type) || a.lag - b.lag,
+  );
+}
+
 /**
  * Convert a Prisma task (without dependencies) to a partial Task object
  * Note: project_id is read from the row but not included in the Task interface
@@ -36,6 +58,7 @@ function prismaToDependency(dep: {
  */
 function prismaToTaskBase(task: {
   id: string;
+  order?: number;
   name: string;
   startDate: string;
   endDate: string;
@@ -44,6 +67,7 @@ function prismaToTaskBase(task: {
 }): Omit<Task, 'dependencies'> {
   return {
     id: task.id,
+    order: task.order,
     name: task.name,
     startDate: task.startDate,
     endDate: task.endDate,
@@ -61,6 +85,16 @@ function prismaToTaskBase(task: {
  * Also manages AI dialog history (messages table).
  */
 export class TaskStore {
+  private async getNextOrder(projectId?: string): Promise<number> {
+    const db = await getDb();
+    const lastTask = await db.task.findFirst({
+      where: projectId ? { projectId } : { projectId: null },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    });
+    return (lastTask?.order ?? -1) + 1;
+  }
+
   /**
    * Load all tasks from DB into a Map (used as scheduler snapshot)
    * @param projectId - Optional project ID to filter tasks by
@@ -77,7 +111,7 @@ export class TaskStore {
     const map = new Map<string, Task>();
     for (const task of tasks) {
       const base = prismaToTaskBase(task);
-      const deps = task.dependencies.map(prismaToDependency);
+      const deps = normalizeDependencies(task.dependencies.map(prismaToDependency));
       map.set(task.id, { ...base, dependencies: deps });
     }
 
@@ -122,11 +156,12 @@ export class TaskStore {
    */
   async create(input: CreateTaskInput, projectId?: string): Promise<Task> {
     const db = await getDb();
-    const id = crypto.randomUUID();
+    const id = input.id ?? crypto.randomUUID();
 
     // Validate dependencies against existing tasks (any task can be a dependency, regardless of project)
     if (input.dependencies && input.dependencies.length > 0) {
-      const depTaskIds = input.dependencies.map(d => d.taskId);
+      const normalizedDependencies = normalizeDependencies(input.dependencies);
+      const depTaskIds = normalizedDependencies.map(d => d.taskId);
       const existingTasks = await db.task.findMany({
         where: { id: { in: depTaskIds } },
         select: { id: true },
@@ -139,19 +174,22 @@ export class TaskStore {
       }
     }
 
+    const normalizedDependencies = normalizeDependencies(input.dependencies);
+
     // Create task with dependencies in a transaction
     const task = await db.task.create({
       data: {
         id,
         projectId,
+        order: input.order ?? await this.getNextOrder(projectId),
         name: input.name,
         startDate: input.startDate,
         endDate: input.endDate,
         color: input.color,
         progress: input.progress ?? 0,
-        dependencies: input.dependencies && input.dependencies.length > 0
+        dependencies: normalizedDependencies.length > 0
           ? {
-              create: input.dependencies.map(dep => ({
+              create: normalizedDependencies.map(dep => ({
                 id: crypto.randomUUID(),
                 depTaskId: dep.taskId,
                 type: dep.type,
@@ -182,13 +220,13 @@ export class TaskStore {
       });
       if (updated) {
         const base = prismaToTaskBase(updated);
-        const deps = updated.dependencies.map(prismaToDependency);
+        const deps = normalizeDependencies(updated.dependencies.map(prismaToDependency));
         return { ...base, dependencies: deps };
       }
     }
 
     const base = prismaToTaskBase(task);
-    const deps = task.dependencies.map(prismaToDependency);
+    const deps = normalizeDependencies(task.dependencies.map(prismaToDependency));
     return { ...base, dependencies: deps };
   }
 
@@ -208,6 +246,10 @@ export class TaskStore {
         : projectId
           ? { projectId }
           : undefined,
+      orderBy: [
+        { order: 'asc' },
+        { id: 'asc' },
+      ],
       include: { dependencies: true },
     });
 
@@ -215,7 +257,7 @@ export class TaskStore {
 
     const result = tasks.map(task => {
       const base = prismaToTaskBase(task);
-      const deps = task.dependencies.map(prismaToDependency);
+      const deps = normalizeDependencies(task.dependencies.map(prismaToDependency));
       return { ...base, dependencies: deps };
     });
 
@@ -236,7 +278,7 @@ export class TaskStore {
     if (!task) return undefined;
 
     const base = prismaToTaskBase(task);
-    const deps = task.dependencies.map(prismaToDependency);
+    const deps = normalizeDependencies(task.dependencies.map(prismaToDependency));
     return { ...base, dependencies: deps };
   }
 
@@ -253,7 +295,8 @@ export class TaskStore {
 
     // Validate new dependencies exist
     if (input.dependencies) {
-      const depTaskIds = input.dependencies.map(d => d.taskId);
+      const normalizedDependencies = normalizeDependencies(input.dependencies);
+      const depTaskIds = normalizedDependencies.map(d => d.taskId);
       const existingTasks = await db.task.findMany({
         where: { id: { in: depTaskIds } },
         select: { id: true },
@@ -266,20 +309,26 @@ export class TaskStore {
       }
     }
 
+    const normalizedDependencies = input.dependencies === undefined
+      ? undefined
+      : normalizeDependencies(input.dependencies);
+
     const updated: Task = {
       ...task,
+      ...(input.order !== undefined && { order: input.order }),
       ...(input.name !== undefined && { name: input.name }),
       ...(input.startDate !== undefined && { startDate: input.startDate }),
       ...(input.endDate !== undefined && { endDate: input.endDate }),
       ...(input.color !== undefined && { color: input.color }),
       ...(input.progress !== undefined && { progress: input.progress }),
-      ...(input.dependencies !== undefined && { dependencies: input.dependencies }),
+      ...(normalizedDependencies !== undefined && { dependencies: normalizedDependencies }),
     };
 
     // Update task
     await db.task.update({
       where: { id },
       data: {
+        order: updated.order ?? 0,
         name: updated.name,
         startDate: updated.startDate,
         endDate: updated.endDate,
@@ -407,6 +456,43 @@ export class TaskStore {
   }
 
   /**
+   * Apply incremental task changes without replacing the entire project task set.
+   * Useful for UI autosave where only a subset of tasks changed.
+   */
+  async applyPatch(
+    patch: { upserts?: Task[]; deletes?: string[] },
+    projectId?: string,
+  ): Promise<{ upserts: number; deletes: number }> {
+    const upserts = patch.upserts ?? [];
+    const deletes = patch.deletes ?? [];
+    const currentTasks = await this.list(projectId, false);
+    const taskMap = new Map(currentTasks.map(task => [task.id, task]));
+
+    for (const taskId of deletes) {
+      taskMap.delete(taskId);
+    }
+
+    for (const task of upserts) {
+      taskMap.set(task.id, {
+        ...task,
+        order: task.order,
+        dependencies: normalizeDependencies(task.dependencies),
+      });
+    }
+
+    const mergedTasks = [...taskMap.values()].sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.id.localeCompare(b.id);
+    });
+
+    await this.importTasks(JSON.stringify(mergedTasks), projectId);
+
+    return { upserts: upserts.length, deletes: deletes.length };
+  }
+
+  /**
    * Clear all tasks from the database, optionally filtered by project ID. CASCADE removes dependencies.
    * @param projectId - Optional project ID to filter deletions by
    * @returns number of tasks deleted
@@ -446,35 +532,40 @@ export class TaskStore {
 
     const db = await getDb();
 
-    // Clear only the project's tasks (CASCADE removes deps); never touch other projects
-    await db.task.deleteMany({
-      where: projectId ? { projectId } : undefined,
-    });
-
-    // Insert each task and its dependencies
-    for (const task of tasks) {
-      await db.task.create({
-        data: {
-          id: task.id,
-          projectId: projectId ?? null,
-          name: task.name,
-          startDate: task.startDate,
-          endDate: task.endDate,
-          color: task.color ?? null,
-          progress: task.progress ?? 0,
-          dependencies: task.dependencies && task.dependencies.length > 0
-            ? {
-                create: task.dependencies.map(dep => ({
-                  id: crypto.randomUUID(),
-                  depTaskId: dep.taskId,
-                  type: dep.type,
-                  lag: dep.lag ?? 0,
-                })),
-              }
-            : undefined,
-        },
+    await db.$transaction(async (tx) => {
+      // Clear only the project's tasks (CASCADE removes deps); never touch other projects
+      await tx.task.deleteMany({
+        where: projectId ? { projectId } : undefined,
       });
-    }
+
+      // Insert each task and its dependencies inside the same transaction so
+      // listeners only ever observe the final committed snapshot.
+      for (const [index, task] of tasks.entries()) {
+        const normalizedDependencies = normalizeDependencies(task.dependencies);
+        await tx.task.create({
+          data: {
+            id: task.id,
+            projectId: projectId ?? null,
+            order: task.order ?? index,
+            name: task.name,
+            startDate: task.startDate,
+            endDate: task.endDate,
+            color: task.color ?? null,
+            progress: task.progress ?? 0,
+            dependencies: normalizedDependencies.length > 0
+              ? {
+                  create: normalizedDependencies.map(dep => ({
+                    id: crypto.randomUUID(),
+                    depTaskId: dep.taskId,
+                    type: dep.type,
+                    lag: dep.lag ?? 0,
+                  })),
+                }
+              : undefined,
+          },
+        });
+      }
+    });
 
     return tasks.length;
   }

@@ -30,7 +30,7 @@ import { verifyToken, type JwtPayload } from './auth.js';
 export type SSEMessage =
   | { type: 'connected' }
   | { type: 'token'; content: string }
-  | { type: 'tasks'; tasks: unknown[] }
+  | { type: 'tasks'; tasks: unknown[]; sourceClientId?: string }
   | { type: 'error'; message: string }
   | { type: 'done' };
 
@@ -41,7 +41,12 @@ export type SSEClientMessage =
 // Connection registries
 // ---------------------------------------------------------------------------
 
-const projectConnections = new Map<string, Set<NodeJS.WritableStream>>();
+type ProjectConnection = {
+  stream: NodeJS.WritableStream;
+  clientId?: string;
+};
+
+const projectConnections = new Map<string, Set<ProjectConnection>>();
 const aiConnections = new Map<string, NodeJS.WritableStream>();
 
 // ---------------------------------------------------------------------------
@@ -60,11 +65,15 @@ export function broadcastToProject(projectId: string, data: SSEMessage): void {
   if (!connections) return;
 
   const json = JSON.stringify(data);
-  const deadConnections: NodeJS.WritableStream[] = [];
+  const deadConnections: ProjectConnection[] = [];
 
   for (const conn of connections) {
     try {
-      conn.write(`data: ${json}\n\n`);
+      if (data.type === 'tasks' && data.sourceClientId && conn.clientId === data.sourceClientId) {
+        continue;
+      }
+
+      conn.stream.write(`data: ${json}\n\n`);
     } catch (err) {
       // Connection is dead, mark for cleanup
       deadConnections.push(conn);
@@ -143,6 +152,7 @@ export function registerSSERoutes(fastify: FastifyInstance): void {
     }
 
     const projectId = payload.projectId;
+    const clientId = (req.query as { token?: string; clientId?: string }).clientId;
 
     // Set SSE headers
     reply.raw.writeHead(200, {
@@ -156,7 +166,11 @@ export function registerSSERoutes(fastify: FastifyInstance): void {
     if (!projectConnections.has(projectId)) {
       projectConnections.set(projectId, new Set());
     }
-    projectConnections.get(projectId)!.add(reply.raw);
+    const connection: ProjectConnection = {
+      stream: reply.raw,
+      clientId: typeof clientId === 'string' && clientId.length > 0 ? clientId : undefined,
+    };
+    projectConnections.get(projectId)!.add(connection);
 
     // Send initial connected message
     reply.raw.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
@@ -165,7 +179,7 @@ export function registerSSERoutes(fastify: FastifyInstance): void {
     reply.raw.on('close', () => {
       const conns = projectConnections.get(projectId);
       if (conns) {
-        conns.delete(reply.raw);
+        conns.delete(connection);
         if (conns.size === 0) {
           projectConnections.delete(projectId);
         }
@@ -223,9 +237,9 @@ export function registerSSERoutes(fastify: FastifyInstance): void {
  */
 setInterval(() => {
   for (const conn of projectConnections.values()) {
-    for (const stream of conn) {
+    for (const connection of conn) {
       try {
-        stream.write(':heartbeat\n\n');
+        connection.stream.write(':heartbeat\n\n');
       } catch {
         // Will be cleaned up on next broadcast
       }

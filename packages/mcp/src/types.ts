@@ -32,6 +32,8 @@ export interface TaskDependency {
 export interface Task {
   /** Unique identifier */
   id: string;
+  /** Stable row order for persistence; lower values render higher in the chart */
+  order?: number;
   /** Task name */
   name: string;
   /** Start date in ISO format: 'YYYY-MM-DD' */
@@ -50,6 +52,10 @@ export interface Task {
  * Input type for creating a new task
  */
 export interface CreateTaskInput {
+  /** Optional task ID; used by web autosave/import to preserve client identity */
+  id?: string;
+  /** Optional stable row order for persistence */
+  order?: number;
   /** Task name */
   name: string;
   /** Start date in ISO format: 'YYYY-MM-DD' */
@@ -72,6 +78,8 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput {
   /** Task ID */
   id: string;
+  /** Optional stable row order for persistence */
+  order?: number;
   /** Optional task name */
   name?: string;
   /** Optional start date in ISO format: 'YYYY-MM-DD' */

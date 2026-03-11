@@ -13,14 +13,14 @@ export default defineConfig({
   server: {
     proxy: {
       // Proxy API and WebSocket to backend
-      '/api': 'http://localhost:3000',
+      '/api': 'http://127.0.0.1:3000',
       '/ws': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         ws: true,
       },
       // Proxy SSE endpoints to backend with proper headers
       '/stream': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         // Preserve SSE headers
         headers: {

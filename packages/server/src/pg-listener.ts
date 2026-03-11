@@ -11,11 +11,111 @@
 
 import { Client } from 'pg';
 import { taskStore } from '@gantt/mcp/store';
+import type { Task } from '@gantt/mcp/types';
 import { broadcastToProject } from './sse.js';
 
 let listenerClient: Client | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let retryDelay = 1000;
+const pendingBroadcasts = new Map<string, ReturnType<typeof setTimeout>>();
+const suppressedProjects = new Map<string, { active: number; until: number }>();
+const lastBroadcastHashes = new Map<string, string>();
+const BROADCAST_DEBOUNCE_MS = 75;
+const SUPPRESSION_COOLDOWN_MS = 1500;
+
+export function suppressProjectBroadcasts(projectId: string, durationMs = 1000): void {
+  const existing = suppressedProjects.get(projectId);
+  suppressedProjects.set(projectId, {
+    active: existing?.active ?? 0,
+    until: Math.max(existing?.until ?? 0, Date.now() + durationMs),
+  });
+}
+
+function isProjectSuppressed(projectId: string): boolean {
+  const entry = suppressedProjects.get(projectId);
+  if (!entry) return false;
+  if (entry.active <= 0 && Date.now() >= entry.until) {
+    suppressedProjects.delete(projectId);
+    return false;
+  }
+  return entry.active > 0 || Date.now() < entry.until;
+}
+
+export function beginProjectBroadcastSuppression(projectId: string, cooldownMs = SUPPRESSION_COOLDOWN_MS): () => void {
+  const entry = suppressedProjects.get(projectId) ?? { active: 0, until: 0 };
+  suppressedProjects.set(projectId, {
+    active: entry.active + 1,
+    until: Math.max(entry.until, Date.now() + cooldownMs),
+  });
+
+  return () => {
+    const current = suppressedProjects.get(projectId);
+    if (!current) return;
+
+    const next = {
+      active: Math.max(0, current.active - 1),
+      until: Math.max(current.until, Date.now() + cooldownMs),
+    };
+
+    if (next.active === 0 && Date.now() >= next.until) {
+      suppressedProjects.delete(projectId);
+      return;
+    }
+
+    suppressedProjects.set(projectId, next);
+  };
+}
+
+function computeSnapshotHash(tasks: Task[]): string {
+  return JSON.stringify(tasks.map((task, index) => ({
+    id: task.id,
+    order: task.order ?? index,
+    name: task.name,
+    startDate: task.startDate,
+    endDate: task.endDate,
+    color: task.color ?? null,
+    progress: task.progress ?? 0,
+    dependencies: (task.dependencies ?? [])
+      .map(dep => ({
+        taskId: dep.taskId,
+        type: dep.type,
+        lag: dep.lag ?? 0,
+      }))
+      .sort((a, b) => a.taskId.localeCompare(b.taskId) || a.type.localeCompare(b.type) || a.lag - b.lag),
+  })));
+}
+
+export function rememberProjectSnapshot(projectId: string, tasks: Task[]): void {
+  lastBroadcastHashes.set(projectId, computeSnapshotHash(tasks));
+}
+
+async function scheduleProjectBroadcast(projectId: string): Promise<void> {
+  const existing = pendingBroadcasts.get(projectId);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timeout = setTimeout(async () => {
+    pendingBroadcasts.delete(projectId);
+
+    try {
+      const tasks = await taskStore.list(projectId, true);
+      const snapshotHash = computeSnapshotHash(tasks);
+      if (lastBroadcastHashes.get(projectId) === snapshotHash) {
+        console.log('[pg-listener] Skipped duplicate snapshot for project:', projectId, 'tasks:', tasks.length);
+        return;
+      }
+
+      lastBroadcastHashes.set(projectId, snapshotHash);
+      broadcastToProject(projectId, { type: 'tasks', tasks });
+      console.log('[pg-listener] Broadcasted debounced snapshot to project:', projectId, 'tasks:', tasks.length);
+    } catch (err) {
+      console.error('[pg-listener] Failed to broadcast snapshot for project:', projectId, err);
+    }
+  }, BROADCAST_DEBOUNCE_MS);
+
+  pendingBroadcasts.set(projectId, timeout);
+}
 
 /**
  * Start the PostgreSQL LISTEN client.
@@ -64,16 +164,12 @@ export async function startPGListener(prisma?: unknown): Promise<void> {
           return;
         }
 
-        // Broadcast the current snapshot so the client never applies a
-        // placeholder empty array as the source of truth.
-        const tasks = await taskStore.list(projectId, true);
-        const sseMessage: { type: 'tasks'; tasks: unknown[] } = {
-          type: 'tasks',
-          tasks,
-        };
+        if (isProjectSuppressed(projectId)) {
+          console.log('[pg-listener] Suppressed echo notification for project:', projectId);
+          return;
+        }
 
-        broadcastToProject(projectId, sseMessage);
-        console.log('[pg-listener] Broadcasted snapshot to project:', projectId, 'tasks:', tasks.length);
+        await scheduleProjectBroadcast(projectId);
       } catch (err) {
         console.error('[pg-listener] Failed to parse notification:', err);
       }
@@ -128,6 +224,13 @@ export function stopPGListener(): void {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
+
+  for (const timeout of pendingBroadcasts.values()) {
+    clearTimeout(timeout);
+  }
+  pendingBroadcasts.clear();
+  suppressedProjects.clear();
+  lastBroadcastHashes.clear();
 
   if (listenerClient) {
     listenerClient

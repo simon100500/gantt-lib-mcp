@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Task } from '../types.ts';
+import { normalizeTaskOrder, sortTasksByOrder } from '../lib/taskOrder.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
 const DEMO_MODE_KEY = 'gantt_demo_mode';
@@ -80,7 +81,11 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean; projectName: 
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Task[];
-      return { tasks: parsed, isDemoMode: demoMode === 'true', projectName };
+      return {
+        tasks: normalizeTaskOrder(sortTasksByOrder(parsed)),
+        isDemoMode: demoMode === 'true',
+        projectName,
+      };
     } catch (err) {
       console.error('Failed to parse local tasks:', err);
       // Clear invalid data
@@ -91,7 +96,7 @@ function loadInitialState(): { tasks: Task[]; isDemoMode: boolean; projectName: 
 
   // No local data or invalid data, show demo project
   localStorage.setItem(DEMO_MODE_KEY, 'true');
-  return { tasks: DEMO_TASKS, isDemoMode: true, projectName };
+  return { tasks: normalizeTaskOrder(DEMO_TASKS), isDemoMode: true, projectName };
 }
 
 export function useLocalTasks(): UseLocalTasksResult {
@@ -101,20 +106,21 @@ export function useLocalTasks(): UseLocalTasksResult {
   const setTasks: React.Dispatch<React.SetStateAction<Task[]>> = useCallback((updater) => {
     setState(prev => {
       const newTasks = typeof updater === 'function' ? (updater as (prev: Task[]) => Task[])(prev.tasks) : updater;
+      const normalizedTasks = normalizeTaskOrder(sortTasksByOrder(newTasks));
 
       // If we're in demo mode and tasks changed, exit demo mode
-      if (prev.isDemoMode && JSON.stringify(newTasks) !== JSON.stringify(DEMO_TASKS)) {
+      if (prev.isDemoMode && JSON.stringify(normalizedTasks) !== JSON.stringify(normalizeTaskOrder(DEMO_TASKS))) {
         localStorage.setItem(DEMO_MODE_KEY, 'false');
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
-        return { tasks: newTasks, isDemoMode: false, projectName: prev.projectName };
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedTasks));
+        return { tasks: normalizedTasks, isDemoMode: false, projectName: prev.projectName };
       }
 
       // Persist tasks if not in demo mode
       if (!prev.isDemoMode) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newTasks));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedTasks));
       }
 
-      return { tasks: newTasks, isDemoMode: prev.isDemoMode, projectName: prev.projectName };
+      return { tasks: normalizedTasks, isDemoMode: prev.isDemoMode, projectName: prev.projectName };
     });
   }, []);
 
