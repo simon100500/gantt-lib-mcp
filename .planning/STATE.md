@@ -349,6 +349,7 @@ None
 | 19 | добавь global.css и --gantt-container-border-radius = 0px | 2026-03-09 | cb61672 | [19-global-css-gantt-container-border-radius](./quick/19-global-css-gantt-container-border-radius/) |
 | 20 | Авто-план и Просроченные — свитчи справа, Авто-план исправлен (disableConstraints) | 2026-03-09 | 996484e | [020-auto-plan-overdue-to-switches](./quick/020-auto-plan-overdue-to-switches/) |
 | 22 | Fix scrollbar persisting after clearing chat input | 2026-03-09 | fd83303 | [22-scrollbar-persists-after-clearing](./quick/22-scrollbar-persists-after-clearing/) |
+| 23 | Переписать синхронизацию диаграммы как простую client-authoritative систему | 2026-03-11 | c301330, 1cdae21, 043f793, 852abda, a7b3cd0 | [23-client-authoritative-rollback-jump-dupli](./quick/23-client-authoritative-rollback-jump-dupli/) |
 
 ### Quick Tasks Pending
 
@@ -384,7 +385,7 @@ The project is a TypeScript MCP server for Gantt chart management. Focus on data
 *STATE initialized: 2026-02-23*
 *Last updated: 2026-03-03 after completing Phase 06 Plan 01*
 
-Last activity: 2026-03-09 - Completed quick task 022: Fix scrollbar persisting after clearing chat input
+Last activity: 2026-03-11 - Completed quick task 023: Переписать синхронизацию диаграммы как простую client-authoritative систему
 
 ### Roadmap Evolution
 
