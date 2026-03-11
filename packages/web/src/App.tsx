@@ -384,6 +384,42 @@ export default function App() {
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
+        {/* ── Project sidebar ─────────────────────────────────────────── */}
+        {projectSidebarVisible && (
+          <aside className="w-72 shrink-0 border-r border-slate-200 bg-white flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-900">Проекты</h2>
+              <button
+                type="button"
+                onClick={() => setProjectSidebarVisible(false)}
+                aria-label="Скрыть проекты"
+                className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
+              >
+                <PanelLeftClose className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {auth.isAuthenticated && auth.project ? (
+                <ProjectSwitcher
+                  currentProject={auth.project}
+                  projects={auth.projects}
+                  onSwitch={auth.switchProject}
+                  onCreateNew={handleCreateProject}
+                  onEdit={handleEditProject}
+                />
+              ) : !auth.isAuthenticated && (
+                <ProjectSwitcher
+                  currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
+                  projects={[]}
+                  onSwitch={() => { }}
+                  onCreateNew={handleCreateProject}
+                  onEdit={handleEditGuestProject}
+                />
+              )}
+            </div>
+          </aside>
+        )}
+
         {tasks.length === 0 && !loading && !hasStartedChat ? (
           /* ── Start Screen ─────────────────────────────────────────────── */
           <StartScreen
@@ -394,42 +430,6 @@ export default function App() {
           />
         ) : (
           <>
-            {/* ── Project sidebar ─────────────────────────────────────────── */}
-            {projectSidebarVisible && (
-              <aside className="w-72 shrink-0 border-r border-slate-200 bg-white flex flex-col">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-                  <h2 className="text-sm font-semibold text-slate-900">Проекты</h2>
-                  <button
-                    type="button"
-                    onClick={() => setProjectSidebarVisible(false)}
-                    aria-label="Скрыть проекты"
-                    className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
-                  >
-                    <PanelLeftClose className="w-4 h-4 text-slate-500" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                  {auth.isAuthenticated && auth.project ? (
-                    <ProjectSwitcher
-                      currentProject={auth.project}
-                      projects={auth.projects}
-                      onSwitch={auth.switchProject}
-                      onCreateNew={handleCreateProject}
-                      onEdit={handleEditProject}
-                    />
-                  ) : !auth.isAuthenticated && (
-                    <ProjectSwitcher
-                      currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
-                      projects={[]}
-                      onSwitch={() => { }}
-                      onCreateNew={handleCreateProject}
-                      onEdit={handleEditGuestProject}
-                    />
-                  )}
-                </div>
-              </aside>
-            )}
-
             {/* Gantt panel wrapper - includes chart and footer */}
             <div className="flex flex-col flex-1 overflow-hidden min-w-0">
               {/* ── Gantt Toolbar ──────────────────────────────────────────── */}

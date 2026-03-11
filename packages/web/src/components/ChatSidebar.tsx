@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,9 +21,28 @@ interface ChatSidebarProps {
 }
 
 const QUICK_CHIPS = ['Добавить задачу', 'Сдвинуть сроки', 'Связать задачи', 'Показать сводку'];
+const LOADING_PHRASES = [
+  'Ищем техкарты',
+  'Сортируем задачи',
+  'Ставим дедлайны',
+  'Проверяем зависимости',
+  'Выравниваем график',
+  'Собираем план работ',
+];
 
-export function ChatSidebar({ messages, streaming, onSend, disabled, connected, loading, onClose, isAuthenticated = true, onLoginRequired }: ChatSidebarProps) {
+export function ChatSidebar({
+  messages,
+  streaming,
+  onSend,
+  disabled,
+  connected,
+  loading,
+  onClose,
+  isAuthenticated = true,
+  onLoginRequired,
+}: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState('');
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
@@ -31,6 +50,19 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streaming]);
+
+  useEffect(() => {
+    if (!loading || streaming) {
+      setLoadingPhraseIndex(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setLoadingPhraseIndex(prev => (prev + 1) % LOADING_PHRASES.length);
+    }, 1800);
+
+    return () => window.clearInterval(timer);
+  }, [loading, streaming]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,8 +87,7 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
     const el = e.currentTarget;
     el.style.height = 'auto';
     const newHeight = el.scrollHeight;
-    el.style.height = newHeight + 'px';
-    // Only show scrollbar when content actually overflows
+    el.style.height = `${newHeight}px`;
     el.style.overflowY = newHeight > 120 ? 'auto' : 'hidden';
   }
 
@@ -68,58 +99,57 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* ── Header ───────────────────────────────── */}
-      <div className="flex items-center gap-2.5 h-11 px-4 border-b border-slate-200 shrink-0">
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-slate-200 px-4">
         <span
           className={cn(
-            'w-2 h-2 rounded-full shrink-0 transition-colors',
+            'h-2 w-2 shrink-0 rounded-full transition-colors',
             connected ? 'bg-emerald-500' : 'bg-amber-400',
           )}
-          title={connected ? 'Подключено' : 'Переподключение…'}
+          title={connected ? 'Подключено' : 'Переподключение...'}
         />
         <span className="text-sm font-semibold tracking-tight text-slate-800">AI Ассистент</span>
         <span className="flex-1" />
         {onClose && (
           <button
             onClick={onClose}
-            className="p-1 hover:bg-slate-100 rounded transition-colors"
+            className="rounded p-1 transition-colors hover:bg-slate-100"
             aria-label="Закрыть"
           >
-            <X className="w-4 h-4 text-slate-500" />
+            <X className="h-4 w-4 text-slate-500" />
           </button>
         )}
       </div>
 
-      {/* ── Messages ─────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2.5">
-        {/* Empty state */}
+      <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-3">
         {isEmpty && (
-          <div className="flex flex-col items-center justify-center flex-1 text-center gap-3 py-8">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary" />
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <Sparkles className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">AI Гант-ассистент</p>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">
                 Попросите создать или изменить расписание проекта
               </p>
             </div>
           </div>
         )}
 
-        {/* Message list */}
         {messages.map(msg => (
           <div
             key={msg.id}
-            className={cn('flex animate-fade-up motion-reduce:animate-none', msg.role === 'user' ? 'justify-end' : 'justify-start')}
+            className={cn(
+              'flex animate-fade-up motion-reduce:animate-none',
+              msg.role === 'user' ? 'justify-end' : 'justify-start',
+            )}
           >
             <div
               className={cn(
-                'max-w-[86%] px-3 py-2 text-sm leading-relaxed rounded-xl',
+                'max-w-[86%] rounded-xl px-3 py-2 text-sm leading-relaxed',
                 msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-sm'
-                  : 'bg-slate-100 text-slate-800 border border-slate-200 rounded-bl-sm',
+                  ? 'rounded-br-sm bg-primary text-primary-foreground'
+                  : 'rounded-bl-sm border border-slate-200 bg-slate-100 text-slate-800',
               )}
             >
               {msg.content}
@@ -127,23 +157,26 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
           </div>
         ))}
 
-        {/* Typing indicator */}
         {loading && !streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="bg-slate-100 border border-slate-200 rounded-xl rounded-bl-sm px-3.5 py-3 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none" />
+            <div className="flex items-center gap-2 rounded-xl rounded-bl-sm border border-slate-200 bg-slate-100 px-3.5 py-3">
+              <div className="flex shrink-0 items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none" />
+              </div>
+              <span className="text-sm text-slate-600">
+                {LOADING_PHRASES[loadingPhraseIndex]}
+              </span>
             </div>
           </div>
         )}
 
-        {/* Streaming partial response */}
         {streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="max-w-[86%] px-3 py-2 text-sm leading-relaxed rounded-xl rounded-bl-sm bg-slate-100 text-slate-800 border border-slate-200">
+            <div className="max-w-[86%] rounded-xl rounded-bl-sm border border-slate-200 bg-slate-100 px-3 py-2 text-sm leading-relaxed text-slate-800">
               {streaming}
-              <span className="inline-block w-0.5 h-3.5 bg-slate-500 ml-0.5 align-middle animate-pulse motion-reduce:animate-none" />
+              <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse align-middle bg-slate-500 motion-reduce:animate-none" />
             </div>
           </div>
         )}
@@ -151,16 +184,15 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
         <div ref={endRef} />
       </div>
 
-      {/* ── Quick chips ──────────────────────────── */}
       {isEmpty && (
-        <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
           {QUICK_CHIPS.map(chip => (
             <button
               key={chip}
               type="button"
               onClick={() => handleChip(chip)}
               className={cn(
-                'text-[11px] px-2.5 py-1 rounded-full border border-slate-200 text-slate-500',
+                'rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500',
                 'transition-colors hover:border-primary hover:text-primary',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
               )}
@@ -171,10 +203,9 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
         </div>
       )}
 
-      {/* ── Input area ───────────────────────────── */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-end gap-2 px-3 py-2.5 border-t border-slate-200 shrink-0"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-200 px-3 py-2.5"
       >
         <textarea
           ref={inputRef}
@@ -184,17 +215,16 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
           onChange={e => setInputValue(e.target.value)}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={disabled ? 'AI думает…' : 'Что хотите сделать?'}
+          placeholder={disabled ? 'AI думает...' : 'Что хотите сделать?'}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
           style={{ maxHeight: '7.5rem' }}
           className={cn(
-            'flex-1 px-3 py-2 text-sm rounded-md',
+            'flex-1 resize-none overflow-y-auto rounded-md px-3 py-2 text-sm leading-relaxed',
             'border border-slate-200 bg-slate-50 placeholder:text-slate-400',
-            'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:border-transparent',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'resize-none overflow-y-auto leading-relaxed',
+            'transition-colors focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         />
         <button
@@ -202,14 +232,13 @@ export function ChatSidebar({ messages, streaming, onSend, disabled, connected, 
           disabled={disabled || !inputValue.trim()}
           aria-label="Send message"
           className={cn(
-            'h-9 w-9 shrink-0 rounded-md bg-primary text-primary-foreground',
-            'flex items-center justify-center',
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground',
             'transition-colors hover:bg-primary/90',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
+            'disabled:cursor-not-allowed disabled:opacity-40',
           )}
         >
-          <ArrowUp className="w-4 h-4" />
+          <ArrowUp className="h-4 w-4" />
         </button>
       </form>
     </div>
