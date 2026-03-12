@@ -1,5 +1,6 @@
 # M001: gantt-lib MCP Server
 
+**Status:** completed
 **Vision:** Развить проект от MCP-сервера для диаграмм Ганта до полноценного AI-управляемого Gantt-приложения с web UI, real-time sync, auth и устойчивой рабочей средой.
 
 ## Success Criteria
@@ -23,9 +24,3 @@
   > After this: Convert the existing single-package project into an npm workspaces monorepo with three packages: `@gantt/mcp`, `@gantt/server`, and `@gantt/web`.
 - [x] **S08: Integrate Gantt Lib Library** `risk:medium` `depends:[S07]`
   > After this: Install gantt-lib package and integrate it into the web package, replacing the placeholder GanttChart component with the actual gantt-lib React component.
-- [ ] **S09: Session Control** `risk:medium` `depends:[S08]`
-  > After this: Wipe the existing SQLite schema and replace it with the multi-user schema.
-- [x] **S10: Work Stability** `risk:medium` `depends:[S09]`
-  > After this: Fix three server-side/MCP bugs that cause silent data corruption and chat UX breakage:
-
-- Bug 3: MCP child process runs without PROJECT_ID, so tasks are created with project_id=NULL.
