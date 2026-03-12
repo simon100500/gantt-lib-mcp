@@ -349,6 +349,12 @@ export function useAuth(): UseAuthResult {
 
   const syncProjectTaskCount = useCallback((projectId: string, taskCount: number) => {
     loggedSetState(prev => {
+      const currentProjectCount = prev.project?.id === projectId ? prev.project.taskCount : undefined;
+      const listProjectCount = prev.projects.find(project => project.id === projectId)?.taskCount;
+      if (currentProjectCount === taskCount && listProjectCount === taskCount) {
+        return prev;
+      }
+
       const projects = prev.projects.map(project => (
         project.id === projectId
           ? { ...project, taskCount }

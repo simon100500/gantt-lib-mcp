@@ -1,7 +1,7 @@
 # Dependencies
 node_modules
 packages/*/node_modules/
-
+.gsd
 # Build output
 dist
 packages/*/dist/

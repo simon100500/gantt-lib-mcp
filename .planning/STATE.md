@@ -385,6 +385,8 @@ Last activity: 2026-03-11 - Completed quick task 030: New project defers creatio
 - Phase 12 added: fix-auto-save-infinite-loop
 - Phase 13 added: start-screen с полем ввода промпта и кнопкой "Пустой график" вместо надписи "No tasks yet"
 
+- Phase 14 added: Redesign new project draft flow, deferred project creation, activation consistency, and live sidebar task-count sync
+
 ### Phase 7 Architecture Context
 
 Обсуждение от 2026-03-04. Цель — полноценный онлайн-редактор Ганта с диалоговым AI-управлением.

@@ -15,6 +15,7 @@ export interface ClientMessage {
 export interface UseWebSocketResult {
   send: (msg: ClientMessage) => void;
   connected: boolean;
+  connectedToken: string | null;
 }
 
 export function useWebSocket(
@@ -24,6 +25,7 @@ export function useWebSocket(
   refreshAccessToken?: () => Promise<string | null>,
 ): UseWebSocketResult {
   const [connected, setConnected] = useState(false);
+  const [connectedToken, setConnectedToken] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const retryDelay = useRef(1000);
   const onMessageRef = useRef(onMessage);
@@ -31,9 +33,25 @@ export function useWebSocket(
   const refreshAccessTokenRef = useRef(refreshAccessToken);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshingAuthRef = useRef(false);
+  const pendingMessagesRef = useRef<ClientMessage[]>([]);
   onMessageRef.current = onMessage;
   getAccessTokenRef.current = getAccessToken;
   refreshAccessTokenRef.current = refreshAccessToken;
+
+  const flushPendingMessages = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !connectedToken) {
+      return;
+    }
+
+    while (pendingMessagesRef.current.length > 0) {
+      const message = pendingMessagesRef.current.shift();
+      if (!message) {
+        continue;
+      }
+      ws.send(JSON.stringify(message));
+    }
+  }, [connectedToken]);
 
   const connect = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -51,6 +69,8 @@ export function useWebSocket(
       try {
         const msg = JSON.parse(event.data as string) as ServerMessage;
         if (msg.type === 'connected') {
+          const token = getAccessTokenRef.current();
+          setConnectedToken(token);
           setConnected(true);
           retryDelay.current = 1000;
         } else if (msg.type === 'error') {
@@ -72,6 +92,7 @@ export function useWebSocket(
 
     ws.onclose = () => {
       setConnected(false);
+      setConnectedToken(null);
       wsRef.current = null;
       if (refreshingAuthRef.current) {
         return;
@@ -89,11 +110,20 @@ export function useWebSocket(
   }, []);
 
   useEffect(() => {
+    if (!connected || !connectedToken) {
+      return;
+    }
+
+    flushPendingMessages();
+  }, [connected, connectedToken, flushPendingMessages]);
+
+  useEffect(() => {
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
       wsRef.current = null;
       setConnected(false);
+      setConnectedToken(null);
     }
 
     if (reconnectTimeoutRef.current) {
@@ -102,6 +132,8 @@ export function useWebSocket(
     }
 
     if (!accessToken) {
+      setConnectedToken(null);
+      pendingMessagesRef.current = [];
       return;
     }
 
@@ -118,12 +150,13 @@ export function useWebSocket(
   }, [accessToken, connect]);
 
   const send = useCallback((msg: ClientMessage) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN && connectedToken) {
       wsRef.current.send(JSON.stringify(msg));
     } else {
-      console.warn('[ws] not connected, message dropped:', msg);
+      pendingMessagesRef.current.push(msg);
+      console.warn('[ws] queued message until connection is ready:', msg);
     }
-  }, []);
+  }, [connectedToken]);
 
-  return { send, connected };
+  return { send, connected, connectedToken };
 }

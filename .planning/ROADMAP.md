@@ -284,6 +284,16 @@ Plans:
 Plans:
 - [ ] 13-01-PLAN.md — Create StartScreen component and wire into App.tsx with conditional rendering on tasks.length === 0
 
+### Phase 14: Redesign new project draft flow, deferred project creation, activation consistency, and live sidebar task-count sync
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 13
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 14 to break down)
+
 ---
 *Roadmap created: 2026-02-23*
 *Last updated: 2026-03-09 after planning Phase 13*
