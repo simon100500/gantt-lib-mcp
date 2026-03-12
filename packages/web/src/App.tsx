@@ -27,6 +27,12 @@ interface SwitchControlProps {
   label: string;
 }
 
+type WorkspaceMode =
+  | { kind: 'guest' }
+  | { kind: 'shared' }
+  | { kind: 'project'; projectId: string }
+  | { kind: 'draft'; draftName: string };
+
 function SwitchControl({ checked, onChange, label }: SwitchControlProps) {
   return (
     <label
@@ -89,7 +95,15 @@ export default function App() {
   const [aiThinking, setAiThinking] = useState(false);
   const [chatSidebarVisible, setChatSidebarVisible] = useState(false);
   const [projectSidebarVisible, setProjectSidebarVisible] = useState(true);
-  const [hasStartedChat, setHasStartedChat] = useState(false);
+  const [workspace, setWorkspace] = useState<WorkspaceMode>(() => {
+    if (hasShareToken) {
+      return { kind: 'shared' };
+    }
+    if (auth.isAuthenticated && auth.project?.id) {
+      return { kind: 'project', projectId: auth.project.id };
+    }
+    return { kind: 'guest' };
+  });
   const [pendingNewProject, setPendingNewProject] = useState(false);
   const [pendingStartPrompt, setPendingStartPrompt] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
@@ -147,6 +161,31 @@ export default function App() {
     return `Проект ${year}-${month}-${day}`;
   }, []);
 
+  useEffect(() => {
+    if (hasShareToken) {
+      setWorkspace({ kind: 'shared' });
+      return;
+    }
+
+    const projectId = auth.project?.id;
+    if (!auth.isAuthenticated || !projectId) {
+      setWorkspace({ kind: 'guest' });
+      return;
+    }
+
+    setWorkspace(prev => {
+      if (prev.kind === 'draft') {
+        return prev;
+      }
+
+      if (prev.kind === 'project' && prev.projectId === projectId) {
+        return prev;
+      }
+
+      return { kind: 'project', projectId };
+    });
+  }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
+
   const createPendingProject = useCallback(async () => {
     if (!auth.isAuthenticated || !pendingNewProject) {
       return true;
@@ -185,7 +224,6 @@ export default function App() {
     }
     if (pendingNewProject) {
       setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
-      setHasStartedChat(true);
       setChatSidebarVisible(true);
       setAiThinking(true);
       setPendingStartPrompt(text);
@@ -196,7 +234,6 @@ export default function App() {
       }
       return;
     }
-    setHasStartedChat(true);
     setChatSidebarVisible(true);
     handleSend(text);
   }, [auth.isAuthenticated, createPendingProject, handleSend, hasShareToken, pendingNewProject]);
@@ -277,21 +314,24 @@ export default function App() {
     setPendingNewProject(false);
     setPendingStartPrompt(null);
     await auth.switchProject(projectId);
+    setWorkspace({ kind: 'project', projectId });
   }, [auth]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
       setPendingNewProject(true);
+      setWorkspace({ kind: 'draft', draftName: getDefaultProjectName() });
+    } else {
+      setWorkspace({ kind: 'guest' });
     }
 
     setTasks([]);
     setMessages([]);
     setStreaming('');
     setAiThinking(false);
-    setHasStartedChat(false);
     setChatSidebarVisible(false);
     setPendingStartPrompt(null);
-  }, [auth.isAuthenticated, setTasks]);
+  }, [auth.isAuthenticated, getDefaultProjectName, setTasks]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     // For guest mode, save to localStorage
@@ -367,18 +407,7 @@ export default function App() {
     // Don't clear tasks for unauthenticated users
     if (!auth.isAuthenticated || hasShareToken) return;
     setTasks([]);
-    if (!pendingStartPrompt) {
-      setHasStartedChat(false);
-    }
   }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken, pendingStartPrompt]);
-
-  // Reset to start screen state when all tasks are removed AND AI is not processing
-  useEffect(() => {
-    if (tasks.length === 0 && !loading && !aiThinking && !pendingStartPrompt) {
-      setHasStartedChat(false);
-      setChatSidebarVisible(false);
-    }
-  }, [tasks.length, loading, aiThinking, pendingStartPrompt]);
 
   // Load chat history on auth/project change
   useEffect(() => {
@@ -414,6 +443,18 @@ export default function App() {
   }, [auth.isAuthenticated, connected, pendingStartPrompt, send]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
+  const isDraftWorkspace = workspace.kind === 'draft';
+  const isGuestWorkspace = workspace.kind === 'guest';
+  const currentProjectLabel = hasShareToken
+    ? (sharedProject.project?.name || 'Shared project')
+    : workspace.kind === 'draft'
+      ? workspace.draftName
+      : auth.isAuthenticated
+        ? auth.project?.name
+        : (localTasks.projectName || 'Мой проект');
+  const startScreenVisible = !hasShareToken && (
+    isDraftWorkspace || (isGuestWorkspace && tasks.length === 0 && !loading)
+  );
 
   // ── Error state ──────────────────────────────────────────────────────────
   if (error) {
@@ -438,15 +479,19 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-4">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
-                currentProject={auth.project}
+                currentProject={
+                  workspace.kind === 'draft'
+                    ? { id: 'draft', name: workspace.draftName, kind: 'draft' }
+                    : { ...auth.project, kind: 'project' }
+                }
                 projects={auth.projects}
                 onSwitch={handleSwitchProject}
                 onCreateNew={handleCreateProject}
-                onEdit={handleEditProject}
+                onEdit={workspace.kind === 'draft' ? undefined : handleEditProject}
               />
             ) : !auth.isAuthenticated && (
               <ProjectSwitcher
-                currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект' }}
+                currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект', kind: 'project' }}
                 projects={[]}
                 onSwitch={() => { }}
                 onCreateNew={handleCreateProject}
@@ -494,11 +539,7 @@ export default function App() {
           {/* Project name breadcrumb */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm font-medium text-slate-700 truncate">
-              {hasShareToken
-                ? (sharedProject.project?.name || 'Shared project')
-                : auth.isAuthenticated
-                  ? auth.project?.name
-                  : (localTasks.projectName || 'Мой проект')}
+              {currentProjectLabel}
             </span>
             {!hasShareToken && auth.isAuthenticated && (
               <Button
@@ -566,7 +607,7 @@ export default function App() {
 
         {/* ── Content ─────────────────────────────────────────────────────── */}
         <div className="flex flex-1 overflow-hidden">
-          {tasks.length === 0 && !loading && !hasStartedChat && !hasShareToken ? (
+          {startScreenVisible ? (
             /* ── Start Screen ─────────────────────────────────────────────── */
             <StartScreen
               onSend={handleStartScreenSend}
