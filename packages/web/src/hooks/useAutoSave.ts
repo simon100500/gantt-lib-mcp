@@ -59,10 +59,12 @@ function computeTasksHash(tasks: Task[]): string {
 export function useAutoSave(
   tasks: Task[],
   accessToken: string | null,
+  skipVersion = 0,
 ): UseAutoSaveResult {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevTokenRef = useRef<string | null>(null);
   const skipCountRef = useRef(0);
+  const lastSkipVersionRef = useRef(skipVersion);
   const lastSavedHashRef = useRef<string>('');
   const saveInProgressRef = useRef(false);
   const [savingState, setSavingState] = useState<SavingState>(globalSavingState);
@@ -79,6 +81,7 @@ export function useAutoSave(
   useEffect(() => {
     if (!accessToken) {
       prevTokenRef.current = null;
+      lastSkipVersionRef.current = skipVersion;
       lastSavedHashRef.current = '';
       console.log('[autosave] No access token, skipping save');
       return;
@@ -89,8 +92,16 @@ export function useAutoSave(
     if (accessToken !== prevTokenRef.current) {
       prevTokenRef.current = accessToken;
       skipCountRef.current = 2;
+      lastSkipVersionRef.current = skipVersion;
       lastSavedHashRef.current = '';
       console.log('[autosave] Token changed, skipping next 2 updates, token:', accessToken.substring(0, 10) + '...');
+      return;
+    }
+
+    if (skipVersion !== lastSkipVersionRef.current) {
+      lastSkipVersionRef.current = skipVersion;
+      lastSavedHashRef.current = computeTasksHash(tasks);
+      console.log('[autosave] Skipping save for system task snapshot, tasks:', tasks.length);
       return;
     }
 
@@ -180,7 +191,7 @@ export function useAutoSave(
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [tasks, accessToken]);
+  }, [tasks, accessToken, skipVersion]);
 
   return { savingState };
 }

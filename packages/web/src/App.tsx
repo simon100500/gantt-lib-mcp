@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
 
 let msgCounter = 0;
+const ACCESS_TOKEN_KEY = 'gantt_access_token';
 
 // ── Switch control (track + thumb) ────────────────────────────────────────
 interface SwitchControlProps {
@@ -91,8 +92,13 @@ export default function App() {
     : auth.isAuthenticated
       ? authenticatedTasks
       : localTasks;
+  const [autoSaveSkipVersion, setAutoSaveSkipVersion] = useState(0);
   // Autosave to server on any chart change (guest mode persists in useLocalTasks)
-  const { savingState } = useAutoSave(tasks, hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null);
+  const { savingState } = useAutoSave(
+    tasks,
+    hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
+    autoSaveSkipVersion,
+  );
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -125,11 +131,16 @@ export default function App() {
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
 
+  const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
+    setAutoSaveSkipVersion(version => version + 1);
+    setTasks(nextTasks);
+  }, [setTasks]);
+
   // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
       console.log('[App] Received tasks via WebSocket, count:', msg.tasks?.length);
-      setTasks(msg.tasks as Task[]);
+      replaceTasksFromSystem(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
       setStreaming(prev => prev + (msg.content ?? ''));
     } else if (msg.type === 'done') {
@@ -150,7 +161,7 @@ export default function App() {
     }
   }, [setTasks]);
 
-  const { send, connected } = useWebSocket(
+  const { send, connected, connectedToken } = useWebSocket(
     handleWsMessage,
     () => (hasShareToken ? null : auth.accessToken),
     hasShareToken ? null : auth.accessToken,
@@ -208,11 +219,11 @@ export default function App() {
   }, []);
 
   const resetWorkspacePresentation = useCallback(() => {
-    setTasks([]);
+    replaceTasksFromSystem([]);
     setMessages([]);
     setStreaming('');
     setAiThinking(false);
-  }, [setTasks]);
+  }, [replaceTasksFromSystem]);
 
   const createPlaceholderTask = useCallback((): Task => {
     const today = new Date().toISOString().split('T')[0];
@@ -223,6 +234,47 @@ export default function App() {
       endDate: today,
     };
   }, []);
+
+  const submitChatMessage = useCallback(async (message: string) => {
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+
+    let token = getLatestAccessToken();
+    if (!token) {
+      return false;
+    }
+
+    let response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message }),
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        return false;
+      }
+
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message }),
+      });
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return true;
+  }, [auth]);
 
   const handleSend = useCallback((text: string) => {
     if (hasShareToken) {
@@ -235,8 +287,14 @@ export default function App() {
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
     setAiThinking(true);
     openProjectChat();
-    send({ type: 'chat', message: text });
-  }, [auth.isAuthenticated, hasShareToken, openProjectChat, send]);
+    void submitChatMessage(text).catch((error) => {
+      setAiThinking(false);
+      setMessages(ms => [
+        ...ms,
+        { id: String(++msgCounter), role: 'assistant', content: `Error: ${String(error)}` },
+      ]);
+    });
+  }, [auth.isAuthenticated, hasShareToken, openProjectChat, submitChatMessage]);
 
   const activateDraftWorkspace = useCallback(async ({
     firstPrompt,
@@ -295,7 +353,11 @@ export default function App() {
     ));
 
     await auth.switchProject(newProject.id);
-    setTasks(createEmptyChart ? [createPlaceholderTask()] : []);
+    if (createEmptyChart) {
+      setTasks([createPlaceholderTask()]);
+    } else {
+      replaceTasksFromSystem([]);
+    }
     setWorkspace({
       kind: 'project',
       projectId: newProject.id,
@@ -303,7 +365,7 @@ export default function App() {
     });
     activationInFlightRef.current = false;
     return true;
-  }, [auth, createPlaceholderTask, hasShareToken, resetWorkspacePresentation, setTasks, workspace]);
+  }, [auth, createPlaceholderTask, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setTasks, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
@@ -489,24 +551,28 @@ export default function App() {
   useEffect(() => {
     // Don't clear tasks for unauthenticated users
     if (!auth.isAuthenticated || hasShareToken) return;
-    setTasks([]);
-  }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken]);
+    replaceTasksFromSystem([]);
+  }, [auth.project?.id, replaceTasksFromSystem, auth.isAuthenticated, hasShareToken]);
 
   // Load chat history on auth/project change
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
       return;
     }
+
+    const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
     setStreaming('');
-    setMessages([]);
-    setAiThinking(false);
+    if (!hasQueuedFirstPrompt) {
+      setMessages([]);
+      setAiThinking(false);
+    }
 
     fetch('/api/messages', {
       headers: { Authorization: `Bearer ${auth.accessToken}` },
     })
       .then(res => (res.ok ? (res.json() as Promise<Array<{ role: string; content: string }>>) : Promise.resolve([])))
       .then(data => {
-        if (createEmptyChartAfterActivationRef.current) {
+        if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
         setMessages(
@@ -521,14 +587,26 @@ export default function App() {
       return;
     }
 
+    if (!auth.accessToken || connectedToken !== auth.accessToken) {
+      return;
+    }
+
     const promptToSend = queuedPromptRef.current;
     if (!promptToSend) {
       return;
     }
 
     queuedPromptRef.current = null;
-    send({ type: 'chat', message: promptToSend });
-  }, [auth.isAuthenticated, connected, send, workspace.kind]);
+    void submitChatMessage(promptToSend).catch((error) => {
+      setAiThinking(false);
+      setMessages(ms => [
+        ...ms,
+        { id: String(++msgCounter), role: 'assistant', content: `Error: ${String(error)}` },
+      ]);
+    });
+  }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, submitChatMessage, workspace.kind]);
+
+  const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project') {
@@ -536,7 +614,7 @@ export default function App() {
     }
 
     auth.syncProjectTaskCount(workspace.projectId, tasks.length);
-  }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
+  }, [activeWorkspaceProjectId, auth.isAuthenticated, auth.syncProjectTaskCount, hasShareToken, tasks.length, workspace.kind]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
   const isDraftWorkspace = workspace.kind === 'draft';

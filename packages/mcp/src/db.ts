@@ -10,11 +10,17 @@
  */
 
 import { createClient, type Client } from '@libsql/client';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { writeMcpDebugLog } from './debug-log.js';
 
 let _db: Client | null = null;
 
 export type DbClient = Client;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
 
 async function ensureTaskColumn(db: Client, columnName: string, definition: string): Promise<void> {
   const tableInfo = await db.execute('PRAGMA table_info(tasks)');
@@ -28,12 +34,12 @@ async function ensureTaskColumn(db: Client, columnName: string, definition: stri
  * Get (or lazily initialize) the singleton SQLite client.
  * Creates all required tables if they do not exist.
  *
- * DB path resolved from env var DB_PATH, defaulting to './gantt.db'.
+ * DB path resolved from env var DB_PATH, defaulting to the project-root gantt.db.
  */
 export async function getDb(): Promise<Client> {
   if (_db) return _db;
 
-  const dbPath = process.env.DB_PATH ?? './gantt.db';
+  const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
   await writeMcpDebugLog('db_initialized', {
     dbPath,
     projectId: process.env.PROJECT_ID,

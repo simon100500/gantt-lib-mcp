@@ -317,7 +317,7 @@ async function verifyMutationAttempt(
   revisionBefore: number,
   assistantResponse: string,
 ): Promise<VerificationResult> {
-  const tasksAfter = await reliableTaskStore.list(projectId, true) as ComparableTask[];
+  const tasksAfter = await reliableTaskStore.list(projectId, false) as ComparableTask[];
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
   const revisionAfter = await reliableTaskStore.getTaskRevision(projectId);
   const runMutations = await reliableTaskStore.getMutationEventsByRun(runId, projectId);
@@ -360,7 +360,7 @@ export async function runAgentWithHistory(
     const runId = crypto.randomUUID();
     const mutationRequested = isMutationIntent(userMessage);
     const tasksBefore = mutationRequested
-      ? await reliableTaskStore.list(projectId, true) as ComparableTask[]
+      ? await reliableTaskStore.list(projectId, false) as ComparableTask[]
       : [];
     const revisionBefore = await reliableTaskStore.getTaskRevision(projectId);
 

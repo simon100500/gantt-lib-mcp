@@ -28,6 +28,19 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 // Valid dependency types
 const VALID_DEPENDENCY_TYPES = ['FS', 'SS', 'FF', 'SF'];
 
+function normalizeProjectId(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveProjectId(argProjectId: unknown): string | undefined {
+  return normalizeProjectId(argProjectId) ?? normalizeProjectId(process.env.PROJECT_ID);
+}
+
 /**
  * Validate date format (YYYY-MM-DD)
  */
@@ -355,7 +368,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'create_task') {
     const input = args as unknown as CreateTaskInput;
     const { projectId: argProjectId } = args as { projectId?: string };
-    const resolvedProjectId = argProjectId ?? process.env.PROJECT_ID;
+    const resolvedProjectId = resolveProjectId(argProjectId);
 
     // DEBUG: Log projectId resolution
     console.error('[CREATE_TASK DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
@@ -426,7 +439,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // If caller explicitly passes null, return all tasks; otherwise default to PROJECT_ID env
     const resolvedProjectId = argProjectId === null
       ? undefined
-      : (argProjectId ?? process.env.PROJECT_ID);
+      : resolveProjectId(argProjectId);
     const tasks = await taskStore.list(resolvedProjectId, false);
 
     console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', tasks.length);
@@ -634,7 +647,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error('Missing required parameter: jsonData');
     }
 
-    const resolvedProjectId = process.env.PROJECT_ID;
+    const resolvedProjectId = normalizeProjectId(process.env.PROJECT_ID);
 
     try {
       const count = await taskStore.importTasks(jsonData, resolvedProjectId);
@@ -697,7 +710,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'create_tasks_batch') {
     const input = args as unknown as CreateTasksBatchInput;
     const { projectId: argProjectId } = args as { projectId?: string };
-    const resolvedProjectId = argProjectId ?? process.env.PROJECT_ID;
+    const resolvedProjectId = resolveProjectId(argProjectId);
 
     console.error('[CREATE_TASKS_BATCH DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
     await writeMcpDebugLog('create_tasks_batch_resolved_project', {
