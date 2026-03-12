@@ -17,6 +17,24 @@ interface OtpModalProps {
 
 type Step = 'email' | 'otp';
 
+async function readErrorMessage(
+  res: Response,
+  fallback: string,
+): Promise<string> {
+  const raw = await res.text();
+
+  if (!raw.trim()) {
+    return `${fallback} (empty response, check backend on localhost:3000)`;
+  }
+
+  try {
+    const data = JSON.parse(raw) as { error?: string; message?: string };
+    return data.error || data.message || fallback;
+  } catch {
+    return `${fallback}: ${raw.slice(0, 200)}`;
+  }
+}
+
 export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
@@ -51,8 +69,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
       });
 
       if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Failed to send code');
+        throw new Error(await readErrorMessage(res, 'Failed to send code'));
       }
 
       setStep('otp');
@@ -119,8 +136,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
       });
 
       if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error || 'Invalid code');
+        throw new Error(await readErrorMessage(res, 'Invalid code'));
       }
 
       const result = await res.json() as {
