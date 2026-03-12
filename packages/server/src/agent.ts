@@ -191,6 +191,7 @@ async function executeAgentAttempt(
   const session = query({
     prompt,
     options: {
+      authType: 'openai',
       model: env.OPENAI_MODEL,
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
@@ -394,6 +395,16 @@ export async function runAgentWithHistory(
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
+
+    await writeServerDebugLog('agent_env_resolved', {
+      runId,
+      projectId,
+      sessionId,
+      authType: 'openai',
+      baseUrl: env.OPENAI_BASE_URL,
+      model: env.OPENAI_MODEL,
+      projectRoot: PROJECT_ROOT,
+    });
 
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
       ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
