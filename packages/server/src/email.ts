@@ -53,7 +53,7 @@ export async function sendOtpEmail(email: string, code: string): Promise<void> {
   await transporter.sendMail({
     from: fromAddress,
     to: email,
-    subject: 'Код входа в ГетГант',
+    subject: 'Код для входа',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">Ваш код для входа в GetGantt.ru</h2>
