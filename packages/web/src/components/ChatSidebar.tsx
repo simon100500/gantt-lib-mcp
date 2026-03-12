@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Sparkles, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useEffect, useRef, useState } from "react";
+import { ArrowUp, Sparkles, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
@@ -20,14 +20,19 @@ interface ChatSidebarProps {
   onLoginRequired?: () => void;
 }
 
-const QUICK_CHIPS = ['Добавить задачу', 'Сдвинуть сроки', 'Связать задачи', 'Показать сводку'];
+const QUICK_CHIPS = [
+  "Добавить задачу",
+  "Сдвинуть сроки",
+  "Связать задачи",
+  "Показать сводку",
+];
 const LOADING_PHRASES = [
-  'Ищем техкарты',
-  'Сортируем задачи',
-  'Ставим дедлайны',
-  'Проверяем зависимости',
-  'Выравниваем график',
-  'Собираем план работ',
+  "Ищем техкарты",
+  "Сортируем задачи",
+  "Ставим дедлайны",
+  "Проверяем зависимости",
+  "Выравниваем график",
+  "Собираем план работ",
 ];
 
 export function ChatSidebar({
@@ -41,14 +46,14 @@ export function ChatSidebar({
   isAuthenticated = true,
   onLoginRequired,
 }: ChatSidebarProps) {
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState("");
   const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
 
   useEffect(() => {
@@ -58,7 +63,7 @@ export function ChatSidebar({
     }
 
     const timer = window.setInterval(() => {
-      setLoadingPhraseIndex(prev => (prev + 1) % LOADING_PHRASES.length);
+      setLoadingPhraseIndex((prev) => (prev + 1) % LOADING_PHRASES.length);
     }, 1800);
 
     return () => window.clearInterval(timer);
@@ -73,26 +78,26 @@ export function ChatSidebar({
       return;
     }
     onSend(text);
-    setInputValue('');
-    if (inputRef.current) inputRef.current.style.height = 'auto';
-    if (inputRef.current) inputRef.current.style.overflowY = 'hidden';
+    setInputValue("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
+    if (inputRef.current) inputRef.current.style.overflowY = "hidden";
   }
 
   function handleChip(chip: string) {
-    setInputValue(chip + ' ');
+    setInputValue(chip + " ");
     inputRef.current?.focus();
   }
 
   function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
     const el = e.currentTarget;
-    el.style.height = 'auto';
+    el.style.height = "auto";
     const newHeight = el.scrollHeight;
     el.style.height = `${newHeight}px`;
-    el.style.overflowY = newHeight > 120 ? 'auto' : 'hidden';
+    el.style.overflowY = newHeight > 120 ? "auto" : "hidden";
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e as unknown as React.FormEvent);
     }
@@ -103,12 +108,14 @@ export function ChatSidebar({
       <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-slate-200 px-4">
         <span
           className={cn(
-            'h-2 w-2 shrink-0 rounded-full transition-colors',
-            connected ? 'bg-emerald-500' : 'bg-amber-400',
+            "h-2 w-2 shrink-0 rounded-full transition-colors",
+            connected ? "bg-emerald-500" : "bg-amber-400",
           )}
-          title={connected ? 'Подключено' : 'Переподключение...'}
+          title={connected ? "Подключено" : "Переподключение..."}
         />
-        <span className="text-sm font-semibold tracking-tight text-slate-800">AI Ассистент</span>
+        <span className="text-sm font-semibold tracking-tight text-slate-800">
+          AI Ассистент
+        </span>
         <span className="flex-1" />
         {onClose && (
           <button
@@ -128,28 +135,30 @@ export function ChatSidebar({
               <Sparkles className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-700">AI Гант-ассистент</p>
+              <p className="text-sm font-medium text-slate-700">
+                AI Гант-ассистент
+              </p>
               <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                Попросите создать или изменить расписание проекта
+                Попросите создать график с нуля или изменить отдельные задачи
               </p>
             </div>
           </div>
         )}
 
-        {messages.map(msg => (
+        {messages.map((msg) => (
           <div
             key={msg.id}
             className={cn(
-              'flex animate-fade-up motion-reduce:animate-none',
-              msg.role === 'user' ? 'justify-end' : 'justify-start',
+              "flex animate-fade-up motion-reduce:animate-none",
+              msg.role === "user" ? "justify-end" : "justify-start",
             )}
           >
             <div
               className={cn(
-                'max-w-[86%] rounded-xl px-3 py-2 text-sm leading-relaxed',
-                msg.role === 'user'
-                  ? 'rounded-br-sm bg-primary text-primary-foreground'
-                  : 'rounded-bl-sm border border-slate-200 bg-slate-100 text-slate-800',
+                "max-w-[86%] rounded-xl px-3 py-2 text-sm leading-relaxed",
+                msg.role === "user"
+                  ? "rounded-br-sm bg-primary text-primary-foreground"
+                  : "rounded-bl-sm border border-slate-200 bg-slate-100 text-slate-800",
               )}
             >
               {msg.content}
@@ -186,15 +195,15 @@ export function ChatSidebar({
 
       {isEmpty && (
         <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-          {QUICK_CHIPS.map(chip => (
+          {QUICK_CHIPS.map((chip) => (
             <button
               key={chip}
               type="button"
               onClick={() => handleChip(chip)}
               className={cn(
-                'rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500',
-                'transition-colors hover:border-primary hover:text-primary',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                "rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500",
+                "transition-colors hover:border-primary hover:text-primary",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
               )}
             >
               {chip}
@@ -212,19 +221,19 @@ export function ChatSidebar({
           name="message"
           rows={1}
           value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
+          onChange={(e) => setInputValue(e.target.value)}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={disabled ? 'AI думает...' : 'Что хотите сделать?'}
+          placeholder={disabled ? "AI думает..." : "Что хотите сделать?"}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
-          style={{ maxHeight: '7.5rem' }}
+          style={{ maxHeight: "7.5rem" }}
           className={cn(
-            'flex-1 resize-none overflow-y-auto rounded-md px-3 py-2 text-sm leading-relaxed',
-            'border border-slate-200 bg-slate-50 placeholder:text-slate-400',
-            'transition-colors focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-            'disabled:cursor-not-allowed disabled:opacity-50',
+            "flex-1 resize-none overflow-y-auto rounded-md px-3 py-2 text-sm leading-relaxed",
+            "border border-slate-200 bg-slate-50 placeholder:text-slate-400",
+            "transition-colors focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         />
         <button
@@ -232,10 +241,10 @@ export function ChatSidebar({
           disabled={disabled || !inputValue.trim()}
           aria-label="Send message"
           className={cn(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground',
-            'transition-colors hover:bg-primary/90',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-            'disabled:cursor-not-allowed disabled:opacity-40',
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground",
+            "transition-colors hover:bg-primary/90",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            "disabled:cursor-not-allowed disabled:opacity-40",
           )}
         >
           <ArrowUp className="h-4 w-4" />

@@ -104,7 +104,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
-  const [projectSidebarVisible, setProjectSidebarVisible] = useState(true);
+  const [projectSidebarVisible, setProjectSidebarVisible] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceMode>(() => {
     if (hasShareToken) {
       return { kind: 'shared' };
@@ -353,6 +353,7 @@ export default function App() {
     ));
 
     await auth.switchProject(newProject.id);
+    setProjectSidebarVisible(false);
     if (createEmptyChart) {
       setTasks([createPlaceholderTask()]);
     } else {
@@ -722,7 +723,7 @@ export default function App() {
                 size="sm"
                 onClick={handleCreateShareLink}
                 disabled={shareStatus === 'creating'}
-                className="h-7 w-7 shrink-0 p-0 text-slate-500 hover:text-slate-900"
+                className="h-7 shrink-0 gap-1.5 px-2.5 text-xs text-slate-600 hover:text-slate-900"
                 title={
                   shareStatus === 'creating'
                     ? 'Создаём ссылку...'
@@ -734,6 +735,17 @@ export default function App() {
                 }
               >
                 {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
+                {shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}
+              </Button>
+            )}
+            {!hasShareToken && auth.isAuthenticated && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCreateProject}
+                className="h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+              >
+                + Новый проект
               </Button>
             )}
           </div>
