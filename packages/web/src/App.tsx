@@ -135,6 +135,7 @@ export default function App() {
     handleWsMessage,
     () => (hasShareToken ? null : auth.accessToken),
     hasShareToken ? null : auth.accessToken,
+    hasShareToken ? undefined : auth.refreshAccessToken,
   );
   const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
 
@@ -366,8 +367,10 @@ export default function App() {
     // Don't clear tasks for unauthenticated users
     if (!auth.isAuthenticated || hasShareToken) return;
     setTasks([]);
-    setHasStartedChat(false);
-  }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken]);
+    if (!pendingStartPrompt) {
+      setHasStartedChat(false);
+    }
+  }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken, pendingStartPrompt]);
 
   // Reset to start screen state when all tasks are removed AND AI is not processing
   useEffect(() => {

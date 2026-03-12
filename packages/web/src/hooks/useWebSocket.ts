@@ -20,16 +20,20 @@ export interface UseWebSocketResult {
 export function useWebSocket(
   onMessage: (msg: ServerMessage) => void,
   getAccessToken: () => string | null,
-  accessToken: string | null   // NEW: reactive trigger — reconnect when this changes
+  accessToken: string | null,
+  refreshAccessToken?: () => Promise<string | null>,
 ): UseWebSocketResult {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const retryDelay = useRef(1000);
   const onMessageRef = useRef(onMessage);
   const getAccessTokenRef = useRef(getAccessToken);
+  const refreshAccessTokenRef = useRef(refreshAccessToken);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  onMessageRef.current = onMessage; // always latest callback
-  getAccessTokenRef.current = getAccessToken; // always latest callback
+  const refreshingAuthRef = useRef(false);
+  onMessageRef.current = onMessage;
+  getAccessTokenRef.current = getAccessToken;
+  refreshAccessTokenRef.current = refreshAccessToken;
 
   const connect = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -41,7 +45,6 @@ export function useWebSocket(
       if (token) {
         ws.send(JSON.stringify({ type: 'auth', token }));
       }
-      // Don't set connected=true here — wait for server confirmation
     };
 
     ws.onmessage = (event) => {
@@ -49,21 +52,30 @@ export function useWebSocket(
         const msg = JSON.parse(event.data as string) as ServerMessage;
         if (msg.type === 'connected') {
           setConnected(true);
-          retryDelay.current = 1000; // reset backoff
+          retryDelay.current = 1000;
         } else if (msg.type === 'error') {
-          // Auth failed - server will close connection, triggering onclose
           console.warn('[ws] Authentication failed:', msg.message);
+          if (msg.message === 'Unauthorized' && refreshAccessTokenRef.current && !refreshingAuthRef.current) {
+            refreshingAuthRef.current = true;
+            void refreshAccessTokenRef.current()
+              .catch(() => null)
+              .finally(() => {
+                refreshingAuthRef.current = false;
+              });
+          }
         }
         onMessageRef.current(msg);
       } catch {
-        // ignore malformed messages
+        // Ignore malformed JSON from the socket.
       }
     };
 
     ws.onclose = () => {
       setConnected(false);
       wsRef.current = null;
-      // Reconnect with backoff
+      if (refreshingAuthRef.current) {
+        return;
+      }
       reconnectTimeoutRef.current = setTimeout(() => {
         retryDelay.current = Math.min(retryDelay.current * 2, 16000);
         connect();
@@ -72,27 +84,23 @@ export function useWebSocket(
 
     ws.onerror = (err) => {
       console.error('[ws] error', err);
-      ws.close(); // triggers onclose → reconnect
+      ws.close();
     };
   }, []);
 
   useEffect(() => {
-    // If an existing connection is open, close it without triggering auto-reconnect.
-    // Setting onclose = null prevents the exponential backoff handler from racing
-    // with this intentional reconnect.
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
       wsRef.current = null;
       setConnected(false);
     }
-    // Clear any pending reconnection timeout
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
-    // Don't connect if no token (unauthenticated user)
     if (!accessToken) {
       return;
     }
@@ -107,7 +115,7 @@ export function useWebSocket(
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [accessToken, connect]); // Re-run when token changes (null → value after OTP login)
+  }, [accessToken, connect]);
 
   const send = useCallback((msg: ClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

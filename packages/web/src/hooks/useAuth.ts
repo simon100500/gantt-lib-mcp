@@ -210,6 +210,37 @@ export function useAuth(): UseAuthResult {
     }
   }, [logout]);
 
+  const fetchWithAuthRetry = useCallback(async (
+    input: RequestInfo | URL,
+    init: RequestInit = {},
+  ): Promise<{ response: Response; token: string | null }> => {
+    let token = state.accessToken;
+    if (!token) {
+      return { response: new Response(null, { status: 401 }), token: null };
+    }
+
+    const withToken = (accessToken: string): RequestInit => ({
+      ...init,
+      headers: {
+        ...(init.headers ?? {}),
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    let response = await fetch(input, withToken(token));
+    if (response.status !== 401) {
+      return { response, token };
+    }
+
+    token = await refreshAccessToken();
+    if (!token) {
+      return { response, token: null };
+    }
+
+    response = await fetch(input, withToken(token));
+    return { response, token };
+  }, [refreshAccessToken, state.accessToken]);
+
   const switchProject = useCallback(async (projectId: string): Promise<void> => {
     console.log('[useAuth] switchProject called with projectId:', projectId);
     console.log('[useAuth] switchProject closure state:', {
@@ -217,18 +248,16 @@ export function useAuth(): UseAuthResult {
       closureProject: state.project?.id,
       hasClosureToken: !!state.accessToken,
     });
-    const currentToken = state.accessToken;
-    if (!currentToken) {
+    if (!state.accessToken) {
       logout();
       return;
     }
 
     try {
-      const res = await fetch('/api/auth/switch-project', {
+      const { response: res } = await fetchWithAuthRetry('/api/auth/switch-project', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`,
         },
         body: JSON.stringify({ projectId }),
       });
@@ -244,6 +273,19 @@ export function useAuth(): UseAuthResult {
         hasAccessToken: !!data.accessToken,
         accessTokenPrefix: data.accessToken?.substring(0, 20) + '...',
       });
+
+      // Fetch projects list with the new access token to ensure we have the latest list
+      // This prevents a race condition where the useEffect refresh overwrites a newly created project
+      const projectsRes = await fetch('/api/projects', {
+        headers: { Authorization: `Bearer ${data.accessToken}` },
+      });
+      let projects = state.projects; // fallback to current projects if fetch fails
+      if (projectsRes.ok) {
+        const projectsData = await projectsRes.json() as { projects: AuthProject[] };
+        projects = projectsData.projects;
+        localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+      }
+
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
       localStorage.setItem(PROJECT_KEY, JSON.stringify(data.project));
@@ -258,31 +300,31 @@ export function useAuth(): UseAuthResult {
           prevIsAuthenticated: prev.isAuthenticated,
           prevProjectId: prev.project?.id,
           newProjectId: data.project.id,
+          projectsCount: projects.length,
         });
         return {
           ...prev,
           accessToken: data.accessToken,
           project: data.project,
+          projects, // Explicitly set projects to prevent race condition with useEffect
         };
       }, 'switchProject');
     } catch (err) {
       console.error('Failed to switch project:', err);
       throw err;
     }
-  }, [state.accessToken, logout]);
+  }, [fetchWithAuthRetry, logout, state.accessToken, state.projects]);
 
   const createProject = useCallback(async (name: string): Promise<AuthProject | null> => {
-    const currentToken = state.accessToken;
-    if (!currentToken) {
+    if (!state.accessToken) {
       return null;
     }
 
     try {
-      const res = await fetch('/api/projects', {
+      const { response: res } = await fetchWithAuthRetry('/api/projects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`,
         },
         body: JSON.stringify({ name }),
       });
@@ -302,7 +344,7 @@ export function useAuth(): UseAuthResult {
       console.error('Failed to create project:', err);
       return null;
     }
-  }, [state.accessToken, state.projects]);
+  }, [fetchWithAuthRetry, state.accessToken, state.projects]);
 
   return {
     ...state,
