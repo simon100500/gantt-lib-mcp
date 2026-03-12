@@ -32,6 +32,7 @@ export interface UseAuthResult extends AuthState {
   logout(): void;
   switchProject(projectId: string): Promise<void>;
   createProject(name: string): Promise<AuthProject | null>;
+  syncProjectTaskCount(projectId: string, taskCount: number): void;
   refreshAccessToken(): Promise<string | null>;
 }
 
@@ -346,12 +347,37 @@ export function useAuth(): UseAuthResult {
     }
   }, [fetchWithAuthRetry, state.accessToken, state.projects]);
 
+  const syncProjectTaskCount = useCallback((projectId: string, taskCount: number) => {
+    loggedSetState(prev => {
+      const projects = prev.projects.map(project => (
+        project.id === projectId
+          ? { ...project, taskCount }
+          : project
+      ));
+      const project = prev.project?.id === projectId
+        ? { ...prev.project, taskCount }
+        : prev.project;
+
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+      if (project) {
+        localStorage.setItem(PROJECT_KEY, JSON.stringify(project));
+      }
+
+      return {
+        ...prev,
+        project,
+        projects,
+      };
+    }, 'syncProjectTaskCount');
+  }, [loggedSetState]);
+
   return {
     ...state,
     login,
     logout,
     switchProject,
     createProject,
+    syncProjectTaskCount,
     refreshAccessToken,
   };
 }

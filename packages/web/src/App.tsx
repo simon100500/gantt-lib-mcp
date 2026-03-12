@@ -30,8 +30,13 @@ interface SwitchControlProps {
 type WorkspaceMode =
   | { kind: 'guest' }
   | { kind: 'shared' }
-  | { kind: 'project'; projectId: string }
-  | { kind: 'draft'; draftName: string };
+  | { kind: 'project'; projectId: string; chatOpen: boolean }
+  | {
+    kind: 'draft';
+    draftName: string;
+    queuedPrompt: string | null;
+    activation: 'idle' | 'creating' | 'switching' | 'ready';
+  };
 
 function SwitchControl({ checked, onChange, label }: SwitchControlProps) {
   return (
@@ -93,19 +98,16 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
-  const [chatSidebarVisible, setChatSidebarVisible] = useState(false);
   const [projectSidebarVisible, setProjectSidebarVisible] = useState(true);
   const [workspace, setWorkspace] = useState<WorkspaceMode>(() => {
     if (hasShareToken) {
       return { kind: 'shared' };
     }
     if (auth.isAuthenticated && auth.project?.id) {
-      return { kind: 'project', projectId: auth.project.id };
+      return { kind: 'project', projectId: auth.project.id, chatOpen: false };
     }
     return { kind: 'guest' };
   });
-  const [pendingNewProject, setPendingNewProject] = useState(false);
-  const [pendingStartPrompt, setPendingStartPrompt] = useState<string | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
 
   // Gantt feature toggles
@@ -119,6 +121,9 @@ export default function App() {
   const disableDependencyEditing = false;
 
   const ganttRef = useRef<GanttChartRef>(null);
+  const activationInFlightRef = useRef(false);
+  const createEmptyChartAfterActivationRef = useRef(false);
+  const queuedPromptRef = useRef<string | null>(null);
 
   // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
@@ -182,24 +187,42 @@ export default function App() {
         return prev;
       }
 
-      return { kind: 'project', projectId };
+      return { kind: 'project', projectId, chatOpen: false };
     });
   }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
 
-  const createPendingProject = useCallback(async () => {
-    if (!auth.isAuthenticated || !pendingNewProject) {
-      return true;
-    }
+  const closeProjectChat = useCallback(() => {
+    setWorkspace(prev => (
+      prev.kind === 'project'
+        ? { ...prev, chatOpen: false }
+        : prev
+    ));
+  }, []);
 
-    const newProject = await auth.createProject(getDefaultProjectName());
-    if (!newProject) {
-      return false;
-    }
+  const openProjectChat = useCallback(() => {
+    setWorkspace(prev => (
+      prev.kind === 'project'
+        ? { ...prev, chatOpen: true }
+        : prev
+    ));
+  }, []);
 
-    await auth.switchProject(newProject.id);
-    setPendingNewProject(false);
-    return true;
-  }, [auth, getDefaultProjectName, pendingNewProject]);
+  const resetWorkspacePresentation = useCallback(() => {
+    setTasks([]);
+    setMessages([]);
+    setStreaming('');
+    setAiThinking(false);
+  }, [setTasks]);
+
+  const createPlaceholderTask = useCallback((): Task => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      id: `task-${Date.now()}`,
+      name: 'РќРѕРІР°СЏ Р·Р°РґР°С‡Р°',
+      startDate: today,
+      endDate: today,
+    };
+  }, []);
 
   const handleSend = useCallback((text: string) => {
     if (hasShareToken) {
@@ -211,8 +234,76 @@ export default function App() {
     }
     setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
     setAiThinking(true);
+    openProjectChat();
     send({ type: 'chat', message: text });
-  }, [auth.isAuthenticated, hasShareToken, send]);
+  }, [auth.isAuthenticated, hasShareToken, openProjectChat, send]);
+
+  const activateDraftWorkspace = useCallback(async ({
+    firstPrompt,
+    createEmptyChart = false,
+  }: {
+    firstPrompt?: string;
+    createEmptyChart?: boolean;
+  }): Promise<boolean> => {
+    if (hasShareToken) {
+      return false;
+    }
+
+    if (!auth.isAuthenticated) {
+      setShowOtpModal(true);
+      return false;
+    }
+
+    if (workspace.kind !== 'draft' || activationInFlightRef.current) {
+      return false;
+    }
+
+    activationInFlightRef.current = true;
+    createEmptyChartAfterActivationRef.current = createEmptyChart;
+    queuedPromptRef.current = firstPrompt ?? null;
+    resetWorkspacePresentation();
+
+    if (firstPrompt) {
+      setMessages([{ id: String(++msgCounter), role: 'user', content: firstPrompt }]);
+      setAiThinking(true);
+    }
+
+    setWorkspace(prev => (
+      prev.kind === 'draft'
+        ? { ...prev, queuedPrompt: firstPrompt ?? null, activation: 'creating' }
+        : prev
+    ));
+
+    const newProject = await auth.createProject(workspace.draftName);
+    if (!newProject) {
+      setAiThinking(false);
+      queuedPromptRef.current = null;
+      setWorkspace(prev => (
+        prev.kind === 'draft'
+          ? { ...prev, queuedPrompt: null, activation: 'idle' }
+          : prev
+      ));
+      activationInFlightRef.current = false;
+      createEmptyChartAfterActivationRef.current = false;
+      return false;
+    }
+
+    setWorkspace(prev => (
+      prev.kind === 'draft'
+        ? { ...prev, activation: 'switching' }
+        : prev
+    ));
+
+    await auth.switchProject(newProject.id);
+    setTasks(createEmptyChart ? [createPlaceholderTask()] : []);
+    setWorkspace({
+      kind: 'project',
+      projectId: newProject.id,
+      chatOpen: !createEmptyChart,
+    });
+    activationInFlightRef.current = false;
+    return true;
+  }, [auth, createPlaceholderTask, hasShareToken, resetWorkspacePresentation, setTasks, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
@@ -222,21 +313,12 @@ export default function App() {
       setShowOtpModal(true);
       return;
     }
-    if (pendingNewProject) {
-      setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
-      setChatSidebarVisible(true);
-      setAiThinking(true);
-      setPendingStartPrompt(text);
-      const created = await createPendingProject();
-      if (!created) {
-        setPendingStartPrompt(null);
-        setAiThinking(false);
-      }
+    if (workspace.kind === 'draft') {
+      await activateDraftWorkspace({ firstPrompt: text });
       return;
     }
-    setChatSidebarVisible(true);
     handleSend(text);
-  }, [auth.isAuthenticated, createPendingProject, handleSend, hasShareToken, pendingNewProject]);
+  }, [activateDraftWorkspace, auth.isAuthenticated, handleSend, hasShareToken, workspace.kind]);
 
   const handleAuthSuccess = useCallback((result: {
     accessToken: string;
@@ -263,11 +345,9 @@ export default function App() {
   }, [setTasks]);
 
   const handleEmptyChart = useCallback(async () => {
-    if (auth.isAuthenticated && pendingNewProject) {
-      const created = await createPendingProject();
-      if (!created) {
-        return;
-      }
+    if (workspace.kind === 'draft') {
+      await activateDraftWorkspace({ createEmptyChart: true });
+      return;
     }
     const today = new Date().toISOString().split('T')[0];
     const placeholderTask: Task = {
@@ -277,8 +357,8 @@ export default function App() {
       endDate: today,
     };
     handleAddTask(placeholderTask);
-    setChatSidebarVisible(true);
-  }, [auth.isAuthenticated, createPendingProject, handleAddTask, pendingNewProject]);
+    openProjectChat();
+  }, [activateDraftWorkspace, handleAddTask, openProjectChat, workspace.kind]);
 
   const handleDeleteTask = useCallback((taskId: string) => {
     setTasks(prev => prev
@@ -311,27 +391,30 @@ export default function App() {
   }, []);
 
   const handleSwitchProject = useCallback(async (projectId: string) => {
-    setPendingNewProject(false);
-    setPendingStartPrompt(null);
+    createEmptyChartAfterActivationRef.current = false;
+    queuedPromptRef.current = null;
+    resetWorkspacePresentation();
     await auth.switchProject(projectId);
-    setWorkspace({ kind: 'project', projectId });
-  }, [auth]);
+    setWorkspace({ kind: 'project', projectId, chatOpen: false });
+  }, [auth, resetWorkspacePresentation]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
-      setPendingNewProject(true);
-      setWorkspace({ kind: 'draft', draftName: getDefaultProjectName() });
+      createEmptyChartAfterActivationRef.current = false;
+      queuedPromptRef.current = null;
+      resetWorkspacePresentation();
+      setWorkspace({
+        kind: 'draft',
+        draftName: getDefaultProjectName(),
+        queuedPrompt: null,
+        activation: 'idle',
+      });
     } else {
+      queuedPromptRef.current = null;
+      resetWorkspacePresentation();
       setWorkspace({ kind: 'guest' });
     }
-
-    setTasks([]);
-    setMessages([]);
-    setStreaming('');
-    setAiThinking(false);
-    setChatSidebarVisible(false);
-    setPendingStartPrompt(null);
-  }, [auth.isAuthenticated, getDefaultProjectName, setTasks]);
+  }, [auth.isAuthenticated, getDefaultProjectName, resetWorkspacePresentation]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     // For guest mode, save to localStorage
@@ -407,23 +490,23 @@ export default function App() {
     // Don't clear tasks for unauthenticated users
     if (!auth.isAuthenticated || hasShareToken) return;
     setTasks([]);
-  }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken, pendingStartPrompt]);
+  }, [auth.project?.id, setTasks, auth.isAuthenticated, hasShareToken]);
 
   // Load chat history on auth/project change
   useEffect(() => {
-    if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken) return;
-    setStreaming('');
-    if (!pendingStartPrompt) {
-      setMessages([]);
-      setAiThinking(false);
+    if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
+      return;
     }
+    setStreaming('');
+    setMessages([]);
+    setAiThinking(false);
 
     fetch('/api/messages', {
       headers: { Authorization: `Bearer ${auth.accessToken}` },
     })
       .then(res => (res.ok ? (res.json() as Promise<Array<{ role: string; content: string }>>) : Promise.resolve([])))
       .then(data => {
-        if (pendingStartPrompt) {
+        if (createEmptyChartAfterActivationRef.current) {
           return;
         }
         setMessages(
@@ -431,20 +514,34 @@ export default function App() {
         );
       })
       .catch(() => { });
-  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken, pendingStartPrompt]);
+  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken, workspace.kind]);
 
   useEffect(() => {
-    if (!pendingStartPrompt || !auth.isAuthenticated || !connected) {
+    if (!auth.isAuthenticated || !connected || workspace.kind !== 'project') {
       return;
     }
 
-    send({ type: 'chat', message: pendingStartPrompt });
-    setPendingStartPrompt(null);
-  }, [auth.isAuthenticated, connected, pendingStartPrompt, send]);
+    const promptToSend = queuedPromptRef.current;
+    if (!promptToSend) {
+      return;
+    }
+
+    queuedPromptRef.current = null;
+    send({ type: 'chat', message: promptToSend });
+  }, [auth.isAuthenticated, connected, send, workspace.kind]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project') {
+      return;
+    }
+
+    auth.syncProjectTaskCount(workspace.projectId, tasks.length);
+  }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
   const isDraftWorkspace = workspace.kind === 'draft';
   const isGuestWorkspace = workspace.kind === 'guest';
+  const chatSidebarVisible = workspace.kind === 'project' && workspace.chatOpen;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'draft'
@@ -672,10 +769,10 @@ export default function App() {
                 <ToolbarSep />
 
                 {/* Chat toggle button - only show when chat is hidden, on the right */}
-                {!chatSidebarVisible && !hasShareToken && (
+                {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
                   <button
                     type="button"
-                    onClick={() => setChatSidebarVisible(true)}
+                    onClick={openProjectChat}
                     aria-label="Показать AI ассистента"
                     className={cn(
                       'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
@@ -788,7 +885,7 @@ export default function App() {
                   disabled={aiThinking}
                   connected={displayConnected}
                   loading={aiThinking}
-                  onClose={() => setChatSidebarVisible(false)}
+                  onClose={closeProjectChat}
                   isAuthenticated={auth.isAuthenticated}
                   onLoginRequired={() => setShowOtpModal(true)}
                 />
