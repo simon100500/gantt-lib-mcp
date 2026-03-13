@@ -19,11 +19,13 @@
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@prisma/client": "^5.22.0",
     "@qwen-code/sdk": "^0.1.5",
     "dotenv": "^17.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "prisma": "^5.22.0",
     "typescript": "^5.7.2"
   }
 }

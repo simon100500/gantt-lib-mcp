@@ -1,0 +1,201 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../dist/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums for type safety
+enum DependencyType {
+  FS // Finish-to-Start
+  SS // Start-to-Start
+  FF // Finish-to-Finish
+  SF // Start-to-Finish
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum MutationSource {
+  agent
+  manual_save
+  api
+  system
+}
+
+enum MutationType {
+  create
+  update
+  delete
+  delete_all
+  import
+}
+
+// Users table
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  projects  Project[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+// Projects table
+model Project {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions     Session[]
+  tasks        Task[]
+  messages     Message[]
+  shareLinks   ShareLink[]
+  taskRevision TaskRevision?
+
+  @@map("projects")
+  @@index([userId])
+}
+
+// Sessions table
+model Session {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  projectId    String    @map("project_id")
+  accessToken  String    @unique @map("access_token")
+  refreshToken String    @unique @map("refresh_token")
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+  @@index([userId])
+  @@index([projectId])
+}
+
+// OTP codes table
+model OtpCode {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+
+  @@map("otp_codes")
+  @@index([email])
+}
+
+// Tasks table
+model Task {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  name      String
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  color     String?
+  progress  Float    @default(0)
+  parentId  String?  @map("parent_id")
+  sortOrder Int      @default(0) @map("sort_order")
+
+  // Relations
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent      Task?         @relation("TaskHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Task[]        @relation("TaskHierarchy")
+  dependencies Dependency[] @relation("TaskDependencies")
+  dependsOn   Dependency[] @relation("DependsOnTasks")
+
+  @@map("tasks")
+  @@index([projectId])
+  @@index([parentId])
+}
+
+// Dependencies table
+model Dependency {
+  id         String         @id @default(uuid())
+  taskId     String         @map("task_id")
+  depTaskId  String         @map("dep_task_id")
+  type       DependencyType
+  lag        Float         @default(0)
+
+  // Relations
+  task    Task @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  depTask Task @relation("DependsOnTasks", fields: [depTaskId], references: [id], onDelete: Cascade)
+
+  @@map("dependencies")
+  @@index([taskId])
+  @@index([depTaskId])
+}
+
+// Messages table
+model Message {
+  id        String      @id @default(uuid())
+  projectId String      @map("project_id")
+  role      MessageRole
+  content   String
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+  @@index([projectId])
+}
+
+// Share links table
+model ShareLink {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("share_links")
+  @@index([projectId])
+}
+
+// Task revisions table
+model TaskRevision {
+  projectId String   @id @map("project_id")
+  revision  Int      @default(0)
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("task_revisions")
+}
+
+// Task mutations table
+model TaskMutation {
+  id           String       @id @default(uuid())
+  projectId    String?      @map("project_id")
+  runId        String?      @map("run_id")
+  sessionId    String?      @map("session_id")
+  source       MutationSource
+  mutationType MutationType @map("mutation_type")
+  taskId       String?      @map("task_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@map("task_mutations")
+  @@index([projectId])
+  @@index([runId])
+  @@index([sessionId])
+}
