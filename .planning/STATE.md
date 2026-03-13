@@ -2,39 +2,38 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: PostgreSQL Migration
-status: Phase 16 plans created, ready for execution
-stopped_at: Completed 16-02 AuthService and ProjectService
-last_updated: "2026-03-13T16:10:07.002Z"
-last_activity: 2026-03-13 — Created Phase 16 plans (16-01 through 16-04)
+status: verifying
+stopped_at: Completed 16-01 TaskService and DependencyService
+last_updated: "2026-03-13T16:11:36.001Z"
+last_activity: 2026-03-13 — Completed Phase 16 Plan 01 (TaskService, DependencyService, date utilities)
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
-  percent: 90
+  completed_plans: 5
 ---
 
 ---
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: PostgreSQL Migration
-status: in_progress
-stopped_at: Phase 16 planning complete
-last_updated: "2026-03-13T17:00:00.000Z"
-last_activity: 2026-03-13 — Phase 16 Services Layer plans created
+status: Phase 16 services layer in progress
+stopped_at: Completed 16-01 TaskService and DependencyService
+last_updated: "2026-03-13T16:10:50.000Z"
+last_activity: 2026-03-13 — Completed Phase 16 Plan 01 (TaskService, DependencyService)
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 5
+  percent: 94
 current_phase: 16
-current_plan: null
+current_plan: 16-01
 ---
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-13 17:00:00
+**Last updated:** 2026-03-13 16:10:50
 
 ## Project Reference
 
@@ -42,23 +41,24 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
 
-**Current focus:** Phase 16 — Services Layer (PLANNED)
+**Current focus:** Phase 16 — Services Layer (IN PROGRESS)
 
 ---
 
 ## Current Position
 
 **Milestone:** v2.0 PostgreSQL Migration
-**Phase:** 16 of 18 (Services Layer) — PLANNED (4 plans)
-**Plan:** Not started
-**Status:** Phase 16 plans created, ready for execution
-**Last activity:** 2026-03-13 — Created Phase 16 plans (16-01 through 16-04)
+**Phase:** 16 of 18 (Services Layer) — IN PROGRESS (4 plans)
+**Plan:** 16-01 TaskService and DependencyService — COMPLETED
+**Status:** Phase 16 Plan 01 complete, ready for Plan 04 verification
+**Last activity:** 2026-03-13 — Completed Phase 16 Plan 01 (TaskService, DependencyService, date utilities)
 
 **Progress:**
-[█████████░] 90%
+```
+[█████████░] 94%
 v1.0: [████████████████████] 14/14 phases (2026-03-13)
-v2.0: [███░░░░░░░░░░░░░░░░] 1/4 phases planned, 0/4 executed (25%)
-Overall: [█████████████████░░] 15/18 phases (83%)
+v2.0: [███████████████████░] 5/6 plans complete (83%)
+Overall: [██████████████████░] 29/31 plans (94%)
 ```
 
 ---
@@ -73,11 +73,11 @@ Overall: [█████████████████░░] 15/18 phase
 - Timeline: 18 days (26 plans)
 
 **v2.0 In Progress:**
-- Plans completed: 2/6 (33%)
+- Plans completed: 5/6 (83%)
 - Plans created: 6/6 (100%)
-- Commits: 6
-- Files changed: 36
-- Duration: ~2 hours
+- Commits: 18
+- Files changed: 44
+- Duration: ~4 hours
 
 ---
 
@@ -126,11 +126,12 @@ Overall: [█████████████████░░] 15/18 phase
 | 2026-03-13 | Services layer | Share database code between MCP and server packages |
 | 2026-03-13 | Prisma schema in packages/mcp | Centralize database schema in MCP package |
 | 2026-03-13 | Connection pool: limit=10, timeout=20s | Appropriate for container constraints |
-| Phase 16-services-layer P02 | 121 | 2 tasks | 2 files |
-- [Phase 16]: Used Prisma Client directly in services (not dependency injection) for simplicity
-- [Phase 16]: Preserved session caching behavior (5-minute TTL) from original auth-store.ts
-- [Phase 16]: Delegated project operations from AuthService to ProjectService (DRY principle)
-- [Phase 16]: Used upsert for idempotent user creation
+| Phase 16-services-layer P01 | Date format: YYYY-MM-DD strings | Domain types use ISO date strings, Prisma uses DateTime |
+| Phase 16-services-layer P01 | Singleton service instances | Export taskService, dependencyService for direct access |
+| Phase 16-services-layer P02 | Used Prisma Client directly in services | Not dependency injection, for simplicity |
+| Phase 16-services-layer P02 | Preserved session caching behavior | 5-minute TTL from original auth-store.ts |
+| Phase 16-services-layer P02 | Delegated project operations to ProjectService | DRY principle for AuthService |
+| Phase 16 P01 | 5 minutes | 3 tasks | 4 files |
 
 ### v2.0 Migration Scope
 
@@ -159,16 +160,31 @@ Overall: [█████████████████░░] 15/18 phase
 - ✅ 10 tables created in PostgreSQL
 - ✅ Migration history established
 
-**Phase 16 Plans Created (2026-03-13):**
-- ✅ 16-CONTEXT.md: Phase context and implementation decisions
-- ✅ 16-01-PLAN.md: TaskService and DependencyService (Wave 1)
-- ✅ 16-02-PLAN.md: AuthService and ProjectService (Wave 1)
-- ✅ 16-03-PLAN.md: MessageService and service exports (Wave 2)
-- ✅ 16-04-PLAN.md: End-to-end verification (Wave 3)
+**Phase 16 Plan 01 Completed (2026-03-13):**
+- ✅ TaskService created with full CRUD operations (create, update, delete, deleteAll, list, get)
+- ✅ TaskService import/export operations implemented
+- ✅ DependencyService created with Prisma (createMany, deleteByTaskId, listByTaskId, validateDependencies)
+- ✅ Date conversion utilities created (dateToDomain, domainToDate)
+- ✅ Transaction support for multi-step operations
+- ✅ Scheduler integration preserved
+- ✅ Mutation tracking preserved
+- ✅ All tests pass (6 date conversion tests)
+
+**Phase 16 Plan 02 Completed (2026-03-13):**
+- ✅ AuthService created with Prisma (OTP lifecycle, user/session management)
+- ✅ ProjectService created with Prisma (CRUD operations, task count)
+- ✅ Session caching preserved (5-minute TTL)
+- ✅ Share link generation with safe alphabet
+- ✅ All operations use Prisma Client (no raw SQL)
+
+**Phase 16 Plan 03 Completed (2026-03-13):**
+- ✅ MessageService created with Prisma
+- ✅ Service exports configured in package.json
+- ✅ Index file exports all services
 
 ### Pending Todos
 
-- [ ] Phase 16: Execute services layer plans (4 plans)
+- [ ] Phase 16 Plan 04: End-to-end verification
 - [ ] Phase 17: Integration & Cleanup
 - [ ] Phase 18: Deployment
 
@@ -177,27 +193,36 @@ Overall: [█████████████████░░] 15/18 phase
 **Known Issue: Prisma Studio read-only mode**
 - User verified schema in Prisma Studio but data doesn't write to database
 - Possible causes: PostgreSQL permissions, read-only connection string, Prisma Studio config
-- Status: Documented for Phase 16 investigation during services layer implementation
+- Status: Documented for investigation during Phase 16 Plan 04 verification
+
+**TypeScript Error in MessageService (out of scope for P01)**
+- Issue: Type mismatch for optional projectId in Message.create()
+- Location: packages/mcp/src/services/message.service.ts:37
+- Status: Out of scope for plan 16-01 (created in plan 16-03)
+- Action: Documented for investigation during Phase 16 Plan 04 verification
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-03-13T16:10:07.000Z
-**Stopped at:** Completed 16-02 AuthService and ProjectService
+**Last session:** 2026-03-13T16:11:36.000Z
+**Stopped at:** Completed 16-01 TaskService and DependencyService
 **Resume file:** None
 
 **Next actions:**
-1. Execute Phase 16 Plan 01: TaskService and DependencyService
-2. Execute Phase 16 Plan 02: AuthService and ProjectService
-3. Execute Phase 16 Plan 03: MessageService and service exports
-4. Execute Phase 16 Plan 04: End-to-end verification
-5. Investigate and resolve Prisma Studio write issue
+1. Execute Phase 16 Plan 04: End-to-end verification
+2. Investigate and resolve Prisma Studio write issue
+3. Fix TypeScript error in MessageService
+4. Phase 17: Integration & Cleanup
+5. Phase 18: Deployment
 
 **Context for next session:**
 - v1.0 is complete and working with SQLite
 - v2.0 Phase 15 complete: Prisma schema, client singleton, migration executed, all tables created
-- Phase 16 planned: 4 plans, 3 waves, services layer architecture defined
+- v2.0 Phase 16 Plans 01-03 complete: All services implemented (TaskService, DependencyService, AuthService, ProjectService, MessageService)
+- Date utilities working (YYYY-MM-DD format)
+- Transaction support in place
+- Scheduler integration preserved
 - Database exists at DATABASE_URL (PostgreSQL) with 10 tables
 - Migration history: 20260313_init
 - Goal: Production scalability for concurrent users
@@ -208,4 +233,4 @@ Overall: [█████████████████░░] 15/18 phase
 ---
 
 *STATE initialized: 2026-02-23*
-*Last updated: 2026-03-13 17:00:00 for Phase 16 planning completion*
+*Last updated: 2026-03-13 16:10:50 for Phase 16 Plan 01 completion*
