@@ -1,6 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Task, TaskDependency } from '../types.ts';
 
+/**
+ * @deprecated This hook is deprecated. Use useBatchTaskUpdate instead.
+ *
+ * useAutoSave sent ALL tasks on every change via PUT /api/tasks, which was inefficient.
+ * gantt-lib's onTasksChange callback only sends changed tasks, not the full array.
+ *
+ * useBatchTaskUpdate properly handles gantt-lib's partial onChange behavior:
+ * - Individual task mutations via PATCH/POST/DELETE endpoints
+ * - Optimistic updates for better UX
+ * - Proper error handling with rollback
+ *
+ * Migration guide:
+ * Before: const { savingState } = useAutoSave(tasks, accessToken);
+ * After:  const batchUpdate = useBatchTaskUpdate({ tasks, setTasks, accessToken });
+ *         const { handleTasksChange, handleAdd, handleDelete, ... } = batchUpdate;
+ */
+
 // Export saving state so components can display it
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 
