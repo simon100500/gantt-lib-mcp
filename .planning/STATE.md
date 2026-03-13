@@ -2,23 +2,23 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: PostgreSQL Migration
-status: completed
-stopped_at: Completed 15-02 Initial Prisma migration and Prisma Client commit
-last_updated: "2026-03-13T15:48:26.101Z"
-last_activity: 2026-03-13 — Completed Phase 15 Plan 02
+status: in_progress
+stopped_at: Phase 16 planning complete
+last_updated: "2026-03-13T17:00:00.000Z"
+last_activity: 2026-03-13 — Phase 16 Services Layer plans created
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
+  total_plans: 6
   completed_plans: 2
-  percent: 100
-current_phase: 15
-current_plan: 02
+  percent: 33
+current_phase: 16
+current_plan: null
 ---
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-13 15:48:26
+**Last updated:** 2026-03-13 17:00:00
 
 ## Project Reference
 
@@ -26,22 +26,22 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
 
-**Current focus:** Phase 15 — Prisma Setup (COMPLETED)
+**Current focus:** Phase 16 — Services Layer (PLANNED)
 
 ---
 
 ## Current Position
 
 **Milestone:** v2.0 PostgreSQL Migration
-**Phase:** 15 of 18 (Prisma Setup) — COMPLETE (2/2 plans)
-**Plan:** 02 (completed)
-**Status:** Phase 15 complete, ready for Phase 16
-**Last activity:** 2026-03-13 — Completed Phase 15 Plan 02
+**Phase:** 16 of 18 (Services Layer) — PLANNED (4 plans)
+**Plan:** Not started
+**Status:** Phase 16 plans created, ready for execution
+**Last activity:** 2026-03-13 — Created Phase 16 plans (16-01 through 16-04)
 
 **Progress:**
-[██████████] 100%
+[███░░░░░] 33%
 v1.0: [████████████████████] 14/14 phases (2026-03-13)
-v2.0: [████░░░░░░░░░░░░░░░░] 1/4 phases (25%)
+v2.0: [███░░░░░░░░░░░░░░░░] 1/4 phases planned, 0/4 executed (25%)
 Overall: [█████████████████░░] 15/18 phases (83%)
 ```
 
@@ -57,9 +57,10 @@ Overall: [█████████████████░░] 15/18 phase
 - Timeline: 18 days (26 plans)
 
 **v2.0 In Progress:**
-- Plans completed: 2/2 (100%)
-- Commits: 5
-- Files changed: 31
+- Plans completed: 2/6 (33%)
+- Plans created: 6/6 (100%)
+- Commits: 6
+- Files changed: 36
 - Duration: ~2 hours
 
 ---
@@ -109,7 +110,6 @@ Overall: [█████████████████░░] 15/18 phase
 | 2026-03-13 | Services layer | Share database code between MCP and server packages |
 | 2026-03-13 | Prisma schema in packages/mcp | Centralize database schema in MCP package |
 | 2026-03-13 | Connection pool: limit=10, timeout=20s | Appropriate for container constraints |
-| Phase 15 P02 | 41 | 6 tasks | 20 files |
 
 ### v2.0 Migration Scope
 
@@ -138,9 +138,16 @@ Overall: [█████████████████░░] 15/18 phase
 - ✅ 10 tables created in PostgreSQL
 - ✅ Migration history established
 
+**Phase 16 Plans Created (2026-03-13):**
+- ✅ 16-CONTEXT.md: Phase context and implementation decisions
+- ✅ 16-01-PLAN.md: TaskService and DependencyService (Wave 1)
+- ✅ 16-02-PLAN.md: AuthService and ProjectService (Wave 1)
+- ✅ 16-03-PLAN.md: MessageService and service exports (Wave 2)
+- ✅ 16-04-PLAN.md: End-to-end verification (Wave 3)
+
 ### Pending Todos
 
-- [ ] Phase 16: Services Layer
+- [ ] Phase 16: Execute services layer plans (4 plans)
 - [ ] Phase 17: Integration & Cleanup
 - [ ] Phase 18: Deployment
 
@@ -155,26 +162,29 @@ Overall: [█████████████████░░] 15/18 phase
 
 ## Session Continuity
 
-**Last session:** 2026-03-13T15:48:26.099Z
-**Stopped at:** Completed 15-02 Initial Prisma migration and Prisma Client commit
+**Last session:** 2026-03-13T17:00:00.000Z
+**Stopped at:** Phase 16 plans created (16-01 through 16-04)
 **Resume file:** None
 
 **Next actions:**
-1. Create Phase 16 plans for Services Layer
-2. Implement TaskService, ProjectService, AuthService, MessageService, DependencyService
-3. Replace SQLite store.ts and auth-store.ts with Prisma-backed services
-4. Investigate and resolve Prisma Studio write issue
+1. Execute Phase 16 Plan 01: TaskService and DependencyService
+2. Execute Phase 16 Plan 02: AuthService and ProjectService
+3. Execute Phase 16 Plan 03: MessageService and service exports
+4. Execute Phase 16 Plan 04: End-to-end verification
+5. Investigate and resolve Prisma Studio write issue
 
 **Context for next session:**
 - v1.0 is complete and working with SQLite
 - v2.0 Phase 15 complete: Prisma schema, client singleton, migration executed, all tables created
+- Phase 16 planned: 4 plans, 3 waves, services layer architecture defined
 - Database exists at DATABASE_URL (PostgreSQL) with 10 tables
 - Migration history: 20260313_init
 - Goal: Production scalability for concurrent users
 - Prisma Client available at packages/mcp/dist/prisma-client/
-- Known issue: Prisma Studio appears to be read-only (needs investigation)
+- Services location: packages/mcp/src/services/
+- Service export: packages/mcp exports "./services" → "./dist/services/index.js"
 
 ---
 
 *STATE initialized: 2026-02-23*
-*Last updated: 2026-03-13 17:00:00 for Phase 15 Plan 01 completion*
+*Last updated: 2026-03-13 17:00:00 for Phase 16 planning completion*
