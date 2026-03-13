@@ -13,6 +13,7 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { taskService, messageService } from '@gantt/mcp/services';
+import type { CreateTaskInput, UpdateTaskInput } from '@gantt/mcp/types';
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
@@ -68,6 +69,81 @@ fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply
   // No WebSocket broadcast - user edits use optimistic updates, WS is only for AI responses
   return reply.send({ deleted: count });
 });
+
+// ---------------------------------------------------------------------------
+// Individual task operations (PATCH, POST, DELETE with :id)
+// ---------------------------------------------------------------------------
+
+// PATCH /api/tasks/:id - Update single task
+fastify.patch('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+  const taskId = (req.params as { id: string }).id;
+  const updates = req.body as UpdateTaskInput;
+
+  if (!taskId) {
+    return reply.status(400).send({ error: 'taskId is required' });
+  }
+
+  if (!updates || Object.keys(updates).length === 0) {
+    return reply.status(400).send({ error: 'updates object is required' });
+  }
+
+  try {
+    const task = await taskService.update(taskId, updates, 'manual-save');
+
+    if (!task) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return reply.send(task);
+  } catch (error) {
+    fastify.log.error(error, 'Failed to update task');
+    return reply.status(500).send({ error: 'Failed to update task' });
+  }
+});
+
+// POST /api/tasks - Create single task
+fastify.post('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
+  const input = req.body as CreateTaskInput;
+
+  if (!input || Object.keys(input).length === 0) {
+    return reply.status(400).send({ error: 'task input is required' });
+  }
+
+  try {
+    const task = await taskService.create(input, req.user!.projectId, 'manual-save');
+    return reply.status(201).send(task);
+  } catch (error) {
+    fastify.log.error(error, 'Failed to create task');
+    const message = error instanceof Error ? error.message : 'Failed to create task';
+    return reply.status(500).send({ error: message });
+  }
+});
+
+// DELETE /api/tasks/:id - Delete single task
+fastify.delete('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+  const taskId = (req.params as { id: string }).id;
+
+  if (!taskId) {
+    return reply.status(400).send({ error: 'taskId is required' });
+  }
+
+  try {
+    const deleted = await taskService.delete(taskId, 'manual-save');
+
+    if (!deleted) {
+      return reply.status(404).send({ error: 'Task not found' });
+    }
+
+    return reply.send({ deleted: true });
+  } catch (error) {
+    fastify.log.error(error, 'Failed to delete task');
+    return reply.status(500).send({ error: 'Failed to delete task' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bulk operations (PUT /api/tasks - kept for AI/import operations)
+// ---------------------------------------------------------------------------
 
 fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   const tasks = req.body as unknown[];
