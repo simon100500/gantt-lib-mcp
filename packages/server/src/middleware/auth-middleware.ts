@@ -10,7 +10,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { verifyToken, type JwtPayload } from '../auth.js';
-import { authStore } from '@gantt/mcp/auth-store';
+import { authService } from '@gantt/mcp/services';
 
 // ---------------------------------------------------------------------------
 // Module augmentation
@@ -72,7 +72,7 @@ export async function authMiddleware(
   }
 
   // 5. Verify session still exists in DB
-  const session = await authStore.findSessionByAccessToken(token);
+  const session = await authService.findSessionByAccessToken(token);
   if (!session) {
     console.warn('[AUTH] Session not found in database');
     reply.status(401).send({ error: 'Unauthorized' });

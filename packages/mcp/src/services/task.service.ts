@@ -8,7 +8,7 @@
 
 import { getPrisma } from '../prisma.js';
 import { TaskScheduler } from '../scheduler.js';
-import type { Task, CreateTaskInput, UpdateTaskInput, TaskDependency, TaskMutationSource } from '../types.js';
+import type { Task, CreateTaskInput, UpdateTaskInput, TaskDependency, TaskMutationSource, TaskMutationEvent } from '../types.js';
 import { dependencyService } from './dependency.service.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
@@ -331,6 +331,68 @@ export class TaskService {
     }
 
     return result.count;
+  }
+
+  /**
+   * Get the current task revision number for a project
+   */
+  async getTaskRevision(projectId?: string): Promise<number> {
+    const scopeId = projectId ?? '__global__';
+    const revision = await this.prisma.taskRevision.findUnique({
+      where: { projectId: scopeId },
+      select: { revision: true },
+    });
+    return revision?.revision ?? 0;
+  }
+
+  /**
+   * Get mutation events for a specific agent run
+   */
+  async getMutationEventsByRun(runId: string, projectId?: string): Promise<TaskMutationEvent[]> {
+    const mutations = await this.prisma.taskMutation.findMany({
+      where: {
+        runId,
+        ...(projectId ? { projectId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return mutations.map(m => this.mutationToDomain(m));
+  }
+
+  /**
+   * Get mutation events since a given ISO timestamp
+   */
+  async getMutationEventsSince(since: string, projectId?: string): Promise<TaskMutationEvent[]> {
+    const mutations = await this.prisma.taskMutation.findMany({
+      where: {
+        createdAt: { gte: new Date(since) },
+        ...(projectId ? { projectId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return mutations.map(m => this.mutationToDomain(m));
+  }
+
+  /**
+   * Convert Prisma TaskMutation to domain TaskMutationEvent
+   */
+  private mutationToDomain(m: any): TaskMutationEvent {
+    const sourceReverseMap: Record<string, TaskMutationSource> = {
+      agent: 'agent',
+      manual_save: 'manual-save',
+      api: 'api',
+      system: 'system',
+    };
+    return {
+      id: m.id,
+      projectId: m.projectId ?? undefined,
+      runId: m.runId ?? undefined,
+      sessionId: m.sessionId ?? undefined,
+      source: sourceReverseMap[m.source] ?? 'system',
+      mutationType: m.mutationType as TaskMutationEvent['mutationType'],
+      taskId: m.taskId ?? undefined,
+      createdAt: m.createdAt.toISOString(),
+    };
   }
 
   /**

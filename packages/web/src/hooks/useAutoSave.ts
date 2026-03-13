@@ -87,14 +87,17 @@ export function useAutoSave(
       return;
     }
 
-    // When token changes (login or project switch), skip the next 2 task updates
-    // (reset to [] + load from server) to avoid immediately overwriting server data
+    // When token changes (login or project switch), skip the next 1 task update
+    // (load from server via useTasks) to avoid immediately overwriting server data.
+    // The reset-to-[] call goes through replaceTasksFromSystem which increments skipVersion,
+    // so that update is intercepted by the skipVersion branch below — it does NOT consume
+    // skipCount. Only the direct setTasks(loadedData) from useTasks needs to be skipped here.
     if (accessToken !== prevTokenRef.current) {
       prevTokenRef.current = accessToken;
-      skipCountRef.current = 2;
+      skipCountRef.current = 1;
       lastSkipVersionRef.current = skipVersion;
       lastSavedHashRef.current = '';
-      console.log('[autosave] Token changed, skipping next 2 updates, token:', accessToken.substring(0, 10) + '...');
+      console.log('[autosave] Token changed, skipping next 1 update, token:', accessToken.substring(0, 10) + '...');
       return;
     }
 
@@ -131,6 +134,13 @@ export function useAutoSave(
     // Clear any pending timer
     if (timerRef.current) clearTimeout(timerRef.current);
 
+    // Capture the skipVersion at save-start so we can detect if a system
+    // snapshot (replaceTasksFromSystem) arrived while the save was in-flight.
+    // If skipVersion advanced during the fetch, the lastSavedHash was already
+    // set by the skipVersion branch to hash(newSystemTasks) — do NOT overwrite
+    // it with the stale currentHash or the next render will trigger a wipe save.
+    const savedSkipVersionRef = lastSkipVersionRef.current;
+
     // Save immediately (no debounce)
     const saveTasks = async () => {
       saveInProgressRef.current = true;
@@ -148,8 +158,13 @@ export function useAutoSave(
         });
 
         if (response.ok) {
-          // Only update hash after successful save
-          lastSavedHashRef.current = currentHash;
+          // Only update hash after successful save — but only if no system
+          // snapshot arrived while the save was in-flight (skipVersion unchanged).
+          if (lastSkipVersionRef.current === savedSkipVersionRef) {
+            lastSavedHashRef.current = currentHash;
+          } else {
+            console.log('[autosave] skipVersion changed during save — not overwriting lastSavedHash');
+          }
           console.log('[autosave] Save successful');
           notifyListeners('saved');
 

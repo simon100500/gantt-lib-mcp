@@ -194,6 +194,16 @@ Phase 18 (Deployment)
 **No orphaned requirements.**
 **No duplicates.**
 
+### Phase 19: Перенос Prisma в отдельный packages/db пакет и перевод MCP сервера с SQLite/taskStore на Prisma сервисы
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 18
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 19 to break down)
+
 ---
 *Roadmap created: 2026-02-23*
 *Last updated: 2026-03-13 with Phase 16 plans*

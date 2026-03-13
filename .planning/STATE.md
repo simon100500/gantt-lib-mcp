@@ -190,10 +190,15 @@ Overall: [██████████████████████] 30
 - ✅ Verification summary created (16-VERIFICATION.md)
 - ✅ Ready for Phase 17 integration
 
+### Roadmap Evolution
+
+- Phase 19 added: Перенос Prisma в отдельный packages/db пакет и перевод MCP сервера с SQLite/taskStore на Prisma сервисы
+
 ### Pending Todos
 
 - [ ] Phase 17: Integration & Cleanup
 - [ ] Phase 18: Deployment
+- [ ] Phase 19: Prisma → packages/db + MCP на Prisma
 
 ### Blockers/Concerns
 

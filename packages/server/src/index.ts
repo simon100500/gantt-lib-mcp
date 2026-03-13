@@ -3,7 +3,7 @@
  *
  * Registers:
  * - GET  /health      — liveness probe
- * - GET  /api/tasks   — return current tasks from SQLite
+ * - GET  /api/tasks   — return current tasks from PostgreSQL via Prisma
  * - POST /api/chat    — fire-and-forget agent run (streaming goes via WebSocket)
  * - GET  /ws          — WebSocket endpoint (streaming tokens + task snapshots)
  *
@@ -12,18 +12,13 @@
 
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
-import { taskStore } from '@gantt/mcp/store';
+import { taskService, messageService } from '@gantt/mcp/services';
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
-
-const reliableTaskStore = taskStore as typeof taskStore & {
-  deleteAll(projectId?: string, source?: 'api' | 'manual-save' | 'agent' | 'system'): Promise<number>;
-  importTasks(jsonData: string, projectId?: string, source?: 'api' | 'manual-save' | 'agent' | 'system'): Promise<number>;
-};
 
 const fastify = Fastify({ logger: true });
 await fastify.register(websocket);
@@ -37,8 +32,8 @@ await registerAdminRoutes(fastify);
 fastify.get('/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
-  console.log('[TASKS DEBUG] GET /api/tasks - projectId from JWT:', req.user!.projectId, 'includeGlobal: false');
-  const tasks = await taskStore.list(req.user!.projectId, false);
+  console.log('[TASKS DEBUG] GET /api/tasks - projectId from JWT:', req.user!.projectId);
+  const tasks = await taskService.list(req.user!.projectId);
   console.log('[TASKS DEBUG] Returning tasks:', tasks.length, 'tasks');
   return reply.send(tasks);
 });
@@ -64,12 +59,12 @@ fastify.post('/api/chat', { preHandler: [authMiddleware] }, async (req, reply) =
 });
 
 fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const messages = await taskStore.getMessages(req.user!.projectId);
+  const messages = await messageService.list(req.user!.projectId);
   return reply.send(messages.slice(-50));
 });
 
 fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const count = await reliableTaskStore.deleteAll(req.user!.projectId, 'api');
+  const count = await taskService.deleteAll(req.user!.projectId, 'api');
   broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks: [] });
   return reply.send({ deleted: count });
 });
@@ -79,7 +74,7 @@ fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) =
   if (!Array.isArray(tasks)) {
     return reply.status(400).send({ error: 'body must be an array of tasks' });
   }
-  const count = await reliableTaskStore.importTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
+  const count = await taskService.importTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
   // Broadcast updated tasks to all sessions for this project so other browser tabs sync
   broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks });
   return reply.send({ saved: count });
