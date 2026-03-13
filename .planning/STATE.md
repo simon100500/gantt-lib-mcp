@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: PostgreSQL Migration
-status: not_started
+status: planning
 last_updated: "2026-03-13T00:00:00.000Z"
-last_activity: "2026-03-13 - Milestone v2.0 started"
+last_activity: "2026-03-13 - Roadmap created for v2.0"
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,14 +22,42 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 
 **Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
 
-**Current focus:** PostgreSQL migration for production scaling
+**Current focus:** Phase 15 — Prisma Setup
+
+---
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-13 — Milestone v2.0 started
+**Milestone:** v2.0 PostgreSQL Migration
+**Phase:** 15 of 18 (Prisma Setup) — Not started
+**Plan:** TBD
+**Status:** Roadmap created, awaiting planning
+**Last activity:** 2026-03-13 — Roadmap initialized for v2.0 milestone
+
+**Progress:**
+```
+v1.0: [████████████████████] 14/14 phases (2026-03-13)
+v2.0: [                    ] 0/4 phases
+Overall: [████████████████░░░░] 14/18 phases (78%)
+```
+
+---
+
+## Performance Metrics
+
+**v1.0 Delivered (2026-03-13):**
+- Commits: 178
+- Files changed: 258
+- Lines added: 42,493
+- Total LOC: ~116,000 (TypeScript/JavaScript)
+- Timeline: 18 days (26 plans)
+
+**v2.0 In Progress:**
+- Requirements: 23
+- Phases: 4
+- Estimated complexity: Medium (migration, no new features)
+
+---
 
 ## Accumulated Context
 
@@ -65,38 +93,53 @@ Last activity: 2026-03-13 — Milestone v2.0 started
 - dependencies (id, project_id, from_id, to_id, type)
 - messages (id, project_id, role, content, created_at)
 
-**Known Decisions to Reference:**
-- TypeScript types for auth (User, Project, Session, OtpEntry, AuthToken) exported from @gantt/mcp/types
-- Foreign key constraints with CASCADE delete for automatic cleanup
-- 15-minute access token expiry, 7-day refresh token expiry
-- Fail fast if JWT_SECRET env var missing
-
 ### Decisions Made
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-02-23 | TypeScript over Python | gantt-lib ecosystem compatibility |
 | 2026-03-13 | PostgreSQL migration (v2.0) | Production scaling for multiple concurrent users |
+| 2026-03-13 | Prisma ORM | Type-safe database access, migrations, connection pooling |
+| 2026-03-13 | Fresh PostgreSQL start | User decision, no legacy data migration complexity |
+| 2026-03-13 | Services layer | Share database code between MCP and server packages |
 
-### Blockers
+### v2.0 Migration Scope
 
-None
+**Starting assumptions:**
+- PostgreSQL already exists (user has DATABASE_URL in .env)
+- Fresh database start — NO data migration from SQLite
+- Keep current functionality — NO new features
+- Focus: SQLite → PostgreSQL with Prisma ORM + connection pooling
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+None yet.
 
 ---
 
 ## Session Continuity
 
-### Previous Milestone Summary
+**Last session:** 2026-03-13
+**Stopped at:** Roadmap creation complete for v2.0 milestone
+**Resume file:** None
 
-v1.0 MVP complete with 14 phases, 178 commits, full-featured Gantt editor with AI assistant. SQLite-based single-container deployment working on CapRover.
+**Next actions:**
+1. `/gsd:plan-phase 15` — Create Prisma schema and setup
+2. Execute Phase 15 plans
+3. `/gsd:plan-phase 16` — Build services layer
+4. Continue through Phase 18
 
-### Next Session Actions
-
-1. Define requirements for PostgreSQL migration
-2. Plan phases for database migration
-3. Execute migration implementation
+**Context for next session:**
+- v1.0 is complete and working with SQLite
+- v2.0 is a pure migration (no new features)
+- Database exists at DATABASE_URL (PostgreSQL)
+- Goal: Production scalability for concurrent users
 
 ---
 
 *STATE initialized: 2026-02-23*
-*Last updated: 2026-03-13 for v2.0 milestone*
+*Last updated: 2026-03-13 for v2.0 roadmap creation*
