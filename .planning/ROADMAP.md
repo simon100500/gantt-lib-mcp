@@ -27,7 +27,7 @@
 | 12. fix-auto-save-infinite-loop | v1.0 | 1 | Complete | 12-01 |
 | 13. start-screen | v1.0 | 1 | Complete | 13-01 |
 | 14. redesign-project-flow | v1.0 | 1 | Complete | 14-01 |
-| 15. Prisma Setup | v2.0 | 0 | Not started | - |
+| 15. Prisma Setup | v2.0 | 2 | Planning | 15-01, 15-02 |
 | 16. Services Layer | v2.0 | 0 | Not started | - |
 | 17. Integration & Cleanup | v2.0 | 0 | Not started | - |
 | 18. Deployment | v2.0 | 0 | Not started | - |
@@ -88,7 +88,9 @@ Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1
 4. Prisma migrations run successfully on target database without errors
 5. Connection pool settings (connection_limit, timeout) are appropriate for container constraints
 
-**Plans:** TBD
+**Plans:** 2 plans
+- [ ] 15-01-PLAN.md — Prisma schema and client singleton with connection pooling
+- [ ] 15-02-PLAN.md — Initial migration execution and database verification
 
 ---
 
@@ -185,4 +187,4 @@ Phase 18 (Deployment)
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-13 after v2.0 roadmap initialization*
+*Last updated: 2026-03-13 with Phase 15 plans*
