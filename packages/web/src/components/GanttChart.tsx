@@ -4,7 +4,7 @@ import type { Task, ValidationResult } from '../types.ts';
 
 export interface GanttChartProps {
   tasks: Task[];
-  onChange?: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
+  onTasksChange?: (tasks: Task[]) => void;
   dayWidth?: number;
   rowHeight?: number;
   containerHeight?: string | number;
@@ -21,6 +21,8 @@ export interface GanttChartProps {
   onDelete?: (taskId: string) => void;
   onInsertAfter?: (taskId: string, newTask: Task) => void;
   onReorder?: (tasks: Task[], movedTaskId?: string, inferredParentId?: string) => void;
+  onPromoteTask?: (taskId: string) => void;
+  onDemoteTask?: (taskId: string, newParentId: string) => void;
 }
 
 export interface GanttChartRef {
@@ -30,7 +32,7 @@ export interface GanttChartRef {
 
 export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   tasks,
-  onChange,
+  onTasksChange,
   dayWidth,
   rowHeight,
   containerHeight,
@@ -47,6 +49,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onDelete,
   onInsertAfter,
   onReorder,
+  onPromoteTask,
+  onDemoteTask,
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void } | null>(null);
 
@@ -59,7 +63,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
     <GanttLibChart
       ref={ganttLibRef}
       tasks={tasks}
-      onChange={onChange}
+      onTasksChange={onTasksChange}
       dayWidth={dayWidth}
       rowHeight={rowHeight}
       containerHeight={containerHeight}
@@ -76,6 +80,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onDelete={onDelete}
       onInsertAfter={onInsertAfter}
       onReorder={onReorder}
+      {...(onPromoteTask && { onPromoteTask })}
+      {...(onDemoteTask && { onDemoteTask })}
     />
   );
 });

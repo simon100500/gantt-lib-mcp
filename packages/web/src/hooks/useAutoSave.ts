@@ -165,7 +165,7 @@ export function useAutoSave(
             'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify(tasks),
-          signal: abortControllerRef.current.signal,
+          signal: abortControllerRef.current?.signal,
         });
 
         if (response.ok) {

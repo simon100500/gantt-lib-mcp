@@ -7,8 +7,9 @@ import { useTasks } from './hooks/useTasks.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
-import { useAutoSave } from './hooks/useAutoSave.ts';
+import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
+import { useTaskMutation } from './hooks/useTaskMutation.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
@@ -93,11 +94,15 @@ export default function App() {
       ? authenticatedTasks
       : localTasks;
   const [autoSaveSkipVersion, setAutoSaveSkipVersion] = useState(0);
-  // Autosave to server on any chart change (guest mode persists in useLocalTasks)
-  const { savingState } = useAutoSave(
+  // Batch task updates for gantt-lib onChange events (handles individual mutations)
+  const batchUpdate = useBatchTaskUpdate({
     tasks,
+    setTasks,
+    accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
+  });
+  // Individual task mutations for direct AI agent operations
+  const { mutateTask, createTask, deleteTask } = useTaskMutation(
     hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
-    autoSaveSkipVersion,
   );
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -407,10 +412,6 @@ export default function App() {
     });
   }, [setTasks]);
 
-  const handleAddTask = useCallback((newTask: Task) => {
-    setTasks(prev => [...prev, newTask]);
-  }, [setTasks]);
-
   const handleEmptyChart = useCallback(async () => {
     if (workspace.kind === 'draft') {
       await activateDraftWorkspace({ createEmptyChart: true });
@@ -423,29 +424,10 @@ export default function App() {
       startDate: today,
       endDate: today,
     };
-    handleAddTask(placeholderTask);
+    // Use batch update handler for add
+    batchUpdate.handleAdd(placeholderTask);
     openProjectChat();
-  }, [activateDraftWorkspace, handleAddTask, openProjectChat, workspace.kind]);
-
-  const handleDeleteTask = useCallback((taskId: string) => {
-    setTasks(prev => prev
-      .filter(t => t.id !== taskId)
-      .map(t => (t.parentId === taskId ? { ...t, parentId: undefined } : t)));
-  }, [setTasks]);
-
-  const handleInsertAfterTask = useCallback((taskId: string, newTask: Task) => {
-    setTasks(prev => {
-      const index = prev.findIndex(t => t.id === taskId);
-      if (index === -1) return prev;
-      const newTasks = [...prev];
-      newTasks.splice(index + 1, 0, newTask);
-      return newTasks;
-    });
-  }, [setTasks]);
-
-  const handleReorderTasks = useCallback((reorderedTasks: Task[]) => {
-    setTasks(reorderedTasks);
-  }, [setTasks]);
+  }, [activateDraftWorkspace, batchUpdate, openProjectChat, workspace.kind]);
 
   const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
     if (!auth.accessToken) return;
@@ -898,7 +880,7 @@ export default function App() {
                 <GanttChart
                   ref={ganttRef}
                   tasks={tasks}
-                  onChange={setTasks}
+                  onTasksChange={batchUpdate.handleTasksChange}
                   dayWidth={24}
                   rowHeight={36}
                   containerHeight="calc(100vh - 120px)"
@@ -911,10 +893,12 @@ export default function App() {
                   disableDependencyEditing={disableDependencyEditing}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
-                  onAdd={handleAddTask}
-                  onDelete={handleDeleteTask}
-                  onInsertAfter={handleInsertAfterTask}
-                  onReorder={handleReorderTasks}
+                  onAdd={batchUpdate.handleAdd}
+                  onDelete={batchUpdate.handleDelete}
+                  onInsertAfter={batchUpdate.handleInsertAfter}
+                  onReorder={batchUpdate.handleReorder}
+                  onPromoteTask={batchUpdate.handlePromoteTask}
+                  onDemoteTask={batchUpdate.handleDemoteTask}
                 />
               )}
 
@@ -924,37 +908,6 @@ export default function App() {
                   <span className="font-mono text-[11px] text-slate-400">
                     {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
                   </span>
-
-                  {/* Saving status indicator */}
-                  {auth.isAuthenticated && !hasShareToken && (
-                    <span
-                      className={cn(
-                        'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                        savingState === 'saving' && 'text-amber-600',
-                        savingState === 'saved' && 'text-emerald-600',
-                        savingState === 'error' && 'text-destructive',
-                      )}
-                    >
-                      {savingState === 'saving' && (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 animate-pulse" />
-                          Сохранение…
-                        </>
-                      )}
-                      {savingState === 'saved' && (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
-                          Сохранено
-                        </>
-                      )}
-                      {savingState === 'error' && (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-destructive" />
-                          Ошибка сохранения
-                        </>
-                      )}
-                    </span>
-                  )}
 
                   <span
                     className={cn(
