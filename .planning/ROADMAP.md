@@ -28,7 +28,7 @@
 | 13. start-screen | v1.0 | 1 | Complete | 13-01 |
 | 14. redesign-project-flow | v1.0 | 1 | Complete | 14-01 |
 | 15. Prisma Setup | v2.0 | 2 | Complete | 2026-03-13 | 15-01, 15-02 |
-| 16. Services Layer | v2.0 | 4 | Not started | - |
+| 16. Services Layer | 1/4 | In Progress|  | - |
 | 17. Integration & Cleanup | v2.0 | 0 | Not started | - |
 | 18. Deployment | v2.0 | 0 | Not started | - |
 
@@ -109,7 +109,7 @@ Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1
 4. No raw SQL queries remain in service implementations
 5. TypeScript types match Prisma-generated types
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 - [ ] 16-01-PLAN.md — TaskService and DependencyService with Prisma CRUD operations
 - [ ] 16-02-PLAN.md — AuthService and ProjectService with Prisma CRUD operations
 - [ ] 16-03-PLAN.md — MessageService and service exports (barrel, package.json)

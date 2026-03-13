@@ -2,6 +2,22 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: PostgreSQL Migration
+status: Phase 16 plans created, ready for execution
+stopped_at: Completed 16-02 AuthService and ProjectService
+last_updated: "2026-03-13T16:10:07.002Z"
+last_activity: 2026-03-13 — Created Phase 16 plans (16-01 through 16-04)
+progress:
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 6
+  completed_plans: 3
+  percent: 90
+---
+
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: PostgreSQL Migration
 status: in_progress
 stopped_at: Phase 16 planning complete
 last_updated: "2026-03-13T17:00:00.000Z"
@@ -39,7 +55,7 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 **Last activity:** 2026-03-13 — Created Phase 16 plans (16-01 through 16-04)
 
 **Progress:**
-[███░░░░░] 33%
+[█████████░] 90%
 v1.0: [████████████████████] 14/14 phases (2026-03-13)
 v2.0: [███░░░░░░░░░░░░░░░░] 1/4 phases planned, 0/4 executed (25%)
 Overall: [█████████████████░░] 15/18 phases (83%)
@@ -110,6 +126,11 @@ Overall: [█████████████████░░] 15/18 phase
 | 2026-03-13 | Services layer | Share database code between MCP and server packages |
 | 2026-03-13 | Prisma schema in packages/mcp | Centralize database schema in MCP package |
 | 2026-03-13 | Connection pool: limit=10, timeout=20s | Appropriate for container constraints |
+| Phase 16-services-layer P02 | 121 | 2 tasks | 2 files |
+- [Phase 16]: Used Prisma Client directly in services (not dependency injection) for simplicity
+- [Phase 16]: Preserved session caching behavior (5-minute TTL) from original auth-store.ts
+- [Phase 16]: Delegated project operations from AuthService to ProjectService (DRY principle)
+- [Phase 16]: Used upsert for idempotent user creation
 
 ### v2.0 Migration Scope
 
@@ -162,8 +183,8 @@ Overall: [█████████████████░░] 15/18 phase
 
 ## Session Continuity
 
-**Last session:** 2026-03-13T17:00:00.000Z
-**Stopped at:** Phase 16 plans created (16-01 through 16-04)
+**Last session:** 2026-03-13T16:10:07.000Z
+**Stopped at:** Completed 16-02 AuthService and ProjectService
 **Resume file:** None
 
 **Next actions:**

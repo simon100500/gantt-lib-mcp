@@ -22,11 +22,11 @@ PostgreSQL migration with Prisma ORM. Fresh database start (no data migration fr
 ### Services (SVC)
 
 - [ ] **SVC-01**: TaskService replaces TaskStore (create, update, delete, list, recalculateDates)
-- [ ] **SVC-02**: ProjectService replaces raw project queries (create, get, update, delete)
-- [ ] **SVC-03**: AuthService replaces auth-store (OTP, sessions, JWT validation)
+- [x] **SVC-02**: ProjectService replaces raw project queries (create, get, update, delete)
+- [x] **SVC-03**: AuthService replaces auth-store (OTP, sessions, JWT validation)
 - [ ] **SVC-04**: MessageService replaces raw message queries
 - [ ] **SVC-05**: DependencyService for task dependency CRUD
-- [ ] **SVC-06**: All services use Prisma client (no raw SQL)
+- [x] **SVC-06**: All services use Prisma client (no raw SQL)
 - [ ] **SVC-07**: Services are shared between packages/mcp and packages/server
 
 ### Connection Pooling (POOL)
