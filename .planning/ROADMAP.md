@@ -27,8 +27,8 @@
 | 12. fix-auto-save-infinite-loop | v1.0 | 1 | Complete | 12-01 |
 | 13. start-screen | v1.0 | 1 | Complete | 13-01 |
 | 14. redesign-project-flow | v1.0 | 1 | Complete | 14-01 |
-| 15. Prisma Setup | 2/2 | Complete   | 2026-03-13 | 15-01, 15-02 |
-| 16. Services Layer | v2.0 | 0 | Not started | - |
+| 15. Prisma Setup | v2.0 | 2 | Complete | 2026-03-13 | 15-01, 15-02 |
+| 16. Services Layer | v2.0 | 4 | Not started | - |
 | 17. Integration & Cleanup | v2.0 | 0 | Not started | - |
 | 18. Deployment | v2.0 | 0 | Not started | - |
 
@@ -90,7 +90,7 @@ Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1
 
 **Plans:** 2/2 plans complete
 - [x] 15-01-PLAN.md — Prisma schema and client singleton with connection pooling (completed 2026-03-13)
-- [ ] 15-02-PLAN.md — Initial migration execution and database verification
+- [x] 15-02-PLAN.md — Initial migration execution and database verification (completed 2026-03-13)
 
 ---
 
@@ -109,7 +109,16 @@ Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1
 4. No raw SQL queries remain in service implementations
 5. TypeScript types match Prisma-generated types
 
-**Plans:** TBD
+**Plans:** 4 plans
+- [ ] 16-01-PLAN.md — TaskService and DependencyService with Prisma CRUD operations
+- [ ] 16-02-PLAN.md — AuthService and ProjectService with Prisma CRUD operations
+- [ ] 16-03-PLAN.md — MessageService and service exports (barrel, package.json)
+- [ ] 16-04-PLAN.md — End-to-end verification and testing
+
+**Wave structure:**
+- Wave 1 (parallel): 16-01, 16-02
+- Wave 2: 16-03 (depends on 16-01, 16-02)
+- Wave 3: 16-04 (verification, depends on all previous)
 
 ---
 
@@ -187,4 +196,4 @@ Phase 18 (Deployment)
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-13 with Phase 15 plans*
+*Last updated: 2026-03-13 with Phase 16 plans*
