@@ -122,27 +122,7 @@ Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1
 
 ---
 
-#### Phase 17: Integration & Cleanup
-
-**Goal:** Application runs end-to-end with Prisma services, SQLite code removed
-
-**Depends on:** Phase 16 (services must exist before integration)
-
-**Requirements:** INT-01, INT-02, INT-03, INT-04, INT-05, CLN-01, CLN-02, CLN-03, CLN-04
-
-**Success Criteria** (what must be TRUE):
-1. MCP tools use TaskService instead of TaskStore for all task operations
-2. Server API routes use services instead of direct database access
-3. Agent can create, update, and delete tasks through Prisma-backed services
-4. WebSocket broadcasts work correctly with new service layer
-5. Auto-schedule engine works with Prisma data (date recalculation, dependency handling)
-6. @libsql/client dependency is removed from package.json
-7. SQLite bootstrap code (packages/mcp/src/db.ts) is removed
-8. All raw SQL queries are replaced with service calls
-
-**Plans:** TBD
-
----
+#### Phase 17: Integration & Cleanup**Goal:** Application runs end-to-end with Prisma services, SQLite code removed**Depends on:** Phase 16 (services must exist before integration)**Requirements:** INT-01, INT-02, INT-03, INT-04, INT-05, CLN-01, CLN-02, CLN-03, CLN-04**Success Criteria** (what must be TRUE):1. MCP tools use TaskService instead of TaskStore for all task operations2. Server API routes use services instead of direct database access3. Agent can create, update, and delete tasks through Prisma-backed services4. WebSocket broadcasts work correctly with new service layer5. Auto-schedule engine works with Prisma data (date recalculation, dependency handling)6. @libsql/client dependency is removed from package.json7. SQLite bootstrap code (packages/mcp/src/db.ts) is removed8. All raw SQL queries are replaced with service calls**Plans:** 4 plans created- [ ] 17-01-PLAN.md — Fix task save from bulk to individual operations (blocking bug fix)- [ ] 17-02-PLAN.md — Replace legacy stores with Prisma services- [ ] 17-03-PLAN.md — Remove SQLite legacy code and dependencies- [ ] 17-04-PLAN.md — Verify WebSocket integration and end-to-end functionality**Wave structure:**- Wave 1: 17-01 (critical bug fix - independent)- Wave 2: 17-02 (service integration - depends on 17-01)- Wave 3: 17-03 (cleanup - depends on 17-02)- Wave 4: 17-04 (verification - depends on all previous)---
 
 #### Phase 18: Deployment
 
