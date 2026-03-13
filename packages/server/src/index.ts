@@ -65,7 +65,7 @@ fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply
 
 fastify.delete('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   const count = await taskService.deleteAll(req.user!.projectId, 'api');
-  broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks: [] });
+  // No WebSocket broadcast - user edits use optimistic updates, WS is only for AI responses
   return reply.send({ deleted: count });
 });
 
@@ -75,8 +75,7 @@ fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) =
     return reply.status(400).send({ error: 'body must be an array of tasks' });
   }
   const count = await taskService.importTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
-  // Broadcast updated tasks to all sessions for this project so other browser tabs sync
-  broadcastToSession(req.user!.sessionId, { type: 'tasks', tasks });
+  // No WebSocket broadcast - user edits use optimistic updates, WS is only for AI responses
   return reply.send({ saved: count });
 });
 

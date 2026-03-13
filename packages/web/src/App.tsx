@@ -139,7 +139,11 @@ export default function App() {
   // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
-      console.log('[App] Received tasks via WebSocket, count:', msg.tasks?.length);
+      // WebSocket is ONLY used for AI agent responses now, not for user edits.
+      // User edits use optimistic updates with direct server save, no realtime sync.
+      // SAFETY: Log stack trace to diagnose unexpected task messages
+      console.log('[App] Received tasks via WebSocket from AI agent, count:', msg.tasks?.length);
+      console.log('[App] Stack trace (to diagnose source):', new Error().stack);
       replaceTasksFromSystem(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
       setStreaming(prev => prev + (msg.content ?? ''));

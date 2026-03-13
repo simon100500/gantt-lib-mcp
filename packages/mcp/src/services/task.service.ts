@@ -405,6 +405,7 @@ export class TaskService {
 
   /**
    * Import tasks from JSON (replaces existing for project)
+   * Uses transaction for atomic operation - all tasks succeed or all fail
    */
   async importTasks(jsonData: string, projectId?: string, source?: TaskMutationSource): Promise<number> {
     let tasks: Task[];
@@ -418,36 +419,39 @@ export class TaskService {
       throw new Error('Import data must be an array of tasks');
     }
 
-    // Delete existing tasks for project
-    await this.prisma.task.deleteMany({
-      where: projectId ? { projectId } : {},
-    });
-
-    // Import tasks
-    for (const [index, task] of tasks.entries()) {
-      await this.prisma.task.create({
-        data: {
-          id: task.id,
-          projectId: projectId || '', // Required field in Prisma schema
-          name: task.name,
-          startDate: domainToDate(task.startDate),
-          endDate: domainToDate(task.endDate),
-          color: task.color || null,
-          parentId: task.parentId || null,
-          progress: task.progress ?? 0,
-          sortOrder: index,
-          dependencies: task.dependencies
-            ? {
-                create: task.dependencies.map(dep => ({
-                  depTaskId: dep.taskId,
-                  type: dep.type,
-                  lag: dep.lag ?? 0,
-                })),
-              }
-            : undefined,
-        },
+    // Use transaction for atomic import - delete all, then create all
+    await this.prisma.$transaction(async (tx) => {
+      // Delete existing tasks for project (cascades to dependencies)
+      await tx.task.deleteMany({
+        where: projectId ? { projectId } : {},
       });
-    }
+
+      // Import all tasks in transaction
+      for (const [index, task] of tasks.entries()) {
+        await tx.task.create({
+          data: {
+            id: task.id,
+            projectId: projectId || '', // Required field in Prisma schema
+            name: task.name,
+            startDate: domainToDate(task.startDate),
+            endDate: domainToDate(task.endDate),
+            color: task.color || null,
+            parentId: task.parentId || null,
+            progress: task.progress ?? 0,
+            sortOrder: index,
+            dependencies: task.dependencies
+              ? {
+                  create: task.dependencies.map(dep => ({
+                    depTaskId: dep.taskId,
+                    type: dep.type,
+                    lag: dep.lag ?? 0,
+                  })),
+                }
+              : undefined,
+          },
+        });
+      }
+    });
 
     await this.recordMutation('import', projectId, undefined, source);
 

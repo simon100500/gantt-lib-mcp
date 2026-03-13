@@ -67,6 +67,7 @@ export function useAutoSave(
   const lastSkipVersionRef = useRef(skipVersion);
   const lastSavedHashRef = useRef<string>('');
   const saveInProgressRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [savingState, setSavingState] = useState<SavingState>(globalSavingState);
 
   // Subscribe to global saving state changes
@@ -134,6 +135,15 @@ export function useAutoSave(
     // Clear any pending timer
     if (timerRef.current) clearTimeout(timerRef.current);
 
+    // Cancel any in-flight save request to prevent race conditions
+    if (abortControllerRef.current) {
+      console.log('[autosave] Aborting previous in-flight save request');
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this save
+    abortControllerRef.current = new AbortController();
+
     // Capture the skipVersion at save-start so we can detect if a system
     // snapshot (replaceTasksFromSystem) arrived while the save was in-flight.
     // If skipVersion advanced during the fetch, the lastSavedHash was already
@@ -155,6 +165,7 @@ export function useAutoSave(
             'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify(tasks),
+          signal: abortControllerRef.current.signal,
         });
 
         if (response.ok) {
@@ -186,6 +197,11 @@ export function useAutoSave(
           }, 2000);
         }
       } catch (err) {
+        // Don't log error if request was aborted (intentional cancellation)
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.log('[autosave] Save request aborted due to newer update');
+          return;
+        }
         console.warn('[autosave] Failed to save tasks:', err);
         notifyListeners('error');
 
@@ -197,6 +213,7 @@ export function useAutoSave(
         }, 2000);
       } finally {
         saveInProgressRef.current = false;
+        abortControllerRef.current = null;
       }
     };
 
