@@ -1,6 +1,17 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import type { Task } from '../types';
 import { useTaskMutation } from './useTaskMutation';
+
+export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
+
+// Track saving state globally (single instance across all components)
+let globalSavingState: SavingState = 'idle';
+const listeners = new Set<(state: SavingState) => void>();
+
+function notifyListeners(state: SavingState) {
+  globalSavingState = state;
+  listeners.forEach(listener => listener(state));
+}
 
 export interface UseBatchTaskUpdateOptions {
   tasks: Task[];
@@ -9,13 +20,55 @@ export interface UseBatchTaskUpdateOptions {
   onCascade?: (tasks: Task[]) => void;
 }
 
+export interface UseBatchTaskUpdateResult {
+  handleTasksChange: (changedTasks: Task[]) => Promise<void>;
+  handleAdd: (task: Task) => Promise<void>;
+  handleDelete: (taskId: string) => Promise<void>;
+  handleInsertAfter: (taskId: string, newTask: Task) => Promise<void>;
+  handleReorder: (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => Promise<void>;
+  handlePromoteTask: (taskId: string) => Promise<void>;
+  handleDemoteTask: (taskId: string, newParentId: string) => Promise<void>;
+  savingState: SavingState;
+}
+
 export function useBatchTaskUpdate({
   tasks,
   setTasks,
   accessToken,
   onCascade,
-}: UseBatchTaskUpdateOptions) {
+}: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
   const { mutateTask, createTask, deleteTask, batchImportTasks } = useTaskMutation(accessToken);
+  const [localSavingState, setLocalSavingState] = useState<SavingState>(globalSavingState);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Subscribe to global saving state changes
+  useEffect(() => {
+    const listener = (state: SavingState) => setLocalSavingState(state);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
+  // Helper to update saving state and reset after delay
+  const setSavingStateWithReset = useCallback((state: SavingState) => {
+    notifyListeners(state);
+
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    // Reset to 'idle' after 2 seconds for 'saved' and 'error' states
+    if (state === 'saved' || state === 'error') {
+      saveTimeoutRef.current = setTimeout(() => {
+        if (globalSavingState === state) {
+          notifyListeners('idle');
+        }
+      }, 2000);
+    }
+  }, []);
 
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
     console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
@@ -38,24 +91,30 @@ export function useBatchTaskUpdate({
     if (changedTasks.length > 1) {
       console.log(`[useBatchTaskUpdate] Using BATCH API for ${changedTasks.length} tasks`);
       try {
+        setSavingStateWithReset('saving');
         const saved = await batchImportTasks(changedTasks);
         console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
+        setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Batch save failed:', error);
+        setSavingStateWithReset('error');
         // TODO: revert optimistic update on error
       }
     } else {
       console.log('[useBatchTaskUpdate] Using single PATCH for 1 task');
       try {
+        setSavingStateWithReset('saving');
         await mutateTask(changedTasks[0]);
         console.log('[useBatchTaskUpdate] Single task saved');
+        setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Single task save failed:', error);
+        setSavingStateWithReset('error');
       }
     }
 
     console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-  }, [setTasks, mutateTask, batchImportTasks]);
+  }, [setTasks, mutateTask, batchImportTasks, setSavingStateWithReset]);
 
   const handleAdd = useCallback(async (task: Task) => {
     // Optimistic update
@@ -63,6 +122,7 @@ export function useBatchTaskUpdate({
 
     // Server update
     try {
+      setSavingStateWithReset('saving');
       const created = await createTask({
         name: task.name,
         startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
@@ -75,12 +135,14 @@ export function useBatchTaskUpdate({
 
       // Replace optimistic task with server response
       setTasks(prev => prev.map(t => t.id === task.id ? created : t));
+      setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to create task:', error);
+      setSavingStateWithReset('error');
       // Revert optimistic update on error
       setTasks(prev => prev.filter(t => t.id !== task.id));
     }
-  }, [setTasks, createTask]);
+  }, [setTasks, createTask, setSavingStateWithReset]);
 
   const handleDelete = useCallback(async (taskId: string) => {
     // Optimistic update
@@ -89,15 +151,18 @@ export function useBatchTaskUpdate({
 
     // Server update
     try {
+      setSavingStateWithReset('saving');
       await deleteTask(taskId);
+      setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to delete task:', error);
+      setSavingStateWithReset('error');
       // Revert optimistic update on error
       if (taskToDelete) {
         setTasks(prev => [...prev, taskToDelete]);
       }
     }
-  }, [tasks, setTasks, deleteTask]);
+  }, [tasks, setTasks, deleteTask, setSavingStateWithReset]);
 
   const handleInsertAfter = useCallback(async (taskId: string, newTask: Task) => {
     // Optimistic update
@@ -111,6 +176,7 @@ export function useBatchTaskUpdate({
 
     // Server update
     try {
+      setSavingStateWithReset('saving');
       const created = await createTask({
         name: newTask.name,
         startDate: typeof newTask.startDate === 'string' ? newTask.startDate : newTask.startDate.toISOString().split('T')[0],
@@ -123,14 +189,16 @@ export function useBatchTaskUpdate({
 
       // Replace optimistic task with server response
       setTasks(prev => prev.map(t => t.id === newTask.id ? created : t));
+      setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to insert task:', error);
+      setSavingStateWithReset('error');
       // Revert optimistic update on error
       setTasks(prev => prev.filter(t => t.id !== newTask.id));
     }
-  }, [setTasks, createTask]);
+  }, [setTasks, createTask, setSavingStateWithReset]);
 
-  const handleReorder = useCallback((reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
+  const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
     // Update parentId if provided
     if (movedTaskId && inferredParentId !== undefined) {
       const updated = reorderedTasks.map(t =>
@@ -143,14 +211,19 @@ export function useBatchTaskUpdate({
       // Send server update for moved task
       const movedTask = updated.find(t => t.id === movedTaskId);
       if (movedTask) {
-        mutateTask(movedTask).catch(error => {
+        try {
+          setSavingStateWithReset('saving');
+          await mutateTask(movedTask);
+          setSavingStateWithReset('saved');
+        } catch (error) {
           console.error(`[useBatchTaskUpdate] Failed to update task ${movedTaskId}:`, error);
-        });
+          setSavingStateWithReset('error');
+        }
       }
     } else {
       setTasks(reorderedTasks);
     }
-  }, [setTasks, mutateTask]);
+  }, [setTasks, mutateTask, setSavingStateWithReset]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
     console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);
@@ -191,14 +264,17 @@ export function useBatchTaskUpdate({
     // Server update
     console.log('[useBatchTaskUpdate] Calling mutateTask with parentId: undefined for task:', task.id);
     try {
+      setSavingStateWithReset('saving');
       const result = await mutateTask({ ...task, parentId: undefined });
       console.log('[useBatchTaskUpdate] mutateTask succeeded, result:', result);
+      setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to promote task:', error);
+      setSavingStateWithReset('error');
       // Revert on error
       setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? task : t));
     }
-  }, [tasks, setTasks, mutateTask]);
+  }, [tasks, setTasks, mutateTask, setSavingStateWithReset]);
 
   const handleDemoteTask = useCallback(async (taskId: string, newParentId: string) => {
     console.log('[useBatchTaskUpdate] handleDemoteTask called for taskId:', taskId, 'newParentId:', newParentId);
@@ -218,13 +294,16 @@ export function useBatchTaskUpdate({
 
     // Server update
     try {
+      setSavingStateWithReset('saving');
       await mutateTask({ ...task, parentId: newParentId });
+      setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to demote task:', error);
+      setSavingStateWithReset('error');
       // Revert on error
       setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? task : t));
     }
-  }, [tasks, setTasks, mutateTask]);
+  }, [tasks, setTasks, mutateTask, setSavingStateWithReset]);
 
   return {
     handleTasksChange,
@@ -234,5 +313,6 @@ export function useBatchTaskUpdate({
     handleReorder,
     handlePromoteTask,
     handleDemoteTask,
+    savingState: localSavingState,
   };
 }

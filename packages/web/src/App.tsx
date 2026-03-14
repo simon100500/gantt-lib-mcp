@@ -100,6 +100,7 @@ export default function App() {
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
   });
+  const { savingState } = batchUpdate;
   // Individual task mutations for direct AI agent operations
   const { mutateTask, createTask, deleteTask } = useTaskMutation(
     hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
@@ -927,6 +928,37 @@ export default function App() {
                     <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
                     {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
                   </span>
+
+                  {/* Save indicator */}
+                  {!hasShareToken && auth.isAuthenticated && savingState !== 'idle' && (
+                    <span
+                      className={cn(
+                        'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                        savingState === 'saving' && 'text-amber-600',
+                        savingState === 'saved' && 'text-emerald-600',
+                        savingState === 'error' && 'text-red-600',
+                      )}
+                    >
+                      {savingState === 'saving' && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 animate-pulse" />
+                          Сохранение…
+                        </>
+                      )}
+                      {savingState === 'saved' && (
+                        <>
+                          <Check className="w-3 h-3 shrink-0" />
+                          Сохранено
+                        </>
+                      )}
+                      {savingState === 'error' && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
+                          Ошибка сохранения
+                        </>
+                      )}
+                    </span>
+                  )}
                 </footer>
               )}
             </div>
