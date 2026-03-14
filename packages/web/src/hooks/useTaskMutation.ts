@@ -43,25 +43,31 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
   });
 
   const mutateTask = async (task: Task): Promise<Task> => {
+    const body = {
+      name: task.name,
+      startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
+      endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+      color: task.color,
+      // Convert undefined to null for parentId - backend needs null to clear the parent
+      parentId: task.parentId ?? null,
+      progress: task.progress,
+      dependencies: task.dependencies,
+    };
+    console.log('[useTaskMutation] PATCH /api/tasks/' + task.id, body);
     const response = await fetch(`/api/tasks/${task.id}`, {
       method: 'PATCH',
       headers: getHeaders(),
-      body: JSON.stringify({
-        name: task.name,
-        startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
-        endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
-        color: task.color,
-        parentId: task.parentId,
-        progress: task.progress,
-        dependencies: task.dependencies,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
+      console.error('[useTaskMutation] Response not OK:', response.status, response.statusText);
       throw new Error(`Failed to update task: ${response.status} ${response.statusText}`);
     }
 
-    return response.json() as Promise<Task>;
+    const result = await response.json() as Promise<Task>;
+    console.log('[useTaskMutation] Response OK:', result);
+    return result;
   };
 
   const createTask = async (input: CreateTaskInput): Promise<Task> => {

@@ -54,6 +54,14 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void } | null>(null);
 
+  // Debug log to check if callbacks are provided
+  console.log('[GanttChart wrapper] Props received:', {
+    hasPromoteTask: !!onPromoteTask,
+    hasDemoteTask: !!onDemoteTask,
+    promoteTaskType: typeof onPromoteTask,
+    demoteTaskType: typeof onDemoteTask,
+  });
+
   useImperativeHandle(ref, () => ({
     scrollToToday: () => ganttLibRef.current?.scrollToToday(),
     scrollToTask: (taskId: string) => ganttLibRef.current?.scrollToTask(taskId),
@@ -80,8 +88,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onDelete={onDelete}
       onInsertAfter={onInsertAfter}
       onReorder={onReorder}
-      {...(onPromoteTask && { onPromoteTask })}
-      {...(onDemoteTask && { onDemoteTask })}
+      onPromoteTask={onPromoteTask}
+      onDemoteTask={onDemoteTask}
     />
   );
 });

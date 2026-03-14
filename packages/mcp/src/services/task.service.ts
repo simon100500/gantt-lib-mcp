@@ -256,7 +256,8 @@ export class TaskService {
     if (input.startDate !== undefined) updateData.startDate = domainToDate(input.startDate);
     if (input.endDate !== undefined) updateData.endDate = domainToDate(input.endDate);
     if (input.color !== undefined) updateData.color = input.color;
-    if (input.parentId !== undefined) updateData.parentId = input.parentId || null;
+    // Handle parentId: null means remove parent, undefined means don't change
+    if (input.parentId !== undefined) updateData.parentId = input.parentId;
     if (input.progress !== undefined) updateData.progress = input.progress;
 
     // Transaction: update task, replace dependencies if needed

@@ -18,6 +18,7 @@ export function useBatchTaskUpdate({
   const { mutateTask, createTask, deleteTask } = useTaskMutation(accessToken);
 
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
+    console.log('[useBatchTaskUpdate] handleTasksChange called with', changedTasks.length, 'tasks:', changedTasks.map(t => ({ id: t.id, name: t.name, parentId: t.parentId })));
     // Optimistic update: merge changed tasks into state immediately
     const changedMap = new Map(changedTasks.map(t => [t.id, t]));
     setTasks(prev => prev.map(t => changedMap.get(t.id) ?? t));
@@ -131,8 +132,13 @@ export function useBatchTaskUpdate({
   }, [setTasks, mutateTask]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
+    console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);
     const task = tasks.find(t => t.id === taskId);
-    if (!task || !task.parentId) return;
+    if (!task || !task.parentId) {
+      console.log('[useBatchTaskUpdate] Task not found or already at root level', { task, parentId: task?.parentId });
+      return;
+    }
+    console.log('[useBatchTaskUpdate] Promoting task:', task.name, 'from parentId:', task.parentId);
 
     // Optimistic update: remove parentId and move after last sibling
     setTasks(currentTasks => {
@@ -162,8 +168,10 @@ export function useBatchTaskUpdate({
     });
 
     // Server update
+    console.log('[useBatchTaskUpdate] Calling mutateTask with parentId: undefined for task:', task.id);
     try {
-      await mutateTask({ ...task, parentId: undefined });
+      const result = await mutateTask({ ...task, parentId: undefined });
+      console.log('[useBatchTaskUpdate] mutateTask succeeded, result:', result);
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to promote task:', error);
       // Revert on error
@@ -172,8 +180,13 @@ export function useBatchTaskUpdate({
   }, [tasks, setTasks, mutateTask]);
 
   const handleDemoteTask = useCallback(async (taskId: string, newParentId: string) => {
+    console.log('[useBatchTaskUpdate] handleDemoteTask called for taskId:', taskId, 'newParentId:', newParentId);
     const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task) {
+      console.log('[useBatchTaskUpdate] Task not found for demote');
+      return;
+    }
+    console.log('[useBatchTaskUpdate] Demoting task:', task.name, 'to parentId:', newParentId);
 
     // Optimistic update: set parentId
     setTasks(currentTasks =>
