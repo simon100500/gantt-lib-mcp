@@ -70,6 +70,16 @@ export function useBatchTaskUpdate({
     }
   }, []);
 
+  // Filter out parent tasks when children are also in the batch
+  // gantt-lib 0.10.0 no longer sends parents with children, but we handle both cases
+  const filterParentTasks = useCallback((tasks: Task[]): Task[] => {
+    const taskIds = new Set(tasks.map(t => t.id));
+    return tasks.filter(task => {
+      // Keep task if it has no parentId or if its parent is not in the batch
+      return !task.parentId || !taskIds.has(task.parentId);
+    });
+  }, []);
+
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
     console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
     console.log('[useBatchTaskUpdate] changedTasks count:', changedTasks.length);
@@ -82,17 +92,23 @@ export function useBatchTaskUpdate({
       endDate: typeof t.endDate === 'string' ? t.endDate : t.endDate.toISOString().split('T')[0],
     })));
 
+    // Filter out parent tasks when children are also changing (gantt-lib 0.10.0 compatibility)
+    const filteredTasks = filterParentTasks(changedTasks);
+    if (changedTasks.length !== filteredTasks.length) {
+      console.log(`[useBatchTaskUpdate] Filtered out ${changedTasks.length - filteredTasks.length} parent tasks`);
+    }
+
     // Optimistic update: merge changed tasks into state immediately
-    const changedMap = new Map(changedTasks.map(t => [t.id, t]));
+    const changedMap = new Map(filteredTasks.map(t => [t.id, t]));
     setTasks(prev => prev.map(t => changedMap.get(t.id) ?? t));
     console.log('[useBatchTaskUpdate] Optimistic state updated');
 
     // Server update: use batch API for multiple tasks, single PATCH for one task
-    if (changedTasks.length > 1) {
-      console.log(`[useBatchTaskUpdate] Using BATCH API for ${changedTasks.length} tasks`);
+    if (filteredTasks.length > 1) {
+      console.log(`[useBatchTaskUpdate] Using BATCH API for ${filteredTasks.length} tasks`);
       try {
         setSavingStateWithReset('saving');
-        const saved = await batchImportTasks(changedTasks);
+        const saved = await batchImportTasks(filteredTasks);
         console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
         setSavingStateWithReset('saved');
       } catch (error) {
@@ -104,7 +120,7 @@ export function useBatchTaskUpdate({
       console.log('[useBatchTaskUpdate] Using single PATCH for 1 task');
       try {
         setSavingStateWithReset('saving');
-        await mutateTask(changedTasks[0]);
+        await mutateTask(filteredTasks[0]);
         console.log('[useBatchTaskUpdate] Single task saved');
         setSavingStateWithReset('saved');
       } catch (error) {
@@ -114,7 +130,7 @@ export function useBatchTaskUpdate({
     }
 
     console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-  }, [setTasks, mutateTask, batchImportTasks, setSavingStateWithReset]);
+  }, [setTasks, mutateTask, batchImportTasks, setSavingStateWithReset, filterParentTasks]);
 
   const handleAdd = useCallback(async (task: Task) => {
     // Optimistic update
