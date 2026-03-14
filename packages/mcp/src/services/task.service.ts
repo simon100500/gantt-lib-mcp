@@ -16,6 +16,25 @@ import { randomUUID } from 'node:crypto';
 export class TaskService {
   private prisma = getPrisma();
 
+  // Helper: Compute parent task dates from its children
+  private async computeParentDates(parentId: string, projectId?: string): Promise<{ startDate: Date; endDate: Date } | null> {
+    const children = await this.prisma.task.findMany({
+      where: { parentId },
+      select: { startDate: true, endDate: true },
+    });
+
+    if (children.length === 0) {
+      return null;
+    }
+
+    // Parent start = min of children starts
+    // Parent end = max of children ends
+    const startDate = new Date(Math.min(...children.map(c => c.startDate.getTime())));
+    const endDate = new Date(Math.max(...children.map(c => c.endDate.getTime())));
+
+    return { startDate, endDate };
+  }
+
   // Helper: Convert Prisma Task to domain Task
   private taskToDomain(task: any, dependencies: TaskDependency[] = []): Task {
     return {
@@ -300,6 +319,63 @@ export class TaskService {
     // Record mutation
     await this.recordMutation('update', existing.projectId || undefined, id, source);
 
+    // After updating a task, recompute parent dates if this is a child task
+    if (updateData.parentId !== undefined) {
+      // If parentId changed, recompute both old and new parent
+      const oldParentId = (await this.prisma.task.findUnique({
+        where: { id },
+        select: { parentId: true },
+      }))?.parentId;
+
+      if (oldParentId) {
+        const oldParentDates = await this.computeParentDates(oldParentId, existing.projectId || undefined);
+        if (oldParentDates) {
+          await this.prisma.task.update({
+            where: { id: oldParentId },
+            data: {
+              startDate: oldParentDates.startDate,
+              endDate: oldParentDates.endDate,
+            },
+          });
+        }
+      }
+
+      if (updateData.parentId) {
+        const newParentDates = await this.computeParentDates(updateData.parentId, existing.projectId || undefined);
+        if (newParentDates) {
+          await this.prisma.task.update({
+            where: { id: updateData.parentId },
+            data: {
+              startDate: newParentDates.startDate,
+              endDate: newParentDates.endDate,
+            },
+          });
+        }
+      }
+    } else if ((await this.prisma.task.findUnique({
+      where: { id },
+      select: { parentId: true },
+    }))?.parentId) {
+      // If this is a child task, recompute its parent's dates
+      const currentTask = await this.prisma.task.findUnique({
+        where: { id },
+        select: { parentId: true },
+      });
+
+      if (currentTask?.parentId) {
+        const parentDates = await this.computeParentDates(currentTask.parentId, existing.projectId || undefined);
+        if (parentDates) {
+          await this.prisma.task.update({
+            where: { id: currentTask.parentId },
+            data: {
+              startDate: parentDates.startDate,
+              endDate: parentDates.endDate,
+            },
+          });
+        }
+      }
+    }
+
     return this.get(id);
   }
 
@@ -532,6 +608,27 @@ export class TaskService {
     // Record mutation for each task
     for (const task of tasks) {
       await this.recordMutation('update', projectId, task.id, source);
+    }
+
+    // After batch update, recompute parent dates for all affected parents
+    const affectedParentIds = new Set<string>();
+    for (const task of tasks) {
+      if (task.parentId) {
+        affectedParentIds.add(task.parentId);
+      }
+    }
+
+    for (const parentId of affectedParentIds) {
+      const parentDates = await this.computeParentDates(parentId, projectId);
+      if (parentDates) {
+        await this.prisma.task.update({
+          where: { id: parentId },
+          data: {
+            startDate: parentDates.startDate,
+            endDate: parentDates.endDate,
+          },
+        });
+      }
     }
 
     return tasks.length;
