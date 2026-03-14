@@ -28,4 +28,5 @@ export interface Task {
   locked?: boolean;          // Prevents drag/resize/edit
   divider?: 'top' | 'bottom'; // Visual grouping lines
   dependencies?: TaskDependency[];
+  sortOrder?: number;        // Display order position
 }

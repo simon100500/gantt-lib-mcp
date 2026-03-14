@@ -18,6 +18,7 @@ export interface UpdateTaskInput {
   parentId?: string;
   progress?: number;
   dependencies?: TaskDependency[];
+  sortOrder?: number;
 }
 
 export interface UseTaskMutationResult {
@@ -53,6 +54,7 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
       parentId: task.parentId ?? null,
       progress: task.progress,
       dependencies: task.dependencies,
+      sortOrder: (task as any).sortOrder,
     };
     console.log('%c[useTaskMutation] SENDING PATCH /api/tasks/' + task.id, 'background: #ff922b; color: white; padding: 2px 6px; border-radius: 3px;');
     console.log('[useTaskMutation] Request body:', body);

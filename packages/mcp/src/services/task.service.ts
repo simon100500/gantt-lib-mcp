@@ -27,6 +27,7 @@ export class TaskService {
       parentId: task.parentId || undefined,
       progress: task.progress,
       dependencies,
+      sortOrder: task.sortOrder,
     };
   }
 
@@ -259,6 +260,7 @@ export class TaskService {
     // Handle parentId: null means remove parent, undefined means don't change
     if (input.parentId !== undefined) updateData.parentId = input.parentId;
     if (input.progress !== undefined) updateData.progress = input.progress;
+    if (input.sortOrder !== undefined) updateData.sortOrder = input.sortOrder;
 
     // Transaction: update task, replace dependencies if needed
     await this.prisma.$transaction(async (tx) => {
@@ -459,19 +461,42 @@ export class TaskService {
     // Use transaction for atomic batch update
     await this.prisma.$transaction(async (tx) => {
       for (const task of sortedTasks) {
+        // Extract sortOrder from task if provided (for reordering operations)
+        const sortOrder = (task as any).sortOrder;
+
+        // Build create data
+        const createData: any = {
+          id: task.id,
+          projectId: projectId || '',
+          name: task.name,
+          startDate: domainToDate(task.startDate),
+          endDate: domainToDate(task.endDate),
+          color: task.color || null,
+          parentId: task.parentId || null,
+          progress: task.progress ?? 0,
+          sortOrder: sortOrder ?? 0,
+        };
+
+        // Build update data
+        const updateData: any = {
+          name: task.name,
+          startDate: domainToDate(task.startDate),
+          endDate: domainToDate(task.endDate),
+          color: task.color || null,
+          parentId: task.parentId || null,
+          progress: task.progress ?? 0,
+        };
+
+        // Only update sortOrder if explicitly provided
+        if (sortOrder !== undefined) {
+          updateData.sortOrder = sortOrder;
+        }
+
         // Upsert task: create if not exists, update if exists
         await tx.task.upsert({
           where: { id: task.id },
           create: {
-            id: task.id,
-            projectId: projectId || '',
-            name: task.name,
-            startDate: domainToDate(task.startDate),
-            endDate: domainToDate(task.endDate),
-            color: task.color || null,
-            parentId: task.parentId || null,
-            progress: task.progress ?? 0,
-            sortOrder: 0, // Will be updated based on actual position
+            ...createData,
             dependencies: task.dependencies
               ? {
                   create: task.dependencies.map(dep => ({
@@ -482,16 +507,7 @@ export class TaskService {
                 }
               : undefined,
           },
-          update: {
-            name: task.name,
-            startDate: domainToDate(task.startDate),
-            endDate: domainToDate(task.endDate),
-            color: task.color || null,
-            parentId: task.parentId || null,
-            progress: task.progress ?? 0,
-            // Note: sortOrder is not updated here - it should reflect the actual position in the full task list
-            // Dependencies are updated separately below
-          },
+          update: updateData,
         });
 
         // Update dependencies if provided

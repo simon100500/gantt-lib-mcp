@@ -199,16 +199,25 @@ export function useBatchTaskUpdate({
   }, [setTasks, createTask, setSavingStateWithReset]);
 
   const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
+    console.log('%c[useBatchTaskUpdate] handleReorder called', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[useBatchTaskUpdate] movedTaskId:', movedTaskId, 'inferredParentId:', inferredParentId);
+
+    // Add sortOrder to all tasks based on their position in the array
+    const tasksWithOrder = reorderedTasks.map((task, index) => ({
+      ...task,
+      sortOrder: index,
+    }));
+
     // Update parentId if provided
     if (movedTaskId && inferredParentId !== undefined) {
-      const updated = reorderedTasks.map(t =>
+      const updated = tasksWithOrder.map(t =>
         t.id === movedTaskId
           ? { ...t, parentId: inferredParentId || undefined }
           : t
       );
       setTasks(updated);
 
-      // Send server update for moved task
+      // Send server update for moved task with sortOrder
       const movedTask = updated.find(t => t.id === movedTaskId);
       if (movedTask) {
         try {
@@ -221,9 +230,36 @@ export function useBatchTaskUpdate({
         }
       }
     } else {
-      setTasks(reorderedTasks);
+      // When just reordering (no parent change), we need to update sortOrder for ALL tasks
+      // that have changed position
+      setTasks(tasksWithOrder);
+
+      // Find tasks whose sortOrder has changed
+      const tasksWithChangedOrder: Task[] = [];
+      for (const newTask of tasksWithOrder) {
+        const oldTask = tasks.find(t => t.id === newTask.id);
+        const oldSortOrder = (oldTask as any)?.sortOrder ?? -1;
+        if (oldSortOrder !== newTask.sortOrder) {
+          tasksWithChangedOrder.push(newTask);
+        }
+      }
+
+      console.log('[useBatchTaskUpdate] Tasks with changed sortOrder:', tasksWithChangedOrder.length);
+
+      // Batch update all tasks with changed sortOrder
+      if (tasksWithChangedOrder.length > 0) {
+        try {
+          setSavingStateWithReset('saving');
+          await batchImportTasks(tasksWithChangedOrder);
+          setSavingStateWithReset('saved');
+          console.log('[useBatchTaskUpdate] Batch updated sortOrder for', tasksWithChangedOrder.length, 'tasks');
+        } catch (error) {
+          console.error('[useBatchTaskUpdate] Failed to update sortOrder:', error);
+          setSavingStateWithReset('error');
+        }
+      }
     }
-  }, [setTasks, mutateTask, setSavingStateWithReset]);
+  }, [setTasks, mutateTask, batchImportTasks, setSavingStateWithReset, tasks]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
     console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);

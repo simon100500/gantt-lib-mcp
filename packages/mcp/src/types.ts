@@ -46,6 +46,8 @@ export interface Task {
   progress?: number;
   /** Optional task dependencies */
   dependencies?: TaskDependency[];
+  /** Optional sort order for display position */
+  sortOrder?: number;
 }
 
 /**
@@ -90,6 +92,8 @@ export interface UpdateTaskInput {
   progress?: number;
   /** Optional task dependencies */
   dependencies?: TaskDependency[];
+  /** Optional sort order for display position */
+  sortOrder?: number;
 }
 
 /**
