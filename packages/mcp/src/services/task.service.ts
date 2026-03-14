@@ -405,6 +405,123 @@ export class TaskService {
   }
 
   /**
+   * Batch update tasks (incremental updates, does NOT delete existing tasks)
+   * This is used for gantt-lib's onChange callbacks where only changed tasks are sent
+   * Uses upsert to create new tasks or update existing ones
+   * Uses topological sort to ensure parents are created/updated before children
+   */
+  async batchUpdateTasks(jsonData: string, projectId?: string, source?: TaskMutationSource): Promise<number> {
+    let tasks: Task[];
+    try {
+      tasks = JSON.parse(jsonData) as Task[];
+    } catch (e) {
+      throw new Error(`Invalid JSON: ${(e as Error).message}`);
+    }
+
+    if (!Array.isArray(tasks)) {
+      throw new Error('Import data must be an array of tasks');
+    }
+
+    // Sort tasks so that parents are created/updated before children
+    // Build a dependency graph and use topological sort
+    const taskMap = new Map(tasks.map(t => [t.id, t]));
+    const sortedTasks: Task[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+
+    // Recursive function to visit tasks in dependency order
+    const visit = (taskId: string) => {
+      if (visited.has(taskId)) return;
+      if (visiting.has(taskId)) {
+        // Circular dependency - skip to avoid infinite loop
+        return;
+      }
+
+      visiting.add(taskId);
+      const task = taskMap.get(taskId);
+      if (task && task.parentId && taskMap.has(task.parentId)) {
+        // Visit parent first
+        visit(task.parentId);
+      }
+
+      visiting.delete(taskId);
+      visited.add(taskId);
+      if (task) {
+        sortedTasks.push(task);
+      }
+    };
+
+    // Visit all tasks
+    for (const task of tasks) {
+      visit(task.id);
+    }
+
+    // Use transaction for atomic batch update
+    await this.prisma.$transaction(async (tx) => {
+      for (const task of sortedTasks) {
+        // Upsert task: create if not exists, update if exists
+        await tx.task.upsert({
+          where: { id: task.id },
+          create: {
+            id: task.id,
+            projectId: projectId || '',
+            name: task.name,
+            startDate: domainToDate(task.startDate),
+            endDate: domainToDate(task.endDate),
+            color: task.color || null,
+            parentId: task.parentId || null,
+            progress: task.progress ?? 0,
+            sortOrder: 0, // Will be updated based on actual position
+            dependencies: task.dependencies
+              ? {
+                  create: task.dependencies.map(dep => ({
+                    depTaskId: dep.taskId,
+                    type: dep.type,
+                    lag: dep.lag ?? 0,
+                  })),
+                }
+              : undefined,
+          },
+          update: {
+            name: task.name,
+            startDate: domainToDate(task.startDate),
+            endDate: domainToDate(task.endDate),
+            color: task.color || null,
+            parentId: task.parentId || null,
+            progress: task.progress ?? 0,
+            // Note: sortOrder is not updated here - it should reflect the actual position in the full task list
+            // Dependencies are updated separately below
+          },
+        });
+
+        // Update dependencies if provided
+        if (task.dependencies !== undefined) {
+          // Delete existing dependencies
+          await tx.dependency.deleteMany({ where: { taskId: task.id } });
+          // Create new dependencies if any
+          if (task.dependencies.length > 0) {
+            await tx.dependency.createMany({
+              data: task.dependencies.map(dep => ({
+                taskId: task.id,
+                depTaskId: dep.taskId,
+                type: dep.type,
+                lag: dep.lag ?? 0,
+              })),
+            });
+          }
+        }
+      }
+    });
+
+    // Record mutation for each task
+    for (const task of tasks) {
+      await this.recordMutation('update', projectId, task.id, source);
+    }
+
+    return tasks.length;
+  }
+
+  /**
    * Import tasks from JSON (replaces existing for project)
    * Uses transaction for atomic operation - all tasks succeed or all fail
    */
@@ -420,6 +537,40 @@ export class TaskService {
       throw new Error('Import data must be an array of tasks');
     }
 
+    // Sort tasks so that parents are created before children
+    // Build a dependency graph and use topological sort
+    const taskMap = new Map(tasks.map(t => [t.id, t]));
+    const sortedTasks: Task[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+
+    // Recursive function to visit tasks in dependency order
+    const visit = (taskId: string) => {
+      if (visited.has(taskId)) return;
+      if (visiting.has(taskId)) {
+        // Circular dependency - skip to avoid infinite loop
+        return;
+      }
+
+      visiting.add(taskId);
+      const task = taskMap.get(taskId);
+      if (task && task.parentId && taskMap.has(task.parentId)) {
+        // Visit parent first
+        visit(task.parentId);
+      }
+
+      visiting.delete(taskId);
+      visited.add(taskId);
+      if (task) {
+        sortedTasks.push(task);
+      }
+    };
+
+    // Visit all tasks
+    for (const task of tasks) {
+      visit(task.id);
+    }
+
     // Use transaction for atomic import - delete all, then create all
     await this.prisma.$transaction(async (tx) => {
       // Delete existing tasks for project (cascades to dependencies)
@@ -427,8 +578,8 @@ export class TaskService {
         where: projectId ? { projectId } : {},
       });
 
-      // Import all tasks in transaction
-      for (const [index, task] of tasks.entries()) {
+      // Import all tasks in sorted order (parents before children)
+      for (const [index, task] of sortedTasks.entries()) {
         await tx.task.create({
           data: {
             id: task.id,

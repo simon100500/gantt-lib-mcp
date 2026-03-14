@@ -161,16 +161,18 @@ fastify.delete('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, r
 
 fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   const tasks = req.body as unknown[];
-  console.log(`%c[SERVER] PUT /api/tasks (BATCH)`, 'background: #e64980; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+  console.log(`%c[SERVER] PUT /api/tasks (BATCH UPDATE)`, 'background: #e64980; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
   console.log('[SERVER] Tasks count:', tasks.length);
   console.log('[SERVER] Tasks:', tasks.map((t: any) => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate })));
 
   if (!Array.isArray(tasks)) {
     return reply.status(400).send({ error: 'body must be an array of tasks' });
   }
-  const count = await taskService.importTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
+  // Use batchUpdateTasks instead of importTasks to avoid deleting all existing tasks
+  // gantt-lib sends only changed tasks, not the full task list
+  const count = await taskService.batchUpdateTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
 
-  console.log(`%c[SERVER] BATCH saved ${count} tasks`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+  console.log(`%c[SERVER] BATCH updated ${count} tasks`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
   // No WebSocket broadcast - user edits use optimistic updates, WS is only for AI responses
   return reply.send({ saved: count });
 });
