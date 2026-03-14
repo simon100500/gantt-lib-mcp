@@ -11,6 +11,7 @@ export interface GanttChartProps {
   showTaskList?: boolean;
   taskListWidth?: number;
   onValidateDependencies?: (result: ValidationResult) => void;
+  enableAutoSchedule?: boolean;
   disableConstraints?: boolean;
   onCascade?: (tasks: Task[]) => void;
   disableTaskNameEditing?: boolean;
@@ -39,6 +40,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   showTaskList,
   taskListWidth,
   onValidateDependencies,
+  enableAutoSchedule,
   disableConstraints,
   onCascade,
   disableTaskNameEditing,
@@ -53,14 +55,6 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onDemoteTask,
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void } | null>(null);
-
-  // Debug log to check if callbacks are provided
-  console.log('[GanttChart wrapper] Props received:', {
-    hasPromoteTask: !!onPromoteTask,
-    hasDemoteTask: !!onDemoteTask,
-    promoteTaskType: typeof onPromoteTask,
-    demoteTaskType: typeof onDemoteTask,
-  });
 
   useImperativeHandle(ref, () => ({
     scrollToToday: () => ganttLibRef.current?.scrollToToday(),
@@ -78,6 +72,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       showTaskList={showTaskList}
       taskListWidth={taskListWidth}
       onValidateDependencies={onValidateDependencies}
+      enableAutoSchedule={enableAutoSchedule}
       disableConstraints={disableConstraints}
       onCascade={onCascade}
       disableTaskNameEditing={disableTaskNameEditing}

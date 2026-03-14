@@ -24,6 +24,7 @@ export interface UseTaskMutationResult {
   mutateTask: (task: Task) => Promise<Task>;
   createTask: (input: CreateTaskInput) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
+  batchImportTasks: (tasks: Task[]) => Promise<number>;
 }
 
 /**
@@ -53,7 +54,9 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
       progress: task.progress,
       dependencies: task.dependencies,
     };
-    console.log('[useTaskMutation] PATCH /api/tasks/' + task.id, body);
+    console.log('%c[useTaskMutation] SENDING PATCH /api/tasks/' + task.id, 'background: #ff922b; color: white; padding: 2px 6px; border-radius: 3px;');
+    console.log('[useTaskMutation] Request body:', body);
+    console.log('[useTaskMutation] Full task being sent:', task);
     const response = await fetch(`/api/tasks/${task.id}`, {
       method: 'PATCH',
       headers: getHeaders(),
@@ -65,8 +68,16 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
       throw new Error(`Failed to update task: ${response.status} ${response.statusText}`);
     }
 
-    const result = await response.json() as Promise<Task>;
-    console.log('[useTaskMutation] Response OK:', result);
+    const result = await response.json() as Task;
+    console.log('%c[useTaskMutation] Response OK', 'background: #51cf66; color: white; padding: 2px 6px; border-radius: 3px;');
+    console.log('[useTaskMutation] Server returned:', {
+      id: result.id,
+      name: result.name,
+      parentId: result.parentId,
+      startDate: result.startDate,
+      endDate: result.endDate,
+    });
+    console.log('[useTaskMutation] Full response:', result);
     return result;
   };
 
@@ -98,5 +109,25 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
     return data.deleted;
   };
 
-  return { mutateTask, createTask, deleteTask };
+  const batchImportTasks = async (tasks: Task[]): Promise<number> => {
+    console.log(`%c[useTaskMutation] BATCH IMPORT - sending ${tasks.length} tasks via PUT /api/tasks`, 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[useTaskMutation] Batch tasks:', tasks.map(t => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate })));
+
+    const response = await fetch('/api/tasks', {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(tasks),
+    });
+
+    if (!response.ok) {
+      console.error('[useTaskMutation] Batch import failed:', response.status, response.statusText);
+      throw new Error(`Failed to batch import tasks: ${response.status} ${response.statusText}`);
+    }
+
+    const result = await response.json() as { saved: number };
+    console.log(`%c[useTaskMutation] BATCH IMPORT SUCCESS - ${result.saved} tasks saved`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    return result.saved;
+  };
+
+  return { mutateTask, createTask, deleteTask, batchImportTasks };
 }

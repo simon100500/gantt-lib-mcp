@@ -15,26 +15,47 @@ export function useBatchTaskUpdate({
   accessToken,
   onCascade,
 }: UseBatchTaskUpdateOptions) {
-  const { mutateTask, createTask, deleteTask } = useTaskMutation(accessToken);
+  const { mutateTask, createTask, deleteTask, batchImportTasks } = useTaskMutation(accessToken);
 
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
-    console.log('[useBatchTaskUpdate] handleTasksChange called with', changedTasks.length, 'tasks:', changedTasks.map(t => ({ id: t.id, name: t.name, parentId: t.parentId })));
+    console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[useBatchTaskUpdate] changedTasks count:', changedTasks.length);
+    console.log('[useBatchTaskUpdate] Full changedTasks data:');
+    console.table(changedTasks.map(t => ({
+      id: t.id,
+      name: t.name,
+      parentId: t.parentId,
+      startDate: typeof t.startDate === 'string' ? t.startDate : t.startDate.toISOString().split('T')[0],
+      endDate: typeof t.endDate === 'string' ? t.endDate : t.endDate.toISOString().split('T')[0],
+    })));
+
     // Optimistic update: merge changed tasks into state immediately
     const changedMap = new Map(changedTasks.map(t => [t.id, t]));
     setTasks(prev => prev.map(t => changedMap.get(t.id) ?? t));
+    console.log('[useBatchTaskUpdate] Optimistic state updated');
 
-    // Server update: send each changed task to server
-    // For cascade operations, all tasks are already in changedTasks array
-    for (const task of changedTasks) {
+    // Server update: use batch API for multiple tasks, single PATCH for one task
+    if (changedTasks.length > 1) {
+      console.log(`[useBatchTaskUpdate] Using BATCH API for ${changedTasks.length} tasks`);
       try {
-        await mutateTask(task);
+        const saved = await batchImportTasks(changedTasks);
+        console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
       } catch (error) {
-        console.error(`[useBatchTaskUpdate] Failed to update task ${task.id}:`, error);
-        // On error, you might want to revert the optimistic update
-        // For now, we log and continue
+        console.error('[useBatchTaskUpdate] Batch save failed:', error);
+        // TODO: revert optimistic update on error
+      }
+    } else {
+      console.log('[useBatchTaskUpdate] Using single PATCH for 1 task');
+      try {
+        await mutateTask(changedTasks[0]);
+        console.log('[useBatchTaskUpdate] Single task saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Single task save failed:', error);
       }
     }
-  }, [setTasks, mutateTask]);
+
+    console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+  }, [setTasks, mutateTask, batchImportTasks]);
 
   const handleAdd = useCallback(async (task: Task) => {
     // Optimistic update

@@ -79,6 +79,10 @@ fastify.patch('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, re
   const taskId = (req.params as { id: string }).id;
   const updates = req.body as UpdateTaskInput;
 
+  console.log(`%c[SERVER] PATCH /api/tasks/${taskId}`, 'background: #cc5de8; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+  console.log('[SERVER] Request body (updates):', updates);
+  console.log('[SERVER] Full updates:', JSON.stringify(updates, null, 2));
+
   if (!taskId) {
     return reply.status(400).send({ error: 'taskId is required' });
   }
@@ -91,11 +95,21 @@ fastify.patch('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, re
     const task = await taskService.update(taskId, updates, 'manual-save');
 
     if (!task) {
+      console.log('[SERVER] Task not found:', taskId);
       return reply.status(404).send({ error: 'Task not found' });
     }
 
+    console.log('%c[SERVER] Task updated successfully', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[SERVER] Updated task:', {
+      id: task.id,
+      name: task.name,
+      parentId: task.parentId,
+      startDate: task.startDate,
+      endDate: task.endDate,
+    });
     return reply.send(task);
   } catch (error) {
+    console.error('[SERVER] Failed to update task:', error);
     fastify.log.error(error, 'Failed to update task');
     return reply.status(500).send({ error: 'Failed to update task' });
   }
@@ -147,10 +161,16 @@ fastify.delete('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, r
 
 fastify.put('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   const tasks = req.body as unknown[];
+  console.log(`%c[SERVER] PUT /api/tasks (BATCH)`, 'background: #e64980; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+  console.log('[SERVER] Tasks count:', tasks.length);
+  console.log('[SERVER] Tasks:', tasks.map((t: any) => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate })));
+
   if (!Array.isArray(tasks)) {
     return reply.status(400).send({ error: 'body must be an array of tasks' });
   }
   const count = await taskService.importTasks(JSON.stringify(tasks), req.user!.projectId, 'manual-save');
+
+  console.log(`%c[SERVER] BATCH saved ${count} tasks`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
   // No WebSocket broadcast - user edits use optimistic updates, WS is only for AI responses
   return reply.send({ saved: count });
 });

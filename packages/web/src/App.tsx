@@ -406,11 +406,20 @@ export default function App() {
   }, []);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
-    setTasks(prev => {
-      const map = new Map(shiftedTasks.map(t => [t.id, t]));
-      return prev.map(t => map.get(t.id) ?? t);
-    });
-  }, [setTasks]);
+    // Use batchUpdate to handle both local state update and server persistence
+    // This is called when a parent task is dragged and its children need to move with it
+    console.log('%c[App] handleCascade CALLED', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[App] shiftedTasks received from gantt-lib:', shiftedTasks.length, 'tasks');
+    console.table(shiftedTasks.map(t => ({
+      id: t.id,
+      name: t.name,
+      parentId: t.parentId,
+      startDate: t.startDate,
+      endDate: t.endDate,
+    })));
+    batchUpdate.handleTasksChange(shiftedTasks);
+    console.log('%c[App] handleCascade batchUpdate.handleTasksChange called', 'background: #51cf66; color: white; font-weight: bold;');
+  }, [batchUpdate]);
 
   const handleEmptyChart = useCallback(async () => {
     if (workspace.kind === 'draft') {
@@ -887,8 +896,8 @@ export default function App() {
                   showTaskList={showTaskList}
                   taskListWidth={650}
                   onValidateDependencies={handleValidation}
-                  disableConstraints={!autoSchedule}
-                  onCascade={!autoSchedule ? undefined : handleCascade}
+                  enableAutoSchedule={autoSchedule}
+                  onCascade={handleCascade}
                   disableTaskNameEditing={disableTaskNameEditing}
                   disableDependencyEditing={disableDependencyEditing}
                   highlightExpiredTasks={highlightExpiredTasks}
