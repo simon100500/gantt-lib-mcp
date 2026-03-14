@@ -147,9 +147,6 @@ export default function App() {
     if (msg.type === 'tasks') {
       // WebSocket is ONLY used for AI agent responses now, not for user edits.
       // User edits use optimistic updates with direct server save, no realtime sync.
-      // SAFETY: Log stack trace to diagnose unexpected task messages
-      console.log('[App] Received tasks via WebSocket from AI agent, count:', msg.tasks?.length);
-      console.log('[App] Stack trace (to diagnose source):', new Error().stack);
       replaceTasksFromSystem(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
       setStreaming(prev => prev + (msg.content ?? ''));
@@ -409,17 +406,7 @@ export default function App() {
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
     // Use batchUpdate to handle both local state update and server persistence
     // This is called when a parent task is dragged and its children need to move with it
-    console.log('%c[App] handleCascade CALLED', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    console.log('[App] shiftedTasks received from gantt-lib:', shiftedTasks.length, 'tasks');
-    console.table(shiftedTasks.map(t => ({
-      id: t.id,
-      name: t.name,
-      parentId: t.parentId,
-      startDate: t.startDate,
-      endDate: t.endDate,
-    })));
     batchUpdate.handleTasksChange(shiftedTasks);
-    console.log('%c[App] handleCascade batchUpdate.handleTasksChange called', 'background: #51cf66; color: white; font-weight: bold;');
   }, [batchUpdate]);
 
   const handleEmptyChart = useCallback(async () => {
