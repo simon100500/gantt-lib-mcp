@@ -62,6 +62,92 @@ function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI
   };
 }
 
+function installFetchLogger(
+  baseUrl: string,
+  runId: string,
+  attempt: number,
+): void {
+  let hostname: string;
+  try {
+    hostname = new URL(baseUrl).hostname;
+  } catch {
+    return;
+  }
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : (input as Request).url;
+
+    if (!url.includes(hostname)) {
+      return originalFetch(input, init);
+    }
+
+    let requestBody: unknown;
+    try {
+      if (typeof init?.body === 'string') requestBody = JSON.parse(init.body);
+      else if (init?.body instanceof Uint8Array) requestBody = JSON.parse(new TextDecoder().decode(init.body));
+    } catch { /* non-JSON body */ }
+
+    await writeServerDebugLog('http_request', {
+      runId,
+      attempt,
+      url,
+      method: init?.method ?? 'GET',
+      body: requestBody,
+    });
+
+    const response = await originalFetch(input, init);
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (response.body && contentType.includes('stream')) {
+      const [body1, body2] = response.body.tee();
+
+      (async () => {
+        const reader = body2.getReader();
+        const captured: string[] = [];
+        try {
+          while (captured.length < 30) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            captured.push(new TextDecoder().decode(value));
+          }
+          reader.cancel().catch(() => undefined);
+        } catch { /* stream closed */ }
+
+        await writeServerDebugLog('http_response_stream', {
+          runId,
+          attempt,
+          url,
+          status: response.status,
+          chunks: captured.slice(0, 10),
+          totalCaptured: captured.length,
+        });
+      })();
+
+      return new Response(body1, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    }
+
+    await writeServerDebugLog('http_response', {
+      runId,
+      attempt,
+      url,
+      status: response.status,
+      contentType,
+    });
+
+    return response;
+  };
+}
+
 function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
   return content
     .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
@@ -180,9 +266,12 @@ async function executeAgentAttempt(
   attempt: number,
   mutationRequested: boolean,
   mcpServerPath: string,
-  dbPath: string,
   env: ReturnType<typeof resolveEnv>,
 ): Promise<AgentAttemptResult> {
+  installFetchLogger(env.OPENAI_BASE_URL, runId, attempt);
+
+  const sdkCliPath = join(PROJECT_ROOT, 'node_modules/@qwen-code/sdk/dist/cli/cli.js');
+
   const session = query({
     prompt,
     options: {
@@ -191,9 +280,9 @@ async function executeAgentAttempt(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
+      pathToQwenExecutable: `node:${sdkCliPath}`,
       env: {
         ...env,
-        DB_PATH: dbPath,
       },
       mcpServers: {
         gantt: {
@@ -403,7 +492,6 @@ export async function runAgentWithHistory(
 
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
       ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
-    const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
 
     let assistantResponse = '';
     let streamedContent = false;
@@ -448,7 +536,6 @@ export async function runAgentWithHistory(
         attempt,
         mutationRequested,
         mcpServerPath,
-        dbPath,
         env,
       );
       assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);

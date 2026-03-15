@@ -344,7 +344,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     tool: name,
     args,
     envProjectId: process.env.PROJECT_ID,
-    dbPath: process.env.DB_PATH,
+    databaseUrl: process.env.DATABASE_URL ? `${process.env.DATABASE_URL.split('@')[1] ?? '***'}` : 'NOT SET',
   });
 
   // Ping tool for connectivity testing
