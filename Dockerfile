@@ -33,6 +33,9 @@ RUN npm ci --ignore-scripts
 COPY packages/mcp ./packages/mcp
 COPY packages/server ./packages/server
 
+# Generate Prisma client for linux-musl (the Alpine runtime target)
+RUN npx prisma generate --schema=packages/mcp/prisma/schema.prisma
+
 # Build mcp first (server depends on it)
 RUN npm run build:mcp
 RUN npm run build:server

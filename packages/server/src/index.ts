@@ -30,7 +30,7 @@ await registerAdminRoutes(fastify);
 // REST routes
 // ---------------------------------------------------------------------------
 
-fastify.get('/health', async () => ({ status: 'ok' }));
+fastify.get('/api/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   console.log('[TASKS DEBUG] GET /api/tasks - projectId from JWT:', req.user!.projectId);

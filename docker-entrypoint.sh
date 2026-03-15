@@ -8,7 +8,7 @@ PORT=3000 \
 GANTT_PROJECT_ROOT=/app \
 GANTT_MCP_SERVER_PATH=/app/mcp/dist/index.js \
 GANTT_MCP_PROMPTS_DIR=/app/mcp/agent/prompts \
-node /app/server/dist/index.js &
+node /app/server/dist/bootstrap.js &
 
 # Start Nginx in foreground
 nginx -g "daemon off;"
