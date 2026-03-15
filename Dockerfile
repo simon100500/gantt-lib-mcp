@@ -30,6 +30,9 @@ COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
 
+# Copy patches directory BEFORE running patch-package
+COPY patches ./patches
+
 RUN npm ci --ignore-scripts
 RUN npx patch-package
 
