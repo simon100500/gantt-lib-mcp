@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -126,6 +126,7 @@ export default function App() {
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
   const [autoSchedule, setAutoSchedule] = useState(true);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [showTaskList, setShowTaskList] = useState(true);
 
   // Always allow editing (removed toggle buttons)
@@ -601,6 +602,11 @@ export default function App() {
   }, [activeWorkspaceProjectId, auth.isAuthenticated, auth.syncProjectTaskCount, hasShareToken, tasks.length, workspace.kind]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
+  const handleCollapseAll = useCallback(() => ganttRef.current?.collapseAll(), []);
+  const handleExpandAll = useCallback(() => ganttRef.current?.expandAll(), []);
+  const handleViewModeToggle = useCallback(() => {
+    setViewMode(prev => prev === 'day' ? 'week' : 'day');
+  }, []);
   const isDraftWorkspace = workspace.kind === 'draft';
   const isGuestWorkspace = workspace.kind === 'guest';
   const chatSidebarVisible = workspace.kind === 'project' && workspace.chatOpen;
@@ -822,6 +828,42 @@ export default function App() {
                   Сегодня
                 </Button>
 
+                <ToolbarSep />
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleViewModeToggle}
+                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  {viewMode === 'day' ? 'День' : 'Неделя'}
+                </Button>
+
+                <ToolbarSep />
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCollapseAll}
+                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                  title="Свернуть все родительские задачи"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  Свернуть все
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleExpandAll}
+                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                  title="Развернуть все родительские задачи"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  Развернуть все
+                </Button>
+
                 <div className="flex-1" />
 
                 {/* Feature switches - right side */}
@@ -890,6 +932,7 @@ export default function App() {
                   disableDependencyEditing={disableDependencyEditing}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
+                  viewMode={viewMode}
                   onAdd={batchUpdate.handleAdd}
                   onDelete={batchUpdate.handleDelete}
                   onInsertAfter={batchUpdate.handleInsertAfter}

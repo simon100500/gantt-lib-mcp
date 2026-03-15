@@ -18,6 +18,7 @@ export interface GanttChartProps {
   disableDependencyEditing?: boolean;
   highlightExpiredTasks?: boolean;
   headerHeight?: number;
+  viewMode?: 'day' | 'week';
   onAdd?: (newTask: Task) => void;
   onDelete?: (taskId: string) => void;
   onInsertAfter?: (taskId: string, newTask: Task) => void;
@@ -29,6 +30,8 @@ export interface GanttChartProps {
 export interface GanttChartRef {
   scrollToToday: () => void;
   scrollToTask: (taskId: string) => void;
+  collapseAll: () => void;
+  expandAll: () => void;
 }
 
 export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
@@ -53,12 +56,15 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onReorder,
   onPromoteTask,
   onDemoteTask,
+  viewMode,
 }, ref) => {
-  const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void } | null>(null);
+  const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void; collapseAll: () => void; expandAll: () => void } | null>(null);
 
   useImperativeHandle(ref, () => ({
     scrollToToday: () => ganttLibRef.current?.scrollToToday(),
     scrollToTask: (taskId: string) => ganttLibRef.current?.scrollToTask(taskId),
+    collapseAll: () => ganttLibRef.current?.collapseAll(),
+    expandAll: () => ganttLibRef.current?.expandAll(),
   }));
 
   return (
@@ -79,6 +85,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       disableDependencyEditing={disableDependencyEditing}
       highlightExpiredTasks={highlightExpiredTasks}
       headerHeight={headerHeight}
+      viewMode={viewMode}
       onAdd={onAdd}
       onDelete={(taskId) => {
         console.log('%c[GanttChart] onDelete called', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;', taskId);
