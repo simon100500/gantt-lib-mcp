@@ -44,8 +44,8 @@ RUN npm run build:server
 # ── Stage 3: Runtime (Nginx + Node) ────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
 
-# Add Node.js runtime (for Fastify server)
-RUN apk add --no-cache nodejs npm
+# Add Node.js runtime and OpenSSL (required by Prisma)
+RUN apk add --no-cache nodejs npm openssl
 
 WORKDIR /app
 
