@@ -832,31 +832,31 @@ export default function App() {
                   type="button"
                   onClick={() => setViewMode('day')}
                   className={cn(
-                    'h-7 px-3 flex items-center gap-1.5 rounded border transition-colors',
+                    'h-7 px-2 flex items-center rounded border transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                     'text-xs font-medium',
                     viewMode === 'day'
                       ? 'bg-slate-900 text-white border-slate-900'
                       : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                   )}
+                  title="По дням"
                 >
                   <Sun className="w-3.5 h-3.5" />
-                  День
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('week')}
                   className={cn(
-                    'h-7 px-3 flex items-center gap-1.5 rounded border transition-colors',
+                    'h-7 px-2 flex items-center rounded border transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                     'text-xs font-medium',
                     viewMode === 'week'
                       ? 'bg-slate-900 text-white border-slate-900'
                       : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                   )}
+                  title="По неделям"
                 >
                   <CalendarRange className="w-3.5 h-3.5" />
-                  Неделя
                 </button>
 
                 <ToolbarSep />
