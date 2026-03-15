@@ -68,7 +68,7 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 **Phase:** 16 of 18 (Services Layer) — COMPLETE (4/4 plans)
 **Plan:** 16-04 Verification — COMPLETED
 **Status:** Phase 16 complete, all services verified ready for Phase 17 integration
-**Last activity:** 2026-03-13 — Completed quick task 31: обнови сайт по новому принципу задач (batch)
+**Last activity:** 2026-03-15 - Completed quick task 260316-113: сделай шрифт Roboto везде кроме лого
 
 **Progress:**
 [████████████████████] 100%
@@ -236,6 +236,7 @@ Overall: [██████████████████████] 30
 | 31 | обнови сайт по новому принципу задач (batch) | 2026-03-13 | b33ab49 | [31-batch-d-projects-gantt-lib-docs-referenc](./quick/31-batch-d-projects-gantt-lib-docs-referenc/) |
 | 32 | gantt-lib 0.10.0 parent task handling | 2026-03-14 | 6c3bf15 | [32-gnatt-lib-parent-tasks-no-longer-sent-wh](./quick/32-gnatt-lib-parent-tasks-no-longer-sent-wh/) |
 | 33 | Proactive JWT token refresh timer (idle-logout fix) | 2026-03-15 | 64534eb | [033-check-session-lifetime](./quick/033-check-session-lifetime/) |
+| 260316-113 | сделай шрифт Roboto везде кроме лого | 2026-03-15 | 83feeec | [260316-113-roboto](./quick/260316-113-roboto/) |
 
 ---
 
