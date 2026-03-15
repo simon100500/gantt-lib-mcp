@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles, Sun } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -840,7 +840,7 @@ export default function App() {
                       : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                   )}
                 >
-                  <CalendarDays className="w-3.5 h-3.5" />
+                  <Sun className="w-3.5 h-3.5" />
                   День
                 </button>
                 <button
@@ -855,7 +855,7 @@ export default function App() {
                       : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                   )}
                 >
-                  <CalendarDays className="w-3.5 h-3.5" />
+                  <CalendarRange className="w-3.5 h-3.5" />
                   Неделя
                 </button>
 
