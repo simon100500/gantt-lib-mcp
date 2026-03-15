@@ -1,5 +1,5 @@
 :root {
-  --gantt-font-family: var(--font-roboto);
+  --gantt-font-family: 'Roboto', sans-serif;
   --gantt-container-border-radius: 0px;
   --gantt-progress-completed: #17c964;
   --gantt-progress-accepted: #00670a;
