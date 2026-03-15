@@ -84,6 +84,45 @@ export function useBatchTaskUpdate({
     console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
     console.log('[useBatchTaskUpdate] changedTasks count:', changedTasks.length);
     console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
+    console.log('[useBatchTaskUpdate] FULL STACK:', new Error().stack);
+
+    // Check if this is a deletion-related call (only dependency updates, no actual task changes)
+    // This happens when gantt-lib's handleDelete calls onTasksChange before onDelete
+    // We should skip the optimistic update in this case to avoid reordering issues
+    const isDeletionRelated = changedTasks.every(t => {
+      const original = tasks.find(orig => orig.id === t.id);
+      if (!original) return false;
+      // Check if only dependencies changed
+      const depsChanged = JSON.stringify(original.dependencies) !== JSON.stringify(t.dependencies);
+      const nothingElseChanged =
+        original.name === t.name &&
+        original.startDate === t.startDate &&
+        original.endDate === t.endDate &&
+        original.parentId === t.parentId &&
+        original.color === t.color &&
+        original.progress === t.progress;
+      return depsChanged && nothingElseChanged;
+    });
+
+    if (isDeletionRelated && changedTasks.length > 0) {
+      console.log('%c[useBatchTaskUpdate] DELETION-RELATED: Skipping optimistic update to avoid reordering', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      // Still need to save the dependency updates to the server
+      try {
+        setSavingStateWithReset('saving');
+        if (changedTasks.length === 1) {
+          await mutateTask(changedTasks[0]);
+        } else {
+          await batchImportTasks(changedTasks);
+        }
+        setSavingStateWithReset('saved');
+        console.log('[useBatchTaskUpdate] Saved dependency updates from deletion');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to save dependency updates:', error);
+        setSavingStateWithReset('error');
+      }
+      return;
+    }
+
     console.log('[useBatchTaskUpdate] Full changedTasks data:');
     console.table(changedTasks.map(t => ({
       id: t.id,
@@ -281,24 +320,46 @@ export function useBatchTaskUpdate({
   }, [setTasks, createTask, setSavingStateWithReset]);
 
   const handleDelete = useCallback(async (taskId: string) => {
-    // Optimistic update
-    const taskToDelete = tasks.find(t => t.id === taskId);
+    console.log('%c[useBatchTaskUpdate] handleDelete called', 'background: #fa5252; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[useBatchTaskUpdate] taskId to delete:', taskId);
+    console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
+
+    // Capture the original index for correct revert position
+    const originalIndex = tasks.findIndex(t => t.id === taskId);
+    const taskToDelete = originalIndex !== -1 ? tasks[originalIndex] : undefined;
+    console.log('[useBatchTaskUpdate] taskToDelete found:', taskToDelete ? `YES at index ${originalIndex} (${taskToDelete.name})` : 'NO - task not in state!');
+
+    // Optimistic update: remove the task immediately
     setTasks(prev => prev.filter(t => t.id !== taskId));
+
+    // Skip server call if no access token (local/guest mode)
+    if (!accessToken) {
+      console.log('[useBatchTaskUpdate] No accessToken - local mode, skip API delete');
+      return;
+    }
 
     // Server update
     try {
       setSavingStateWithReset('saving');
-      await deleteTask(taskId);
+      console.log('[useBatchTaskUpdate] Calling deleteTask API for:', taskId);
+      const result = await deleteTask(taskId);
+      console.log('%c[useBatchTaskUpdate] deleteTask SUCCESS:', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;', result);
       setSavingStateWithReset('saved');
     } catch (error) {
-      console.error('[useBatchTaskUpdate] Failed to delete task:', error);
+      console.error('%c[useBatchTaskUpdate] deleteTask FAILED - reverting optimistic update at original position', 'background: #ff0000; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      console.error('[useBatchTaskUpdate] Error:', error);
       setSavingStateWithReset('error');
-      // Revert optimistic update on error
+      // Revert optimistic update on error: re-insert at original position (not end)
       if (taskToDelete) {
-        setTasks(prev => [...prev, taskToDelete]);
+        setTasks(prev => {
+          const reverted = [...prev];
+          const clampedIndex = Math.min(originalIndex, reverted.length);
+          reverted.splice(clampedIndex, 0, taskToDelete);
+          return reverted;
+        });
       }
     }
-  }, [tasks, setTasks, deleteTask, setSavingStateWithReset]);
+  }, [tasks, setTasks, deleteTask, setSavingStateWithReset, accessToken]);
 
   const handleInsertAfter = useCallback(async (taskId: string, newTask: Task) => {
     // Optimistic update
@@ -335,8 +396,10 @@ export function useBatchTaskUpdate({
   }, [setTasks, createTask, setSavingStateWithReset]);
 
   const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
-    console.log('%c[useBatchTaskUpdate] handleReorder called', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('%c[useBatchTaskUpdate] handleReorder called', 'background: #ff00ff; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
     console.log('[useBatchTaskUpdate] movedTaskId:', movedTaskId, 'inferredParentId:', inferredParentId);
+    console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
+    console.log('[useBatchTaskUpdate] FULL STACK:', new Error().stack);
 
     // Add sortOrder to all tasks based on their position in the array
     const tasksWithOrder = reorderedTasks.map((task, index) => ({

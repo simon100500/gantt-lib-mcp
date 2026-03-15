@@ -80,7 +80,12 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       highlightExpiredTasks={highlightExpiredTasks}
       headerHeight={headerHeight}
       onAdd={onAdd}
-      onDelete={onDelete}
+      onDelete={(taskId) => {
+        console.log('%c[GanttChart] onDelete called', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;', taskId);
+        console.log('[GanttChart] CALLER:', new Error().stack?.split('\n')[2]?.trim());
+        console.log('[GanttChart] FULL STACK:', new Error().stack);
+        onDelete?.(taskId);
+      }}
       onInsertAfter={onInsertAfter}
       onReorder={onReorder}
       onPromoteTask={onPromoteTask}

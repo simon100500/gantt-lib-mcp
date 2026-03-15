@@ -5,3 +5,9 @@
 .gantt-container {
   border: 0;
 }
+
+/* DEBUG: Make delete buttons always visible for testing entity deletion issue */
+.gantt-tl-name-action-btn {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}

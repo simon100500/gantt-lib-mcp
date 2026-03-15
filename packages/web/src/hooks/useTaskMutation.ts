@@ -98,12 +98,18 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
   };
 
   const deleteTask = async (id: string): Promise<boolean> => {
+    console.log(`%c[useTaskMutation] DELETE /api/tasks/${id}`, 'background: #e64980; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+    console.log('[useTaskMutation] accessToken present:', !!accessToken);
     const response = await fetch(`/api/tasks/${id}`, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
     });
 
+    console.log(`[useTaskMutation] DELETE response: ${response.status} ${response.statusText}`);
     if (!response.ok) {
+      let body = '';
+      try { body = await response.text(); } catch {}
+      console.error(`[useTaskMutation] DELETE failed body:`, body);
       throw new Error(`Failed to delete task: ${response.status} ${response.statusText}`);
     }
 
