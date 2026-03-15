@@ -235,13 +235,14 @@ Overall: [██████████████████████] 30
 |---|-------------|------|--------|-----------|
 | 31 | обнови сайт по новому принципу задач (batch) | 2026-03-13 | b33ab49 | [31-batch-d-projects-gantt-lib-docs-referenc](./quick/31-batch-d-projects-gantt-lib-docs-referenc/) |
 | 32 | gantt-lib 0.10.0 parent task handling | 2026-03-14 | 6c3bf15 | [32-gnatt-lib-parent-tasks-no-longer-sent-wh](./quick/32-gnatt-lib-parent-tasks-no-longer-sent-wh/) |
+| 33 | Proactive JWT token refresh timer (idle-logout fix) | 2026-03-15 | 64534eb | [033-check-session-lifetime](./quick/033-check-session-lifetime/) |
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-03-14T11:45:15.000Z
-**Stopped at:** Completed Quick Task 32: gantt-lib 0.10.0 parent task handling
+**Last session:** 2026-03-15T00:00:00.000Z
+**Stopped at:** Completed Quick Task 33: Proactive JWT token refresh timer (idle-logout fix)
 **Resume file:** None
 
 **Next actions:**
