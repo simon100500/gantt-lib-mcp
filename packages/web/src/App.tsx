@@ -604,9 +604,6 @@ export default function App() {
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
   const handleCollapseAll = useCallback(() => ganttRef.current?.collapseAll(), []);
   const handleExpandAll = useCallback(() => ganttRef.current?.expandAll(), []);
-  const handleViewModeToggle = useCallback(() => {
-    setViewMode(prev => prev === 'day' ? 'week' : 'day');
-  }, []);
   const isDraftWorkspace = workspace.kind === 'draft';
   const isGuestWorkspace = workspace.kind === 'guest';
   const chatSidebarVisible = workspace.kind === 'project' && workspace.chatOpen;
@@ -830,15 +827,37 @@ export default function App() {
 
                 <ToolbarSep />
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleViewModeToggle}
-                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                {/* View mode buttons with active state highlighting */}
+                <button
+                  type="button"
+                  onClick={() => setViewMode('day')}
+                  className={cn(
+                    'h-7 px-3 flex items-center gap-1.5 rounded border transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                    'text-xs font-medium',
+                    viewMode === 'day'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
+                  )}
                 >
                   <CalendarDays className="w-3.5 h-3.5" />
-                  {viewMode === 'day' ? 'День' : 'Неделя'}
-                </Button>
+                  День
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('week')}
+                  className={cn(
+                    'h-7 px-3 flex items-center gap-1.5 rounded border transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                    'text-xs font-medium',
+                    viewMode === 'week'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
+                  )}
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Неделя
+                </button>
 
                 <ToolbarSep />
 
@@ -920,7 +939,7 @@ export default function App() {
                   ref={ganttRef}
                   tasks={tasks}
                   onTasksChange={batchUpdate.handleTasksChange}
-                  dayWidth={24}
+                  dayWidth={viewMode === 'week' ? 8 : 24}
                   rowHeight={36}
                   containerHeight="calc(100vh - 120px)"
                   showTaskList={showTaskList}
