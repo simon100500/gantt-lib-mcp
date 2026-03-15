@@ -237,13 +237,14 @@ Overall: [██████████████████████] 30
 | 32 | gantt-lib 0.10.0 parent task handling | 2026-03-14 | 6c3bf15 | [32-gnatt-lib-parent-tasks-no-longer-sent-wh](./quick/32-gnatt-lib-parent-tasks-no-longer-sent-wh/) |
 | 33 | Proactive JWT token refresh timer (idle-logout fix) | 2026-03-15 | 64534eb | [033-check-session-lifetime](./quick/033-check-session-lifetime/) |
 | 260316-113 | сделай шрифт Roboto везде кроме лого | 2026-03-15 | 83feeec | [260316-113-roboto](./quick/260316-113-roboto/) |
+| 260316-3db | Add day/week view toggle and collapse/expand buttons | 2026-03-15 | a74806b | [260316-3db-add-day-week-view-buttons-and-expand-col](./quick/260316-3db-add-day-week-view-buttons-and-expand-col/) |
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-03-15T00:00:00.000Z
-**Stopped at:** Completed Quick Task 33: Proactive JWT token refresh timer (idle-logout fix)
+**Last session:** 2026-03-15T23:27:33.000Z
+**Stopped at:** Completed Quick Task 260316-3db: Add day/week view toggle and collapse/expand buttons
 **Resume file:** None
 
 **Next actions:**
