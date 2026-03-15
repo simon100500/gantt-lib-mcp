@@ -31,6 +31,7 @@ COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
 
 RUN npm ci --ignore-scripts
+RUN npx patch-package
 
 COPY packages/mcp ./packages/mcp
 COPY packages/server ./packages/server
