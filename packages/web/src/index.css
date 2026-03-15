@@ -6,6 +6,8 @@
 
 @layer base {
   :root {
+    --font-roboto: 'Roboto', sans-serif;
+
     /* Neutral surface */
     --background: 210 20% 98%;
     --foreground: 222 47% 11%;
@@ -49,7 +51,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Roboto', sans-serif;
+    font-family: var(--font-roboto);
   }
 
   /* Cascadia Mono for logo */
