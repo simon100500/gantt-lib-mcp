@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles, Sun } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -827,37 +827,37 @@ export default function App() {
 
                 <ToolbarSep />
 
-                {/* View mode buttons with active state highlighting */}
-                <button
-                  type="button"
-                  onClick={() => setViewMode('day')}
-                  className={cn(
-                    'h-7 px-2 flex items-center rounded border transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                    'text-xs font-medium',
-                    viewMode === 'day'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
-                  )}
-                  title="По дням"
-                >
-                  <Sun className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('week')}
-                  className={cn(
-                    'h-7 px-2 flex items-center rounded border transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                    'text-xs font-medium',
-                    viewMode === 'week'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
-                  )}
-                  title="По неделям"
-                >
-                  <CalendarRange className="w-3.5 h-3.5" />
-                </button>
+                {/* View mode split button */}
+                <div className="inline-flex rounded border border-slate-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('day')}
+                    className={cn(
+                      'h-7 px-3 flex items-center transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'text-xs font-medium border-r border-slate-200',
+                      viewMode === 'day'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                    )}
+                  >
+                    День
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('week')}
+                    className={cn(
+                      'h-7 px-3 flex items-center transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'text-xs font-medium',
+                      viewMode === 'week'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                    )}
+                  >
+                    Неделя
+                  </button>
+                </div>
 
                 <ToolbarSep />
 
