@@ -20,6 +20,8 @@ RUN npm run build -w packages/web
 
 # ── Stage 2: Build server + mcp ────────────────────────────────────────────
 FROM node:22-alpine AS build-server
+# Install OpenSSL so prisma generate detects linux-musl-openssl-3.0.x (not 1.1.x)
+RUN apk add --no-cache openssl
 WORKDIR /build
 
 # Copy all workspace package manifests (npm ci validates the full workspace structure)
@@ -70,16 +72,18 @@ COPY --from=build-server /build/node_modules ./node_modules
 COPY --from=build-server /build/packages/mcp/agent/prompts ./mcp/agent/prompts
 
 # CapRover / Docker environment variables
+ARG DATABASE_URL
+ARG JWT_SECRET
 ARG OPENAI_API_KEY
 ARG OPENAI_BASE_URL=https://api.z.ai/api/paas/v4/
 ARG OPENAI_MODEL=glm-4.7
-ARG DB_PATH=/data/gantt.db
 ARG PORT=3000
 
+ENV DATABASE_URL=${DATABASE_URL}
+ENV JWT_SECRET=${JWT_SECRET}
 ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 ENV OPENAI_BASE_URL=${OPENAI_BASE_URL}
 ENV OPENAI_MODEL=${OPENAI_MODEL}
-ENV DB_PATH=${DB_PATH}
 ENV PORT=${PORT}
 
 # Nginx config
@@ -88,9 +92,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Startup script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-
-# Persistent data directory (mount CapRover Persistent Directory here)
-VOLUME /data
 
 EXPOSE 80
 

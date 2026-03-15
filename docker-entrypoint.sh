@@ -3,7 +3,6 @@ set -e
 
 # Start Fastify server in background
 # Container path overrides for MCP server and agent prompts
-DB_PATH="${DB_PATH:-/data/gantt.db}" \
 PORT=3000 \
 GANTT_PROJECT_ROOT=/app \
 GANTT_MCP_SERVER_PATH=/app/mcp/dist/index.js \
