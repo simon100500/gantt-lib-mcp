@@ -104,6 +104,33 @@ export function useBatchTaskUpdate({
       return depsChanged && nothingElseChanged;
     });
 
+    // Check if this is a pure reorder — gantt-lib fires onTasksChange for every drag event,
+    // including reorders where no actual task properties changed. In that case, handleReorder
+    // is about to be called and is the sole owner of sortOrder persistence.
+    // We skip the server save entirely so there's only ONE save in flight.
+    const isPureReorder = changedTasks.length > 0 && changedTasks.every(t => {
+      const original = tasks.find(orig => orig.id === t.id);
+      if (!original) return false; // New task — not a pure reorder
+      const startOrig = typeof original.startDate === 'string' ? original.startDate : (original.startDate as Date).toISOString().split('T')[0];
+      const startNew = typeof t.startDate === 'string' ? t.startDate : (t.startDate as Date).toISOString().split('T')[0];
+      const endOrig = typeof original.endDate === 'string' ? original.endDate : (original.endDate as Date).toISOString().split('T')[0];
+      const endNew = typeof t.endDate === 'string' ? t.endDate : (t.endDate as Date).toISOString().split('T')[0];
+      return (
+        original.name === t.name &&
+        startOrig === startNew &&
+        endOrig === endNew &&
+        (original.parentId ?? null) === (t.parentId ?? null) &&
+        (original.color ?? null) === (t.color ?? null) &&
+        (original.progress ?? 0) === (t.progress ?? 0)
+      );
+    });
+
+    if (isPureReorder) {
+      console.log('%c[useBatchTaskUpdate] handleTasksChange: pure reorder detected — skipping, handleReorder will save', 'background: #f59f00; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE (pure reorder, skipped)`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      return;
+    }
+
     if (isDeletionRelated && changedTasks.length > 0) {
       console.log('%c[useBatchTaskUpdate] DELETION-RELATED: Skipping optimistic update to avoid reordering', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
       // Still need to save the dependency updates to the server
@@ -257,17 +284,30 @@ export function useBatchTaskUpdate({
     // The filterParentTasks was incorrectly filtering out parents that were explicitly sent
     const filteredTasks = tasksWithDescendants; // No filtering - use all tasks
 
+    // Strip sortOrder before sending to server.
+    // handleTasksChange is called by gantt-lib's onTasksChange which fires for EVERY drag event
+    // (including reorders). gantt-lib passes task objects through spread, so the original
+    // sortOrder values from the server load are still present on the task objects.
+    // handleReorder is the sole owner of sortOrder persistence — it fires immediately after
+    // onTasksChange and saves the new correct sortOrders. If we let handleTasksChange write
+    // the old sortOrder values first, they race with (and can overwrite) handleReorder's save,
+    // causing the "first reload shows old order" bug.
+    const tasksWithoutSortOrder = filteredTasks.map(({ ...t }) => {
+      delete (t as any).sortOrder;
+      return t;
+    });
+
     // Optimistic update: merge changed tasks into state immediately
     const changedMap = new Map(filteredTasks.map(t => [t.id, t]));
     setTasks(prev => prev.map(t => changedMap.get(t.id) ?? t));
     console.log('[useBatchTaskUpdate] Optimistic state updated');
 
     // Server update: use batch API for multiple tasks, single PATCH for one task
-    if (filteredTasks.length > 1) {
-      console.log(`[useBatchTaskUpdate] Using BATCH API for ${filteredTasks.length} tasks`);
+    if (tasksWithoutSortOrder.length > 1) {
+      console.log(`[useBatchTaskUpdate] Using BATCH API for ${tasksWithoutSortOrder.length} tasks`);
       try {
         setSavingStateWithReset('saving');
-        const saved = await batchImportTasks(filteredTasks);
+        const saved = await batchImportTasks(tasksWithoutSortOrder);
         console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
         setSavingStateWithReset('saved');
       } catch (error) {
@@ -279,7 +319,7 @@ export function useBatchTaskUpdate({
       console.log('[useBatchTaskUpdate] Using single PATCH for 1 task');
       try {
         setSavingStateWithReset('saving');
-        await mutateTask(filteredTasks[0]);
+        await mutateTask(tasksWithoutSortOrder[0]);
         console.log('[useBatchTaskUpdate] Single task saved');
         setSavingStateWithReset('saved');
       } catch (error) {
@@ -416,12 +456,35 @@ export function useBatchTaskUpdate({
       );
       setTasks(updated);
 
-      // Send server update for moved task with sortOrder
-      const movedTask = updated.find(t => t.id === movedTaskId);
-      if (movedTask) {
+      // Find all tasks whose sortOrder changed (not just the moved one).
+      // When a task changes position, ALL tasks that shifted also get new sortOrder values.
+      // We must persist all of them, otherwise the DB retains stale sortOrders for shifted tasks.
+      const tasksWithChangedOrder: Task[] = [];
+      for (const newTask of updated) {
+        const oldTask = tasks.find(t => t.id === newTask.id);
+        // Include the moved task (parentId changed) and any task with a different sortOrder
+        const oldSortOrder = (oldTask as any)?.sortOrder ?? -1;
+        const parentChanged = newTask.id === movedTaskId;
+        if (parentChanged || oldSortOrder !== newTask.sortOrder) {
+          tasksWithChangedOrder.push(newTask);
+        }
+      }
+
+      console.log('[useBatchTaskUpdate] Tasks with changed sortOrder (with parent change):', tasksWithChangedOrder.length);
+
+      if (tasksWithChangedOrder.length > 1) {
         try {
           setSavingStateWithReset('saving');
-          await mutateTask(movedTask);
+          await batchImportTasks(tasksWithChangedOrder);
+          setSavingStateWithReset('saved');
+        } catch (error) {
+          console.error(`[useBatchTaskUpdate] Failed to batch update tasks with parent change:`, error);
+          setSavingStateWithReset('error');
+        }
+      } else if (tasksWithChangedOrder.length === 1) {
+        try {
+          setSavingStateWithReset('saving');
+          await mutateTask(tasksWithChangedOrder[0]);
           setSavingStateWithReset('saved');
         } catch (error) {
           console.error(`[useBatchTaskUpdate] Failed to update task ${movedTaskId}:`, error);
