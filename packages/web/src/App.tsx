@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -7,8 +7,9 @@ import { useTasks } from './hooks/useTasks.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuth } from './hooks/useAuth.ts';
-import { useAutoSave } from './hooks/useAutoSave.ts';
+import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
+import { useTaskMutation } from './hooks/useTaskMutation.ts';
 import { OtpModal } from './components/OtpModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
@@ -93,11 +94,16 @@ export default function App() {
       ? authenticatedTasks
       : localTasks;
   const [autoSaveSkipVersion, setAutoSaveSkipVersion] = useState(0);
-  // Autosave to server on any chart change (guest mode persists in useLocalTasks)
-  const { savingState } = useAutoSave(
+  // Batch task updates for gantt-lib onChange events (handles individual mutations)
+  const batchUpdate = useBatchTaskUpdate({
     tasks,
+    setTasks,
+    accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
+  });
+  const { savingState } = batchUpdate;
+  // Individual task mutations for direct AI agent operations
+  const { mutateTask, createTask, deleteTask } = useTaskMutation(
     hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
-    autoSaveSkipVersion,
   );
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -120,6 +126,7 @@ export default function App() {
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
   const [autoSchedule, setAutoSchedule] = useState(true);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [showTaskList, setShowTaskList] = useState(true);
 
   // Always allow editing (removed toggle buttons)
@@ -139,7 +146,8 @@ export default function App() {
   // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
-      console.log('[App] Received tasks via WebSocket, count:', msg.tasks?.length);
+      // WebSocket is ONLY used for AI agent responses now, not for user edits.
+      // User edits use optimistic updates with direct server save, no realtime sync.
       replaceTasksFromSystem(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
       setStreaming(prev => prev + (msg.content ?? ''));
@@ -397,15 +405,10 @@ export default function App() {
   }, []);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
-    setTasks(prev => {
-      const map = new Map(shiftedTasks.map(t => [t.id, t]));
-      return prev.map(t => map.get(t.id) ?? t);
-    });
-  }, [setTasks]);
-
-  const handleAddTask = useCallback((newTask: Task) => {
-    setTasks(prev => [...prev, newTask]);
-  }, [setTasks]);
+    // Use batchUpdate to handle both local state update and server persistence
+    // This is called when a parent task is dragged and its children need to move with it
+    batchUpdate.handleTasksChange(shiftedTasks);
+  }, [batchUpdate]);
 
   const handleEmptyChart = useCallback(async () => {
     if (workspace.kind === 'draft') {
@@ -419,29 +422,10 @@ export default function App() {
       startDate: today,
       endDate: today,
     };
-    handleAddTask(placeholderTask);
+    // Use batch update handler for add
+    batchUpdate.handleAdd(placeholderTask);
     openProjectChat();
-  }, [activateDraftWorkspace, handleAddTask, openProjectChat, workspace.kind]);
-
-  const handleDeleteTask = useCallback((taskId: string) => {
-    setTasks(prev => prev
-      .filter(t => t.id !== taskId)
-      .map(t => (t.parentId === taskId ? { ...t, parentId: undefined } : t)));
-  }, [setTasks]);
-
-  const handleInsertAfterTask = useCallback((taskId: string, newTask: Task) => {
-    setTasks(prev => {
-      const index = prev.findIndex(t => t.id === taskId);
-      if (index === -1) return prev;
-      const newTasks = [...prev];
-      newTasks.splice(index + 1, 0, newTask);
-      return newTasks;
-    });
-  }, [setTasks]);
-
-  const handleReorderTasks = useCallback((reorderedTasks: Task[]) => {
-    setTasks(reorderedTasks);
-  }, [setTasks]);
+  }, [activateDraftWorkspace, batchUpdate, openProjectChat, workspace.kind]);
 
   const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
     if (!auth.accessToken) return;
@@ -618,6 +602,8 @@ export default function App() {
   }, [activeWorkspaceProjectId, auth.isAuthenticated, auth.syncProjectTaskCount, hasShareToken, tasks.length, workspace.kind]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
+  const handleCollapseAll = useCallback(() => ganttRef.current?.collapseAll(), []);
+  const handleExpandAll = useCallback(() => ganttRef.current?.expandAll(), []);
   const isDraftWorkspace = workspace.kind === 'draft';
   const isGuestWorkspace = workspace.kind === 'guest';
   const chatSidebarVisible = workspace.kind === 'project' && workspace.chatOpen;
@@ -839,6 +825,64 @@ export default function App() {
                   Сегодня
                 </Button>
 
+                <ToolbarSep />
+
+                {/* View mode split button */}
+                <div className="inline-flex rounded border border-slate-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('day')}
+                    className={cn(
+                      'h-7 px-3 flex items-center transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'text-xs font-medium border-r border-slate-200',
+                      viewMode === 'day'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                    )}
+                  >
+                    День
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('week')}
+                    className={cn(
+                      'h-7 px-3 flex items-center transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'text-xs font-medium',
+                      viewMode === 'week'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                    )}
+                  >
+                    Неделя
+                  </button>
+                </div>
+
+                <ToolbarSep />
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCollapseAll}
+                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                  title="Свернуть все родительские задачи"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  Свернуть все
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleExpandAll}
+                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                  title="Развернуть все родительские задачи"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  Развернуть все
+                </Button>
+
                 <div className="flex-1" />
 
                 {/* Feature switches - right side */}
@@ -894,23 +938,26 @@ export default function App() {
                 <GanttChart
                   ref={ganttRef}
                   tasks={tasks}
-                  onChange={setTasks}
-                  dayWidth={24}
+                  onTasksChange={batchUpdate.handleTasksChange}
+                  dayWidth={viewMode === 'week' ? 8 : 24}
                   rowHeight={36}
                   containerHeight="calc(100vh - 120px)"
                   showTaskList={showTaskList}
                   taskListWidth={650}
                   onValidateDependencies={handleValidation}
-                  disableConstraints={!autoSchedule}
-                  onCascade={!autoSchedule ? undefined : handleCascade}
+                  enableAutoSchedule={autoSchedule}
+                  onCascade={handleCascade}
                   disableTaskNameEditing={disableTaskNameEditing}
                   disableDependencyEditing={disableDependencyEditing}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
-                  onAdd={handleAddTask}
-                  onDelete={handleDeleteTask}
-                  onInsertAfter={handleInsertAfterTask}
-                  onReorder={handleReorderTasks}
+                  viewMode={viewMode}
+                  onAdd={batchUpdate.handleAdd}
+                  onDelete={batchUpdate.handleDelete}
+                  onInsertAfter={batchUpdate.handleInsertAfter}
+                  onReorder={batchUpdate.handleReorder}
+                  onPromoteTask={batchUpdate.handlePromoteTask}
+                  onDemoteTask={batchUpdate.handleDemoteTask}
                 />
               )}
 
@@ -921,14 +968,24 @@ export default function App() {
                     {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
                   </span>
 
-                  {/* Saving status indicator */}
-                  {auth.isAuthenticated && !hasShareToken && (
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                      displayConnected ? 'text-emerald-600' : 'text-amber-600',
+                    )}
+                  >
+                    <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
+                    {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
+                  </span>
+
+                  {/* Save indicator */}
+                  {!hasShareToken && auth.isAuthenticated && savingState !== 'idle' && (
                     <span
                       className={cn(
                         'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
                         savingState === 'saving' && 'text-amber-600',
                         savingState === 'saved' && 'text-emerald-600',
-                        savingState === 'error' && 'text-destructive',
+                        savingState === 'error' && 'text-red-600',
                       )}
                     >
                       {savingState === 'saving' && (
@@ -939,28 +996,18 @@ export default function App() {
                       )}
                       {savingState === 'saved' && (
                         <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                          <Check className="w-3 h-3 shrink-0" />
                           Сохранено
                         </>
                       )}
                       {savingState === 'error' && (
                         <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-destructive" />
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
                           Ошибка сохранения
                         </>
                       )}
                     </span>
                   )}
-
-                  <span
-                    className={cn(
-                      'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                      displayConnected ? 'text-emerald-600' : 'text-amber-600',
-                    )}
-                  >
-                    <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                    {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
-                  </span>
                 </footer>
               )}
             </div>

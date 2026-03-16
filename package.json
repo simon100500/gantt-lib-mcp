@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "type": "module",
   "description": "MCP server for Gantt chart management using gantt-lib",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
+    "postinstall": "patch-package",
     "build": "npm run build --workspaces",
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
@@ -20,6 +23,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "patch-package": "^8.0.1",
     "typescript": "^5.7.2"
   }
 }

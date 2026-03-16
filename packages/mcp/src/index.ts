@@ -4,9 +4,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { taskStore } from './store.js';
-import { getDb } from './db.js';
-import type { Task, CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
+import { taskService } from './services/task.service.js';
+import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
 import { writeMcpDebugLog } from './debug-log.js';
 
 // Create MCP server instance
@@ -402,10 +401,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    const task = await taskStore.create(input, resolvedProjectId);
+    const task = await taskService.create(input, resolvedProjectId, 'agent');
 
     // Return the task with cascade info (scoped to same project)
-    const allTasks = await taskStore.list(resolvedProjectId, false);
+    const allTasks = await taskService.list(resolvedProjectId);
     const dependentTasks = allTasks.filter(t =>
       t.dependencies?.some(d => d.taskId === task.id) ||
       task.dependencies?.some(d => d.taskId === t.id)
@@ -440,7 +439,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const resolvedProjectId = argProjectId === null
       ? undefined
       : resolveProjectId(argProjectId);
-    const tasks = await taskStore.list(resolvedProjectId, false);
+    const tasks = await taskService.list(resolvedProjectId);
 
     console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', tasks.length);
     await writeMcpDebugLog('tool_call_completed', {
@@ -468,7 +467,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error('Missing required parameter: id');
     }
 
-    const task = await taskStore.get(id);
+    const task = await taskService.get(id);
     if (!task) {
       throw new Error(`Task not found: ${id}`);
     }
@@ -519,7 +518,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // Validate date range if both dates are provided
-    const existingTask = await taskStore.get(id);
+    const existingTask = await taskService.get(id);
     if (existingTask) {
       const startDate = input.startDate ?? existingTask.startDate;
       const endDate = input.endDate ?? existingTask.endDate;
@@ -541,7 +540,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
     const hasDependencyChanges = input.dependencies !== undefined;
 
-    const updatedTask = await taskStore.update(id, input);
+    const updatedTask = await taskService.update(id, input, 'agent');
     if (!updatedTask) {
       throw new Error(`Task not found: ${id}`);
     }
@@ -554,7 +553,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
-      const allTasks = await taskStore.list(process.env.PROJECT_ID, false);
+      const allTasks = await taskService.list(process.env.PROJECT_ID);
 
       // Find all tasks that were affected by the cascade
       const affectedTasks = allTasks.filter(t => {
@@ -603,7 +602,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error('Missing required parameter: id');
     }
 
-    const deleted = await taskStore.delete(id);
+    const deleted = await taskService.delete(id, 'agent');
     if (!deleted) {
       throw new Error(`Task not found: ${id}`);
     }
@@ -625,7 +624,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // export_tasks tool
   if (name === 'export_tasks') {
-    const json = await taskStore.exportTasks();
+    const json = await taskService.exportTasks();
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
       exportLength: json.length,
@@ -650,7 +649,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const resolvedProjectId = normalizeProjectId(process.env.PROJECT_ID);
 
     try {
-      const count = await taskStore.importTasks(jsonData, resolvedProjectId);
+      const count = await taskService.importTasks(jsonData, resolvedProjectId, 'agent');
       await writeMcpDebugLog('tool_call_completed', {
         tool: name,
         resolvedProjectId,
@@ -763,7 +762,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (combinationIndex === 0 || previousTaskIds[currentStream] === null) {
               startDate = input.baseStartDate;
             } else {
-              const prevTask = await taskStore.get(previousTaskIds[currentStream]!);
+              const prevTask = await taskService.get(previousTaskIds[currentStream]!);
               if (!prevTask) {
                 startDate = input.baseStartDate;
               } else {
@@ -795,12 +794,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             // Create the task
-            const task = await taskStore.create({
+            const task = await taskService.create({
               name: taskName,
               startDate,
               endDate,
               dependencies,
-            }, resolvedProjectId);
+            }, resolvedProjectId, 'agent');
 
             createdTasks.push(task.id);
             previousTaskIds[currentStream] = task.id;
@@ -848,9 +847,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server with stdio transport
 async function main() {
-  // Initialize the SQLite database (creates tables if needed)
-  await getDb();
-
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Server runs via stdio, no explicit listen needed

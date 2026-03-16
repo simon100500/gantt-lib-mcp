@@ -13,27 +13,27 @@ PostgreSQL migration with Prisma ORM. Fresh database start (no data migration fr
 
 ### Database (DB)
 
-- [ ] **DB-01**: Prisma schema defined for all existing tables (users, projects, sessions, otp_codes, tasks, dependencies, messages)
-- [ ] **DB-02**: Prisma client generated and accessible from packages/mcp and packages/server
-- [ ] **DB-03**: DATABASE_URL configured for PostgreSQL connection pooling
+- [x] **DB-01**: Prisma schema defined for all existing tables (users, projects, sessions, otp_codes, tasks, dependencies, messages)
+- [x] **DB-02**: Prisma client generated and accessible from packages/mcp and packages/server
+- [x] **DB-03**: DATABASE_URL configured for PostgreSQL connection pooling
 - [ ] **DB-04**: Prisma migrations run successfully on target database
-- [ ] **DB-05**: Foreign key constraints match current SQLite schema
+- [x] **DB-05**: Foreign key constraints match current SQLite schema
 
 ### Services (SVC)
 
-- [ ] **SVC-01**: TaskService replaces TaskStore (create, update, delete, list, recalculateDates)
-- [ ] **SVC-02**: ProjectService replaces raw project queries (create, get, update, delete)
-- [ ] **SVC-03**: AuthService replaces auth-store (OTP, sessions, JWT validation)
-- [ ] **SVC-04**: MessageService replaces raw message queries
-- [ ] **SVC-05**: DependencyService for task dependency CRUD
-- [ ] **SVC-06**: All services use Prisma client (no raw SQL)
-- [ ] **SVC-07**: Services are shared between packages/mcp and packages/server
+- [x] **SVC-01**: TaskService replaces TaskStore (create, update, delete, list, recalculateDates)
+- [x] **SVC-02**: ProjectService replaces raw project queries (create, get, update, delete)
+- [x] **SVC-03**: AuthService replaces auth-store (OTP, sessions, JWT validation)
+- [x] **SVC-04**: MessageService replaces raw message queries
+- [x] **SVC-05**: DependencyService for task dependency CRUD
+- [x] **SVC-06**: All services use Prisma client (no raw SQL)
+- [x] **SVC-07**: Services are shared between packages/mcp and packages/server
 
 ### Connection Pooling (POOL)
 
-- [ ] **POOL-01**: Prisma connection pool configured (connection_limit)
-- [ ] **POOL-02**: Timeout settings for database connections
-- [ ] **POOL-03**: Proper handling of connection lifecycle (dispose on shutdown)
+- [x] **POOL-01**: Prisma connection pool configured (connection_limit)
+- [x] **POOL-02**: Timeout settings for database connections
+- [x] **POOL-03**: Proper handling of connection lifecycle (dispose on shutdown)
 
 ### Integration (INT)
 

@@ -13,7 +13,7 @@ import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
-import { taskStore } from '@gantt/mcp/store';
+import { taskService, messageService } from '@gantt/mcp/services';
 import { broadcastToSession } from './ws.js';
 import { writeServerDebugLog } from './debug-log.js';
 
@@ -53,11 +53,6 @@ type VerificationResult = {
   externalMutations: MutationEvent[];
 };
 
-const reliableTaskStore = taskStore as typeof taskStore & {
-  getTaskRevision(projectId?: string): Promise<number>;
-  getMutationEventsByRun(runId: string, projectId?: string): Promise<MutationEvent[]>;
-  getMutationEventsSince(since: string, projectId?: string): Promise<MutationEvent[]>;
-};
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -205,7 +200,7 @@ async function executeAgentAttempt(
           command: 'node',
           args: [mcpServerPath],
           env: {
-            DB_PATH: dbPath,
+            DATABASE_URL: process.env.DATABASE_URL ?? '',
             PROJECT_ID: projectId,
             AI_RUN_ID: runId,
             AI_SESSION_ID: sessionId,
@@ -318,11 +313,11 @@ async function verifyMutationAttempt(
   revisionBefore: number,
   assistantResponse: string,
 ): Promise<VerificationResult> {
-  const tasksAfter = await reliableTaskStore.list(projectId, false) as ComparableTask[];
+  const tasksAfter = await taskService.list(projectId) as ComparableTask[];
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
-  const revisionAfter = await reliableTaskStore.getTaskRevision(projectId);
-  const runMutations = await reliableTaskStore.getMutationEventsByRun(runId, projectId);
-  const mutationsSinceStart = await reliableTaskStore.getMutationEventsSince(runStartedAt, projectId);
+  const revisionAfter = await taskService.getTaskRevision(projectId);
+  const runMutations = await taskService.getMutationEventsByRun(runId, projectId);
+  const mutationsSinceStart = await taskService.getMutationEventsSince(runStartedAt, projectId);
   const externalMutations = mutationsSinceStart.filter((event: MutationEvent) => event.runId !== runId);
 
   await writeServerDebugLog('mutation_verification', {
@@ -361,9 +356,9 @@ export async function runAgentWithHistory(
     const runId = crypto.randomUUID();
     const mutationRequested = isMutationIntent(userMessage);
     const tasksBefore = mutationRequested
-      ? await reliableTaskStore.list(projectId, false) as ComparableTask[]
+      ? await taskService.list(projectId) as ComparableTask[]
       : [];
-    const revisionBefore = await reliableTaskStore.getTaskRevision(projectId);
+    const revisionBefore = await taskService.getTaskRevision(projectId);
 
     await writeServerDebugLog('agent_run_started', {
       runId,
@@ -376,8 +371,8 @@ export async function runAgentWithHistory(
       tasksBeforeNames: tasksBefore.map((task) => task.name),
     });
 
-    await reliableTaskStore.addMessage('user', userMessage, projectId);
-    const messages = await reliableTaskStore.getMessages(projectId);
+    await messageService.add('user', userMessage, projectId);
+    const messages = await messageService.list(projectId);
 
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
       ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
@@ -523,7 +518,7 @@ export async function runAgentWithHistory(
     }
 
     if (assistantResponse) {
-      await reliableTaskStore.addMessage('assistant', assistantResponse, projectId);
+      await messageService.add('assistant', assistantResponse, projectId);
     }
     await writeServerDebugLog('agent_response_saved', {
       runId,

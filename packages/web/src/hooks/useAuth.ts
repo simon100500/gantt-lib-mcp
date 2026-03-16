@@ -1,5 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 
+// Decode JWT payload to get expiry time (ms). Returns null on parse error.
+function getTokenExpMs(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1])) as { exp?: number };
+    if (typeof payload.exp !== 'number') return null;
+    return payload.exp * 1000;
+  } catch {
+    return null;
+  }
+}
+
 // LocalStorage keys
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const REFRESH_TOKEN_KEY = 'gantt_refresh_token';
@@ -210,6 +221,28 @@ export function useAuth(): UseAuthResult {
       return null;
     }
   }, [logout]);
+
+  // Proactive token refresh: schedule refreshAccessToken ~2 min before access token expires
+  useEffect(() => {
+    const token = state.accessToken;
+    if (!token) return;
+
+    const expMs = getTokenExpMs(token);
+    if (!expMs) return;
+
+    const refreshAt = expMs - Date.now() - 2 * 60 * 1000; // 2 min before expiry
+    if (refreshAt <= 0) {
+      // Already expired or about to expire — refresh immediately
+      void refreshAccessToken();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void refreshAccessToken();
+    }, refreshAt);
+
+    return () => clearTimeout(timer);
+  }, [state.accessToken, refreshAccessToken]);
 
   const fetchWithAuthRetry = useCallback(async (
     input: RequestInfo | URL,

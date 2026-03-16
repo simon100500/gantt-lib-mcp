@@ -1,7 +1,11 @@
 :root {
-  --gantt-container-border-radius: 0px;
+  --gantt-font-family: 'Roboto', sans-serif !important;
+  --gantt-container-border-radius: 0px !important;
+  --gantt-progress-completed: #17c964 !important;
+  --gantt-progress-accepted: #00670a !important;
 }
 
 .gantt-container {
   border: 0;
 }
+

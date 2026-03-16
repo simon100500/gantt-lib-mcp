@@ -16,20 +16,11 @@ export function useTasks(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Track the last token we've successfully used to fetch tasks
-  const lastProcessedToken = useRef<string | null>(null);
-
   useEffect(() => {
     if (!accessToken) {
       setLoading(false);
       // Don't setTasks([]) here - let the UI handle empty state
       // This prevents clearing demo tasks in local mode
-      lastProcessedToken.current = null;
-      return;
-    }
-
-    // Skip if we've already processed this exact token
-    if (accessToken === lastProcessedToken.current) {
       return;
     }
 
@@ -69,7 +60,6 @@ export function useTasks(
         if (cancelled) return;
         if (data) {
           setTasks(data);
-          lastProcessedToken.current = accessToken;
         }
         setLoading(false);
       })

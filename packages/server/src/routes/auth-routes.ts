@@ -9,8 +9,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { authStore } from '@gantt/mcp/auth-store';
-import { taskStore } from '@gantt/mcp/store';
+import { authService, taskService } from '@gantt/mcp/services';
 import { sendOtpEmail } from '../email.js';
 import {
   generateOtp,
@@ -39,7 +38,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     try {
       const code = generateOtp();
-      await authStore.createOtp(email, code);
+      await authService.createOtp(email, code);
       await sendOtpEmail(email, code);
       return reply.send({ sent: true });
     } catch (err) {
@@ -60,25 +59,25 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'email and code required' });
     }
 
-    const valid = await authStore.consumeOtp(email, code);
+    const valid = await authService.consumeOtp(email, code);
     if (!valid) {
       return reply.status(400).send({ error: 'Invalid or expired code' });
     }
 
     // Find or create user
-    const user = await authStore.findOrCreateUser(email);
+    const user = await authService.findOrCreateUser(email);
 
     // Get or create default project
-    let projects = await authStore.listProjects(user.id);
+    let projects = await authService.listProjects(user.id);
     if (projects.length === 0) {
-      await authStore.createDefaultProject(user.id);
-      projects = await authStore.listProjects(user.id);
+      await authService.createDefaultProject(user.id);
+      projects = await authService.listProjects(user.id);
     }
 
     const project = projects[0]!;
 
     // Create session first to get the actual session ID from database
-    const session = await authStore.createSession(user.id, project.id, '', '');
+    const session = await authService.createSession(user.id, project.id, '', '');
 
     // Generate tokens with the actual session ID
     const tokenPayload = {
@@ -92,7 +91,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const refreshToken = signRefreshToken(tokenPayload);
 
     // Update session with the actual tokens
-    await authStore.updateSessionTokens(session.id, accessToken, refreshToken);
+    await authService.updateSessionTokens(session.id, accessToken, refreshToken);
 
     return reply.send({
       accessToken,
@@ -114,7 +113,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     // Find session by refresh token
-    const session = await authStore.findSessionByRefreshToken(refreshToken);
+    const session = await authService.findSessionByRefreshToken(refreshToken);
     if (!session) {
       return reply.status(401).send({ error: 'Invalid refresh token' });
     }
@@ -138,7 +137,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const newRefreshToken = signRefreshToken(tokenPayload);
 
     // Update session
-    await authStore.updateSessionTokens(session.id, newAccessToken, newRefreshToken);
+    await authService.updateSessionTokens(session.id, newAccessToken, newRefreshToken);
 
     return reply.send({
       accessToken: newAccessToken,
@@ -159,13 +158,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const accessToken = authHeader.slice(7);
 
     // Find session
-    const session = await authStore.findSessionByAccessToken(accessToken);
+    const session = await authService.findSessionByAccessToken(accessToken);
     if (!session) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
     // Delete session
-    await authStore.deleteSession(session.id);
+    await authService.deleteSession(session.id);
 
     return reply.send({ ok: true });
   });
@@ -185,7 +184,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     // Verify project belongs to user
-    const projects = await authStore.listProjects(userId);
+    const projects = await authService.listProjects(userId);
     const project = projects.find(p => p.id === projectId);
 
     if (!project) {
@@ -208,13 +207,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     console.log('[SWITCH-PROJECT DEBUG] New access token prefix:', newAccessToken.substring(0, 20) + '...');
 
     // Update session tokens and project
-    await authStore.updateSessionTokens(sessionId, newAccessToken, newRefreshToken);
+    await authService.updateSessionTokens(sessionId, newAccessToken, newRefreshToken);
 
     console.log('[SWITCH-PROJECT DEBUG] Session tokens updated, now updating project');
-    await authStore.updateSessionProject(sessionId, project.id);
+    await authService.updateSessionProject(sessionId, project.id);
 
     console.log('[SWITCH-PROJECT DEBUG] Verifying session exists with new token...');
-    const verifySession = await authStore.findSessionByAccessToken(newAccessToken);
+    const verifySession = await authService.findSessionByAccessToken(newAccessToken);
     if (verifySession) {
       console.log('[SWITCH-PROJECT DEBUG] VERIFIED: Session found with new token!', {
         sessionId: verifySession.id,
@@ -239,14 +238,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/share', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const projects = await authStore.listProjects(req.user!.userId);
+    const projects = await authService.listProjects(req.user!.userId);
     const project = projects.find((item) => item.id === projectId);
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const shareLink = await authStore.createShareLink(projectId);
+    const shareLink = await authService.createShareLink(projectId);
     const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
     const host = req.headers.host ?? 'localhost:3000';
     const origin = req.headers.origin ?? `${proto}://${host}`;
@@ -265,17 +264,17 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'token required' });
     }
 
-    const shareLink = await authStore.findShareLinkById(token);
+    const shareLink = await authService.findShareLinkById(token);
     if (!shareLink) {
       return reply.status(404).send({ error: 'Share link not found' });
     }
 
-    const project = await authStore.findProjectById(shareLink.projectId);
+    const project = await authService.findProjectById(shareLink.projectId);
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const tasks = await taskStore.list(project.id, false);
+    const tasks = await taskService.list(project.id);
     return reply.send({
       project: { id: project.id, name: project.name },
       tasks,
@@ -286,7 +285,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // GET /api/projects
   // ---------------------------------------------------------------------------
   fastify.get('/api/projects', { preHandler: [authMiddleware] }, async (req, reply) => {
-    const projects = await authStore.listProjects(req.user!.userId);
+    const projects = await authService.listProjects(req.user!.userId);
     return reply.send({ projects });
   });
 
@@ -301,7 +300,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'name required' });
     }
 
-    const project = await authStore.createProject(req.user!.userId, name.trim());
+    const project = await authService.createProject(req.user!.userId, name.trim());
     return reply.send({ project });
   });
 
@@ -317,7 +316,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'name required' });
     }
 
-    const project = await authStore.updateProject(projectId, req.user!.userId, name.trim());
+    const project = await authService.updateProject(projectId, req.user!.userId, name.trim());
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
