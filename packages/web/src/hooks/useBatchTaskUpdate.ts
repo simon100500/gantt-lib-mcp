@@ -121,7 +121,8 @@ export function useBatchTaskUpdate({
         endOrig === endNew &&
         (original.parentId ?? null) === (t.parentId ?? null) &&
         (original.color ?? null) === (t.color ?? null) &&
-        (original.progress ?? 0) === (t.progress ?? 0)
+        (original.progress ?? 0) === (t.progress ?? 0) &&
+        JSON.stringify(original.dependencies ?? []) === JSON.stringify(t.dependencies ?? [])
       );
     });
 
@@ -132,8 +133,15 @@ export function useBatchTaskUpdate({
     }
 
     if (isDeletionRelated && changedTasks.length > 0) {
-      console.log('%c[useBatchTaskUpdate] DELETION-RELATED: Skipping optimistic update to avoid reordering', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-      // Still need to save the dependency updates to the server
+      console.log('%c[useBatchTaskUpdate] DELETION-RELATED: Updating only dependencies in state', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      // Update only the dependencies field — preserve task order
+      const changedMap = new Map(changedTasks.map(t => [t.id, t]));
+      setTasks(prev => prev.map(t => {
+        const changed = changedMap.get(t.id);
+        if (!changed) return t;
+        return { ...t, dependencies: changed.dependencies };
+      }));
+      // Save the dependency updates to the server
       try {
         setSavingStateWithReset('saving');
         if (changedTasks.length === 1) {
