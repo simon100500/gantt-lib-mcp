@@ -128,7 +128,7 @@ export default function App() {
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
   const [autoSchedule, setAutoSchedule] = useState(true);
   const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
-  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [showTaskList, setShowTaskList] = useState(true);
 
   // Always allow editing (removed toggle buttons)
@@ -920,13 +920,27 @@ export default function App() {
                       className={cn(
                         'h-7 px-3 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        'text-xs font-medium',
+                        'text-xs font-medium border-r border-slate-200',
                         viewMode === 'week'
                           ? 'bg-secondary text-secondary-foreground'
                           : 'bg-white text-slate-600',
                       )}
                     >
                       Неделя
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('month')}
+                      className={cn(
+                        'h-7 px-3 flex items-center transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        'text-xs font-medium',
+                        viewMode === 'month'
+                          ? 'bg-secondary text-secondary-foreground'
+                          : 'bg-white text-slate-600',
+                      )}
+                    >
+                      Месяц
                     </button>
                   </div>
 
@@ -986,7 +1000,7 @@ export default function App() {
                     ref={ganttRef}
                     tasks={tasks}
                     onTasksChange={batchUpdate.handleTasksChange}
-                    dayWidth={viewMode === 'week' ? 8 : 24}
+                    dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                     rowHeight={36}
                     containerHeight="calc(100vh - 120px)"
                     showTaskList={showTaskList}
