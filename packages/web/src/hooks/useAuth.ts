@@ -201,10 +201,13 @@ export function useAuth(): UseAuthResult {
 
       console.log('[useAuth] refreshAccessToken: response status:', res.status, res.statusText);
       if (!res.ok) {
-        console.log('[useAuth] refreshAccessToken: response not OK, logging out');
         const errorBody = await res.text();
-        console.log('[useAuth] refreshAccessToken: error body:', errorBody);
-        logout();
+        console.log('[useAuth] refreshAccessToken: response not OK, status:', res.status, 'body:', errorBody);
+        if (res.status === 401 || res.status === 403) {
+          console.log('[useAuth] refreshAccessToken: auth error, logging out');
+          logout();
+        }
+        // 5xx and other errors are temporary — do not logout
         return null;
       }
 
@@ -216,8 +219,7 @@ export function useAuth(): UseAuthResult {
       loggedSetState(prev => ({ ...prev, accessToken: data.accessToken }), 'refreshAccessToken');
       return data.accessToken;
     } catch (err) {
-      console.log('[useAuth] refreshAccessToken: exception, logging out', err);
-      logout();
+      console.warn('[useAuth] refreshAccessToken: network error, not logging out', err);
       return null;
     }
   }, [logout]);

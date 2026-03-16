@@ -150,6 +150,12 @@ export class AuthService {
     return this.userToDomain(user);
   }
 
+  async findUserById(userId: string): Promise<User | undefined> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return undefined;
+    return this.userToDomain(user);
+  }
+
   /**
    * List all projects for a user with task counts
    *
@@ -321,6 +327,7 @@ export class AuthService {
       data: {
         accessToken,
         refreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
   }

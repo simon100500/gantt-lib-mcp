@@ -126,9 +126,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     // Generate new tokens
+    const sessionUser = await authService.findUserById(session.userId);
     const tokenPayload = {
       sub: session.userId,
-      email: '', // Not needed for refresh, token has it
+      email: sessionUser?.email ?? '',
       projectId: session.projectId,
       sessionId: session.id,
     };
