@@ -18,7 +18,7 @@ export interface GanttChartProps {
   disableDependencyEditing?: boolean;
   highlightExpiredTasks?: boolean;
   headerHeight?: number;
-  viewMode?: 'day' | 'week';
+  viewMode?: 'day' | 'week' | 'month';
   onAdd?: (newTask: Task) => void;
   onDelete?: (taskId: string) => void;
   onInsertAfter?: (taskId: string, newTask: Task) => void;
