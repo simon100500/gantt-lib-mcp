@@ -61,9 +61,11 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 )}
               >
                 <span className="truncate text-sm">{p.name}</span>
-                {p.taskCount !== undefined && (
+                {p.taskCount === undefined ? (
+                  <span className="text-xs text-slate-200 shrink-0 w-4 text-center">—</span>
+                ) : p.taskCount > 0 ? (
                   <span className="text-xs text-slate-400 shrink-0">{p.taskCount}</span>
-                )}
+                ) : null}
               </button>
             ))}
           </div>
