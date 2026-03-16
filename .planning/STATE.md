@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: PostgreSQL Migration
 status: verifying
-stopped_at: "Completed Quick Task 260317-1tk: Move '+ Новый проект' button to right side of topbar"
-last_updated: "2026-03-16T22:19:50.775Z"
+stopped_at: "Completed Quick Task 260317-1v4: Add month view mode"
+last_updated: "2026-03-16T22:22:41.466Z"
 last_activity: "2026-03-17 - Completed quick task 260317-1qv: Error HTTP 500 non-blocking compact banner"
 progress:
   total_phases: 5
@@ -280,8 +280,8 @@ Overall: [██████████████████████] 30
 
 ## Session Continuity
 
-**Last session:** 2026-03-16T22:19:50.772Z
-**Stopped at:** Completed Quick Task 260317-1tk: Move '+ Новый проект' button to right side of topbar
+**Last session:** 2026-03-16T22:22:41.463Z
+**Stopped at:** Completed Quick Task 260317-1v4: Add month view mode
 **Resume file:** None
 
 **Next actions:**
