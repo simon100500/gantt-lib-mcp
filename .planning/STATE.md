@@ -238,13 +238,14 @@ Overall: [██████████████████████] 30
 | 33 | Proactive JWT token refresh timer (idle-logout fix) | 2026-03-15 | 64534eb | [033-check-session-lifetime](./quick/033-check-session-lifetime/) |
 | 260316-113 | сделай шрифт Roboto везде кроме лого | 2026-03-15 | 83feeec | [260316-113-roboto](./quick/260316-113-roboto/) |
 | 260316-3db | Add day/week view toggle and collapse/expand buttons | 2026-03-15 | a74806b | [260316-3db-add-day-week-view-buttons-and-expand-col](./quick/260316-3db-add-day-week-view-buttons-and-expand-col/) |
+| 260316-m1z | Inline project name rename in header breadcrumb | 2026-03-16 | 20d09da | [260316-m1z-inline](./quick/260316-m1z-inline/) |
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-03-15T23:25:35.797Z
-**Stopped at:** Completed Quick Task 260316-3db: Add day/week view toggle and collapse/expand buttons
+**Last session:** 2026-03-16T00:00:00.000Z
+**Stopped at:** Completed Quick Task 260316-m1z: Inline project name rename in header breadcrumb
 **Resume file:** None
 
 **Next actions:**
