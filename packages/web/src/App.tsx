@@ -864,7 +864,30 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  {/* Action buttons - left side */}
+                  {/* Collapse/Expand buttons */}
+                  <button
+                    type="button"
+                    onClick={handleCollapseAll}
+                    title="Свернуть все родительские задачи"
+                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium"
+                  >
+                    <ChevronsDownUp className="w-3.5 h-3.5" />
+                    <span>Свернуть все</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExpandAll}
+                    title="Развернуть все родительские задачи"
+                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium"
+                  >
+                    <ChevronsUpDown className="w-3.5 h-3.5" />
+                    <span>Развернуть все</span>
+                  </button>
+
+                  <div className="flex-1" />
+
+                  {/* Today button - right side */}
                   <Button
                     size="sm"
                     variant="outline"
@@ -877,7 +900,7 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  {/* View mode split button */}
+                  {/* View mode split button - right side */}
                   <div className="inline-flex rounded border border-slate-200 overflow-hidden">
                     <button
                       type="button"
@@ -887,8 +910,8 @@ export default function App() {
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium border-r border-slate-200',
                         viewMode === 'day'
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                          ? 'bg-secondary text-secondary-foreground'
+                          : 'bg-white text-slate-600',
                       )}
                     >
                       День
@@ -901,8 +924,8 @@ export default function App() {
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium',
                         viewMode === 'week'
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                          ? 'bg-secondary text-secondary-foreground'
+                          : 'bg-white text-slate-600',
                       )}
                     >
                       Неделя
@@ -910,26 +933,6 @@ export default function App() {
                   </div>
 
                   <ToolbarSep />
-
-                  <button
-                    type="button"
-                    onClick={handleCollapseAll}
-                    title="Свернуть все родительские задачи"
-                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <ChevronsDownUp className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleExpandAll}
-                    title="Развернуть все родительские задачи"
-                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <ChevronsUpDown className="w-3.5 h-3.5" />
-                  </button>
-
-                  <div className="flex-1" />
 
                   {/* Feature switches - right side */}
                   <div className="flex items-center gap-2">
