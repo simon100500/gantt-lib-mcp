@@ -703,8 +703,8 @@ export default function App() {
               hasShareToken
                 ? 'cursor-default bg-slate-50 text-slate-300'
                 : projectSidebarVisible
-                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+                  ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
             )}
             title={hasShareToken ? 'Read-only share' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
           >
@@ -714,7 +714,7 @@ export default function App() {
           {/* Logo */}
           <div className="flex items-center gap-2 text-base font-cascadia tracking-tight select-none">
             <img src="/favicon.svg" alt="GetGantt" className="h-5 w-5" />
-            <span className="text-slate-900">GetGantt</span>
+            <span className="text-slate-900">ГетГант</span>
           </div>
 
           <span className="text-slate-400">/</span>
@@ -745,7 +745,7 @@ export default function App() {
               <span
                 className={cn(
                   "text-sm font-medium text-slate-700 truncate",
-                  !hasShareToken && "cursor-pointer hover:text-slate-900 hover:underline decoration-slate-400 underline-offset-2"
+                  !hasShareToken && "cursor-pointer hover:bg-slate-100 rounded px-1 -mx-1"
                 )}
                 title={hasShareToken ? undefined : "Нажмите, чтобы переименовать"}
                 onClick={hasShareToken ? undefined : handleStartInlineRename}
@@ -842,244 +842,244 @@ export default function App() {
             <>
               {/* Gantt panel wrapper - includes chart and footer */}
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-              {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-              <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
-                {/* Show/hide task list - outline style for both states */}
-                <button
-                  type="button"
-                  onClick={() => setShowTaskList(!showTaskList)}
-                  aria-pressed={showTaskList}
-                  aria-label={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
-                  className={cn(
-                    'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                    'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
-                    'text-xs font-medium',
-                  )}
-                  title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
-                >
-                  <PanelLeft className="w-3.5 h-3.5" />
-                  {showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
-                </button>
-
-                <ToolbarSep />
-
-                {/* Action buttons - left side */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleScrollToToday}
-                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
-                >
-                  <CalendarDays className="w-3.5 h-3.5" />
-                  Сегодня
-                </Button>
-
-                <ToolbarSep />
-
-                {/* View mode split button */}
-                <div className="inline-flex rounded border border-slate-200 overflow-hidden">
+                {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
+                <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+                  {/* Show/hide task list - outline style for both states */}
                   <button
                     type="button"
-                    onClick={() => setViewMode('day')}
+                    onClick={() => setShowTaskList(!showTaskList)}
+                    aria-pressed={showTaskList}
+                    aria-label={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                     className={cn(
-                      'h-7 px-3 flex items-center transition-colors',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      'text-xs font-medium border-r border-slate-200',
-                      viewMode === 'day'
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-transparent text-slate-600 hover:bg-slate-100',
-                    )}
-                  >
-                    День
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('week')}
-                    className={cn(
-                      'h-7 px-3 flex items-center transition-colors',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      'text-xs font-medium',
-                      viewMode === 'week'
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-transparent text-slate-600 hover:bg-slate-100',
-                    )}
-                  >
-                    Неделя
-                  </button>
-                </div>
-
-                <ToolbarSep />
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleCollapseAll}
-                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
-                  title="Свернуть все родительские задачи"
-                >
-                  <ChevronUp className="w-3.5 h-3.5" />
-                  Свернуть все
-                </Button>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleExpandAll}
-                  className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
-                  title="Развернуть все родительские задачи"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                  Развернуть все
-                </Button>
-
-                <div className="flex-1" />
-
-                {/* Feature switches - right side */}
-                <div className="flex items-center gap-2">
-                  <SwitchControl
-                    checked={autoSchedule}
-                    onChange={setAutoSchedule}
-                    label="Закрепить связи"
-                  />
-                  <ToolbarSep />
-                  <SwitchControl
-                    checked={highlightExpiredTasks}
-                    onChange={setHighlightExpiredTasks}
-                    label="Просроченные"
-                  />
-                </div>
-
-                <ToolbarSep />
-
-                {/* Chat toggle button - only show when chat is hidden, on the right */}
-                {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
-                  <button
-                    type="button"
-                    onClick={openProjectChat}
-                    aria-label="Показать AI ассистента"
-                    className={cn(
-                      'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
+                      'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                      'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
+                      'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                       'text-xs font-medium',
                     )}
-                    title="Показать AI ассистента"
+                    title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    AI ассистент
+                    <PanelLeft className="w-3.5 h-3.5" />
+                    {showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                   </button>
-                )}
 
-                {/* Validation errors badge */}
-                {validationErrors.length > 0 && (
-                  <span className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-0.5 font-medium">
-                    {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
-                  </span>
-                )}
-              </div>
+                  <ToolbarSep />
 
-              {/* ── Gantt Chart ─────────────────────────────────────────── */}
-              {loading ? (
-                <div className="flex items-center justify-center flex-1 text-sm text-slate-400">
-                  Загрузка…
-                </div>
-              ) : (
-                <GanttChart
-                  ref={ganttRef}
-                  tasks={tasks}
-                  onTasksChange={batchUpdate.handleTasksChange}
-                  dayWidth={viewMode === 'week' ? 8 : 24}
-                  rowHeight={36}
-                  containerHeight="calc(100vh - 120px)"
-                  showTaskList={showTaskList}
-                  taskListWidth={650}
-                  onValidateDependencies={handleValidation}
-                  enableAutoSchedule={autoSchedule}
-                  onCascade={handleCascade}
-                  disableTaskNameEditing={disableTaskNameEditing}
-                  disableDependencyEditing={disableDependencyEditing}
-                  highlightExpiredTasks={highlightExpiredTasks}
-                  headerHeight={40}
-                  viewMode={viewMode}
-                  onAdd={batchUpdate.handleAdd}
-                  onDelete={batchUpdate.handleDelete}
-                  onInsertAfter={batchUpdate.handleInsertAfter}
-                  onReorder={batchUpdate.handleReorder}
-                  onPromoteTask={batchUpdate.handlePromoteTask}
-                  onDemoteTask={batchUpdate.handleDemoteTask}
-                />
-              )}
-
-              {/* ── Status Bar ───────────────────────────────────────────── */}
-              {tasks.length > 0 && (
-                <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
-                  <span className="font-mono text-[11px] text-slate-400">
-                    {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
-                  </span>
-
-                  <span
-                    className={cn(
-                      'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                      displayConnected ? 'text-emerald-600' : 'text-amber-600',
-                    )}
+                  {/* Action buttons - left side */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleScrollToToday}
+                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
                   >
-                    <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                    {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
-                  </span>
+                    <CalendarDays className="w-3.5 h-3.5" />
+                    Сегодня
+                  </Button>
 
-                  {/* Save indicator */}
-                  {!hasShareToken && auth.isAuthenticated && savingState !== 'idle' && (
+                  <ToolbarSep />
+
+                  {/* View mode split button */}
+                  <div className="inline-flex rounded border border-slate-200 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('day')}
+                      className={cn(
+                        'h-7 px-3 flex items-center transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        'text-xs font-medium border-r border-slate-200',
+                        viewMode === 'day'
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                      )}
+                    >
+                      День
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('week')}
+                      className={cn(
+                        'h-7 px-3 flex items-center transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        'text-xs font-medium',
+                        viewMode === 'week'
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-transparent text-slate-600 hover:bg-slate-100',
+                      )}
+                    >
+                      Неделя
+                    </button>
+                  </div>
+
+                  <ToolbarSep />
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCollapseAll}
+                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                    title="Свернуть все родительские задачи"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    Свернуть все
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleExpandAll}
+                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                    title="Развернуть все родительские задачи"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    Развернуть все
+                  </Button>
+
+                  <div className="flex-1" />
+
+                  {/* Feature switches - right side */}
+                  <div className="flex items-center gap-2">
+                    <SwitchControl
+                      checked={autoSchedule}
+                      onChange={setAutoSchedule}
+                      label="Закрепить связи"
+                    />
+                    <ToolbarSep />
+                    <SwitchControl
+                      checked={highlightExpiredTasks}
+                      onChange={setHighlightExpiredTasks}
+                      label="Просроченные"
+                    />
+                  </div>
+
+                  <ToolbarSep />
+
+                  {/* Chat toggle button - only show when chat is hidden, on the right */}
+                  {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
+                    <button
+                      type="button"
+                      onClick={openProjectChat}
+                      aria-label="Показать AI ассистента"
+                      className={cn(
+                        'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                        'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
+                        'text-xs font-medium',
+                      )}
+                      title="Показать AI ассистента"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      AI ассистент
+                    </button>
+                  )}
+
+                  {/* Validation errors badge */}
+                  {validationErrors.length > 0 && (
+                    <span className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-0.5 font-medium">
+                      {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
+                    </span>
+                  )}
+                </div>
+
+                {/* ── Gantt Chart ─────────────────────────────────────────── */}
+                {loading ? (
+                  <div className="flex items-center justify-center flex-1 text-sm text-slate-400">
+                    Загрузка…
+                  </div>
+                ) : (
+                  <GanttChart
+                    ref={ganttRef}
+                    tasks={tasks}
+                    onTasksChange={batchUpdate.handleTasksChange}
+                    dayWidth={viewMode === 'week' ? 8 : 24}
+                    rowHeight={36}
+                    containerHeight="calc(100vh - 120px)"
+                    showTaskList={showTaskList}
+                    taskListWidth={650}
+                    onValidateDependencies={handleValidation}
+                    enableAutoSchedule={autoSchedule}
+                    onCascade={handleCascade}
+                    disableTaskNameEditing={disableTaskNameEditing}
+                    disableDependencyEditing={disableDependencyEditing}
+                    highlightExpiredTasks={highlightExpiredTasks}
+                    headerHeight={40}
+                    viewMode={viewMode}
+                    onAdd={batchUpdate.handleAdd}
+                    onDelete={batchUpdate.handleDelete}
+                    onInsertAfter={batchUpdate.handleInsertAfter}
+                    onReorder={batchUpdate.handleReorder}
+                    onPromoteTask={batchUpdate.handlePromoteTask}
+                    onDemoteTask={batchUpdate.handleDemoteTask}
+                  />
+                )}
+
+                {/* ── Status Bar ───────────────────────────────────────────── */}
+                {tasks.length > 0 && (
+                  <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
+                    <span className="font-mono text-[11px] text-slate-400">
+                      {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
+                    </span>
+
                     <span
                       className={cn(
                         'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                        savingState === 'saving' && 'text-amber-600',
-                        savingState === 'saved' && 'text-emerald-600',
-                        savingState === 'error' && 'text-red-600',
+                        displayConnected ? 'text-emerald-600' : 'text-amber-600',
                       )}
                     >
-                      {savingState === 'saving' && (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 animate-pulse" />
-                          Сохранение…
-                        </>
-                      )}
-                      {savingState === 'saved' && (
-                        <>
-                          <Check className="w-3 h-3 shrink-0" />
-                          Сохранено
-                        </>
-                      )}
-                      {savingState === 'error' && (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
-                          Ошибка сохранения
-                        </>
-                      )}
+                      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
+                      {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
                     </span>
-                  )}
-                </footer>
-              )}
-            </div>
 
-            {/* ── Chat sidebar ───────────────────────────────────────────── */}
-            {chatSidebarVisible && !hasShareToken && (
-              <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col relative z-20">
-                <ChatSidebar
-                  messages={messages}
-                  streaming={streaming}
-                  onSend={handleSend}
-                  disabled={aiThinking}
-                  connected={displayConnected}
-                  loading={aiThinking}
-                  onClose={closeProjectChat}
-                  isAuthenticated={auth.isAuthenticated}
-                  onLoginRequired={() => setShowOtpModal(true)}
-                />
-              </aside>
-            )}
-          </>
-        )}
+                    {/* Save indicator */}
+                    {!hasShareToken && auth.isAuthenticated && savingState !== 'idle' && (
+                      <span
+                        className={cn(
+                          'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                          savingState === 'saving' && 'text-amber-600',
+                          savingState === 'saved' && 'text-emerald-600',
+                          savingState === 'error' && 'text-red-600',
+                        )}
+                      >
+                        {savingState === 'saving' && (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 animate-pulse" />
+                            Сохранение…
+                          </>
+                        )}
+                        {savingState === 'saved' && (
+                          <>
+                            <Check className="w-3 h-3 shrink-0" />
+                            Сохранено
+                          </>
+                        )}
+                        {savingState === 'error' && (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
+                            Ошибка сохранения
+                          </>
+                        )}
+                      </span>
+                    )}
+                  </footer>
+                )}
+              </div>
+
+              {/* ── Chat sidebar ───────────────────────────────────────────── */}
+              {chatSidebarVisible && !hasShareToken && (
+                <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col relative z-20">
+                  <ChatSidebar
+                    messages={messages}
+                    streaming={streaming}
+                    onSend={handleSend}
+                    disabled={aiThinking}
+                    connected={displayConnected}
+                    loading={aiThinking}
+                    onClose={closeProjectChat}
+                    isAuthenticated={auth.isAuthenticated}
+                    onLoginRequired={() => setShowOtpModal(true)}
+                  />
+                </aside>
+              )}
+            </>
+          )}
         </div>
       </div>
 
