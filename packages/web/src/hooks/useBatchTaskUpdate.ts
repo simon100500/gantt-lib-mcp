@@ -549,15 +549,17 @@ export function useBatchTaskUpdate({
         return currentTasks.map(t => t.id === taskId ? { ...t, parentId: undefined } : t);
       }
 
-      const lastSiblingIndex = currentTasks
+      const withoutPromoted = currentTasks.filter(t => t.id !== taskId);
+      // Re-derive the insert position from withoutPromoted so that removing the promoted task
+      // from the array doesn't skew the index. lastSiblingIndex.index was computed on the
+      // original array (which still contained the promoted task), so using it directly as an
+      // offset into the shorter withoutPromoted array places the task one slot too far when the
+      // promoted task appeared before the last sibling.
+      const lastSiblingInWithout = withoutPromoted
         .map((t, i) => ({ task: t, index: i }))
         .filter(({ task }) => task.parentId === parentId)
         .sort((a, b) => b.index - a.index)[0];
-
-      if (!lastSiblingIndex) return currentTasks;
-
-      const withoutPromoted = currentTasks.filter(t => t.id !== taskId);
-      const insertIndex = lastSiblingIndex.index + 1;
+      const insertIndex = (lastSiblingInWithout?.index ?? -1) + 1;
       const promotedTask = { ...task, parentId: undefined };
 
       return [
