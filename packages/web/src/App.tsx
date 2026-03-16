@@ -639,22 +639,19 @@ export default function App() {
     }
   }, [isRenamingProject, renameValue, currentProjectLabel, handleSaveProjectName]);
 
-  // ── Error state ──────────────────────────────────────────────────────────
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 max-w-sm text-center">
-          {sharedProject.shareToken
-            ? `Не удалось открыть ссылку: ${error}`
-            : `Не удалось загрузить задачи: ${error}`}
-        </div>
-      </div>
-    );
-  }
-
   // ── Layout ───────────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+      {/* Error banner - non-blocking */}
+      {error && (
+        <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center p-2">
+          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-1.5 max-w-md text-center shadow-sm">
+            {sharedProject.shareToken
+              ? `Не удалось открыть ссылку: ${error}`
+              : `Не удалось загрузить задачи: ${error}`}
+          </div>
+        </div>
+      )}
 
       {/* ── Project sidebar (full height) ──────────────────────────────────── */}
       {projectSidebarVisible && !hasShareToken && (
