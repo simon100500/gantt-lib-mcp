@@ -121,6 +121,8 @@ export default function App() {
     return { kind: 'guest' };
   });
   const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   // Gantt feature toggles
   const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
@@ -134,6 +136,7 @@ export default function App() {
   const disableDependencyEditing = false;
 
   const ganttRef = useRef<GanttChartRef>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
@@ -618,6 +621,24 @@ export default function App() {
     isDraftWorkspace || (isGuestWorkspace && tasks.length === 0 && !loading)
   );
 
+  const handleStartInlineRename = useCallback(() => {
+    if (hasShareToken) return;
+    setRenameValue(currentProjectLabel ?? '');
+    setIsRenamingProject(true);
+  }, [hasShareToken, currentProjectLabel]);
+
+  const handleCommitInlineRename = useCallback(async () => {
+    if (!isRenamingProject) return;
+    setIsRenamingProject(false);
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === currentProjectLabel) return;
+    try {
+      await handleSaveProjectName(trimmed);
+    } catch {
+      // ignore — handleSaveProjectName throws on failure; name stays as-is in state
+    }
+  }, [isRenamingProject, renameValue, currentProjectLabel, handleSaveProjectName]);
+
   // ── Error state ──────────────────────────────────────────────────────────
   if (error) {
     return (
@@ -700,9 +721,38 @@ export default function App() {
 
           {/* Project name breadcrumb */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-medium text-slate-700 truncate">
-              {currentProjectLabel}
-            </span>
+            {isRenamingProject && !hasShareToken ? (
+              <input
+                ref={renameInputRef}
+                type="text"
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={handleCommitInlineRename}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleCommitInlineRename();
+                  } else if (e.key === 'Escape') {
+                    setIsRenamingProject(false);
+                    setRenameValue('');
+                  }
+                }}
+                className="text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-ring min-w-0 max-w-[220px]"
+                autoFocus
+                onFocus={e => e.target.select()}
+              />
+            ) : (
+              <span
+                className={cn(
+                  "text-sm font-medium text-slate-700 truncate",
+                  !hasShareToken && "cursor-pointer hover:text-slate-900 hover:underline decoration-slate-400 underline-offset-2"
+                )}
+                title={hasShareToken ? undefined : "Нажмите, чтобы переименовать"}
+                onClick={hasShareToken ? undefined : handleStartInlineRename}
+              >
+                {currentProjectLabel}
+              </span>
+            )}
             {!hasShareToken && auth.isAuthenticated && (
               <Button
                 variant="ghost"
