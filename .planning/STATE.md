@@ -68,7 +68,7 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 **Phase:** 16 of 18 (Services Layer) — COMPLETE (4/4 plans)
 **Plan:** 16-04 Verification — COMPLETED
 **Status:** Phase 16 complete, all services verified ready for Phase 17 integration
-**Last activity:** 2026-03-15 - Completed quick task 260316-3db: Add day/week view toggle and collapse/expand buttons
+**Last activity:** 2026-03-16 - Completed quick task 260316-m1z: добавь переименование проекта по клику в хедере (прям inline)
 
 **Progress:**
 [████████████████████] 100%
