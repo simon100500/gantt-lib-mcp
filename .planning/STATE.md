@@ -84,7 +84,7 @@ See: .planning/PROJECT.md (updated 2026-03-13)
 **Phase:** 16 of 18 (Services Layer) — COMPLETE (4/4 plans)
 **Plan:** 16-04 Verification — COMPLETED
 **Status:** Phase 16 complete, all services verified ready for Phase 17 integration
-**Last activity:** 2026-03-16 - Completed quick task 260316-mf0: collapse/expand icons ChevronsDownUp/ChevronsUpDown + violet active view toggle
+**Last activity:** 2026-03-16 - Completed quick task 260316-nwf: Task count zero-hiding and stable loading display
 
 **Progress:**
 [████████████████████] 100%
@@ -257,6 +257,7 @@ Overall: [██████████████████████] 30
 | 260316-3db | Add day/week view toggle and collapse/expand buttons | 2026-03-15 | a74806b | [260316-3db-add-day-week-view-buttons-and-expand-col](./quick/260316-3db-add-day-week-view-buttons-and-expand-col/) |
 | 260316-m1z | Inline project name rename in header breadcrumb | 2026-03-16 | 20d09da | [260316-m1z-inline](./quick/260316-m1z-inline/) |
 | 260316-mf0 | Collapse/expand icons ChevronsDownUp/ChevronsUpDown, violet active view toggle | 2026-03-16 | a5689aa | [260316-mf0-collapse-expand-icons-chevronsdownup-che](./quick/260316-mf0-collapse-expand-icons-chevronsdownup-che/) |
+| 260316-nwf | Task count zero-hiding and stable loading display | 2026-03-16 | 7df23a9 | [260316-nwf-add-skeleton-or-stable-display-for-task-](./quick/260316-nwf-add-skeleton-or-stable-display-for-task-/) |
 
 ---
 
