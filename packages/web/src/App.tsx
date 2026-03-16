@@ -771,19 +771,20 @@ export default function App() {
                 {shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}
               </Button>
             )}
-            {!hasShareToken && auth.isAuthenticated && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCreateProject}
-                className="h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
-              >
-                + Новый проект
-              </Button>
-            )}
           </div>
 
           <div className="flex-1" />
+
+          {!hasShareToken && auth.isAuthenticated && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCreateProject}
+              className="h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+            >
+              + Новый проект
+            </Button>
+          )}
 
           {hasShareToken ? (
             <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
