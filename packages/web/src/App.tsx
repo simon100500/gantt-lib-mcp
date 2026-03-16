@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronUp, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -706,7 +706,7 @@ export default function App() {
                   ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
             )}
-            title={hasShareToken ? 'Read-only share' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -887,7 +887,7 @@ export default function App() {
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium border-r border-slate-200',
                         viewMode === 'day'
-                          ? 'bg-slate-900 text-white'
+                          ? 'bg-violet-600 text-white'
                           : 'bg-transparent text-slate-600 hover:bg-slate-100',
                       )}
                     >
@@ -901,7 +901,7 @@ export default function App() {
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium',
                         viewMode === 'week'
-                          ? 'bg-slate-900 text-white'
+                          ? 'bg-violet-600 text-white'
                           : 'bg-transparent text-slate-600 hover:bg-slate-100',
                       )}
                     >
@@ -911,27 +911,23 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <button
+                    type="button"
                     onClick={handleCollapseAll}
-                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
                     title="Свернуть все родительские задачи"
+                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <ChevronUp className="w-3.5 h-3.5" />
-                    Свернуть все
-                  </Button>
+                    <ChevronsDownUp className="w-3.5 h-3.5" />
+                  </button>
 
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <button
+                    type="button"
                     onClick={handleExpandAll}
-                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
                     title="Развернуть все родительские задачи"
+                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    Развернуть все
-                  </Button>
+                    <ChevronsUpDown className="w-3.5 h-3.5" />
+                  </button>
 
                   <div className="flex-1" />
 
@@ -1025,7 +1021,7 @@ export default function App() {
                       )}
                     >
                       <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                      {hasShareToken ? 'Read-only share' : displayConnected ? 'Подключено' : 'Переподключение…'}
+                      {hasShareToken ? 'Только для чтения' : displayConnected ? 'Подключено' : 'Переподключение…'}
                     </span>
 
                     {/* Save indicator */}
