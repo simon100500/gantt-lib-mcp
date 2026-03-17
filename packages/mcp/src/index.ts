@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { taskService } from './services/task.service.js';
-import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
+import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency, GetConversationHistoryInput, AddMessageInput } from './types.js';
 import { writeMcpDebugLog } from './debug-log.js';
 
 // Create MCP server instance
@@ -356,6 +356,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['baseStartDate', 'workTypes', 'repeatBy'],
+      },
+    },
+    {
+      name: 'get_conversation_history',
+      description: 'Get recent messages from the conversation history for context awareness. Call this before responding to understand previous dialogue turns.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to filter messages by. If not provided, uses the current session project (PROJECT_ID env var)',
+          },
+          limit: {
+            type: 'number',
+            description: 'Number of recent messages to return (default: 20, max: 50)',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+      },
+    },
+    {
+      name: 'add_message',
+      description: 'Add an assistant message to the conversation history. Call this to record your response so future turns have context.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: {
+            type: 'string',
+            description: 'Message content to add to the conversation history',
+          },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to associate the message with. If not provided, uses the current session project (PROJECT_ID env var)',
+          },
+        },
+        required: ['content'],
       },
     },
   ],
