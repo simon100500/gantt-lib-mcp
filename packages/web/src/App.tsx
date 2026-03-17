@@ -851,12 +851,12 @@ export default function App() {
                     className="h-7 gap-1.5"
                   >
                     <PanelLeft className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Список задач</span>
+                    <span className="hidden md:inline">Список задач</span>
                   </Button>
 
                   <ToolbarSep />
 
-                  {/* Collapse/Expand buttons - text hidden on small screens */}
+                  {/* Collapse/Expand buttons - text hidden on medium screens */}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -865,7 +865,7 @@ export default function App() {
                     className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <ChevronsDownUp className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Свернуть</span>
+                    <span className="hidden md:inline">Свернуть</span>
                   </Button>
 
                   <Button
@@ -876,7 +876,7 @@ export default function App() {
                     className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <ChevronsUpDown className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Развернуть</span>
+                    <span className="hidden md:inline">Развернуть</span>
                   </Button>
 
                   {/* Today button - ghost variant with FlagTriangleRight icon */}
@@ -887,7 +887,7 @@ export default function App() {
                     className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <FlagTriangleRight className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Сегодня</span>
+                    <span className="hidden md:inline">Сегодня</span>
                   </Button>
 
                   <div className="flex-1" />
