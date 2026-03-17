@@ -26,8 +26,8 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 
 ### Task Hierarchy (HIER)
 
-- [ ] **HIER-01**: `create_task` accepts `parentId?: string` parameter
-- [ ] **HIER-02**: `update_task` accepts `parentId?: string | null` parameter (null removes from parent)
+- [x] **HIER-01**: `create_task` accepts `parentId?: string` parameter
+- [x] **HIER-02**: `update_task` accepts `parentId?: string | null` parameter (null removes from parent)
 - [x] **HIER-03**: `get_tasks` supports filtering by `parentId?: string | null` (null = root only, string = direct children)
 
 ### Conversation History (HIST)
