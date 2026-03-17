@@ -202,7 +202,7 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 
 | Category | Requirements | Phase |
 |----------|--------------|-------|
-| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2/2 | Complete   | 2026-03-17 | 18 |
+| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2/2 | Complete    | 2026-03-17 | 18 |
 | Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 |
 | Conversation History (HIST) | HIST-01 through HIST-02 | 20 |
 | Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 |
