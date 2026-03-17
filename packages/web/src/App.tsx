@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -768,7 +768,7 @@ export default function App() {
                 }
               >
                 {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
-                {shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}
+                <span className="hidden lg:inline">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
               </Button>
             )}
           </div>
@@ -780,7 +780,7 @@ export default function App() {
               variant="ghost"
               size="sm"
               onClick={handleCreateProject}
-              className="h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+              className="hidden md:inline-flex h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
             >
               + Новый проект
             </Button>
@@ -793,7 +793,7 @@ export default function App() {
             </div>
           ) : !auth.isAuthenticated ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-slate-600">
+              <span className="hidden lg:inline text-sm font-medium text-slate-600">
                 Войдите, чтобы сохранить график
               </span>
               <LoginButton onClick={() => setShowOtpModal(true)} />
@@ -805,7 +805,7 @@ export default function App() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-8 max-w-[180px] lg:max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
                   >
                     <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
@@ -841,7 +841,7 @@ export default function App() {
               {/* Gantt panel wrapper - includes chart and footer */}
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-                <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+                <div className="flex items-center gap-1.5 h-auto min-h-[2.75rem] px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
                   {/* Show/hide task list - outline style for both states */}
                   <button
                     type="button"
@@ -944,10 +944,9 @@ export default function App() {
                     </button>
                   </div>
 
-                  <ToolbarSep />
-
-                  {/* Feature switches - right side */}
-                  <div className="flex items-center gap-2">
+                  {/* Feature switches - hidden below xl, shown inline on xl+ */}
+                  <div className="hidden xl:flex items-center gap-2">
+                    <ToolbarSep />
                     <SwitchControl
                       checked={autoSchedule}
                       onChange={setAutoSchedule}
@@ -959,6 +958,43 @@ export default function App() {
                       onChange={setHighlightExpiredTasks}
                       label="Просроченные"
                     />
+                  </div>
+
+                  {/* Overflow menu - visible only below xl, contains the toggle switches */}
+                  <div className="xl:hidden">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="h-7 px-2 flex items-center rounded border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          title="Дополнительные параметры"
+                        >
+                          <Ellipsis className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuItem
+                          onSelect={e => { e.preventDefault(); setAutoSchedule(!autoSchedule); }}
+                          className="flex items-center justify-between gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">Закрепить связи</span>
+                          <span className={cn(
+                            'w-2 h-2 rounded-full shrink-0',
+                            autoSchedule ? 'bg-emerald-500' : 'bg-slate-300'
+                          )} />
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={e => { e.preventDefault(); setHighlightExpiredTasks(!highlightExpiredTasks); }}
+                          className="flex items-center justify-between gap-2 cursor-pointer"
+                        >
+                          <span className="text-sm">Просроченные</span>
+                          <span className={cn(
+                            'w-2 h-2 rounded-full shrink-0',
+                            highlightExpiredTasks ? 'bg-emerald-500' : 'bg-slate-300'
+                          )} />
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   <ToolbarSep />
