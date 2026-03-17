@@ -947,6 +947,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  // add_message tool
+  if (name === 'add_message') {
+    const input = args as unknown as AddMessageInput;
+    const { projectId: argProjectId } = args as { projectId?: string };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+
+    // Validate content
+    if (!input.content || input.content.trim().length === 0) {
+      throw new Error('content is required and must be non-empty');
+    }
+
+    // Add the message (always as 'assistant' role)
+    const message = await messageService.add('assistant', input.content.trim(), resolvedProjectId);
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      resolvedProjectId,
+      messageId: message.id,
+      contentLength: message.content.length,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            message,
+            success: true,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
   await writeMcpDebugLog('tool_call_failed', {
     tool: name,
     error: `Unknown tool: ${name}`,
