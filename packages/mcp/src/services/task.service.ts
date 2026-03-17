@@ -214,6 +214,7 @@ export class TaskService {
    */
   async list(
     projectId?: string,
+    parentId?: string | null,
     limit: number = 100,
     offset: number = 0,
     full: boolean = false
@@ -226,14 +227,19 @@ export class TaskService {
       throw new Error('offset must be >= 0');
     }
 
+    // Build where clause with combined filters
+    const whereClause: any = {};
+    if (projectId) whereClause.projectId = projectId;
+    if (parentId !== undefined) whereClause.parentId = parentId;
+
     // Query total count first
     const total = await this.prisma.task.count({
-      where: projectId ? { projectId } : undefined,
+      where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
     });
 
     // Query tasks with pagination
     const tasks = await this.prisma.task.findMany({
-      where: projectId ? { projectId } : undefined,
+      where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: { dependencies: true },
       orderBy: { sortOrder: 'asc' },
       take: limit,
