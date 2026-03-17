@@ -879,8 +879,6 @@ export default function App() {
                     <span className="hidden sm:inline">Развернуть</span>
                   </Button>
 
-                  <div className="flex-1" />
-
                   {/* Today button - ghost variant with FlagTriangleRight icon */}
                   <Button
                     size="sm"
@@ -891,6 +889,8 @@ export default function App() {
                     <FlagTriangleRight className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Сегодня</span>
                   </Button>
+
+                  <div className="flex-1" />
 
                   <ToolbarSep />
 
