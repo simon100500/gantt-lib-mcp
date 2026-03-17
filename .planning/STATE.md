@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: None
-milestone_name: Planning next milestone
-status: shipped
-stopped_at: "v2.0 milestone complete"
-last_updated: "2026-03-17T20:00:00.000Z"
-last_activity: "2026-03-17 — v2.0 PostgreSQL Migration shipped"
+milestone: v3.0
+milestone_name: MCP Server Refactoring
+status: planning
+stopped_at: "Defining requirements"
+last_updated: "2026-03-17T22:00:00.000Z"
+last_activity: "2026-03-17 — v3.0 milestone started"
 progress:
-  total_phases: 16
-  completed_phases: 16
-  total_plans: 32
-  completed_plans: 32
-  percent: 100
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 ---
@@ -98,7 +98,7 @@ current_plan: 16-01
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-17 20:00:00
+**Last updated:** 2026-03-17 22:00:00
 
 ## Project Reference
 
@@ -106,23 +106,24 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
 
-**Current focus:** Planning next milestone
+**Current focus:** v3.0 MCP Server Refactoring
 
 ---
 
 ## Current Position
 
-**Milestone:** v2.0 PostgreSQL Migration — SHIPPED 2026-03-17
-**Phase:** 16 of 16 (Services Layer) — COMPLETE
-**Plan:** All 6 plans complete
-**Status:** v2.0 milestone complete, ready for next milestone
-**Last activity:** 2026-03-17 — v2.0 PostgreSQL Migration shipped
+**Milestone:** v3.0 MCP Server Refactoring
+**Phase:** Planning phase (5 phases planned)
+**Plan:** —
+**Status:** Defining requirements
+**Last activity:** 2026-03-17 — v3.0 milestone started
 
 **Progress:**
-[████████████████████] 100%
+[░░░░░░░░░░] 0%
 v1.0: [████████████████████] 14/14 phases (2026-03-13)
 v2.0: [████████████████████] 2/2 phases (2026-03-17)
-Overall: [████████████████████] 16/16 phases complete
+v3.0: [░░░░░░░░░░] 0/5 phases (planning)
+Overall: [██████████████████░░] 16/21 phases (76%)
 ```
 
 ---
