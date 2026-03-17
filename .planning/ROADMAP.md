@@ -99,7 +99,7 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 4. Conversation history limited to 20 messages with truncation notice
 5. Token usage reduced by 50-90% for large projects
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 - [ ] 17-01-PLAN.md — Update get_tasks and get_task MCP tools with compact mode, pagination, and includeChildren
 - [ ] 17-02-PLAN.md — Add limit parameter to MessageService.list() and update agent.ts
 
@@ -202,8 +202,7 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 
 | Category | Requirements | Phase |
 |----------|--------------|-------|
-| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 |
-| Hardening (HARD) | HARD-01 through HARD-03 | 18 |
+| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2/2 | Complete   | 2026-03-17 | 18 |
 | Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 |
 | Conversation History (HIST) | HIST-01 through HIST-02 | 20 |
 | Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 |
