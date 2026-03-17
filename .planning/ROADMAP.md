@@ -20,7 +20,7 @@
 | 18. Qwen SDK Hardening | v3.0 | 1 | Ready to execute | - |
 | 19. Task Hierarchy | v3.0 | TBD | Not started | - |
 | 20. Conversation History | v3.0 | TBD | Not started | - |
-| 21. Tool Quality | v3.0 | TBD | Not started | - |
+| 21. Tool Quality | v3.0 | 1 | Ready to execute | - |
 
 ## Phases
 
@@ -82,7 +82,7 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 
 ### 🚧 v3.0 MCP Server Refactoring (In Progress)
 
-**Milestone Goal:** Improve MCP server: token economy, agent hardening, task hierarchy, conversation history
+**Milestone Goal:** Improve MCP server: token economy, agent hardening, task hierarchy, conversation history, tool quality
 
 #### Phase 17: Token Economy
 
@@ -175,7 +175,8 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 3. Agent can recover from errors using error message guidance
 4. Tool descriptions reference related tools (e.g., batch_create)
 
-**Plans:** TBD
+**Plans:** 1/1 plan ready
+- [ ] 21-01-PLAN.md — Update tool descriptions and error messages with semantic density and actionable guidance
 
 ---
 
@@ -207,11 +208,11 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 | Hardening (HARD) | HARD-01 through HARD-03 | 18 | 1/1 | Complete    | 2026-03-17 |
 | Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 | 1/1 | Complete    | 2026-03-17 |
 | Conversation History (HIST) | HIST-01 through HIST-02 | 20 | 1/1 | Complete    | 2026-03-17 |
-| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | TBD | Not started | - |
+| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | 1 | Ready to execute | - |
 
 **No orphaned requirements.**
 **No duplicates.**
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-17 with Phase 18 plan*
+*Last updated: 2026-03-18 with Phase 21 plan*
