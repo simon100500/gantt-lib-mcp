@@ -130,7 +130,7 @@ export function ChatSidebar({
 
       <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-3">
         {isEmpty && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 sm:gap-3 py-6 sm:py-8 text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
               <Sparkles className="h-5 w-5 text-primary" />
             </div>
@@ -194,7 +194,7 @@ export function ChatSidebar({
       </div>
 
       {isEmpty && (
-        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+        <div className="hidden sm:flex flex-wrap gap-1.5 px-3 pb-2">
           {QUICK_CHIPS.map((chip) => (
             <button
               key={chip}
@@ -214,7 +214,7 @@ export function ChatSidebar({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-200 px-3 py-2.5"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-200 px-3 py-2 sm:py-2.5"
       >
         <textarea
           ref={inputRef}
@@ -230,7 +230,7 @@ export function ChatSidebar({
           spellCheck={false}
           style={{ maxHeight: "7.5rem" }}
           className={cn(
-            "flex-1 resize-none overflow-y-auto rounded-md px-3 py-2 text-sm leading-relaxed",
+            "flex-1 resize-none overflow-y-auto rounded-md px-2.5 sm:px-3 py-2 text-sm leading-relaxed",
             "border border-slate-200 bg-slate-50 placeholder:text-slate-400",
             "transition-colors focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
             "disabled:cursor-not-allowed disabled:opacity-50",
