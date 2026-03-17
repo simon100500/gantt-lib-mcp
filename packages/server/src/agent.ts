@@ -372,7 +372,7 @@ export async function runAgentWithHistory(
     });
 
     await messageService.add('user', userMessage, projectId);
-    const messages = await messageService.list(projectId);
+    const messages = await messageService.list(projectId, 20);
 
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
       ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
