@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, FlagTriangleRight, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -842,54 +842,54 @@ export default function App() {
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
                 <div className="flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
-                  {/* Show/hide task list - icon only */}
-                  <button
-                    type="button"
+                  {/* Show/hide task list - secondary button with text hidden on small screens */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => setShowTaskList(!showTaskList)}
                     aria-pressed={showTaskList}
-                    aria-label={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
-                    className={cn(
-                      'h-7 w-7 flex items-center justify-center rounded border transition-colors',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                      'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
-                    )}
-                    title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
+                    className="h-7 gap-1.5"
                   >
                     <PanelLeft className="w-3.5 h-3.5" />
-                  </button>
+                    <span className="hidden sm:inline">{showTaskList ? 'Скрыть задачи' : 'Список задач'}</span>
+                  </Button>
 
                   <ToolbarSep />
 
-                  {/* Collapse/Expand buttons - icon only */}
-                  <button
-                    type="button"
+                  {/* Collapse/Expand buttons - text hidden on small screens */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={handleCollapseAll}
                     title="Свернуть все родительские задачи"
-                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <ChevronsDownUp className="w-3.5 h-3.5" />
-                  </button>
+                    <span className="hidden sm:inline">Свернуть</span>
+                  </Button>
 
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={handleExpandAll}
                     title="Развернуть все родительские задачи"
-                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <ChevronsUpDown className="w-3.5 h-3.5" />
-                  </button>
+                    <span className="hidden sm:inline">Развернуть</span>
+                  </Button>
 
                   <div className="flex-1" />
 
-                  {/* Today button - right side */}
+                  {/* Today button - shows current date DD.MM with flag icon */}
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={handleScrollToToday}
                     className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
                   >
-                    <CalendarDays className="w-3.5 h-3.5" />
-                    Сегодня
+                    <FlagTriangleRight className="w-3.5 h-3.5" />
+                    {new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
                   </Button>
 
                   <ToolbarSep />
