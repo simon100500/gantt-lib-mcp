@@ -890,6 +890,8 @@ export default function App() {
                     <span className="hidden md:inline">Сегодня</span>
                   </Button>
 
+                  <div className="flex-1" />
+
                   <ToolbarSep />
 
                   {/* View mode split button - abbreviated on narrow screens */}
@@ -982,8 +984,6 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  <div className="flex-1" />
-
                   {/* Chat toggle button - always on the far right */}
                   {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
                     <button
@@ -991,7 +991,7 @@ export default function App() {
                       onClick={openProjectChat}
                       aria-label="Показать AI ассистента"
                       className={cn(
-                        'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors shrink-0',
+                        'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                         'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
                         'text-xs font-medium',
