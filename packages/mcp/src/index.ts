@@ -147,6 +147,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Optional project ID to filter tasks by. If not provided, uses the current session project (PROJECT_ID env var). Pass null to get all tasks across all projects.',
           },
+          parentId: {
+            type: 'string',
+            description: 'Optional filter by parent task ID. null = root tasks only (tasks without a parent), string = direct children of that parent task. Omit to get all tasks (default behavior).',
+          },
           limit: {
             type: 'number',
             description: 'Maximum number of tasks to return (default: 100, max: 1000). Use pagination for large projects.',
@@ -454,18 +458,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_tasks tool
   if (name === 'get_tasks') {
-    const { projectId: argProjectId, limit = 100, offset = 0, full = false } = args as any;
+    const { projectId: argProjectId, parentId, limit = 100, offset = 0, full = false } = args as any;
     // If caller explicitly passes null, return all tasks; otherwise default to PROJECT_ID env
     const resolvedProjectId = argProjectId === null
       ? undefined
       : resolveProjectId(argProjectId);
-    const result = await taskService.list(resolvedProjectId, limit, offset, full);
+    const result = await taskService.list(resolvedProjectId, parentId, limit, offset, full);
 
-    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', result.tasks.length);
+    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'parentId:', parentId, 'tasks found:', result.tasks.length);
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
       argProjectId,
       resolvedProjectId,
+      parentId,
       limit,
       offset,
       full,
