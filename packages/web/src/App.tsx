@@ -686,7 +686,7 @@ export default function App() {
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
 
         {/* ── Top Bar ──────────────────────────────────────────────────────── */}
-        <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
+        <header className="flex items-center gap-2 sm:gap-3 h-12 px-3 sm:px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
           {/* Burger menu button */}
           <button
             type="button"
@@ -709,7 +709,7 @@ export default function App() {
           </button>
 
           {/* Logo */}
-          <div className="flex items-center gap-2 text-base font-cascadia tracking-tight select-none">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-base font-cascadia tracking-tight select-none">
             <img src="/favicon.svg" alt="GetGantt" className="h-5 w-5" />
             <span className="text-slate-900">ГетГант</span>
           </div>
@@ -780,7 +780,7 @@ export default function App() {
               variant="ghost"
               size="sm"
               onClick={handleCreateProject}
-              className="h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+              className="h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary hidden md:flex"
             >
               + Новый проект
             </Button>
@@ -792,10 +792,8 @@ export default function App() {
               Только чтение
             </div>
           ) : !auth.isAuthenticated ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-slate-600">
-                Войдите, чтобы сохранить график
-              </span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-xs sm:text-sm font-medium text-slate-600 hidden xs:inline">Войдите</span><span className="text-xs sm:text-sm font-medium text-slate-600 hidden sm:inline">, чтобы сохранить график</span>
               <LoginButton onClick={() => setShowOtpModal(true)} />
             </div>
           ) : (
@@ -805,7 +803,7 @@ export default function App() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-8 max-w-[180px] sm:max-w-[280px] gap-1.5 px-2 sm:px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
                   >
                     <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
