@@ -191,6 +191,7 @@ async function executeAgentAttempt(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
+      maxSessionTurns: 20,  // HARD-01: Prevent infinite loops
       env: {
         ...env,
         DB_PATH: dbPath,
