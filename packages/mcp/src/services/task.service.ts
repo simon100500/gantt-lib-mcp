@@ -257,9 +257,9 @@ export class TaskService {
   }
 
   /**
-   * Get a task by ID with dependencies
+   * Get a task by ID with dependencies and optional children
    */
-  async get(id: string): Promise<Task | undefined> {
+  async get(id: string, includeChildren: boolean | 'shallow' | 'deep' = false): Promise<Task | undefined> {
     const task = await this.prisma.task.findUnique({
       where: { id },
       include: { dependencies: true },
@@ -273,7 +273,41 @@ export class TaskService {
       lag: d.lag,
     }));
 
-    return this.taskToDomain(task, deps);
+    // Load children if requested
+    let children: Task[] = [];
+    if (includeChildren !== false) {
+      const childTasks = await this.prisma.task.findMany({
+        where: { parentId: id },
+        include: { dependencies: true },
+        orderBy: { sortOrder: 'asc' },
+      });
+
+      children = childTasks.map(child => {
+        const childDeps = child.dependencies.map(d => ({
+          taskId: d.depTaskId,
+          type: d.type as TaskDependency['type'],
+          lag: d.lag,
+        }));
+        return this.taskToDomain(child, childDeps, true);
+      });
+
+      // Recursive loading for 'deep' mode
+      if (includeChildren === 'deep') {
+        for (const child of children) {
+          const nestedChildren = await this.get(child.id, 'deep');
+          if (nestedChildren) {
+            (child as any).children = nestedChildren.children || [];
+          }
+        }
+      }
+    }
+
+    // Return task with children if loaded
+    const result = this.taskToDomain(task, deps, true);
+    if (children.length > 0) {
+      (result as any).children = children;
+    }
+    return result;
   }
 
   /**

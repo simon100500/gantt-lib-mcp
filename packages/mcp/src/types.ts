@@ -48,6 +48,8 @@ export interface Task {
   dependencies?: TaskDependency[];
   /** Optional sort order for display position */
   sortOrder?: number;
+  /** Optional child tasks for hierarchical loading */
+  children?: Task[];
 }
 
 /**
