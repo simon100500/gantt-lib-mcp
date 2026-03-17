@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { taskService } from './services/task.service.js';
+import { messageService } from './services/message.service.js';
 import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency, GetConversationHistoryInput, AddMessageInput } from './types.js';
 import { writeMcpDebugLog } from './debug-log.js';
 
@@ -901,6 +902,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: JSON.stringify({
             ...result,
             message: `Batch creation complete: ${createdTasks.length} tasks created${failedTasks.length > 0 ? `, ${failedTasks.length} failed` : ''}`,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
+  // get_conversation_history tool
+  if (name === 'get_conversation_history') {
+    const { projectId: argProjectId, limit } = args as GetConversationHistoryInput & { limit?: number };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+
+    // Validate and clamp limit parameter
+    const defaultLimit = 20;
+    const maxLimit = 50;
+    const messageLimit = Math.min(Math.max(limit ?? defaultLimit, 1), maxLimit);
+
+    // Fetch all messages for the project
+    const allMessages = await messageService.list(resolvedProjectId);
+
+    // Return the last N messages (most recent first)
+    const recentMessages = allMessages.slice(-messageLimit).reverse();
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      resolvedProjectId,
+      totalMessages: allMessages.length,
+      returnedMessages: recentMessages.length,
+      limit: messageLimit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            messages: recentMessages,
+            total: allMessages.length,
+            returned: recentMessages.length,
+            limit: messageLimit,
           }, null, 2),
         },
       ],
