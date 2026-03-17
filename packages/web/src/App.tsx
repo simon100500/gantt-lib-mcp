@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, FlagTriangleRight, Link, LogOut, Menu, PanelLeft, Sparkles } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, FlagTriangleRight, Link, LogOut, Menu, PanelLeft, PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
@@ -850,7 +850,7 @@ export default function App() {
                     aria-pressed={showTaskList}
                     className="h-7 gap-1.5"
                   >
-                    <PanelLeft className="w-3.5 h-3.5" />
+                    {showTaskList ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}
                     <span className="hidden md:inline">Список задач</span>
                   </Button>
 
