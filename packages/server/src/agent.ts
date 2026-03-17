@@ -313,7 +313,7 @@ async function verifyMutationAttempt(
   revisionBefore: number,
   assistantResponse: string,
 ): Promise<VerificationResult> {
-  const tasksAfter = await taskService.list(projectId) as ComparableTask[];
+  const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
   const revisionAfter = await taskService.getTaskRevision(projectId);
   const runMutations = await taskService.getMutationEventsByRun(runId, projectId);
@@ -355,9 +355,9 @@ export async function runAgentWithHistory(
   try {
     const runId = crypto.randomUUID();
     const mutationRequested = isMutationIntent(userMessage);
-    const tasksBefore = mutationRequested
-      ? await taskService.list(projectId) as ComparableTask[]
-      : [];
+    const { tasks: tasksBefore } = mutationRequested
+      ? await taskService.list(projectId)
+      : { tasks: [] };
     const revisionBefore = await taskService.getTaskRevision(projectId);
 
     await writeServerDebugLog('agent_run_started', {
@@ -407,7 +407,7 @@ export async function runAgentWithHistory(
 
     let assistantResponse = '';
     let streamedContent = false;
-    let tasksAfter = tasksBefore;
+    let tasksAfter: ComparableTask[] = tasksBefore;
     let finalVerification: VerificationResult = {
       tasksAfter: tasksBefore,
       tasksChanged: false,
@@ -465,7 +465,7 @@ export async function runAgentWithHistory(
         revisionBefore,
         assistantResponse,
       );
-      tasksAfter = finalVerification.tasksAfter;
+      tasksAfter = finalVerification.tasksAfter as ComparableTask[];
 
       if (!mutationRequested) {
         break;
