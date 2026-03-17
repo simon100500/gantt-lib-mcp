@@ -13,9 +13,9 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 
 ### Token Economy (TOKEN)
 
-- [ ] **TOKEN-01**: `get_tasks` supports compact mode with only essential fields (id, name, dates, parentId, progress)
-- [ ] **TOKEN-02**: `get_tasks` supports pagination with `limit` (default: 100) and `offset` (default: 0) parameters
-- [ ] **TOKEN-03**: `get_task` supports `includeChildren: boolean` (default: false) to avoid loading child tasks
+- [x] **TOKEN-01**: `get_tasks` supports compact mode with only essential fields (id, name, dates, parentId, progress)
+- [x] **TOKEN-02**: `get_tasks` supports pagination with `limit` (default: 100) and `offset` (default: 0) parameters
+- [x] **TOKEN-03**: `get_task` supports `includeChildren: boolean` (default: false) to avoid loading child tasks
 - [x] **TOKEN-04**: Conversation history limited to 20 messages with truncation notice when exceeded
 
 ### Hardening (HARD)
