@@ -404,8 +404,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const task = await taskService.create(input, resolvedProjectId, 'agent');
 
     // Return the task with cascade info (scoped to same project)
-    const allTasks = await taskService.list(resolvedProjectId);
-    const dependentTasks = allTasks.filter(t =>
+    const allTasksResult = await taskService.list(resolvedProjectId);
+    const dependentTasks = allTasksResult.tasks.filter(t =>
       t.dependencies?.some(d => d.taskId === task.id) ||
       task.dependencies?.some(d => d.taskId === t.id)
     );
@@ -414,7 +414,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resolvedProjectId,
       createdTaskId: task.id,
       createdTaskName: task.name,
-      visibleTaskCount: allTasks.length,
+      visibleTaskCount: allTasksResult.tasks.length,
       affectedTasks: dependentTasks.map((t) => ({ id: t.id, name: t.name })),
     });
 
@@ -439,22 +439,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const resolvedProjectId = argProjectId === null
       ? undefined
       : resolveProjectId(argProjectId);
-    const tasks = await taskService.list(resolvedProjectId);
+    const result = await taskService.list(resolvedProjectId);
 
-    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', tasks.length);
+    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', result.tasks.length);
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
       argProjectId,
       resolvedProjectId,
-      taskCount: tasks.length,
-      tasks: tasks.map((task) => ({ id: task.id, name: task.name, startDate: task.startDate, endDate: task.endDate })),
+      taskCount: result.tasks.length,
+      tasks: result.tasks.map((task) => ({ id: task.id, name: task.name, startDate: task.startDate, endDate: task.endDate })),
     });
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(tasks, null, 2),
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
@@ -553,15 +553,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
-      const allTasks = await taskService.list(process.env.PROJECT_ID);
+      const allTasksResult = await taskService.list(process.env.PROJECT_ID);
 
       // Find all tasks that were affected by the cascade
-      const affectedTasks = allTasks.filter(t => {
+      const affectedTasks = allTasksResult.tasks.filter(t => {
         if (t.id === id) return false;
         return t.dependencies?.some(d => {
           const depTaskId = d.taskId;
           return depTaskId === id ||
-            allTasks.find(x => x.id === depTaskId)?.dependencies?.some(dd => dd.taskId === id);
+            allTasksResult.tasks.find(x => x.id === depTaskId)?.dependencies?.some(dd => dd.taskId === id);
         });
       });
 
@@ -574,7 +574,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               message: 'Task updated successfully',
               affectedTasks: affectedTasks.length,
               affectedTaskIds: affectedTasks.map(t => t.id),
-              allTasks
+              allTasks: allTasksResult.tasks
             }, null, 2),
           },
         ],

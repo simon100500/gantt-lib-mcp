@@ -36,8 +36,8 @@ export class TaskService {
   }
 
   // Helper: Convert Prisma Task to domain Task
-  private taskToDomain(task: any, dependencies: TaskDependency[] = []): Task {
-    return {
+  private taskToDomain(task: any, dependencies: TaskDependency[] = [], full: boolean = false): Task {
+    const base = {
       id: task.id,
       name: task.name,
       startDate: dateToDomain(task.startDate),
@@ -45,6 +45,17 @@ export class TaskService {
       color: task.color || undefined,
       parentId: task.parentId || undefined,
       progress: task.progress,
+    };
+
+    if (!full) {
+      return {
+        ...base,
+        dependencies: [], // Compact mode: empty dependencies array
+      } as Task;
+    }
+
+    return {
+      ...base,
       dependencies,
       sortOrder: task.sortOrder,
     };
@@ -194,27 +205,55 @@ export class TaskService {
     await this.recordMutation('create', projectId, id, source);
 
     // Return fresh task with dependencies
-    return this.get(id) as Promise<Task>;
+    const result = await this.get(id);
+    return result!;
   }
 
   /**
-   * List tasks by project ID
+   * List tasks by project ID with compact mode and pagination
    */
-  async list(projectId?: string): Promise<Task[]> {
+  async list(
+    projectId?: string,
+    limit: number = 100,
+    offset: number = 0,
+    full: boolean = false
+  ): Promise<{ tasks: Task[]; hasMore: boolean; total: number }> {
+    // Validate parameters
+    if (limit < 1 || limit > 1000) {
+      throw new Error('limit must be between 1 and 1000');
+    }
+    if (offset < 0) {
+      throw new Error('offset must be >= 0');
+    }
+
+    // Query total count first
+    const total = await this.prisma.task.count({
+      where: projectId ? { projectId } : undefined,
+    });
+
+    // Query tasks with pagination
     const tasks = await this.prisma.task.findMany({
       where: projectId ? { projectId } : undefined,
       include: { dependencies: true },
-      orderBy: [{ sortOrder: 'asc' }],
+      orderBy: { sortOrder: 'asc' },
+      take: limit,
+      skip: offset,
     });
 
-    return tasks.map(task => {
+    const result = tasks.map(task => {
       const deps = task.dependencies.map(d => ({
         taskId: d.depTaskId,
         type: d.type as TaskDependency['type'],
         lag: d.lag,
       }));
-      return this.taskToDomain(task, deps);
+      return this.taskToDomain(task, deps, full);
     });
+
+    return {
+      tasks: result,
+      hasMore: offset + limit < total,
+      total,
+    };
   }
 
   /**
@@ -478,8 +517,8 @@ export class TaskService {
    * Export all tasks as JSON
    */
   async exportTasks(): Promise<string> {
-    const tasks = await this.list();
-    return JSON.stringify(tasks, null, 2);
+    const result = await this.list();
+    return JSON.stringify(result.tasks, null, 2);
   }
 
   /**
