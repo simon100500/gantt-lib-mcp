@@ -4,19 +4,19 @@ milestone: v3.0
 milestone_name: MCP Server Refactoring
 status: planning
 stopped_at: Phase 19 context gathered
-last_updated: "2026-03-17T21:23:06.931Z"
-last_activity: 2026-03-17 — Phase 18 plan created
+last_updated: "2026-03-18T12:00:00.000Z"
+last_activity: 2026-03-18 — Phase 19 plan created
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 3
+  total_plans: 4
   completed_plans: 3
   percent: 100
 ---
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-17 20:50:00
+**Last updated:** 2026-03-18 12:00:00
 
 ## Project Reference
 
@@ -31,17 +31,17 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 ## Current Position
 
 **Milestone:** v3.0 MCP Server Refactoring
-**Phase:** 18 — Qwen SDK Hardening (planned)
+**Phase:** 19 — Task Hierarchy (planned)
 **Plan:** 01 (ready to execute)
-**Status:** Ready to plan
-**Last activity:** 2026-03-17 — Phase 18 plan created
+**Status:** Ready to execute
+**Last activity:** 2026-03-18 — Phase 19 plan created
 
 **Progress:**
 [██████████] 100%
-[██░░░░░░░░] 20%
+[███░░░░░░░] 40%
 v1.0: [████████████████████] 14/14 phases (2026-03-13)
 v2.0: [████████████████████] 2/2 phases (2026-03-17)
-v3.0: [██░░░░░░░░] 1/5 phases (2/3 plans complete, 1/3 ready)
+v3.0: [███░░░░░░░] 2/5 phases (3/4 plans complete, 1/4 ready)
 Overall: [██████████████████░░] 17/22 phases (77%)
 ```
 
@@ -51,7 +51,8 @@ Overall: [██████████████████░░] 17/22 ph
   - ✅ Plan 17-02: Conversation history limiting (20 messages)
 - 📋 Phase 18: Qwen SDK Hardening (planned, ready to execute)
   - 📋 Plan 18-01: maxSessionTurns + AbortController timeout + excludeTools
-- Phase 19: Task Hierarchy
+- 📋 Phase 19: Task Hierarchy (planned, ready to execute)
+  - 📋 Plan 19-01: Add parentId filter to get_tasks (HIER-03)
 - Phase 20: Conversation History
 - Phase 21: Tool Quality
 
