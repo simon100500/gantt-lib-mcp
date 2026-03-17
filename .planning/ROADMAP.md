@@ -16,7 +16,7 @@
 |-------|-----------|-------|--------|-----------|
 | 1-14 | v1.0 | 26 | Complete | 2026-03-13 |
 | 15-16 | v2.0 | 6 | Complete | 2026-03-17 |
-| 17. Token Economy | v3.0 | TBD | Not started | - |
+| 17. Token Economy | v3.0 | 2 | Ready to execute | - |
 | 18. Qwen SDK Hardening | v3.0 | TBD | Not started | - |
 | 19. Task Hierarchy | v3.0 | TBD | Not started | - |
 | 20. Conversation History | v3.0 | TBD | Not started | - |
@@ -99,7 +99,9 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 4. Conversation history limited to 20 messages with truncation notice
 5. Token usage reduced by 50-90% for large projects
 
-**Plans:** TBD
+**Plans:** 2 plans
+- [ ] 17-01-PLAN.md — Update get_tasks and get_task MCP tools with compact mode, pagination, and includeChildren
+- [ ] 17-02-PLAN.md — Add limit parameter to MessageService.list() and update agent.ts
 
 ---
 
@@ -211,4 +213,4 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-17 with v3.0 phases*
+*Last updated: 2026-03-17 with Phase 17 plans*
