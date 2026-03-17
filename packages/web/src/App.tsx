@@ -842,16 +842,16 @@ export default function App() {
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
                 <div className="flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
-                  {/* Show/hide task list - secondary button with text hidden on small screens */}
+                  {/* Show/hide task list - text stays same, button shows state */}
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant={showTaskList ? "secondary" : "ghost"}
                     onClick={() => setShowTaskList(!showTaskList)}
                     aria-pressed={showTaskList}
                     className="h-7 gap-1.5"
                   >
                     <PanelLeft className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">{showTaskList ? 'Скрыть задачи' : 'Список задач'}</span>
+                    <span className="hidden sm:inline">Список задач</span>
                   </Button>
 
                   <ToolbarSep />
@@ -881,15 +881,15 @@ export default function App() {
 
                   <div className="flex-1" />
 
-                  {/* Today button - shows current date DD.MM with flag icon */}
+                  {/* Today button - ghost variant with FlagTriangleRight icon */}
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     onClick={handleScrollToToday}
-                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                    className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <FlagTriangleRight className="w-3.5 h-3.5" />
-                    {new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                    <span className="hidden sm:inline">Сегодня</span>
                   </Button>
 
                   <ToolbarSep />
