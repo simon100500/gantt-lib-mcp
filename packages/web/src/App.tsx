@@ -839,7 +839,7 @@ export default function App() {
               {/* Gantt panel wrapper - includes chart and footer */}
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-                <div className="flex items-center gap-1.5 h-11 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+                <div className="flex items-center gap-1 sm:gap-1.5 h-11 px-3 sm:px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
                   {/* Show/hide task list - outline style for both states */}
                   <button
                     type="button"
@@ -847,7 +847,7 @@ export default function App() {
                     aria-pressed={showTaskList}
                     aria-label={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                     className={cn(
-                      'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
+                      'h-7 px-2 sm:px-3 flex items-center gap-1.5 sm:gap-2 rounded border transition-colors',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                       'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
                       'text-xs font-medium',
@@ -855,7 +855,7 @@ export default function App() {
                     title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                   >
                     <PanelLeft className="w-3.5 h-3.5" />
-                    {showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
+                    <span className="hidden sm:inline">{showTaskList ? 'Скрыть задачи' : 'Показать задачи'}</span>
                   </button>
 
                   <ToolbarSep />
@@ -865,7 +865,7 @@ export default function App() {
                     type="button"
                     onClick={handleCollapseAll}
                     title="Свернуть все родительские задачи"
-                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium"
+                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium hidden sm:flex"
                   >
                     <ChevronsDownUp className="w-3.5 h-3.5" />
                     <span>Свернуть все</span>
@@ -875,7 +875,7 @@ export default function App() {
                     type="button"
                     onClick={handleExpandAll}
                     title="Развернуть все родительские задачи"
-                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium"
+                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium hidden sm:flex"
                   >
                     <ChevronsUpDown className="w-3.5 h-3.5" />
                     <span>Развернуть все</span>
@@ -888,10 +888,10 @@ export default function App() {
                     size="sm"
                     variant="outline"
                     onClick={handleScrollToToday}
-                    className="h-7 text-xs gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
+                    className="h-7 px-2 sm:px-2.5 text-xs gap-1 sm:gap-1.5 border-slate-200 text-slate-600 hover:text-slate-900"
                   >
                     <CalendarDays className="w-3.5 h-3.5" />
-                    Сегодня
+                    <span className="hidden sm:inline">Сегодня</span>
                   </Button>
 
                   <ToolbarSep />
@@ -902,7 +902,7 @@ export default function App() {
                       type="button"
                       onClick={() => setViewMode('day')}
                       className={cn(
-                        'h-7 px-3 flex items-center transition-colors',
+                        'h-7 px-2 sm:px-3 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium border-r border-slate-200',
                         viewMode === 'day'
@@ -910,13 +910,13 @@ export default function App() {
                           : 'bg-white text-slate-600',
                       )}
                     >
-                      День
+                      <span className="hidden xs:inline">Д</span><span className="hidden sm:inline">ень</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('week')}
                       className={cn(
-                        'h-7 px-3 flex items-center transition-colors',
+                        'h-7 px-2 sm:px-3 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium border-r border-slate-200',
                         viewMode === 'week'
@@ -924,13 +924,13 @@ export default function App() {
                           : 'bg-white text-slate-600',
                       )}
                     >
-                      Неделя
+                      <span className="hidden xs:inline">Н</span><span className="hidden sm:inline">еделя</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('month')}
                       className={cn(
-                        'h-7 px-3 flex items-center transition-colors',
+                        'h-7 px-2 sm:px-3 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium',
                         viewMode === 'month'
@@ -938,14 +938,14 @@ export default function App() {
                           : 'bg-white text-slate-600',
                       )}
                     >
-                      Месяц
+                      <span className="hidden xs:inline">М</span><span className="hidden sm:inline">есяц</span>
                     </button>
                   </div>
 
                   <ToolbarSep />
 
                   {/* Feature switches - right side */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 hidden md:flex">
                     <SwitchControl
                       checked={autoSchedule}
                       onChange={setAutoSchedule}
