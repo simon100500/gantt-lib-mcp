@@ -20,9 +20,9 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 
 ### Hardening (HARD)
 
-- [ ] **HARD-01**: Agent has max session turns limit of 20
-- [ ] **HARD-02**: Agent has 2-minute timeout via AbortController
-- [ ] **HARD-03**: Agent excluded from direct file system and terminal tools (write_file, edit_file, run_terminal_cmd, run_python_code)
+- [x] **HARD-01**: Agent has max session turns limit of 20
+- [x] **HARD-02**: Agent has 2-minute timeout via AbortController
+- [x] **HARD-03**: Agent excluded from direct file system and terminal tools (write_file, edit_file, run_terminal_cmd, run_python_code)
 
 ### Task Hierarchy (HIER)
 
