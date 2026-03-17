@@ -841,7 +841,7 @@ export default function App() {
               {/* Gantt panel wrapper - includes chart and footer */}
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-                <div className="flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+                <div className="flex items-center gap-2 py-2 px-4 pr-32 bg-white border-b border-slate-200 shrink-0 flex-wrap relative">
                   {/* Show/hide task list - text stays same, button shows state */}
                   <Button
                     size="sm"
@@ -984,25 +984,27 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  {/* Chat toggle button - always on the far right */}
-                  {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
-                    <button
-                      type="button"
-                      onClick={openProjectChat}
-                      aria-label="Показать AI ассистента"
-                      className={cn(
-                        'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                        'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
-                        'text-xs font-medium',
-                      )}
-                      title="Показать AI ассистента"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">AI ассистент</span>
-                      <span className="sm:hidden">AI</span>
-                    </button>
-                  )}
+                  {/* Chat toggle button - absolute positioned always on far right */}
+                  <div className="absolute right-4 top-2">
+                    {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
+                      <button
+                        type="button"
+                        onClick={openProjectChat}
+                        aria-label="Показать AI ассистента"
+                        className={cn(
+                          'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                          'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
+                          'text-xs font-medium',
+                        )}
+                        title="Показать AI ассистента"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">AI ассистент</span>
+                        <span className="sm:hidden">AI</span>
+                      </button>
+                    )}
+                  </div>
 
                   {/* Validation errors badge */}
                   {validationErrors.length > 0 && (
