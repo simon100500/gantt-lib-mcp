@@ -850,7 +850,7 @@ export default function App() {
                     aria-pressed={showTaskList}
                     className="h-7 gap-1.5"
                   >
-                    {showTaskList ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}
+                    {showTaskList ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
                     <span className="hidden md:inline">Список задач</span>
                   </Button>
 
