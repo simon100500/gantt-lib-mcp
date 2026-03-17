@@ -2,71 +2,79 @@
 
 **Gathered:** 2026-03-18
 **Status:** Ready for planning
-**Source:** MCP Refactoring Plan Phase 3
 
 <domain>
 ## Phase Boundary
 
-Give the agent the ability to work with nested tasks via `parentId` in MCP tools. Services already support `parentId` — this phase only exposes it through the MCP API and adds filtering.
+Enable AI agent to work with nested tasks via `parentId` parameter in MCP tools. Most functionality already exists — this phase adds missing `parentId` filter to `get_tasks` (HIER-03).
 
-**Already complete (from prior phases):**
-- `create_task` accepts `parentId?: string` in schema
-- `update_task` accepts `parentId?: string | null` in schema
-- TaskService validates parent exists and prevents self-parent
-- TaskService automatically recalculates parent dates from children range
+**Что входит:**
+- `get_tasks` принимает `parentId?: string | null` для фильтрации
+- `null` = только корневые задачи (parentId IS NULL)
+- `string` = только прямые дети указанного родителя
+- `undefined` = все задачи (текущее поведение)
 
-**What this phase adds:**
-- `get_tasks` filter by `parentId?: string | null`
-- Circular hierarchy validation (prevent task from becoming its own ancestor)
+**Что НЕ входит:**
+- HIER-01, HIER-02 уже реализованы (`create_task` и `update_task` принимают `parentId`)
+- Изменение логики пересчёта дат (уже работает)
+- Глубокая детекция циклов (текущей проверки достаточно)
 
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-### get_tasks parentId Filter (LOCKED — from refactoring plan)
+### get_tasks parentId Filter (LOCKED)
 
-**Parameter behavior:**
-- `parentId: null` — return only root tasks (tasks without a parent)
-- `parentId: "task-id"` — return only direct children of that parent
-- `parentId` not provided — return all tasks (current behavior)
+**Параметр `parentId` в `get_tasks`:**
+- Тип: `string | null | undefined`
+- `undefined` (или не указан) → все задачи, текущее поведение
+- `null` → только корневые задачи (`WHERE parentId IS NULL`)
+- `"task-id"` → только прямые дети указанного родителя (`WHERE parentId = 'task-id'`)
 
-**Schema addition to `get_tasks`:**
+**Описание для inputSchema:**
+```
+Optional filter by parent task ID.
+- null = root tasks only (tasks without a parent)
+- string = direct children of that parent task
+- undefined/not provided = all tasks (default behavior)
+```
+
+**Взаимодействие с пагинацией:**
+- Фильтр `parentId` применяется ДО пагинации
+- `limit`/`offset` ограничивают отфильтрованный результат
+- Пример: `get_tasks(parentId="abc", limit=50)` → максимум 50 детей задачи abc
+
+**Примеры использования:**
 ```typescript
-parentId: {
-  type: 'string',
-  description: 'Optional parent task ID to filter by. null = root tasks only, string = direct children of parent, omitted = all tasks.',
-}
+// Получить все корневые задачи
+get_tasks(parentId=null, limit=100)
+
+// Получить детей конкретного родителя
+get_tasks(parentId="task-123", limit=50)
+
+// Получить все задачи (текущее поведение)
+get_tasks(limit=100) // или get_tasks(parentId=undefined, limit=100)
 ```
 
-**Service layer changes:**
-- `TaskService.list()` already accepts `projectId`
-- Add new optional parameter `parentId?: string | null`
-- Prisma query: `where: { projectId, parentId: parentIdFilter }`
-- When `parentId === null`, filter for `parentId: { equals: null }` (Prisma null handling)
+### Circular Reference Detection (LOCKED)
+- Текущая проверка достаточна: запрещает только `parentId === id` (сам себе родитель)
+- Глубокая детекция (A→B→C→A) не требуется — редкий кейс, усложняет код
 
-### Circular Hierarchy Validation (LOCKED — from refactoring plan)
+### Orphan Handling (LOCKED)
+- Текущее поведение: `onDelete: SetNull` в Prisma схеме
+- При удалении родителя дети становятся корневыми задачами
+- Данные не теряются, пользователь может восстановить иерархию
 
-**Prevent:** A task cannot become its own ancestor through `parentId` assignment.
-
-**Validation approach:**
-1. When `parentId` is set in `create_task` or `update_task`
-2. Walk up the ancestor chain from the proposed parent
-3. If we encounter the task being updated → circular hierarchy → error
-
-**Error message format:**
-```
-Circular hierarchy detected: task '{childName}' cannot be a child of '{parentName}' because '{parentName}' is already a descendant of '{childName}'.
-```
-
-**Implementation location:**
-- Add helper method `TaskService.detectCircularHierarchy(childId: string, proposedParentId: string): Promise<boolean>`
-- Call in `create()` before transaction
-- Call in `update()` before transaction
+### Parent Date Behavior (LOCKED)
+- **Родитель без детей** = обычная задача с любыми датами
+- **При добавлении первого ребёнка** → даты родителя становятся равны датам ребёнка
+- **При наличии детей** → даты родителя = min(startDate) и max(endDate) от детей
+- **При удалении всех детей** → родитель сохраняет последние вычисленные даты
 
 ### Claude's Discretion
-- Implementation details of the ancestor traversal (recursive vs iterative)
-- Performance optimization for deep hierarchies (depth limit, caching)
+- Порядок параметров в функции `TaskService.list()` — можно добавить `parentId` после `projectId`
+- Тип параметра в TypeScript — `string | null | undefined` или использовать отдельный флаг?
 
 </decisions>
 
@@ -75,19 +83,19 @@ Circular hierarchy detected: task '{childName}' cannot be a child of '{parentNam
 
 **Downstream agents MUST read these before planning or implementing.**
 
-### Source Specification
-- `.planning/reference/MCP-reafctoring-plan.md` — Phase 3 (Иерархия задач) — complete specification with examples
-
 ### Requirements
-- `.planning/REQUIREMENTS.md` — HIER-01, HIER-02, HIER-03 (task hierarchy support)
+- `.planning/REQUIREMENTS.md` — HIER-01, HIER-02, HIER-03 (task hierarchy via parentId)
 
-### Implementation Files
-- `packages/mcp/src/index.ts` — MCP tool schemas and handlers (get_tasks needs parentId filter)
-- `packages/mcp/src/services/task.service.ts` — TaskService with existing parentId support
-- `packages/mcp/src/types.ts` — Task, CreateTaskInput, UpdateTaskInput types (already have parentId)
+### MCP Implementation
+- `packages/mcp/src/index.ts` — MCP tool handlers (create_task lines 76-139, update_task lines 188-251, get_tasks lines 141-167)
+- `packages/mcp/src/services/task.service.ts` — TaskService с полной поддержкой иерархии
+- `packages/mcp/src/types.ts` — CreateTaskInput, UpdateTaskInput с `parentId?: string`
 
-### Verification
-- `.planning/reference/MCP-reafctoring-plan.md` — Section "Верификация" → "Phase 3"
+### Database Schema
+- `packages/mcp/prisma/schema.prisma` — Task model с parentId и TaskHierarchy relation (lines 107-128)
+
+### Agent Documentation
+- `packages/mcp/agent/prompts/system.md` — System prompt documenting parentId workflow (lines 17-21)
 
 </canonical_refs>
 
@@ -95,53 +103,46 @@ Circular hierarchy detected: task '{childName}' cannot be a child of '{parentNam
 ## Existing Code Insights
 
 ### Reusable Assets
-- `packages/mcp/src/index.ts` lines 76-138 — `create_task` already has `parentId` in schema
-- `packages/mcp/src/index.ts` lines 188-250 — `update_task` already has `parentId` in schema
-- `packages/mcp/src/index.ts` lines 141-166 — `get_tasks` needs `parentId` filter added
-- `packages/mcp/src/services/task.service.ts` lines 140-150 — Parent validation already exists
-- `packages/mcp/src/services/task.service.ts` lines 333-344 — Update parent validation already exists
-- `packages/mcp/src/services/task.service.ts` lines 19-36 — `computeParentDates()` for automatic recalculation
+- `TaskService.computeParentDates()` (lines 20-36) — Вычисляет даты родителя от детей
+- `TaskService.create()` (lines 132-210) — Валидация parentId, проверка существования родителя, запрет A→A
+- `TaskService.update()` (lines 317-453) — Обновление parentId, пересчёт дат старого и нового родителя
+- `TaskService.get()` (lines 262-311) — Поддержка includeChildren: false | 'shallow' | 'deep'
 
 ### Established Patterns
-- MCP tools use `inputSchema.properties` for parameters
-- Prisma queries use `where: { field: value }` pattern
-- Null handling in Prisma: `{ equals: null }` for filtering null values
-- Transactional updates in TaskService using `$transaction`
+- Prisma where clause для nullable полей: `where: { parentId: null }` для фильтрации корневых задач
+- Параметры MCP tools передаются в service методы без изменений типов
+- Дата пересчитывается автоматически через `runScheduler()` и `computeParentDates()`
 
 ### Integration Points
-- `packages/mcp/src/index.ts` — Add `parentId` property to `get_tasks` inputSchema
-- `packages/mcp/src/index.ts` — Pass `parentId` parameter to `taskService.list()`
-- `packages/mcp/src/services/task.service.ts` — Add `parentId` parameter to `list()` method
-- `packages/mcp/src/services/task.service.ts` — Add `detectCircularHierarchy()` helper method
+- `packages/mcp/src/index.ts` — Update get_tasks inputSchema (add parentId property) and handler (pass to TaskService.list)
+- `packages/mcp/src/services/task.service.ts` — Update `list()` method signature to accept `parentId?: string | null`
 
 ### Current State
 ```typescript
-// get_tasks сейчас (lines 141-166)
+// get_tasks сейчас (index.ts lines 141-167)
 {
   name: 'get_tasks',
-  description: 'Get a list of Gantt chart tasks...',
+  description: '...',
   inputSchema: {
     type: 'object',
     properties: {
       projectId: {...},
       limit: {...},
       offset: {...},
-      full: {...},
-      // ← добавить parentId сюда
-    },
-  },
+      full: {...}
+      // ← parentId нужно добавить здесь
+    }
+  }
 }
 
-// TaskService.list() сейчас (lines 215-227)
+// TaskService.list() сейчас (task.service.ts lines 215-257)
 async list(
   projectId?: string,
   limit: number = 100,
   offset: number = 0,
   full: boolean = false
-): Promise<{ tasks: Task[]; hasMore: boolean; total: number }> {
-  // ← добавить parentId?: string | null параметр
-  // ← добавить parentId в Prisma where clause
-}
+): Promise<{ tasks: Task[]; hasMore: boolean; total: number }>
+// ← parentId нужно добавить сюда
 ```
 
 </code_context>
@@ -149,26 +150,59 @@ async list(
 <specifics>
 ## Specific Ideas
 
-**From refactoring plan — exact behaviors:**
+### User Workflow (из обсуждения)
+```
+1. Создать "Каркас здания" как обычную задачу с датами
+2. Добавить подзадачи с parentId="g4"
+3. Даты родителя автоматически пересчитываются от детей
+```
 
-### 3.3 `get_tasks` — фильтр по `parentId?: string | null`
-- `null` = только корневые задачи (без родителя)
-- `"id"` = только прямые дети конкретного родителя
-- Не передан = все задачи (текущее поведение)
+### Типичный сценарий агента
+```javascript
+// 1. Получить корневые задачи
+const roots = get_tasks(parentId=null, limit=100)
 
-### Verification test case (from refactoring plan):
-"Создать задачу с `parentId` → родитель получает правильные даты. Фильтр `parentId=null` → только корневые."
+// 2. Для каждой корневой — получить детей
+const children = get_tasks(parentId=roots[0].id, limit=50)
+
+// 3. Агент создаёт подзадачу
+create_task({name: "Фундамент", parentId: parent.id, startDate: "...", endDate: "..."})
+
+// 4. Даты родителя автоматически обновились
+```
+
+### Group Task Pattern (из gantt-lib)
+```typescript
+// Родитель-контейнер сначала существует сам по себе
+{
+  id: 'g4',
+  name: 'Каркас здания',
+  startDate: '2026-03-29',
+  endDate: '2026-05-10',
+  // parentId отсутствует
+}
+
+// Потом добавляются дети
+{
+  id: 'g4-1',
+  name: 'Монтаж колонн 1 этажа',
+  parentId: 'g4',
+  // ...
+}
+```
 
 </specifics>
 
 <deferred>
 ## Deferred Ideas
 
-None — Phase 19 is fully specified by the MCP refactoring plan. All decisions are locked.
+- Глубокая детекция циклических ссылок (A→B→C→A) — отложено, текущей проверки достаточно
+- Каскадное удаление потомков при удалении родителя — текущее SetNull безопаснее для данных
+- Рекурсивная фильтрация `get_tasks(parentId)` (все потомки) — сложнее с пагинацией, достаточно прямых детей
 
 </deferred>
 
 ---
 
 *Phase: 19-task-hierarchy*
-*Context gathered: 2026-03-18 from MCP Refactoring Plan Phase 3*
+*Context gathered: 2026-03-18*
