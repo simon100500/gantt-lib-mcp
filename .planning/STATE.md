@@ -310,6 +310,7 @@ Overall: [██████████████████████] 30
 | 260317-1qv | Error HTTP 500 non-blocking compact banner | 2026-03-17 | d6438ff | [260317-1qv-error-http-500](./quick/260317-1qv-error-http-500/) |
 | 260317-1v4 | Add month view mode | 2026-03-17 | f7654d6 | [260317-1v4-add-month-view](./quick/260317-1v4-add-month-view/) |
 | 260318 | Remove Enter key form submission | 2026-03-17 | b7abb62 | [260318-enter](./quick/260318-enter/) |
+| 260317-ghn | Basic responsive layout for taskbars (web design guidelines) | 2026-03-17 | da18eaa | [260317-ghn-web-design-guidelines](./quick/260317-ghn-web-design-guidelines/) |
 
 ---
 
