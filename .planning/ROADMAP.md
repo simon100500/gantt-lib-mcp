@@ -16,8 +16,8 @@
 |-------|-----------|-------|--------|-----------|
 | 1-14 | v1.0 | 26 | Complete | 2026-03-13 |
 | 15-16 | v2.0 | 6 | Complete | 2026-03-17 |
-| 17. Token Economy | v3.0 | 2 | Ready to execute | - |
-| 18. Qwen SDK Hardening | v3.0 | TBD | Not started | - |
+| 17. Token Economy | v3.0 | 2 | Complete | 2026-03-17 |
+| 18. Qwen SDK Hardening | v3.0 | 1 | Ready to execute | - |
 | 19. Task Hierarchy | v3.0 | TBD | Not started | - |
 | 20. Conversation History | v3.0 | TBD | Not started | - |
 | 21. Tool Quality | v3.0 | TBD | Not started | - |
@@ -100,8 +100,8 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 5. Token usage reduced by 50-90% for large projects
 
 **Plans:** 2/2 plans complete
-- [ ] 17-01-PLAN.md — Update get_tasks and get_task MCP tools with compact mode, pagination, and includeChildren
-- [ ] 17-02-PLAN.md — Add limit parameter to MessageService.list() and update agent.ts
+- [x] 17-01-PLAN.md — Update get_tasks and get_task MCP tools with compact mode, pagination, and includeChildren
+- [x] 17-02-PLAN.md — Add limit parameter to MessageService.list() and update agent.ts
 
 ---
 
@@ -119,7 +119,8 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 3. Agent excluded from direct file system and terminal tools
 4. Agent cannot hang or run indefinitely
 
-**Plans:** TBD
+**Plans:** 1 plan ready
+- [ ] 18-01-PLAN.md — Add maxSessionTurns, AbortController timeout, and excludeTools to agent.ts
 
 ---
 
@@ -200,16 +201,17 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 **v1+v2 Requirements:** 32 total — 100% complete
 **v3 Requirements:** 14 total — 100% mapped (Phases 17-21)
 
-| Category | Requirements | Phase |
-|----------|--------------|-------|
-| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2/2 | Complete    | 2026-03-17 | 18 |
-| Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 |
-| Conversation History (HIST) | HIST-01 through HIST-02 | 20 |
-| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 |
+| Category | Requirements | Phase | Plans | Status | Completed |
+|----------|--------------|-------|-------|--------|-----------|
+| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2 | Complete | 2026-03-17 |
+| Hardening (HARD) | HARD-01 through HARD-03 | 18 | 1 | Ready | - |
+| Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 | TBD | Not started | - |
+| Conversation History (HIST) | HIST-01 through HIST-02 | 20 | TBD | Not started | - |
+| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | TBD | Not started | - |
 
 **No orphaned requirements.**
 **No duplicates.**
 
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-17 with Phase 17 plans*
+*Last updated: 2026-03-17 with Phase 18 plan*
