@@ -183,6 +183,10 @@ async function executeAgentAttempt(
   dbPath: string,
   env: ReturnType<typeof resolveEnv>,
 ): Promise<AgentAttemptResult> {
+  // HARD-02: 2-minute timeout to prevent hangs
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), 120_000); // 2 minutes
+
   const session = query({
     prompt,
     options: {
@@ -192,6 +196,7 @@ async function executeAgentAttempt(
       permissionMode: 'yolo',
       includePartialMessages: true,
       maxSessionTurns: 20,  // HARD-01: Prevent infinite loops
+      abortController,  // HARD-02: Timeout protection
       env: {
         ...env,
         DB_PATH: dbPath,
@@ -217,7 +222,8 @@ async function executeAgentAttempt(
   let streamedContent = false;
   let capturedPartialContent = false;
 
-  for await (const event of session) {
+  try {
+    for await (const event of session) {
     if (isSDKPartialAssistantMessage(event)) {
       if (
         event.event.type === 'content_block_delta'
@@ -295,6 +301,9 @@ async function executeAgentAttempt(
       });
       break;
     }
+  }
+  } finally {
+    clearTimeout(timeout);
   }
 
   return {
