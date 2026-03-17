@@ -45,13 +45,6 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
     el.style.overflowY = newHeight > 192 ? 'auto' : 'hidden';
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  }
-
   function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
     const text = inputValue.trim();
@@ -90,7 +83,6 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
               onInput={handleTextareaInput}
-              onKeyDown={handleKeyDown}
               placeholder="Опишите ваш проект или выберите пример ниже"
               autoComplete="off"
               spellCheck={false}
