@@ -856,7 +856,7 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  {/* Collapse/Expand buttons - text hidden on medium screens */}
+                  {/* Collapse/Expand buttons - text hidden on large screens */}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -865,7 +865,7 @@ export default function App() {
                     className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <ChevronsDownUp className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">Свернуть</span>
+                    <span className="hidden xl:inline">Свернуть</span>
                   </Button>
 
                   <Button
@@ -876,7 +876,7 @@ export default function App() {
                     className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
                   >
                     <ChevronsUpDown className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">Развернуть</span>
+                    <span className="hidden xl:inline">Развернуть</span>
                   </Button>
 
                   {/* Today button - ghost variant with FlagTriangleRight icon */}
