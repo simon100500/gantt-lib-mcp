@@ -139,7 +139,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_tasks',
-      description: 'Get a list of Gantt chart tasks for the current project. Always call this before modifying tasks so you know what tasks exist and their IDs.',
+      description: 'Get a list of Gantt chart tasks with compact format by default. Use full=true for complete task data with all dependencies. Use pagination for large projects.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -147,18 +147,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Optional project ID to filter tasks by. If not provided, uses the current session project (PROJECT_ID env var). Pass null to get all tasks across all projects.',
           },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of tasks to return (default: 100, max: 1000). Use pagination for large projects.',
+            default: 100,
+          },
+          offset: {
+            type: 'number',
+            description: 'Number of tasks to skip for pagination (default: 0). Increment by limit to fetch next page.',
+            default: 0,
+          },
+          full: {
+            type: 'boolean',
+            description: 'Return full task data with all dependencies (default: false). Compact mode returns essential fields only.',
+            default: false,
+          },
         },
       },
     },
     {
       name: 'get_task',
-      description: 'Get a single task by ID',
+      description: 'Get a single task by ID with optional hierarchical child loading. Use includeChildren to load nested task structure.',
       inputSchema: {
         type: 'object',
         properties: {
           id: {
             type: 'string',
             description: 'Task ID',
+          },
+          includeChildren: {
+            type: 'string',
+            enum: ['false', 'shallow', 'deep'],
+            description: 'Include child tasks in response: false (no children, default), shallow (direct children only), deep (all descendants recursively).',
           },
         },
         required: ['id'],
@@ -434,19 +454,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_tasks tool
   if (name === 'get_tasks') {
-    const { projectId: argProjectId } = args as { projectId?: string | null };
+    const { projectId: argProjectId, limit = 100, offset = 0, full = false } = args as any;
     // If caller explicitly passes null, return all tasks; otherwise default to PROJECT_ID env
     const resolvedProjectId = argProjectId === null
       ? undefined
       : resolveProjectId(argProjectId);
-    const result = await taskService.list(resolvedProjectId);
+    const result = await taskService.list(resolvedProjectId, limit, offset, full);
 
     console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', result.tasks.length);
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
       argProjectId,
       resolvedProjectId,
+      limit,
+      offset,
+      full,
       taskCount: result.tasks.length,
+      hasMore: result.hasMore,
+      total: result.total,
       tasks: result.tasks.map((task) => ({ id: task.id, name: task.name, startDate: task.startDate, endDate: task.endDate })),
     });
 
@@ -462,17 +487,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_task tool
   if (name === 'get_task') {
-    const { id } = args as { id: string };
+    const { id, includeChildren = false } = args as any;
     if (!id) {
       throw new Error('Missing required parameter: id');
     }
 
-    const task = await taskService.get(id);
+    const task = await taskService.get(id, includeChildren);
     if (!task) {
       throw new Error(`Task not found: ${id}`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
+      taskId: id,
+      includeChildren,
       task,
     });
 
