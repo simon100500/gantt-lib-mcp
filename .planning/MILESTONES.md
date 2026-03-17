@@ -25,3 +25,31 @@
 
 ---
 
+## v2.0 PostgreSQL Migration (Shipped: 2026-03-17)
+
+**Phases:** 15-16 | **Plans:** 6 | **Timeline:** 4 days (2026-03-13 → 2026-03-17)
+
+**Git range:** ff39766 (Prisma schema) → 8ecdc71 (task save refactor)
+
+**Stats:**
+- Commits: 64
+- Files changed: 80 TypeScript files
+- Lines added: ~32,870
+- Database: PostgreSQL + Prisma ORM (10 tables)
+
+**Key accomplishments:**
+1. **Prisma ORM + PostgreSQL** — 10-table schema with proper relationships, foreign key cascades, and connection pooling
+2. **Prisma Client Singleton** — Hot-reload safe with graceful shutdown, accessible from both packages/mcp and packages/server
+3. **Migration System** — Prisma Migrate for schema version control and production deployments (20260313_init)
+4. **Services Layer** — TaskService, ProjectService, AuthService, MessageService, DependencyService all using Prisma
+5. **Shared Services** — No duplicate database code between packages/mcp and packages/server
+6. **Type-Safe Access** — Generated TypeScript types from Prisma schema throughout codebase
+
+**Archived:**
+- [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2.0-ROADMAP.md)
+- [.planning/milestones/v2.0-REQUIREMENTS.md](.planning/milestones/v2.0-REQUIREMENTS.md)
+
+**Known gaps:** None
+
+---
+
