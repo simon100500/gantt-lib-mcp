@@ -913,6 +913,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { projectId: argProjectId, limit } = args as GetConversationHistoryInput & { limit?: number };
     const resolvedProjectId = resolveProjectId(argProjectId);
 
+    // Validate projectId is available
+    if (!resolvedProjectId) {
+      throw new Error('Project ID is required. Provide projectId parameter or set PROJECT_ID environment variable.');
+    }
+
     // Validate and clamp limit parameter
     const defaultLimit = 20;
     const maxLimit = 50;
@@ -952,6 +957,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const input = args as unknown as AddMessageInput;
     const { projectId: argProjectId } = args as { projectId?: string };
     const resolvedProjectId = resolveProjectId(argProjectId);
+
+    // Validate projectId is available
+    if (!resolvedProjectId) {
+      throw new Error('Project ID is required. Provide projectId parameter or set PROJECT_ID environment variable.');
+    }
 
     // Validate content
     if (!input.content || input.content.trim().length === 0) {
