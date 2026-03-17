@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Decode JWT payload to get expiry time (ms). Returns null on parse error.
 function getTokenExpMs(token: string): number | null {
@@ -181,47 +181,64 @@ export function useAuth(): UseAuthResult {
     }, 'logout');
   }, []);
 
+  // Mutex: if a refresh is already in-flight, return the same Promise (prevents race condition
+  // with rotating refresh tokens when multiple callers trigger refresh simultaneously)
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
-    console.log('[useAuth] refreshAccessToken called');
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    console.log('[useAuth] refreshAccessToken: refresh token from localStorage:', refreshToken ? refreshToken.substring(0, 20) + '...' : 'null');
-    if (!refreshToken) {
-      console.log('[useAuth] refreshAccessToken: no refresh token, logging out');
-      logout();
-      return null;
+    if (refreshPromiseRef.current) {
+      console.log('[useAuth] refreshAccessToken: deduplicating concurrent refresh');
+      return refreshPromiseRef.current;
     }
 
-    try {
-      console.log('[useAuth] refreshAccessToken: calling /api/auth/refresh');
-      const res = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      console.log('[useAuth] refreshAccessToken: response status:', res.status, res.statusText);
-      if (!res.ok) {
-        const errorBody = await res.text();
-        console.log('[useAuth] refreshAccessToken: response not OK, status:', res.status, 'body:', errorBody);
-        if (res.status === 401 || res.status === 403) {
-          console.log('[useAuth] refreshAccessToken: auth error, logging out');
-          logout();
-        }
-        // 5xx and other errors are temporary — do not logout
+    const doRefresh = async (): Promise<string | null> => {
+      console.log('[useAuth] refreshAccessToken called');
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      console.log('[useAuth] refreshAccessToken: refresh token from localStorage:', refreshToken ? refreshToken.substring(0, 20) + '...' : 'null');
+      if (!refreshToken) {
+        console.log('[useAuth] refreshAccessToken: no refresh token, logging out');
+        logout();
         return null;
       }
 
-      const data = await res.json() as { accessToken: string; refreshToken: string };
-      console.log('[useAuth] refreshAccessToken: got new tokens');
-      localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+      try {
+        console.log('[useAuth] refreshAccessToken: calling /api/auth/refresh');
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
 
-      loggedSetState(prev => ({ ...prev, accessToken: data.accessToken }), 'refreshAccessToken');
-      return data.accessToken;
-    } catch (err) {
-      console.warn('[useAuth] refreshAccessToken: network error, not logging out', err);
-      return null;
-    }
+        console.log('[useAuth] refreshAccessToken: response status:', res.status, res.statusText);
+        if (!res.ok) {
+          const errorBody = await res.text();
+          console.log('[useAuth] refreshAccessToken: response not OK, status:', res.status, 'body:', errorBody);
+          if (res.status === 401 || res.status === 403) {
+            console.log('[useAuth] refreshAccessToken: auth error, logging out');
+            logout();
+          }
+          // 5xx and other errors are temporary — do not logout
+          return null;
+        }
+
+        const data = await res.json() as { accessToken: string; refreshToken: string };
+        console.log('[useAuth] refreshAccessToken: got new tokens');
+        localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+        localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+
+        loggedSetState(prev => ({ ...prev, accessToken: data.accessToken }), 'refreshAccessToken');
+        return data.accessToken;
+      } catch (err) {
+        console.warn('[useAuth] refreshAccessToken: network error, not logging out', err);
+        return null;
+      }
+    };
+
+    refreshPromiseRef.current = doRefresh().finally(() => {
+      refreshPromiseRef.current = null;
+    });
+
+    return refreshPromiseRef.current;
   }, [logout]);
 
   // Proactive token refresh: schedule refreshAccessToken ~2 min before access token expires
@@ -245,6 +262,25 @@ export function useAuth(): UseAuthResult {
 
     return () => clearTimeout(timer);
   }, [state.accessToken, refreshAccessToken]);
+
+  // On tab/app return: proactively refresh if token expires within 5 minutes.
+  // Handles mobile browsers that freeze setTimeout during background, leaving the
+  // proactive timer unexecuted and the token expired on return.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+      if (!token) return;
+      const expMs = getTokenExpMs(token);
+      if (!expMs) return;
+      if (expMs - Date.now() < 5 * 60 * 1000) {
+        void refreshAccessToken();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [refreshAccessToken]);
 
   const fetchWithAuthRetry = useCallback(async (
     input: RequestInfo | URL,
