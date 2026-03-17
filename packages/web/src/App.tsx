@@ -841,46 +841,42 @@ export default function App() {
               {/* Gantt panel wrapper - includes chart and footer */}
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-                <div className="flex items-center gap-1.5 h-auto min-h-[2.75rem] px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
-                  {/* Show/hide task list - outline style for both states */}
+                <div className="flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap">
+                  {/* Show/hide task list - icon only */}
                   <button
                     type="button"
                     onClick={() => setShowTaskList(!showTaskList)}
                     aria-pressed={showTaskList}
                     aria-label={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                     className={cn(
-                      'h-7 px-3 flex items-center gap-2 rounded border transition-colors',
+                      'h-7 w-7 flex items-center justify-center rounded border transition-colors',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                       'bg-transparent text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900',
-                      'text-xs font-medium',
                     )}
                     title={showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                   >
                     <PanelLeft className="w-3.5 h-3.5" />
-                    {showTaskList ? 'Скрыть задачи' : 'Показать задачи'}
                   </button>
 
                   <ToolbarSep />
 
-                  {/* Collapse/Expand buttons */}
+                  {/* Collapse/Expand buttons - icon only */}
                   <button
                     type="button"
                     onClick={handleCollapseAll}
                     title="Свернуть все родительские задачи"
-                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium"
+                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <ChevronsDownUp className="w-3.5 h-3.5" />
-                    <span>Свернуть все</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleExpandAll}
                     title="Развернуть все родительские задачи"
-                    className="h-7 px-2.5 flex items-center gap-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-xs font-medium"
+                    className="h-7 w-7 flex items-center justify-center rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <ChevronsUpDown className="w-3.5 h-3.5" />
-                    <span>Развернуть все</span>
                   </button>
 
                   <div className="flex-1" />
@@ -898,13 +894,13 @@ export default function App() {
 
                   <ToolbarSep />
 
-                  {/* View mode split button - right side */}
+                  {/* View mode split button - abbreviated on narrow screens */}
                   <div className="inline-flex rounded border border-slate-200 overflow-hidden">
                     <button
                       type="button"
                       onClick={() => setViewMode('day')}
                       className={cn(
-                        'h-7 px-3 flex items-center transition-colors',
+                        'h-7 px-2.5 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium border-r border-slate-200',
                         viewMode === 'day'
@@ -912,13 +908,14 @@ export default function App() {
                           : 'bg-white text-slate-600',
                       )}
                     >
-                      День
+                      <span className="hidden sm:inline">День</span>
+                      <span className="sm:hidden">Д</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('week')}
                       className={cn(
-                        'h-7 px-3 flex items-center transition-colors',
+                        'h-7 px-2.5 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium border-r border-slate-200',
                         viewMode === 'week'
@@ -926,13 +923,14 @@ export default function App() {
                           : 'bg-white text-slate-600',
                       )}
                     >
-                      Неделя
+                      <span className="hidden sm:inline">Неделя</span>
+                      <span className="sm:hidden">Н</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('month')}
                       className={cn(
-                        'h-7 px-3 flex items-center transition-colors',
+                        'h-7 px-2.5 flex items-center transition-colors',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         'text-xs font-medium',
                         viewMode === 'month'
@@ -940,66 +938,53 @@ export default function App() {
                           : 'bg-white text-slate-600',
                       )}
                     >
-                      Месяц
+                      <span className="hidden sm:inline">Месяц</span>
+                      <span className="sm:hidden">М</span>
                     </button>
                   </div>
 
-                  {/* Feature switches - hidden below xl, shown inline on xl+ */}
-                  <div className="hidden xl:flex items-center gap-2">
-                    <ToolbarSep />
-                    <SwitchControl
-                      checked={autoSchedule}
-                      onChange={setAutoSchedule}
-                      label="Закрепить связи"
-                    />
-                    <ToolbarSep />
-                    <SwitchControl
-                      checked={highlightExpiredTasks}
-                      onChange={setHighlightExpiredTasks}
-                      label="Просроченные"
-                    />
-                  </div>
-
-                  {/* Overflow menu - visible only below xl, contains the toggle switches */}
-                  <div className="xl:hidden">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          className="h-7 px-2 flex items-center rounded border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          title="Дополнительные параметры"
-                        >
-                          <Ellipsis className="w-4 h-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-52">
-                        <DropdownMenuItem
-                          onSelect={e => { e.preventDefault(); setAutoSchedule(!autoSchedule); }}
-                          className="flex items-center justify-between gap-2 cursor-pointer"
-                        >
-                          <span className="text-sm">Закрепить связи</span>
-                          <span className={cn(
-                            'w-2 h-2 rounded-full shrink-0',
-                            autoSchedule ? 'bg-emerald-500' : 'bg-slate-300'
-                          )} />
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={e => { e.preventDefault(); setHighlightExpiredTasks(!highlightExpiredTasks); }}
-                          className="flex items-center justify-between gap-2 cursor-pointer"
-                        >
-                          <span className="text-sm">Просроченные</span>
-                          <span className={cn(
-                            'w-2 h-2 rounded-full shrink-0',
-                            highlightExpiredTasks ? 'bg-emerald-500' : 'bg-slate-300'
-                          )} />
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                  {/* Overflow menu - always visible, contains toggle switches with real checkboxes */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="h-7 px-2 flex items-center rounded border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        title="Дополнительные параметры"
+                      >
+                        <Ellipsis className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem
+                        onSelect={e => { e.preventDefault(); setAutoSchedule(!autoSchedule); }}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={autoSchedule}
+                          readOnly
+                          className="h-4 w-4 rounded border-slate-300 accent-primary pointer-events-none shrink-0"
+                        />
+                        <span className="text-sm">Закрепить связи</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={e => { e.preventDefault(); setHighlightExpiredTasks(!highlightExpiredTasks); }}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={highlightExpiredTasks}
+                          readOnly
+                          className="h-4 w-4 rounded border-slate-300 accent-primary pointer-events-none shrink-0"
+                        />
+                        <span className="text-sm">Просроченные</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
                   <ToolbarSep />
 
-                  {/* Chat toggle button - only show when chat is hidden, on the right */}
+                  {/* Chat toggle button - always on the far right */}
                   {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
                     <button
                       type="button"
@@ -1014,7 +999,8 @@ export default function App() {
                       title="Показать AI ассистента"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      AI ассистент
+                      <span className="hidden sm:inline">AI ассистент</span>
+                      <span className="sm:hidden">AI</span>
                     </button>
                   )}
 
