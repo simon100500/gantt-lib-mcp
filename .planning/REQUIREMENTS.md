@@ -32,8 +32,8 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 
 ### Conversation History (HIST)
 
-- [ ] **HIST-01**: New MCP tool `get_conversation_history` returns last N messages (limit: 20, max: 50)
-- [ ] **HIST-02**: New MCP tool `add_message` records assistant message to project chat history
+- [x] **HIST-01**: New MCP tool `get_conversation_history` returns last N messages (limit: 20, max: 50)
+- [x] **HIST-02**: New MCP tool `add_message` records assistant message to project chat history
 
 ### Tool Quality (QUAL)
 

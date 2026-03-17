@@ -157,7 +157,7 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 3. MessageService integration works correctly
 4. Agent can read and write conversation history
 
-**Plans:** TBD
+**Plans:** 1/1 plans complete
 
 ---
 
@@ -206,7 +206,7 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 | Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2 | Complete | 2026-03-17 |
 | Hardening (HARD) | HARD-01 through HARD-03 | 18 | 1/1 | Complete    | 2026-03-17 |
 | Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 | 1/1 | Complete    | 2026-03-17 |
-| Conversation History (HIST) | HIST-01 through HIST-02 | 20 | TBD | Not started | - |
+| Conversation History (HIST) | HIST-01 through HIST-02 | 20 | 1/1 | Complete   | 2026-03-17 |
 | Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | TBD | Not started | - |
 
 **No orphaned requirements.**
