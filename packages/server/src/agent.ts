@@ -197,6 +197,7 @@ async function executeAgentAttempt(
       includePartialMessages: true,
       maxSessionTurns: 20,  // HARD-01: Prevent infinite loops
       abortController,  // HARD-02: Timeout protection
+      excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: {
         ...env,
         DB_PATH: dbPath,
