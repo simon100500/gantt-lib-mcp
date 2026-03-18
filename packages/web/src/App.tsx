@@ -993,7 +993,7 @@ export default function App() {
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  <ToolbarSep />
+                  {!chatSidebarVisible && <ToolbarSep />}
 
                   {/* Chat toggle button - absolute positioned always on far right */}
                   <div className="absolute right-4 top-2">
