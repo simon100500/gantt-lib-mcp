@@ -2,40 +2,40 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: MCP Server Refactoring
-status: executing
-stopped_at: Completed 22-03-PLAN.md
-last_updated: "2026-03-19T01:18:57Z"
-last_activity: 2026-03-19 - Completed 22-03 task store and WebSocket store routing
+status: completed
+stopped_at: Completed 22-04-PLAN.md
+last_updated: "2026-03-18T22:45:37.013Z"
+last_activity: 2026-03-19 - Completed 22-04 workspace router and layout decomposition
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 10
-  completed_plans: 9
-  percent: 98
+  completed_plans: 10
+  percent: 100
 ---
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-19 01:18:57 UTC
+**Last updated:** 2026-03-18 22:45:37 UTC
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-03-17)
 
-**Current focus:** Phase 22 - Zustand Frontend Refactor
+**Current focus:** Phase 22 - Zustand Frontend Refactor complete
 
 ## Current Position
 
 **Milestone:** v3.0 MCP Server Refactoring
 **Phase:** 22 - Zustand Frontend Refactor
-**Plan:** 04 (next)
-**Status:** In progress
-**Last activity:** 2026-03-19 - Completed 22-03 task store and WebSocket store routing
+**Plan:** 04 complete
+**Status:** Complete
+**Last activity:** 2026-03-19 - Completed 22-04 workspace router and layout decomposition
 
 **Progress:**
-[██████████] 98%
-- Overall plans with summaries: 9/10 complete
-- Phase 22 plans with summaries: 3/4 complete
+[██████████] 100%
+- Overall plans with summaries: 10/10 complete
+- Phase 22 plans with summaries: 4/4 complete
 
 ## Decisions
 
@@ -45,28 +45,31 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 - Keep token refresh scheduling, visibility refresh, and storage synchronization inside `packages/web/src/stores/useAuthStore.ts` instead of spreading auth orchestration across components.
 - Keep the existing task hooks as compatibility adapters while moving task source selection and loading into `useTaskStore`.
 - Route WebSocket task and chat events directly into Zustand stores so `App.tsx` no longer depends on callback-local task or chat state.
+- [Phase 22]: Keep App.tsx responsible for orchestration side effects while moving rendering into explicit workspace shells.
+- [Phase 22]: Let Toolbar and ProjectMenu read UI state from useUIStore directly instead of receiving App-local control props.
 
 ## Recent Execution
 
-- `417c2df` - Added `useTaskStore` and moved authenticated, local, and shared task loading behind Zustand adapters.
-- `1409fbc` - Routed WebSocket task/chat side effects directly into Zustand stores.
-- `npm run build --workspace=packages/web` passed after the `22-03` migration verification.
+- `620d6fb` - Extracted explicit workspace shells and narrowed `App.tsx` to workspace routing.
+- `3805141` - Routed project menu controls through `useUIStore` rather than `App.tsx` local UI orchestration.
+- `npm run build --workspace=packages/web` passed after the `22-04` frontend shell verification.
 
 ## Session Continuity
 
-**Last session:** 2026-03-19T01:18:57Z
-**Stopped at:** Completed 22-03-PLAN.md
+**Last session:** 2026-03-18T22:45:26.690Z
+**Stopped at:** Completed 22-04-PLAN.md
 **Resume file:** None
 
 **Next actions:**
-1. Execute `22-04-PLAN.md`.
-2. Thin `App.tsx` into workspace-focused composition and move remaining toolbar/project controls into stores.
+1. Review `.planning/phases/22-zustand-frontend-refactor/22-04-SUMMARY.md` for the completed shell decomposition details.
+2. Decide whether to close out the v3.0 milestone or queue follow-up frontend polish work.
 3. Keep phase 22 planning docs aligned with the newer frontmatter format so the GSD helpers can parse them reliably.
 
 **Context for next session:**
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-01-SUMMARY.md`
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-02-SUMMARY.md`
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-03-SUMMARY.md`
-- Phase 22 now has three recorded summaries on disk
-- `useTaskStore` owns task source selection and `App.tsx` now routes WebSocket task/chat side effects directly into Zustand stores
+- Summary written at `.planning/phases/22-zustand-frontend-refactor/22-04-SUMMARY.md`
+- Phase 22 now has four recorded summaries on disk
+- `App.tsx` now routes workspace shells while `Toolbar` and `ProjectMenu` read layout state directly from `useUIStore`
 - Pre-existing unrelated worktree changes remain in `packages/web/src/components/OtpModal.tsx`

@@ -47,8 +47,8 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 - [x] **WEB-ZUSTAND-03**: Auth/session/project ownership moves into `useAuthStore` while `useAuth` remains a compatibility wrapper
 - [x] **WEB-ZUSTAND-04**: Task collections and source selection move into `useTaskStore`
 - [x] **WEB-ZUSTAND-05**: WebSocket task/chat side effects write directly into stores
-- [ ] **WEB-ZUSTAND-06**: `App.tsx` becomes a thin workspace router with dedicated workspace components
-- [ ] **WEB-ZUSTAND-07**: Toolbar and project-menu controls are driven by UI-store state instead of app-local orchestration
+- [x] **WEB-ZUSTAND-06**: `App.tsx` becomes a thin workspace router with dedicated workspace components
+- [x] **WEB-ZUSTAND-07**: Toolbar and project-menu controls are driven by UI-store state instead of app-local orchestration
 
 ---
 
@@ -88,7 +88,7 @@ These features shipped in previous milestones and must continue working:
 | HIER-01 through HIER-03 | Phase 19 | Pending |
 | HIST-01 through HIST-02 | Phase 20 | Pending |
 | QUAL-01 through QUAL-02 | Phase 21 | Pending |
-| WEB-ZUSTAND-01 through WEB-ZUSTAND-07 | Phase 22 | In Progress |
+| WEB-ZUSTAND-01 through WEB-ZUSTAND-07 | Phase 22 | Complete |
 
 **Coverage:**
 - v3.0 requirements: 14 total
@@ -97,4 +97,4 @@ These features shipped in previous milestones and must continue working:
 
 ---
 *Requirements defined: 2026-03-17*
-*Last updated: 2026-03-17 after v3.0 milestone initialization*
+*Last updated: 2026-03-19 after Phase 22 completion*
