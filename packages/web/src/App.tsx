@@ -995,7 +995,7 @@ export default function App() {
                       size="sm"
                       onClick={openProjectChat}
                       aria-label="Показать AI ассистента"
-                      className="h-7 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                      className="ml-auto h-7 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                       title="Показать AI ассистента"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
