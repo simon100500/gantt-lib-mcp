@@ -105,7 +105,7 @@ export function ChatSidebar({
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-slate-200 px-4">
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-slate-200 px-4">
         <span
           className={cn(
             "h-2 w-2 shrink-0 rounded-full transition-colors",
