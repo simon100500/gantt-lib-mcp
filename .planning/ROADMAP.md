@@ -175,7 +175,7 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 3. Agent can recover from errors using error message guidance
 4. Tool descriptions reference related tools (e.g., batch_create)
 
-**Plans:** 1/1 plan ready
+**Plans:** 1/1 plans complete
 - [ ] 21-01-PLAN.md — Update tool descriptions and error messages with semantic density and actionable guidance
 
 ---
@@ -208,7 +208,7 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 | Hardening (HARD) | HARD-01 through HARD-03 | 18 | 1/1 | Complete    | 2026-03-17 |
 | Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 | 1/1 | Complete    | 2026-03-17 |
 | Conversation History (HIST) | HIST-01 through HIST-02 | 20 | 1/1 | Complete    | 2026-03-17 |
-| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | 1 | Ready to execute | - |
+| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | 1/1 | Complete   | 2026-03-18 |
 
 **No orphaned requirements.**
 **No duplicates.**

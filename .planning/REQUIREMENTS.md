@@ -37,8 +37,8 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 
 ### Tool Quality (QUAL)
 
-- [ ] **QUAL-01**: All tool descriptions are semantic and dense with usage guidance
-- [ ] **QUAL-02**: Error messages follow "what + why + what to do" pattern with actionable guidance
+- [x] **QUAL-01**: All tool descriptions are semantic and dense with usage guidance
+- [x] **QUAL-02**: Error messages follow "what + why + what to do" pattern with actionable guidance
 
 ---
 
