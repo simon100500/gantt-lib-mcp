@@ -849,10 +849,7 @@ export default function App() {
               {/* Gantt panel wrapper - includes chart and footer */}
               <div className="flex flex-col flex-1 overflow-hidden min-w-0">
                 {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-                <div className={cn(
-                  "flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap relative min-h-12",
-                  !chatSidebarVisible && "pr-32"
-                )}>
+                <div className="flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap relative min-h-12">
                   {/* Show/hide task list - text stays same, button shows state */}
                   <Button
                     size="sm"
