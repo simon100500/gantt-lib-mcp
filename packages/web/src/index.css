@@ -19,7 +19,8 @@
     --primary-foreground: 0 0% 98%;
 
     /* Secondary — бледно-фиолетовый (lavender) */
-    --secondary: 252 60% 94%;
+    /* --secondary: 252 60% 94%; */
+    --secondary: 220 14% 96%;
     --secondary-foreground: 222 47% 11%;
 
     /* Muted — slate-100 / slate-500 */
@@ -61,31 +62,38 @@
     width: 5px;
     height: 5px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     @apply bg-slate-200 rounded-full;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-300;
   }
 }
 
 @layer utilities {
+
   /* Shimmer for loading skeletons */
   @keyframes shimmer {
-    0%   { background-position: 200% center; }
-    100% { background-position: -200% center; }
+    0% {
+      background-position: 200% center;
+    }
+
+    100% {
+      background-position: -200% center;
+    }
   }
 
   .animate-shimmer {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--muted)) 25%,
-      hsl(215 16% 78%) 50%,
-      hsl(var(--muted)) 75%
-    );
+    background: linear-gradient(90deg,
+        hsl(var(--muted)) 25%,
+        hsl(215 16% 78%) 50%,
+        hsl(var(--muted)) 75%);
     background-size: 200% auto;
     animation: shimmer 2s linear infinite;
   }
@@ -99,8 +107,15 @@
 
   /* Fade-up for chat messages */
   @keyframes fade-up {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .animate-fade-up {
