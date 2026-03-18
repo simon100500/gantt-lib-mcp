@@ -446,6 +446,7 @@ export default function App() {
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     await auth.switchProject(projectId);
+    setProjectSidebarVisible(false);
     setWorkspace({ kind: 'project', projectId, chatOpen: false });
   }, [auth, resetWorkspacePresentation]);
 
