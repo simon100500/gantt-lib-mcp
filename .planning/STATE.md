@@ -126,7 +126,7 @@ Overall: [██████████████████████] 21
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260318-mpo | Add Russian holidays 2026 to GanttChart | 2026-03-18 | 72e046f | [260318-mpo-add-custom-calendar-days-russian-holiday](./quick/260318-mpo-add-custom-calendar-days-russian-holiday/) |
-| 260318-u8c | UI cosmetics (unified headers, sidebar animation, auto-close) | 2026-03-18 | c43faff | [260318-u8c-1-ai-2-3](./quick/260318-u8c-1-ai-2-3/) |
+| 260318-u8c | UI cosmetics (unified headers, sidebar animation, auto-close) | 2026-03-18 | 00f5436 | [260318-u8c-1-ai-2-3](./quick/260318-u8c-1-ai-2-3/) |
 
 ---
 
