@@ -4,8 +4,8 @@ milestone: v3.0
 milestone_name: MCP Server Refactoring
 status: completed
 stopped_at: "Completed quick task 260318-mpo: Add Russian holidays 2026"
-last_updated: "2026-03-18T13:24:36.996Z"
-last_activity: 2026-03-18 — Phase 21 complete
+last_updated: "2026-03-18T13:25:00.000Z"
+last_activity: 2026-03-18 — Completed quick task 260318-mpo: Add Russian holidays 2026
 progress:
   total_phases: 5
   completed_phases: 5
@@ -32,7 +32,7 @@ progress:
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-18 10:15:00 UTC
+**Last updated:** 2026-03-18 13:25:00 UTC
 
 ## Project Reference
 
@@ -97,6 +97,14 @@ Overall: [██████████████████████] 21
 - ✅ Task hierarchy (parentId support)
 - ✅ Conversation history (get_conversation_history tool)
 - ✅ Tool quality (semantic descriptions, actionable errors)
+
+---
+
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260318-mpo | Add Russian holidays 2026 to GanttChart | 2026-03-18 | 72e046f | [260318-mpo-add-custom-calendar-days-russian-holiday](./quick/260318-mpo-add-custom-calendar-days-russian-holiday/) |
 
 ---
 
