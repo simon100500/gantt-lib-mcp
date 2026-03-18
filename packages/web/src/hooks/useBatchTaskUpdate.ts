@@ -51,16 +51,6 @@ export function useBatchTaskUpdate({
     }
   }, []);
 
-  // Filter out parent tasks when children are also in the batch
-  // gantt-lib 0.10.0 no longer sends parents with children, but we handle both cases
-  const filterParentTasks = useCallback((tasks: Task[]): Task[] => {
-    const taskIds = new Set(tasks.map(t => t.id));
-    return tasks.filter(task => {
-      // Keep task if it has no parentId or if its parent is not in the batch
-      return !task.parentId || !taskIds.has(task.parentId);
-    });
-  }, []);
-
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
     console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
     console.log('[useBatchTaskUpdate] changedTasks count:', changedTasks.length);
@@ -148,130 +138,7 @@ export function useBatchTaskUpdate({
       endDate: typeof t.endDate === 'string' ? t.endDate : t.endDate.toISOString().split('T')[0],
     })));
 
-    // When a parent task is moved, we need to move all its descendants with the same delta
-    // gantt-lib doesn't do this automatically for parent-child relationships
-    const tasksWithDescendants: Task[] = [...changedTasks];
-    const changedTaskIds = new Set(changedTasks.map(t => t.id)); // Track which tasks gantt-lib already sent
-
-    console.log('[useBatchTaskUpdate] Starting parent-child check...');
-    console.log('[useBatchTaskUpdate] Total tasks in state:', tasks.length);
-    console.log('[useBatchTaskUpdate] Changed tasks:', changedTasks.length);
-    console.log('[useBatchTaskUpdate] Changed task IDs:', Array.from(changedTaskIds));
-
-    for (const changedTask of changedTasks) {
-      console.log('[useBatchTaskUpdate] Processing changed task:', changedTask.id, changedTask.name);
-
-      // Check if this is a parent task (has children)
-      const hasChildren = tasks.some(t => t.parentId === changedTask.id);
-      console.log('[useBatchTaskUpdate] Task', changedTask.id, 'hasChildren:', hasChildren);
-
-      if (hasChildren) {
-        console.log('[useBatchTaskUpdate] Task', changedTask.id, 'IS A PARENT - finding children...');
-
-        // Find original task to calculate date delta
-        const originalTask = tasks.find(t => t.id === changedTask.id);
-        if (!originalTask) {
-          console.log('[useBatchTaskUpdate] WARNING: Original task not found for', changedTask.id);
-          continue;
-        }
-
-        // Log raw date types and values for debugging
-        console.log('[useBatchTaskUpdate] DEBUG - Original task dates:', {
-          startDateType: typeof originalTask.startDate,
-          startDateValue: originalTask.startDate,
-          endDateType: typeof originalTask.endDate,
-          endDateValue: originalTask.endDate,
-        });
-        console.log('[useBatchTaskUpdate] DEBUG - Changed task dates:', {
-          startDateType: typeof changedTask.startDate,
-          startDateValue: changedTask.startDate,
-          endDateType: typeof changedTask.endDate,
-          endDateValue: changedTask.endDate,
-        });
-
-        const originalStart = typeof originalTask.startDate === 'string'
-          ? new Date(originalTask.startDate)
-          : originalTask.startDate;
-        const originalEnd = typeof originalTask.endDate === 'string'
-          ? new Date(originalTask.endDate)
-          : originalTask.endDate;
-        const newStart = typeof changedTask.startDate === 'string'
-          ? new Date(changedTask.startDate)
-          : changedTask.startDate;
-        const newEnd = typeof changedTask.endDate === 'string'
-          ? new Date(changedTask.endDate)
-          : changedTask.endDate;
-
-        console.log('[useBatchTaskUpdate] Original dates:', originalStart.toISOString().split('T')[0], '-', originalEnd.toISOString().split('T')[0]);
-        console.log('[useBatchTaskUpdate] New dates:', newStart.toISOString().split('T')[0], '-', newEnd.toISOString().split('T')[0]);
-
-        const startDelta = newStart.getTime() - originalStart.getTime();
-        const endDelta = newEnd.getTime() - originalEnd.getTime();
-
-        console.log('[useBatchTaskUpdate] Deltas:', startDelta, 'ms (start),', endDelta, 'ms (end)');
-
-        // Only apply delta if dates actually changed
-        if (startDelta !== 0 || endDelta !== 0) {
-          console.log(`%c[useBatchTaskUpdate] Parent task ${changedTask.id} MOVED - adding descendants`, 'background: #ffd43b; color: black; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-
-          // Recursively find all descendants and apply the same delta
-          const addDescendants = (parentId: string, depth = 0) => {
-            const children = tasks.filter(t => t.parentId === parentId);
-            console.log(`[useBatchTaskUpdate] ${'  '.repeat(depth)}Found ${children.length} direct children of ${parentId}`);
-
-            for (const child of children) {
-              // Skip if gantt-lib already sent this child with correct dates
-              if (changedTaskIds.has(child.id)) {
-                console.log(`%c[useBatchTaskUpdate] ${'  '.repeat(depth)}SKIPPING ${child.id} - already in changedTasks (gantt-lib sent it)`, 'background: #a3e635; color: black; padding: 2px 6px; border-radius: 3px;');
-                continue;
-              }
-
-              console.log(`[useBatchTaskUpdate] ${'  '.repeat(depth)}Processing child: ${child.id} (${child.name})`);
-
-              const childStart = typeof child.startDate === 'string'
-                ? new Date(child.startDate)
-                : child.startDate;
-              const childEnd = typeof child.endDate === 'string'
-                ? new Date(child.endDate)
-                : child.endDate;
-
-              console.log(`[useBatchTaskUpdate] ${'  '.repeat(depth)}  Old: ${childStart.toISOString().split('T')[0]} - ${childEnd.toISOString().split('T')[0]}`);
-
-              const newChildStart = new Date(childStart.getTime() + startDelta).toISOString().split('T')[0];
-              const newChildEnd = new Date(childEnd.getTime() + endDelta).toISOString().split('T')[0];
-
-              console.log(`[useBatchTaskUpdate] ${'  '.repeat(depth)}  New: ${newChildStart} - ${newChildEnd}`);
-
-              tasksWithDescendants.push({
-                ...child,
-                startDate: newChildStart,
-                endDate: newChildEnd,
-              });
-
-              console.log(`%c[useBatchTaskUpdate] ${'  '.repeat(depth)}Added descendant ${child.id} to batch`, 'background: #d0f0fd; color: black; padding: 2px 6px; border-radius: 3px;');
-
-              // Recursively add nested children
-              addDescendants(child.id, depth + 1);
-            }
-          };
-
-          addDescendants(changedTask.id);
-        } else {
-          console.log(`[useBatchTaskUpdate] Parent task ${changedTask.id} dates unchanged, not moving descendants`);
-        }
-      } else {
-        console.log('[useBatchTaskUpdate] Task', changedTask.id, 'is NOT a parent');
-      }
-    }
-
-    if (tasksWithDescendants.length > changedTasks.length) {
-      console.log(`[useBatchTaskUpdate] Added ${tasksWithDescendants.length - changedTasks.length} descendants to the batch`);
-    }
-
-    // DON'T filter out parent tasks!
-    // gantt-lib 0.10.0 DOES send parents with children via onCascade callback
-    // The filterParentTasks was incorrectly filtering out parents that were explicitly sent
-    const filteredTasks = tasksWithDescendants; // No filtering - use all tasks
+    const filteredTasks = changedTasks;
 
     // Strip sortOrder before sending to server.
     // handleTasksChange is called by gantt-lib's onTasksChange which fires for EVERY drag event
