@@ -45,8 +45,8 @@ MCP server refactoring: token economy, agent hardening, task hierarchy, conversa
 - [x] **WEB-ZUSTAND-01**: Zustand is installed in `packages/web` and available to the frontend bundle
 - [x] **WEB-ZUSTAND-02**: Foundational chat and UI frontend state lives in dedicated Zustand stores
 - [x] **WEB-ZUSTAND-03**: Auth/session/project ownership moves into `useAuthStore` while `useAuth` remains a compatibility wrapper
-- [ ] **WEB-ZUSTAND-04**: Task collections and source selection move into `useTaskStore`
-- [ ] **WEB-ZUSTAND-05**: WebSocket task/chat side effects write directly into stores
+- [x] **WEB-ZUSTAND-04**: Task collections and source selection move into `useTaskStore`
+- [x] **WEB-ZUSTAND-05**: WebSocket task/chat side effects write directly into stores
 - [ ] **WEB-ZUSTAND-06**: `App.tsx` becomes a thin workspace router with dedicated workspace components
 - [ ] **WEB-ZUSTAND-07**: Toolbar and project-menu controls are driven by UI-store state instead of app-local orchestration
 
