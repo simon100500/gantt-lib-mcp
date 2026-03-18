@@ -75,7 +75,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'create_task',
-      description: 'Create a new Gantt chart task with name, dates, and optional properties',
+      description: 'Create a Gantt task with name, dates, dependencies. Returns created task with cascade info. Supports parentId for hierarchy. Use get_tasks to list existing tasks before creating.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -140,7 +140,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_tasks',
-      description: 'Get a list of Gantt chart tasks with compact format by default. Use full=true for complete task data with all dependencies. Use pagination for large projects.',
+      description: 'List tasks with compact mode by default (id, name, dates, parentId, progress). Use full=true for complete data with dependencies. Supports pagination (limit/offset) and parentId filtering. For single task, use get_task.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -191,7 +191,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'update_task',
-      description: 'Update task properties (all fields optional except id)',
+      description: 'Update task by id. All fields optional except id. Returns updated task with cascade info if dates/dependencies changed. Pass parentId=null to remove from parent. Use get_task to fetch current state first.',
       inputSchema: {
         type: 'object',
         properties: {
