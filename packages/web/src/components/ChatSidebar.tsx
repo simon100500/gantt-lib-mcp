@@ -48,8 +48,13 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
   const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
+  const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [messages, streaming]);
 
   useEffect(() => {
     if (!loading || streaming) {
@@ -184,6 +189,8 @@ export function ChatSidebar({
             </div>
           </div>
         )}
+
+        <div ref={endRef} />
       </div>
 
       {isEmpty && (
