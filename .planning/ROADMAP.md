@@ -2,7 +2,7 @@
 
 **Created:** 2026-02-23
 **Current milestone:** v3.0 MCP Server Refactoring
-**Phase range:** 17-21
+**Phase range:** 17-22
 
 ## Milestones
 
@@ -21,6 +21,7 @@
 | 19. Task Hierarchy | v3.0 | TBD | Not started | - |
 | 20. Conversation History | v3.0 | TBD | Not started | - |
 | 21. Tool Quality | v3.0 | 1 | Ready to execute | - |
+| 22. Zustand Frontend Refactor | v3.0 | 1/4 | In Progress | - |
 
 ## Phases
 
@@ -213,6 +214,19 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 **No orphaned requirements.**
 **No duplicates.**
 
+### Phase 22: Zustand Frontend Refactor
+
+**Goal:** Refactor `packages/web` state ownership around Zustand stores and workspace-oriented frontend state.
+**Requirements**: WEB-ZUSTAND-03
+**Depends on:** Phase 21
+**Plans:** 1/4 plans complete
+
+Plans:
+- [ ] 22-01-PLAN.md
+- [x] 22-02-PLAN.md - Move auth/session/project ownership into Zustand via `useAuthStore`
+- [ ] 22-03-PLAN.md
+- [ ] 22-04-PLAN.md
+
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-18 with Phase 21 plan*
+*Last updated: 2026-03-19 with Phase 22 plan progress*
