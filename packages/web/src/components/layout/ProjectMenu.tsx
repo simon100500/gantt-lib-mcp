@@ -24,8 +24,6 @@ interface ProjectMenuProps {
   currentProjectLabel: string | undefined;
   onCreateProject: () => void | Promise<void>;
   onSwitchProject: (projectId: string) => void | Promise<void>;
-  onEditProject: (projectId: string, currentName: string) => Promise<void>;
-  onEditGuestProject: (projectId: string, currentName: string) => Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
@@ -38,8 +36,6 @@ export function ProjectMenu({
   currentProjectLabel,
   onCreateProject,
   onSwitchProject,
-  onEditProject,
-  onEditGuestProject,
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
@@ -50,6 +46,7 @@ export function ProjectMenu({
   const projectSidebarVisible = useUIStore((state) => state.projectSidebarVisible);
   const shareStatus = useUIStore((state) => state.shareStatus);
   const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
+  const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
 
@@ -113,7 +110,11 @@ export function ProjectMenu({
                 projects={auth.projects}
                 onSwitch={onSwitchProject}
                 onCreateNew={() => void onCreateProject()}
-                onEdit={workspace.kind === 'draft' ? undefined : onEditProject}
+                onEdit={workspace.kind === 'draft'
+                  ? undefined
+                  : async () => {
+                    setShowEditProjectModal(true);
+                  }}
               />
             ) : (
               <ProjectSwitcher
@@ -121,7 +122,9 @@ export function ProjectMenu({
                 projects={[]}
                 onSwitch={() => {}}
                 onCreateNew={() => void onCreateProject()}
-                onEdit={onEditGuestProject}
+                onEdit={async () => {
+                  setShowEditProjectModal(true);
+                }}
               />
             )}
           </div>

@@ -281,17 +281,6 @@ export default function App() {
     openProjectChat();
   }, [activateDraftWorkspace, batchUpdate, createPlaceholderTask, openProjectChat, workspace.kind]);
 
-  const handleEditProject = useCallback(async (_projectId: string, _currentName: string) => {
-    if (!auth.accessToken) {
-      return;
-    }
-    setShowEditProjectModal(true);
-  }, [auth.accessToken, setShowEditProjectModal]);
-
-  const handleEditGuestProject = useCallback(async (_projectId: string, _currentName: string) => {
-    setShowEditProjectModal(true);
-  }, [setShowEditProjectModal]);
-
   const handleSwitchProject = useCallback(async (projectId: string) => {
     setProjectSidebarVisible(false);
     createEmptyChartAfterActivationRef.current = false;
@@ -525,8 +514,6 @@ export default function App() {
         currentProjectLabel={currentProjectLabel}
         onCreateProject={handleCreateProject}
         onSwitchProject={handleSwitchProject}
-        onEditProject={handleEditProject}
-        onEditGuestProject={handleEditGuestProject}
         onSaveProjectName={handleSaveProjectName}
         onCreateShareLink={handleCreateShareLink}
         onLoginRequired={() => setShowOtpModal(true)}
