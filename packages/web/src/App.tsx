@@ -998,12 +998,7 @@ export default function App() {
                         type="button"
                         onClick={openProjectChat}
                         aria-label="Показать AI ассистента"
-                        className={cn(
-                          'h-7 px-2.5 flex items-center gap-1.5 rounded border transition-colors',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                          'bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90',
-                          'text-xs font-medium',
-                        )}
+                        className="h-7 px-2 flex items-center gap-1.5 rounded border border-slate-200 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 text-xs font-medium shadow-sm"
                         title="Показать AI ассистента"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
