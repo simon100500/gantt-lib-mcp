@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, FlagTriangleRight, Link, LogOut, Menu, PanelLeft, PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
 import { russianHolidays2026 } from './lib/russianHolidays2026.ts';
-import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
+import { ChatSidebar } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
 import { useTasks } from './hooks/useTasks.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
@@ -18,9 +18,10 @@ import { LoginButton } from './components/LoginButton.tsx';
 import { Button } from './components/ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './components/ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
+import { useChatStore } from './stores/useChatStore.ts';
+import { useTaskStore } from './stores/useTaskStore.ts';
 import type { Task, ValidationResult, DependencyError } from './types.ts';
 
-let msgCounter = 0;
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 
 // ── Switch control (track + thumb) ────────────────────────────────────────
@@ -108,9 +109,9 @@ export default function App() {
   );
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [streaming, setStreaming] = useState('');
-  const [aiThinking, setAiThinking] = useState(false);
+  const messages = useChatStore((state) => state.messages);
+  const streaming = useChatStore((state) => state.streamingText);
+  const aiThinking = useChatStore((state) => state.aiThinking);
   const [projectSidebarVisible, setProjectSidebarVisible] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceMode>(() => {
     if (hasShareToken) {
@@ -152,26 +153,15 @@ export default function App() {
     if (msg.type === 'tasks') {
       // WebSocket is ONLY used for AI agent responses now, not for user edits.
       // User edits use optimistic updates with direct server save, no realtime sync.
-      replaceTasksFromSystem(msg.tasks as Task[]);
+      useTaskStore.getState().replaceFromSystem(msg.tasks as Task[]);
     } else if (msg.type === 'token') {
-      setStreaming(prev => prev + (msg.content ?? ''));
+      useChatStore.getState().appendToken(msg.content ?? '');
     } else if (msg.type === 'done') {
-      setAiThinking(false);
-      setStreaming(prev => {
-        if (prev) {
-          setMessages(ms => [...ms, { id: String(++msgCounter), role: 'assistant', content: prev }]);
-        }
-        return '';
-      });
+      useChatStore.getState().finishStreaming();
     } else if (msg.type === 'error') {
-      setAiThinking(false);
-      setStreaming('');
-      setMessages(ms => [
-        ...ms,
-        { id: String(++msgCounter), role: 'assistant', content: `Error: ${msg.message ?? 'unknown error'}` },
-      ]);
+      useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, [setTasks]);
+  }, []);
 
   const { send, connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -232,9 +222,7 @@ export default function App() {
 
   const resetWorkspacePresentation = useCallback(() => {
     replaceTasksFromSystem([]);
-    setMessages([]);
-    setStreaming('');
-    setAiThinking(false);
+    useChatStore.getState().reset();
   }, [replaceTasksFromSystem]);
 
   const createPlaceholderTask = useCallback((): Task => {
@@ -296,15 +284,10 @@ export default function App() {
       setShowOtpModal(true);
       return;
     }
-    setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
-    setAiThinking(true);
+    useChatStore.getState().addMessage({ role: 'user', content: text });
     openProjectChat();
     void submitChatMessage(text).catch((error) => {
-      setAiThinking(false);
-      setMessages(ms => [
-        ...ms,
-        { id: String(++msgCounter), role: 'assistant', content: `Error: ${String(error)}` },
-      ]);
+      useChatStore.getState().setError(String(error));
     });
   }, [auth.isAuthenticated, hasShareToken, openProjectChat, submitChatMessage]);
 
@@ -334,8 +317,7 @@ export default function App() {
     resetWorkspacePresentation();
 
     if (firstPrompt) {
-      setMessages([{ id: String(++msgCounter), role: 'user', content: firstPrompt }]);
-      setAiThinking(true);
+      useChatStore.getState().addMessage({ role: 'user', content: firstPrompt });
     }
 
     setWorkspace(prev => (
@@ -346,7 +328,7 @@ export default function App() {
 
     const newProject = await auth.createProject(workspace.draftName);
     if (!newProject) {
-      setAiThinking(false);
+      useChatStore.getState().finishStreaming();
       queuedPromptRef.current = null;
       setWorkspace(prev => (
         prev.kind === 'draft'
@@ -551,10 +533,10 @@ export default function App() {
     }
 
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
-    setStreaming('');
     if (!hasQueuedFirstPrompt) {
-      setMessages([]);
-      setAiThinking(false);
+      useChatStore.getState().reset();
+    } else {
+      useChatStore.setState({ streamingText: '', error: null });
     }
 
     fetch('/api/messages', {
@@ -565,9 +547,16 @@ export default function App() {
         if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
-        setMessages(
-          data.map(m => ({ id: String(++msgCounter), role: m.role as 'user' | 'assistant', content: m.content })),
-        );
+        useChatStore.setState({
+          messages: data.map((message) => ({
+            id: crypto.randomUUID(),
+            role: message.role as 'user' | 'assistant',
+            content: message.content,
+          })),
+          streamingText: '',
+          aiThinking: false,
+          error: null,
+        });
       })
       .catch(() => { });
   }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken, workspace.kind]);
@@ -588,11 +577,7 @@ export default function App() {
 
     queuedPromptRef.current = null;
     void submitChatMessage(promptToSend).catch((error) => {
-      setAiThinking(false);
-      setMessages(ms => [
-        ...ms,
-        { id: String(++msgCounter), role: 'assistant', content: `Error: ${String(error)}` },
-      ]);
+      useChatStore.getState().setError(String(error));
     });
   }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, submitChatMessage, workspace.kind]);
 
