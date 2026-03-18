@@ -125,7 +125,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(401).send({ error: 'Invalid refresh token' });
     }
 
-    // Generate new tokens
+    // Generate new ACCESS token only (refresh token stays the same - no rotation!)
+    // This prevents race condition where concurrent refresh requests invalidate each other
     const sessionUser = await authService.findUserById(session.userId);
     const tokenPayload = {
       sub: session.userId,
@@ -135,14 +136,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     };
 
     const newAccessToken = signAccessToken(tokenPayload);
-    const newRefreshToken = signRefreshToken(tokenPayload);
 
-    // Update session
-    await authService.updateSessionTokens(session.id, newAccessToken, newRefreshToken);
+    // Update session with new access token, keep the same refresh token
+    await authService.updateSessionTokens(session.id, newAccessToken, refreshToken);
 
     return reply.send({
       accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
+      refreshToken: refreshToken, // Return the same refresh token
     });
   });
 
@@ -192,7 +192,18 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(403).send({ error: 'Project not found or access denied' });
     }
 
-    // Create new session for the switched project
+    // Get current session to preserve refresh token (no rotation - prevents race condition)
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+    const currentAccessToken = authHeader.slice(7);
+    const currentSession = await authService.findSessionByAccessToken(currentAccessToken);
+    if (!currentSession) {
+      return reply.status(401).send({ error: 'Session not found' });
+    }
+
+    // Create new access token only, keep the same refresh token
     const tokenPayload = {
       sub: userId,
       email: req.user!.email,
@@ -201,14 +212,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     };
 
     const newAccessToken = signAccessToken(tokenPayload);
-    const newRefreshToken = signRefreshToken(tokenPayload);
 
     console.log('[SWITCH-PROJECT DEBUG] About to update session tokens in DB');
     console.log('[SWITCH-PROJECT DEBUG] Session ID:', sessionId);
     console.log('[SWITCH-PROJECT DEBUG] New access token prefix:', newAccessToken.substring(0, 20) + '...');
 
-    // Update session tokens and project
-    await authService.updateSessionTokens(sessionId, newAccessToken, newRefreshToken);
+    // Update session with new access token, keep the same refresh token
+    await authService.updateSessionTokens(sessionId, newAccessToken, currentSession.refreshToken);
 
     console.log('[SWITCH-PROJECT DEBUG] Session tokens updated, now updating project');
     await authService.updateSessionProject(sessionId, project.id);
@@ -232,7 +242,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     return reply.send({
       accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
+      refreshToken: currentSession.refreshToken, // Return the same refresh token (no rotation)
       project: { id: project.id, name: project.name },
     });
   });
