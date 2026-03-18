@@ -1,6 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, ValidationResult } from '../types.ts';
+import type { CustomDayConfig } from 'gantt-lib';
 
 export interface GanttChartProps {
   tasks: Task[];
@@ -19,6 +20,7 @@ export interface GanttChartProps {
   highlightExpiredTasks?: boolean;
   headerHeight?: number;
   viewMode?: 'day' | 'week' | 'month';
+  customDays?: CustomDayConfig[];
   onAdd?: (newTask: Task) => void;
   onDelete?: (taskId: string) => void;
   onInsertAfter?: (taskId: string, newTask: Task) => void;
@@ -57,6 +59,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onPromoteTask,
   onDemoteTask,
   viewMode,
+  customDays,
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void; collapseAll: () => void; expandAll: () => void } | null>(null);
 
@@ -97,6 +100,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onReorder={onReorder}
       onPromoteTask={onPromoteTask}
       onDemoteTask={onDemoteTask}
+      customDays={customDays}
     />
   );
 });
