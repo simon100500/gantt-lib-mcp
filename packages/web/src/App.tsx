@@ -694,7 +694,7 @@ export default function App() {
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
 
         {/* ── Top Bar ──────────────────────────────────────────────────────── */}
-        <header className="flex items-center gap-3 h-12 px-4 bg-white border-b border-slate-200 shrink-0">
+        <header className="flex items-center gap-3 min-h-12 px-4 bg-white border-b border-slate-200 shrink-0">
           {/* Burger menu button */}
           <button
             type="button"
