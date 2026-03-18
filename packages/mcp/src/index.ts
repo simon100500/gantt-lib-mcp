@@ -1,13 +1,18 @@
+// Load environment variables BEFORE importing services
+import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { writeMcpDebugLog } from './debug-log.js';
+
+// Import services AFTER dotenv is configured
 import { taskService } from './services/task.service.js';
 import { messageService } from './services/message.service.js';
+import { dependencyService } from './services/dependency.service.js';
 import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency, GetConversationHistoryInput, AddMessageInput } from './types.js';
-import { writeMcpDebugLog } from './debug-log.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -359,6 +364,51 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['content'],
+      },
+    },
+    {
+      name: 'set_dependency',
+      description: 'Create a dependency (link) between two tasks. The successor task depends on the predecessor task. For example, to make task B start after task A finishes, set taskId=B (successor) and dependsOnTaskId=A (predecessor) with type=FS. Returns created dependency.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'ID of the successor task (the task that depends on the other)',
+          },
+          dependsOnTaskId: {
+            type: 'string',
+            description: 'ID of the predecessor task (the task that the successor depends on)',
+          },
+          type: {
+            type: 'string',
+            description: 'Dependency type: FS (Finish-to-Start, default), SS (Start-to-Start), FF (Finish-to-Finish), SF (Start-to-Finish)',
+            enum: ['FS', 'SS', 'FF', 'SF'],
+          },
+          lag: {
+            type: 'number',
+            description: 'Optional lag in days (default: 0). Positive values delay the successor, negative values allow overlap.',
+          },
+        },
+        required: ['taskId', 'dependsOnTaskId'],
+      },
+    },
+    {
+      name: 'remove_dependency',
+      description: 'Remove a dependency between two tasks. Requires both task IDs to identify the specific dependency link. Returns success confirmation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'ID of the successor task (the task that has the dependency)',
+          },
+          dependsOnTaskId: {
+            type: 'string',
+            description: 'ID of the predecessor task (the task that the successor depends on)',
+          },
+        },
+        required: ['taskId', 'dependsOnTaskId'],
       },
     },
   ],
@@ -915,13 +965,166 @@ Fix: Provide a non-empty content string with your response.`);
     };
   }
 
+  // set_dependency tool
+  if (name === 'set_dependency') {
+    const { taskId, dependsOnTaskId, type = 'FS', lag = 0 } = args as {
+      taskId: string;
+      dependsOnTaskId: string;
+      type?: 'FS' | 'SS' | 'FF' | 'SF';
+      lag?: number;
+    };
+
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task ID is required to identify which task should have the dependency.
+Fix: Provide the successor task ID as a string parameter.`);
+    }
+
+    if (!dependsOnTaskId) {
+      throw new Error(`[Permanent] Missing required parameter: dependsOnTaskId.
+Reason: Dependency task ID is required to identify which task this one depends on.
+Fix: Provide the predecessor task ID as a string parameter.`);
+    }
+
+    if (!isValidDependencyType(type)) {
+      throw new Error(`[Permanent] Invalid dependency type: ${type}.
+Must be one of: FS, SS, FF, SF.
+Fix: Use valid dependency type.`);
+    }
+
+    // Verify both tasks exist
+    const tasks = await taskService.list(undefined, undefined, 1000, 0, false);
+    const taskExists = tasks.tasks.find(t => t.id === taskId);
+    const depTaskExists = tasks.tasks.find(t => t.id === dependsOnTaskId);
+
+    if (!taskExists) {
+      throw new Error(`[Permanent] Task not found: ${taskId}.
+Reason: The successor task does not exist.
+Fix: Call get_tasks to list available task IDs.`);
+    }
+
+    if (!depTaskExists) {
+      throw new Error(`[Permanent] Dependency task not found: ${dependsOnTaskId}.
+Reason: The predecessor task does not exist.
+Fix: Call get_tasks to list available task IDs.`);
+    }
+
+    // Validate dependency doesn't already exist (get with full=true to load existing dependencies)
+    const existingTask = await taskService.get(taskId, true);
+    const existingDep = existingTask?.dependencies?.find(d => d.taskId === dependsOnTaskId);
+    if (existingDep) {
+      throw new Error(`[Permanent] Dependency already exists: task ${taskId} already depends on ${dependsOnTaskId}.
+Reason: Duplicate dependencies are not allowed.
+Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
+    }
+
+    // Create the dependency by updating the task with new dependencies array
+    const currentDependencies = existingTask?.dependencies || [];
+    const updatedDependencies = [
+      ...currentDependencies.filter(d => d.taskId !== dependsOnTaskId),
+      { taskId: dependsOnTaskId, type, lag }
+    ];
+
+    const updatedTask = await taskService.update(taskId, { id: taskId, dependencies: updatedDependencies }, 'agent');
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      taskId,
+      dependsOnTaskId,
+      type,
+      lag,
+      updatedTask,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            dependency: {
+              taskId,
+              dependsOnTaskId,
+              type,
+              lag,
+            },
+            message: `Dependency created: task ${taskId} now depends on ${dependsOnTaskId} (${type}${lag !== 0 ? ` with ${lag}d lag` : ''})`,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
+  // remove_dependency tool
+  if (name === 'remove_dependency') {
+    const { taskId, dependsOnTaskId } = args as {
+      taskId: string;
+      dependsOnTaskId: string;
+    };
+
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task ID is required to identify which task has the dependency.
+Fix: Provide the task ID as a string parameter.`);
+    }
+
+    if (!dependsOnTaskId) {
+      throw new Error(`[Permanent] Missing required parameter: dependsOnTaskId.
+Reason: Dependency task ID is required to identify which dependency to remove.
+Fix: Provide the dependency task ID as a string parameter.`);
+    }
+
+    // Get current task with full dependencies
+    const existingTask = await taskService.get(taskId, true);
+    if (!existingTask) {
+      throw new Error(`[Permanent] Task not found: ${taskId}.
+Reason: The task does not exist.
+Fix: Call get_tasks to list available task IDs.`);
+    }
+
+    // Check if dependency exists
+    const existingDep = existingTask?.dependencies?.find(d => d.taskId === dependsOnTaskId);
+    if (!existingDep) {
+      throw new Error(`[Permanent] Dependency not found: task ${taskId} does not depend on ${dependsOnTaskId}.
+Reason: The dependency to remove does not exist.
+Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
+    }
+
+    // Remove the dependency by updating the task without this dependency
+    const updatedDependencies = (existingTask.dependencies || []).filter(d => d.taskId !== dependsOnTaskId);
+    const updatedTask = await taskService.update(taskId, { id: taskId, dependencies: updatedDependencies }, 'agent');
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      taskId,
+      dependsOnTaskId,
+      updatedTask,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            removed: {
+              taskId,
+              dependsOnTaskId,
+            },
+            message: `Dependency removed: task ${taskId} no longer depends on ${dependsOnTaskId}`,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
   await writeMcpDebugLog('tool_call_failed', {
     tool: name,
     error: `Unknown tool: ${name}`,
   });
   throw new Error(`[Permanent] Unknown tool: ${name}.
 Reason: Tool name not found in MCP server registry.
-Fix: Check available tools via tools/list request. Valid tools: ping, create_task, get_tasks, get_task, update_task, delete_task, create_tasks_batch, get_conversation_history, add_message.`);
+Fix: Check available tools via tools/list request. Valid tools: ping, create_task, get_tasks, get_task, update_task, delete_task, create_tasks_batch, get_conversation_history, add_message, set_dependency, remove_dependency.`);
 });
 
 // Start server with stdio transport

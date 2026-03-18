@@ -5,7 +5,6 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./store": "./dist/store.js",
     "./db": "./dist/db.js",
     "./types": "./dist/types.js",
     "./auth-store": "./dist/auth-store.js",

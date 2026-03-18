@@ -14,7 +14,14 @@ import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
 
 export class TaskService {
-  private prisma = getPrisma();
+  private _prisma: ReturnType<typeof getPrisma> | undefined;
+
+  private get prisma() {
+    if (!this._prisma) {
+      this._prisma = getPrisma();
+    }
+    return this._prisma;
+  }
 
   // Helper: Compute parent task dates from its children
   private async computeParentDates(parentId: string, projectId?: string): Promise<{ startDate: Date; endDate: Date } | null> {
