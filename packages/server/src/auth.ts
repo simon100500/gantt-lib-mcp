@@ -44,7 +44,7 @@ export interface ShareTokenPayload {
 type BasePayload = Omit<JwtPayload, 'type'>;
 
 /**
- * Sign an access token (15 minute expiry)
+ * Sign an access token (NEVER expires - only logout clears it)
  *
  * @param payload - User and session data
  * @returns Signed JWT access token
@@ -52,13 +52,13 @@ type BasePayload = Omit<JwtPayload, 'type'>;
 export function signAccessToken(payload: BasePayload): string {
   return jwt.sign(
     { ...payload, type: 'access' as const },
-    SECRET,
-    { expiresIn: '15m' }
+    SECRET
+    // No expiresIn - token lives forever until logout
   );
 }
 
 /**
- * Sign a refresh token (7 day expiry)
+ * Sign a refresh token (NEVER expires - only logout clears it)
  *
  * @param payload - User and session data
  * @returns Signed JWT refresh token
@@ -66,8 +66,8 @@ export function signAccessToken(payload: BasePayload): string {
 export function signRefreshToken(payload: BasePayload): string {
   return jwt.sign(
     { ...payload, type: 'refresh' as const },
-    SECRET,
-    { expiresIn: '7d' }
+    SECRET
+    // No expiresIn - token lives forever until logout
   );
 }
 
