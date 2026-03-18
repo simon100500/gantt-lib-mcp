@@ -1,17 +1,7 @@
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Task } from '../types';
+import { useUIStore, type SavingState } from '../stores/useUIStore';
 import { useTaskMutation } from './useTaskMutation';
-
-export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
-
-// Track saving state globally (single instance across all components)
-let globalSavingState: SavingState = 'idle';
-const listeners = new Set<(state: SavingState) => void>();
-
-function notifyListeners(state: SavingState) {
-  globalSavingState = state;
-  listeners.forEach(listener => listener(state));
-}
 
 export interface UseBatchTaskUpdateOptions {
   tasks: Task[];
@@ -38,21 +28,12 @@ export function useBatchTaskUpdate({
   onCascade,
 }: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
   const { mutateTask, createTask, deleteTask, batchImportTasks } = useTaskMutation(accessToken);
-  const [localSavingState, setLocalSavingState] = useState<SavingState>(globalSavingState);
+  const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Subscribe to global saving state changes
-  useEffect(() => {
-    const listener = (state: SavingState) => setLocalSavingState(state);
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  }, []);
 
   // Helper to update saving state and reset after delay
   const setSavingStateWithReset = useCallback((state: SavingState) => {
-    notifyListeners(state);
+    useUIStore.getState().setSavingState(state);
 
     // Clear any existing timeout
     if (saveTimeoutRef.current) {
@@ -63,8 +44,8 @@ export function useBatchTaskUpdate({
     // Reset to 'idle' after 2 seconds for 'saved' and 'error' states
     if (state === 'saved' || state === 'error') {
       saveTimeoutRef.current = setTimeout(() => {
-        if (globalSavingState === state) {
-          notifyListeners('idle');
+        if (useUIStore.getState().savingState === state) {
+          useUIStore.getState().setSavingState('idle');
         }
       }, 2000);
     }
@@ -621,6 +602,6 @@ export function useBatchTaskUpdate({
     handleReorder,
     handlePromoteTask,
     handleDemoteTask,
-    savingState: localSavingState,
+    savingState,
   };
 }
