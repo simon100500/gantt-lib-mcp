@@ -99,30 +99,6 @@ export interface UpdateTaskInput {
 }
 
 /**
- * Input type for import/export operations
- */
-export interface FilePathInput {
-  /** File path for export/import */
-  filePath: string;
-}
-
-/**
- * Input type for import_tasks tool
- */
-export interface ImportTasksInput {
-  /** JSON string containing array of tasks */
-  jsonData: string;
-}
-
-/**
- * Input type for set_autosave_path tool
- */
-export interface AutoSaveInput {
-  /** Optional file path for autosave (default: ./gantt-data.json) */
-  filePath?: string;
-}
-
-/**
  * Work type definition for batch task creation
  */
 export interface WorkType {

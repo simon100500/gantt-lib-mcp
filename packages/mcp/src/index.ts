@@ -67,7 +67,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'ping',
-      description: 'A simple ping tool to test MCP server connectivity',
+      description: 'Test MCP server connectivity. Returns "pong". Use for debugging connection issues.',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -172,7 +172,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_task',
-      description: 'Get a single task by ID with optional hierarchical child loading. Use includeChildren to load nested task structure.',
+      description: 'Get single task by id with optional child loading. includeChildren: false (default), "shallow" (direct children), "deep" (all descendants). Use get_tasks for listing multiple tasks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -256,7 +256,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'delete_task',
-      description: 'Delete a task by ID',
+      description: 'Delete task by id. Returns success confirmation. Task removal triggers cascade recalculation of dependent tasks. Use get_tasks to verify deletion.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -269,43 +269,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'export_tasks',
-      description: 'Export all tasks to JSON format',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-    },
-    {
-      name: 'import_tasks',
-      description: 'Import tasks from JSON data (replaces all existing tasks)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          jsonData: {
-            type: 'string',
-            description: 'JSON string containing array of tasks to import',
-          },
-        },
-        required: ['jsonData'],
-      },
-    },
-    {
-      name: 'set_autosave_path',
-      description: 'No-op (kept for backward compatibility). Tasks are now persisted automatically via SQLite.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          filePath: {
-            type: 'string',
-            description: 'Ignored — SQLite persistence is always active',
-          },
-        },
-      },
-    },
-    {
       name: 'create_tasks_batch',
-      description: 'Create multiple Gantt chart tasks from a template with repeat parameters. Automatically generates task names, dates, and sequential FS dependencies within streams.',
+      description: 'Create multiple tasks from template with repeat parameters (sections, floors). Auto-generates names, dates, sequential FS dependencies within streams. Returns created tasks array. Alternative: use create_task for single tasks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -361,7 +326,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_conversation_history',
-      description: 'Get recent messages from the conversation history for context awareness. Call this before responding to understand previous dialogue turns.',
+      description: 'Get recent messages for context awareness. Call before responding to understand previous dialogue. Limit: default 20, max 50. Use add_message to record your response.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -380,7 +345,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'add_message',
-      description: 'Add an assistant message to the conversation history. Call this to record your response so future turns have context.',
+      description: 'Record assistant message to conversation history. Use after responding to user for future context. Call get_conversation_history to read previous messages.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -687,89 +652,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: 'text',
           text: JSON.stringify({ success: true, deleted: id }, null, 2),
-        },
-      ],
-    };
-  }
-
-  // export_tasks tool
-  if (name === 'export_tasks') {
-    const json = await taskService.exportTasks();
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      exportLength: json.length,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: json,
-        },
-      ],
-    };
-  }
-
-  // import_tasks tool
-  if (name === 'import_tasks') {
-    const { jsonData } = args as { jsonData: string };
-    if (!jsonData) {
-      throw new Error('Missing required parameter: jsonData');
-    }
-
-    const resolvedProjectId = normalizeProjectId(process.env.PROJECT_ID);
-
-    try {
-      const count = await taskService.importTasks(jsonData, resolvedProjectId, 'agent');
-      await writeMcpDebugLog('tool_call_completed', {
-        tool: name,
-        resolvedProjectId,
-        imported: count,
-      });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ success: true, imported: count, message: `Imported ${count} tasks successfully` }, null, 2),
-          },
-        ],
-      };
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      await writeMcpDebugLog('tool_call_failed', {
-        tool: name,
-        resolvedProjectId,
-        error: errorMessage,
-      });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${errorMessage}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  // set_autosave_path tool — no-op for backward compatibility
-  // Tasks are now persisted automatically via SQLite
-  if (name === 'set_autosave_path') {
-    const { filePath } = args as { filePath?: string };
-    const path = filePath || './gantt-data.json';
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      path,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            success: true,
-            autoSavePath: path,
-            message: 'Note: SQLite persistence is always active. set_autosave_path is a no-op kept for backward compatibility.',
-          }, null, 2),
         },
       ],
     };
