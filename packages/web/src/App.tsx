@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, FlagTriangleRight, Link, LogOut, Menu, PanelLeft, PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
 import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
+import { russianHolidays2026 } from './lib/russianHolidays2026.ts';
 import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
 import { StartScreen } from './components/StartScreen.tsx';
 import { useTasks } from './hooks/useTasks.ts';
@@ -1043,6 +1044,7 @@ export default function App() {
                     onReorder={batchUpdate.handleReorder}
                     onPromoteTask={batchUpdate.handlePromoteTask}
                     onDemoteTask={batchUpdate.handleDemoteTask}
+                    customDays={russianHolidays2026}
                   />
                 )}
 
