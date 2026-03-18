@@ -865,8 +865,6 @@ export default function App() {
                     <span className="hidden md:inline">Список задач</span>
                   </Button>
 
-                  <ToolbarSep />
-
                   {/* Collapse/Expand buttons - text hidden on large screens */}
                   <Button
                     size="sm"
@@ -902,8 +900,6 @@ export default function App() {
                   </Button>
 
                   <div className="flex-1" />
-
-                  <ToolbarSep />
 
                   {/* View mode split button - abbreviated on narrow screens */}
                   <div className="inline-flex rounded border border-slate-200 overflow-hidden">
@@ -996,7 +992,7 @@ export default function App() {
                   {!chatSidebarVisible && <ToolbarSep />}
 
                   {/* Chat toggle button - absolute positioned always on far right */}
-                  <div className="absolute right-4 top-2">
+                  <div className="absolute right-4 top-2.5">
                     {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
                       <button
                         type="button"
