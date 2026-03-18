@@ -43,8 +43,8 @@ export class TaskService {
   }
 
   // Helper: Convert Prisma Task to domain Task
-  private taskToDomain(task: any, dependencies: TaskDependency[] = [], full: boolean = false): Task {
-    const base = {
+  private taskToDomain(task: any, dependencies: TaskDependency[] = []): Task {
+    return {
       id: task.id,
       name: task.name,
       startDate: dateToDomain(task.startDate),
@@ -52,17 +52,6 @@ export class TaskService {
       color: task.color || undefined,
       parentId: task.parentId || undefined,
       progress: task.progress,
-    };
-
-    if (!full) {
-      return {
-        ...base,
-        dependencies: [], // Compact mode: empty dependencies array
-      } as Task;
-    }
-
-    return {
-      ...base,
       dependencies,
       sortOrder: task.sortOrder,
     };
@@ -217,14 +206,13 @@ export class TaskService {
   }
 
   /**
-   * List tasks by project ID with compact mode and pagination
+   * List tasks by project ID with pagination
    */
   async list(
     projectId?: string,
     parentId?: string | null,
     limit: number = 100,
-    offset: number = 0,
-    full: boolean = false
+    offset: number = 0
   ): Promise<{ tasks: Task[]; hasMore: boolean; total: number }> {
     // Validate parameters
     if (limit < 1 || limit > 1000) {
@@ -259,7 +247,7 @@ export class TaskService {
         type: d.type as TaskDependency['type'],
         lag: d.lag,
       }));
-      return this.taskToDomain(task, deps, full);
+      return this.taskToDomain(task, deps);
     });
 
     return {
@@ -301,7 +289,7 @@ export class TaskService {
           type: d.type as TaskDependency['type'],
           lag: d.lag,
         }));
-        return this.taskToDomain(child, childDeps, true);
+        return this.taskToDomain(child, childDeps);
       });
 
       // Recursive loading for 'deep' mode
@@ -316,7 +304,7 @@ export class TaskService {
     }
 
     // Return task with children if loaded
-    const result = this.taskToDomain(task, deps, true);
+    const result = this.taskToDomain(task, deps);
     if (children.length > 0) {
       (result as any).children = children;
     }

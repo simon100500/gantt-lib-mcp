@@ -1,5 +1,12 @@
 // Load environment variables BEFORE importing services
-import 'dotenv/config';
+// Use explicit path to .env relative to this file's location (__dirname = packages/mcp/dist)
+// so that DATABASE_URL is available regardless of the process working directory.
+import { config as dotenvConfig } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dotenvDir = dirname(__filename);
+dotenvConfig({ path: resolve(__dotenvDir, '../../../.env') });
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -145,7 +152,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_tasks',
-      description: 'List tasks with compact mode by default (id, name, dates, parentId, progress). Use full=true for complete data with dependencies. Supports pagination (limit/offset) and parentId filtering. For single task, use get_task.',
+      description: 'List tasks in compact mode by default (id, name, dates, parentId, progress — no dependencies). Use full=true to include dependencies and sortOrder. Supports pagination (limit/offset) and parentId filtering. For a single task use get_task.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -169,7 +176,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           full: {
             type: 'boolean',
-            description: 'Return full task data with all dependencies (default: false). Compact mode returns essential fields only.',
+            description: 'Return full task data including dependencies and sortOrder (default: false). Compact mode omits these fields to save tokens.',
             default: false,
           },
         },
@@ -524,12 +531,15 @@ Fix: Use valid dependency type.`);
     const resolvedProjectId = argProjectId === null
       ? undefined
       : resolveProjectId(argProjectId);
-    const result = await taskService.list(resolvedProjectId, parentId, limit, offset, full);
+    const result = await taskService.list(resolvedProjectId, parentId, limit, offset);
 
-    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'parentId:', parentId, 'tasks found:', result.tasks.length);
+    // Compact mode: strip dependencies and sortOrder to save tokens
+    const tasks = full
+      ? result.tasks
+      : result.tasks.map(({ dependencies: _deps, sortOrder: _sort, ...compact }) => compact);
+
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
-      argProjectId,
       resolvedProjectId,
       parentId,
       limit,
@@ -538,14 +548,13 @@ Fix: Use valid dependency type.`);
       taskCount: result.tasks.length,
       hasMore: result.hasMore,
       total: result.total,
-      tasks: result.tasks.map((task) => ({ id: task.id, name: task.name, startDate: task.startDate, endDate: task.endDate })),
     });
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify({ tasks, hasMore: result.hasMore, total: result.total }, null, 2),
         },
       ],
     };
@@ -993,7 +1002,7 @@ Fix: Use valid dependency type.`);
     }
 
     // Verify both tasks exist
-    const tasks = await taskService.list(undefined, undefined, 1000, 0, false);
+    const tasks = await taskService.list(undefined, undefined, 1000, 0);
     const taskExists = tasks.tasks.find(t => t.id === taskId);
     const depTaskExists = tasks.tasks.find(t => t.id === dependsOnTaskId);
 

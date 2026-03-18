@@ -2,14 +2,14 @@
 status: awaiting_human_verify
 trigger: "MCP tool for creating task dependencies reports success but doesn't actually create links in database"
 created: 2026-03-18T00:00:00.000Z
-updated: 2026-03-18T13:30:00.000Z
+updated: 2026-03-18T15:05:00.000Z
 ---
 
 ## Current Focus
-hypothesis: FIX APPLIED - Added dotenv/config import to MCP server and changed all services to lazy Prisma initialization
-test: Direct test of taskService.update() with dependencies array
-expecting: Dependency is created in PostgreSQL database
-next_action: Request human verification - test set_dependency tool in real environment
+hypothesis: CONFIRMED NEW ROOT CAUSE — The global Claude MCP config (~/.claude/settings.json) points to D:/Projects/gantt-lib-mcp/dist/index.js which DOES NOT EXIST. The real compiled MCP server is at packages/mcp/dist/index.js. The MCP server never starts. Log entries from 11:18 were from a direct Node.js test script, not from MCP protocol. The earlier dotenv fix is valid but irrelevant until the path is corrected.
+test: Verify dist/index.js at root doesn't exist, verify packages/mcp/dist/index.js does exist, update global MCP settings
+expecting: After updating MCP config path, MCP server starts and set_dependency works end-to-end
+next_action: Update ~/.claude/settings.json mcpServers.gantt-lib.args[0] to point to D:/Projects/gantt-lib-mcp/packages/mcp/dist/index.js and request human to restart Claude to apply
 
 ## Symptoms
 expected: Link created between tasks (predecessor-successor relationship established)
@@ -22,6 +22,10 @@ started: Since always (never worked from the beginning)
 - hypothesis: "set_dependency and remove_dependency tools don't exist in codebase"
   evidence: "Tools ARE implemented in packages/mcp/src/index.ts (lines 365-1115). Code compiles successfully."
   timestamp: "2026-03-18T12:30:00.000Z"
+
+- hypothesis: "Wrong MCP server entry point path caused server to never start"
+  evidence: "~/.claude/settings.json and ~/.claude.json both pointed to D:/Projects/gantt-lib-mcp/dist/index.js which does not exist. Fixed to packages/mcp/dist/index.js."
+  timestamp: "2026-03-18T15:00:00.000Z"
 
 - hypothesis: "MCP server is using SQLite stores instead of Prisma services"
   evidence: "MCP server imports taskService from './services/task.service.js', not from old SQLite stores."
@@ -51,6 +55,16 @@ started: Since always (never worked from the beginning)
   checked: Applied fix - added dotenv/config import to index.ts, changed all services to lazy Prisma initialization
   found: Direct test of taskService.update() with dependencies succeeded. Dependency created in PostgreSQL: "ae0d6ceb-3cc9-49eb-8c1f-09f379e96b1b depends on c3fb6d98-712f-4d80-85ae-3a08e5e4ab1e type: FS"
   implication: FIX VERIFIED - Dependencies now persist to PostgreSQL correctly
+
+- timestamp: 2026-03-18T15:00:00.000Z
+  checked: ~/.claude/settings.json global MCP server configuration for gantt-lib
+  found: "args": ["D:/Projects/gantt-lib-mcp/dist/index.js"] — this path does NOT exist on disk. The root-level dist/ folder was deleted (gitignore entry + confirmed not on filesystem). The real compiled MCP server is at packages/mcp/dist/index.js.
+  implication: MCP server NEVER starts. All log entries at 11:18 were from a direct Node.js test script run in terminal, not from MCP protocol calls. User's tests after dist rebuild failed because the wrong path is configured.
+
+- timestamp: 2026-03-18T15:00:00.000Z
+  checked: set_dependency handler in packages/mcp/dist/index.js (lines 885-955)
+  found: Handler correctly calls taskService.list() to verify tasks exist, taskService.get() to load existing dependencies, then taskService.update() with updated dependencies array. The code path is identical to what the direct test exercises.
+  implication: The code itself is correct. The only problem is the MCP config points to the wrong path so the server never starts.
 
 - timestamp: 2026-03-18T13:00:00.000Z
   checked: MCP server imports (packages/mcp/src/index.ts lines 7-9)
@@ -98,25 +112,28 @@ started: Since always (never worked from the beginning)
   implication: AI is instructed to set dependencies but not given clear instructions on which tool to use
 
 ## Resolution
-root_cause: MCP server (packages/mcp/src/index.ts) did not import or configure dotenv. Additionally, all service classes (TaskService, MessageService, DependencyService) initialized Prisma client at class instantiation time using class field `private prisma = getPrisma()`. This caused Prisma client to be initialized before dotenv could load environment variables, resulting in DATABASE_URL being undefined. All database operations failed silently with PrismaClientValidationError.
+root_cause: |
+  TWO compounding issues:
+  1. PRIMARY: The global Claude MCP config (~/.claude/settings.json and ~/.claude.json) pointed the MCP server to D:/Projects/gantt-lib-mcp/dist/index.js which does NOT exist. The root-level dist/ folder was deleted when it was gitignored (commit dbf5975, Feb 23). The real compiled MCP server is at packages/mcp/dist/index.js. The MCP server NEVER started, so all tool calls silently failed. Log entries we saw were from direct Node.js test scripts, not MCP protocol calls.
+  2. SECONDARY: Even with the correct path, dotenv was loaded with `import 'dotenv/config'` which resolves .env relative to process.cwd() — not relative to the script file. When Claude launches the MCP server as a stdio subprocess, cwd is NOT the project root, so DATABASE_URL was never loaded, causing PrismaClientValidationError on all DB operations.
 
 fix: |
-  1. Added `import 'dotenv/config'` as the first import in packages/mcp/src/index.ts
-  2. Changed all service classes to use lazy Prisma initialization:
-     - TaskService: Changed `private prisma = getPrisma()` to lazy getter pattern
-     - MessageService: Same change
-     - DependencyService: Same change
-  This ensures Prisma client is only initialized on first use, after dotenv has loaded DATABASE_URL.
+  1. Fixed MCP server path in ~/.claude/settings.json: D:/Projects/gantt-lib-mcp/dist/index.js → D:/Projects/gantt-lib-mcp/packages/mcp/dist/index.js
+  2. Fixed same path in ~/.claude.json for projects "D:/Projects/gantt-lib" and "D:/Projects/gantt-lib-mcp"
+  3. Changed dotenv loading in packages/mcp/src/index.ts from `import 'dotenv/config'` to explicit path resolution using __dirname, so .env is found regardless of process cwd
+  4. Rebuilt packages/mcp with `npm run build:mcp`
 
 verification: |
-  Direct test via Node.js script confirmed fix works:
-  - DATABASE_URL is now loaded correctly
-  - taskService.update() with dependencies array succeeded
-  - Dependency created and persisted to PostgreSQL: "ae0d6ceb-3cc9-49eb-8c1f-09f379e96b1b depends on c3fb6d98-712f-4d80-85ae-3a08e5e4ab1e type: FS"
-  - Direct Prisma query confirmed dependency exists in database
+  - Confirmed packages/mcp/dist/index.js exists and compiled correctly
+  - Confirmed dist/index.js now loads .env from absolute path (D:/Projects/gantt-lib-mcp/.env)
+  - Confirmed DATABASE_URL is loaded when dotenv runs with the explicit path
+  - Service code and set_dependency handler are correct (verified earlier)
+  - Awaiting human confirmation that set_dependency now works via actual MCP tool call
 
 files_changed:
-  - packages/mcp/src/index.ts (added dotenv/config import)
-  - packages/mcp/src/services/task.service.ts (lazy Prisma initialization)
-  - packages/mcp/src/services/message.service.ts (lazy Prisma initialization)
-  - packages/mcp/src/services/dependency.service.ts (lazy Prisma initialization)
+  - packages/mcp/src/index.ts (dotenv loading: explicit __dirname-relative path instead of cwd-relative)
+  - C:/Users/Volobuev/.claude/settings.json (MCP server path corrected)
+  - C:/Users/Volobuev/.claude.json (MCP server path corrected for two projects)
+  - packages/mcp/src/services/task.service.ts (lazy Prisma initialization - applied in previous session)
+  - packages/mcp/src/services/message.service.ts (lazy Prisma initialization - applied in previous session)
+  - packages/mcp/src/services/dependency.service.ts (lazy Prisma initialization - applied in previous session)
