@@ -407,15 +407,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Validate date format
     if (!isValidDateFormat(input.startDate)) {
-      throw new Error(`Invalid startDate format: ${input.startDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid startDate format: ${input.startDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
     if (!isValidDateFormat(input.endDate)) {
-      throw new Error(`Invalid endDate format: ${input.endDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid endDate format: ${input.endDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
 
     // Validate date range
     if (!isValidDateRange(input.startDate, input.endDate)) {
-      throw new Error(`Invalid date range: startDate (${input.startDate}) must be before or equal to endDate (${input.endDate})`);
+      throw new Error(`[Permanent] Invalid date range: startDate (${input.startDate}) must be ≤ endDate (${input.endDate}).
+Reason: End date cannot be before start date.
+Fix: Adjust dates so startDate ≤ endDate.`);
     }
 
     // Validate dependencies
@@ -423,7 +429,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       for (let i = 0; i < input.dependencies.length; i++) {
         const dep = input.dependencies[i];
         if (!isValidDependencyType(dep.type)) {
-          throw new Error(`Invalid dependency type at index ${i}: ${dep.type}. Must be one of: FS, SS, FF, SF`);
+          throw new Error(`[Permanent] Invalid dependency type at index ${i}: ${dep.type}.
+Must be one of: FS, SS, FF, SF.
+Fix: Use valid dependency type.`);
         }
       }
     }
@@ -497,12 +505,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'get_task') {
     const { id, includeChildren = false } = args as any;
     if (!id) {
-      throw new Error('Missing required parameter: id');
+      throw new Error(`[Permanent] Missing required parameter: id.
+Reason: Task ID is required to identify which task to retrieve.
+Fix: Provide the task ID as a string parameter.`);
     }
 
     const task = await taskService.get(id, includeChildren);
     if (!task) {
-      throw new Error(`Task not found: ${id}`);
+      throw new Error(`[Permanent] Task not found: ${id}.
+Reason: No task with this ID exists in the project.
+Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
@@ -527,7 +539,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { id } = input;
 
     if (!id) {
-      throw new Error('Missing required parameter: id');
+      throw new Error(`[Permanent] Missing required parameter: id.
+Reason: Task ID is required to identify which task to update.
+Fix: Provide the task ID as a string parameter.`);
     }
 
     // Check if at least one optional field is provided
@@ -541,15 +555,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       input.dependencies !== undefined;
 
     if (!hasUpdates) {
-      throw new Error('At least one field to update must be provided');
+      throw new Error(`[Permanent] No update fields provided.
+Reason: At least one field (name, startDate, endDate, color, parentId, progress, dependencies) must be provided.
+Fix: Include at least one field to update.`);
     }
 
     // Validate date format if dates are provided
     if (input.startDate && !isValidDateFormat(input.startDate)) {
-      throw new Error(`Invalid startDate format: ${input.startDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid startDate format: ${input.startDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
     if (input.endDate && !isValidDateFormat(input.endDate)) {
-      throw new Error(`Invalid endDate format: ${input.endDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid endDate format: ${input.endDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
 
     // Validate date range if both dates are provided
@@ -558,7 +578,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const startDate = input.startDate ?? existingTask.startDate;
       const endDate = input.endDate ?? existingTask.endDate;
       if (!isValidDateRange(startDate, endDate)) {
-        throw new Error(`Invalid date range: startDate (${startDate}) must be before or equal to endDate (${endDate})`);
+        throw new Error(`[Permanent] Invalid date range: startDate (${startDate}) must be ≤ endDate (${endDate}).
+Reason: End date cannot be before start date.
+Fix: Adjust dates so startDate ≤ endDate.`);
       }
     }
 
@@ -567,7 +589,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       for (let i = 0; i < input.dependencies.length; i++) {
         const dep = input.dependencies[i];
         if (!isValidDependencyType(dep.type)) {
-          throw new Error(`Invalid dependency type at index ${i}: ${dep.type}. Must be one of: FS, SS, FF, SF`);
+          throw new Error(`[Permanent] Invalid dependency type at index ${i}: ${dep.type}.
+Must be one of: FS, SS, FF, SF.
+Fix: Use valid dependency type.`);
         }
       }
     }
@@ -577,7 +601,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const updatedTask = await taskService.update(id, input, 'agent');
     if (!updatedTask) {
-      throw new Error(`Task not found: ${id}`);
+      throw new Error(`[Permanent] Task not found: ${id}.
+Reason: No task with this ID exists in the project.
+Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('update_task_completed', {
       id,
@@ -634,12 +660,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'delete_task') {
     const { id } = args as { id: string };
     if (!id) {
-      throw new Error('Missing required parameter: id');
+      throw new Error(`[Permanent] Missing required parameter: id.
+Reason: Task ID is required to identify which task to delete.
+Fix: Provide the task ID as a string parameter.`);
     }
 
     const deleted = await taskService.delete(id, 'agent');
     if (!deleted) {
-      throw new Error(`Task not found: ${id}`);
+      throw new Error(`[Permanent] Task not found: ${id}.
+Reason: No task with this ID exists in the project.
+Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
@@ -673,18 +703,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Validate baseStartDate format
     if (!isValidDateFormat(input.baseStartDate)) {
-      throw new Error(`Invalid baseStartDate format: ${input.baseStartDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid baseStartDate format: ${input.baseStartDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
 
     // Validate workTypes
     if (!input.workTypes || input.workTypes.length === 0) {
-      throw new Error('workTypes must be a non-empty array');
+      throw new Error(`[Permanent] workTypes must be a non-empty array.
+Reason: At least one work type is required to create tasks.
+Fix: Provide workTypes array with at least one item (e.g., [{ name: "Foundation", duration: 5 }]).`);
     }
 
     // Validate repeatBy has at least one repeat parameter
     const repeatKeys = Object.keys(input.repeatBy);
     if (repeatKeys.length === 0) {
-      throw new Error('repeatBy must contain at least one repeat parameter (e.g., sections, floors)');
+      throw new Error(`[Permanent] repeatBy must contain at least one repeat parameter.
+Reason: Need at least one dimension to repeat tasks across (sections, floors, etc.).
+Fix: Provide repeatBy object with at least one array (e.g., { sections: [1, 2, 3] }).`);
     }
 
     const streams = input.streams || 1;
@@ -797,7 +833,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Validate projectId is available
     if (!resolvedProjectId) {
-      throw new Error('Project ID is required. Provide projectId parameter or set PROJECT_ID environment variable.');
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Conversation history is scoped to a project.
+Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
     }
 
     // Validate and clamp limit parameter
@@ -842,12 +880,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Validate projectId is available
     if (!resolvedProjectId) {
-      throw new Error('Project ID is required. Provide projectId parameter or set PROJECT_ID environment variable.');
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Conversation history is scoped to a project.
+Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
     }
 
     // Validate content
     if (!input.content || input.content.trim().length === 0) {
-      throw new Error('content is required and must be non-empty');
+      throw new Error(`[Permanent] content is required and must be non-empty.
+Reason: Empty messages cannot be recorded to conversation history.
+Fix: Provide a non-empty content string with your response.`);
     }
 
     // Add the message (always as 'assistant' role)
@@ -877,7 +919,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     tool: name,
     error: `Unknown tool: ${name}`,
   });
-  throw new Error(`Unknown tool: ${name}`);
+  throw new Error(`[Permanent] Unknown tool: ${name}.
+Reason: Tool name not found in MCP server registry.
+Fix: Check available tools via tools/list request. Valid tools: ping, create_task, get_tasks, get_task, update_task, delete_task, create_tasks_batch, get_conversation_history, add_message.`);
 });
 
 // Start server with stdio transport
