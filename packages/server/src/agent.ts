@@ -183,6 +183,10 @@ async function executeAgentAttempt(
   dbPath: string,
   env: ReturnType<typeof resolveEnv>,
 ): Promise<AgentAttemptResult> {
+  // HARD-02: 2-minute timeout to prevent hangs
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), 120_000); // 2 minutes
+
   const session = query({
     prompt,
     options: {
@@ -191,6 +195,9 @@ async function executeAgentAttempt(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
+      maxSessionTurns: 20,  // HARD-01: Prevent infinite loops
+      abortController,  // HARD-02: Timeout protection
+      excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: {
         ...env,
         DB_PATH: dbPath,
@@ -216,7 +223,8 @@ async function executeAgentAttempt(
   let streamedContent = false;
   let capturedPartialContent = false;
 
-  for await (const event of session) {
+  try {
+    for await (const event of session) {
     if (isSDKPartialAssistantMessage(event)) {
       if (
         event.event.type === 'content_block_delta'
@@ -295,6 +303,9 @@ async function executeAgentAttempt(
       break;
     }
   }
+  } finally {
+    clearTimeout(timeout);
+  }
 
   return {
     assistantResponse,
@@ -313,7 +324,7 @@ async function verifyMutationAttempt(
   revisionBefore: number,
   assistantResponse: string,
 ): Promise<VerificationResult> {
-  const tasksAfter = await taskService.list(projectId) as ComparableTask[];
+  const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
   const revisionAfter = await taskService.getTaskRevision(projectId);
   const runMutations = await taskService.getMutationEventsByRun(runId, projectId);
@@ -355,9 +366,9 @@ export async function runAgentWithHistory(
   try {
     const runId = crypto.randomUUID();
     const mutationRequested = isMutationIntent(userMessage);
-    const tasksBefore = mutationRequested
-      ? await taskService.list(projectId) as ComparableTask[]
-      : [];
+    const { tasks: tasksBefore } = mutationRequested
+      ? await taskService.list(projectId)
+      : { tasks: [] };
     const revisionBefore = await taskService.getTaskRevision(projectId);
 
     await writeServerDebugLog('agent_run_started', {
@@ -372,7 +383,7 @@ export async function runAgentWithHistory(
     });
 
     await messageService.add('user', userMessage, projectId);
-    const messages = await messageService.list(projectId);
+    const messages = await messageService.list(projectId, 20);
 
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
       ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
@@ -407,7 +418,7 @@ export async function runAgentWithHistory(
 
     let assistantResponse = '';
     let streamedContent = false;
-    let tasksAfter = tasksBefore;
+    let tasksAfter: ComparableTask[] = tasksBefore;
     let finalVerification: VerificationResult = {
       tasksAfter: tasksBefore,
       tasksChanged: false,
@@ -465,7 +476,7 @@ export async function runAgentWithHistory(
         revisionBefore,
         assistantResponse,
       );
-      tasksAfter = finalVerification.tasksAfter;
+      tasksAfter = finalVerification.tasksAfter as ComparableTask[];
 
       if (!mutationRequested) {
         break;

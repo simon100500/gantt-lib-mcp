@@ -10,7 +10,14 @@ import type { Message } from '../types.js';
 import { randomUUID } from 'node:crypto';
 
 export class MessageService {
-  private prisma = getPrisma();
+  private _prisma: ReturnType<typeof getPrisma> | undefined;
+
+  private get prisma() {
+    if (!this._prisma) {
+      this._prisma = getPrisma();
+    }
+    return this._prisma;
+  }
 
   /**
    * Helper: Convert Prisma Message to domain Message
@@ -48,15 +55,19 @@ export class MessageService {
   /**
    * Get all messages for a project, ordered by creation time
    * @param projectId - Project ID to filter messages by
+   * @param limit - Maximum number of messages to return (default: 20, most recent)
    * @returns Array of messages ordered by creation time (oldest first)
    */
-  async list(projectId: string): Promise<Message[]> {
+  async list(projectId: string, limit: number = 20): Promise<Message[]> {
+    // Fetch last N messages ordered by creation time (most recent first)
     const messages = await this.prisma.message.findMany({
       where: { projectId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' }, // Changed to desc to get most recent first
+      take: limit, // Take only the last N messages
     });
 
-    return messages.map(m => this.messageToDomain(m));
+    // Reverse to maintain chronological order (oldest first)
+    return messages.reverse().map(m => this.messageToDomain(m));
   }
 
   /**

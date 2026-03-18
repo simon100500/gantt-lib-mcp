@@ -9,7 +9,14 @@ import { getPrisma } from '../prisma.js';
 import type { TaskDependency } from '../types.js';
 
 export class DependencyService {
-  private prisma = getPrisma();
+  private _prisma: ReturnType<typeof getPrisma> | undefined;
+
+  private get prisma() {
+    if (!this._prisma) {
+      this._prisma = getPrisma();
+    }
+    return this._prisma;
+  }
 
   /**
    * Create multiple dependencies for a task

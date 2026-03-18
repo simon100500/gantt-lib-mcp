@@ -1,67 +1,50 @@
 # Requirements: gantt-lib MCP Server
 
-**Defined:** 2026-03-13
+**Defined:** 2026-03-17
 **Core Value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
 
-**Milestone:** v2.0 — PostgreSQL Migration with Prisma
+**Milestone:** v3.0 — MCP Server Refactoring
 
 ---
 
-## v2.0 Requirements
+## v3.0 Requirements
 
-PostgreSQL migration with Prisma ORM. Fresh database start (no data migration from SQLite).
+MCP server refactoring: token economy, agent hardening, task hierarchy, conversation history, tool quality.
 
-### Database (DB)
+### Token Economy (TOKEN)
 
-- [x] **DB-01**: Prisma schema defined for all existing tables (users, projects, sessions, otp_codes, tasks, dependencies, messages)
-- [x] **DB-02**: Prisma client generated and accessible from packages/mcp and packages/server
-- [x] **DB-03**: DATABASE_URL configured for PostgreSQL connection pooling
-- [ ] **DB-04**: Prisma migrations run successfully on target database
-- [x] **DB-05**: Foreign key constraints match current SQLite schema
+- [x] **TOKEN-01**: `get_tasks` supports compact mode with only essential fields (id, name, dates, parentId, progress)
+- [x] **TOKEN-02**: `get_tasks` supports pagination with `limit` (default: 100) and `offset` (default: 0) parameters
+- [x] **TOKEN-03**: `get_task` supports `includeChildren: boolean` (default: false) to avoid loading child tasks
+- [x] **TOKEN-04**: Conversation history limited to 20 messages with truncation notice when exceeded
 
-### Services (SVC)
+### Hardening (HARD)
 
-- [x] **SVC-01**: TaskService replaces TaskStore (create, update, delete, list, recalculateDates)
-- [x] **SVC-02**: ProjectService replaces raw project queries (create, get, update, delete)
-- [x] **SVC-03**: AuthService replaces auth-store (OTP, sessions, JWT validation)
-- [x] **SVC-04**: MessageService replaces raw message queries
-- [x] **SVC-05**: DependencyService for task dependency CRUD
-- [x] **SVC-06**: All services use Prisma client (no raw SQL)
-- [x] **SVC-07**: Services are shared between packages/mcp and packages/server
+- [x] **HARD-01**: Agent has max session turns limit of 20
+- [x] **HARD-02**: Agent has 2-minute timeout via AbortController
+- [x] **HARD-03**: Agent excluded from direct file system and terminal tools (write_file, edit_file, run_terminal_cmd, run_python_code)
 
-### Connection Pooling (POOL)
+### Task Hierarchy (HIER)
 
-- [x] **POOL-01**: Prisma connection pool configured (connection_limit)
-- [x] **POOL-02**: Timeout settings for database connections
-- [x] **POOL-03**: Proper handling of connection lifecycle (dispose on shutdown)
+- [x] **HIER-01**: `create_task` accepts `parentId?: string` parameter
+- [x] **HIER-02**: `update_task` accepts `parentId?: string | null` parameter (null removes from parent)
+- [x] **HIER-03**: `get_tasks` supports filtering by `parentId?: string | null` (null = root only, string = direct children)
 
-### Integration (INT)
+### Conversation History (HIST)
 
-- [ ] **INT-01**: MCP tools use TaskService instead of TaskStore
-- [ ] **INT-02**: Server API routes use services instead of direct SQL
-- [ ] **INT-03**: Agent runs with Prisma-backed task operations
-- [ ] **INT-04**: WebSocket broadcasts work with new services
-- [ ] **INT-05**: Auto-schedule engine works with Prisma data
+- [x] **HIST-01**: New MCP tool `get_conversation_history` returns last N messages (limit: 20, max: 50)
+- [x] **HIST-02**: New MCP tool `add_message` records assistant message to project chat history
 
-### Cleanup (CLN)
+### Tool Quality (QUAL)
 
-- [ ] **CLN-01**: Remove @libsql/client dependency
-- [ ] **CLN-02**: Remove SQLite bootstrap code (packages/mcp/src/db.ts)
-- [ ] **CLN-03**: Remove raw SQL queries scattered across codebase
-- [ ] **CLN-04**: Update TypeScript types to match Prisma-generated types
-
-### Deployment (DEP)
-
-- [ ] **DEP-01**: Docker image includes Prisma client
-- [ ] **DEP-02**: DATABASE_URL environment variable documented
-- [ ] **DEP-03**: Prisma migrations run on container startup if needed
-- [ ] **DEP-04**: Connection pool size appropriate for container limits
+- [x] **QUAL-01**: All tool descriptions are semantic and dense with usage guidance
+- [x] **QUAL-02**: Error messages follow "what + why + what to do" pattern with actionable guidance
 
 ---
 
-## v1.0 Features (Validated — Keep Working)
+## v1.0+v2.0 Features (Validated — Keep Working)
 
-These features shipped in v1.0 and must continue working after PostgreSQL migration:
+These features shipped in previous milestones and must continue working:
 
 - ✓ MCP tool API (create_task, update_task, delete_task, batch_create)
 - ✓ Auto-schedule engine with FS/SS/FF/SF dependencies
@@ -70,6 +53,7 @@ These features shipped in v1.0 and must continue working after PostgreSQL migrat
 - ✓ Multi-user project isolation
 - ✓ OTP email authentication
 - ✓ Real-time WebSocket sync
+- ✓ PostgreSQL + Prisma ORM with connection pooling
 - ✓ Production Docker deployment
 
 ---
@@ -78,12 +62,10 @@ These features shipped in v1.0 and must continue working after PostgreSQL migrat
 
 | Feature | Reason |
 |---------|--------|
-| Multiple chats per project | Keep current structure (messages → project) |
-| Soft delete | Not required for v2.0, simple delete sufficient |
+| MCP → REST API migration | Service layer already sufficient, article allows "through internal service layer" |
 | Task change events | Operational telemetry, defer to future |
-| Data migration from SQLite | Fresh start per user decision |
-| Audit/replay history | Not required for current functionality |
-| Undo/redo | Feature enhancement, not part of DB migration |
+| Undo/redo | Feature enhancement, not part of MCP refactoring |
+| Advanced pagination (cursors, etc.) | Simple offset/limit sufficient for v3.0 |
 
 ---
 
@@ -91,18 +73,17 @@ These features shipped in v1.0 and must continue working after PostgreSQL migrat
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DB-01 through DB-05 | Phase 15 | Pending |
-| SVC-01 through SVC-07 | Phase 16 | Pending |
-| POOL-01 through POOL-03 | Phase 15 | Pending |
-| INT-01 through INT-05 | Phase 17 | Pending |
-| CLN-01 through CLN-04 | Phase 17 | Pending |
-| DEP-01 through DEP-04 | Phase 18 | Pending |
+| TOKEN-01 through TOKEN-04 | Phase 17 | Pending |
+| HARD-01 through HARD-03 | Phase 18 | Pending |
+| HIER-01 through HIER-03 | Phase 19 | Pending |
+| HIST-01 through HIST-02 | Phase 20 | Pending |
+| QUAL-01 through QUAL-02 | Phase 21 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 23 total
-- Mapped to phases: 23
+- v3.0 requirements: 14 total
+- Mapped to phases: 14
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-03-13*
-*Last updated: 2026-03-13 after initial definition*
+*Requirements defined: 2026-03-17*
+*Last updated: 2026-03-17 after v3.0 milestone initialization*

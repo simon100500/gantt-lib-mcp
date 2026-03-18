@@ -34,7 +34,7 @@ fastify.get('/api/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) => {
   console.log('[TASKS DEBUG] GET /api/tasks - projectId from JWT:', req.user!.projectId);
-  const tasks = await taskService.list(req.user!.projectId);
+  const { tasks } = await taskService.list(req.user!.projectId);
   console.log('[TASKS DEBUG] Returning tasks:', tasks.length, 'tasks');
   return reply.send(tasks);
 });

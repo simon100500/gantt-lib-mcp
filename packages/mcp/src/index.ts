@@ -1,12 +1,25 @@
+// Load environment variables BEFORE importing services
+// Use explicit path to .env relative to this file's location (__dirname = packages/mcp/dist)
+// so that DATABASE_URL is available regardless of the process working directory.
+import { config as dotenvConfig } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dotenvDir = dirname(__filename);
+dotenvConfig({ path: resolve(__dotenvDir, '../../../.env') });
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { taskService } from './services/task.service.js';
-import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency } from './types.js';
 import { writeMcpDebugLog } from './debug-log.js';
+
+// Import services AFTER dotenv is configured
+import { taskService } from './services/task.service.js';
+import { messageService } from './services/message.service.js';
+import { dependencyService } from './services/dependency.service.js';
+import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency, GetConversationHistoryInput, AddMessageInput } from './types.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -66,7 +79,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'ping',
-      description: 'A simple ping tool to test MCP server connectivity',
+      description: 'Test MCP server connectivity. Returns "pong". Use for debugging connection issues.',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -74,7 +87,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'create_task',
-      description: 'Create a new Gantt chart task with name, dates, and optional properties',
+      description: 'Create a Gantt task with name, dates, dependencies. Returns created task with cascade info. Supports parentId for hierarchy. Use get_tasks to list existing tasks before creating.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -139,7 +152,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_tasks',
-      description: 'Get a list of Gantt chart tasks for the current project. Always call this before modifying tasks so you know what tasks exist and their IDs.',
+      description: 'List tasks in compact mode by default (id, name, dates, parentId, progress — no dependencies). Use full=true to include dependencies and sortOrder. Supports pagination (limit/offset) and parentId filtering. For a single task use get_task.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -147,12 +160,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Optional project ID to filter tasks by. If not provided, uses the current session project (PROJECT_ID env var). Pass null to get all tasks across all projects.',
           },
+          parentId: {
+            type: 'string',
+            description: 'Optional filter by parent task ID. null = root tasks only (tasks without a parent), string = direct children of that parent task. Omit to get all tasks (default behavior).',
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of tasks to return (default: 100, max: 1000). Use pagination for large projects.',
+            default: 100,
+          },
+          offset: {
+            type: 'number',
+            description: 'Number of tasks to skip for pagination (default: 0). Increment by limit to fetch next page.',
+            default: 0,
+          },
+          full: {
+            type: 'boolean',
+            description: 'Return full task data including dependencies and sortOrder (default: false). Compact mode omits these fields to save tokens.',
+            default: false,
+          },
         },
       },
     },
     {
       name: 'get_task',
-      description: 'Get a single task by ID',
+      description: 'Get single task by id with optional child loading. includeChildren: false (default), "shallow" (direct children), "deep" (all descendants). Use get_tasks for listing multiple tasks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -160,13 +192,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: 'string',
             description: 'Task ID',
           },
+          includeChildren: {
+            type: 'string',
+            enum: ['false', 'shallow', 'deep'],
+            description: 'Include child tasks in response: false (no children, default), shallow (direct children only), deep (all descendants recursively).',
+          },
         },
         required: ['id'],
       },
     },
     {
       name: 'update_task',
-      description: 'Update task properties (all fields optional except id)',
+      description: 'Update task by id. All fields optional except id. Returns updated task with cascade info if dates/dependencies changed. Pass parentId=null to remove from parent. Use get_task to fetch current state first.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -231,7 +268,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'delete_task',
-      description: 'Delete a task by ID',
+      description: 'Delete task by id. Returns success confirmation. Task removal triggers cascade recalculation of dependent tasks. Use get_tasks to verify deletion.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -244,43 +281,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'export_tasks',
-      description: 'Export all tasks to JSON format',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-    },
-    {
-      name: 'import_tasks',
-      description: 'Import tasks from JSON data (replaces all existing tasks)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          jsonData: {
-            type: 'string',
-            description: 'JSON string containing array of tasks to import',
-          },
-        },
-        required: ['jsonData'],
-      },
-    },
-    {
-      name: 'set_autosave_path',
-      description: 'No-op (kept for backward compatibility). Tasks are now persisted automatically via SQLite.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          filePath: {
-            type: 'string',
-            description: 'Ignored — SQLite persistence is always active',
-          },
-        },
-      },
-    },
-    {
       name: 'create_tasks_batch',
-      description: 'Create multiple Gantt chart tasks from a template with repeat parameters. Automatically generates task names, dates, and sequential FS dependencies within streams.',
+      description: 'Create multiple tasks from template with repeat parameters (sections, floors). Auto-generates names, dates, sequential FS dependencies within streams. Returns created tasks array. Alternative: use create_task for single tasks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -334,6 +336,88 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['baseStartDate', 'workTypes', 'repeatBy'],
       },
     },
+    {
+      name: 'get_conversation_history',
+      description: 'Get recent messages for context awareness. Call before responding to understand previous dialogue. Limit: default 20, max 50. Use add_message to record your response.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to filter messages by. If not provided, uses the current session project (PROJECT_ID env var)',
+          },
+          limit: {
+            type: 'number',
+            description: 'Number of recent messages to return (default: 20, max: 50)',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+      },
+    },
+    {
+      name: 'add_message',
+      description: 'Record assistant message to conversation history. Use after responding to user for future context. Call get_conversation_history to read previous messages.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: {
+            type: 'string',
+            description: 'Message content to add to the conversation history',
+          },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID to associate the message with. If not provided, uses the current session project (PROJECT_ID env var)',
+          },
+        },
+        required: ['content'],
+      },
+    },
+    {
+      name: 'set_dependency',
+      description: 'Create a dependency (link) between two tasks. The successor task depends on the predecessor task. For example, to make task B start after task A finishes, set taskId=B (successor) and dependsOnTaskId=A (predecessor) with type=FS. Returns created dependency.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'ID of the successor task (the task that depends on the other)',
+          },
+          dependsOnTaskId: {
+            type: 'string',
+            description: 'ID of the predecessor task (the task that the successor depends on)',
+          },
+          type: {
+            type: 'string',
+            description: 'Dependency type: FS (Finish-to-Start, default), SS (Start-to-Start), FF (Finish-to-Finish), SF (Start-to-Finish)',
+            enum: ['FS', 'SS', 'FF', 'SF'],
+          },
+          lag: {
+            type: 'number',
+            description: 'Optional lag in days (default: 0). Positive values delay the successor, negative values allow overlap.',
+          },
+        },
+        required: ['taskId', 'dependsOnTaskId'],
+      },
+    },
+    {
+      name: 'remove_dependency',
+      description: 'Remove a dependency between two tasks. Requires both task IDs to identify the specific dependency link. Returns success confirmation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'ID of the successor task (the task that has the dependency)',
+          },
+          dependsOnTaskId: {
+            type: 'string',
+            description: 'ID of the predecessor task (the task that the successor depends on)',
+          },
+        },
+        required: ['taskId', 'dependsOnTaskId'],
+      },
+    },
   ],
 }));
 
@@ -380,15 +464,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Validate date format
     if (!isValidDateFormat(input.startDate)) {
-      throw new Error(`Invalid startDate format: ${input.startDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid startDate format: ${input.startDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
     if (!isValidDateFormat(input.endDate)) {
-      throw new Error(`Invalid endDate format: ${input.endDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid endDate format: ${input.endDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
 
     // Validate date range
     if (!isValidDateRange(input.startDate, input.endDate)) {
-      throw new Error(`Invalid date range: startDate (${input.startDate}) must be before or equal to endDate (${input.endDate})`);
+      throw new Error(`[Permanent] Invalid date range: startDate (${input.startDate}) must be ≤ endDate (${input.endDate}).
+Reason: End date cannot be before start date.
+Fix: Adjust dates so startDate ≤ endDate.`);
     }
 
     // Validate dependencies
@@ -396,7 +486,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       for (let i = 0; i < input.dependencies.length; i++) {
         const dep = input.dependencies[i];
         if (!isValidDependencyType(dep.type)) {
-          throw new Error(`Invalid dependency type at index ${i}: ${dep.type}. Must be one of: FS, SS, FF, SF`);
+          throw new Error(`[Permanent] Invalid dependency type at index ${i}: ${dep.type}.
+Must be one of: FS, SS, FF, SF.
+Fix: Use valid dependency type.`);
         }
       }
     }
@@ -404,8 +496,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const task = await taskService.create(input, resolvedProjectId, 'agent');
 
     // Return the task with cascade info (scoped to same project)
-    const allTasks = await taskService.list(resolvedProjectId);
-    const dependentTasks = allTasks.filter(t =>
+    const allTasksResult = await taskService.list(resolvedProjectId);
+    const dependentTasks = allTasksResult.tasks.filter(t =>
       t.dependencies?.some(d => d.taskId === task.id) ||
       task.dependencies?.some(d => d.taskId === t.id)
     );
@@ -414,7 +506,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resolvedProjectId,
       createdTaskId: task.id,
       createdTaskName: task.name,
-      visibleTaskCount: allTasks.length,
+      visibleTaskCount: allTasksResult.tasks.length,
       affectedTasks: dependentTasks.map((t) => ({ id: t.id, name: t.name })),
     });
 
@@ -434,27 +526,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_tasks tool
   if (name === 'get_tasks') {
-    const { projectId: argProjectId } = args as { projectId?: string | null };
+    const { projectId: argProjectId, parentId, limit = 100, offset = 0, full = false } = args as any;
     // If caller explicitly passes null, return all tasks; otherwise default to PROJECT_ID env
     const resolvedProjectId = argProjectId === null
       ? undefined
       : resolveProjectId(argProjectId);
-    const tasks = await taskService.list(resolvedProjectId);
+    const result = await taskService.list(resolvedProjectId, parentId, limit, offset);
 
-    console.error('[GET_TASKS DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId, 'tasks found:', tasks.length);
+    // Compact mode: strip dependencies and sortOrder to save tokens
+    const tasks = full
+      ? result.tasks
+      : result.tasks.map(({ dependencies: _deps, sortOrder: _sort, ...compact }) => compact);
+
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
-      argProjectId,
       resolvedProjectId,
-      taskCount: tasks.length,
-      tasks: tasks.map((task) => ({ id: task.id, name: task.name, startDate: task.startDate, endDate: task.endDate })),
+      parentId,
+      limit,
+      offset,
+      full,
+      taskCount: result.tasks.length,
+      hasMore: result.hasMore,
+      total: result.total,
     });
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(tasks, null, 2),
+          text: JSON.stringify({ tasks, hasMore: result.hasMore, total: result.total }, null, 2),
         },
       ],
     };
@@ -462,17 +562,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // get_task tool
   if (name === 'get_task') {
-    const { id } = args as { id: string };
+    const { id, includeChildren = false } = args as any;
     if (!id) {
-      throw new Error('Missing required parameter: id');
+      throw new Error(`[Permanent] Missing required parameter: id.
+Reason: Task ID is required to identify which task to retrieve.
+Fix: Provide the task ID as a string parameter.`);
     }
 
-    const task = await taskService.get(id);
+    const task = await taskService.get(id, includeChildren);
     if (!task) {
-      throw new Error(`Task not found: ${id}`);
+      throw new Error(`[Permanent] Task not found: ${id}.
+Reason: No task with this ID exists in the project.
+Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
+      taskId: id,
+      includeChildren,
       task,
     });
 
@@ -492,7 +598,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { id } = input;
 
     if (!id) {
-      throw new Error('Missing required parameter: id');
+      throw new Error(`[Permanent] Missing required parameter: id.
+Reason: Task ID is required to identify which task to update.
+Fix: Provide the task ID as a string parameter.`);
     }
 
     // Check if at least one optional field is provided
@@ -506,15 +614,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       input.dependencies !== undefined;
 
     if (!hasUpdates) {
-      throw new Error('At least one field to update must be provided');
+      throw new Error(`[Permanent] No update fields provided.
+Reason: At least one field (name, startDate, endDate, color, parentId, progress, dependencies) must be provided.
+Fix: Include at least one field to update.`);
     }
 
     // Validate date format if dates are provided
     if (input.startDate && !isValidDateFormat(input.startDate)) {
-      throw new Error(`Invalid startDate format: ${input.startDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid startDate format: ${input.startDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
     if (input.endDate && !isValidDateFormat(input.endDate)) {
-      throw new Error(`Invalid endDate format: ${input.endDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid endDate format: ${input.endDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
 
     // Validate date range if both dates are provided
@@ -523,7 +637,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const startDate = input.startDate ?? existingTask.startDate;
       const endDate = input.endDate ?? existingTask.endDate;
       if (!isValidDateRange(startDate, endDate)) {
-        throw new Error(`Invalid date range: startDate (${startDate}) must be before or equal to endDate (${endDate})`);
+        throw new Error(`[Permanent] Invalid date range: startDate (${startDate}) must be ≤ endDate (${endDate}).
+Reason: End date cannot be before start date.
+Fix: Adjust dates so startDate ≤ endDate.`);
       }
     }
 
@@ -532,7 +648,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       for (let i = 0; i < input.dependencies.length; i++) {
         const dep = input.dependencies[i];
         if (!isValidDependencyType(dep.type)) {
-          throw new Error(`Invalid dependency type at index ${i}: ${dep.type}. Must be one of: FS, SS, FF, SF`);
+          throw new Error(`[Permanent] Invalid dependency type at index ${i}: ${dep.type}.
+Must be one of: FS, SS, FF, SF.
+Fix: Use valid dependency type.`);
         }
       }
     }
@@ -542,7 +660,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const updatedTask = await taskService.update(id, input, 'agent');
     if (!updatedTask) {
-      throw new Error(`Task not found: ${id}`);
+      throw new Error(`[Permanent] Task not found: ${id}.
+Reason: No task with this ID exists in the project.
+Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('update_task_completed', {
       id,
@@ -553,15 +673,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
-      const allTasks = await taskService.list(process.env.PROJECT_ID);
+      const allTasksResult = await taskService.list(process.env.PROJECT_ID);
 
       // Find all tasks that were affected by the cascade
-      const affectedTasks = allTasks.filter(t => {
+      const affectedTasks = allTasksResult.tasks.filter(t => {
         if (t.id === id) return false;
         return t.dependencies?.some(d => {
           const depTaskId = d.taskId;
           return depTaskId === id ||
-            allTasks.find(x => x.id === depTaskId)?.dependencies?.some(dd => dd.taskId === id);
+            allTasksResult.tasks.find(x => x.id === depTaskId)?.dependencies?.some(dd => dd.taskId === id);
         });
       });
 
@@ -574,7 +694,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               message: 'Task updated successfully',
               affectedTasks: affectedTasks.length,
               affectedTaskIds: affectedTasks.map(t => t.id),
-              allTasks
+              allTasks: allTasksResult.tasks
             }, null, 2),
           },
         ],
@@ -599,12 +719,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'delete_task') {
     const { id } = args as { id: string };
     if (!id) {
-      throw new Error('Missing required parameter: id');
+      throw new Error(`[Permanent] Missing required parameter: id.
+Reason: Task ID is required to identify which task to delete.
+Fix: Provide the task ID as a string parameter.`);
     }
 
     const deleted = await taskService.delete(id, 'agent');
     if (!deleted) {
-      throw new Error(`Task not found: ${id}`);
+      throw new Error(`[Permanent] Task not found: ${id}.
+Reason: No task with this ID exists in the project.
+Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
@@ -617,89 +741,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: 'text',
           text: JSON.stringify({ success: true, deleted: id }, null, 2),
-        },
-      ],
-    };
-  }
-
-  // export_tasks tool
-  if (name === 'export_tasks') {
-    const json = await taskService.exportTasks();
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      exportLength: json.length,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: json,
-        },
-      ],
-    };
-  }
-
-  // import_tasks tool
-  if (name === 'import_tasks') {
-    const { jsonData } = args as { jsonData: string };
-    if (!jsonData) {
-      throw new Error('Missing required parameter: jsonData');
-    }
-
-    const resolvedProjectId = normalizeProjectId(process.env.PROJECT_ID);
-
-    try {
-      const count = await taskService.importTasks(jsonData, resolvedProjectId, 'agent');
-      await writeMcpDebugLog('tool_call_completed', {
-        tool: name,
-        resolvedProjectId,
-        imported: count,
-      });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ success: true, imported: count, message: `Imported ${count} tasks successfully` }, null, 2),
-          },
-        ],
-      };
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      await writeMcpDebugLog('tool_call_failed', {
-        tool: name,
-        resolvedProjectId,
-        error: errorMessage,
-      });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${errorMessage}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  // set_autosave_path tool — no-op for backward compatibility
-  // Tasks are now persisted automatically via SQLite
-  if (name === 'set_autosave_path') {
-    const { filePath } = args as { filePath?: string };
-    const path = filePath || './gantt-data.json';
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      path,
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            success: true,
-            autoSavePath: path,
-            message: 'Note: SQLite persistence is always active. set_autosave_path is a no-op kept for backward compatibility.',
-          }, null, 2),
         },
       ],
     };
@@ -721,18 +762,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Validate baseStartDate format
     if (!isValidDateFormat(input.baseStartDate)) {
-      throw new Error(`Invalid baseStartDate format: ${input.baseStartDate}. Expected format: YYYY-MM-DD`);
+      throw new Error(`[Permanent] Invalid baseStartDate format: ${input.baseStartDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
     }
 
     // Validate workTypes
     if (!input.workTypes || input.workTypes.length === 0) {
-      throw new Error('workTypes must be a non-empty array');
+      throw new Error(`[Permanent] workTypes must be a non-empty array.
+Reason: At least one work type is required to create tasks.
+Fix: Provide workTypes array with at least one item (e.g., [{ name: "Foundation", duration: 5 }]).`);
     }
 
     // Validate repeatBy has at least one repeat parameter
     const repeatKeys = Object.keys(input.repeatBy);
     if (repeatKeys.length === 0) {
-      throw new Error('repeatBy must contain at least one repeat parameter (e.g., sections, floors)');
+      throw new Error(`[Permanent] repeatBy must contain at least one repeat parameter.
+Reason: Need at least one dimension to repeat tasks across (sections, floors, etc.).
+Fix: Provide repeatBy object with at least one array (e.g., { sections: [1, 2, 3] }).`);
     }
 
     const streams = input.streams || 1;
@@ -838,11 +885,255 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  // get_conversation_history tool
+  if (name === 'get_conversation_history') {
+    const { projectId: argProjectId, limit } = args as GetConversationHistoryInput & { limit?: number };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+
+    // Validate projectId is available
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Conversation history is scoped to a project.
+Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
+    }
+
+    // Validate and clamp limit parameter
+    const defaultLimit = 20;
+    const maxLimit = 50;
+    const messageLimit = Math.min(Math.max(limit ?? defaultLimit, 1), maxLimit);
+
+    // Fetch all messages for the project
+    const allMessages = await messageService.list(resolvedProjectId);
+
+    // Return the last N messages (most recent first)
+    const recentMessages = allMessages.slice(-messageLimit).reverse();
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      resolvedProjectId,
+      totalMessages: allMessages.length,
+      returnedMessages: recentMessages.length,
+      limit: messageLimit,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            messages: recentMessages,
+            total: allMessages.length,
+            returned: recentMessages.length,
+            limit: messageLimit,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
+  // add_message tool
+  if (name === 'add_message') {
+    const input = args as unknown as AddMessageInput;
+    const { projectId: argProjectId } = args as { projectId?: string };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+
+    // Validate projectId is available
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Conversation history is scoped to a project.
+Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
+    }
+
+    // Validate content
+    if (!input.content || input.content.trim().length === 0) {
+      throw new Error(`[Permanent] content is required and must be non-empty.
+Reason: Empty messages cannot be recorded to conversation history.
+Fix: Provide a non-empty content string with your response.`);
+    }
+
+    // Add the message (always as 'assistant' role)
+    const message = await messageService.add('assistant', input.content.trim(), resolvedProjectId);
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      resolvedProjectId,
+      messageId: message.id,
+      contentLength: message.content.length,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            message,
+            success: true,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
+  // set_dependency tool
+  if (name === 'set_dependency') {
+    const { taskId, dependsOnTaskId, type = 'FS', lag = 0 } = args as {
+      taskId: string;
+      dependsOnTaskId: string;
+      type?: 'FS' | 'SS' | 'FF' | 'SF';
+      lag?: number;
+    };
+
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task ID is required to identify which task should have the dependency.
+Fix: Provide the successor task ID as a string parameter.`);
+    }
+
+    if (!dependsOnTaskId) {
+      throw new Error(`[Permanent] Missing required parameter: dependsOnTaskId.
+Reason: Dependency task ID is required to identify which task this one depends on.
+Fix: Provide the predecessor task ID as a string parameter.`);
+    }
+
+    if (!isValidDependencyType(type)) {
+      throw new Error(`[Permanent] Invalid dependency type: ${type}.
+Must be one of: FS, SS, FF, SF.
+Fix: Use valid dependency type.`);
+    }
+
+    // Verify both tasks exist
+    const tasks = await taskService.list(undefined, undefined, 1000, 0);
+    const taskExists = tasks.tasks.find(t => t.id === taskId);
+    const depTaskExists = tasks.tasks.find(t => t.id === dependsOnTaskId);
+
+    if (!taskExists) {
+      throw new Error(`[Permanent] Task not found: ${taskId}.
+Reason: The successor task does not exist.
+Fix: Call get_tasks to list available task IDs.`);
+    }
+
+    if (!depTaskExists) {
+      throw new Error(`[Permanent] Dependency task not found: ${dependsOnTaskId}.
+Reason: The predecessor task does not exist.
+Fix: Call get_tasks to list available task IDs.`);
+    }
+
+    // Validate dependency doesn't already exist (get with full=true to load existing dependencies)
+    const existingTask = await taskService.get(taskId, true);
+    const existingDep = existingTask?.dependencies?.find(d => d.taskId === dependsOnTaskId);
+    if (existingDep) {
+      throw new Error(`[Permanent] Dependency already exists: task ${taskId} already depends on ${dependsOnTaskId}.
+Reason: Duplicate dependencies are not allowed.
+Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
+    }
+
+    // Create the dependency by updating the task with new dependencies array
+    const currentDependencies = existingTask?.dependencies || [];
+    const updatedDependencies = [
+      ...currentDependencies.filter(d => d.taskId !== dependsOnTaskId),
+      { taskId: dependsOnTaskId, type, lag }
+    ];
+
+    const updatedTask = await taskService.update(taskId, { id: taskId, dependencies: updatedDependencies }, 'agent');
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      taskId,
+      dependsOnTaskId,
+      type,
+      lag,
+      updatedTask,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            dependency: {
+              taskId,
+              dependsOnTaskId,
+              type,
+              lag,
+            },
+            message: `Dependency created: task ${taskId} now depends on ${dependsOnTaskId} (${type}${lag !== 0 ? ` with ${lag}d lag` : ''})`,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
+  // remove_dependency tool
+  if (name === 'remove_dependency') {
+    const { taskId, dependsOnTaskId } = args as {
+      taskId: string;
+      dependsOnTaskId: string;
+    };
+
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task ID is required to identify which task has the dependency.
+Fix: Provide the task ID as a string parameter.`);
+    }
+
+    if (!dependsOnTaskId) {
+      throw new Error(`[Permanent] Missing required parameter: dependsOnTaskId.
+Reason: Dependency task ID is required to identify which dependency to remove.
+Fix: Provide the dependency task ID as a string parameter.`);
+    }
+
+    // Get current task with full dependencies
+    const existingTask = await taskService.get(taskId, true);
+    if (!existingTask) {
+      throw new Error(`[Permanent] Task not found: ${taskId}.
+Reason: The task does not exist.
+Fix: Call get_tasks to list available task IDs.`);
+    }
+
+    // Check if dependency exists
+    const existingDep = existingTask?.dependencies?.find(d => d.taskId === dependsOnTaskId);
+    if (!existingDep) {
+      throw new Error(`[Permanent] Dependency not found: task ${taskId} does not depend on ${dependsOnTaskId}.
+Reason: The dependency to remove does not exist.
+Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
+    }
+
+    // Remove the dependency by updating the task without this dependency
+    const updatedDependencies = (existingTask.dependencies || []).filter(d => d.taskId !== dependsOnTaskId);
+    const updatedTask = await taskService.update(taskId, { id: taskId, dependencies: updatedDependencies }, 'agent');
+
+    await writeMcpDebugLog('tool_call_completed', {
+      tool: name,
+      taskId,
+      dependsOnTaskId,
+      updatedTask,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            removed: {
+              taskId,
+              dependsOnTaskId,
+            },
+            message: `Dependency removed: task ${taskId} no longer depends on ${dependsOnTaskId}`,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+
   await writeMcpDebugLog('tool_call_failed', {
     tool: name,
     error: `Unknown tool: ${name}`,
   });
-  throw new Error(`Unknown tool: ${name}`);
+  throw new Error(`[Permanent] Unknown tool: ${name}.
+Reason: Tool name not found in MCP server registry.
+Fix: Check available tools via tools/list request. Valid tools: ping, create_task, get_tasks, get_task, update_task, delete_task, create_tasks_batch, get_conversation_history, add_message, set_dependency, remove_dependency.`);
 });
 
 // Start server with stdio transport

@@ -14,7 +14,14 @@ import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
 
 export class TaskService {
-  private prisma = getPrisma();
+  private _prisma: ReturnType<typeof getPrisma> | undefined;
+
+  private get prisma() {
+    if (!this._prisma) {
+      this._prisma = getPrisma();
+    }
+    return this._prisma;
+  }
 
   // Helper: Compute parent task dates from its children
   private async computeParentDates(parentId: string, projectId?: string): Promise<{ startDate: Date; endDate: Date } | null> {
@@ -194,20 +201,47 @@ export class TaskService {
     await this.recordMutation('create', projectId, id, source);
 
     // Return fresh task with dependencies
-    return this.get(id) as Promise<Task>;
+    const result = await this.get(id);
+    return result!;
   }
 
   /**
-   * List tasks by project ID
+   * List tasks by project ID with pagination
    */
-  async list(projectId?: string): Promise<Task[]> {
-    const tasks = await this.prisma.task.findMany({
-      where: projectId ? { projectId } : undefined,
-      include: { dependencies: true },
-      orderBy: [{ sortOrder: 'asc' }],
+  async list(
+    projectId?: string,
+    parentId?: string | null,
+    limit: number = 100,
+    offset: number = 0
+  ): Promise<{ tasks: Task[]; hasMore: boolean; total: number }> {
+    // Validate parameters
+    if (limit < 1 || limit > 1000) {
+      throw new Error('limit must be between 1 and 1000');
+    }
+    if (offset < 0) {
+      throw new Error('offset must be >= 0');
+    }
+
+    // Build where clause with combined filters
+    const whereClause: any = {};
+    if (projectId) whereClause.projectId = projectId;
+    if (parentId !== undefined) whereClause.parentId = parentId;
+
+    // Query total count first
+    const total = await this.prisma.task.count({
+      where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
     });
 
-    return tasks.map(task => {
+    // Query tasks with pagination
+    const tasks = await this.prisma.task.findMany({
+      where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
+      include: { dependencies: true },
+      orderBy: { sortOrder: 'asc' },
+      take: limit,
+      skip: offset,
+    });
+
+    const result = tasks.map(task => {
       const deps = task.dependencies.map(d => ({
         taskId: d.depTaskId,
         type: d.type as TaskDependency['type'],
@@ -215,12 +249,18 @@ export class TaskService {
       }));
       return this.taskToDomain(task, deps);
     });
+
+    return {
+      tasks: result,
+      hasMore: offset + limit < total,
+      total,
+    };
   }
 
   /**
-   * Get a task by ID with dependencies
+   * Get a task by ID with dependencies and optional children
    */
-  async get(id: string): Promise<Task | undefined> {
+  async get(id: string, includeChildren: boolean | 'shallow' | 'deep' = false): Promise<Task | undefined> {
     const task = await this.prisma.task.findUnique({
       where: { id },
       include: { dependencies: true },
@@ -234,7 +274,41 @@ export class TaskService {
       lag: d.lag,
     }));
 
-    return this.taskToDomain(task, deps);
+    // Load children if requested
+    let children: Task[] = [];
+    if (includeChildren !== false) {
+      const childTasks = await this.prisma.task.findMany({
+        where: { parentId: id },
+        include: { dependencies: true },
+        orderBy: { sortOrder: 'asc' },
+      });
+
+      children = childTasks.map(child => {
+        const childDeps = child.dependencies.map(d => ({
+          taskId: d.depTaskId,
+          type: d.type as TaskDependency['type'],
+          lag: d.lag,
+        }));
+        return this.taskToDomain(child, childDeps);
+      });
+
+      // Recursive loading for 'deep' mode
+      if (includeChildren === 'deep') {
+        for (const child of children) {
+          const nestedChildren = await this.get(child.id, 'deep');
+          if (nestedChildren) {
+            (child as any).children = nestedChildren.children || [];
+          }
+        }
+      }
+    }
+
+    // Return task with children if loaded
+    const result = this.taskToDomain(task, deps);
+    if (children.length > 0) {
+      (result as any).children = children;
+    }
+    return result;
   }
 
   /**
@@ -478,8 +552,8 @@ export class TaskService {
    * Export all tasks as JSON
    */
   async exportTasks(): Promise<string> {
-    const tasks = await this.list();
-    return JSON.stringify(tasks, null, 2);
+    const result = await this.list();
+    return JSON.stringify(result.tasks, null, 2);
   }
 
   /**

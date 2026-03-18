@@ -48,6 +48,8 @@ export interface Task {
   dependencies?: TaskDependency[];
   /** Optional sort order for display position */
   sortOrder?: number;
+  /** Optional child tasks for hierarchical loading */
+  children?: Task[];
 }
 
 /**
@@ -94,30 +96,6 @@ export interface UpdateTaskInput {
   dependencies?: TaskDependency[];
   /** Optional sort order for display position */
   sortOrder?: number;
-}
-
-/**
- * Input type for import/export operations
- */
-export interface FilePathInput {
-  /** File path for export/import */
-  filePath: string;
-}
-
-/**
- * Input type for import_tasks tool
- */
-export interface ImportTasksInput {
-  /** JSON string containing array of tasks */
-  jsonData: string;
-}
-
-/**
- * Input type for set_autosave_path tool
- */
-export interface AutoSaveInput {
-  /** Optional file path for autosave (default: ./gantt-data.json) */
-  filePath?: string;
 }
 
 /**
@@ -184,6 +162,26 @@ export interface Message {
   content: string;
   /** ISO timestamp of creation */
   createdAt: string;
+}
+
+/**
+ * Input type for get_conversation_history tool
+ */
+export interface GetConversationHistoryInput {
+  /** Optional project ID to filter messages by. If not provided, uses the current session project (PROJECT_ID env var) */
+  projectId?: string;
+  /** Number of recent messages to return (default: 20, max: 50) */
+  limit?: number;
+}
+
+/**
+ * Input type for add_message tool
+ */
+export interface AddMessageInput {
+  /** Message content (must be non-empty) */
+  content: string;
+  /** Optional project ID to associate the message with. If not provided, uses the current session project (PROJECT_ID env var) */
+  projectId?: string;
 }
 
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';

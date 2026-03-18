@@ -1,36 +1,26 @@
 # ROADMAP: gantt-lib MCP Server
 
 **Created:** 2026-02-23
-**Current milestone:** v2.0 PostgreSQL Migration
-**Phase range:** 15-18
+**Current milestone:** v3.0 MCP Server Refactoring
+**Phase range:** 17-21
 
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-13)
-- 🚧 **v2.0 PostgreSQL Migration** — Phases 15-18 (in progress)
+- ✅ **v2.0 PostgreSQL Migration** — Phases 15-16 (shipped 2026-03-17)
+- 🚧 **v3.0 MCP Server Refactoring** — Phases 17-21 (in progress)
 
 ## Progress
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 1. MCP Server Foundation | v1.0 | 1 | Complete | 01-01 |
-| 2. Task CRUD + Data Model | v1.0 | 1 | Complete | 02-01 |
-| 3. Auto-schedule Engine | v1.0 | 2 | Complete | 03-01, 03-02 |
-| 4. Testing & Validation | v1.0 | 0 | Complete | - |
-| 5. Batch Tasks | v1.0 | 1 | Complete | 05-01 |
-| 6. qwen-agent | v1.0 | 2 | Complete | 06-01, 06-02 |
-| 7. Web UI | v1.0 | 6 | Complete | 07-01 through 07-06 |
-| 8. Integrate gantt-lib | v1.0 | 2 | Complete | 08-01, 08-02 |
-| 9. session-control | v1.0 | 6 | Complete* | 09-01 through 09-05 (* 09-06 pending) |
-| 10. work-stability | v1.0 | 2 | Complete | 10-01, 10-02 |
-| 11. complete-design-system | v1.0 | 0 | Complete | - |
-| 12. fix-auto-save-infinite-loop | v1.0 | 1 | Complete | 12-01 |
-| 13. start-screen | v1.0 | 1 | Complete | 13-01 |
-| 14. redesign-project-flow | v1.0 | 1 | Complete | 14-01 |
-| 15. Prisma Setup | v2.0 | 2 | Complete | 2026-03-13 | 15-01, 15-02 |
-| 16. Services Layer | 4/4 | Complete   | 2026-03-13 | - |
-| 17. Integration & Cleanup | v2.0 | 0 | Not started | - |
-| 18. Deployment | v2.0 | 0 | Not started | - |
+| 1-14 | v1.0 | 26 | Complete | 2026-03-13 |
+| 15-16 | v2.0 | 6 | Complete | 2026-03-17 |
+| 17. Token Economy | v3.0 | 2 | Complete | 2026-03-17 |
+| 18. Qwen SDK Hardening | v3.0 | 1 | Ready to execute | - |
+| 19. Task Hierarchy | v3.0 | TBD | Not started | - |
+| 20. Conversation History | v3.0 | TBD | Not started | - |
+| 21. Tool Quality | v3.0 | 1 | Ready to execute | - |
 
 ## Phases
 
@@ -69,121 +59,160 @@ Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1
 
 ---
 
-### 🚧 v2.0 PostgreSQL Migration (In Progress)
+<details>
+<summary>✅ v2.0 PostgreSQL Migration (Phases 15-16) — SHIPPED 2026-03-17</summary>
 
-**Milestone Goal:** Replace SQLite with PostgreSQL + Prisma ORM for production scalability with multiple concurrent users.
+**2 phases, 6 plans, 4 days**
 
-#### Phase 15: Prisma Setup
+Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2.0-ROADMAP.md)
 
-**Goal:** PostgreSQL database with Prisma ORM is ready for development
+- [x] Phase 15: Prisma Setup (2 plans)
+- [x] Phase 16: Services Layer (4 plans)
 
-**Depends on:** Nothing (first phase of v2.0)
+**Key accomplishments:**
+1. Prisma schema defines all tables with proper relationships
+2. Prisma client singleton with connection pooling
+3. TaskService, ProjectService, AuthService, MessageService, DependencyService
+4. All services use Prisma (no raw SQL)
+5. Services shared between packages/mcp and packages/server
 
-**Requirements:** DB-01, DB-02, DB-03, DB-04, DB-05, POOL-01, POOL-02, POOL-03
+</details>
+
+---
+
+### 🚧 v3.0 MCP Server Refactoring (In Progress)
+
+**Milestone Goal:** Improve MCP server: token economy, agent hardening, task hierarchy, conversation history, tool quality
+
+#### Phase 17: Token Economy
+
+**Goal:** Reduce MCP response size and conversation history context
+
+**Depends on:** Nothing (first phase of v3.0)
+
+**Requirements:** TOKEN-01, TOKEN-02, TOKEN-03, TOKEN-04
 
 **Success Criteria** (what must be TRUE):
-1. Prisma schema defines all existing tables (users, projects, sessions, otp_codes, tasks, dependencies, messages) with proper relationships
-2. Prisma client generates successfully and is accessible from both packages/mcp and packages/server
-3. DATABASE_URL environment variable connects to PostgreSQL with connection pooling configured
-4. Prisma migrations run successfully on target database without errors
-5. Connection pool settings (connection_limit, timeout) are appropriate for container constraints
+1. `get_tasks` returns compact format by default (id, name, dates, parentId, progress)
+2. `get_tasks` supports pagination with `limit` and `offset` parameters
+3. `get_task` supports `includeChildren: boolean` (default: false)
+4. Conversation history limited to 20 messages with truncation notice
+5. Token usage reduced by 50-90% for large projects
 
 **Plans:** 2/2 plans complete
-- [x] 15-01-PLAN.md — Prisma schema and client singleton with connection pooling (completed 2026-03-13)
-- [x] 15-02-PLAN.md — Initial migration execution and database verification (completed 2026-03-13)
+- [x] 17-01-PLAN.md — Update get_tasks and get_task MCP tools with compact mode, pagination, and includeChildren
+- [x] 17-02-PLAN.md — Add limit parameter to MessageService.list() and update agent.ts
 
 ---
 
-#### Phase 16: Services Layer
+#### Phase 18: Qwen SDK Hardening
 
-**Goal:** All database operations use Prisma-backed services instead of direct SQL
+**Goal:** Make agent reliable — no hangs, no infinite loops, MCP-only access
 
-**Depends on:** Phase 15 (Prisma client and schema must exist)
+**Depends on:** Phase 17 (token economy helps with hardening)
 
-**Requirements:** SVC-01, SVC-02, SVC-03, SVC-04, SVC-05, SVC-06, SVC-07
+**Requirements:** HARD-01, HARD-02, HARD-03
 
 **Success Criteria** (what must be TRUE):
-1. TaskService provides all CRUD operations (create, update, delete, list, recalculateDates) using Prisma
-2. ProjectService, AuthService, MessageService, and DependencyService exist and use Prisma client
-3. Services are shared between packages/mcp and packages/server (no duplicate database code)
-4. No raw SQL queries remain in service implementations
-5. TypeScript types match Prisma-generated types
+1. Agent has max session turns limit of 20
+2. Agent has 2-minute timeout via AbortController
+3. Agent excluded from direct file system and terminal tools
+4. Agent cannot hang or run indefinitely
 
-**Plans:** 4/4 plans complete
-- [ ] 16-01-PLAN.md — TaskService and DependencyService with Prisma CRUD operations
-- [ ] 16-02-PLAN.md — AuthService and ProjectService with Prisma CRUD operations
-- [ ] 16-03-PLAN.md — MessageService and service exports (barrel, package.json)
-- [ ] 16-04-PLAN.md — End-to-end verification and testing
-
-**Wave structure:**
-- Wave 1 (parallel): 16-01, 16-02
-- Wave 2: 16-03 (depends on 16-01, 16-02)
-- Wave 3: 16-04 (verification, depends on all previous)
+**Plans:** 1/1 plans complete
+- [ ] 18-01-PLAN.md — Add maxSessionTurns, AbortController timeout, and excludeTools to agent.ts
 
 ---
 
-#### Phase 17: Integration & Cleanup**Goal:** Application runs end-to-end with Prisma services, SQLite code removed**Depends on:** Phase 16 (services must exist before integration)**Requirements:** INT-01, INT-02, INT-03, INT-04, INT-05, CLN-01, CLN-02, CLN-03, CLN-04**Success Criteria** (what must be TRUE):1. MCP tools use TaskService instead of TaskStore for all task operations2. Server API routes use services instead of direct database access3. Agent can create, update, and delete tasks through Prisma-backed services4. WebSocket broadcasts work correctly with new service layer5. Auto-schedule engine works with Prisma data (date recalculation, dependency handling)6. @libsql/client dependency is removed from package.json7. SQLite bootstrap code (packages/mcp/src/db.ts) is removed8. All raw SQL queries are replaced with service calls**Plans:** 4 plans created- [ ] 17-01-PLAN.md — Fix task save from bulk to individual operations (blocking bug fix)- [ ] 17-02-PLAN.md — Replace legacy stores with Prisma services- [ ] 17-03-PLAN.md — Remove SQLite legacy code and dependencies- [ ] 17-04-PLAN.md — Verify WebSocket integration and end-to-end functionality**Wave structure:**- Wave 1: 17-01 (critical bug fix - independent)- Wave 2: 17-02 (service integration - depends on 17-01)- Wave 3: 17-03 (cleanup - depends on 17-02)- Wave 4: 17-04 (verification - depends on all previous)---
+#### Phase 19: Task Hierarchy
 
-#### Phase 18: Deployment
+**Goal:** Enable agent to work with nested tasks via parentId
 
-**Goal:** Application deploys to production with PostgreSQL database
+**Depends on:** Phase 17 (MCP tools updated)
 
-**Depends on:** Phase 17 (code must work before deployment)
-
-**Requirements:** DEP-01, DEP-02, DEP-03, DEP-04
+**Requirements:** HIER-01, HIER-02, HIER-03
 
 **Success Criteria** (what must be TRUE):
-1. Docker image includes Prisma client and migrations
-2. DATABASE_URL environment variable is documented in deployment guide
-3. Prisma migrations run automatically on container startup if needed
-4. Connection pool size is appropriate for container resource limits
-5. Application connects to external PostgreSQL database successfully in production
+1. `create_task` accepts `parentId?: string` parameter
+2. `update_task` accepts `parentId?: string | null` (null removes from parent)
+3. `get_tasks` supports filtering by `parentId?: string | null`
+4. Parent task dates automatically recalculate from children range
+5. Cannot create circular hierarchy
 
-**Plans:** TBD
+**Plans:** 1/1 plans complete
+
+---
+
+#### Phase 20: Conversation History
+
+**Goal:** Give agent access to previous session context via MCP tools
+
+**Depends on:** Phase 17 (MCP tools pattern established)
+
+**Requirements:** HIST-01, HIST-02
+
+**Success Criteria** (what must be TRUE):
+1. New MCP tool `get_conversation_history` returns last N messages (limit: 20, max: 50)
+2. New MCP tool `add_message` records assistant message to project chat
+3. MessageService integration works correctly
+4. Agent can read and write conversation history
+
+**Plans:** 1/1 plans complete
+
+---
+
+#### Phase 21: Tool Quality
+
+**Goal:** Improve tool descriptions and error messages per MCP best practices
+
+**Depends on:** Phase 17-20 (tools updated, can improve descriptions)
+
+**Requirements:** QUAL-01, QUAL-02
+
+**Success Criteria** (what must be TRUE):
+1. All tool descriptions are semantic and dense with usage guidance
+2. Error messages follow "what + why + what to do" pattern
+3. Agent can recover from errors using error message guidance
+4. Tool descriptions reference related tools (e.g., batch_create)
+
+**Plans:** 1/1 plans complete
+- [ ] 21-01-PLAN.md — Update tool descriptions and error messages with semantic density and actionable guidance
 
 ---
 
 ## Dependencies
 
 ```
-Phase 15 (Prisma Setup)
+Phase 17 (Token Economy)
     ↓
-Phase 16 (Services Layer)
+Phase 18 (Qwen SDK Hardening)
     ↓
-Phase 17 (Integration & Cleanup)
+Phase 19 (Task Hierarchy) ──┐
+    ↓                        │
+Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
     ↓
-Phase 18 (Deployment)
 ```
+
+**Notes:** Phases 19-20 can be done in parallel after Phase 17. Phase 21 depends on all tool changes being complete.
 
 ---
 
 ## Coverage
 
-**v1 Requirements:** 17 total — 100% mapped (Phases 1-14)
-**v2 Requirements:** 23 total — 100% mapped (Phases 15-18)
+**v1+v2 Requirements:** 32 total — 100% complete
+**v3 Requirements:** 14 total — 100% mapped (Phases 17-21)
 
-| Category | Requirements | Phase |
-|----------|--------------|-------|
-| Database (DB) | DB-01 through DB-05 | 15 |
-| Connection Pooling (POOL) | POOL-01 through POOL-03 | 15 |
-| Services (SVC) | SVC-01 through SVC-07 | 16 |
-| Integration (INT) | INT-01 through INT-05 | 17 |
-| Cleanup (CLN) | CLN-01 through CLN-04 | 17 |
-| Deployment (DEP) | DEP-01 through DEP-04 | 18 |
+| Category | Requirements | Phase | Plans | Status | Completed |
+|----------|--------------|-------|-------|--------|-----------|
+| Token Economy (TOKEN) | TOKEN-01 through TOKEN-04 | 17 | 2 | Complete | 2026-03-17 |
+| Hardening (HARD) | HARD-01 through HARD-03 | 18 | 1/1 | Complete    | 2026-03-17 |
+| Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 | 1/1 | Complete    | 2026-03-17 |
+| Conversation History (HIST) | HIST-01 through HIST-02 | 20 | 1/1 | Complete    | 2026-03-17 |
+| Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | 1/1 | Complete    | 2026-03-18 |
 
 **No orphaned requirements.**
 **No duplicates.**
 
-### Phase 19: Перенос Prisma в отдельный packages/db пакет и перевод MCP сервера с SQLite/taskStore на Prisma сервисы
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 18
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 19 to break down)
-
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-13 with Phase 16 plans*
+*Last updated: 2026-03-18 with Phase 21 plan*
