@@ -989,24 +989,20 @@ export default function App() {
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {!chatSidebarVisible && <div className="w-2" />}
-
-                  {/* Chat toggle button - absolute positioned always on far right */}
-                  <div className="absolute right-4 top-2.5">
-                    {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
-                      <Button
-                        size="sm"
-                        onClick={openProjectChat}
-                        aria-label="Показать AI ассистента"
-                        className="h-7 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-                        title="Показать AI ассистента"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">AI ассистент</span>
-                        <span className="sm:hidden">AI</span>
-                      </Button>
-                    )}
-                  </div>
+                  {/* Chat toggle button */}
+                  {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
+                    <Button
+                      size="sm"
+                      onClick={openProjectChat}
+                      aria-label="Показать AI ассистента"
+                      className="h-7 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                      title="Показать AI ассистента"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">AI ассистент</span>
+                      <span className="sm:hidden">AI</span>
+                    </Button>
+                  )}
 
                   {/* Validation errors badge */}
                   {validationErrors.length > 0 && (
