@@ -466,20 +466,34 @@ export default function App() {
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
 
   const handleCollapseAll = useCallback(() => {
-    ganttRef.current?.collapseAll();
+    // В controlled режиме (collapsedParentIds передан как prop) библиотека
+    // автоматически реагирует на изменения store, поэтому НЕ вызываем ref методы
     // Сохраняем состояние всех свёрнутых родительских задач
+    console.log('[App] handleCollapseAll called', {
+      workspaceKind: workspace.kind,
+      tasksCount: tasks.length,
+      projectId: workspace.kind === 'project' ? workspace.projectId : null
+    });
     if (workspace.kind === 'project') {
+      // Для отладки: покажем все задачи и их parentId
+      console.log('[App] All tasks sample:', tasks.slice(0, 5).map(t => ({ id: t.id, name: t.name, parentId: t.parentId })));
+
+      // Ищем родительские задачи: у которых НЕТ parentId и у которых ЕСТЬ дети
       const allParentIds = tasks
-        .filter(t => t.parentId === null && tasks.some(c => c.parentId === t.id))
+        .filter(t => !t.parentId && tasks.some(c => c.parentId === t.id))
         .map(t => t.id);
+      console.log('[App] Found parent IDs:', allParentIds);
       setProjectState(workspace.projectId, { collapsedParentIds: allParentIds });
     }
   }, [tasks, workspace, setProjectState]);
 
   const handleExpandAll = useCallback(() => {
-    ganttRef.current?.expandAll();
+    // В controlled режиме (collapsedParentIds передан как prop) библиотека
+    // автоматически реагирует на изменения store, поэтому НЕ вызываем ref методы
     // Сохраняем пустое состояние (все развёрнуты)
+    console.log('[App] handleExpandAll called', { workspaceKind: workspace.kind });
     if (workspace.kind === 'project') {
+      console.log('[App] Expanding all - clearing collapsedParentIds');
       setProjectState(workspace.projectId, { collapsedParentIds: [] });
     }
   }, [workspace, setProjectState]);

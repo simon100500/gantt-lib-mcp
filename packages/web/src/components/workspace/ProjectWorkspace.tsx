@@ -73,13 +73,22 @@ export function ProjectWorkspace({
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
   // Читаем сохранённый collapsedParentIds для текущего проекта (controlled mode)
+  // Сначала получаем все projectStates через селектор
+  const projectStates = useProjectUIStore((state) => state.projectStates);
+  // Затем вычисляем collapsedParentIds для текущего проекта
   const collapsedParentIds = useMemo(() => {
     if (!projectId) return new Set<string>();
-    const projectState = getProjectState(projectId);
-    return projectState?.collapsedParentIds
+    const projectState = projectStates[projectId];
+    const ids = projectState?.collapsedParentIds
       ? new Set(projectState.collapsedParentIds)
       : new Set<string>();
-  }, [projectId, getProjectState]);
+    console.log('[ProjectWorkspace] collapsedParentIds computed:', {
+      projectId,
+      ids: Array.from(ids),
+      source: projectState?.collapsedParentIds
+    });
+    return ids;
+  }, [projectId, projectStates]);
 
   // Обработчик для controlled mode
   const handleToggleCollapse = useCallback((parentId: string) => {

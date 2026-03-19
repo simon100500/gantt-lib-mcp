@@ -31,16 +31,22 @@ export const useProjectUIStore = create<ProjectUIStore>()(
       },
 
       setProjectState: (projectId, partialState) => {
-        set((store) => ({
-          projectStates: {
-            ...store.projectStates,
-            [projectId]: {
-              ...store.projectStates[projectId],
-              ...DEFAULT_STATE,
-              ...partialState,
+        console.log('[useProjectUIStore] setProjectState called', { projectId, partialState });
+        set((store) => {
+          const currentState = store.projectStates[projectId];
+          const newState = {
+            projectStates: {
+              ...store.projectStates,
+              [projectId]: {
+                ...DEFAULT_STATE,
+                ...currentState,
+                ...partialState,
+              },
             },
-          },
-        }));
+          };
+          console.log('[useProjectUIStore] New state:', newState);
+          return newState;
+        });
       },
 
       clearProjectState: (projectId) => {
