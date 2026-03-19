@@ -53,7 +53,7 @@ export function Toolbar({
         className="h-7 gap-1.5"
       >
         {showTaskList ? <PanelRightOpen className="h-3.5 w-3.5" /> : <PanelRightClose className="h-3.5 w-3.5" />}
-        <span className="hidden md:inline">Список задач</span>
+        <span className="hidden md:inline text-xs">Список задач</span>
       </Button>
 
       <Button
@@ -64,7 +64,7 @@ export function Toolbar({
         className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
       >
         <ChevronsDownUp className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">Свернуть</span>
+        <span className="hidden xl:inline text-xs">Свернуть</span>
       </Button>
 
       <Button
@@ -75,7 +75,7 @@ export function Toolbar({
         className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
       >
         <ChevronsUpDown className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">Развернуть</span>
+        <span className="hidden xl:inline text-xs">Развернуть</span>
       </Button>
 
       <Button
@@ -85,7 +85,7 @@ export function Toolbar({
         className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
       >
         <FlagTriangleRight className="h-3.5 w-3.5" />
-        <span className="hidden md:inline">Сегодня</span>
+        <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
 
       <div className="flex-1" />
@@ -179,7 +179,7 @@ export function Toolbar({
           title="Показать AI ассистента"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">AI ассистент</span>
+          <span className="hidden sm:inline text-xs">AI ассистент</span>
           <span className="sm:hidden">AI</span>
         </Button>
       )}
