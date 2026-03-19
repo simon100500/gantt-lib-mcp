@@ -21,9 +21,8 @@ export interface GanttChartProps {
   headerHeight?: number;
   viewMode?: 'day' | 'week' | 'month';
   customDays?: CustomDayConfig[];
-  // TODO: collapsedParentIds будет доступен в будущей версии gantt-lib
-  // collapsedParentIds?: Set<string>;
-  // onToggleCollapse?: (parentId: string) => void;
+  collapsedParentIds?: Set<string>;
+  onToggleCollapse?: (parentId: string) => void;
   onAdd?: (newTask: Task) => void;
   onDelete?: (taskId: string) => void;
   onInsertAfter?: (taskId: string, newTask: Task) => void;
@@ -57,8 +56,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   headerHeight,
   viewMode,
   customDays,
-  // collapsedParentIds,
-  // onToggleCollapse,
+  collapsedParentIds,
+  onToggleCollapse,
   onAdd,
   onDelete,
   onInsertAfter,
@@ -94,8 +93,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       highlightExpiredTasks={highlightExpiredTasks}
       headerHeight={headerHeight}
       viewMode={viewMode}
-      // collapsedParentIds={collapsedParentIds}
-      // onToggleCollapse={onToggleCollapse}
+      collapsedParentIds={collapsedParentIds}
+      onToggleCollapse={onToggleCollapse}
       onAdd={onAdd}
       onDelete={(taskId) => {
         console.log('%c[GanttChart] onDelete called', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;', taskId);

@@ -1,5 +1,5 @@
 import type { Ref, RefObject } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { Check } from 'lucide-react';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
@@ -72,44 +72,30 @@ export function ProjectWorkspace({
   const projectId = workspace.kind === 'project' ? workspace.projectId : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
-  // Читаем сохранённый collapsedParentIds для текущего проекта
-  const projectState = projectId ? getProjectState(projectId) : null;
+  // Читаем сохранённый collapsedParentIds для текущего проекта (controlled mode)
+  const collapsedParentIds = useMemo(() => {
+    if (!projectId) return new Set<string>();
+    const projectState = getProjectState(projectId);
+    return projectState?.collapsedParentIds
+      ? new Set(projectState.collapsedParentIds)
+      : new Set<string>();
+  }, [projectId, getProjectState]);
 
-  // Применяем сохранённое состояние сворачивания после загрузки задач
-  const collapseStateAppliedRef = useRef(false);
-  useEffect(() => {
-    // Применяем только когда задачи загрузились и проект изменился
-    if (!loading && tasks.length > 0 && projectId) {
-      const currentState = getProjectState(projectId);
-      const savedIds = currentState?.collapsedParentIds;
+  // Обработчик для controlled mode
+  const handleToggleCollapse = useCallback((parentId: string) => {
+    if (!projectId) return;
 
-      // Если сохранённое состояние не пустое (есть свёрнутые задачи), вызываем collapseAll
-      // ВНИМАНИЕ: gantt-lib 0.22.2 не поддерживает частичное сворачивание,
-      // только collapseAll/expandAll для всех задач
-      if (savedIds && savedIds.length > 0) {
-        // Проверяем - если сохранены все родительские задачи, вызываем collapseAll
-        const allParentIds = tasks
-          .filter(t => t.parentId === null && tasks.some(c => c.parentId === t.id))
-          .map(t => t.id);
-
-        const allCollapsed = allParentIds.every(id => savedIds.includes(id));
-        const noneCollapsed = savedIds.length === 0;
-
-        if (allCollapsed && !collapseStateAppliedRef.current) {
-          ganttRef.current?.collapseAll();
-          collapseStateAppliedRef.current = true;
-        } else if (noneCollapsed && !collapseStateAppliedRef.current) {
-          ganttRef.current?.expandAll();
-          collapseStateAppliedRef.current = true;
-        }
-      }
+    const newSet = new Set(collapsedParentIds);
+    if (newSet.has(parentId)) {
+      newSet.delete(parentId);
+    } else {
+      newSet.add(parentId);
     }
 
-    // Сбрасываем флаг при смене проекта
-    return () => {
-      collapseStateAppliedRef.current = false;
-    };
-  }, [loading, tasks, projectId, getProjectState, ganttRef]);
+    setProjectState(projectId, {
+      collapsedParentIds: Array.from(newSet),
+    });
+  }, [projectId, collapsedParentIds, setProjectState]);
 
   // Загружаем viewMode из состояния проекта при смене проекта
   useEffect(() => {
@@ -170,6 +156,8 @@ export function ProjectWorkspace({
             highlightExpiredTasks={highlightExpiredTasks}
             headerHeight={40}
             viewMode={viewMode}
+            collapsedParentIds={collapsedParentIds}
+            onToggleCollapse={handleToggleCollapse}
             onAdd={readOnly ? undefined : batchUpdate?.handleAdd}
             onDelete={readOnly ? undefined : batchUpdate?.handleDelete}
             onInsertAfter={readOnly ? undefined : batchUpdate?.handleInsertAfter}
