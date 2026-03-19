@@ -84,12 +84,17 @@ After initial completion, user reported two issues:
 1. Current project was not highlighted in sidebar
 2. Task count hole still appeared when switching projects
 
-**Root cause:** The original fix synced `tasks.length` to the NEW project id, which was incorrect. It should sync the OLD project's task count BEFORE switching.
+**Root cause:** The original approach tried to sync task counts during project switches, but `tasks.length` becomes 0 during switches (before new tasks load), causing race conditions where 0 overwrites correct values.
 
-**Fix applied (commit `fa5c69b`):**
+**Final fix (commits `fa5c69b`, `91f0763`):**
 - Added `bg-slate-100` highlighting for current project in sidebar
-- Changed sync logic to sync current project's task count BEFORE switching
-- This ensures the old project's task count is preserved, and the new project's count is loaded from the API response
+- **Completely rewrote task count mechanism:**
+  - `taskCount` comes from `/api/projects` and is stored in `useAuthStore`
+  - `syncProjectTaskCount` NEVER overwrites non-zero with zero
+  - `useEffect` only syncs when `tasks.length > 0` (tasks actually loaded)
+  - Removed complex sync logic from `handleSwitchProject` (not needed - counts already stored)
+
+This prevents race conditions where task counts were overwritten with zero during project switches.
 
 ## Issues Encountered
 
