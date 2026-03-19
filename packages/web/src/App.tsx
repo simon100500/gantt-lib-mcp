@@ -286,13 +286,15 @@ export default function App() {
   }, [activateDraftWorkspace, batchUpdate, createPlaceholderTask, openProjectChat, workspace.kind]);
 
   const handleSwitchProject = useCallback(async (projectId: string) => {
-    setProjectSidebarVisible(false);
+    // Keep sidebar open after switching projects
     createEmptyChartAfterActivationRef.current = false;
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     await auth.switchProject(projectId);
+    // Sync task count after switching to ensure it persists
+    auth.syncProjectTaskCount(projectId, tasks.length);
     setWorkspace({ kind: 'project', projectId, chatOpen: false });
-  }, [auth, resetWorkspacePresentation, setProjectSidebarVisible, setWorkspace]);
+  }, [auth, resetWorkspacePresentation, tasks.length, setWorkspace]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
