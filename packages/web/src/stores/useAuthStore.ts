@@ -475,6 +475,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const currentProjectCount = state.project?.id === projectId ? state.project.taskCount : undefined;
     const listProjectCount = state.projects.find((project) => project.id === projectId)?.taskCount;
 
+    // Log with stack trace to find who's calling with 0
+    if (taskCount === 0 && (currentProjectCount !== 0 || listProjectCount !== 0)) {
+      console.error('[syncProjectTaskCount] OVERWRITING NON-ZERO WITH ZERO!', {
+        projectId,
+        taskCount,
+        currentProjectCount,
+        listProjectCount,
+        stack: new Error().stack?.split('\n').slice(2, 6).join('\n')
+      });
+    }
+
     console.log('[syncProjectTaskCount]', {
       projectId,
       taskCount,

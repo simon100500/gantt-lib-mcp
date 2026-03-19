@@ -296,7 +296,8 @@ export default function App() {
       console.log('[handleSwitchProject] Syncing OLD project task count', {
         oldProjectId: workspace.projectId,
         taskCount: tasks.length,
-        newProjectId: projectId
+        newProjectId: projectId,
+        stack: new Error().stack?.split('\n').slice(2, 5).join('\n')
       });
       auth.syncProjectTaskCount(workspace.projectId, tasks.length);
     }
@@ -463,12 +464,17 @@ export default function App() {
       previousProjectIdRef.current = currentProjectId;
       console.log('[useEffect sync] Skipping - project just switched', {
         previous: previousProjectId,
-        current: currentProjectId
+        current: currentProjectId,
+        tasksLength: tasks.length
       });
       return;
     }
 
     // Only sync if project hasn't changed (tasks were added/removed)
+    console.log('[useEffect sync] Syncing task count', {
+      currentProjectId,
+      tasksLength: tasks.length
+    });
     auth.syncProjectTaskCount(currentProjectId, tasks.length);
   }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
 
