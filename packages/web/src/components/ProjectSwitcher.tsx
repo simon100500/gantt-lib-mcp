@@ -10,6 +10,11 @@ interface ProjectSwitcherProps {
 }
 
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
+  console.log('[ProjectSwitcher render]', {
+    currentProject,
+    projects: projects.map(p => ({ id: p.id, name: p.name, taskCount: p.taskCount }))
+  });
+
   return (
     <div className="flex flex-col h-full">
       {/* Projects list */}

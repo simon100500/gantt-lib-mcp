@@ -475,7 +475,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const currentProjectCount = state.project?.id === projectId ? state.project.taskCount : undefined;
     const listProjectCount = state.projects.find((project) => project.id === projectId)?.taskCount;
 
+    console.log('[syncProjectTaskCount]', {
+      projectId,
+      taskCount,
+      currentProjectCount,
+      listProjectCount,
+      state: {
+        currentProject: state.project,
+        projects: state.projects,
+      }
+    });
+
     if (currentProjectCount === taskCount && listProjectCount === taskCount) {
+      console.log('[syncProjectTaskCount] Skipping - already synced');
       return;
     }
 
@@ -487,6 +499,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const project = state.project?.id === projectId
       ? { ...state.project, taskCount }
       : state.project;
+
+    console.log('[syncProjectTaskCount] Updating', { project, projects });
 
     persistStoredAuth({
       accessToken: state.accessToken,

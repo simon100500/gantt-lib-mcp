@@ -292,6 +292,11 @@ export default function App() {
 
     // Sync current project's task count BEFORE switching
     if (workspace.kind === 'project' && workspace.projectId) {
+      console.log('[handleSwitchProject] Syncing OLD project task count', {
+        oldProjectId: workspace.projectId,
+        taskCount: tasks.length,
+        newProjectId: projectId
+      });
       auth.syncProjectTaskCount(workspace.projectId, tasks.length);
     }
 
