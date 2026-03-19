@@ -36,6 +36,15 @@ export default function App() {
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const hasShareToken = Boolean(sharedProject.shareToken);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
+      return;
+    }
+
+    void auth.refreshProjects();
+  }, [auth.isAuthenticated, auth.accessToken, hasShareToken]);
+
   const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
   const { tasks, setTasks, loading, error } = hasShareToken
     ? sharedProject
