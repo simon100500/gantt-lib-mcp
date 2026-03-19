@@ -477,12 +477,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     // NEVER overwrite non-zero with zero - zero means "not loaded yet"
     if (taskCount === 0 && (currentProjectCount !== undefined || listProjectCount !== undefined)) {
-      console.log('[syncProjectTaskCount] Skipping - would overwrite non-zero with zero', {
-        projectId,
-        taskCount,
-        currentProjectCount,
-        listProjectCount
-      });
       return;
     }
 
