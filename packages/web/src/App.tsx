@@ -447,6 +447,7 @@ export default function App() {
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
   const handleCollapseAll = useCallback(() => ganttRef.current?.collapseAll(), []);
   const handleExpandAll = useCallback(() => ganttRef.current?.expandAll(), []);
+  const shareStatus = useUIStore((state) => state.shareStatus);
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'draft'
@@ -492,6 +493,8 @@ export default function App() {
             onExpandAll={handleExpandAll}
             onValidation={handleValidation}
             onCascade={handleCascade}
+            shareStatus={shareStatus}
+            onCreateShareLink={handleCreateShareLink}
           />
         )
         : (
@@ -507,6 +510,8 @@ export default function App() {
             onExpandAll={handleExpandAll}
             onValidation={handleValidation}
             onCascade={handleCascade}
+            shareStatus={shareStatus}
+            onCreateShareLink={handleCreateShareLink}
           />
         );
 

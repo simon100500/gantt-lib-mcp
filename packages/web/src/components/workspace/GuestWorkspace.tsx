@@ -19,6 +19,8 @@ interface GuestWorkspaceProps {
   onExpandAll: () => void;
   onValidation: (result: ValidationResult) => void;
   onCascade: (shiftedTasks: Task[]) => void;
+  shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
+  onCreateShareLink?: () => void;
 }
 
 export function GuestWorkspace(props: GuestWorkspaceProps) {
@@ -50,6 +52,8 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       onValidation={props.onValidation}
       onCascade={props.onCascade}
       showChat={false}
+      shareStatus={props.shareStatus}
+      onCreateShareLink={props.onCreateShareLink}
     />
   );
 }

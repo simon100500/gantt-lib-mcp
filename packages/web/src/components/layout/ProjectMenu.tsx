@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Check, ChevronDown, Eye, Link, LogOut, Menu } from 'lucide-react';
+import { ChevronDown, Eye, LogOut, Menu, User } from 'lucide-react';
 
 import { LoginButton } from '../LoginButton.tsx';
 import { ProjectSwitcher } from '../ProjectSwitcher.tsx';
@@ -154,7 +154,7 @@ export function ProjectMenu({
 
           <div className="flex select-none items-center gap-2 text-base font-cascadia tracking-tight">
             <img src="/favicon.svg" alt="GetGantt" className="h-5 w-5" />
-            <span className="text-slate-900">ГетГант</span>
+            <span className="hidden sm:inline text-slate-900">ГетГант</span>
           </div>
 
           <span className="text-slate-400">/</span>
@@ -194,28 +194,6 @@ export function ProjectMenu({
                 {currentProjectLabel}
               </span>
             )}
-
-            {!hasShareToken && auth.isAuthenticated && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void onCreateShareLink()}
-                disabled={shareStatus === 'creating'}
-                className="h-7 shrink-0 gap-1.5 px-2.5 text-xs text-slate-600 hover:text-slate-900"
-                title={
-                  shareStatus === 'creating'
-                    ? 'Создаём ссылку...'
-                    : shareStatus === 'copied'
-                      ? 'Ссылка скопирована'
-                      : shareStatus === 'error'
-                        ? 'Ошибка ссылки'
-                        : 'Поделиться'
-                }
-              >
-                {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
-                <span className="hidden lg:inline">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
-              </Button>
-            )}
           </div>
 
           <div className="flex-1" />
@@ -251,8 +229,9 @@ export function ProjectMenu({
                   size="sm"
                   className="h-8 max-w-[180px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 lg:max-w-[280px]"
                 >
-                  <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                  <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
+                  <span className="hidden lg:inline truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
+                  <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 lg:block" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">

@@ -1,8 +1,10 @@
 import {
+  Check,
   ChevronsDownUp,
   ChevronsUpDown,
   Ellipsis,
   FlagTriangleRight,
+  Link,
   PanelRightClose,
   PanelRightOpen,
   Sparkles,
@@ -24,6 +26,9 @@ interface ToolbarProps {
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
+  shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
+  onCreateShareLink?: () => void;
+  showShareButton?: boolean;
 }
 
 export function Toolbar({
@@ -32,6 +37,9 @@ export function Toolbar({
   onScrollToToday,
   onCollapseAll,
   onExpandAll,
+  shareStatus = 'idle',
+  onCreateShareLink,
+  showShareButton = false,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const viewMode = useUIStore((state) => state.viewMode);
@@ -87,6 +95,28 @@ export function Toolbar({
         <FlagTriangleRight className="h-3.5 w-3.5" />
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
+
+      {showShareButton && onCreateShareLink && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => void onCreateShareLink()}
+          disabled={shareStatus === 'creating'}
+          className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+          title={
+            shareStatus === 'creating'
+              ? 'Создаём ссылку...'
+              : shareStatus === 'copied'
+                ? 'Ссылка скопирована'
+                : shareStatus === 'error'
+                  ? 'Ошибка ссылки'
+                  : 'Поделиться'
+          }
+        >
+          {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
+          <span className="hidden md:inline text-xs">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
+        </Button>
+      )}
 
       <div className="flex-1" />
 

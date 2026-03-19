@@ -29,6 +29,8 @@ interface ProjectWorkspaceProps {
   onCascade?: (shiftedTasks: Task[]) => void;
   readOnly?: boolean;
   showChat?: boolean;
+  shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
+  onCreateShareLink?: () => void;
 }
 
 export function ProjectWorkspace({
@@ -48,6 +50,8 @@ export function ProjectWorkspace({
   onCascade,
   readOnly = false,
   showChat = true,
+  shareStatus = 'idle',
+  onCreateShareLink,
 }: ProjectWorkspaceProps) {
   const tasks = useTaskStore((state) => state.tasks);
   const loading = useTaskStore((state) => state.loading);
@@ -71,6 +75,9 @@ export function ProjectWorkspace({
           onScrollToToday={onScrollToToday}
           onCollapseAll={onCollapseAll}
           onExpandAll={onExpandAll}
+          shareStatus={shareStatus}
+          onCreateShareLink={onCreateShareLink}
+          showShareButton={!hasShareToken && isAuthenticated}
         />
 
         {loading ? (
