@@ -54,6 +54,12 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 - `ecf2147` - Removed "current project" badge from sidebar and moved edit button to header.
 - `npm run build --workspace=packages/web` passed after quick task 260319-kol.
 
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260319-kol | Zustand project sidebar fixes | 2026-03-19 | d9bc17d | [260319-kol-zustand](./quick/260319-kol-zustand/) |
+
 ## Session Continuity
 
 **Last session:** 2026-03-19T11:55:15.000Z
