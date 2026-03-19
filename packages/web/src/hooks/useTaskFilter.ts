@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { and, withoutDeps, expired, nameContains, inDateRange } from 'gantt-lib/filters';
+import { and, withoutDeps, expired, nameContains, inDateRange } from 'gantt-lib';
 import type { TaskPredicate } from 'gantt-lib';
 import { useUIStore } from '../stores/useUIStore';
 
