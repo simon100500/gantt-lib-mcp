@@ -227,6 +227,21 @@ Plans:
 - [x] 22-03-PLAN.md - Move task ownership and WebSocket routing onto Zustand task/chat stores
 - [x] 22-04-PLAN.md - Extract workspace shells and route toolbar/project menu controls through Zustand UI state
 
+### Phase 23: filters
+
+**Goal:** Add UI task filters to Gantt chart using gantt-lib's Task Filtering API. Filter by: without dependencies, expired, text search, date range. Separate popup for filter controls.
+
+**Requirements**: TBD
+**Depends on:** Phase 22
+**Plans:** 0 plans
+
+**Canonical refs:**
+- `d:\Projects\gantt-lib\docs\REFERENCE.md` §7.3 — Task Filtering API documentation
+- `d:\Projects\gantt-lib\packages\website\src\app\page.tsx` — Filter UI examples
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 23 to break down)
+
 ---
 *Roadmap created: 2026-02-23*
 *Last updated: 2026-03-19 with Phase 22 completion progress*
