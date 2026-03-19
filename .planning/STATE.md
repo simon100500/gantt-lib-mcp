@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: MCP Server Refactoring
 status: completed
-stopped_at: Completed 23-01-PLAN.md
-last_updated: "2026-03-19T21:45:48.150Z"
+stopped_at: Completed 23-02-PLAN.md
+last_updated: "2026-03-20T00:45:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 ---
@@ -72,8 +72,8 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 
 ## Current Position
 
-Phase: 23 (filters) — EXECUTING
-Plan: 2 of 2
+Phase: 23 (filters) — COMPLETED
+Plan: 2 of 2 (all plans complete)
 
 ## Decisions
 
@@ -87,6 +87,7 @@ Plan: 2 of 2
 - [Phase 22]: Let Toolbar and ProjectMenu read UI state from useUIStore directly instead of receiving App-local control props.
 - [Phase 23]: Import filter functions from 'gantt-lib' main module (not 'gantt-lib/filters' subpath)
 - [Phase 23]: Return undefined when no active filters (shows all tasks)
+- [Phase 23]: Use onPointerDownCapture to prevent DropdownMenu from closing on input interaction
 
 ## Recent Execution
 
@@ -106,8 +107,8 @@ Plan: 2 of 2
 
 ## Session Continuity
 
-**Last session:** 2026-03-19T21:45:48.148Z
-**Stopped at:** Completed 23-01-PLAN.md
+**Last session:** 2026-03-20T00:45:00.000Z
+**Stopped at:** Completed 23-02-PLAN.md
 **Resume file:** None
 
 **Next actions:**
