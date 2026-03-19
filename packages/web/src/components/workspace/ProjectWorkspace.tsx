@@ -55,6 +55,8 @@ export function ProjectWorkspace({
 }: ProjectWorkspaceProps) {
   const tasks = useTaskStore((state) => state.tasks);
   const loading = useTaskStore((state) => state.loading);
+  const collapseAll = useTaskStore((state) => state.collapseAll);
+  const expandAll = useTaskStore((state) => state.expandAll);
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
   const aiThinking = useChatStore((state) => state.aiThinking);
@@ -73,8 +75,8 @@ export function ProjectWorkspace({
           showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
           onOpenChat={onOpenChat}
           onScrollToToday={onScrollToToday}
-          onCollapseAll={onCollapseAll}
-          onExpandAll={onExpandAll}
+          onCollapseAll={collapseAll}
+          onExpandAll={expandAll}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
