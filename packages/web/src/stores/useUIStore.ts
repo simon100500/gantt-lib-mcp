@@ -29,6 +29,12 @@ interface UIState {
   validationErrors: DependencyError[];
   shareStatus: ShareStatus;
   savingState: SavingState;
+  // Filter state
+  filterWithoutDeps: boolean;
+  filterExpired: boolean;
+  filterSearchText: string;
+  filterDateFrom: string;
+  filterDateTo: string;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
@@ -40,6 +46,13 @@ interface UIState {
   setValidationErrors: (errors: DependencyError[]) => void;
   setShareStatus: (status: ShareStatus) => void;
   setSavingState: (status: SavingState) => void;
+  // Filter actions
+  setFilterWithoutDeps: (value: boolean) => void;
+  setFilterExpired: (value: boolean) => void;
+  setFilterSearchText: (value: string) => void;
+  setFilterDateFrom: (value: string) => void;
+  setFilterDateTo: (value: string) => void;
+  resetFilters: () => void;
 }
 
 const initialWorkspace: WorkspaceMode = { kind: 'guest' };
@@ -56,6 +69,11 @@ export const useUIStore = create<UIState>()((set) => ({
   validationErrors: [],
   shareStatus: 'idle',
   savingState: 'idle',
+  filterWithoutDeps: false,
+  filterExpired: false,
+  filterSearchText: '',
+  filterDateFrom: '',
+  filterDateTo: '',
   setWorkspace: (workspace) => {
     set((state) => ({
       workspace: typeof workspace === 'function' ? workspace(state.workspace) : workspace,
@@ -71,4 +89,16 @@ export const useUIStore = create<UIState>()((set) => ({
   setValidationErrors: (validationErrors) => set({ validationErrors }),
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setSavingState: (savingState) => set({ savingState }),
+  setFilterWithoutDeps: (filterWithoutDeps) => set({ filterWithoutDeps }),
+  setFilterExpired: (filterExpired) => set({ filterExpired }),
+  setFilterSearchText: (filterSearchText) => set({ filterSearchText }),
+  setFilterDateFrom: (filterDateFrom) => set({ filterDateFrom }),
+  setFilterDateTo: (filterDateTo) => set({ filterDateTo }),
+  resetFilters: () => set({
+    filterWithoutDeps: false,
+    filterExpired: false,
+    filterSearchText: '',
+    filterDateFrom: '',
+    filterDateTo: '',
+  }),
 }));
