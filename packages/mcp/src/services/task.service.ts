@@ -454,7 +454,8 @@ export class TaskService {
   }
 
   /**
-   * Delete a task (dependencies cascade via Prisma)
+   * Delete a task with explicit dependency cleanup
+   * Deletes both dependencies FROM this task and dependencies TO this task
    */
   async delete(id: string, source?: TaskMutationSource): Promise<boolean> {
     const task = await this.prisma.task.findUnique({
@@ -464,6 +465,12 @@ export class TaskService {
 
     if (!task) return false;
 
+    // Delete dependencies where this task is the source (from this task)
+    await dependencyService.deleteByTaskId(id);
+    // Delete dependencies where this task is the target (to this task)
+    await dependencyService.deleteDependentOnTask(id);
+
+    // Delete the task itself
     await this.prisma.task.delete({ where: { id } });
 
     await this.recordMutation('delete', task.projectId || undefined, id, source);
