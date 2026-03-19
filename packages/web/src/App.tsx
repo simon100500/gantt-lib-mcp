@@ -289,12 +289,16 @@ export default function App() {
     // Keep sidebar open after switching projects
     createEmptyChartAfterActivationRef.current = false;
     queuedPromptRef.current = null;
+
+    // Sync current project's task count BEFORE switching
+    if (workspace.kind === 'project' && workspace.projectId) {
+      auth.syncProjectTaskCount(workspace.projectId, tasks.length);
+    }
+
     resetWorkspacePresentation();
     await auth.switchProject(projectId);
-    // Sync task count after switching to ensure it persists
-    auth.syncProjectTaskCount(projectId, tasks.length);
     setWorkspace({ kind: 'project', projectId, chatOpen: false });
-  }, [auth, resetWorkspacePresentation, tasks.length, setWorkspace]);
+  }, [auth, resetWorkspacePresentation, tasks.length, setWorkspace, workspace]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {

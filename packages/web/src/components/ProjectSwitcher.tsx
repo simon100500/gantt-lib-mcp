@@ -26,14 +26,19 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 className={cn(
                   "flex items-center justify-between gap-2 px-2 py-2 rounded-md text-left transition-colors",
                   "hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "text-slate-700"
+                  p.id === currentProject.id
+                    ? "bg-slate-100 text-slate-900 font-medium"
+                    : "text-slate-700"
                 )}
               >
                 <span className="truncate text-sm">{p.name}</span>
                 {p.taskCount === undefined ? (
                   <span className="text-xs text-slate-200 shrink-0 w-4 text-center">—</span>
                 ) : p.taskCount > 0 ? (
-                  <span className="text-xs text-slate-400 shrink-0">{p.taskCount}</span>
+                  <span className={cn(
+                    "text-xs shrink-0",
+                    p.id === currentProject.id ? "text-slate-600" : "text-slate-400"
+                  )}>{p.taskCount}</span>
                 ) : null}
               </button>
             ))}
