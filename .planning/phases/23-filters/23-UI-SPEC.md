@@ -1,7 +1,8 @@
 ---
 phase: 23
 slug: filters
-status: draft
+status: approved
+reviewed_at: 2026-03-20
 shadcn_initialized: false
 preset: none
 created: 2026-03-20
