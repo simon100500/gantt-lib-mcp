@@ -51,6 +51,7 @@ export default function App() {
   const ganttRef = useRef<GanttChartRef>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
+  const previousProjectIdRef = useRef<string | null>(null);
   const queuedPromptRef = useRef<string | null>(null);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
@@ -452,7 +453,23 @@ export default function App() {
     if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project') {
       return;
     }
-    auth.syncProjectTaskCount(workspace.projectId, tasks.length);
+
+    const currentProjectId = workspace.projectId;
+    const previousProjectId = previousProjectIdRef.current;
+
+    // Skip sync if project just switched (tasks are still loading)
+    // The old project's count was already synced in handleSwitchProject
+    if (previousProjectId !== currentProjectId) {
+      previousProjectIdRef.current = currentProjectId;
+      console.log('[useEffect sync] Skipping - project just switched', {
+        previous: previousProjectId,
+        current: currentProjectId
+      });
+      return;
+    }
+
+    // Only sync if project hasn't changed (tasks were added/removed)
+    auth.syncProjectTaskCount(currentProjectId, tasks.length);
   }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
