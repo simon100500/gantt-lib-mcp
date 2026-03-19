@@ -62,7 +62,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 **Phase:** 22 - Zustand Frontend Refactor
 **Plan:** 04 complete
 **Status:** Milestone complete
-**Last activity:** 2026-03-19 - Completed quick task 260319-vc2: UI localStorage persistence
+**Last activity:** 2026-03-20 - Completed quick task 260319-xbm: Recursive collapse all for parent tasks
 
 **Progress:**
 [██████████] 100%
@@ -91,6 +91,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260319-xbm | Recursive collapse all for parent tasks | 2026-03-20 | 4dbb2d7 | [260319-xbm](./quick/260319-xbm/) |
 | 260319-vc2 | UI localStorage persistence | 2026-03-19 | d471757 | [260319-vc2-ui-localstorage-viewmode-collapsedparent](./quick/260319-vc2-ui-localstorage-viewmode-collapsedparent/) |
 | 260319-uz3 | Loading Phrases | 2026-03-19 | fe3a27b | [260319-uz3-loading-phrases](./quick/260319-uz3-loading-phrases/) |
 | 260319-kol | Zustand project sidebar fixes | 2026-03-19 | d9bc17d | [260319-kol-zustand](./quick/260319-kol-zustand/) |
@@ -99,7 +100,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 ## Session Continuity
 
 **Last session:** 2026-03-19T19:37:44.559Z
-**Stopped at:** Completed quick-260319-vc2: UI localStorage persistence
+**Stopped at:** Completed quick-260319-xbm: Recursive collapse all for parent tasks
 **Resume file:** None
 
 **Next actions:**
