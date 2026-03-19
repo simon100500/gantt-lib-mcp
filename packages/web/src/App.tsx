@@ -475,14 +475,29 @@ export default function App() {
       projectId: workspace.kind === 'project' ? workspace.projectId : null
     });
     if (workspace.kind === 'project') {
+      // Рекурсивно находим все родительские задачи (не только root)
+      const getAllParentIds = (tasks: Task[]): string[] => {
+        const parentIds = new Set<string>();
+
+        // Сначала собираем всех прямых родителей
+        tasks.forEach(task => {
+          if (task.parentId) {
+            parentIds.add(task.parentId);
+          }
+        });
+
+        // Возвращаем только те ID, которые существуют в tasks и являются родителями
+        return Array.from(parentIds).filter(id =>
+          tasks.some(t => t.id === id)
+        );
+      };
+
       // Для отладки: покажем все задачи и их parentId
       console.log('[App] All tasks sample:', tasks.slice(0, 5).map(t => ({ id: t.id, name: t.name, parentId: t.parentId })));
 
-      // Ищем родительские задачи: у которых НЕТ parentId и у которых ЕСТЬ дети
-      const allParentIds = tasks
-        .filter(t => !t.parentId && tasks.some(c => c.parentId === t.id))
-        .map(t => t.id);
-      console.log('[App] Found parent IDs:', allParentIds);
+      // Рекурсивно собираем ВСЕ родительские задачи (не только root)
+      const allParentIds = getAllParentIds(tasks);
+      console.log('[App] Found all parent IDs (recursive):', allParentIds);
       setProjectState(workspace.projectId, { collapsedParentIds: allParentIds });
     }
   }, [tasks, workspace, setProjectState]);
