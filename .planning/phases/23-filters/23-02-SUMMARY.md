@@ -69,8 +69,9 @@ Each task was committed atomically:
 
 1. **Task 1: Create FilterPopup component with all filter controls** - `6a09e73` (feat)
 2. **Task 2: Add filter button to Toolbar and wire up useFilterPersistence hook** - `22dc61c` (feat)
+3. **Focus fix: Added onPointerDownCapture to prevent focus loss** - `9896c32` (fix)
 
-**Plan metadata:** (pending final commit)
+**Plan metadata:** `d0d329c` (docs: complete plan) + `8242807` (docs: update STATE/ROADMAP)
 
 ## Files Created/Modified
 
@@ -93,11 +94,11 @@ Each task was committed atomically:
 
 **1. [Rule 1 - Bug] Fixed search input focus loss on each keystroke**
 - **Found during:** Task 3 (checkpoint verification - user reported)
-- **Issue:** Search input loses focus on each keystroke because parent component re-renders on state change
-- **Fix:** Wrapped search input div in a way that prevents DropdownMenuItem onSelect from firing on input events
+- **Issue:** Search input loses focus on each keystroke because DropdownMenu triggers onSelect on input interaction
+- **Fix:** Added onPointerDownCapture={(e) => e.preventDefault()} to search, date, and reset button containers to prevent DropdownMenu from closing
 - **Files modified:** packages/web/src/components/FilterPopup.tsx
-- **Verification:** User can type continuously without focus loss
-- **Committed in:** (pending fix commit)
+- **Verification:** User can type continuously without focus loss, build passes
+- **Committed in:** 9896c32 (separate fix commit)
 
 ---
 
@@ -106,7 +107,7 @@ Each task was committed atomically:
 
 ## Issues Encountered
 
-**Search input focus loss:** User reported that typing in the search input causes focus to be lost after each character. This is caused by the DropdownMenuItem's onSelect behavior triggering re-renders on state change. The fix involves preventing event propagation from the input to the menu item.
+**Search input focus loss:** User reported that typing in the search input causes focus to be lost after each character. Root cause was DropdownMenu's default behavior of closing on interaction. Fixed by adding onPointerDownCapture to prevent menu close on input focus/click events.
 
 ## User Setup Required
 
@@ -119,6 +120,18 @@ None - no external service configuration required.
 - Real-time filtering working via taskFilter prop
 - Persistence working via useFilterPersistence hook
 - Ready for user testing and feedback
+
+## Self-Check: PASSED
+
+All commits verified:
+- 6a09e73: Task 1 - FilterPopup component
+- 22dc61c: Task 2 - Filter button integration
+- 9896c32: Focus fix
+- d0d329c: Plan documentation
+- 8242807: STATE/ROADMAP updates
+
+All files created:
+- .planning/phases/23-filters/23-02-SUMMARY.md
 
 ---
 *Phase: 23-filters*
