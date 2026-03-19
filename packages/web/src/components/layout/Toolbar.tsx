@@ -4,6 +4,7 @@ import {
   ChevronsUpDown,
   Ellipsis,
   FlagTriangleRight,
+  Funnel,
   Link,
   PanelRightClose,
   PanelRightOpen,
@@ -19,6 +20,8 @@ import {
 } from '../ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '../../stores/useUIStore.ts';
+import { FilterPopup } from '../FilterPopup';
+import { useTaskFilter } from '../../hooks/useTaskFilter';
 
 interface ToolbarProps {
   showChatToggle?: boolean;
@@ -54,6 +57,18 @@ export function Toolbar({
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
+
+  // Filter state
+  const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
+  const filterExpired = useUIStore((state) => state.filterExpired);
+  const filterSearchText = useUIStore((state) => state.filterSearchText);
+  const filterDateFrom = useUIStore((state) => state.filterDateFrom);
+  const filterDateTo = useUIStore((state) => state.filterDateTo);
+  const hasActiveFilters =
+    filterWithoutDeps ||
+    filterExpired ||
+    filterSearchText.trim().length > 0 ||
+    (filterDateFrom && filterDateTo);
 
   // Используем переданный viewMode если есть, иначе из store
   const currentViewMode = externalViewMode ?? viewMode;
@@ -163,6 +178,18 @@ export function Toolbar({
           </button>
         ))}
       </div>
+
+      <FilterPopup>
+        <Button
+          size="sm"
+          variant={hasActiveFilters ? 'secondary' : 'ghost'}
+          className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+          title="Показать фильтры задач"
+        >
+          <Funnel className="h-3.5 w-3.5" />
+          <span className="hidden md:inline text-xs">Фильтры</span>
+        </Button>
+      </FilterPopup>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

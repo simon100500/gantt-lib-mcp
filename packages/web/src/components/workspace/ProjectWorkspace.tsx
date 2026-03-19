@@ -7,6 +7,8 @@ import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { russianHolidays2026 } from '../../lib/russianHolidays2026.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
+import { useFilterPersistence } from '../../hooks/useFilterPersistence';
+import { useTaskFilter } from '../../hooks/useTaskFilter';
 import { useChatStore } from '../../stores/useChatStore.ts';
 import { useTaskStore } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
@@ -71,6 +73,10 @@ export function ProjectWorkspace({
 
   const projectId = workspace.kind === 'project' ? workspace.projectId : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
+
+  // Filter persistence and computed filter
+  useFilterPersistence();
+  const taskFilter = useTaskFilter();
 
   // Читаем сохранённый collapsedParentIds для текущего проекта (controlled mode)
   // Сначала получаем все projectStates через селектор
@@ -151,6 +157,7 @@ export function ProjectWorkspace({
           <GanttChart
             ref={ganttRef as Ref<GanttChartRef>}
             tasks={tasks}
+            taskFilter={taskFilter}
             onTasksChange={readOnly ? undefined : batchUpdate?.handleTasksChange}
             dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
             rowHeight={36}
