@@ -43,6 +43,7 @@ export interface UseAuthResult extends AuthState {
   createProject(name: string): Promise<AuthProject | null>;
   syncProjectTaskCount(projectId: string, taskCount: number): void;
   refreshAccessToken(): Promise<string | null>;
+  refreshProjects(): Promise<void>;
 }
 
 interface StoredAuthState {
@@ -467,6 +468,31 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to create project:', error);
       return null;
+    }
+  },
+
+  async refreshProjects() {
+    const token = get().accessToken;
+    if (!token) {
+      return;
+    }
+
+    try {
+      const projects = await fetchProjects(token);
+      const state = get();
+      const nextProjects = projects.length > 0 ? projects : state.projects;
+
+      persistStoredAuth({
+        accessToken: state.accessToken,
+        refreshToken: getRefreshToken(),
+        user: state.user,
+        project: state.project,
+        projects: nextProjects,
+      });
+
+      set({ projects: nextProjects });
+    } catch (error) {
+      console.error('Failed to refresh projects:', error);
     }
   },
 
