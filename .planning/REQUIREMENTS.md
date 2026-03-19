@@ -88,13 +88,21 @@ These features shipped in previous milestones and must continue working:
 | HIER-01 through HIER-03 | Phase 19 | Pending |
 | HIST-01 through HIST-02 | Phase 20 | Pending |
 | QUAL-01 through QUAL-02 | Phase 21 | Pending |
-| WEB-ZUSTAND-01 through WEB-ZUSTAND-07 | Phase 22 | Complete |
+| WEB-ZUSTAND-01 through WEB-ZUSTAND-07 | Phase 22 | Complete
+| FILTER-01 through FILTER-04 | Phase 23 | Pending |
 
 **Coverage:**
-- v3.0 requirements: 14 total
-- Mapped to phases: 14
+- v3.0 requirements: 18 total
+- Mapped to phases: 18
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-17*
 *Last updated: 2026-03-19 after Phase 22 completion*
+
+### UI Filters (FILTER)
+
+- [ ] **FILTER-01**: Filter state stored in useUIStore with fields: filterWithoutDeps, filterExpired, filterSearchText, filterDateFrom, filterDateTo
+- [ ] **FILTER-02**: Filter state persisted to localStorage with key 'gantt-filters' and loaded on mount
+- [ ] **FILTER-03**: GanttChart component accepts taskFilter prop of type TaskPredicate from gantt-lib
+- [ ] **FILTER-04**: Filter button in Toolbar opens popup with controls: checkboxes (without deps, expired), text input (search), date inputs (from, to), reset button

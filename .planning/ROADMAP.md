@@ -2,13 +2,13 @@
 
 **Created:** 2026-02-23
 **Current milestone:** v3.0 MCP Server Refactoring
-**Phase range:** 17-22
+**Phase range:** 17-23
 
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-13)
 - ✅ **v2.0 PostgreSQL Migration** — Phases 15-16 (shipped 2026-03-17)
-- 🚧 **v3.0 MCP Server Refactoring** — Phases 17-21 (in progress)
+- 🚧 **v3.0 MCP Server Refactoring** — Phases 17-23 (in progress)
 
 ## Progress
 
@@ -21,7 +21,8 @@
 | 19. Task Hierarchy | v3.0 | TBD | Not started | - |
 | 20. Conversation History | v3.0 | TBD | Not started | - |
 | 21. Tool Quality | v3.0 | 1 | Ready to execute | - |
-| 22. Zustand Frontend Refactor | 4/4 | Complete    | 2026-03-18 | - |
+| 22. Zustand Frontend Refactor | v3.0 | 4 | Complete | 2026-03-18 |
+| 23. filters | v3.0 | 2 | Ready to execute | - |
 
 ## Phases
 
@@ -83,7 +84,7 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 
 ### 🚧 v3.0 MCP Server Refactoring (In Progress)
 
-**Milestone Goal:** Improve MCP server: token economy, agent hardening, task hierarchy, conversation history, tool quality
+**Milestone Goal:** Improve MCP server: token economy, agent hardening, task hierarchy, conversation history, tool quality, UI filters
 
 #### Phase 17: Token Economy
 
@@ -181,6 +182,40 @@ Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2
 
 ---
 
+#### Phase 22: Zustand Frontend Refactor
+
+**Goal:** Refactor `packages/web` state ownership around Zustand stores and workspace-oriented frontend state.
+
+**Requirements**: WEB-ZUSTAND-01 through WEB-ZUSTAND-07
+**Depends on:** Phase 21
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 22-01-PLAN.md - Install Zustand and add foundational chat/UI stores plus save-state transport
+- [x] 22-02-PLAN.md - Move auth/session/project ownership into Zustand via `useAuthStore`
+- [x] 22-03-PLAN.md - Move task ownership and WebSocket routing onto Zustand task/chat stores
+- [x] 22-04-PLAN.md - Extract workspace shells and route toolbar/project menu controls through Zustand UI state
+
+---
+
+#### Phase 23: filters
+
+**Goal:** Add UI task filters to Gantt chart using gantt-lib's Task Filtering API. Filter by: without dependencies, expired, text search, date range. Separate popup for filter controls.
+
+**Requirements**: FILTER-01, FILTER-02, FILTER-03, FILTER-04
+**Depends on:** Phase 22
+**Plans:** 2 plans
+
+**Canonical refs:**
+- `d:\Projects\gantt-lib\docs\REFERENCE.md` §7.3 — Task Filtering API documentation
+- `d:\Projects\gantt-lib\packages\website\src\app\page.tsx` — Filter UI examples
+
+Plans:
+- [ ] 23-01-PLAN.md — Add filter state to useUIStore, create persistence hook, add taskFilter prop to GanttChart
+- [ ] 23-02-PLAN.md — Create FilterPopup component and add filter button to Toolbar
+
+---
+
 ## Dependencies
 
 ```
@@ -192,16 +227,19 @@ Phase 19 (Task Hierarchy) ──┐
     ↓                        │
 Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
     ↓
+Phase 22 (Zustand Frontend Refactor)
+    ↓
+Phase 23 (filters)
 ```
 
-**Notes:** Phases 19-20 can be done in parallel after Phase 17. Phase 21 depends on all tool changes being complete.
+**Notes:** Phases 19-20 can be done in parallel after Phase 17. Phase 21 depends on all tool changes being complete. Phase 23 depends on Phase 22 (Zustand stores).
 
 ---
 
 ## Coverage
 
 **v1+v2 Requirements:** 32 total — 100% complete
-**v3 Requirements:** 14 total — 100% mapped (Phases 17-21)
+**v3 Requirements:** 18 total — 100% mapped (Phases 17-23)
 
 | Category | Requirements | Phase | Plans | Status | Completed |
 |----------|--------------|-------|-------|--------|-----------|
@@ -210,38 +248,12 @@ Phase 20 (Conversation History) ── Phase 21 (Tool Quality)
 | Task Hierarchy (HIER) | HIER-01 through HIER-03 | 19 | 1/1 | Complete    | 2026-03-17 |
 | Conversation History (HIST) | HIST-01 through HIST-02 | 20 | 1/1 | Complete    | 2026-03-17 |
 | Tool Quality (QUAL) | QUAL-01 through QUAL-02 | 21 | 1/1 | Complete    | 2026-03-18 |
+| Frontend Zustand Refactor (WEB-ZUSTAND) | WEB-ZUSTAND-01 through WEB-ZUSTAND-07 | 22 | 4 | Complete | 2026-03-18 |
+| UI Filters (FILTER) | FILTER-01 through FILTER-04 | 23 | 2 | Ready to execute | - |
 
 **No orphaned requirements.**
 **No duplicates.**
 
-### Phase 22: Zustand Frontend Refactor
-
-**Goal:** Refactor `packages/web` state ownership around Zustand stores and workspace-oriented frontend state.
-**Requirements**: WEB-ZUSTAND-01 through WEB-ZUSTAND-07
-**Depends on:** Phase 21
-**Plans:** 4/4 plans complete
-
-Plans:
-- [x] 22-01-PLAN.md - Install Zustand and add foundational chat/UI stores plus save-state transport
-- [x] 22-02-PLAN.md - Move auth/session/project ownership into Zustand via `useAuthStore`
-- [x] 22-03-PLAN.md - Move task ownership and WebSocket routing onto Zustand task/chat stores
-- [x] 22-04-PLAN.md - Extract workspace shells and route toolbar/project menu controls through Zustand UI state
-
-### Phase 23: filters
-
-**Goal:** Add UI task filters to Gantt chart using gantt-lib's Task Filtering API. Filter by: without dependencies, expired, text search, date range. Separate popup for filter controls.
-
-**Requirements**: TBD
-**Depends on:** Phase 22
-**Plans:** 0 plans
-
-**Canonical refs:**
-- `d:\Projects\gantt-lib\docs\REFERENCE.md` §7.3 — Task Filtering API documentation
-- `d:\Projects\gantt-lib\packages\website\src\app\page.tsx` — Filter UI examples
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 23 to break down)
-
 ---
 *Roadmap created: 2026-02-23*
-*Last updated: 2026-03-19 with Phase 22 completion progress*
+*Last updated: 2026-03-20 with Phase 23 planning*
