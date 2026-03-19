@@ -372,12 +372,27 @@ export class AuthService {
   /**
    * Create a share link for a project
    *
-   * Retries on collision (unlikely with 8-char random ID).
+   * Returns an existing link when present so the project keeps
+   * a stable share URL across repeated "share" actions.
+   * Retries on collision when creating a new ID.
    *
    * @param projectId - Project ID to create share link for
-   * @returns Created ShareLink
+   * @returns Existing or newly created ShareLink
    */
   async createShareLink(projectId: string): Promise<ShareLink> {
+    const existingLink = await this.prisma.shareLink.findFirst({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (existingLink) {
+      return {
+        id: existingLink.id,
+        projectId: existingLink.projectId,
+        createdAt: existingLink.createdAt.toISOString(),
+      };
+    }
+
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = this.generateShareId();
       try {
