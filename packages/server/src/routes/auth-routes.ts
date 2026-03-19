@@ -285,7 +285,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const tasks = await taskService.list(project.id);
+    const { tasks } = await taskService.list(project.id);
     return reply.send({
       project: { id: project.id, name: project.name },
       tasks,

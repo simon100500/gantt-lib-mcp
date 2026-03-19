@@ -59,6 +59,8 @@ export function ProjectWorkspace({
 }: ProjectWorkspaceProps) {
   const tasks = useTaskStore((state) => state.tasks);
   const loading = useTaskStore((state) => state.loading);
+  const sharedProject = useTaskStore((state) => state.project);
+  const shareToken = useTaskStore((state) => state.shareToken);
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
   const aiThinking = useChatStore((state) => state.aiThinking);
@@ -71,7 +73,11 @@ export function ProjectWorkspace({
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
 
-  const projectId = workspace.kind === 'project' ? workspace.projectId : null;
+  const projectId = workspace.kind === 'project'
+    ? workspace.projectId
+    : workspace.kind === 'shared'
+      ? `shared:${shareToken ?? sharedProject?.id ?? 'unknown'}`
+      : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
   // Filter persistence and computed filter

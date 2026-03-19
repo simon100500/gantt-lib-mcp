@@ -464,6 +464,11 @@ export default function App() {
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
+  const workspaceStateId = workspace.kind === 'project'
+    ? workspace.projectId
+    : workspace.kind === 'shared'
+      ? `shared:${sharedProject.shareToken ?? sharedProject.project?.id ?? 'unknown'}`
+      : null;
 
   const handleCollapseAll = useCallback(() => {
     // В controlled режиме (collapsedParentIds передан как prop) библиотека
@@ -472,9 +477,9 @@ export default function App() {
     console.log('[App] handleCollapseAll called', {
       workspaceKind: workspace.kind,
       tasksCount: tasks.length,
-      projectId: workspace.kind === 'project' ? workspace.projectId : null
+      projectId: workspaceStateId,
     });
-    if (workspace.kind === 'project') {
+    if (workspaceStateId) {
       // Рекурсивно находим все родительские задачи (не только root)
       const getAllParentIds = (tasks: Task[]): string[] => {
         const parentIds = new Set<string>();
@@ -498,20 +503,20 @@ export default function App() {
       // Рекурсивно собираем ВСЕ родительские задачи (не только root)
       const allParentIds = getAllParentIds(tasks);
       console.log('[App] Found all parent IDs (recursive):', allParentIds);
-      setProjectState(workspace.projectId, { collapsedParentIds: allParentIds });
+      setProjectState(workspaceStateId, { collapsedParentIds: allParentIds });
     }
-  }, [tasks, workspace, setProjectState]);
+  }, [tasks, workspace, workspaceStateId, setProjectState]);
 
   const handleExpandAll = useCallback(() => {
     // В controlled режиме (collapsedParentIds передан как prop) библиотека
     // автоматически реагирует на изменения store, поэтому НЕ вызываем ref методы
     // Сохраняем пустое состояние (все развёрнуты)
-    console.log('[App] handleExpandAll called', { workspaceKind: workspace.kind });
-    if (workspace.kind === 'project') {
+    console.log('[App] handleExpandAll called', { workspaceKind: workspace.kind, projectId: workspaceStateId });
+    if (workspaceStateId) {
       console.log('[App] Expanding all - clearing collapsedParentIds');
-      setProjectState(workspace.projectId, { collapsedParentIds: [] });
+      setProjectState(workspaceStateId, { collapsedParentIds: [] });
     }
-  }, [workspace, setProjectState]);
+  }, [workspace, workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const currentProjectLabel = hasShareToken

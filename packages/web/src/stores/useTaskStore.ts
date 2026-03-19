@@ -258,7 +258,13 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     const state = get();
 
     if (shareToken) {
-      if (state.activeSource === 'shared' && state.shareToken === shareToken && !state.loading) {
+      if (
+        state.activeSource === 'shared'
+        && state.shareToken === shareToken
+        && state.isSharedReadOnly
+        && state.project
+        && !state.loading
+      ) {
         return;
       }
 
