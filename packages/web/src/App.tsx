@@ -51,7 +51,6 @@ export default function App() {
   const ganttRef = useRef<GanttChartRef>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
-  const previousProjectIdRef = useRef<string | null>(null);
   const queuedPromptRef = useRef<string | null>(null);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
@@ -290,22 +289,10 @@ export default function App() {
     // Keep sidebar open after switching projects
     createEmptyChartAfterActivationRef.current = false;
     queuedPromptRef.current = null;
-
-    // Sync current project's task count BEFORE switching
-    if (workspace.kind === 'project' && workspace.projectId) {
-      console.log('[handleSwitchProject] Syncing OLD project task count', {
-        oldProjectId: workspace.projectId,
-        taskCount: tasks.length,
-        newProjectId: projectId,
-        stack: new Error().stack?.split('\n').slice(2, 5).join('\n')
-      });
-      auth.syncProjectTaskCount(workspace.projectId, tasks.length);
-    }
-
     resetWorkspacePresentation();
     await auth.switchProject(projectId);
     setWorkspace({ kind: 'project', projectId, chatOpen: false });
-  }, [auth, resetWorkspacePresentation, tasks.length, setWorkspace, workspace]);
+  }, [auth, resetWorkspacePresentation, setWorkspace]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
@@ -455,27 +442,13 @@ export default function App() {
       return;
     }
 
-    const currentProjectId = workspace.projectId;
-    const previousProjectId = previousProjectIdRef.current;
-
-    // Skip sync if project just switched (tasks are still loading)
-    // The old project's count was already synced in handleSwitchProject
-    if (previousProjectId !== currentProjectId) {
-      previousProjectIdRef.current = currentProjectId;
-      console.log('[useEffect sync] Skipping - project just switched', {
-        previous: previousProjectId,
-        current: currentProjectId,
-        tasksLength: tasks.length
-      });
+    // Only sync if tasks are actually loaded (length > 0)
+    // Don't overwrite stored counts with zero during project switches
+    if (tasks.length === 0) {
       return;
     }
 
-    // Only sync if project hasn't changed (tasks were added/removed)
-    console.log('[useEffect sync] Syncing task count', {
-      currentProjectId,
-      tasksLength: tasks.length
-    });
-    auth.syncProjectTaskCount(currentProjectId, tasks.length);
+    auth.syncProjectTaskCount(workspace.projectId, tasks.length);
   }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);

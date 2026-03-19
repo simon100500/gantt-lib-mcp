@@ -475,30 +475,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const currentProjectCount = state.project?.id === projectId ? state.project.taskCount : undefined;
     const listProjectCount = state.projects.find((project) => project.id === projectId)?.taskCount;
 
-    // Log with stack trace to find who's calling with 0
-    if (taskCount === 0 && (currentProjectCount !== 0 || listProjectCount !== 0)) {
-      console.error('[syncProjectTaskCount] OVERWRITING NON-ZERO WITH ZERO!', {
+    // NEVER overwrite non-zero with zero - zero means "not loaded yet"
+    if (taskCount === 0 && (currentProjectCount !== undefined || listProjectCount !== undefined)) {
+      console.log('[syncProjectTaskCount] Skipping - would overwrite non-zero with zero', {
         projectId,
         taskCount,
         currentProjectCount,
-        listProjectCount,
-        stack: new Error().stack?.split('\n').slice(2, 6).join('\n')
+        listProjectCount
       });
+      return;
     }
 
-    console.log('[syncProjectTaskCount]', {
-      projectId,
-      taskCount,
-      currentProjectCount,
-      listProjectCount,
-      state: {
-        currentProject: state.project,
-        projects: state.projects,
-      }
-    });
-
     if (currentProjectCount === taskCount && listProjectCount === taskCount) {
-      console.log('[syncProjectTaskCount] Skipping - already synced');
       return;
     }
 
@@ -510,8 +498,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const project = state.project?.id === projectId
       ? { ...state.project, taskCount }
       : state.project;
-
-    console.log('[syncProjectTaskCount] Updating', { project, projects });
 
     persistStoredAuth({
       accessToken: state.accessToken,
