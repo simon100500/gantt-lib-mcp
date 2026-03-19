@@ -178,12 +178,6 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
         </Card>
       ) : (
         <div className="relative w-[420px] max-w-[calc(100vw-2rem)]">
-          <button
-            onClick={() => setStep('email')}
-            className="absolute left-0 -top-9 text-sm text-primary hover:underline flex items-center gap-1 z-10"
-          >
-            ← Изменить email
-          </button>
           <Card className="w-full shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={onClose}
@@ -197,7 +191,15 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
             </button>
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-xl font-semibold">Проверьте email</CardTitle>
-              <CardDescription>Мы отправили 6-значный код на {email}</CardDescription>
+              <CardDescription className="flex items-center gap-1 flex-wrap">
+                Мы отправили 6-значный код на {email}{' '}
+                <button
+                  onClick={() => setStep('email')}
+                  className="text-primary hover:underline text-sm"
+                >
+                  (изменить)
+                </button>
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -216,7 +218,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
                     setOtp(value);
                   }}
                   className={cn(
-                    "h-11 text-center text-2xl font-mono tracking-widest",
+                    "h-14 text-center !text-4xl font-mono tracking-widest py-4",
                     error && "border-destructive focus-visible:ring-destructive"
                   )}
                   disabled={loading}

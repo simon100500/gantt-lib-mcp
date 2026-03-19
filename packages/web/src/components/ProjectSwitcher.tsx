@@ -1,4 +1,4 @@
-import { Plus, Pencil } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -7,42 +7,13 @@ interface ProjectSwitcherProps {
   projects: { id: string; name: string; taskCount?: number }[];
   onSwitch: (projectId: string) => void;
   onCreateNew: () => void;
-  onEdit?: (projectId: string, currentName: string) => Promise<void>;
 }
 
-export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onEdit }: ProjectSwitcherProps) {
-  const isDraft = currentProject.kind === 'draft';
-
+export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
   return (
     <div className="flex flex-col h-full">
-      {/* Current project display */}
-      <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200 shrink-0">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-slate-500 font-medium mb-0.5">
-            {isDraft ? 'Черновик' : 'Текущий проект'}
-          </p>
-          <p className="text-sm font-semibold text-slate-900 truncate">{currentProject.name}</p>
-          {isDraft && (
-            <p className="mt-1 text-xs text-slate-500">
-              Проект будет создан после первого действия на стартовом экране
-            </p>
-          )}
-        </div>
-        {onEdit && !isDraft && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onEdit(currentProject.id, currentProject.name)}
-            className="h-8 w-8 p-0 shrink-0"
-            aria-label="Переименовать проект"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-
       {/* Projects list */}
-      <div className="flex flex-col gap-2 mt-4 flex-1 overflow-y-auto">
+      <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
         <p className="text-xs text-slate-500 font-medium sticky top-0 bg-background py-1">Все проекты</p>
 
         {/* All projects as simple list */}
@@ -55,7 +26,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 className={cn(
                   "flex items-center justify-between gap-2 px-2 py-2 rounded-md text-left transition-colors",
                   "hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  !isDraft && p.id === currentProject.id
+                  p.id === currentProject.id
                     ? "bg-slate-100 text-slate-900 font-medium"
                     : "text-slate-700"
                 )}
@@ -64,7 +35,10 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 {p.taskCount === undefined ? (
                   <span className="text-xs text-slate-200 shrink-0 w-4 text-center">—</span>
                 ) : p.taskCount > 0 ? (
-                  <span className="text-xs text-slate-400 shrink-0">{p.taskCount}</span>
+                  <span className={cn(
+                    "text-xs shrink-0",
+                    p.id === currentProject.id ? "text-slate-600" : "text-slate-400"
+                  )}>{p.taskCount}</span>
                 ) : null}
               </button>
             ))}

@@ -1,179 +1,90 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Ellipsis, Eye, FlagTriangleRight, Link, LogOut, Menu, PanelLeft, PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
-import { GanttChart, type GanttChartRef } from './components/GanttChart.tsx';
-import { russianHolidays2026 } from './lib/russianHolidays2026.ts';
-import { ChatSidebar, type ChatMessage } from './components/ChatSidebar.tsx';
-import { StartScreen } from './components/StartScreen.tsx';
-import { useTasks } from './hooks/useTasks.ts';
-import { useLocalTasks } from './hooks/useLocalTasks.ts';
-import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import { useCallback, useEffect, useRef } from 'react';
+
+import { EditProjectModal } from './components/EditProjectModal.tsx';
+import { OtpModal } from './components/OtpModal.tsx';
+import type { GanttChartRef } from './components/GanttChart.tsx';
+import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
+import { DraftWorkspace } from './components/workspace/DraftWorkspace.tsx';
+import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
+import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
+import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { useAuth } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
+import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
 import { useTaskMutation } from './hooks/useTaskMutation.ts';
-import { OtpModal } from './components/OtpModal.tsx';
-import { EditProjectModal } from './components/EditProjectModal.tsx';
-import { ProjectSwitcher } from './components/ProjectSwitcher.tsx';
-import { LoginButton } from './components/LoginButton.tsx';
-import { Button } from './components/ui/button.tsx';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './components/ui/dropdown-menu.tsx';
-import { cn } from '@/lib/utils';
-import type { Task, ValidationResult, DependencyError } from './types.ts';
+import { useTasks } from './hooks/useTasks.ts';
+import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import { useChatStore } from './stores/useChatStore.ts';
+import { useTaskStore } from './stores/useTaskStore.ts';
+import { useUIStore } from './stores/useUIStore.ts';
+import type { Task, ValidationResult } from './types.ts';
 
-let msgCounter = 0;
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 
-// ── Switch control (track + thumb) ────────────────────────────────────────
-interface SwitchControlProps {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}
-
-type WorkspaceMode =
-  | { kind: 'guest' }
-  | { kind: 'shared' }
-  | { kind: 'project'; projectId: string; chatOpen: boolean }
-  | {
-    kind: 'draft';
-    draftName: string;
-    queuedPrompt: string | null;
-    activation: 'idle' | 'creating' | 'switching' | 'ready';
-  };
-
-function SwitchControl({ checked, onChange, label }: SwitchControlProps) {
-  return (
-    <label
-      className="flex items-center gap-1.5 cursor-pointer select-none group"
-      onClick={() => onChange(!checked)}
-    >
-      {/* Track + thumb */}
-      <span
-        role="switch"
-        aria-checked={checked}
-        className={cn(
-          'relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          checked
-            ? 'bg-primary border-primary'
-            : 'bg-slate-200 border-slate-300',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute left-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform',
-            checked ? 'translate-x-3' : 'translate-x-0',
-          )}
-        />
-      </span>
-      {/* Label */}
-      <span className={cn(
-        'text-xs font-medium transition-colors',
-        checked ? 'text-slate-800' : 'text-slate-500',
-      )}>
-        {label}
-      </span>
-    </label>
-  );
-}
-
-// ── Toolbar separator ──────────────────────────────────────────────────────
-function ToolbarSep() {
-  return <span className="w-px h-4 bg-slate-200 shrink-0" />;
-}
-
-// ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const auth = useAuth();
   const sharedProject = useSharedProject();
-  const hasShareToken = Boolean(sharedProject.shareToken);
-  const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
   const localTasks = useLocalTasks();
+  const workspace = useUIStore((state) => state.workspace);
+  const showOtpModal = useUIStore((state) => state.showOtpModal);
+  const showEditProjectModal = useUIStore((state) => state.showEditProjectModal);
+  const setWorkspace = useUIStore((state) => state.setWorkspace);
+  const setShowOtpModal = useUIStore((state) => state.setShowOtpModal);
+  const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
+  const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
+  const setValidationErrors = useUIStore((state) => state.setValidationErrors);
+  const setShareStatus = useUIStore((state) => state.setShareStatus);
+  const hasShareToken = Boolean(sharedProject.shareToken);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
+      return;
+    }
+
+    void auth.refreshProjects();
+  }, [auth.isAuthenticated, auth.accessToken, hasShareToken]);
+
+  const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
   const { tasks, setTasks, loading, error } = hasShareToken
     ? sharedProject
     : auth.isAuthenticated
       ? authenticatedTasks
       : localTasks;
-  const [autoSaveSkipVersion, setAutoSaveSkipVersion] = useState(0);
-  // Batch task updates for gantt-lib onChange events (handles individual mutations)
   const batchUpdate = useBatchTaskUpdate({
     tasks,
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
   });
-  const { savingState } = batchUpdate;
-  // Individual task mutations for direct AI agent operations
-  const { mutateTask, createTask, deleteTask } = useTaskMutation(
-    hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
-  );
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [streaming, setStreaming] = useState('');
-  const [aiThinking, setAiThinking] = useState(false);
-  const [projectSidebarVisible, setProjectSidebarVisible] = useState(false);
-  const [workspace, setWorkspace] = useState<WorkspaceMode>(() => {
-    if (hasShareToken) {
-      return { kind: 'shared' };
-    }
-    if (auth.isAuthenticated && auth.project?.id) {
-      return { kind: 'project', projectId: auth.project.id, chatOpen: false };
-    }
-    return { kind: 'guest' };
-  });
-  const [shareStatus, setShareStatus] = useState<'idle' | 'creating' | 'copied' | 'error'>('idle');
-  const [isRenamingProject, setIsRenamingProject] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
-
-  // Gantt feature toggles
-  const [validationErrors, setValidationErrors] = useState<DependencyError[]>([]);
-  const [autoSchedule, setAutoSchedule] = useState(true);
-  const [highlightExpiredTasks, setHighlightExpiredTasks] = useState(true);
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
-  const [showTaskList, setShowTaskList] = useState(true);
-
-  // Always allow editing (removed toggle buttons)
-  const disableTaskNameEditing = false;
-  const disableDependencyEditing = false;
-
+  useTaskMutation(hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null);
   const ganttRef = useRef<GanttChartRef>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
-    setAutoSaveSkipVersion(version => version + 1);
     setTasks(nextTasks);
   }, [setTasks]);
 
-  // ── WebSocket message handler ────────────────────────────────────────────
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
-      // WebSocket is ONLY used for AI agent responses now, not for user edits.
-      // User edits use optimistic updates with direct server save, no realtime sync.
-      replaceTasksFromSystem(msg.tasks as Task[]);
-    } else if (msg.type === 'token') {
-      setStreaming(prev => prev + (msg.content ?? ''));
-    } else if (msg.type === 'done') {
-      setAiThinking(false);
-      setStreaming(prev => {
-        if (prev) {
-          setMessages(ms => [...ms, { id: String(++msgCounter), role: 'assistant', content: prev }]);
-        }
-        return '';
-      });
-    } else if (msg.type === 'error') {
-      setAiThinking(false);
-      setStreaming('');
-      setMessages(ms => [
-        ...ms,
-        { id: String(++msgCounter), role: 'assistant', content: `Error: ${msg.message ?? 'unknown error'}` },
-      ]);
+      useTaskStore.getState().replaceFromSystem(msg.tasks as Task[]);
+      return;
     }
-  }, [setTasks]);
+    if (msg.type === 'token') {
+      useChatStore.getState().appendToken(msg.content ?? '');
+      return;
+    }
+    if (msg.type === 'done') {
+      useChatStore.getState().finishStreaming();
+      return;
+    }
+    if (msg.type === 'error') {
+      useChatStore.getState().setError(msg.message ?? 'unknown error');
+    }
+  }, []);
 
-  const { send, connected, connectedToken } = useWebSocket(
+  const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
     () => (hasShareToken ? null : auth.accessToken),
     hasShareToken ? null : auth.accessToken,
@@ -197,51 +108,39 @@ export default function App() {
 
     const projectId = auth.project?.id;
     if (!auth.isAuthenticated || !projectId) {
-      setWorkspace({ kind: 'guest' });
+      setWorkspace((current) => current.kind === 'draft' ? current : { kind: 'guest' });
       return;
     }
 
-    setWorkspace(prev => {
-      if (prev.kind === 'draft') {
-        return prev;
+    setWorkspace((current) => {
+      if (current.kind === 'draft') {
+        return current;
       }
-
-      if (prev.kind === 'project' && prev.projectId === projectId) {
-        return prev;
+      if (current.kind === 'project' && current.projectId === projectId) {
+        return current;
       }
-
       return { kind: 'project', projectId, chatOpen: false };
     });
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
+  }, [auth.isAuthenticated, auth.project?.id, hasShareToken, setWorkspace]);
 
   const closeProjectChat = useCallback(() => {
-    setWorkspace(prev => (
-      prev.kind === 'project'
-        ? { ...prev, chatOpen: false }
-        : prev
-    ));
-  }, []);
+    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: false } : current);
+  }, [setWorkspace]);
 
   const openProjectChat = useCallback(() => {
-    setWorkspace(prev => (
-      prev.kind === 'project'
-        ? { ...prev, chatOpen: true }
-        : prev
-    ));
-  }, []);
+    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
+  }, [setWorkspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
     replaceTasksFromSystem([]);
-    setMessages([]);
-    setStreaming('');
-    setAiThinking(false);
+    useChatStore.getState().reset();
   }, [replaceTasksFromSystem]);
 
   const createPlaceholderTask = useCallback((): Task => {
     const today = new Date().toISOString().split('T')[0];
     return {
       id: `task-${Date.now()}`,
-      name: 'РќРѕРІР°СЏ Р·Р°РґР°С‡Р°',
+      name: 'Новая задача',
       startDate: today,
       endDate: today,
     };
@@ -249,7 +148,6 @@ export default function App() {
 
   const submitChatMessage = useCallback(async (message: string) => {
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-
     let token = getLatestAccessToken();
     if (!token) {
       return false;
@@ -259,7 +157,7 @@ export default function App() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ message }),
     });
@@ -269,13 +167,12 @@ export default function App() {
       if (!refreshedToken) {
         return false;
       }
-
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
       response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ message }),
       });
@@ -284,7 +181,6 @@ export default function App() {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-
     return true;
   }, [auth]);
 
@@ -296,17 +192,12 @@ export default function App() {
       setShowOtpModal(true);
       return;
     }
-    setMessages(ms => [...ms, { id: String(++msgCounter), role: 'user', content: text }]);
-    setAiThinking(true);
+    useChatStore.getState().addMessage({ role: 'user', content: text });
     openProjectChat();
-    void submitChatMessage(text).catch((error) => {
-      setAiThinking(false);
-      setMessages(ms => [
-        ...ms,
-        { id: String(++msgCounter), role: 'assistant', content: `Error: ${String(error)}` },
-      ]);
+    void submitChatMessage(text).catch((submitError) => {
+      useChatStore.getState().setError(String(submitError));
     });
-  }, [auth.isAuthenticated, hasShareToken, openProjectChat, submitChatMessage]);
+  }, [auth.isAuthenticated, hasShareToken, openProjectChat, setShowOtpModal, submitChatMessage]);
 
   const activateDraftWorkspace = useCallback(async ({
     firstPrompt,
@@ -318,12 +209,10 @@ export default function App() {
     if (hasShareToken) {
       return false;
     }
-
     if (!auth.isAuthenticated) {
       setShowOtpModal(true);
       return false;
     }
-
     if (workspace.kind !== 'draft' || activationInFlightRef.current) {
       return false;
     }
@@ -334,35 +223,28 @@ export default function App() {
     resetWorkspacePresentation();
 
     if (firstPrompt) {
-      setMessages([{ id: String(++msgCounter), role: 'user', content: firstPrompt }]);
-      setAiThinking(true);
+      useChatStore.getState().addMessage({ role: 'user', content: firstPrompt });
     }
 
-    setWorkspace(prev => (
-      prev.kind === 'draft'
-        ? { ...prev, queuedPrompt: firstPrompt ?? null, activation: 'creating' }
-        : prev
-    ));
+    setWorkspace((current) => current.kind === 'draft'
+      ? { ...current, queuedPrompt: firstPrompt ?? null, activation: 'creating' }
+      : current);
 
     const newProject = await auth.createProject(workspace.draftName);
     if (!newProject) {
-      setAiThinking(false);
+      useChatStore.getState().finishStreaming();
       queuedPromptRef.current = null;
-      setWorkspace(prev => (
-        prev.kind === 'draft'
-          ? { ...prev, queuedPrompt: null, activation: 'idle' }
-          : prev
-      ));
+      setWorkspace((current) => current.kind === 'draft'
+        ? { ...current, queuedPrompt: null, activation: 'idle' }
+        : current);
       activationInFlightRef.current = false;
       createEmptyChartAfterActivationRef.current = false;
       return false;
     }
 
-    setWorkspace(prev => (
-      prev.kind === 'draft'
-        ? { ...prev, activation: 'switching' }
-        : prev
-    ));
+    setWorkspace((current) => current.kind === 'draft'
+      ? { ...current, activation: 'switching' }
+      : current);
 
     await auth.switchProject(newProject.id);
     setProjectSidebarVisible(false);
@@ -371,14 +253,10 @@ export default function App() {
     } else {
       replaceTasksFromSystem([]);
     }
-    setWorkspace({
-      kind: 'project',
-      projectId: newProject.id,
-      chatOpen: !createEmptyChart,
-    });
+    setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: !createEmptyChart });
     activationInFlightRef.current = false;
     return true;
-  }, [auth, createPlaceholderTask, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setTasks, workspace]);
+  }, [auth, createPlaceholderTask, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setProjectSidebarVisible, setShowOtpModal, setTasks, setWorkspace, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
@@ -393,25 +271,18 @@ export default function App() {
       return;
     }
     handleSend(text);
-  }, [activateDraftWorkspace, auth.isAuthenticated, handleSend, hasShareToken, workspace.kind]);
-
-  const handleAuthSuccess = useCallback((result: {
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string };
-    project: { id: string; name: string };
-  }) => {
-    auth.login(result, result.user, result.project);
-  }, [auth]);
+  }, [activateDraftWorkspace, auth.isAuthenticated, handleSend, hasShareToken, setShowOtpModal, workspace.kind]);
 
   const handleValidation = useCallback((result: ValidationResult) => {
     setValidationErrors(result.isValid ? [] : result.errors);
-  }, []);
+    // Log validation errors to console for debugging (not shown in UI)
+    if (!result.isValid && result.errors.length > 0) {
+      console.warn('[Gantt Validation] Dependency validation errors detected:', result.errors);
+    }
+  }, [setValidationErrors]);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
-    // Use batchUpdate to handle both local state update and server persistence
-    // This is called when a parent task is dragged and its children need to move with it
-    batchUpdate.handleTasksChange(shiftedTasks);
+    void batchUpdate.handleTasksChange(shiftedTasks);
   }, [batchUpdate]);
 
   const handleEmptyChart = useCallback(async () => {
@@ -419,36 +290,18 @@ export default function App() {
       await activateDraftWorkspace({ createEmptyChart: true });
       return;
     }
-    const today = new Date().toISOString().split('T')[0];
-    const placeholderTask: Task = {
-      id: `task-${Date.now()}`,
-      name: 'Новая задача',
-      startDate: today,
-      endDate: today,
-    };
-    // Use batch update handler for add
-    batchUpdate.handleAdd(placeholderTask);
+    void batchUpdate.handleAdd(createPlaceholderTask());
     openProjectChat();
-  }, [activateDraftWorkspace, batchUpdate, openProjectChat, workspace.kind]);
-
-  const handleEditProject = useCallback(async (projectId: string, currentName: string) => {
-    if (!auth.accessToken) return;
-
-    setShowEditProjectModal(true);
-  }, [auth.accessToken]);
-
-  const handleEditGuestProject = useCallback(async (projectId: string, currentName: string) => {
-    setShowEditProjectModal(true);
-  }, []);
+  }, [activateDraftWorkspace, batchUpdate, createPlaceholderTask, openProjectChat, workspace.kind]);
 
   const handleSwitchProject = useCallback(async (projectId: string) => {
-    setProjectSidebarVisible(false);
+    // Keep sidebar open after switching projects
     createEmptyChartAfterActivationRef.current = false;
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     await auth.switchProject(projectId);
     setWorkspace({ kind: 'project', projectId, chatOpen: false });
-  }, [auth, resetWorkspacePresentation]);
+  }, [auth, resetWorkspacePresentation, setWorkspace]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
@@ -461,46 +314,41 @@ export default function App() {
         queuedPrompt: null,
         activation: 'idle',
       });
-    } else {
-      queuedPromptRef.current = null;
-      resetWorkspacePresentation();
-      setWorkspace({ kind: 'guest' });
+      return;
     }
-  }, [auth.isAuthenticated, getDefaultProjectName, resetWorkspacePresentation]);
+    queuedPromptRef.current = null;
+    resetWorkspacePresentation();
+    setWorkspace({ kind: 'guest' });
+  }, [auth.isAuthenticated, getDefaultProjectName, resetWorkspacePresentation, setWorkspace]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
-    // For guest mode, save to localStorage
     if (!auth.isAuthenticated) {
       localTasks.setProjectName(newName);
       return;
     }
-
-    // For authenticated users, save to server
     if (!auth.accessToken || !auth.project || !auth.user) {
       throw new Error('Not authenticated');
     }
 
-    const res = await fetch(`/api/projects/${auth.project.id}`, {
+    const response = await fetch(`/api/projects/${auth.project.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${auth.accessToken}`,
+        Authorization: `Bearer ${auth.accessToken}`,
       },
       body: JSON.stringify({ name: newName }),
     });
 
-    if (!res.ok) {
-      const data = await res.json() as { error?: string };
+    if (!response.ok) {
+      const data = await response.json() as { error?: string };
       throw new Error(data.error || 'Failed to update project name');
     }
 
-    const data = await res.json() as { project: { id: string; name: string } };
-
-    // Update local state
+    const data = await response.json() as { project: { id: string; name: string } };
     auth.login(
       { accessToken: auth.accessToken, refreshToken: localStorage.getItem('gantt_refresh_token') || '' },
       auth.user,
-      data.project
+      data.project,
     );
   }, [auth, localTasks]);
 
@@ -508,110 +356,114 @@ export default function App() {
     if (!auth.accessToken || !auth.project) {
       return;
     }
-
     try {
       setShareStatus('creating');
-      const res = await fetch(`/api/projects/${auth.project.id}/share`, {
+      const response = await fetch(`/api/projects/${auth.project.id}/share`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${auth.accessToken}`,
         },
       });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-
-      const data = await res.json() as { url: string };
+      const data = await response.json() as { url: string };
       await navigator.clipboard.writeText(data.url);
       setShareStatus('copied');
       window.setTimeout(() => {
-        setShareStatus((current) => (current === 'copied' ? 'idle' : current));
+        if (useUIStore.getState().shareStatus === 'copied') {
+          useUIStore.getState().setShareStatus('idle');
+        }
       }, 2500);
-    } catch (err) {
-      console.error('Failed to create share link:', err);
+    } catch (createError) {
+      console.error('Failed to create share link:', createError);
       setShareStatus('error');
       window.setTimeout(() => {
-        setShareStatus((current) => (current === 'error' ? 'idle' : current));
+        if (useUIStore.getState().shareStatus === 'error') {
+          useUIStore.getState().setShareStatus('idle');
+        }
       }, 2500);
     }
-  }, [auth.accessToken, auth.project]);
+  }, [auth.accessToken, auth.project, setShareStatus]);
 
-  // Clear tasks when project changes (only for authenticated users)
   useEffect(() => {
-    // Don't clear tasks for unauthenticated users
-    if (!auth.isAuthenticated || hasShareToken) return;
+    if (!auth.isAuthenticated || hasShareToken) {
+      return;
+    }
     replaceTasksFromSystem([]);
-  }, [auth.project?.id, replaceTasksFromSystem, auth.isAuthenticated, hasShareToken]);
+  }, [auth.isAuthenticated, auth.project?.id, hasShareToken, replaceTasksFromSystem]);
 
-  // Load chat history on auth/project change
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
       return;
     }
 
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
-    setStreaming('');
     if (!hasQueuedFirstPrompt) {
-      setMessages([]);
-      setAiThinking(false);
+      useChatStore.getState().reset();
+    } else {
+      useChatStore.setState({ streamingText: '', error: null });
     }
 
     fetch('/api/messages', {
       headers: { Authorization: `Bearer ${auth.accessToken}` },
     })
-      .then(res => (res.ok ? (res.json() as Promise<Array<{ role: string; content: string }>>) : Promise.resolve([])))
-      .then(data => {
+      .then((response) => response.ok
+        ? response.json() as Promise<Array<{ role: string; content: string }>>
+        : Promise.resolve([]))
+      .then((data) => {
         if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
-        setMessages(
-          data.map(m => ({ id: String(++msgCounter), role: m.role as 'user' | 'assistant', content: m.content })),
-        );
+        useChatStore.setState({
+          messages: data.map((message) => ({
+            id: crypto.randomUUID(),
+            role: message.role as 'user' | 'assistant',
+            content: message.content,
+          })),
+          streamingText: '',
+          aiThinking: false,
+          error: null,
+        });
       })
-      .catch(() => { });
-  }, [auth.isAuthenticated, auth.accessToken, auth.project?.id, hasShareToken, workspace.kind]);
+      .catch(() => {});
+  }, [auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, workspace.kind]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !connected || workspace.kind !== 'project') {
       return;
     }
-
     if (!auth.accessToken || connectedToken !== auth.accessToken) {
       return;
     }
-
     const promptToSend = queuedPromptRef.current;
     if (!promptToSend) {
       return;
     }
-
     queuedPromptRef.current = null;
-    void submitChatMessage(promptToSend).catch((error) => {
-      setAiThinking(false);
-      setMessages(ms => [
-        ...ms,
-        { id: String(++msgCounter), role: 'assistant', content: `Error: ${String(error)}` },
-      ]);
+    void submitChatMessage(promptToSend).catch((submitError) => {
+      useChatStore.getState().setError(String(submitError));
     });
   }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, submitChatMessage, workspace.kind]);
-
-  const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project') {
       return;
     }
 
+    // Only sync if tasks are actually loaded (length > 0)
+    // Don't overwrite stored counts with zero during project switches
+    if (tasks.length === 0) {
+      return;
+    }
+
     auth.syncProjectTaskCount(workspace.projectId, tasks.length);
-  }, [activeWorkspaceProjectId, auth.isAuthenticated, auth.syncProjectTaskCount, hasShareToken, tasks.length, workspace.kind]);
+  }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
   const handleCollapseAll = useCallback(() => ganttRef.current?.collapseAll(), []);
   const handleExpandAll = useCallback(() => ganttRef.current?.expandAll(), []);
-  const isDraftWorkspace = workspace.kind === 'draft';
-  const isGuestWorkspace = workspace.kind === 'guest';
-  const chatSidebarVisible = workspace.kind === 'project' && workspace.chatOpen;
+  const shareStatus = useUIStore((state) => state.shareStatus);
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'draft'
@@ -619,509 +471,87 @@ export default function App() {
       : auth.isAuthenticated
         ? auth.project?.name
         : (localTasks.projectName || 'Мой проект');
-  const startScreenVisible = !hasShareToken && (
-    isDraftWorkspace || (isGuestWorkspace && tasks.length === 0 && !loading)
-  );
 
-  const handleStartInlineRename = useCallback(() => {
-    if (hasShareToken) return;
-    setRenameValue(currentProjectLabel ?? '');
-    setIsRenamingProject(true);
-  }, [hasShareToken, currentProjectLabel]);
+  const workspaceShell = workspace.kind === 'shared'
+    ? (
+      <SharedWorkspace
+        ganttRef={ganttRef}
+        displayConnected={displayConnected}
+        onScrollToToday={handleScrollToToday}
+        onCollapseAll={handleCollapseAll}
+        onExpandAll={handleExpandAll}
+        onValidation={handleValidation}
+      />
+    )
+    : workspace.kind === 'draft'
+      ? (
+        <DraftWorkspace
+          isAuthenticated={auth.isAuthenticated}
+          onSend={handleStartScreenSend}
+          onEmptyChart={handleEmptyChart}
+          onLoginRequired={() => setShowOtpModal(true)}
+        />
+      )
+      : workspace.kind === 'project'
+        ? (
+          <ProjectWorkspace
+            ganttRef={ganttRef}
+            hasShareToken={hasShareToken}
+            displayConnected={displayConnected}
+            isAuthenticated={auth.isAuthenticated}
+            batchUpdate={batchUpdate}
+            onSend={handleSend}
+            onLoginRequired={() => setShowOtpModal(true)}
+            onCloseChat={closeProjectChat}
+            onOpenChat={openProjectChat}
+            onScrollToToday={handleScrollToToday}
+            onCollapseAll={handleCollapseAll}
+            onExpandAll={handleExpandAll}
+            onValidation={handleValidation}
+            onCascade={handleCascade}
+            shareStatus={shareStatus}
+            onCreateShareLink={handleCreateShareLink}
+          />
+        )
+        : (
+          <GuestWorkspace
+            ganttRef={ganttRef}
+            isAuthenticated={auth.isAuthenticated}
+            batchUpdate={batchUpdate}
+            onSend={handleStartScreenSend}
+            onEmptyChart={handleEmptyChart}
+            onLoginRequired={() => setShowOtpModal(true)}
+            onScrollToToday={handleScrollToToday}
+            onCollapseAll={handleCollapseAll}
+            onExpandAll={handleExpandAll}
+            onValidation={handleValidation}
+            onCascade={handleCascade}
+            shareStatus={shareStatus}
+            onCreateShareLink={handleCreateShareLink}
+          />
+        );
 
-  const handleCommitInlineRename = useCallback(async () => {
-    if (!isRenamingProject) return;
-    setIsRenamingProject(false);
-    const trimmed = renameValue.trim();
-    if (!trimmed || trimmed === currentProjectLabel) return;
-    try {
-      await handleSaveProjectName(trimmed);
-    } catch {
-      // ignore — handleSaveProjectName throws on failure; name stays as-is in state
-    }
-  }, [isRenamingProject, renameValue, currentProjectLabel, handleSaveProjectName]);
-
-  // ── Layout ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Error banner - non-blocking */}
-      {error && (
-        <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center p-2">
-          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-1.5 max-w-md text-center shadow-sm">
-            {sharedProject.shareToken
-              ? `Не удалось открыть ссылку: ${error}`
-              : `Не удалось загрузить задачи: ${error}`}
-          </div>
-        </div>
-      )}
+    <>
+      <ProjectMenu
+        error={error}
+        hasShareToken={hasShareToken}
+        currentProjectLabel={currentProjectLabel}
+        onCreateProject={handleCreateProject}
+        onSwitchProject={handleSwitchProject}
+        onSaveProjectName={handleSaveProjectName}
+        onCreateShareLink={handleCreateShareLink}
+        onLoginRequired={() => setShowOtpModal(true)}
+      >
+        {workspaceShell}
+      </ProjectMenu>
 
-      {/* ── Project sidebar (full height) ──────────────────────────────────── */}
-      {!hasShareToken && (
-        <aside
-          className={cn(
-            "shrink-0 border-r border-slate-200 bg-background flex flex-col h-full",
-            "transition-all duration-300 ease-in-out",
-            projectSidebarVisible ? "w-60 opacity-100" : "w-0 opacity-0 overflow-hidden"
-          )}
-        >
-          <div className="flex-1 overflow-y-auto p-4">
-            {auth.isAuthenticated && auth.project ? (
-              <ProjectSwitcher
-                currentProject={
-                  workspace.kind === 'draft'
-                    ? { id: 'draft', name: workspace.draftName, kind: 'draft' }
-                    : { ...auth.project, kind: 'project' }
-                }
-                projects={auth.projects}
-                onSwitch={handleSwitchProject}
-                onCreateNew={handleCreateProject}
-                onEdit={workspace.kind === 'draft' ? undefined : handleEditProject}
-              />
-            ) : !auth.isAuthenticated && (
-              <ProjectSwitcher
-                currentProject={{ id: 'demo', name: localTasks.projectName || 'Мой проект', kind: 'project' }}
-                projects={[]}
-                onSwitch={() => { }}
-                onCreateNew={handleCreateProject}
-                onEdit={handleEditGuestProject}
-              />
-            )}
-          </div>
-        </aside>
-      )}
-
-      {/* ── Main content area ─────────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-
-        {/* ── Top Bar ──────────────────────────────────────────────────────── */}
-        <header className="flex items-center gap-3 min-h-12 px-4 bg-white border-b border-slate-200 shrink-0">
-          {/* Burger menu button */}
-          <button
-            type="button"
-            onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
-            aria-pressed={projectSidebarVisible}
-            aria-label={hasShareToken ? 'Режим только чтения' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-            disabled={hasShareToken}
-            className={cn(
-              'h-8 w-8 flex items-center justify-center rounded transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-              hasShareToken
-                ? 'cursor-default bg-slate-50 text-slate-300'
-                : projectSidebarVisible
-                  ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
-            )}
-            title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          {/* Logo */}
-          <div className="flex items-center gap-2 text-base font-cascadia tracking-tight select-none">
-            <img src="/favicon.svg" alt="GetGantt" className="h-5 w-5" />
-            <span className="text-slate-900">ГетГант</span>
-          </div>
-
-          <span className="text-slate-400">/</span>
-
-          {/* Project name breadcrumb */}
-          <div className="flex items-center gap-2 min-w-0">
-            {isRenamingProject && !hasShareToken ? (
-              <input
-                ref={renameInputRef}
-                type="text"
-                value={renameValue}
-                onChange={e => setRenameValue(e.target.value)}
-                onBlur={handleCommitInlineRename}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleCommitInlineRename();
-                  } else if (e.key === 'Escape') {
-                    setIsRenamingProject(false);
-                    setRenameValue('');
-                  }
-                }}
-                className="text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-ring min-w-0 max-w-[220px]"
-                autoFocus
-                onFocus={e => e.target.select()}
-              />
-            ) : (
-              <span
-                className={cn(
-                  "text-sm font-medium text-slate-700 truncate",
-                  !hasShareToken && "cursor-pointer hover:bg-slate-100 rounded px-1 -mx-1"
-                )}
-                title={hasShareToken ? undefined : "Нажмите, чтобы переименовать"}
-                onClick={hasShareToken ? undefined : handleStartInlineRename}
-              >
-                {currentProjectLabel}
-              </span>
-            )}
-            {!hasShareToken && auth.isAuthenticated && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCreateShareLink}
-                disabled={shareStatus === 'creating'}
-                className="h-7 shrink-0 gap-1.5 px-2.5 text-xs text-slate-600 hover:text-slate-900"
-                title={
-                  shareStatus === 'creating'
-                    ? 'Создаём ссылку...'
-                    : shareStatus === 'copied'
-                      ? 'Ссылка скопирована'
-                      : shareStatus === 'error'
-                        ? 'Ошибка ссылки'
-                        : 'Поделиться'
-                }
-              >
-                {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
-                <span className="hidden lg:inline">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
-              </Button>
-            )}
-          </div>
-
-          <div className="flex-1" />
-
-          {!hasShareToken && auth.isAuthenticated && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCreateProject}
-              className="hidden md:inline-flex h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary"
-            >
-              + Новый проект
-            </Button>
-          )}
-
-          {hasShareToken ? (
-            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-              <Eye className="h-3.5 w-3.5" />
-              Только чтение
-            </div>
-          ) : !auth.isAuthenticated ? (
-            <div className="flex items-center gap-3">
-              <span className="hidden lg:inline text-sm font-medium text-slate-600">
-                Войдите, чтобы сохранить график
-              </span>
-              <LoginButton onClick={() => setShowOtpModal(true)} />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 max-w-[180px] lg:max-w-[280px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0"
-                  >
-                    <span className="truncate text-slate-600">{auth.user?.email ?? 'Account'}</span>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel className="truncate text-slate-700">
-                    {auth.user?.email ?? 'Account'}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Выйти</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-        </header>
-
-        {/* ── Content ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-1 overflow-hidden">
-          {startScreenVisible ? (
-            /* ── Start Screen ─────────────────────────────────────────────── */
-            <StartScreen
-              onSend={handleStartScreenSend}
-              onEmptyChart={handleEmptyChart}
-              isAuthenticated={auth.isAuthenticated}
-              onLoginRequired={() => setShowOtpModal(true)}
-            />
-          ) : (
-            <>
-              {/* Gantt panel wrapper - includes chart and footer */}
-              <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-                {/* ── Gantt Toolbar ──────────────────────────────────────────── */}
-                <div className="flex items-center gap-2 py-2 px-4 bg-white border-b border-slate-200 shrink-0 flex-wrap relative min-h-12">
-                  {/* Show/hide task list - text stays same, button shows state */}
-                  <Button
-                    size="sm"
-                    variant={showTaskList ? "secondary" : "ghost"}
-                    onClick={() => setShowTaskList(!showTaskList)}
-                    aria-pressed={showTaskList}
-                    className="h-7 gap-1.5"
-                  >
-                    {showTaskList ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
-                    <span className="hidden md:inline">Список задач</span>
-                  </Button>
-
-                  {/* Collapse/Expand buttons - text hidden on large screens */}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleCollapseAll}
-                    title="Свернуть все родительские задачи"
-                    className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-                  >
-                    <ChevronsDownUp className="w-3.5 h-3.5" />
-                    <span className="hidden xl:inline">Свернуть</span>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleExpandAll}
-                    title="Развернуть все родительские задачи"
-                    className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-                  >
-                    <ChevronsUpDown className="w-3.5 h-3.5" />
-                    <span className="hidden xl:inline">Развернуть</span>
-                  </Button>
-
-                  {/* Today button - ghost variant with FlagTriangleRight icon */}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleScrollToToday}
-                    className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-                  >
-                    <FlagTriangleRight className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">Сегодня</span>
-                  </Button>
-
-                  <div className="flex-1" />
-
-                  {/* View mode split button - abbreviated on narrow screens */}
-                  <div className="inline-flex rounded border border-slate-200 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('day')}
-                      className={cn(
-                        'h-7 px-2.5 flex items-center transition-colors',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        'text-xs font-medium border-r border-slate-200',
-                        viewMode === 'day'
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'bg-white text-slate-600',
-                      )}
-                    >
-                      <span className="hidden sm:inline">День</span>
-                      <span className="sm:hidden">Д</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('week')}
-                      className={cn(
-                        'h-7 px-2.5 flex items-center transition-colors',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        'text-xs font-medium border-r border-slate-200',
-                        viewMode === 'week'
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'bg-white text-slate-600',
-                      )}
-                    >
-                      <span className="hidden sm:inline">Неделя</span>
-                      <span className="sm:hidden">Н</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('month')}
-                      className={cn(
-                        'h-7 px-2.5 flex items-center transition-colors',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        'text-xs font-medium',
-                        viewMode === 'month'
-                          ? 'bg-secondary text-secondary-foreground'
-                          : 'bg-white text-slate-600',
-                      )}
-                    >
-                      <span className="hidden sm:inline">Месяц</span>
-                      <span className="sm:hidden">М</span>
-                    </button>
-                  </div>
-
-                  {/* Overflow menu - always visible, contains toggle switches with real checkboxes */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="h-7 px-2 flex items-center rounded border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        title="Дополнительные параметры"
-                      >
-                        <Ellipsis className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-52">
-                      <DropdownMenuItem
-                        onSelect={e => { e.preventDefault(); setAutoSchedule(!autoSchedule); }}
-                        className="flex items-center gap-2 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={autoSchedule}
-                          readOnly
-                          className="h-4 w-4 rounded border-slate-300 accent-primary pointer-events-none shrink-0"
-                        />
-                        <span className="text-sm">Закрепить связи</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={e => { e.preventDefault(); setHighlightExpiredTasks(!highlightExpiredTasks); }}
-                        className="flex items-center gap-2 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={highlightExpiredTasks}
-                          readOnly
-                          className="h-4 w-4 rounded border-slate-300 accent-primary pointer-events-none shrink-0"
-                        />
-                        <span className="text-sm">Просроченные</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Chat toggle button */}
-                  {!chatSidebarVisible && !hasShareToken && workspace.kind === 'project' && (
-                    <Button
-                      size="sm"
-                      onClick={openProjectChat}
-                      aria-label="Показать AI ассистента"
-                      className="ml-auto h-7 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-                      title="Показать AI ассистента"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">AI ассистент</span>
-                      <span className="sm:hidden">AI</span>
-                    </Button>
-                  )}
-
-                  {/* Validation errors badge */}
-                  {validationErrors.length > 0 && (
-                    <span className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-0.5 font-medium">
-                      {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
-                    </span>
-                  )}
-                </div>
-
-                {/* ── Gantt Chart ─────────────────────────────────────────── */}
-                {loading ? (
-                  <div className="flex items-center justify-center flex-1 text-sm text-slate-400">
-                    Загрузка…
-                  </div>
-                ) : (
-                  <GanttChart
-                    ref={ganttRef}
-                    tasks={tasks}
-                    onTasksChange={batchUpdate.handleTasksChange}
-                    dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
-                    rowHeight={36}
-                    containerHeight="calc(100vh - 120px)"
-                    showTaskList={showTaskList}
-                    taskListWidth={650}
-                    onValidateDependencies={handleValidation}
-                    enableAutoSchedule={autoSchedule}
-                    onCascade={handleCascade}
-                    disableTaskNameEditing={disableTaskNameEditing}
-                    disableDependencyEditing={disableDependencyEditing}
-                    highlightExpiredTasks={highlightExpiredTasks}
-                    headerHeight={40}
-                    viewMode={viewMode}
-                    onAdd={batchUpdate.handleAdd}
-                    onDelete={batchUpdate.handleDelete}
-                    onInsertAfter={batchUpdate.handleInsertAfter}
-                    onReorder={batchUpdate.handleReorder}
-                    onPromoteTask={batchUpdate.handlePromoteTask}
-                    onDemoteTask={batchUpdate.handleDemoteTask}
-                    customDays={russianHolidays2026}
-                  />
-                )}
-
-                {/* ── Status Bar ───────────────────────────────────────────── */}
-                {tasks.length > 0 && (
-                  <footer className="flex items-center gap-4 h-7 px-4 bg-white border-t border-slate-200 shrink-0 select-none">
-                    <span className="font-mono text-[11px] text-slate-400">
-                      {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
-                    </span>
-
-                    <span
-                      className={cn(
-                        'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                        displayConnected ? 'text-emerald-600' : 'text-amber-600',
-                      )}
-                    >
-                      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                      {hasShareToken ? 'Только для чтения' : displayConnected ? 'Подключено' : 'Переподключение…'}
-                    </span>
-
-                    {/* Save indicator */}
-                    {!hasShareToken && auth.isAuthenticated && savingState !== 'idle' && (
-                      <span
-                        className={cn(
-                          'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                          savingState === 'saving' && 'text-amber-600',
-                          savingState === 'saved' && 'text-emerald-600',
-                          savingState === 'error' && 'text-red-600',
-                        )}
-                      >
-                        {savingState === 'saving' && (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400 animate-pulse" />
-                            Сохранение…
-                          </>
-                        )}
-                        {savingState === 'saved' && (
-                          <>
-                            <Check className="w-3 h-3 shrink-0" />
-                            Сохранено
-                          </>
-                        )}
-                        {savingState === 'error' && (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-400" />
-                            Ошибка сохранения
-                          </>
-                        )}
-                      </span>
-                    )}
-                  </footer>
-                )}
-              </div>
-
-              {/* ── Chat sidebar ───────────────────────────────────────────── */}
-              {chatSidebarVisible && !hasShareToken && (
-                <aside className="w-80 shrink-0 border-l border-slate-200 flex flex-col relative z-20">
-                  <ChatSidebar
-                    messages={messages}
-                    streaming={streaming}
-                    onSend={handleSend}
-                    disabled={aiThinking}
-                    connected={displayConnected}
-                    loading={aiThinking}
-                    onClose={closeProjectChat}
-                    isAuthenticated={auth.isAuthenticated}
-                    onLoginRequired={() => setShowOtpModal(true)}
-                  />
-                </aside>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── OTP Modal (controlled) ──────────────────────────────────────────── */}
       {showOtpModal && (
         <OtpModal
           onSuccess={async (result) => {
             auth.login(result, result.user, result.project);
             setShowOtpModal(false);
 
-            // 1. Import local guest tasks (if the user created any)
             const hasLocalEdits = localTasks.tasks.length > 0;
             if (hasLocalEdits) {
               try {
@@ -1129,37 +559,31 @@ export default function App() {
                   method: 'PUT',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${result.accessToken}`,
+                    Authorization: `Bearer ${result.accessToken}`,
                   },
                   body: JSON.stringify(localTasks.tasks),
                 });
                 localStorage.removeItem('gantt_local_tasks');
                 localStorage.removeItem('gantt_demo_mode');
-              } catch (err) {
-                console.error('Failed to import local tasks after login:', err);
+              } catch (importError) {
+                console.error('Failed to import local tasks after login:', importError);
               }
             }
 
-            // 2. Transfer project name if guest renamed it (separate from task import)
-            const DEFAULT_PROJECT_NAME = 'Мой проект';
-            if (localTasks.projectName && localTasks.projectName !== DEFAULT_PROJECT_NAME) {
+            const defaultProjectName = 'Мой проект';
+            if (localTasks.projectName && localTasks.projectName !== defaultProjectName) {
               try {
                 await fetch(`/api/projects/${result.project.id}`, {
                   method: 'PATCH',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${result.accessToken}`,
+                    Authorization: `Bearer ${result.accessToken}`,
                   },
                   body: JSON.stringify({ name: localTasks.projectName }),
                 });
-                // Update auth state so header reflects the new name immediately
-                auth.login(
-                  result,
-                  result.user,
-                  { ...result.project, name: localTasks.projectName }
-                );
-              } catch (err) {
-                console.error('Failed to transfer project name after login:', err);
+                auth.login(result, result.user, { ...result.project, name: localTasks.projectName });
+              } catch (transferError) {
+                console.error('Failed to transfer project name after login:', transferError);
               }
             }
           }}
@@ -1167,7 +591,6 @@ export default function App() {
         />
       )}
 
-      {/* ── Edit Project Modal ───────────────────────────────────────────────── */}
       {showEditProjectModal && (
         <EditProjectModal
           projectName={auth.isAuthenticated && auth.project ? auth.project.name : localTasks.projectName}
@@ -1175,8 +598,6 @@ export default function App() {
           onClose={() => setShowEditProjectModal(false)}
         />
       )}
-
-      {/* ── Create Project Modal ───────────────────────────────────────────────── */}
-    </div>
+    </>
   );
 }

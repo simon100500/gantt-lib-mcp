@@ -1,20 +1,10 @@
-import { useEffect, useState } from 'react';
 import type { Task } from '../types.ts';
-
-interface SharedProject {
-  id: string;
-  name: string;
-}
-
-interface ShareResponse {
-  project: SharedProject;
-  tasks: Task[];
-}
+import { useTaskStore, type SharedTaskProject } from '../stores/useTaskStore.ts';
 
 export interface UseSharedProjectResult {
   shareToken: string | null;
   isSharedReadOnly: boolean;
-  project: SharedProject | null;
+  project: SharedTaskProject | null;
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   loading: boolean;
@@ -22,51 +12,17 @@ export interface UseSharedProjectResult {
 }
 
 export function useSharedProject(): UseSharedProjectResult {
-  const [shareToken] = useState(() => new URLSearchParams(window.location.search).get('share'));
-  const [project, setProject] = useState<SharedProject | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(Boolean(shareToken));
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!shareToken) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/share?token=${encodeURIComponent(shareToken)}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string };
-          throw new Error(data.error || `HTTP ${res.status}`);
-        }
-
-        return res.json() as Promise<ShareResponse>;
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setProject(data.project);
-        setTasks(data.tasks);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shareToken]);
+  const shareToken = useTaskStore((state) => state.shareToken);
+  const isSharedReadOnly = useTaskStore((state) => state.isSharedReadOnly);
+  const project = useTaskStore((state) => state.project);
+  const tasks = useTaskStore((state) => state.tasks);
+  const setTasks = useTaskStore((state) => state.setTasks);
+  const loading = useTaskStore((state) => state.loading);
+  const error = useTaskStore((state) => state.error);
 
   return {
     shareToken,
-    isSharedReadOnly: Boolean(shareToken && project),
+    isSharedReadOnly,
     project,
     tasks,
     setTasks,

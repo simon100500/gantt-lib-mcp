@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { Task } from '../types.ts';
+import { useTaskStore } from '../stores/useTaskStore.ts';
 
 export interface UseTasksResult {
   tasks: Task[];
@@ -12,65 +13,19 @@ export function useTasks(
   accessToken: string | null,
   refreshAccessToken: () => Promise<string | null>
 ): UseTasksResult {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const shareToken = new URLSearchParams(window.location.search).get('share');
+  const tasks = useTaskStore((state) => state.tasks);
+  const setTasks = useTaskStore((state) => state.setTasks);
+  const loading = useTaskStore((state) => state.loading);
+  const error = useTaskStore((state) => state.error);
 
   useEffect(() => {
-    if (!accessToken) {
-      setLoading(false);
-      // Don't setTasks([]) here - let the UI handle empty state
-      // This prevents clearing demo tasks in local mode
-      return;
-    }
-
-    let cancelled = false;
-    const fetchTasks = async (token: string) => {
-      const res = await fetch('/api/tasks', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      if (res.status === 401) {
-        // When we get a 401, always attempt to refresh the token first.
-        // The refreshAccessToken function will handle logging out if refresh token is invalid.
-        // This handles both cases:
-        // 1. Token expired after idle period (refresh token should be valid)
-        // 2. Server restart (session may be invalid, refresh will fail and logout)
-        const newToken = await refreshAccessToken();
-        if (!newToken || cancelled) return null; // logout() already called inside refreshAccessToken
-
-        // Retry with the new token
-        const retryRes = await fetch('/api/tasks', {
-          headers: { 'Authorization': `Bearer ${newToken}` },
-        });
-        if (!retryRes.ok) {
-          throw new Error(`HTTP ${retryRes.status}`);
-        }
-        return retryRes.json() as Promise<Task[]>;
-      }
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json() as Promise<Task[]>;
-    };
-
-    setLoading(true);
-    setError(null);
-    fetchTasks(accessToken)
-      .then(data => {
-        if (cancelled) return;
-        if (data) {
-          setTasks(data);
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        if (cancelled) return;
-        setError(String(err));
-        setLoading(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [accessToken, refreshAccessToken]);
+    void useTaskStore.getState().syncSource({
+      accessToken,
+      refreshAccessToken,
+      shareToken,
+    });
+  }, [accessToken, refreshAccessToken, shareToken]);
 
   return { tasks, setTasks, loading, error };
 }
