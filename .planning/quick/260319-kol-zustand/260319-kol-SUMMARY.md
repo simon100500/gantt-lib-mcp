@@ -57,6 +57,7 @@ Each task was committed atomically:
 
 1. **Task 1: Fix task count sync and remove sidebar auto-close** - `231afbb` (fix)
 2. **Task 2: Remove "current project" badge and move edit button to header** - `ecf2147` (feat)
+3. **Follow-up fix: Highlight current project and fix task count sync** - `fa5c69b` (fix)
 
 ## Files Created/Modified
 
@@ -76,6 +77,19 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 None - plan executed exactly as written.
+
+## Follow-up Fixes
+
+After initial completion, user reported two issues:
+1. Current project was not highlighted in sidebar
+2. Task count hole still appeared when switching projects
+
+**Root cause:** The original fix synced `tasks.length` to the NEW project id, which was incorrect. It should sync the OLD project's task count BEFORE switching.
+
+**Fix applied (commit `fa5c69b`):**
+- Added `bg-slate-100` highlighting for current project in sidebar
+- Changed sync logic to sync current project's task count BEFORE switching
+- This ensures the old project's task count is preserved, and the new project's count is loaded from the API response
 
 ## Issues Encountered
 
