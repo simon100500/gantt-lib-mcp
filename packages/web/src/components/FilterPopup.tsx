@@ -38,6 +38,10 @@ export function FilterPopup({ children }: FilterPopupProps) {
     resetFilters();
   };
 
+  const preventMenuTypeahead = (event: React.SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -81,7 +85,10 @@ export function FilterPopup({ children }: FilterPopupProps) {
         <DropdownMenuSeparator />
 
         {/* Search input */}
-        <div className="px-2 py-1.5" onPointerDownCapture={(e) => e.preventDefault()}>
+        <div
+          className="px-2 py-1.5"
+          onKeyDownCapture={preventMenuTypeahead}
+        >
           <Label htmlFor="filter-search" className="text-xs font-medium">
             Поиск
           </Label>
@@ -99,7 +106,10 @@ export function FilterPopup({ children }: FilterPopupProps) {
         <DropdownMenuSeparator />
 
         {/* Date range inputs */}
-        <div className="px-2 py-1.5 space-y-2" onPointerDownCapture={(e) => e.preventDefault()}>
+        <div
+          className="px-2 py-1.5 space-y-2"
+          onKeyDownCapture={preventMenuTypeahead}
+        >
           <div className="space-y-1">
             <Label htmlFor="filter-date-from" className="text-xs font-medium">
               От
@@ -129,7 +139,7 @@ export function FilterPopup({ children }: FilterPopupProps) {
         <DropdownMenuSeparator />
 
         {/* Reset button */}
-        <div className="px-2 py-1.5" onPointerDownCapture={(e) => e.preventDefault()}>
+        <div className="px-2 py-1.5" onPointerDownCapture={(event) => event.preventDefault()}>
           <Button
             variant="destructive"
             size="sm"
