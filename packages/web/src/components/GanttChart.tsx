@@ -29,6 +29,7 @@ export interface GanttChartProps {
   onReorder?: (tasks: Task[], movedTaskId?: string, inferredParentId?: string) => void;
   onPromoteTask?: (taskId: string) => void;
   onDemoteTask?: (taskId: string, newParentId: string) => void;
+  taskFilter?: import('gantt-lib').TaskPredicate;
 }
 
 export interface GanttChartRef {
@@ -64,6 +65,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onReorder,
   onPromoteTask,
   onDemoteTask,
+  taskFilter,
 }, ref) => {
   const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void; collapseAll: () => void; expandAll: () => void } | null>(null);
 
@@ -107,6 +109,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onPromoteTask={onPromoteTask}
       onDemoteTask={onDemoteTask}
       customDays={customDays}
+      taskFilter={taskFilter}
     />
   );
 });
