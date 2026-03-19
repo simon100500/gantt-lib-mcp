@@ -184,11 +184,15 @@ export function Toolbar({
         </Button>
       )}
 
-      {validationErrors.length > 0 && (
+      {/* Validation errors are hidden from UI to avoid user confusion.
+          The onValidateDependencies callback in gantt-lib is informational only
+          and does not block dependency creation. Errors are still logged to console
+          for debugging purposes. */}
+      {/* {validationErrors.length > 0 && (
         <span className="rounded border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
           {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
         </span>
-      )}
+      )} */}
     </div>
   );
 }

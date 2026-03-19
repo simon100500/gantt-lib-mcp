@@ -266,6 +266,10 @@ export default function App() {
 
   const handleValidation = useCallback((result: ValidationResult) => {
     setValidationErrors(result.isValid ? [] : result.errors);
+    // Log validation errors to console for debugging (not shown in UI)
+    if (!result.isValid && result.errors.length > 0) {
+      console.warn('[Gantt Validation] Dependency validation errors detected:', result.errors);
+    }
   }, [setValidationErrors]);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
