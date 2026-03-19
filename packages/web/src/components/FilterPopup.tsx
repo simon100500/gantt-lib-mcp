@@ -81,7 +81,7 @@ export function FilterPopup({ children }: FilterPopupProps) {
         <DropdownMenuSeparator />
 
         {/* Search input */}
-        <div className="px-2 py-1.5">
+        <div className="px-2 py-1.5" onPointerDownCapture={(e) => e.preventDefault()}>
           <Label htmlFor="filter-search" className="text-xs font-medium">
             Поиск
           </Label>
@@ -92,13 +92,14 @@ export function FilterPopup({ children }: FilterPopupProps) {
             value={filterSearchText}
             onChange={(e) => setFilterSearchText(e.target.value)}
             className="h-8 text-sm"
+            onFocus={(e) => e.target.select()}
           />
         </div>
 
         <DropdownMenuSeparator />
 
         {/* Date range inputs */}
-        <div className="px-2 py-1.5 space-y-2">
+        <div className="px-2 py-1.5 space-y-2" onPointerDownCapture={(e) => e.preventDefault()}>
           <div className="space-y-1">
             <Label htmlFor="filter-date-from" className="text-xs font-medium">
               От
@@ -128,7 +129,7 @@ export function FilterPopup({ children }: FilterPopupProps) {
         <DropdownMenuSeparator />
 
         {/* Reset button */}
-        <div className="px-2 py-1.5">
+        <div className="px-2 py-1.5" onPointerDownCapture={(e) => e.preventDefault()}>
           <Button
             variant="destructive"
             size="sm"
