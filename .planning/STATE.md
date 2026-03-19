@@ -46,7 +46,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 **Phase:** 22 - Zustand Frontend Refactor
 **Plan:** 04 complete
 **Status:** Milestone complete
-**Last activity:** 2026-03-19 - Completed quick task 260319-kol: Zustand project sidebar fixes
+**Last activity:** 2026-03-19 - Completed quick task 260319-up3: Auto-refresh projects on page load
 
 **Progress:**
 [██████████] 100%
@@ -76,6 +76,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260319-kol | Zustand project sidebar fixes | 2026-03-19 | d9bc17d | [260319-kol-zustand](./quick/260319-kol-zustand/) |
+| 260319-up3 | Auto-refresh projects on page load | 2026-03-19 | 55fd6e9 | [260319-up3](./quick/260319-up3/) |
 
 ## Session Continuity
 
