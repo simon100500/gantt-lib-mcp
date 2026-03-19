@@ -18,6 +18,7 @@ import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
+import { useProjectUIStore } from './stores/useProjectUIStore.ts';
 import type { Task, ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
@@ -461,8 +462,28 @@ export default function App() {
   }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
-  const handleCollapseAll = useCallback(() => ganttRef.current?.collapseAll(), []);
-  const handleExpandAll = useCallback(() => ganttRef.current?.expandAll(), []);
+
+  const setProjectState = useProjectUIStore((state) => state.setProjectState);
+
+  const handleCollapseAll = useCallback(() => {
+    ganttRef.current?.collapseAll();
+    // Сохраняем состояние всех свёрнутых родительских задач
+    if (workspace.kind === 'project') {
+      const allParentIds = tasks
+        .filter(t => t.parentId === null && tasks.some(c => c.parentId === t.id))
+        .map(t => t.id);
+      setProjectState(workspace.projectId, { collapsedParentIds: allParentIds });
+    }
+  }, [tasks, workspace, setProjectState]);
+
+  const handleExpandAll = useCallback(() => {
+    ganttRef.current?.expandAll();
+    // Сохраняем пустое состояние (все развёрнуты)
+    if (workspace.kind === 'project') {
+      setProjectState(workspace.projectId, { collapsedParentIds: [] });
+    }
+  }, [workspace, setProjectState]);
+
   const shareStatus = useUIStore((state) => state.shareStatus);
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')

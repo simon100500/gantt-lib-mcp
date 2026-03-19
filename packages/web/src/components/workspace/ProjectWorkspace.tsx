@@ -1,4 +1,5 @@
 import type { Ref, RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 import { Check } from 'lucide-react';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
@@ -9,6 +10,7 @@ import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts
 import { useChatStore } from '../../stores/useChatStore.ts';
 import { useTaskStore } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
+import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '@/lib/utils';
 import type { Task, ValidationResult } from '../../types.ts';
 
@@ -55,18 +57,80 @@ export function ProjectWorkspace({
 }: ProjectWorkspaceProps) {
   const tasks = useTaskStore((state) => state.tasks);
   const loading = useTaskStore((state) => state.loading);
-  const collapseAll = useTaskStore((state) => state.collapseAll);
-  const expandAll = useTaskStore((state) => state.expandAll);
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
   const aiThinking = useChatStore((state) => state.aiThinking);
   const workspace = useUIStore((state) => state.workspace);
   const savingState = useUIStore((state) => state.savingState);
-  const viewMode = useUIStore((state) => state.viewMode);
   const showTaskList = useUIStore((state) => state.showTaskList);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const setViewMode = useUIStore((state) => state.setViewMode);
+  const getProjectState = useProjectUIStore((state) => state.getProjectState);
+  const setProjectState = useProjectUIStore((state) => state.setProjectState);
+
+  const projectId = workspace.kind === 'project' ? workspace.projectId : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
+
+  // Читаем сохранённый collapsedParentIds для текущего проекта
+  const projectState = projectId ? getProjectState(projectId) : null;
+
+  // Применяем сохранённое состояние сворачивания после загрузки задач
+  const collapseStateAppliedRef = useRef(false);
+  useEffect(() => {
+    // Применяем только когда задачи загрузились и проект изменился
+    if (!loading && tasks.length > 0 && projectId) {
+      const currentState = getProjectState(projectId);
+      const savedIds = currentState?.collapsedParentIds;
+
+      // Если сохранённое состояние не пустое (есть свёрнутые задачи), вызываем collapseAll
+      // ВНИМАНИЕ: gantt-lib 0.22.2 не поддерживает частичное сворачивание,
+      // только collapseAll/expandAll для всех задач
+      if (savedIds && savedIds.length > 0) {
+        // Проверяем - если сохранены все родительские задачи, вызываем collapseAll
+        const allParentIds = tasks
+          .filter(t => t.parentId === null && tasks.some(c => c.parentId === t.id))
+          .map(t => t.id);
+
+        const allCollapsed = allParentIds.every(id => savedIds.includes(id));
+        const noneCollapsed = savedIds.length === 0;
+
+        if (allCollapsed && !collapseStateAppliedRef.current) {
+          ganttRef.current?.collapseAll();
+          collapseStateAppliedRef.current = true;
+        } else if (noneCollapsed && !collapseStateAppliedRef.current) {
+          ganttRef.current?.expandAll();
+          collapseStateAppliedRef.current = true;
+        }
+      }
+    }
+
+    // Сбрасываем флаг при смене проекта
+    return () => {
+      collapseStateAppliedRef.current = false;
+    };
+  }, [loading, tasks, projectId, getProjectState, ganttRef]);
+
+  // Загружаем viewMode из состояния проекта при смене проекта
+  useEffect(() => {
+    if (projectId) {
+      const projectState = getProjectState(projectId);
+      if (projectState?.viewMode) {
+        setViewMode(projectState.viewMode);
+      }
+    }
+  }, [projectId, getProjectState, setViewMode]);
+
+  // Сохраняем viewMode при изменении
+  const handleViewModeChange = (newViewMode: 'day' | 'week' | 'month') => {
+    setViewMode(newViewMode);
+    if (projectId) {
+      setProjectState(projectId, { viewMode: newViewMode });
+    }
+  };
+
+  // Получаем viewMode из store (он будет обновлён через useEffect или handleViewModeChange)
+  const viewMode = useUIStore((state) => state.viewMode);
 
   return (
     <>
@@ -75,11 +139,13 @@ export function ProjectWorkspace({
           showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
           onOpenChat={onOpenChat}
           onScrollToToday={onScrollToToday}
-          onCollapseAll={collapseAll}
-          onExpandAll={expandAll}
+          onCollapseAll={onCollapseAll}
+          onExpandAll={onExpandAll}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
         />
 
         {loading ? (

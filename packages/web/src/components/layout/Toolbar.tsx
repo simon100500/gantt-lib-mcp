@@ -29,6 +29,8 @@ interface ToolbarProps {
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
+  viewMode?: 'day' | 'week' | 'month';
+  onViewModeChange?: (viewMode: 'day' | 'week' | 'month') => void;
 }
 
 export function Toolbar({
@@ -40,6 +42,8 @@ export function Toolbar({
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
+  viewMode: externalViewMode,
+  onViewModeChange,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const viewMode = useUIStore((state) => state.viewMode);
@@ -50,6 +54,10 @@ export function Toolbar({
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
+
+  // Используем переданный viewMode если есть, иначе из store
+  const currentViewMode = externalViewMode ?? viewMode;
+  const handleViewModeChange = onViewModeChange ?? setViewMode;
 
   return (
     <div className="flex min-h-12 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
@@ -125,11 +133,11 @@ export function Toolbar({
           <button
             key={nextMode}
             type="button"
-            onClick={() => setViewMode(nextMode)}
+            onClick={() => handleViewModeChange(nextMode)}
             className={cn(
               'flex h-7 items-center px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               nextMode !== 'month' && 'border-r border-slate-200',
-              viewMode === nextMode
+              currentViewMode === nextMode
                 ? 'bg-secondary text-secondary-foreground'
                 : 'bg-white text-slate-600',
             )}

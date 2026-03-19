@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 import type { Task } from '../types.ts';
 
@@ -43,10 +42,6 @@ interface TaskState {
   projectName: string;
   authToken: string | null;
   currentRequestId: number;
-  collapsedParentIds: Set<string>;
-  toggleCollapse: (parentId: string) => void;
-  collapseAll: () => void;
-  expandAll: () => void;
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   replaceFromSystem: (tasks: Task[]) => void;
   fetchTasks: (accessToken: string, refreshAccessToken: () => Promise<string | null>) => Promise<void>;
@@ -97,39 +92,18 @@ function loadLocalSnapshot(): LocalSnapshot {
   return { tasks: [], isDemoMode: false, projectName };
 }
 
-export const useTaskStore = create<TaskState>()(
-  persist(
-    (set, get) => ({
-      tasks: [],
-      loading: false,
-      error: null,
-      activeSource: getInitialShareToken() ? 'shared' : 'local',
-      shareToken: getInitialShareToken(),
-      project: null,
-      isSharedReadOnly: false,
-      isDemoMode: false,
-      projectName: DEFAULT_PROJECT_NAME,
-      authToken: null,
-      currentRequestId: 0,
-      collapsedParentIds: new Set<string>(),
-      toggleCollapse: (parentId) => {
-        set((state) => {
-          const newSet = new Set(state.collapsedParentIds);
-          if (newSet.has(parentId)) {
-            newSet.delete(parentId);
-          } else {
-            newSet.add(parentId);
-          }
-          return { collapsedParentIds: newSet };
-        });
-      },
-      collapseAll: () => {
-        const allParentIds = get().tasks
-          .filter(t => t.parentId === null && get().tasks.some(c => c.parentId === t.id))
-          .map(t => t.id);
-        set({ collapsedParentIds: new Set(allParentIds) });
-      },
-      expandAll: () => set({ collapsedParentIds: new Set() }),
+export const useTaskStore = create<TaskState>()((set, get) => ({
+  tasks: [],
+  loading: false,
+  error: null,
+  activeSource: getInitialShareToken() ? 'shared' : 'local',
+  shareToken: getInitialShareToken(),
+  project: null,
+  isSharedReadOnly: false,
+  isDemoMode: false,
+  projectName: DEFAULT_PROJECT_NAME,
+  authToken: null,
+  currentRequestId: 0,
   setTasks: (tasks) => {
     set((state) => {
       const nextTasks = typeof tasks === 'function' ? tasks(state.tasks) : tasks;
@@ -311,17 +285,4 @@ export const useTaskStore = create<TaskState>()(
     localStorage.setItem(PROJECT_NAME_KEY, name);
     set({ projectName: name });
   },
-    }),
-    {
-      name: 'gantt_collapsed_parents',
-      partialize: (state) => ({
-        collapsedParentIds: Array.from(state.collapsedParentIds),
-      }),
-      merge: (persistedState: any, currentState) => ({
-        ...currentState,
-        ...persistedState,
-        collapsedParentIds: new Set(persistedState.collapsedParentIds || []),
-      }),
-    }
-  )
-);
+}));
