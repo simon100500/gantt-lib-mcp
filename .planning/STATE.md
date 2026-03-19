@@ -4,8 +4,8 @@ milestone: v3.0
 milestone_name: MCP Server Refactoring
 status: completed
 stopped_at: Completed 22-04-PLAN.md
-last_updated: "2026-03-18T22:49:45.636Z"
-last_activity: 2026-03-19 - Completed 22-04 workspace router and layout decomposition
+last_updated: "2026-03-19T11:59:15.000Z"
+last_activity: 2026-03-19 - Completed quick task 260319-kol: Zustand project sidebar fixes
 progress:
   total_phases: 6
   completed_phases: 6
@@ -30,7 +30,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 **Phase:** 22 - Zustand Frontend Refactor
 **Plan:** 04 complete
 **Status:** Milestone complete
-**Last activity:** 2026-03-19 - Completed 22-04 workspace router and layout decomposition
+**Last activity:** 2026-03-19 - Completed quick task 260319-kol: Zustand project sidebar fixes
 
 **Progress:**
 [██████████] 100%
@@ -50,14 +50,14 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 
 ## Recent Execution
 
-- `620d6fb` - Extracted explicit workspace shells and narrowed `App.tsx` to workspace routing.
-- `3805141` - Routed project menu controls through `useUIStore` rather than `App.tsx` local UI orchestration.
-- `npm run build --workspace=packages/web` passed after the `22-04` frontend shell verification.
+- `231afbb` - Fixed task count sync and removed sidebar auto-close on project switch.
+- `ecf2147` - Removed "current project" badge from sidebar and moved edit button to header.
+- `npm run build --workspace=packages/web` passed after quick task 260319-kol.
 
 ## Session Continuity
 
-**Last session:** 2026-03-18T22:45:26.690Z
-**Stopped at:** Completed 22-04-PLAN.md
+**Last session:** 2026-03-19T11:55:15.000Z
+**Stopped at:** Completed quick task 260319-kol
 **Resume file:** None
 
 **Next actions:**
@@ -70,6 +70,8 @@ See: `.planning/PROJECT.md` (updated 2026-03-17)
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-02-SUMMARY.md`
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-03-SUMMARY.md`
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-04-SUMMARY.md`
+- Summary written at `.planning/quick/260319-kol-zustand/260319-kol-SUMMARY.md`
 - Phase 22 now has four recorded summaries on disk
+- Quick task 260319-kol completed: fixed task count sync, removed current project badge, moved edit to header
 - `App.tsx` now routes workspace shells while `Toolbar` and `ProjectMenu` read layout state directly from `useUIStore`
 - Pre-existing unrelated worktree changes remain in `packages/web/src/components/OtpModal.tsx`
