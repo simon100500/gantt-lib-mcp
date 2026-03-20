@@ -597,6 +597,7 @@ export default function App() {
         onSaveProjectName={handleSaveProjectName}
         onCreateShareLink={handleCreateShareLink}
         onLoginRequired={() => setShowOtpModal(true)}
+        ganttRef={ganttRef}
       >
         {workspaceShell}
       </ProjectMenu>

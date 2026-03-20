@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, Eye, LogOut, Menu, Pencil, User } from 'lucide-react';
 
+import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
 import { ProjectSwitcher } from '../ProjectSwitcher.tsx';
+import { TaskSearch } from '../TaskSearch';
 import { Button } from '../ui/button.tsx';
 import {
   DropdownMenu,
@@ -27,6 +29,7 @@ interface ProjectMenuProps {
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
+  ganttRef: React.RefObject<GanttChartRef>;
 }
 
 export function ProjectMenu({
@@ -39,6 +42,7 @@ export function ProjectMenu({
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
+  ganttRef,
 }: ProjectMenuProps) {
   const auth = useAuthStore();
   const localProjectName = useTaskStore((state) => state.projectName);
@@ -199,6 +203,10 @@ export function ProjectMenu({
               </>
             )}
           </div>
+
+          <TaskSearch
+            onTaskNavigate={(taskId) => ganttRef.current?.scrollToTask(taskId)}
+          />
 
           <div className="flex-1" />
 
