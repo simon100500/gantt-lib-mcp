@@ -99,6 +99,7 @@ Plan: 2 of 2 (all plans complete)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260320-fx2 | Popover Radix UI для чипа связи | 2026-03-20 | 3bb023a | [260320-fx2-popover-radix-id-popover](./quick/260320-fx2-popover-radix-id-popover/) |
 | 260319-xbm | Recursive collapse all for parent tasks | 2026-03-20 | 4dbb2d7 | [260319-xbm](./quick/260319-xbm/) |
 | 260319-vc2 | UI localStorage persistence | 2026-03-19 | d471757 | [260319-vc2-ui-localstorage-viewmode-collapsedparent](./quick/260319-vc2-ui-localstorage-viewmode-collapsedparent/) |
 | 260319-uz3 | Loading Phrases | 2026-03-19 | fe3a27b | [260319-uz3-loading-phrases](./quick/260319-uz3-loading-phrases/) |
@@ -107,8 +108,8 @@ Plan: 2 of 2 (all plans complete)
 
 ## Session Continuity
 
-**Last session:** 2026-03-20T00:45:00.000Z
-**Stopped at:** Completed 23-02-PLAN.md
+**Last session:** 2026-03-20T12:00:00.000Z
+**Stopped at:** Completed quick-260320-fx2: Popover Radix UI для чипа связи
 **Resume file:** None
 
 **Next actions:**
@@ -130,7 +131,9 @@ Plan: 2 of 2 (all plans complete)
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-03-SUMMARY.md`
 - Summary written at `.planning/phases/22-zustand-frontend-refactor/22-04-SUMMARY.md`
 - Summary written at `.planning/quick/260319-kol-zustand/260319-kol-SUMMARY.md`
+- Summary written at `.planning/quick/260320-fx2-popover-radix-id-popover/260320-fx2-SUMMARY.md`
 - Phase 22 now has four recorded summaries on disk
 - Quick task 260319-kol completed: fixed task count sync, removed current project badge, moved edit to header
+- Quick task 260320-fx2 completed: added Popover UI component and RelationChip component
 - `App.tsx` now routes workspace shells while `Toolbar` and `ProjectMenu` read layout state directly from `useUIStore`
 - Pre-existing unrelated worktree changes remain in `packages/web/src/components/OtpModal.tsx`
