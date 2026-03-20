@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { DependencyError } from '../types';
+import type { DependencyError, Task } from '../types';
 
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 export type ShareStatus = 'idle' | 'creating' | 'copied' | 'error';
@@ -35,6 +35,10 @@ interface UIState {
   filterSearchText: string;
   filterDateFrom: string;
   filterDateTo: string;
+  // Search state
+  searchQuery: string;
+  searchResults: string[];
+  searchIndex: number;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
@@ -53,11 +57,16 @@ interface UIState {
   setFilterDateFrom: (value: string) => void;
   setFilterDateTo: (value: string) => void;
   resetFilters: () => void;
+  // Search actions
+  setSearchQuery: (query: string, tasks: Task[]) => void;
+  navNext: () => void;
+  navPrev: () => void;
+  clearSearch: () => void;
 }
 
 const initialWorkspace: WorkspaceMode = { kind: 'guest' };
 
-export const useUIStore = create<UIState>()((set) => ({
+export const useUIStore = create<UIState>()((set, get) => ({
   workspace: initialWorkspace,
   showOtpModal: false,
   showEditProjectModal: false,
@@ -74,6 +83,9 @@ export const useUIStore = create<UIState>()((set) => ({
   filterSearchText: '',
   filterDateFrom: '',
   filterDateTo: '',
+  searchQuery: '',
+  searchResults: [],
+  searchIndex: -1,
   setWorkspace: (workspace) => {
     set((state) => ({
       workspace: typeof workspace === 'function' ? workspace(state.workspace) : workspace,
@@ -100,5 +112,33 @@ export const useUIStore = create<UIState>()((set) => ({
     filterSearchText: '',
     filterDateFrom: '',
     filterDateTo: '',
+  }),
+  setSearchQuery: (query, tasks) => {
+    const lowerQuery = query.toLowerCase();
+    const results = query
+      ? tasks.filter(t => t.name.toLowerCase().includes(lowerQuery)).map(t => t.id)
+      : [];
+    set({
+      searchQuery: query,
+      searchResults: results,
+      searchIndex: results.length > 0 ? 0 : -1,
+    });
+  },
+  navNext: () => {
+    const state = get();
+    if (state.searchResults.length === 0) return;
+    const nextIndex = (state.searchIndex + 1) % state.searchResults.length;
+    set({ searchIndex: nextIndex });
+  },
+  navPrev: () => {
+    const state = get();
+    if (state.searchResults.length === 0) return;
+    const prevIndex = state.searchIndex === 0 ? state.searchResults.length - 1 : state.searchIndex - 1;
+    set({ searchIndex: prevIndex });
+  },
+  clearSearch: () => set({
+    searchQuery: '',
+    searchResults: [],
+    searchIndex: -1,
   }),
 }));
