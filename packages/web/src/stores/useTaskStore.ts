@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { Task } from '../types.ts';
+import { normalizeTasks, type Task } from '../types.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
 const PROJECT_NAME_KEY = 'gantt_project_name';
@@ -76,13 +76,14 @@ function loadLocalSnapshot(): LocalSnapshot {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as Task[];
+      const normalized = normalizeTasks(parsed);
 
-      if (isLegacyDemoTaskSet(parsed)) {
+      if (isLegacyDemoTaskSet(normalized)) {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
         return { tasks: [], isDemoMode: false, projectName };
       }
 
-      return { tasks: parsed, isDemoMode: false, projectName };
+      return { tasks: normalized, isDemoMode: false, projectName };
     } catch (error) {
       console.error('Failed to parse local tasks:', error);
       localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -106,7 +107,8 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
   currentRequestId: 0,
   setTasks: (tasks) => {
     set((state) => {
-      const nextTasks = typeof tasks === 'function' ? tasks(state.tasks) : tasks;
+      const candidateTasks = typeof tasks === 'function' ? tasks(state.tasks) : tasks;
+      const nextTasks = normalizeTasks(candidateTasks);
       if (state.activeSource === 'local') {
         persistLocalTasks(nextTasks);
       }
@@ -118,12 +120,13 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     });
   },
   replaceFromSystem: (tasks) => {
+    const normalizedTasks = normalizeTasks(tasks);
     set((state) => ({
-      tasks,
+      tasks: normalizedTasks,
       loading: false,
       error: null,
       ...(state.activeSource === 'local' ? (() => {
-        persistLocalTasks(tasks);
+        persistLocalTasks(normalizedTasks);
         return {};
       })() : {}),
     }));
@@ -161,14 +164,14 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
         }
 
         set({ authToken: refreshedToken });
-        return retryResponse.json() as Promise<Task[]>;
+        return normalizeTasks(await retryResponse.json() as Task[]);
       }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      return response.json() as Promise<Task[]>;
+      return normalizeTasks(await response.json() as Task[]);
     };
 
     try {
@@ -237,7 +240,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       }
 
       set({
-        tasks: data.tasks,
+        tasks: normalizeTasks(data.tasks),
         project: data.project,
         isSharedReadOnly: true,
         loading: false,

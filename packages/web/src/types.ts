@@ -1,7 +1,7 @@
 export interface TaskDependency {
   taskId: string;
   type: 'FS' | 'SS' | 'FF' | 'SF';
-  lag?: number;
+  lag: number;
 }
 
 export interface DependencyError {
@@ -29,4 +29,26 @@ export interface Task {
   divider?: 'top' | 'bottom'; // Visual grouping lines
   dependencies?: TaskDependency[];
   sortOrder?: number;        // Display order position
+}
+
+type RawTaskDependency = Omit<TaskDependency, 'lag'> & {
+  lag?: number;
+};
+
+type RawTask = Omit<Task, 'dependencies'> & {
+  dependencies?: RawTaskDependency[];
+};
+
+export function normalizeTask(task: RawTask): Task {
+  return {
+    ...task,
+    dependencies: task.dependencies?.map((dependency) => ({
+      ...dependency,
+      lag: dependency.lag ?? 0,
+    })),
+  };
+}
+
+export function normalizeTasks(tasks: RawTask[]): Task[] {
+  return tasks.map(normalizeTask);
 }
