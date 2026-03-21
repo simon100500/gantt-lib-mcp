@@ -102,11 +102,11 @@ export function ProjectMenu({
       {!hasShareToken && (
         <aside
           className={cn(
-            'flex h-full shrink-0 flex-col border-r border-slate-200 bg-[#f7f8fa] transition-all duration-300 ease-in-out',
+            'flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
             projectSidebarVisible ? 'w-60 opacity-100' : 'w-0 overflow-hidden opacity-0',
           )}
         >
-          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-[52px]">
+          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
                 currentProject={currentProject}
@@ -149,9 +149,7 @@ export function ProjectMenu({
             </button>
 
             <div className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#deebff]">
-                <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-              </div>
+              <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
               <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
             </div>
 
