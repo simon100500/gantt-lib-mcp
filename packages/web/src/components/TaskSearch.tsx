@@ -150,7 +150,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
 
   const hasResults = searchResults.length > 0;
   const showCounter = searchQuery.trim().length > 0;
-  const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : 'Нет совпадений';
+  const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : 'Ctrl+⏎ — создать';
 
   return (
     <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center gap-2">
