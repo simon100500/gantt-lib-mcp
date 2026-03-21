@@ -116,7 +116,7 @@ export function ChatSidebar({
           title={connected ? "Подключено" : "Переподключение..."}
         />
         <span className="text-[12px] font-medium tracking-tight text-slate-600">
-          Assistant
+          AI-Ассистент Ганта
         </span>
         <span className="flex-1" />
         {onClose && (

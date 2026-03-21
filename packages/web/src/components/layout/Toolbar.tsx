@@ -99,7 +99,7 @@ export function Toolbar({
         variant="ghost"
         onClick={onCollapseAll}
         title="Свернуть все родительские задачи"
-        className={actionButtonClassName}
+        className={cn(actionButtonClassName, 'hidden md:flex')}
       >
         <ChevronsDownUp className="h-3.5 w-3.5" />
         <span className="hidden xl:inline text-xs">Свернуть</span>
@@ -110,7 +110,7 @@ export function Toolbar({
         variant="ghost"
         onClick={onExpandAll}
         title="Развернуть все родительские задачи"
-        className={actionButtonClassName}
+        className={cn(actionButtonClassName, 'hidden md:flex')}
       >
         <ChevronsUpDown className="h-3.5 w-3.5" />
         <span className="hidden xl:inline text-xs">Развернуть</span>
@@ -132,7 +132,7 @@ export function Toolbar({
           variant="ghost"
           onClick={() => void onCreateShareLink()}
           disabled={shareStatus === 'creating'}
-          className={actionButtonClassName}
+          className={cn(actionButtonClassName, 'hidden md:flex')}
           title={
             shareStatus === 'creating'
               ? 'Создаём ссылку...'
@@ -158,6 +158,7 @@ export function Toolbar({
         className={cn(
           actionButtonClassName,
           disableTaskDrag && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+          'hidden md:flex',
         )}
         title={disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
       >
@@ -171,6 +172,7 @@ export function Toolbar({
           className={cn(
             actionButtonClassName,
             hasActiveFilters && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+            'hidden md:flex',
           )}
           title="Показать фильтры задач"
         >
@@ -224,7 +226,105 @@ export function Toolbar({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
+            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none md:hidden"
+            title="Ещё"
+          >
+            <Ellipsis className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem
+            onClick={onCollapseAll}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <ChevronsDownUp className="h-4 w-4" />
+            <span className="text-sm">Свернуть все</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onExpandAll}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <ChevronsUpDown className="h-4 w-4" />
+            <span className="text-sm">Развернуть все</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onScrollToToday}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <FlagTriangleRight className="h-4 w-4" />
+            <span className="text-sm">Сегодня</span>
+          </DropdownMenuItem>
+          {showShareButton && onCreateShareLink && (
+            <DropdownMenuItem
+              onClick={() => void onCreateShareLink()}
+              disabled={shareStatus === 'creating'}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+              <span className="text-sm">
+                {shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}
+              </span>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onClick={() => setDisableTaskDrag(!disableTaskDrag)}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            {disableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+            <span className="text-sm">{disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}</span>
+          </DropdownMenuItem>
+          <FilterPopup>
+            <DropdownMenuItem
+              onSelect={(e) => e.preventDefault()}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <div className="relative">
+                <Funnel className="h-4 w-4" />
+                {hasActiveFilters && (
+                  <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                )}
+              </div>
+              <span className="text-sm">Фильтры</span>
+            </DropdownMenuItem>
+          </FilterPopup>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setAutoSchedule(!autoSchedule);
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <input
+              type="checkbox"
+              checked={autoSchedule}
+              readOnly
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+            />
+            <span className="text-sm">Закрепить связи</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setHighlightExpiredTasks(!highlightExpiredTasks);
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <input
+              type="checkbox"
+              checked={highlightExpiredTasks}
+              readOnly
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+            />
+            <span className="text-sm">Просроченные</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="hidden md:flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
             title="Дополнительные параметры"
           >
             <Ellipsis className="h-4 w-4" />

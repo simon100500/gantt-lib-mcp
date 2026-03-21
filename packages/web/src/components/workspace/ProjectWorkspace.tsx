@@ -156,8 +156,11 @@ export function ProjectWorkspace({
 
       {/* Chart and Chat side by side */}
       <div className="mt-0.5 flex min-w-0 flex-1 overflow-hidden px-3 md:px-4">
-        {/* Chart card */}
-        <div className="flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+        {/* Chart card - hide on mobile when chat is open */}
+        <div className={cn(
+          "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
+          chatSidebarVisible && "hidden md:flex"
+        )}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
@@ -246,9 +249,9 @@ export function ProjectWorkspace({
           </div>
         </div>
 
-        {/* Chat card */}
+        {/* Chat card - full width on mobile when open, side on desktop */}
         {chatSidebarVisible && !hasShareToken && onSend && (
-          <aside className="mb-3 ml-3 hidden w-[320px] shrink-0 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:flex xl:flex-col">
+          <aside className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] md:ml-3 md:w-[360px] md:flex-1 md:max-w-md xl:max-w-[320px]">
             <ChatSidebar
               messages={messages}
               streaming={streaming}
