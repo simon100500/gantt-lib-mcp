@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: MCP Server Refactoring
 status: unknown
-stopped_at: "Completed quick-260320-fvq: Search in header"
-last_updated: "2026-03-21T12:59:54.753Z"
+stopped_at: "Completed quick-260321-m9d: Primary button + Ctrl+Enter for task creation"
+last_updated: "2026-03-21T13:03:05.986Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -51,6 +51,7 @@ Plan: 2 of 2 (all plans complete)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260321-m9d | Primary кнопка + Ctrl+Enter | 2026-03-21 | 662f153 | [260321-m9d](./quick/260321-m9d-primary-ctrl-enter/) |
 | 260321-m63 | Кнопка "+ задача" в поиске | 2026-03-21 | 2019ece | [260321-m63](./quick/260321-m63/) |
 | 260320-fvq | Поиск по задачам в хедер | 2026-03-20 | 57ba246 | [260320-fvq-search-in-header](./quick/260320-fvq-search-in-header/) |
 | 260320-fx2 | Popover Radix UI для чипа связи | 2026-03-20 | 3bb023a | [260320-fx2-popover-radix-id-popover](./quick/260320-fx2-popover-radix-id-popover/) |
@@ -62,8 +63,8 @@ Plan: 2 of 2 (all plans complete)
 
 ## Session Continuity
 
-**Last session:** 2026-03-21T12:59:54.753Z
-**Stopped at:** Completed quick-260321-m63: Add create task button to TaskSearch
+**Last session:** 2026-03-21T13:03:05.983Z
+**Stopped at:** Completed quick-260321-m9d: Primary button + Ctrl+Enter for task creation
 **Resume file:** None
 
 **Next actions:**
