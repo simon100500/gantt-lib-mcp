@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ChevronDown, ChevronUp, X, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Search, CornerDownLeft } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -150,7 +150,6 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
 
   const hasResults = searchResults.length > 0;
   const showCounter = searchQuery.trim().length > 0;
-  const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : 'Ctrl+⏎ — создать';
 
   return (
     <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center gap-2">
@@ -190,15 +189,19 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           title="Ctrl+K или /"
         />
         <div className="absolute right-1 flex items-center gap-0.5">
-          {showCounter && (
-            <span
-              className={cn(
-                'mr-1 shrink-0 text-xs font-medium tabular-nums',
-                hasResults ? 'text-slate-500' : 'text-slate-400',
-              )}
-            >
-              {currentLabel}
+          {showCounter && hasResults && (
+            <span className="mr-1 shrink-0 text-xs font-medium tabular-nums text-slate-500">
+              {searchIndex + 1}/{searchResults.length}
             </span>
+          )}
+          {showCounter && !hasResults && (
+            <div className="mr-1 flex items-center gap-1 text-xs text-slate-400">
+              <kbd className="pointer-events-none select-none inline-flex h-4.5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 font-sans text-[11px] font-medium">
+                Ctrl
+              </kbd>
+              <CornerDownLeft className="h-3 w-3" />
+              <span>создать</span>
+            </div>
           )}
           {hasResults && (
             <>
@@ -246,7 +249,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
         variant="default"
         size="sm"
         onClick={handleCreateTask}
-        className="h-8 px-3 text-xs font-medium shrink-0"
+        className="h-7 px-2.5 text-xs font-medium shrink-0"
       >
         + Задача
       </Button>
