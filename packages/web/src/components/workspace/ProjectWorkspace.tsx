@@ -240,7 +240,7 @@ export function ProjectWorkspace({
           </div>
 
           {chatSidebarVisible && !hasShareToken && onSend && (
-            <aside className="hidden h-full w-[320px] shrink-0 overflow-hidden border-l border-slate-200 bg-white xl:flex xl:flex-col">
+            <aside className="hidden h-full w-[320px] shrink-0 overflow-hidden border-l border-slate-300 bg-white xl:flex xl:flex-col">
               <ChatSidebar
                 messages={messages}
                 streaming={streaming}

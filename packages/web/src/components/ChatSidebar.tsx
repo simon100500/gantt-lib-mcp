@@ -107,7 +107,7 @@ export function ChatSidebar({
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white px-3 shrink-0">
+      <div className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0">
         <span
           className={cn(
             "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
@@ -130,7 +130,7 @@ export function ChatSidebar({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto pl-4 pr-3 py-3">
         {isEmpty && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
@@ -160,7 +160,7 @@ export function ChatSidebar({
                 "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
                 msg.role === "user"
                   ? "rounded-br-sm bg-primary/10 text-slate-800"
-                  : "rounded-bl-sm bg-transparent text-slate-700",
+                  : "rounded-bl-sm bg-slate-100 text-slate-700",
               )}
             >
               {msg.content}
@@ -185,7 +185,7 @@ export function ChatSidebar({
 
         {streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-transparent px-0 py-2 text-sm leading-relaxed text-slate-700">
+            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-slate-100 px-3 py-2 text-sm leading-relaxed text-slate-700">
               {streaming}
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse align-middle bg-slate-500 motion-reduce:animate-none" />
             </div>
@@ -196,7 +196,7 @@ export function ChatSidebar({
       </div>
 
       {isEmpty && (
-        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+        <div className="flex flex-wrap gap-1.5 pl-4 pr-3 pb-2">
           {QUICK_CHIPS.map((chip) => (
             <button
               key={chip}
@@ -216,7 +216,7 @@ export function ChatSidebar({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white px-3 py-2"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-4 pr-3 py-2"
       >
         <textarea
           ref={inputRef}
