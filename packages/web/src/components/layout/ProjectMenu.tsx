@@ -106,7 +106,7 @@ export function ProjectMenu({
             projectSidebarVisible ? 'w-60 opacity-100' : 'w-0 overflow-hidden opacity-0',
           )}
         >
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-[52px]">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
                 currentProject={currentProject}

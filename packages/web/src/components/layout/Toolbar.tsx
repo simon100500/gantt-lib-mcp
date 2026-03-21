@@ -73,7 +73,7 @@ export function Toolbar({
     'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900';
 
   return (
-    <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-2 py-2 md:px-3">
+    <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
       <Button
         size="sm"
         variant="ghost"
@@ -244,7 +244,7 @@ export function Toolbar({
           size="sm"
           onClick={onOpenChat}
           aria-label="Показать AI ассистента"
-          className="ml-auto h-8 gap-1.5 rounded-md bg-[#0c66e4] px-3 text-primary-foreground shadow-sm hover:bg-[#0055cc]"
+          className="ml-auto h-8 gap-1.5 rounded-md bg-primary px-3 text-primary-foreground shadow-sm hover:bg-primary/90"
           title="Показать AI ассистента"
         >
           <Sparkles className="h-3.5 w-3.5" />
