@@ -26,74 +26,15 @@ const QUICK_CHIPS = [
   "Связать задачи",
   "Показать сводку",
 ];
+
 const LOADING_PHRASES = [
-  "Ищем техкарты",
-  "Сортируем задачи",
-  "Ставим дедлайны",
+  "Собираем контекст",
   "Проверяем зависимости",
-  "Выравниваем график",
-  "Собираем план работ",
-  "Ругаем подрядчиков",
-  "Совещаемся с миньонами",
-  "Выдаём предписания",
-  "Читаем ЕНИР",
-  "Изучаем ППР",
-  "Хвалим рабочих",
-  "Считаем рабочих",
-  "Оформляем пропуска",
-  "Оформляем патенты",
-  "Считаем выходные",
-  "Закрываем наряды",
-  "Тянем времянку",
-  "Сушим стяжку",
-  "Клеим обои",
-  "Сдаём работы заказчику",
-  "Спорим с технадзором",
-  "Пишем журнал работ",
-  "Исправляем замечания технадзора",
-  "Наводим красоту",
-  "Снимаем защитные плёночки",
-  "Делаем обмеры",
-  "Бетономешалка — мешает бетон. Бригада строителей ж...",
-  "Выводим уровень",
-  "Делаем разуклонку",
-  "Расшиваем швы",
-  "Заказываем материал",
-  "Фиксируем скотчем",
-  "Чертим исполнительную",
-  "Сто раз так делали",
-  "Ждём поставку (как чуда)",
-  "Уточняем уточнения",
-  "Переносим сроки (в последний раз)",
-  "Смотрим, кто виноват",
-  "Делаем вид, что всё по графику",
-  "Оптимизируем график",
-  "Звоним поставщику (в пятый раз)",
-  "Проверяем, где бригада",
-  "Ищем материалы на складе",
-  "Сдвигаем дедлайны (аккуратно)",
-  "Учитываем человеческий фактор",
-  "Синхронизируем хаос",
+  "Уточняем сроки",
+  "Перестраиваем план",
   "Ищем узкие места",
-  "Ищем критический путь",
-  "Расставляем приоритеты (на глаз)",
-  "Делаем красиво, но быстро",
-  "Уплотняем график",
-  "Добавляем ещё одну задачу",
-  "Переоцениваем сроки",
-  "Сверяемся с календарём",
-  "Ушли на совещание",
-  "Решаем «быстро один вопрос»",
-  "Проверяем, что сделано",
-  "Готовим отчёт к «ещё вчера»",
-  "Ждём бетононасос",
-  "Греем объект пушками",
-  "Дожимаем подрядчика",
-  "Проверяем отметки",
-  "Ловим геометрию",
-  "Подгоняем под проект",
-  "Собираем исполнительную документацию",
-  "Строим по чертежу, чтобы не было ...",
+  "Сверяем приоритеты",
+  "Подготавливаем ответ",
 ];
 
 export function ChatSidebar({
@@ -165,8 +106,8 @@ export function ChatSidebar({
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#f7f8fa]">
-      <div className="flex min-h-10 items-center gap-2.5 border-b border-slate-200 bg-white px-3 shrink-0">
+    <div className="flex h-full flex-col bg-white">
+      <div className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white px-3 shrink-0">
         <span
           className={cn(
             "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
@@ -174,8 +115,8 @@ export function ChatSidebar({
           )}
           title={connected ? "Подключено" : "Переподключение..."}
         />
-        <span className="text-[13px] font-semibold tracking-tight text-slate-800">
-          AI Ассистент
+        <span className="text-[12px] font-medium tracking-tight text-slate-600">
+          Assistant
         </span>
         <span className="flex-1" />
         {onClose && (
@@ -192,15 +133,15 @@ export function ChatSidebar({
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
         {isEmpty && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <Sparkles className="h-4.5 w-4.5 text-primary" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+              <Sparkles className="h-4 w-4 text-slate-500" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">
-                AI Гант-ассистент
+                Помощник по проекту
               </p>
               <p className="mt-1 text-xs leading-relaxed text-slate-400">
-                Попросите создать график с нуля или изменить отдельные задачи
+                Попросите создать график с нуля или изменить отдельные задачи.
               </p>
             </div>
           </div>
@@ -218,8 +159,8 @@ export function ChatSidebar({
               className={cn(
                 "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
                 msg.role === "user"
-                  ? "rounded-br-sm bg-primary text-primary-foreground"
-                  : "rounded-bl-sm border border-slate-200 bg-white text-slate-800",
+                  ? "rounded-br-sm bg-primary/10 text-slate-800"
+                  : "rounded-bl-sm bg-transparent text-slate-700",
               )}
             >
               {msg.content}
@@ -229,7 +170,7 @@ export function ChatSidebar({
 
         {loading && !streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="flex items-center gap-2 rounded-lg rounded-bl-sm border border-slate-200 bg-white px-3.5 py-3">
+            <div className="flex items-center gap-2 rounded-lg rounded-bl-sm bg-transparent px-0 py-2.5">
               <div className="flex shrink-0 items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.3s]" />
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.15s]" />
@@ -244,7 +185,7 @@ export function ChatSidebar({
 
         {streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="max-w-[88%] rounded-lg rounded-bl-sm border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-slate-800">
+            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-transparent px-0 py-2 text-sm leading-relaxed text-slate-700">
               {streaming}
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse align-middle bg-slate-500 motion-reduce:animate-none" />
             </div>
@@ -262,8 +203,8 @@ export function ChatSidebar({
               type="button"
               onClick={() => handleChip(chip)}
               className={cn(
-                "rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-500",
-                "transition-colors hover:border-primary hover:text-primary",
+                "rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-500",
+                "transition-colors hover:border-slate-300 hover:text-slate-700",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
               )}
             >
@@ -285,7 +226,7 @@ export function ChatSidebar({
           onChange={(e) => setInputValue(e.target.value)}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={disabled ? "AI думает..." : "Что хотите сделать?"}
+          placeholder={disabled ? "Assistant думает..." : "Что хотите сделать?"}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}

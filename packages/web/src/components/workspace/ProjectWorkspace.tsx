@@ -135,25 +135,25 @@ export function ProjectWorkspace({
   }, [searchResults, tempHighlightedTaskId]);
 
   return (
-    <>
-      <div className="flex min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
-        <div className="hidden xl:block xl:w-3 2xl:w-4" />
+    <div className="flex min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
+      <div className="hidden xl:block xl:w-3 2xl:w-4" />
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2">
-          <Toolbar
-            showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
-            onOpenChat={onOpenChat}
-            onScrollToToday={onScrollToToday}
-            onCollapseAll={onCollapseAll}
-            onExpandAll={onExpandAll}
-            shareStatus={shareStatus}
-            onCreateShareLink={onCreateShareLink}
-            showShareButton={!hasShareToken && isAuthenticated}
-            viewMode={viewMode}
-            onViewModeChange={handleViewModeChange}
-          />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2">
+        <Toolbar
+          showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
+          onOpenChat={onOpenChat}
+          onScrollToToday={onScrollToToday}
+          onCollapseAll={onCollapseAll}
+          onExpandAll={onExpandAll}
+          shareStatus={shareStatus}
+          onCreateShareLink={onCreateShareLink}
+          showShareButton={!hasShareToken && isAuthenticated}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
 
-          <div className="mt-0.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+        <div className="mt-0.5 flex min-h-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
@@ -238,26 +238,26 @@ export function ProjectWorkspace({
               </footer>
             )}
           </div>
-        </div>
 
-        <div className="hidden xl:block xl:w-3 2xl:w-4" />
+          {chatSidebarVisible && !hasShareToken && onSend && (
+            <aside className="hidden h-full w-[320px] shrink-0 overflow-hidden border-l border-slate-200 bg-white xl:flex xl:flex-col">
+              <ChatSidebar
+                messages={messages}
+                streaming={streaming}
+                onSend={onSend}
+                disabled={aiThinking}
+                connected={displayConnected}
+                loading={aiThinking}
+                onClose={onCloseChat}
+                isAuthenticated={isAuthenticated}
+                onLoginRequired={onLoginRequired}
+              />
+            </aside>
+          )}
+        </div>
       </div>
 
-      {chatSidebarVisible && !hasShareToken && onSend && (
-        <aside className="relative z-20 hidden w-[320px] shrink-0 overflow-hidden border-l border-slate-300 bg-white xl:flex xl:flex-col">
-          <ChatSidebar
-            messages={messages}
-            streaming={streaming}
-            onSend={onSend}
-            disabled={aiThinking}
-            connected={displayConnected}
-            loading={aiThinking}
-            onClose={onCloseChat}
-            isAuthenticated={isAuthenticated}
-            onLoginRequired={onLoginRequired}
-          />
-        </aside>
-      )}
-    </>
+      <div className="hidden xl:block xl:w-3 2xl:w-4" />
+    </div>
   );
 }
