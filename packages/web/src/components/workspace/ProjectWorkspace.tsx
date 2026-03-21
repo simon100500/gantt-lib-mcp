@@ -139,7 +139,7 @@ export function ProjectWorkspace({
       <div className="flex min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
         <div className="hidden xl:block xl:w-3 2xl:w-4" />
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden py-2 xl:py-3">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2 xl:pt-3">
           <Toolbar
             showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
             onOpenChat={onOpenChat}
@@ -153,7 +153,7 @@ export function ProjectWorkspace({
             onViewModeChange={handleViewModeChange}
           />
 
-          <div className="mt-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
