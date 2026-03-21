@@ -115,8 +115,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
       }
     }
 
-    // Clear search after creation
-    clearSearch();
+    // Navigate to the new task
+    if (onTaskNavigate) {
+      onTaskNavigate(newTask.id);
+    }
+
+    // Keep focus in input - don't clear search
   };
 
   const hasResults = searchResults.length > 0;
@@ -143,6 +147,9 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
             } else if (event.key === 'ArrowUp' || (event.key === 'Enter' && event.shiftKey)) {
               event.preventDefault();
               handleNavPrev();
+            } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+              event.preventDefault();
+              void handleCreateTask();
             } else if (event.key === 'Escape') {
               event.preventDefault();
               if (searchQuery) {
@@ -152,7 +159,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
               }
             }
           }}
-          placeholder="Поиск задач..."
+          placeholder="Поиск или новая задача..."
           className="h-9 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или /"
@@ -211,12 +218,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
       </div>
       {/* Кнопка создания задачи */}
       <Button
-        variant="ghost"
+        variant="default"
         size="sm"
         onClick={handleCreateTask}
-        className="h-9 px-3 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 shrink-0"
+        className="h-9 px-3 text-xs font-medium shrink-0"
       >
-        + задача
+        + Задача
       </Button>
     </div>
   );
