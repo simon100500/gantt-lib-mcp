@@ -103,10 +103,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
     // Clear search input
     clearSearch();
 
-    // Navigate to the new task
-    if (onTaskNavigate) {
-      onTaskNavigate(tempId);
-    }
+    // Navigate to the new task (wait for React render)
+    requestAnimationFrame(() => {
+      if (onTaskNavigate) {
+        onTaskNavigate(tempId);
+      }
+    });
 
     // Highlight the new task temporarily
     setTempHighlightedTaskId(tempId);
@@ -130,6 +132,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           setTimeout(() => {
             setTempHighlightedTaskId(null);
           }, 2000);
+          // Scroll to the real ID
+          requestAnimationFrame(() => {
+            if (onTaskNavigate) {
+              onTaskNavigate(created.id);
+            }
+          });
         }
       } catch (error) {
         console.error('Failed to create task:', error);
