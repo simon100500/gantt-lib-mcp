@@ -26,7 +26,18 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isEditableTarget = target instanceof HTMLElement && (
+        target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.isContentEditable
+      );
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      } else if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditableTarget) {
         event.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -72,7 +83,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
   const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : 'Нет совпадений';
 
   return (
-    <div className="flex min-w-0 shrink items-center gap-2 w-full max-w-[48rem]">
+    <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center">
       <div className="relative flex min-w-0 flex-1 items-center">
         <Input
           ref={inputRef}
@@ -95,12 +106,22 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
               }
             }
           }}
-          placeholder="Поиск задач..."
-          className="h-9 w-full rounded-lg border-slate-200 bg-white pr-20 text-sm"
+          placeholder="Поиск задач... /"
+          className="h-9 w-full rounded-lg border-slate-200 bg-white pr-32 text-sm focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
-          title="Ctrl+K"
+          title="Ctrl+K или /"
         />
         <div className="absolute right-1 flex items-center gap-0.5">
+          {showCounter && (
+            <span
+              className={cn(
+                'mr-1 shrink-0 text-xs font-medium tabular-nums',
+                hasResults ? 'text-slate-500' : 'text-slate-400',
+              )}
+            >
+              {currentLabel}
+            </span>
+          )}
           {hasResults && (
             <>
               <Button
@@ -136,16 +157,6 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           )}
         </div>
       </div>
-      {showCounter && (
-        <span
-          className={cn(
-            'shrink-0 text-sm font-medium tabular-nums',
-            hasResults ? 'text-slate-600' : 'text-slate-400',
-          )}
-        >
-          {currentLabel}
-        </span>
-      )}
     </div>
   );
 }
