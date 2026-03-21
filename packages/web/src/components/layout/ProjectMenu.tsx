@@ -88,7 +88,7 @@ export function ProjectMenu({
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-[#f4f5f7] text-slate-900">
       {error && (
         <div className="absolute left-0 right-0 top-0 z-50 flex items-center justify-center p-2">
           <div className="max-w-md rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-1.5 text-center text-xs text-destructive shadow-sm">
@@ -102,7 +102,7 @@ export function ProjectMenu({
       {!hasShareToken && (
         <aside
           className={cn(
-            'flex h-full shrink-0 flex-col border-r border-slate-200 bg-background transition-all duration-300 ease-in-out',
+            'flex h-full shrink-0 flex-col border-r border-slate-200 bg-[#f7f8fa] transition-all duration-300 ease-in-out',
             projectSidebarVisible ? 'w-60 opacity-100' : 'w-0 overflow-hidden opacity-0',
           )}
         >
@@ -127,7 +127,7 @@ export function ProjectMenu({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-12 items-center gap-4 border-b border-slate-200 bg-white px-4">
+        <header className="flex min-h-[56px] items-center gap-4 border-b border-slate-200 bg-white px-4 md:px-5">
           <div className="flex min-w-0 shrink-0 items-center gap-3">
             <button
               type="button"
@@ -136,26 +136,28 @@ export function ProjectMenu({
               aria-label={hasShareToken ? 'Режим только чтения' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
               disabled={hasShareToken}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                'flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                 hasShareToken
                   ? 'cursor-default bg-slate-50 text-slate-300'
                   : projectSidebarVisible
-                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+                    ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    : 'text-slate-500 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700',
               )}
               title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
             >
               {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
             </button>
 
-            <div className="flex select-none items-center gap-2 text-base font-cascadia tracking-tight">
-              <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
-              <span className="hidden text-slate-900 sm:inline">ГетГант</span>
+            <div className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#deebff]">
+                <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
+              </div>
+              <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
             </div>
 
-            <span className="text-slate-400">/</span>
+            <span className="text-slate-300">/</span>
 
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
               {isRenamingProject && !hasShareToken ? (
                 <input
                   type="text"
@@ -174,7 +176,7 @@ export function ProjectMenu({
                       setRenameValue('');
                     }
                   }}
-                  className="min-w-0 max-w-[220px] rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-w-0 max-w-[240px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   autoFocus
                   onFocus={(event) => event.target.select()}
                 />
@@ -182,8 +184,8 @@ export function ProjectMenu({
                 <>
                   <span
                     className={cn(
-                      'truncate text-sm font-medium text-slate-700',
-                      !hasShareToken && 'cursor-pointer rounded px-1 -mx-1 hover:bg-slate-100',
+                      'truncate text-sm font-semibold text-slate-700',
+                      !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
                     )}
                     title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
                     onClick={hasShareToken ? undefined : () => {
@@ -197,7 +199,7 @@ export function ProjectMenu({
                     <button
                       type="button"
                       onClick={() => setShowEditProjectModal(true)}
-                      className="shrink-0 rounded p-0.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      className="shrink-0 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                       aria-label="Переименовать проект"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -210,7 +212,7 @@ export function ProjectMenu({
                   variant="outline"
                   size="icon"
                   onClick={() => void onCreateProject()}
-                  className="h-6 w-6 shrink-0"
+                  className="h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50"
                   aria-label="Новый проект"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -221,13 +223,13 @@ export function ProjectMenu({
 
           <div className="flex-1 md:hidden" />
 
-          <div className="hidden min-w-0 flex-1 justify-center md:flex lg:justify-center">
+          <div className="hidden min-w-0 flex-1 px-4 md:flex lg:px-8">
             <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-3">
             {hasShareToken ? (
-              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
                 Только чтение
               </div>
@@ -244,7 +246,7 @@ export function ProjectMenu({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 max-w-[180px] gap-1.5 px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 lg:max-w-[280px]"
+                    className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 lg:max-w-[280px]"
                   >
                     <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
                     <span className="hidden truncate text-slate-600 lg:inline">{auth.user?.email ?? 'Account'}</span>
@@ -266,7 +268,7 @@ export function ProjectMenu({
           </div>
         </header>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden bg-[#f4f5f7]">
           {children}
         </div>
       </div>
