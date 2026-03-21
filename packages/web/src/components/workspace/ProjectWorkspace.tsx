@@ -135,10 +135,9 @@ export function ProjectWorkspace({
   }, [searchResults, tempHighlightedTaskId]);
 
   return (
-    <div className="flex min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
-      <div className="hidden xl:block xl:w-3 2xl:w-4" />
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2">
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
+      {/* Toolbar on full width */}
+      <div className="px-3 pt-2 md:px-4">
         <Toolbar
           showChatToggle={!hasShareToken && showChat}
           isChatOpen={chatSidebarVisible}
@@ -152,8 +151,12 @@ export function ProjectWorkspace({
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
         />
+      </div>
 
-        <div className="mt-0.5 flex min-h-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+      {/* Chart and Chat side by side */}
+      <div className="mt-0.5 flex min-w-0 flex-1 overflow-hidden px-3 md:px-4">
+        {/* Chart card */}
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
@@ -239,26 +242,25 @@ export function ProjectWorkspace({
               </footer>
             )}
           </div>
-
-          {chatSidebarVisible && !hasShareToken && onSend && (
-            <aside className="hidden h-full w-[320px] shrink-0 overflow-hidden border-l border-slate-300 bg-white xl:flex xl:flex-col">
-              <ChatSidebar
-                messages={messages}
-                streaming={streaming}
-                onSend={onSend}
-                disabled={aiThinking}
-                connected={displayConnected}
-                loading={aiThinking}
-                onClose={onCloseChat}
-                isAuthenticated={isAuthenticated}
-                onLoginRequired={onLoginRequired}
-              />
-            </aside>
-          )}
         </div>
-      </div>
 
-      <div className="hidden xl:block xl:w-3 2xl:w-4" />
+        {/* Chat card */}
+        {chatSidebarVisible && !hasShareToken && onSend && (
+          <aside className="mb-3 ml-3 hidden w-[320px] shrink-0 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:flex xl:flex-col">
+            <ChatSidebar
+              messages={messages}
+              streaming={streaming}
+              onSend={onSend}
+              disabled={aiThinking}
+              connected={displayConnected}
+              loading={aiThinking}
+              onClose={onCloseChat}
+              isAuthenticated={isAuthenticated}
+              onLoginRequired={onLoginRequired}
+            />
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

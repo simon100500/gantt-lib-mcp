@@ -221,7 +221,7 @@ export function ChatSidebar({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-4 pr-3 py-2"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-3 pr-3 py-2"
       >
         <textarea
           ref={inputRef}
