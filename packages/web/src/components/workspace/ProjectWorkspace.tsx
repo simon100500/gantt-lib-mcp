@@ -139,7 +139,7 @@ export function ProjectWorkspace({
       <div className="flex min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
         <div className="hidden xl:block xl:w-3 2xl:w-4" />
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2 xl:pt-3">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2">
           <Toolbar
             showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
             onOpenChat={onOpenChat}
@@ -153,43 +153,41 @@ export function ProjectWorkspace({
             onViewModeChange={handleViewModeChange}
           />
 
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+          <div className="mt-0.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-hidden rounded-[inherit] bg-white">
-                <GanttChart
-                  ref={ganttRef as Ref<GanttChartRef>}
-                  tasks={tasks}
-                  taskFilter={taskFilter}
-                  onTasksChange={readOnly ? undefined : batchUpdate?.handleTasksChange}
-                  dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
-                  rowHeight={36}
-                  containerHeight="calc(100vh - 162px)"
-                  showTaskList={showTaskList}
-                  taskListWidth={650}
-                  onValidateDependencies={onValidation}
-                  enableAutoSchedule={autoSchedule}
-                  onCascade={readOnly ? undefined : onCascade}
-                  disableTaskNameEditing={readOnly}
-                  disableDependencyEditing={readOnly}
-                  highlightExpiredTasks={highlightExpiredTasks}
-                  headerHeight={40}
-                  viewMode={viewMode}
-                  collapsedParentIds={collapsedParentIds}
-                  onToggleCollapse={handleToggleCollapse}
-                  onAdd={readOnly ? undefined : batchUpdate?.handleAdd}
-                  onDelete={readOnly ? undefined : batchUpdate?.handleDelete}
-                  onInsertAfter={readOnly ? undefined : batchUpdate?.handleInsertAfter}
-                  onReorder={readOnly ? undefined : batchUpdate?.handleReorder}
-                  onPromoteTask={readOnly ? undefined : batchUpdate?.handlePromoteTask}
-                  onDemoteTask={readOnly ? undefined : batchUpdate?.handleDemoteTask}
-                  customDays={russianHolidays2026}
-                  highlightedTaskIds={highlightedSearchTaskIds}
-                />
-              </div>
+              <GanttChart
+                ref={ganttRef as Ref<GanttChartRef>}
+                tasks={tasks}
+                taskFilter={taskFilter}
+                onTasksChange={readOnly ? undefined : batchUpdate?.handleTasksChange}
+                dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
+                rowHeight={36}
+                containerHeight="calc(100dvh - 152px)"
+                showTaskList={showTaskList}
+                taskListWidth={650}
+                onValidateDependencies={onValidation}
+                enableAutoSchedule={autoSchedule}
+                onCascade={readOnly ? undefined : onCascade}
+                disableTaskNameEditing={readOnly}
+                disableDependencyEditing={readOnly}
+                highlightExpiredTasks={highlightExpiredTasks}
+                headerHeight={40}
+                viewMode={viewMode}
+                collapsedParentIds={collapsedParentIds}
+                onToggleCollapse={handleToggleCollapse}
+                onAdd={readOnly ? undefined : batchUpdate?.handleAdd}
+                onDelete={readOnly ? undefined : batchUpdate?.handleDelete}
+                onInsertAfter={readOnly ? undefined : batchUpdate?.handleInsertAfter}
+                onReorder={readOnly ? undefined : batchUpdate?.handleReorder}
+                onPromoteTask={readOnly ? undefined : batchUpdate?.handlePromoteTask}
+                onDemoteTask={readOnly ? undefined : batchUpdate?.handleDemoteTask}
+                customDays={russianHolidays2026}
+                highlightedTaskIds={highlightedSearchTaskIds}
+              />
             )}
 
             {tasks.length > 0 && (
