@@ -156,7 +156,12 @@ export function Toolbar({
           )}
           title="Показать фильтры задач"
         >
-          <Funnel className="h-3.5 w-3.5" />
+          <div className="relative">
+            <Funnel className="h-3.5 w-3.5" />
+            {hasActiveFilters && (
+              <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+            )}
+          </div>
           <span className="hidden md:inline text-xs">Фильтры</span>
         </Button>
       </FilterPopup>
@@ -168,7 +173,7 @@ export function Toolbar({
             type="button"
             onClick={() => handleViewModeChange(nextMode)}
             className={cn(
-              'flex h-8 items-center px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'flex h-8 items-center px-3 text-xs font-semibold transition-colors focus-visible:outline-none',
               nextMode !== 'month' && 'border-r border-slate-200',
               currentViewMode === nextMode
                 ? 'bg-[#dfe1e6] text-slate-900'
@@ -201,7 +206,7 @@ export function Toolbar({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
             title="Дополнительные параметры"
           >
             <Ellipsis className="h-4 w-4" />
@@ -247,8 +252,7 @@ export function Toolbar({
           onClick={onToggleChat}
           aria-pressed={isChatOpen}
           className={cn(
-            'h-8 gap-1.5 rounded-md px-3 text-xs font-medium transition-all',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+            'h-8 gap-1.5 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none',
             isChatOpen
               ? 'bg-primary border-2 border-primary/30 text-primary-foreground shadow-inner'
               : 'bg-primary border-2 border-transparent text-primary-foreground shadow-sm hover:bg-primary/90',
