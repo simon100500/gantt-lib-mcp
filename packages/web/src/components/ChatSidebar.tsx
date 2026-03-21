@@ -107,7 +107,7 @@ export function ChatSidebar({
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0">
+      <header className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0">
         <span
           className={cn(
             "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
@@ -122,15 +122,20 @@ export function ChatSidebar({
         {onClose && (
           <button
             onClick={onClose}
-            className="rounded-md p-1 transition-colors hover:bg-slate-100"
+            className="rounded-md p-1 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             aria-label="Закрыть"
           >
             <X className="h-4 w-4 text-slate-500" />
           </button>
         )}
-      </div>
+      </header>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto pl-4 pr-3 py-3">
+      <div
+        role="region"
+        aria-label="Сообщения AI ассистента"
+        aria-live="polite"
+        className="flex flex-1 flex-col gap-2 overflow-y-auto pl-4 pr-3 py-3"
+      >
         {isEmpty && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
@@ -226,7 +231,7 @@ export function ChatSidebar({
           onChange={(e) => setInputValue(e.target.value)}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={disabled ? "Assistant думает..." : "Что хотите сделать?"}
+          placeholder={disabled ? "Assistant думает…" : "Что хотите сделать?"}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}

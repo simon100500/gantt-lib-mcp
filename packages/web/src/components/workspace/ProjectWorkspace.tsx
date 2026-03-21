@@ -25,7 +25,7 @@ interface ProjectWorkspaceProps {
   onSend?: (text: string) => void;
   onLoginRequired: () => void;
   onCloseChat?: () => void;
-  onOpenChat?: () => void;
+  onToggleChat?: () => void;
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
@@ -46,7 +46,7 @@ export function ProjectWorkspace({
   onSend,
   onLoginRequired,
   onCloseChat,
-  onOpenChat,
+  onToggleChat,
   onScrollToToday,
   onCollapseAll,
   onExpandAll,
@@ -140,8 +140,9 @@ export function ProjectWorkspace({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden pt-2">
         <Toolbar
-          showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
-          onOpenChat={onOpenChat}
+          showChatToggle={!hasShareToken && showChat}
+          isChatOpen={chatSidebarVisible}
+          onToggleChat={onToggleChat}
           onScrollToToday={onScrollToToday}
           onCollapseAll={onCollapseAll}
           onExpandAll={onExpandAll}

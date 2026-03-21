@@ -24,7 +24,8 @@ import { FilterPopup } from '../FilterPopup';
 
 interface ToolbarProps {
   showChatToggle?: boolean;
-  onOpenChat?: () => void;
+  isChatOpen?: boolean;
+  onToggleChat?: () => void;
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
@@ -37,7 +38,8 @@ interface ToolbarProps {
 
 export function Toolbar({
   showChatToggle = false,
-  onOpenChat,
+  isChatOpen = false,
+  onToggleChat,
   onScrollToToday,
   onCollapseAll,
   onExpandAll,
@@ -144,6 +146,21 @@ export function Toolbar({
 
       <div className="flex-1" />
 
+      <FilterPopup>
+        <Button
+          size="sm"
+          variant={hasActiveFilters ? 'secondary' : 'ghost'}
+          className={cn(
+            actionButtonClassName,
+            hasActiveFilters && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+          )}
+          title="Показать фильтры задач"
+        >
+          <Funnel className="h-3.5 w-3.5" />
+          <span className="hidden md:inline text-xs">Фильтры</span>
+        </Button>
+      </FilterPopup>
+
       <div className="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
         {(['day', 'week', 'month'] as const).map((nextMode) => (
           <button
@@ -179,21 +196,6 @@ export function Toolbar({
           </button>
         ))}
       </div>
-
-      <FilterPopup>
-        <Button
-          size="sm"
-          variant={hasActiveFilters ? 'secondary' : 'ghost'}
-          className={cn(
-            actionButtonClassName,
-            hasActiveFilters && 'border-slate-300 bg-white text-slate-900 shadow-sm',
-          )}
-          title="Показать фильтры задач"
-        >
-          <Funnel className="h-3.5 w-3.5" />
-          <span className="hidden md:inline text-xs">Фильтры</span>
-        </Button>
-      </FilterPopup>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -239,16 +241,22 @@ export function Toolbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {showChatToggle && onOpenChat && (
+      {showChatToggle && onToggleChat && (
         <Button
           size="sm"
-          onClick={onOpenChat}
-          aria-label="Показать AI ассистента"
-          className="ml-auto h-8 gap-1.5 rounded-md bg-primary px-3 text-primary-foreground shadow-sm hover:bg-primary/90"
-          title="Показать AI ассистента"
+          onClick={onToggleChat}
+          aria-pressed={isChatOpen}
+          className={cn(
+            'h-8 gap-1.5 rounded-md px-3 text-xs font-medium transition-all',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+            isChatOpen
+              ? 'bg-primary border-2 border-primary/30 text-primary-foreground shadow-inner'
+              : 'bg-primary border-2 border-transparent text-primary-foreground shadow-sm hover:bg-primary/90',
+          )}
+          title={isChatOpen ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
         >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline text-xs">AI ассистент</span>
+          <Sparkles className={cn('h-3.5 w-3.5', isChatOpen && 'fill-primary-foreground/20')} />
+          <span className="hidden sm:inline">AI ассистент</span>
           <span className="sm:hidden">AI</span>
         </Button>
       )}
