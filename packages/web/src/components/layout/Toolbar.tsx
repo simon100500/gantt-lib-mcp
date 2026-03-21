@@ -6,8 +6,8 @@ import {
   FlagTriangleRight,
   Funnel,
   Link,
-  PanelRightClose,
-  PanelRightOpen,
+  ListIndentDecrease,
+  ListIndentIncrease,
   Sparkles,
 } from 'lucide-react';
 
@@ -78,12 +78,12 @@ export function Toolbar({
     <div className="flex min-h-12 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
       <Button
         size="sm"
-        variant={showTaskList ? 'secondary' : 'ghost'}
+        variant="ghost"
         onClick={() => setShowTaskList(!showTaskList)}
         aria-pressed={showTaskList}
         className="h-7 gap-1.5"
       >
-        {showTaskList ? <PanelRightOpen className="h-3.5 w-3.5" /> : <PanelRightClose className="h-3.5 w-3.5" />}
+        {showTaskList ? <ListIndentDecrease className="h-3.5 w-3.5" /> : <ListIndentIncrease className="h-3.5 w-3.5" />}
         <span className="hidden md:inline text-xs">Список задач</span>
       </Button>
 

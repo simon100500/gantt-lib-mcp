@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, LogOut, Menu, Pencil, Plus, User } from 'lucide-react';
+import { ChevronDown, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -145,7 +145,7 @@ export function ProjectMenu({
               )}
               title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
             >
-              <Menu className="h-5 w-5" />
+              {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
             </button>
 
             <div className="flex select-none items-center gap-2 text-base font-cascadia tracking-tight">
