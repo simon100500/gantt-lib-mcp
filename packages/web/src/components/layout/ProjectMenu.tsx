@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, LogOut, Menu, Pencil, User } from 'lucide-react';
+import { ChevronDown, Eye, LogOut, Menu, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -202,6 +202,17 @@ export function ProjectMenu({
                   )}
                 </>
               )}
+              {!hasShareToken && auth.isAuthenticated && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => void onCreateProject()}
+                  className="h-6 w-6 shrink-0"
+                  title="Новый проект"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
 
@@ -210,17 +221,6 @@ export function ProjectMenu({
           </div>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-            {!hasShareToken && auth.isAuthenticated && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void onCreateProject()}
-                className="hidden h-7 shrink-0 px-2.5 text-xs text-primary hover:bg-primary/10 hover:text-primary md:inline-flex"
-              >
-                + Новый проект
-              </Button>
-            )}
-
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
