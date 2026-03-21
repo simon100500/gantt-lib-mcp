@@ -159,8 +159,8 @@ export function ChatSidebar({
               className={cn(
                 "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
                 msg.role === "user"
-                  ? "rounded-br-sm bg-primary/10 text-slate-800"
-                  : "rounded-bl-sm bg-slate-100 text-slate-700",
+                  ? "rounded-br-sm bg-[#e7f0fe] text-slate-800"
+                  : "rounded-bl-sm bg-transparent text-slate-800",
               )}
             >
               {msg.content}
@@ -185,7 +185,7 @@ export function ChatSidebar({
 
         {streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-slate-100 px-3 py-2 text-sm leading-relaxed text-slate-700">
+            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-transparent px-3 py-2 text-sm leading-relaxed text-slate-800">
               {streaming}
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse align-middle bg-slate-500 motion-reduce:animate-none" />
             </div>
