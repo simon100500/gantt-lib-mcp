@@ -240,13 +240,12 @@ export function ChatSidebar({
         />
         <button
           type="submit"
-          disabled={disabled || !inputValue.trim()}
+          aria-disabled={disabled || !inputValue.trim()}
           aria-label="Send message"
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground",
             "transition-colors hover:bg-primary/90",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-            "disabled:cursor-not-allowed disabled:opacity-40",
           )}
         >
           <ArrowUp className="h-4 w-4" />
