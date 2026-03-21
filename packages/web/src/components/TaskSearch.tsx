@@ -141,15 +141,15 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           value={searchQuery}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'ArrowDown' || (event.key === 'Enter' && !event.shiftKey)) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+              event.preventDefault();
+              void handleCreateTask();
+            } else if (event.key === 'ArrowDown' || (event.key === 'Enter' && !event.shiftKey)) {
               event.preventDefault();
               handleNavNext();
             } else if (event.key === 'ArrowUp' || (event.key === 'Enter' && event.shiftKey)) {
               event.preventDefault();
               handleNavPrev();
-            } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-              event.preventDefault();
-              void handleCreateTask();
             } else if (event.key === 'Escape') {
               event.preventDefault();
               if (searchQuery) {
@@ -160,7 +160,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
             }
           }}
           placeholder="Поиск или новая задача..."
-          className="h-9 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
+          className="h-8 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или /"
         />
@@ -221,7 +221,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
         variant="default"
         size="sm"
         onClick={handleCreateTask}
-        className="h-9 px-3 text-xs font-medium shrink-0"
+        className="h-8 px-3 text-xs font-medium shrink-0"
       >
         + Задача
       </Button>
