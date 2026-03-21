@@ -128,7 +128,7 @@ export function ProjectMenu({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex min-h-12 items-center gap-4 border-b border-slate-200 bg-white px-4">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex min-w-0 shrink-0 items-center gap-3">
             <button
               type="button"
               onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
@@ -149,7 +149,7 @@ export function ProjectMenu({
             </button>
 
             <div className="flex select-none items-center gap-2 text-base font-cascadia tracking-tight">
-              <img src="/favicon.svg" alt="GetGantt" className="h-5 w-5" />
+              <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
               <span className="hidden text-slate-900 sm:inline">ГетГант</span>
             </div>
 
@@ -159,6 +159,9 @@ export function ProjectMenu({
               {isRenamingProject && !hasShareToken ? (
                 <input
                   type="text"
+                  name="project-name"
+                  autoComplete="off"
+                  spellCheck={false}
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => { void commitInlineRename(); }}
@@ -171,7 +174,7 @@ export function ProjectMenu({
                       setRenameValue('');
                     }
                   }}
-                  className="min-w-0 max-w-[220px] rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="min-w-0 max-w-[220px] rounded border border-slate-300 bg-white px-1.5 py-0.5 text-sm font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   autoFocus
                   onFocus={(event) => event.target.select()}
                 />
@@ -208,7 +211,7 @@ export function ProjectMenu({
                   size="icon"
                   onClick={() => void onCreateProject()}
                   className="h-6 w-6 shrink-0"
-                  title="Новый проект"
+                  aria-label="Новый проект"
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
@@ -216,11 +219,13 @@ export function ProjectMenu({
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-[1.4] justify-center">
+          <div className="flex-1 md:hidden" />
+
+          <div className="hidden min-w-0 flex-1 justify-center md:flex lg:justify-center">
             <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+          <div className="flex min-w-0 shrink-0 items-center gap-3">
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
