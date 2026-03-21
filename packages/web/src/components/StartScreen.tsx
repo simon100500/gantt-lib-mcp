@@ -71,7 +71,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
       <div className="w-full max-w-[640px] px-6">
         {/* Headline */}
         <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">
-          На что составим график?
+          Какой график нужен?
         </h1>
 
         {/* Textarea form block */}

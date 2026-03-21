@@ -132,6 +132,10 @@ export default function App() {
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
   }, [setWorkspace]);
 
+  const toggleProjectChat = useCallback(() => {
+    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: !current.chatOpen } : current);
+  }, [setWorkspace]);
+
   const resetWorkspacePresentation = useCallback(() => {
     replaceTasksFromSystem([]);
     useChatStore.getState().reset();
@@ -558,7 +562,7 @@ export default function App() {
             onSend={handleSend}
             onLoginRequired={() => setShowOtpModal(true)}
             onCloseChat={closeProjectChat}
-            onOpenChat={openProjectChat}
+            onToggleChat={toggleProjectChat}
             onScrollToToday={handleScrollToToday}
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}

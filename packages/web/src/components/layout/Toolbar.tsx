@@ -8,6 +8,8 @@ import {
   Link,
   ListIndentDecrease,
   ListIndentIncrease,
+  Lock,
+  LockOpen,
   Sparkles,
 } from 'lucide-react';
 
@@ -21,11 +23,11 @@ import {
 import { cn } from '@/lib/utils';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { FilterPopup } from '../FilterPopup';
-import { useTaskFilter } from '../../hooks/useTaskFilter';
 
 interface ToolbarProps {
   showChatToggle?: boolean;
-  onOpenChat?: () => void;
+  isChatOpen?: boolean;
+  onToggleChat?: () => void;
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
@@ -38,7 +40,8 @@ interface ToolbarProps {
 
 export function Toolbar({
   showChatToggle = false,
-  onOpenChat,
+  isChatOpen = false,
+  onToggleChat,
   onScrollToToday,
   onCollapseAll,
   onExpandAll,
@@ -52,13 +55,13 @@ export function Toolbar({
   const viewMode = useUIStore((state) => state.viewMode);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
-  const validationErrors = useUIStore((state) => state.validationErrors);
+  const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
   const setShowTaskList = useUIStore((state) => state.setShowTaskList);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
+  const setDisableTaskDrag = useUIStore((state) => state.setDisableTaskDrag);
 
-  // Filter state
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
   const filterExpired = useUIStore((state) => state.filterExpired);
   const filterSearchText = useUIStore((state) => state.filterSearchText);
@@ -70,18 +73,22 @@ export function Toolbar({
     filterSearchText.trim().length > 0 ||
     (filterDateFrom && filterDateTo);
 
-  // Используем переданный viewMode если есть, иначе из store
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
+  const actionButtonClassName =
+    'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900';
 
   return (
-    <div className="flex min-h-12 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
+    <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
       <Button
         size="sm"
         variant="ghost"
         onClick={() => setShowTaskList(!showTaskList)}
         aria-pressed={showTaskList}
-        className="h-7 gap-1.5"
+        className={cn(
+          actionButtonClassName,
+          showTaskList && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+        )}
       >
         {showTaskList ? <ListIndentDecrease className="h-3.5 w-3.5" /> : <ListIndentIncrease className="h-3.5 w-3.5" />}
         <span className="hidden md:inline text-xs">Список задач</span>
@@ -92,7 +99,7 @@ export function Toolbar({
         variant="ghost"
         onClick={onCollapseAll}
         title="Свернуть все родительские задачи"
-        className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+        className={cn(actionButtonClassName, 'hidden lg:flex')}
       >
         <ChevronsDownUp className="h-3.5 w-3.5" />
         <span className="hidden xl:inline text-xs">Свернуть</span>
@@ -103,7 +110,7 @@ export function Toolbar({
         variant="ghost"
         onClick={onExpandAll}
         title="Развернуть все родительские задачи"
-        className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+        className={cn(actionButtonClassName, 'hidden lg:flex')}
       >
         <ChevronsUpDown className="h-3.5 w-3.5" />
         <span className="hidden xl:inline text-xs">Развернуть</span>
@@ -113,7 +120,7 @@ export function Toolbar({
         size="sm"
         variant="ghost"
         onClick={onScrollToToday}
-        className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+        className={actionButtonClassName}
       >
         <FlagTriangleRight className="h-3.5 w-3.5" />
         <span className="hidden md:inline text-xs">Сегодня</span>
@@ -125,7 +132,7 @@ export function Toolbar({
           variant="ghost"
           onClick={() => void onCreateShareLink()}
           disabled={shareStatus === 'creating'}
-          className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+          className={cn(actionButtonClassName, 'hidden lg:flex')}
           title={
             shareStatus === 'creating'
               ? 'Создаём ссылку...'
@@ -143,18 +150,54 @@ export function Toolbar({
 
       <div className="flex-1" />
 
-      <div className="inline-flex overflow-hidden rounded border border-slate-200">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setDisableTaskDrag(!disableTaskDrag)}
+        aria-pressed={disableTaskDrag}
+        className={cn(
+          actionButtonClassName,
+          disableTaskDrag && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+          'hidden lg:flex',
+        )}
+        title={disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
+      >
+        {disableTaskDrag ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+      </Button>
+
+      <FilterPopup>
+        <Button
+          size="sm"
+          variant={hasActiveFilters ? 'secondary' : 'ghost'}
+          className={cn(
+            actionButtonClassName,
+            hasActiveFilters && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+            'hidden lg:flex',
+          )}
+          title="Показать фильтры задач"
+        >
+          <div className="relative">
+            <Funnel className="h-3.5 w-3.5" />
+            {hasActiveFilters && (
+              <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+            )}
+          </div>
+          <span className="hidden md:inline text-xs">Фильтры</span>
+        </Button>
+      </FilterPopup>
+
+      <div className="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
         {(['day', 'week', 'month'] as const).map((nextMode) => (
           <button
             key={nextMode}
             type="button"
             onClick={() => handleViewModeChange(nextMode)}
             className={cn(
-              'flex h-7 items-center px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'flex h-8 items-center px-3 text-xs font-semibold transition-colors focus-visible:outline-none',
               nextMode !== 'month' && 'border-r border-slate-200',
               currentViewMode === nextMode
-                ? 'bg-secondary text-secondary-foreground'
-                : 'bg-white text-slate-600',
+                ? 'bg-[#dfe1e6] text-slate-900'
+                : 'bg-white text-slate-600 hover:bg-slate-50',
             )}
           >
             {nextMode === 'day' && (
@@ -179,23 +222,102 @@ export function Toolbar({
         ))}
       </div>
 
-      <FilterPopup>
-        <Button
-          size="sm"
-          variant={hasActiveFilters ? 'secondary' : 'ghost'}
-          className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-          title="Показать фильтры задач"
-        >
-          <Funnel className="h-3.5 w-3.5" />
-          <span className="hidden md:inline text-xs">Фильтры</span>
-        </Button>
-      </FilterPopup>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none lg:hidden"
+            title="Ещё"
+          >
+            <Ellipsis className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem
+            onClick={onCollapseAll}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <ChevronsDownUp className="h-4 w-4" />
+            <span className="text-sm">Свернуть все</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onExpandAll}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <ChevronsUpDown className="h-4 w-4" />
+            <span className="text-sm">Развернуть все</span>
+          </DropdownMenuItem>
+          {showShareButton && onCreateShareLink && (
+            <DropdownMenuItem
+              onClick={() => void onCreateShareLink()}
+              disabled={shareStatus === 'creating'}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+              <span className="text-sm">
+                {shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}
+              </span>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onClick={() => setDisableTaskDrag(!disableTaskDrag)}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            {disableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+            <span className="text-sm">{disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}</span>
+          </DropdownMenuItem>
+          <FilterPopup>
+            <DropdownMenuItem
+              onSelect={(e) => e.preventDefault()}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <div className="relative">
+                <Funnel className="h-4 w-4" />
+                {hasActiveFilters && (
+                  <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                )}
+              </div>
+              <span className="text-sm">Фильтры</span>
+            </DropdownMenuItem>
+          </FilterPopup>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setAutoSchedule(!autoSchedule);
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <input
+              type="checkbox"
+              checked={autoSchedule}
+              readOnly
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+            />
+            <span className="text-sm">Закрепить связи</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setHighlightExpiredTasks(!highlightExpiredTasks);
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <input
+              type="checkbox"
+              checked={highlightExpiredTasks}
+              readOnly
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+            />
+            <span className="text-sm">Просроченные</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-7 items-center rounded border border-slate-200 px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
             title="Дополнительные параметры"
           >
             <Ellipsis className="h-4 w-4" />
@@ -213,7 +335,7 @@ export function Toolbar({
               type="checkbox"
               checked={autoSchedule}
               readOnly
-              className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
             />
             <span className="text-sm">Закрепить связи</span>
           </DropdownMenuItem>
@@ -228,36 +350,31 @@ export function Toolbar({
               type="checkbox"
               checked={highlightExpiredTasks}
               readOnly
-              className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
             />
             <span className="text-sm">Просроченные</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {showChatToggle && onOpenChat && (
+      {showChatToggle && onToggleChat && (
         <Button
           size="sm"
-          onClick={onOpenChat}
-          aria-label="Показать AI ассистента"
-          className="ml-auto h-7 gap-1.5 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-          title="Показать AI ассистента"
+          onClick={onToggleChat}
+          aria-pressed={isChatOpen}
+          className={cn(
+            'h-8 gap-1.5 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none',
+            isChatOpen
+              ? 'bg-primary border-2 border-primary/30 text-primary-foreground shadow-inner'
+              : 'bg-primary border-2 border-transparent text-primary-foreground shadow-sm hover:bg-primary/90',
+          )}
+          title={isChatOpen ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
         >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline text-xs">AI ассистент</span>
+          <Sparkles className={cn('h-3.5 w-3.5', isChatOpen && 'fill-primary-foreground/20')} />
+          <span className="hidden sm:inline">AI ассистент</span>
           <span className="sm:hidden">AI</span>
         </Button>
       )}
-
-      {/* Validation errors are hidden from UI to avoid user confusion.
-          The onValidateDependencies callback in gantt-lib is informational only
-          and does not block dependency creation. Errors are still logged to console
-          for debugging purposes. */}
-      {/* {validationErrors.length > 0 && (
-        <span className="rounded border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
-          {validationErrors.length} ошибк{validationErrors.length === 1 ? 'а' : validationErrors.length > 1 && validationErrors.length < 5 ? 'и' : ''}
-        </span>
-      )} */}
     </div>
   );
 }

@@ -12,10 +12,17 @@ interface ProjectSwitcherProps {
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
   return (
     <div className="flex flex-col h-full">
-      {/* Projects list */}
-      <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
-        <p className="text-xs text-slate-500 font-medium sticky top-0 bg-background py-1">Все проекты</p>
+      {/* Create new button - fixed at top */}
+      <Button
+        onClick={onCreateNew}
+        className="w-full shrink-0"
+        size="sm"
+      >
+        <Plus className="mr-2 h-4 w-4" /> Новый проект
+      </Button>
 
+      {/* Projects list */}
+      <div className="flex flex-col gap-2 flex-1 overflow-y-auto pt-2">
         {/* All projects as simple list */}
         {projects.length > 0 ? (
           <div className="flex flex-col gap-1">
@@ -46,17 +53,6 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
         ) : (
           <p className="text-sm text-slate-400 py-2">Нет других проектов</p>
         )}
-      </div>
-
-      {/* Create new button - fixed at bottom */}
-      <div className="shrink-0 pt-2">
-        <Button
-          onClick={onCreateNew}
-          className="w-full"
-          size="sm"
-        >
-          <Plus className="mr-2 h-4 w-4" /> Новый проект
-        </Button>
       </div>
     </div>
   );
