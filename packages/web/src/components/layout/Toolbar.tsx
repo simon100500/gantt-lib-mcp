@@ -99,7 +99,7 @@ export function Toolbar({
         variant="ghost"
         onClick={onCollapseAll}
         title="Свернуть все родительские задачи"
-        className={cn(actionButtonClassName, 'hidden md:flex')}
+        className={cn(actionButtonClassName, 'hidden lg:flex')}
       >
         <ChevronsDownUp className="h-3.5 w-3.5" />
         <span className="hidden xl:inline text-xs">Свернуть</span>
@@ -110,7 +110,7 @@ export function Toolbar({
         variant="ghost"
         onClick={onExpandAll}
         title="Развернуть все родительские задачи"
-        className={cn(actionButtonClassName, 'hidden md:flex')}
+        className={cn(actionButtonClassName, 'hidden lg:flex')}
       >
         <ChevronsUpDown className="h-3.5 w-3.5" />
         <span className="hidden xl:inline text-xs">Развернуть</span>
@@ -132,7 +132,7 @@ export function Toolbar({
           variant="ghost"
           onClick={() => void onCreateShareLink()}
           disabled={shareStatus === 'creating'}
-          className={cn(actionButtonClassName, 'hidden md:flex')}
+          className={cn(actionButtonClassName, 'hidden lg:flex')}
           title={
             shareStatus === 'creating'
               ? 'Создаём ссылку...'
@@ -158,7 +158,7 @@ export function Toolbar({
         className={cn(
           actionButtonClassName,
           disableTaskDrag && 'border-slate-300 bg-white text-slate-900 shadow-sm',
-          'hidden md:flex',
+          'hidden lg:flex',
         )}
         title={disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
       >
@@ -172,7 +172,7 @@ export function Toolbar({
           className={cn(
             actionButtonClassName,
             hasActiveFilters && 'border-slate-300 bg-white text-slate-900 shadow-sm',
-            'hidden md:flex',
+            'hidden lg:flex',
           )}
           title="Показать фильтры задач"
         >
@@ -226,7 +226,7 @@ export function Toolbar({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none md:hidden"
+            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none lg:hidden"
             title="Ещё"
           >
             <Ellipsis className="h-4 w-4" />
@@ -246,13 +246,6 @@ export function Toolbar({
           >
             <ChevronsUpDown className="h-4 w-4" />
             <span className="text-sm">Развернуть все</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onScrollToToday}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <FlagTriangleRight className="h-4 w-4" />
-            <span className="text-sm">Сегодня</span>
           </DropdownMenuItem>
           {showShareButton && onCreateShareLink && (
             <DropdownMenuItem
@@ -324,7 +317,7 @@ export function Toolbar({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="hidden md:flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
+            className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
             title="Дополнительные параметры"
           >
             <Ellipsis className="h-4 w-4" />
