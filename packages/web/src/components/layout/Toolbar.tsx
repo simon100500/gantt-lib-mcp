@@ -73,7 +73,7 @@ export function Toolbar({
     'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900';
 
   return (
-    <div className="flex min-h-[46px] flex-wrap items-center gap-2 border-b border-slate-300 bg-[#ebecf0] px-3 py-2 md:px-4">
+    <div className="flex min-h-[46px] flex-wrap items-center gap-2 border-b border-slate-200 bg-[#f4f5f7] px-2 py-2 md:px-3">
       <Button
         size="sm"
         variant="ghost"

@@ -137,29 +137,29 @@ export function ProjectWorkspace({
   return (
     <>
       <div className="flex min-w-0 flex-1 overflow-hidden bg-[#f4f5f7]">
-        <div className="hidden xl:block xl:w-8 2xl:w-12" />
+        <div className="hidden xl:block xl:w-3 2xl:w-4" />
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden py-4 xl:py-5">
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
-            <Toolbar
-              showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
-              onOpenChat={onOpenChat}
-              onScrollToToday={onScrollToToday}
-              onCollapseAll={onCollapseAll}
-              onExpandAll={onExpandAll}
-              shareStatus={shareStatus}
-              onCreateShareLink={onCreateShareLink}
-              showShareButton={!hasShareToken && isAuthenticated}
-              viewMode={viewMode}
-              onViewModeChange={handleViewModeChange}
-            />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden py-2 xl:py-3">
+          <Toolbar
+            showChatToggle={!chatSidebarVisible && !hasShareToken && showChat}
+            onOpenChat={onOpenChat}
+            onScrollToToday={onScrollToToday}
+            onCollapseAll={onCollapseAll}
+            onExpandAll={onExpandAll}
+            shareStatus={shareStatus}
+            onCreateShareLink={onCreateShareLink}
+            showShareButton={!hasShareToken && isAuthenticated}
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+          />
 
+          <div className="mt-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-hidden bg-white">
+              <div className="min-h-0 flex-1 overflow-hidden rounded-[inherit] bg-white">
                 <GanttChart
                   ref={ganttRef as Ref<GanttChartRef>}
                   tasks={tasks}
@@ -242,11 +242,11 @@ export function ProjectWorkspace({
           </div>
         </div>
 
-        <div className="hidden xl:block xl:w-8 2xl:w-12" />
+        <div className="hidden xl:block xl:w-3 2xl:w-4" />
       </div>
 
       {chatSidebarVisible && !hasShareToken && onSend && (
-        <aside className="relative z-20 m-4 ml-0 hidden w-[320px] shrink-0 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:flex xl:flex-col">
+        <aside className="relative z-20 my-3 ml-0 mr-3 hidden w-[320px] shrink-0 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:flex xl:flex-col">
           <ChatSidebar
             messages={messages}
             streaming={streaming}
