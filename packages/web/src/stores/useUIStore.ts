@@ -39,6 +39,7 @@ interface UIState {
   searchQuery: string;
   searchResults: string[];
   searchIndex: number;
+  tempHighlightedTaskId: string | null;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
@@ -62,6 +63,7 @@ interface UIState {
   navNext: () => void;
   navPrev: () => void;
   clearSearch: () => void;
+  setTempHighlightedTaskId: (taskId: string | null) => void;
 }
 
 const initialWorkspace: WorkspaceMode = { kind: 'guest' };
@@ -86,6 +88,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   searchQuery: '',
   searchResults: [],
   searchIndex: -1,
+  tempHighlightedTaskId: null,
   setWorkspace: (workspace) => {
     set((state) => ({
       workspace: typeof workspace === 'function' ? workspace(state.workspace) : workspace,
@@ -148,4 +151,5 @@ export const useUIStore = create<UIState>()((set, get) => ({
     searchResults: [],
     searchIndex: -1,
   }),
+  setTempHighlightedTaskId: (taskId) => set({ tempHighlightedTaskId: taskId }),
 }));

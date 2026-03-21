@@ -139,7 +139,14 @@ export function ProjectWorkspace({
 
   // Получаем viewMode из store (он будет обновлён через useEffect или handleViewModeChange)
   const viewMode = useUIStore((state) => state.viewMode);
-  const highlightedSearchTaskIds = useMemo(() => new Set(searchResults), [searchResults]);
+  const tempHighlightedTaskId = useUIStore((state) => state.tempHighlightedTaskId);
+  const highlightedSearchTaskIds = useMemo(() => {
+    const ids = new Set(searchResults);
+    if (tempHighlightedTaskId) {
+      ids.add(tempHighlightedTaskId);
+    }
+    return ids;
+  }, [searchResults, tempHighlightedTaskId]);
 
   return (
     <>

@@ -24,6 +24,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
   const navNext = useUIStore((state) => state.navNext);
   const navPrev = useUIStore((state) => state.navPrev);
   const clearSearch = useUIStore((state) => state.clearSearch);
+  const setTempHighlightedTaskId = useUIStore((state) => state.setTempHighlightedTaskId);
 
   const accessToken = useAuthStore((state) => state.accessToken);
   const setTasks = useTaskStore((state) => state.setTasks);
@@ -88,8 +89,9 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
     const taskName = searchQuery.trim() || 'Новая задача';
     const today = new Date().toISOString().split('T')[0];
 
+    const tempId = crypto.randomUUID();
     const newTask: Task = {
-      id: crypto.randomUUID(),
+      id: tempId,
       name: taskName,
       startDate: today,
       endDate: today,
@@ -97,6 +99,20 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
 
     // Optimistic update
     setTasks(prev => [...prev, newTask]);
+
+    // Clear search input
+    clearSearch();
+
+    // Navigate to the new task
+    if (onTaskNavigate) {
+      onTaskNavigate(tempId);
+    }
+
+    // Highlight the new task temporarily
+    setTempHighlightedTaskId(tempId);
+    setTimeout(() => {
+      setTempHighlightedTaskId(null);
+    }, 2000);
 
     // Server update for authenticated users
     if (accessToken) {
@@ -107,20 +123,21 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           endDate: today,
         });
         // Replace with server response
-        setTasks(prev => prev.map(t => t.id === newTask.id ? created : t));
+        setTasks(prev => prev.map(t => t.id === tempId ? created : t));
+        // Update highlight with real ID
+        if (created.id !== tempId) {
+          setTempHighlightedTaskId(created.id);
+          setTimeout(() => {
+            setTempHighlightedTaskId(null);
+          }, 2000);
+        }
       } catch (error) {
         console.error('Failed to create task:', error);
         // Revert on error
-        setTasks(prev => prev.filter(t => t.id !== newTask.id));
+        setTasks(prev => prev.filter(t => t.id !== tempId));
+        setTempHighlightedTaskId(null);
       }
     }
-
-    // Navigate to the new task
-    if (onTaskNavigate) {
-      onTaskNavigate(newTask.id);
-    }
-
-    // Keep focus in input - don't clear search
   };
 
   const hasResults = searchResults.length > 0;
