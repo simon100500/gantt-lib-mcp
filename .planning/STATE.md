@@ -2,62 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: MCP Server Refactoring
-status: completed
+status: unknown
 stopped_at: "Completed quick-260320-fvq: Search in header"
-last_updated: "2026-03-20T09:15:00.000Z"
+last_updated: "2026-03-21T12:59:54.753Z"
 progress:
   total_phases: 7
   completed_phases: 7
   total_plans: 12
   completed_plans: 12
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: MCP Server Refactoring
-status: completed
-stopped_at: "Completed quick-260319-vc2: UI localStorage persistence"
-last_updated: "2026-03-19T21:00:59.500Z"
-last_activity: "2026-03-19 - Completed quick task 260319-vc2: UI localStorage persistence"
-progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: MCP Server Refactoring
-status: completed
-stopped_at: "Completed quick-260319-uz3: Loading Phrases"
-last_updated: "2026-03-19T19:18:51.162Z"
-last_activity: "2026-03-19 - Completed quick task 260319-up3: Auto-refresh projects on page load"
-progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
----
-
----
-gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: MCP Server Refactoring
-status: completed
-stopped_at: Completed 22-04-PLAN.md
-last_updated: "2026-03-19T11:59:15.000Z"
-last_activity: 2026-03-19 - Completed quick task 260319-kol: Zustand project sidebar fixes
-progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
 ---
 
 # STATE: gantt-lib MCP Server
@@ -99,6 +51,7 @@ Plan: 2 of 2 (all plans complete)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260321-m63 | Кнопка "+ задача" в поиске | 2026-03-21 | 2019ece | [260321-m63](./quick/260321-m63/) |
 | 260320-fvq | Поиск по задачам в хедер | 2026-03-20 | 57ba246 | [260320-fvq-search-in-header](./quick/260320-fvq-search-in-header/) |
 | 260320-fx2 | Popover Radix UI для чипа связи | 2026-03-20 | 3bb023a | [260320-fx2-popover-radix-id-popover](./quick/260320-fx2-popover-radix-id-popover/) |
 | 260319-xbm | Recursive collapse all for parent tasks | 2026-03-20 | 4dbb2d7 | [260319-xbm](./quick/260319-xbm/) |
@@ -109,8 +62,8 @@ Plan: 2 of 2 (all plans complete)
 
 ## Session Continuity
 
-**Last session:** 2026-03-20T09:15:00.000Z
-**Stopped at:** Completed quick-260320-fvq: Search in header
+**Last session:** 2026-03-21T12:59:54.753Z
+**Stopped at:** Completed quick-260321-m63: Add create task button to TaskSearch
 **Resume file:** None
 
 **Next actions:**
