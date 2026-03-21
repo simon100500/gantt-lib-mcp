@@ -137,7 +137,7 @@ export function ProjectWorkspace({
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
-      <div className="px-3 pt-2 md:px-4">
+      <div className="px-3 md:px-4">
         <Toolbar
           showChatToggle={!hasShareToken && showChat}
           isChatOpen={chatSidebarVisible}
@@ -170,7 +170,7 @@ export function ProjectWorkspace({
                 onTasksChange={readOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}
-                containerHeight="calc(100dvh - 152px)"
+                containerHeight="calc(100dvh - 136px)"
                 showTaskList={showTaskList}
                 taskListWidth={650}
                 onValidateDependencies={onValidation}
@@ -195,7 +195,7 @@ export function ProjectWorkspace({
             )}
 
             {tasks.length > 0 && (
-              <footer className="flex h-8 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
+              <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
                 <span className="font-mono text-[11px] text-slate-400">
                   {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
                 </span>
