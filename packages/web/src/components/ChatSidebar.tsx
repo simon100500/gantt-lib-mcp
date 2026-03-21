@@ -165,23 +165,23 @@ export function ChatSidebar({
   }
 
   return (
-    <div className="flex h-full flex-col bg-white">
-      <div className="flex items-center gap-3 min-h-12 px-4 bg-white border-b border-slate-200 shrink-0">
+    <div className="flex h-full flex-col bg-[#f7f8fa]">
+      <div className="flex min-h-10 items-center gap-2.5 border-b border-slate-200 bg-white px-3 shrink-0">
         <span
           className={cn(
-            "h-2 w-2 shrink-0 rounded-full transition-colors",
+            "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
             connected ? "bg-emerald-500" : "bg-amber-400",
           )}
           title={connected ? "Подключено" : "Переподключение..."}
         />
-        <span className="text-sm font-semibold tracking-tight text-slate-800">
+        <span className="text-[13px] font-semibold tracking-tight text-slate-800">
           AI Ассистент
         </span>
         <span className="flex-1" />
         {onClose && (
           <button
             onClick={onClose}
-            className="rounded p-1 transition-colors hover:bg-slate-100"
+            className="rounded-md p-1 transition-colors hover:bg-slate-100"
             aria-label="Закрыть"
           >
             <X className="h-4 w-4 text-slate-500" />
@@ -189,11 +189,11 @@ export function ChatSidebar({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-3">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
         {isEmpty && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Sparkles className="h-5 w-5 text-primary" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Sparkles className="h-4.5 w-4.5 text-primary" />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">
@@ -216,10 +216,10 @@ export function ChatSidebar({
           >
             <div
               className={cn(
-                "max-w-[86%] rounded-xl px-3 py-2 text-sm leading-relaxed",
+                "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
                 msg.role === "user"
                   ? "rounded-br-sm bg-primary text-primary-foreground"
-                  : "rounded-bl-sm border border-slate-200 bg-slate-100 text-slate-800",
+                  : "rounded-bl-sm border border-slate-200 bg-white text-slate-800",
               )}
             >
               {msg.content}
@@ -229,7 +229,7 @@ export function ChatSidebar({
 
         {loading && !streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="flex items-center gap-2 rounded-xl rounded-bl-sm border border-slate-200 bg-slate-100 px-3.5 py-3">
+            <div className="flex items-center gap-2 rounded-lg rounded-bl-sm border border-slate-200 bg-white px-3.5 py-3">
               <div className="flex shrink-0 items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.3s]" />
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.15s]" />
@@ -244,7 +244,7 @@ export function ChatSidebar({
 
         {streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="max-w-[86%] rounded-xl rounded-bl-sm border border-slate-200 bg-slate-100 px-3 py-2 text-sm leading-relaxed text-slate-800">
+            <div className="max-w-[88%] rounded-lg rounded-bl-sm border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-slate-800">
               {streaming}
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse align-middle bg-slate-500 motion-reduce:animate-none" />
             </div>
@@ -275,7 +275,7 @@ export function ChatSidebar({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-200 px-3 py-2.5"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white px-3 py-2"
       >
         <textarea
           ref={inputRef}
