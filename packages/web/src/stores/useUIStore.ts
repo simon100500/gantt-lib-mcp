@@ -26,6 +26,7 @@ interface UIState {
   showTaskList: boolean;
   autoSchedule: boolean;
   highlightExpiredTasks: boolean;
+  disableTaskDrag: boolean;
   validationErrors: DependencyError[];
   shareStatus: ShareStatus;
   savingState: SavingState;
@@ -48,6 +49,7 @@ interface UIState {
   setShowTaskList: (visible: boolean) => void;
   setAutoSchedule: (enabled: boolean) => void;
   setHighlightExpiredTasks: (enabled: boolean) => void;
+  setDisableTaskDrag: (enabled: boolean) => void;
   setValidationErrors: (errors: DependencyError[]) => void;
   setShareStatus: (status: ShareStatus) => void;
   setSavingState: (status: SavingState) => void;
@@ -77,6 +79,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   showTaskList: true,
   autoSchedule: true,
   highlightExpiredTasks: true,
+  disableTaskDrag: false,
   validationErrors: [],
   shareStatus: 'idle',
   savingState: 'idle',
@@ -101,6 +104,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShowTaskList: (showTaskList) => set({ showTaskList }),
   setAutoSchedule: (autoSchedule) => set({ autoSchedule }),
   setHighlightExpiredTasks: (highlightExpiredTasks) => set({ highlightExpiredTasks }),
+  setDisableTaskDrag: (disableTaskDrag) => set({ disableTaskDrag }),
   setValidationErrors: (validationErrors) => set({ validationErrors }),
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setSavingState: (savingState) => set({ savingState }),

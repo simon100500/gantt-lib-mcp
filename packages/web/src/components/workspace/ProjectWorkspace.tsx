@@ -69,6 +69,7 @@ export function ProjectWorkspace({
   const showTaskList = useUIStore((state) => state.showTaskList);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
   const searchResults = useUIStore((state) => state.searchResults);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
@@ -178,6 +179,7 @@ export function ProjectWorkspace({
                 onCascade={readOnly ? undefined : onCascade}
                 disableTaskNameEditing={readOnly}
                 disableDependencyEditing={readOnly}
+                disableTaskDrag={disableTaskDrag}
                 highlightExpiredTasks={highlightExpiredTasks}
                 headerHeight={40}
                 viewMode={viewMode}

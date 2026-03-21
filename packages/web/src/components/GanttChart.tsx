@@ -17,6 +17,7 @@ export interface GanttChartProps {
   onCascade?: (tasks: Task[]) => void;
   disableTaskNameEditing?: boolean;
   disableDependencyEditing?: boolean;
+  disableTaskDrag?: boolean;
   highlightExpiredTasks?: boolean;
   headerHeight?: number;
   viewMode?: 'day' | 'week' | 'month';
@@ -55,6 +56,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onCascade,
   disableTaskNameEditing,
   disableDependencyEditing,
+  disableTaskDrag,
   highlightExpiredTasks,
   headerHeight,
   viewMode,
@@ -102,6 +104,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onCascade={onCascade}
       disableTaskNameEditing={disableTaskNameEditing}
       disableDependencyEditing={disableDependencyEditing}
+      disableTaskDrag={disableTaskDrag}
       highlightExpiredTasks={highlightExpiredTasks}
       headerHeight={headerHeight}
       viewMode={viewMode}

@@ -8,6 +8,8 @@ import {
   Link,
   ListIndentDecrease,
   ListIndentIncrease,
+  Lock,
+  LockOpen,
   Sparkles,
 } from 'lucide-react';
 
@@ -53,10 +55,12 @@ export function Toolbar({
   const viewMode = useUIStore((state) => state.viewMode);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
   const setShowTaskList = useUIStore((state) => state.setShowTaskList);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
+  const setDisableTaskDrag = useUIStore((state) => state.setDisableTaskDrag);
 
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
   const filterExpired = useUIStore((state) => state.filterExpired);
@@ -145,6 +149,20 @@ export function Toolbar({
       )}
 
       <div className="flex-1" />
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setDisableTaskDrag(!disableTaskDrag)}
+        aria-pressed={disableTaskDrag}
+        className={cn(
+          actionButtonClassName,
+          disableTaskDrag && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+        )}
+        title={disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
+      >
+        {disableTaskDrag ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+      </Button>
 
       <FilterPopup>
         <Button
