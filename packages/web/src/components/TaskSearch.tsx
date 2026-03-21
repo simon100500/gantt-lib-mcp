@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Search } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -84,7 +84,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
 
   return (
     <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center">
-      <div className="relative flex min-w-0 flex-1 items-center">
+      <div className="relative flex min-w-0 flex-1 items-center group">
+        {/* Иконка лупы слева */}
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors pointer-events-none">
+          <Search size={16} strokeWidth={2.2} />
+        </div>
+
         <Input
           ref={inputRef}
           type="text"
@@ -106,8 +111,8 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
               }
             }
           }}
-          placeholder="Поиск задач... /"
-          className="h-9 w-full rounded-lg border-slate-200 bg-white pr-32 text-sm focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0"
+          placeholder="Поиск задач..."
+          className="h-9 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или /"
         />
@@ -154,6 +159,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
             >
               <X className="h-3.5 w-3.5" />
             </Button>
+          )}
+          {/* Индикатор горячей клавиши */}
+          {!searchQuery && (
+            <kbd className="pointer-events-none select-none hidden sm:inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 font-sans text-[12px] font-medium text-slate-400 group-focus-within:hidden mr-1.5">
+              /
+            </kbd>
           )}
         </div>
       </div>
