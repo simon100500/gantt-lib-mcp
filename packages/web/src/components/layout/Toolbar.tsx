@@ -76,72 +76,72 @@ export function Toolbar({
 
   return (
     <div className="flex min-h-12 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2">
-      <div className="flex flex-1 items-center gap-2 md:justify-end">
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setShowTaskList(!showTaskList)}
-          aria-pressed={showTaskList}
-          className="h-7 gap-1.5"
-        >
-          {showTaskList ? <ListIndentDecrease className="h-3.5 w-3.5" /> : <ListIndentIncrease className="h-3.5 w-3.5" />}
-          <span className="hidden md:inline text-xs">Список задач</span>
-        </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setShowTaskList(!showTaskList)}
+        aria-pressed={showTaskList}
+        className="h-7 gap-1.5"
+      >
+        {showTaskList ? <ListIndentDecrease className="h-3.5 w-3.5" /> : <ListIndentIncrease className="h-3.5 w-3.5" />}
+        <span className="hidden md:inline text-xs">Список задач</span>
+      </Button>
 
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onCollapseAll}
+        title="Свернуть все родительские задачи"
+        className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+      >
+        <ChevronsDownUp className="h-3.5 w-3.5" />
+        <span className="hidden xl:inline text-xs">Свернуть</span>
+      </Button>
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onExpandAll}
+        title="Развернуть все родительские задачи"
+        className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+      >
+        <ChevronsUpDown className="h-3.5 w-3.5" />
+        <span className="hidden xl:inline text-xs">Развернуть</span>
+      </Button>
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onScrollToToday}
+        className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+      >
+        <FlagTriangleRight className="h-3.5 w-3.5" />
+        <span className="hidden md:inline text-xs">Сегодня</span>
+      </Button>
+
+      {showShareButton && onCreateShareLink && (
         <Button
           size="sm"
           variant="ghost"
-          onClick={onCollapseAll}
-          title="Свернуть все родительские задачи"
+          onClick={() => void onCreateShareLink()}
+          disabled={shareStatus === 'creating'}
           className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
+          title={
+            shareStatus === 'creating'
+              ? 'Создаём ссылку...'
+              : shareStatus === 'copied'
+                ? 'Ссылка скопирована'
+                : shareStatus === 'error'
+                  ? 'Ошибка ссылки'
+                  : 'Поделиться'
+          }
         >
-          <ChevronsDownUp className="h-3.5 w-3.5" />
-          <span className="hidden xl:inline text-xs">Свернуть</span>
+          {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
+          <span className="hidden md:inline text-xs">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
         </Button>
+      )}
 
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onExpandAll}
-          title="Развернуть все родительские задачи"
-          className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-        >
-          <ChevronsUpDown className="h-3.5 w-3.5" />
-          <span className="hidden xl:inline text-xs">Развернуть</span>
-        </Button>
-
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onScrollToToday}
-          className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-        >
-          <FlagTriangleRight className="h-3.5 w-3.5" />
-          <span className="hidden md:inline text-xs">Сегодня</span>
-        </Button>
-
-        {showShareButton && onCreateShareLink && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void onCreateShareLink()}
-            disabled={shareStatus === 'creating'}
-            className="h-7 gap-1.5 text-slate-600 hover:text-slate-900"
-            title={
-              shareStatus === 'creating'
-                ? 'Создаём ссылку...'
-                : shareStatus === 'copied'
-                  ? 'Ссылка скопирована'
-                  : shareStatus === 'error'
-                    ? 'Ошибка ссылки'
-                    : 'Поделиться'
-            }
-          >
-            {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
-            <span className="hidden md:inline text-xs">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
-          </Button>
-        )}
-      </div>
+      <div className="flex-1" />
 
       <div className="inline-flex overflow-hidden rounded border border-slate-200">
         {(['day', 'week', 'month'] as const).map((nextMode) => (
