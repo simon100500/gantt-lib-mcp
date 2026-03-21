@@ -44,7 +44,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
         event.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
-      } else if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditableTarget) {
+      } else if (event.key === '+' && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditableTarget) {
         event.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -186,7 +186,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           placeholder="Поиск или новая задача..."
           className="h-8 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
-          title="Ctrl+K или /"
+          title="Ctrl+K или +"
         />
         <div className="absolute right-1 flex items-center gap-0.5">
           {showCounter && hasResults && (
@@ -238,8 +238,8 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           )}
           {/* Индикатор горячей клавиши */}
           {!searchQuery && (
-            <kbd className="pointer-events-none select-none hidden sm:inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 font-sans text-[12px] font-medium text-slate-400 group-focus-within:hidden mr-1.5">
-              /
+            <kbd className="select-none hidden sm:inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 font-sans text-[12px] font-medium text-slate-400 group-focus-within:hidden mr-1.5" title="Нажмите клавишу &quot;+&quot;">
+              +
             </kbd>
           )}
         </div>
