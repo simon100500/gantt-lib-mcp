@@ -5,7 +5,10 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { useUIStore } from '../stores/useUIStore';
 import { useTaskStore } from '../stores/useTaskStore';
+import { useAuthStore } from '../stores/useAuthStore';
+import { useTaskMutation } from '../hooks/useTaskMutation';
 import { cn } from '@/lib/utils';
+import type { Task } from '../types';
 
 interface TaskSearchProps {
   onTaskNavigate?: (taskId: string) => void;
@@ -22,7 +25,10 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
   const navPrev = useUIStore((state) => state.navPrev);
   const clearSearch = useUIStore((state) => state.clearSearch);
 
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const setTasks = useTaskStore((state) => state.setTasks);
   const tasks = useTaskStore((state) => state.tasks);
+  const { createTask } = useTaskMutation(accessToken);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -78,12 +84,47 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
     inputRef.current?.focus();
   };
 
+  const handleCreateTask = async () => {
+    const taskName = searchQuery.trim() || 'Новая задача';
+    const today = new Date().toISOString().split('T')[0];
+
+    const newTask: Task = {
+      id: crypto.randomUUID(),
+      name: taskName,
+      startDate: today,
+      endDate: today,
+    };
+
+    // Optimistic update
+    setTasks(prev => [...prev, newTask]);
+
+    // Server update for authenticated users
+    if (accessToken) {
+      try {
+        const created = await createTask({
+          name: taskName,
+          startDate: today,
+          endDate: today,
+        });
+        // Replace with server response
+        setTasks(prev => prev.map(t => t.id === newTask.id ? created : t));
+      } catch (error) {
+        console.error('Failed to create task:', error);
+        // Revert on error
+        setTasks(prev => prev.filter(t => t.id !== newTask.id));
+      }
+    }
+
+    // Clear search after creation
+    clearSearch();
+  };
+
   const hasResults = searchResults.length > 0;
   const showCounter = searchQuery.trim().length > 0;
   const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : 'Нет совпадений';
 
   return (
-    <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center">
+    <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center gap-2">
       <div className="relative flex min-w-0 flex-1 items-center group">
         {/* Иконка лупы слева */}
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors pointer-events-none">
@@ -168,6 +209,15 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           )}
         </div>
       </div>
+      {/* Кнопка создания задачи */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleCreateTask}
+        className="h-9 px-3 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 shrink-0"
+      >
+        + задача
+      </Button>
     </div>
   );
 }
