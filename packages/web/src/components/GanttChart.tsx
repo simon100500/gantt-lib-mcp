@@ -30,11 +30,13 @@ export interface GanttChartProps {
   onPromoteTask?: (taskId: string) => void;
   onDemoteTask?: (taskId: string, newParentId: string) => void;
   taskFilter?: import('gantt-lib').TaskPredicate;
+  highlightedTaskIds?: Set<string>;
 }
 
 export interface GanttChartRef {
   scrollToToday: () => void;
   scrollToTask: (taskId: string) => void;
+  scrollToRow: (taskId: string) => void;
   collapseAll: () => void;
   expandAll: () => void;
 }
@@ -66,12 +68,20 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onPromoteTask,
   onDemoteTask,
   taskFilter,
+  highlightedTaskIds,
 }, ref) => {
-  const ganttLibRef = useRef<{ scrollToToday: () => void; scrollToTask: (taskId: string) => void; collapseAll: () => void; expandAll: () => void } | null>(null);
+  const ganttLibRef = useRef<{
+    scrollToToday: () => void;
+    scrollToTask: (taskId: string) => void;
+    scrollToRow: (taskId: string) => void;
+    collapseAll: () => void;
+    expandAll: () => void;
+  } | null>(null);
 
   useImperativeHandle(ref, () => ({
     scrollToToday: () => ganttLibRef.current?.scrollToToday(),
     scrollToTask: (taskId: string) => ganttLibRef.current?.scrollToTask(taskId),
+    scrollToRow: (taskId: string) => ganttLibRef.current?.scrollToRow(taskId),
     collapseAll: () => ganttLibRef.current?.collapseAll(),
     expandAll: () => ganttLibRef.current?.expandAll(),
   }));
@@ -110,6 +120,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onDemoteTask={onDemoteTask}
       customDays={customDays}
       taskFilter={taskFilter}
+      highlightedTaskIds={highlightedTaskIds}
     />
   );
 });

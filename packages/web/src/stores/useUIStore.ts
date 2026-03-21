@@ -114,9 +114,16 @@ export const useUIStore = create<UIState>()((set, get) => ({
     filterDateTo: '',
   }),
   setSearchQuery: (query, tasks) => {
-    const lowerQuery = query.toLowerCase();
-    const results = query
-      ? tasks.filter(t => t.name.toLowerCase().includes(lowerQuery)).map(t => t.id)
+    const normalizedQuery = query.trim().toLowerCase();
+    const results = normalizedQuery
+      ? tasks
+        .filter((task) =>
+          task.name
+            .toLowerCase()
+            .split(/\s+/)
+            .some((word) => word.startsWith(normalizedQuery))
+        )
+        .map((task) => task.id)
       : [];
     set({
       searchQuery: query,

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -12,8 +12,7 @@ interface TaskSearchProps {
 }
 
 export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [localQuery, setLocalQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const searchQuery = useUIStore((state) => state.searchQuery);
   const searchResults = useUIStore((state) => state.searchResults);
@@ -25,65 +24,81 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
 
   const tasks = useTaskStore((state) => state.tasks);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleInputChange = (value: string) => {
-    setLocalQuery(value);
     setSearchQuery(value, tasks);
   };
 
-  const handleNavNext = () => {
-    const newIndex = (searchIndex + 1) % searchResults.length;
-    navNext();
-    const taskId = searchResults[newIndex];
+  const handleNavigateToIndex = (index: number) => {
+    const taskId = searchResults[index];
     if (taskId && onTaskNavigate) {
       onTaskNavigate(taskId);
     }
+  };
+
+  const handleNavNext = () => {
+    if (searchResults.length === 0) return;
+    const newIndex = (searchIndex + 1) % searchResults.length;
+    navNext();
+    handleNavigateToIndex(newIndex);
   };
 
   const handleNavPrev = () => {
+    if (searchResults.length === 0) return;
     const newIndex = searchIndex === 0 ? searchResults.length - 1 : searchIndex - 1;
     navPrev();
-    const taskId = searchResults[newIndex];
-    if (taskId && onTaskNavigate) {
-      onTaskNavigate(taskId);
-    }
+    handleNavigateToIndex(newIndex);
   };
 
   const handleClear = () => {
-    setLocalQuery('');
     clearSearch();
-    setIsOpen(false);
+    inputRef.current?.focus();
   };
 
-  const handleOpen = () => setIsOpen(true);
-
-  if (!isOpen) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleOpen}
-        className="h-7 px-2 text-slate-500 hover:text-slate-700"
-        title="Поиск задач"
-      >
-        <Search className="h-4 w-4" />
-      </Button>
-    );
-  }
-
   const hasResults = searchResults.length > 0;
-  const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : '0/0';
+  const showCounter = searchQuery.trim().length > 0;
+  const currentLabel = hasResults ? `${searchIndex + 1}/${searchResults.length}` : 'Нет совпадений';
 
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="relative flex items-center">
-        <Search className="absolute left-2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+    <div className="flex min-w-0 shrink items-center gap-2 w-full max-w-[48rem]">
+      <div className="relative flex min-w-0 flex-1 items-center">
         <Input
+          ref={inputRef}
           type="text"
-          value={localQuery}
+          value={searchQuery}
           onChange={(e) => handleInputChange(e.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' || (event.key === 'Enter' && !event.shiftKey)) {
+              event.preventDefault();
+              handleNavNext();
+            } else if (event.key === 'ArrowUp' || (event.key === 'Enter' && event.shiftKey)) {
+              event.preventDefault();
+              handleNavPrev();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              if (searchQuery) {
+                handleClear();
+              } else {
+                inputRef.current?.blur();
+              }
+            }
+          }}
           placeholder="Поиск задач..."
-          className="h-7 w-48 pl-7 pr-16 text-xs"
-          autoFocus
+          className="h-9 w-full rounded-lg border-slate-200 bg-white pr-20 text-sm"
+          aria-label="Поиск задач"
+          title="Ctrl+K"
         />
         <div className="absolute right-1 flex items-center gap-0.5">
           {hasResults && (
@@ -92,39 +107,45 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavPrev}
-                className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
                 title="Предыдущий результат"
               >
-                <ChevronUp className="h-3 w-3" />
+                <ChevronUp className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleNavNext}
-                className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
                 title="Следующий результат"
               >
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3.5 w-3.5" />
               </Button>
             </>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClear}
-            className="h-5 w-5 p-0 text-slate-400 hover:text-slate-600"
-            title="Закрыть поиск"
-          >
-            <X className="h-3 w-3" />
-          </Button>
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClear}
+              className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+              title="Очистить поиск"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
-      <span className={cn(
-        "text-xs font-medium tabular-nums",
-        hasResults ? "text-slate-600" : "text-slate-400"
-      )}>
-        {currentLabel}
-      </span>
+      {showCounter && (
+        <span
+          className={cn(
+            'shrink-0 text-sm font-medium tabular-nums',
+            hasResults ? 'text-slate-600' : 'text-slate-400',
+          )}
+        >
+          {currentLabel}
+        </span>
+      )}
     </div>
   );
 }

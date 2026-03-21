@@ -69,6 +69,7 @@ export function ProjectWorkspace({
   const showTaskList = useUIStore((state) => state.showTaskList);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const searchResults = useUIStore((state) => state.searchResults);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
@@ -138,6 +139,7 @@ export function ProjectWorkspace({
 
   // Получаем viewMode из store (он будет обновлён через useEffect или handleViewModeChange)
   const viewMode = useUIStore((state) => state.viewMode);
+  const highlightedSearchTaskIds = useMemo(() => new Set(searchResults), [searchResults]);
 
   return (
     <>
@@ -187,6 +189,7 @@ export function ProjectWorkspace({
             onPromoteTask={readOnly ? undefined : batchUpdate?.handlePromoteTask}
             onDemoteTask={readOnly ? undefined : batchUpdate?.handleDemoteTask}
             customDays={russianHolidays2026}
+            highlightedTaskIds={highlightedSearchTaskIds}
           />
         )}
 
