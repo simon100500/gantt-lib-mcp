@@ -208,7 +208,7 @@ export function ProjectMenu({
               <>
                 <span
                   className={cn(
-                    'truncate text-sm font-semibold text-slate-700',
+                    'truncate text-sm font-semibold font-cascadia tracking-tight text-slate-900',
                     !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
                   )}
                   title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
