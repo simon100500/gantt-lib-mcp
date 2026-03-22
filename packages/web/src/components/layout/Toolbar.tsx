@@ -180,7 +180,7 @@ export function Toolbar({
         size="sm"
         variant="ghost"
         onClick={onScrollToToday}
-        className={actionButtonClassName}
+        className={cn(actionButtonClassName, 'hidden sm:flex')}
       >
         <FlagTriangleRight className="h-3.5 w-3.5" />
         <span className="hidden md:inline text-xs">Сегодня</span>
@@ -308,6 +308,13 @@ export function Toolbar({
             <ChevronsUpDown className="h-4 w-4" />
             <span className="text-sm">Развернуть все</span>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onScrollToToday}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <FlagTriangleRight className="h-4 w-4" />
+            <span className="text-sm">Сегодня</span>
+          </DropdownMenuItem>
           {showShareButton && onCreateShareLink && (
             <DropdownMenuItem
               onClick={() => void onCreateShareLink()}
@@ -424,7 +431,7 @@ export function Toolbar({
           onClick={onToggleChat}
           aria-pressed={isChatOpen}
           className={cn(
-            'h-8 gap-1.5 rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none',
+            'h-8 rounded-md px-2 text-xs font-medium transition-all focus-visible:outline-none',
             isChatOpen
               ? 'bg-primary border-2 border-primary/30 text-primary-foreground shadow-inner'
               : 'bg-primary border-2 border-transparent text-primary-foreground shadow-sm hover:bg-primary/90',
@@ -432,8 +439,6 @@ export function Toolbar({
           title={isChatOpen ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
         >
           <Sparkles className={cn('h-3.5 w-3.5', isChatOpen && 'fill-primary-foreground/20')} />
-          <span className="hidden sm:inline">AI ассистент</span>
-          <span className="sm:hidden">AI</span>
         </Button>
       )}
     </div>
