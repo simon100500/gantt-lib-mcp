@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -7,15 +7,28 @@ interface ProjectSwitcherProps {
   projects: { id: string; name: string; taskCount?: number }[];
   onSwitch: (projectId: string) => void;
   onCreateNew: () => void;
+  onClose?: () => void;
 }
 
-export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
+export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onClose }: ProjectSwitcherProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Logo and project name - shown only on mobile (when sidebar is open) */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-3 md:hidden">
-        <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
-        <span className="text-sm font-semibold text-slate-900">ГетГант</span>
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 md:hidden">
+        <div className="flex items-center gap-2">
+          <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
+          <span className="text-sm font-semibold text-slate-900">ГетГант</span>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            aria-label="Закрыть"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Create new button - fixed at top */}

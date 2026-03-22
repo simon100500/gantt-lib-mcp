@@ -99,11 +99,20 @@ export function ProjectMenu({
         </div>
       )}
 
+      {/* Mobile sidebar overlay */}
+      {!hasShareToken && projectSidebarVisible && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 md:hidden"
+          onClick={() => setProjectSidebarVisible(false)}
+        />
+      )}
+
       {!hasShareToken && (
         <aside
           className={cn(
             'flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
-            projectSidebarVisible ? 'w-60 opacity-100' : 'w-0 overflow-hidden opacity-0',
+            'fixed inset-y-0 left-0 z-50 md:relative md:inset-auto',
+            projectSidebarVisible ? 'w-full opacity-100 md:w-60' : 'w-0 overflow-hidden opacity-0',
           )}
         >
           <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
@@ -111,15 +120,26 @@ export function ProjectMenu({
               <ProjectSwitcher
                 currentProject={currentProject}
                 projects={auth.projects}
-                onSwitch={onSwitchProject}
-                onCreateNew={() => void onCreateProject()}
+                onSwitch={(id) => {
+                  void onSwitchProject(id);
+                  setProjectSidebarVisible(false);
+                }}
+                onCreateNew={() => {
+                  void onCreateProject();
+                  setProjectSidebarVisible(false);
+                }}
+                onClose={() => setProjectSidebarVisible(false)}
               />
             ) : (
               <ProjectSwitcher
                 currentProject={currentProject}
                 projects={[]}
                 onSwitch={() => {}}
-                onCreateNew={() => void onCreateProject()}
+                onCreateNew={() => {
+                  void onCreateProject();
+                  setProjectSidebarVisible(false);
+                }}
+                onClose={() => setProjectSidebarVisible(false)}
               />
             )}
           </div>
