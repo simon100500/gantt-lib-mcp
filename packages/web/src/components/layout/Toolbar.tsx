@@ -1,5 +1,5 @@
 import {
-  Calendar,
+  ChartNoAxesGantt,
   Check,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -7,8 +7,7 @@ import {
   FlagTriangleRight,
   Funnel,
   Link,
-  ListIndentDecrease,
-  ListIndentIncrease,
+  Rows3,
   Lock,
   LockOpen,
   Sparkles,
@@ -123,8 +122,8 @@ export function Toolbar({
           showTaskList && 'border-slate-300 bg-white text-slate-900 shadow-sm',
         )}
       >
-        {showTaskList ? <ListIndentDecrease className="h-3.5 w-3.5" /> : <ListIndentIncrease className="h-3.5 w-3.5" />}
-        <span className="hidden md:inline text-xs">Список</span>
+        <Rows3 className="h-3.5 w-3.5" />
+        <span className="hidden md:inline text-xs">Задачи</span>
       </Button>
 
       <Button
@@ -137,8 +136,8 @@ export function Toolbar({
           showChart && 'border-slate-300 bg-white text-slate-900 shadow-sm',
         )}
       >
-        <Calendar className="h-3.5 w-3.5" />
-        <span className="hidden md:inline text-xs">Календарь</span>
+        <ChartNoAxesGantt className="h-3.5 w-3.5" />
+        <span className="hidden md:inline text-xs">Гант</span>
       </Button>
 
       <Button
