@@ -102,7 +102,7 @@ export function ProjectMenu({
       {/* Mobile sidebar overlay */}
       {!hasShareToken && projectSidebarVisible && (
         <div
-          className="fixed inset-0 z-40 bg-black/20 md:hidden"
+          className="fixed inset-0 z-40 bg-black/20 sm:hidden"
           onClick={() => setProjectSidebarVisible(false)}
         />
       )}
@@ -111,8 +111,8 @@ export function ProjectMenu({
         <aside
           className={cn(
             'flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
-            'fixed inset-y-0 left-0 z-50 md:relative md:inset-auto',
-            projectSidebarVisible ? 'w-full opacity-100 md:w-60' : 'w-0 overflow-hidden opacity-0',
+            'fixed inset-y-0 left-0 z-50 sm:relative sm:inset-auto',
+            projectSidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0',
           )}
         >
           <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
@@ -122,13 +122,12 @@ export function ProjectMenu({
                 projects={auth.projects}
                 onSwitch={(id) => {
                   void onSwitchProject(id);
-                  setProjectSidebarVisible(false);
                 }}
                 onCreateNew={() => {
                   void onCreateProject();
-                  setProjectSidebarVisible(false);
                 }}
                 onClose={() => setProjectSidebarVisible(false)}
+                isInline={true}
               />
             ) : (
               <ProjectSwitcher
@@ -137,9 +136,9 @@ export function ProjectMenu({
                 onSwitch={() => {}}
                 onCreateNew={() => {
                   void onCreateProject();
-                  setProjectSidebarVisible(false);
                 }}
                 onClose={() => setProjectSidebarVisible(false)}
+                isInline={true}
               />
             )}
           </div>
@@ -147,8 +146,8 @@ export function ProjectMenu({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 md:gap-4 md:px-5">
-          {/* Кнопка меню - всегда слева */}
+        <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-5">
+          {/* Кнопка меню - скрывается на десктопе когда сайдбар открыт */}
           <button
             type="button"
             onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
@@ -162,21 +161,23 @@ export function ProjectMenu({
                 : projectSidebarVisible
                   ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
                   : 'text-slate-500 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700',
+              // Скрываем на десктопе когда сайдбар открыт
+              projectSidebarVisible && 'sm:hidden',
             )}
             title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
           >
             {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
           </button>
 
-          {/* Логотип и разделитель - только на десктопе */}
-          <div className="hidden select-none items-center gap-2.5 text-base font-cascadia tracking-tight md:flex">
+          {/* Логотип и разделитель - на всех экранах */}
+          <div className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight">
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-            <span className="text-[15px] font-semibold text-slate-900">ГетГант</span>
-            <span className="text-slate-300">/</span>
+            <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
+            <span className="text-slate-300 hidden sm:inline">/</span>
           </div>
 
           {/* Название проекта - занимает всё доступное место */}
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 md:flex-none md:gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
             {isRenamingProject && !hasShareToken ? (
               <input
                 type="text"
@@ -195,7 +196,7 @@ export function ProjectMenu({
                     setRenameValue('');
                   }
                 }}
-                className="min-w-0 max-w-[120px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:max-w-[240px]"
+                className="min-w-0 max-w-[120px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[240px]"
                 autoFocus
                 onFocus={(event) => event.target.select()}
               />
@@ -231,7 +232,7 @@ export function ProjectMenu({
                 variant="outline"
                 size="icon"
                 onClick={() => void onCreateProject()}
-                className="hidden h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 md:flex"
+                className="hidden h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 sm:flex"
                 aria-label="Новый проект"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -240,12 +241,12 @@ export function ProjectMenu({
           </div>
 
           {/* Поиск - только на десктопе */}
-          <div className="hidden min-w-0 flex-1 px-4 md:flex lg:px-8">
+          <div className="hidden min-w-0 flex-1 px-4 sm:flex sm:px-8">
             <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
           </div>
 
           {/* Логин - всегда справа */}
-          <div className="flex shrink-0 items-center gap-2 md:gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
@@ -253,7 +254,7 @@ export function ProjectMenu({
               </div>
             ) : !auth.isAuthenticated ? (
               <div className="flex items-center gap-3">
-                <span className="hidden text-sm font-medium text-slate-600 lg:inline">
+                <span className="hidden text-sm font-medium text-slate-600 sm:inline">
                   Войдите, чтобы сохранить график
                 </span>
                 <LoginButton onClick={onLoginRequired} />
@@ -264,11 +265,11 @@ export function ProjectMenu({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 lg:max-w-[280px]"
+                    className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 sm:max-w-[280px]"
                   >
-                    <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
-                    <span className="hidden truncate text-slate-600 lg:inline">{auth.user?.email ?? 'Account'}</span>
-                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 lg:block" />
+                    <User className="h-4 w-4 shrink-0 text-slate-600 sm:hidden" />
+                    <span className="hidden truncate text-slate-600 sm:inline">{auth.user?.email ?? 'Account'}</span>
+                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 sm:block" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64">

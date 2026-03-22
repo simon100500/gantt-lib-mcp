@@ -1,4 +1,4 @@
-import { Plus, X } from 'lucide-react';
+import { Plus, PanelRightOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -8,13 +8,14 @@ interface ProjectSwitcherProps {
   onSwitch: (projectId: string) => void;
   onCreateNew: () => void;
   onClose?: () => void;
+  isInline?: boolean;
 }
 
-export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onClose }: ProjectSwitcherProps) {
+export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onClose, isInline = false }: ProjectSwitcherProps) {
   return (
     <div className="flex flex-col h-full">
-      {/* Logo and project name - shown only on mobile (when sidebar is open) */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 md:hidden">
+      {/* Logo and close/collapse button - on all screens */}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3">
         <div className="flex items-center gap-2">
           <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
           <span className="text-sm font-semibold text-slate-900">ГетГант</span>
@@ -24,9 +25,10 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-            aria-label="Закрыть"
+            aria-label={isInline ? "Свернуть" : "Закрыть"}
+            title={isInline ? "Свернуть" : "Закрыть"}
           >
-            <X className="h-5 w-5" />
+            <PanelRightOpen className="h-5 w-5" />
           </button>
         )}
       </div>
