@@ -127,105 +127,105 @@ export function ProjectMenu({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-[56px] items-center gap-4 border-b border-slate-200 bg-white px-4 md:px-5">
-          <div className="flex min-w-0 shrink-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
-              aria-pressed={projectSidebarVisible}
-              aria-label={hasShareToken ? 'Режим только чтения' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-              disabled={hasShareToken}
-              className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                hasShareToken
-                  ? 'cursor-default bg-slate-50 text-slate-300'
-                  : projectSidebarVisible
-                    ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    : 'text-slate-500 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700',
-              )}
-              title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-            >
-              {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
-            </button>
+        <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 md:gap-4 md:px-5">
+          {/* Кнопка меню - всегда слева */}
+          <button
+            type="button"
+            onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
+            aria-pressed={projectSidebarVisible}
+            aria-label={hasShareToken ? 'Режим только чтения' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            disabled={hasShareToken}
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+              hasShareToken
+                ? 'cursor-default bg-slate-50 text-slate-300'
+                : projectSidebarVisible
+                  ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  : 'text-slate-500 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700',
+            )}
+            title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+          >
+            {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
+          </button>
 
-            <div className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight">
-              <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-              <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
-            </div>
-
+          {/* Логотип и разделитель - только на десктопе */}
+          <div className="hidden select-none items-center gap-2.5 text-base font-cascadia tracking-tight md:flex">
+            <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
+            <span className="text-[15px] font-semibold text-slate-900">ГетГант</span>
             <span className="text-slate-300">/</span>
-
-            <div className="flex min-w-0 items-center gap-2.5">
-              {isRenamingProject && !hasShareToken ? (
-                <input
-                  type="text"
-                  name="project-name"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={renameValue}
-                  onChange={(event) => setRenameValue(event.target.value)}
-                  onBlur={() => { void commitInlineRename(); }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void commitInlineRename();
-                    } else if (event.key === 'Escape') {
-                      setIsRenamingProject(false);
-                      setRenameValue('');
-                    }
-                  }}
-                  className="min-w-0 max-w-[240px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  autoFocus
-                  onFocus={(event) => event.target.select()}
-                />
-              ) : (
-                <>
-                  <span
-                    className={cn(
-                      'truncate text-sm font-semibold text-slate-700',
-                      !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
-                    )}
-                    title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
-                    onClick={hasShareToken ? undefined : () => {
-                      setRenameValue(currentProjectLabel ?? '');
-                      setIsRenamingProject(true);
-                    }}
-                  >
-                    {currentProjectLabel}
-                  </span>
-                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'draft' && (
-                    <button
-                      type="button"
-                      onClick={() => setShowEditProjectModal(true)}
-                      className="shrink-0 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                      aria-label="Переименовать проект"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </>
-              )}
-              {!hasShareToken && auth.isAuthenticated && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => void onCreateProject()}
-                  className="h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50"
-                  aria-label="Новый проект"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
           </div>
 
-          <div className="flex-1 md:hidden" />
+          {/* Название проекта - занимает всё доступное место */}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 md:flex-none md:gap-2.5">
+            {isRenamingProject && !hasShareToken ? (
+              <input
+                type="text"
+                name="project-name"
+                autoComplete="off"
+                spellCheck={false}
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                onBlur={() => { void commitInlineRename(); }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void commitInlineRename();
+                  } else if (event.key === 'Escape') {
+                    setIsRenamingProject(false);
+                    setRenameValue('');
+                  }
+                }}
+                className="min-w-0 max-w-[120px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:max-w-[240px]"
+                autoFocus
+                onFocus={(event) => event.target.select()}
+              />
+            ) : (
+              <>
+                <span
+                  className={cn(
+                    'truncate text-sm font-semibold text-slate-700',
+                    !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
+                  )}
+                  title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
+                  onClick={hasShareToken ? undefined : () => {
+                    setRenameValue(currentProjectLabel ?? '');
+                    setIsRenamingProject(true);
+                  }}
+                >
+                  {currentProjectLabel}
+                </span>
+                {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'draft' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEditProjectModal(true)}
+                    className="shrink-0 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Переименовать проект"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </>
+            )}
+            {!hasShareToken && auth.isAuthenticated && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => void onCreateProject()}
+                className="hidden h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 md:flex"
+                aria-label="Новый проект"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
 
+          {/* Поиск - только на десктопе */}
           <div className="hidden min-w-0 flex-1 px-4 md:flex lg:px-8">
             <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
           </div>
 
-          <div className="flex min-w-0 shrink-0 items-center gap-3">
+          {/* Логин - всегда справа */}
+          <div className="flex shrink-0 items-center gap-2 md:gap-3">
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
