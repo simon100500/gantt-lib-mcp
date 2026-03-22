@@ -12,6 +12,12 @@ interface ProjectSwitcherProps {
 export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew }: ProjectSwitcherProps) {
   return (
     <div className="flex flex-col h-full">
+      {/* Logo and project name - shown only on mobile (when sidebar is open) */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-3 md:hidden">
+        <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
+        <span className="text-sm font-semibold text-slate-900">ГетГант</span>
+      </div>
+
       {/* Create new button - fixed at top */}
       <Button
         onClick={onCreateNew}
