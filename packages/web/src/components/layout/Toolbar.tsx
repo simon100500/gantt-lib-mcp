@@ -36,6 +36,8 @@ interface ToolbarProps {
   showShareButton?: boolean;
   viewMode?: 'day' | 'week' | 'month';
   onViewModeChange?: (viewMode: 'day' | 'week' | 'month') => void;
+  disableTaskDrag?: boolean;
+  onToggleDisableTaskDrag?: (enabled: boolean) => void;
 }
 
 export function Toolbar({
@@ -50,19 +52,21 @@ export function Toolbar({
   showShareButton = false,
   viewMode: externalViewMode,
   onViewModeChange,
+  disableTaskDrag: externalDisableTaskDrag,
+  onToggleDisableTaskDrag,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
   const viewMode = useUIStore((state) => state.viewMode);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
-  const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
+  const disableTaskDrag = externalDisableTaskDrag ?? useUIStore((state) => state.disableTaskDrag);
   const setShowTaskList = useUIStore((state) => state.setShowTaskList);
   const setShowChart = useUIStore((state) => state.setShowChart);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
-  const setDisableTaskDrag = useUIStore((state) => state.setDisableTaskDrag);
+  const setDisableTaskDrag = onToggleDisableTaskDrag ?? useUIStore((state) => state.setDisableTaskDrag);
 
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
   const filterExpired = useUIStore((state) => state.filterExpired);

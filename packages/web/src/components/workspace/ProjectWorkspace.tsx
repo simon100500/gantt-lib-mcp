@@ -70,7 +70,6 @@ export function ProjectWorkspace({
   const showChart = useUIStore((state) => state.showChart);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
-  const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
   const searchResults = useUIStore((state) => state.searchResults);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
@@ -94,6 +93,16 @@ export function ProjectWorkspace({
       ? new Set(projectState.collapsedParentIds)
       : new Set<string>();
   }, [projectId, projectStates]);
+
+  const disableTaskDrag = useMemo(() => {
+    if (!projectId) return false;
+    return projectStates[projectId]?.disableTaskDrag ?? false;
+  }, [projectId, projectStates]);
+
+  const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
+    if (!projectId) return;
+    setProjectState(projectId, { disableTaskDrag: enabled });
+  }, [projectId, setProjectState]);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) return;
@@ -152,6 +161,8 @@ export function ProjectWorkspace({
           showShareButton={!hasShareToken && isAuthenticated}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          disableTaskDrag={disableTaskDrag}
+          onToggleDisableTaskDrag={handleSetDisableTaskDrag}
         />
       </div>
 

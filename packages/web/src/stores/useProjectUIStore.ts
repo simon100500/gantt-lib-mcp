@@ -6,6 +6,7 @@ import type { ViewMode } from './useUIStore.ts';
 interface ProjectUIState {
   viewMode: ViewMode;
   collapsedParentIds: string[];
+  disableTaskDrag: boolean;
 }
 
 interface ProjectUIStore {
@@ -18,6 +19,7 @@ interface ProjectUIStore {
 const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
   collapsedParentIds: [],
+  disableTaskDrag: false,
 };
 
 export const useProjectUIStore = create<ProjectUIStore>()(
