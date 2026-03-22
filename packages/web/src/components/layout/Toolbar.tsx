@@ -13,6 +13,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+import { useEffect } from 'react';
+
 import { Button } from '../ui/button.tsx';
 import {
   DropdownMenu,
@@ -81,6 +83,15 @@ export function Toolbar({
 
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
+
+  // На мобильном (< 768px) обеспечиваем что только один режим включен
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    if (isMobile && showTaskList && showChart) {
+      // Если оба включены на мобильном - оставляем только гант
+      setShowTaskList(false);
+    }
+  }, [showTaskList, showChart, setShowTaskList]);
 
   // Двойной toggle: нельзя скрыть оба элемента одновременно
   // На мобильном (< 768px) показываем только один из двух
