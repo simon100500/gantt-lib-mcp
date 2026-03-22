@@ -18,7 +18,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
       <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3">
         <div className="flex items-center gap-2">
           <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
-          <span className="text-sm font-semibold text-slate-900">ГетГант</span>
+          <span className="text-base font-semibold text-slate-900">ГетГант</span>
         </div>
         {onClose && (
           <button

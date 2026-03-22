@@ -170,14 +170,17 @@ export function ProjectMenu({
             {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
           </button>
 
-          {/* Логотип и разделитель - на всех экранах */}
-          <div className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight">
+          {/* Логотип и разделитель - скрываются на десктопе когда сайдбар открыт */}
+          <div className={cn(
+            'flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight',
+            projectSidebarVisible && 'sm:hidden'
+          )}>
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
             <span className="text-slate-300 hidden sm:inline">/</span>
           </div>
 
-          {/* Название проекта - занимает всё доступное место */}
+          {/* Название проекта - всегда остаётся */}
           <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
             {isRenamingProject && !hasShareToken ? (
               <input
