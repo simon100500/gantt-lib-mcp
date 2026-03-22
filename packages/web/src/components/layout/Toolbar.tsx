@@ -233,18 +233,19 @@ export function Toolbar({
         </Button>
       </FilterPopup>
 
-      <div className="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-        {(['day', 'week', 'month'] as const).map((nextMode) => (
+      <div className="inline-flex rounded-md">
+        {(['day', 'week', 'month'] as const).map((nextMode, index) => (
           <button
             key={nextMode}
             type="button"
             onClick={() => handleViewModeChange(nextMode)}
             className={cn(
-              'flex h-8 items-center px-3 text-xs font-semibold transition-colors focus-visible:outline-none',
-              nextMode !== 'month' && 'border-r border-slate-200',
+              'flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border',
+              index === 0 && 'rounded-l-md',
+              index === 2 && 'rounded-r-md',
               currentViewMode === nextMode
-                ? 'bg-[#dfe1e6] text-slate-900'
-                : 'bg-white text-slate-600 hover:bg-slate-50',
+                ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+                : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
             )}
           >
             {nextMode === 'day' && (
