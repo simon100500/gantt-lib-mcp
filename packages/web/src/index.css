@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Базовые стили для предотвращения прокрутки страницы на мобильных */
+@layer base {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    overscroll-behavior: none;
+  }
+}
+
 @layer base {
   :root {
     /* Neutral surface */
