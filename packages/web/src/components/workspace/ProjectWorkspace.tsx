@@ -67,6 +67,7 @@ export function ProjectWorkspace({
   const workspace = useUIStore((state) => state.workspace);
   const savingState = useUIStore((state) => state.savingState);
   const showTaskList = useUIStore((state) => state.showTaskList);
+  const showChart = useUIStore((state) => state.showChart);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
@@ -176,6 +177,7 @@ export function ProjectWorkspace({
                 rowHeight={36}
                 containerHeight="calc(100dvh - 136px)"
                 showTaskList={showTaskList}
+                showChart={showChart}
                 taskListWidth={650}
                 onValidateDependencies={onValidation}
                 enableAutoSchedule={autoSchedule}

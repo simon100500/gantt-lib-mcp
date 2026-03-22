@@ -24,6 +24,7 @@ interface UIState {
   projectSidebarVisible: boolean;
   viewMode: ViewMode;
   showTaskList: boolean;
+  showChart: boolean;
   autoSchedule: boolean;
   highlightExpiredTasks: boolean;
   disableTaskDrag: boolean;
@@ -47,6 +48,7 @@ interface UIState {
   setProjectSidebarVisible: (visible: boolean) => void;
   setViewMode: (viewMode: ViewMode) => void;
   setShowTaskList: (visible: boolean) => void;
+  setShowChart: (visible: boolean) => void;
   setAutoSchedule: (enabled: boolean) => void;
   setHighlightExpiredTasks: (enabled: boolean) => void;
   setDisableTaskDrag: (enabled: boolean) => void;
@@ -77,6 +79,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   projectSidebarVisible: false,
   viewMode: 'day',
   showTaskList: true,
+  showChart: true,
   autoSchedule: true,
   highlightExpiredTasks: true,
   disableTaskDrag: false,
@@ -102,6 +105,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setProjectSidebarVisible: (projectSidebarVisible) => set({ projectSidebarVisible }),
   setViewMode: (viewMode) => set({ viewMode }),
   setShowTaskList: (showTaskList) => set({ showTaskList }),
+  setShowChart: (showChart) => set({ showChart }),
   setAutoSchedule: (autoSchedule) => set({ autoSchedule }),
   setHighlightExpiredTasks: (highlightExpiredTasks) => set({ highlightExpiredTasks }),
   setDisableTaskDrag: (disableTaskDrag) => set({ disableTaskDrag }),

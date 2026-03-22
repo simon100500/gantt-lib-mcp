@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: MCP Server Refactoring
 status: unknown
-stopped_at: "Completed quick-260321-m9d: Primary button + Ctrl+Enter for task creation"
+stopped_at: "Completed quick-260322-q76: Двойной toggle календарь/тасклист"
 last_updated: "2026-03-21T13:04:40.735Z"
 progress:
   total_phases: 7
@@ -51,6 +51,7 @@ Plan: 2 of 2 (all plans complete)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260322-q76 | Двойной toggle календарь/тасклист | 2026-03-22 | ${commit_hash} | [260322-q76](./quick/260322-q76-gantt-lib-grid-toggle/) |
 | 260321-m9d | Primary кнопка + Ctrl+Enter | 2026-03-21 | 662f153 | [260321-m9d](./quick/260321-m9d-primary-ctrl-enter/) |
 | 260321-m63 | Кнопка "+ задача" в поиске | 2026-03-21 | 2019ece | [260321-m63](./quick/260321-m63/) |
 | 260320-fvq | Поиск по задачам в хедер | 2026-03-20 | 57ba246 | [260320-fvq-search-in-header](./quick/260320-fvq-search-in-header/) |

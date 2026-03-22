@@ -1,4 +1,5 @@
 import {
+  Calendar,
   Check,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -52,11 +53,13 @@ export function Toolbar({
   onViewModeChange,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
+  const showChart = useUIStore((state) => state.showChart);
   const viewMode = useUIStore((state) => state.viewMode);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const disableTaskDrag = useUIStore((state) => state.disableTaskDrag);
   const setShowTaskList = useUIStore((state) => state.setShowTaskList);
+  const setShowChart = useUIStore((state) => state.setShowChart);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
@@ -75,6 +78,36 @@ export function Toolbar({
 
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
+
+  // Двойной toggle: нельзя скрыть оба элемента одновременно
+  const handleToggleTaskList = () => {
+    if (!showTaskList) {
+      // Список скрыт - показываем его
+      setShowTaskList(true);
+    } else if (showChart) {
+      // Список виден и календарь тоже - скрываем список
+      setShowTaskList(false);
+    } else {
+      // Список виден, но календарь скрыт - переключаемся на календарь
+      setShowTaskList(false);
+      setShowChart(true);
+    }
+  };
+
+  const handleToggleChart = () => {
+    if (!showChart) {
+      // Календарь скрыт - показываем его
+      setShowChart(true);
+    } else if (showTaskList) {
+      // Календарь виден и список тоже - скрываем календарь
+      setShowChart(false);
+    } else {
+      // Календарь виден, но список скрыт - переключаемся на список
+      setShowChart(false);
+      setShowTaskList(true);
+    }
+  };
+
   const actionButtonClassName =
     'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900';
 
@@ -83,7 +116,7 @@ export function Toolbar({
       <Button
         size="sm"
         variant="ghost"
-        onClick={() => setShowTaskList(!showTaskList)}
+        onClick={handleToggleTaskList}
         aria-pressed={showTaskList}
         className={cn(
           actionButtonClassName,
@@ -91,7 +124,21 @@ export function Toolbar({
         )}
       >
         {showTaskList ? <ListIndentDecrease className="h-3.5 w-3.5" /> : <ListIndentIncrease className="h-3.5 w-3.5" />}
-        <span className="hidden md:inline text-xs">Список задач</span>
+        <span className="hidden md:inline text-xs">Список</span>
+      </Button>
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleToggleChart}
+        aria-pressed={showChart}
+        className={cn(
+          actionButtonClassName,
+          showChart && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+        )}
+      >
+        <Calendar className="h-3.5 w-3.5" />
+        <span className="hidden md:inline text-xs">Календарь</span>
       </Button>
 
       <Button
