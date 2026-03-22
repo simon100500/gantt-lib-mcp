@@ -51,7 +51,7 @@ Plan: 2 of 2 (all plans complete)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260322-q76 | Двойной toggle календарь/тасклист | 2026-03-22 | ${commit_hash} | [260322-q76](./quick/260322-q76-gantt-lib-grid-toggle/) |
+| 260322-q76 | Двойной toggle календарь/тасклист | 2026-03-22 | d40b2c8 | [260322-q76](./quick/260322-q76-gantt-lib-grid-toggle/) |
 | 260321-m9d | Primary кнопка + Ctrl+Enter | 2026-03-21 | 662f153 | [260321-m9d](./quick/260321-m9d-primary-ctrl-enter/) |
 | 260321-m63 | Кнопка "+ задача" в поиске | 2026-03-21 | 2019ece | [260321-m63](./quick/260321-m63/) |
 | 260320-fvq | Поиск по задачам в хедер | 2026-03-20 | 57ba246 | [260320-fvq-search-in-header](./quick/260320-fvq-search-in-header/) |
