@@ -79,15 +79,20 @@ export function Toolbar({
   const handleViewModeChange = onViewModeChange ?? setViewMode;
 
   // Двойной toggle: нельзя скрыть оба элемента одновременно
+  // На мобильном (< 768px) показываем только один из двух
   const handleToggleTaskList = () => {
     if (!showTaskList) {
       // Список скрыт - показываем его
       setShowTaskList(true);
-    } else if (showChart) {
-      // Список виден и календарь тоже - скрываем список
+      // На мобильном скрываем гант
+      if (window.innerWidth < 768) {
+        setShowChart(false);
+      }
+    } else if (showChart && window.innerWidth >= 768) {
+      // Список виден и календарь тоже (только на десктопе) - скрываем список
       setShowTaskList(false);
     } else {
-      // Список виден, но календарь скрыт - переключаемся на календарь
+      // Список виден - скрываем его, показываем гант
       setShowTaskList(false);
       setShowChart(true);
     }
@@ -97,11 +102,15 @@ export function Toolbar({
     if (!showChart) {
       // Календарь скрыт - показываем его
       setShowChart(true);
-    } else if (showTaskList) {
-      // Календарь виден и список тоже - скрываем календарь
+      // На мобильном скрываем задачи
+      if (window.innerWidth < 768) {
+        setShowTaskList(false);
+      }
+    } else if (showTaskList && window.innerWidth >= 768) {
+      // Календарь виден и список тоже (только на десктопе) - скрываем календарь
       setShowChart(false);
     } else {
-      // Календарь виден, но список скрыт - переключаемся на список
+      // Календарь виден - скрываем его, показываем задачи
       setShowChart(false);
       setShowTaskList(true);
     }
