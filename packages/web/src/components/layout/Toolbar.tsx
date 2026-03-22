@@ -112,33 +112,34 @@ export function Toolbar({
 
   return (
     <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={handleToggleTaskList}
-        aria-pressed={showTaskList}
-        className={cn(
-          actionButtonClassName,
-          showTaskList && 'border-slate-300 bg-white text-slate-900 shadow-sm',
-        )}
-      >
-        <Rows3 className="h-3.5 w-3.5" />
-        <span className="hidden md:inline text-xs">Задачи</span>
-      </Button>
-
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={handleToggleChart}
-        aria-pressed={showChart}
-        className={cn(
-          actionButtonClassName,
-          showChart && 'border-slate-300 bg-white text-slate-900 shadow-sm',
-        )}
-      >
-        <ChartNoAxesGantt className="h-3.5 w-3.5" />
-        <span className="hidden md:inline text-xs">Гант</span>
-      </Button>
+      <div className="inline-flex rounded-md">
+        <button
+          type="button"
+          onClick={handleToggleTaskList}
+          className={cn(
+            'flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium transition-colors focus-visible:outline-none rounded-l-md border-r',
+            showTaskList
+              ? 'border-y border-l border-primary text-primary bg-primary/5 hover:bg-primary/10'
+              : 'border-y border-l border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+          )}
+        >
+          <Rows3 className="h-3.5 w-3.5" />
+          <span className="hidden md:inline">Задачи</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleToggleChart}
+          className={cn(
+            'flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium transition-colors focus-visible:outline-none rounded-r-md border',
+            showChart
+              ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+              : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+          )}
+        >
+          <ChartNoAxesGantt className="h-3.5 w-3.5" />
+          <span className="hidden md:inline">Гант</span>
+        </button>
+      </div>
 
       <Button
         size="sm"
