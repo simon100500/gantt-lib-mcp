@@ -122,6 +122,7 @@ export function ProjectMenu({
                 projects={auth.projects}
                 onSwitch={(id) => {
                   void onSwitchProject(id);
+                  setProjectSidebarVisible(false);
                 }}
                 onCreateNew={() => {
                   void onCreateProject();
