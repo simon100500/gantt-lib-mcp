@@ -240,13 +240,13 @@ export function ProjectMenu({
             )}
           </div>
 
-          {/* Поиск - только на десктопе */}
-          <div className="hidden min-w-0 flex-1 px-4 sm:flex sm:px-8">
+          {/* Поиск - только на больших экранах */}
+          <div className="hidden min-w-0 flex-1 px-4 lg:flex lg:px-8">
             <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
           </div>
 
           {/* Логин - всегда справа */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
@@ -254,7 +254,7 @@ export function ProjectMenu({
               </div>
             ) : !auth.isAuthenticated ? (
               <div className="flex items-center gap-3">
-                <span className="hidden text-sm font-medium text-slate-600 sm:inline">
+                <span className="hidden text-sm font-medium text-slate-600 lg:inline">
                   Войдите, чтобы сохранить график
                 </span>
                 <LoginButton onClick={onLoginRequired} />
@@ -267,9 +267,9 @@ export function ProjectMenu({
                     size="sm"
                     className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 sm:max-w-[280px]"
                   >
-                    <User className="h-4 w-4 shrink-0 text-slate-600 sm:hidden" />
-                    <span className="hidden truncate text-slate-600 sm:inline">{auth.user?.email ?? 'Account'}</span>
-                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 sm:block" />
+                    <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
+                    <span className="hidden truncate text-slate-600 lg:inline">{auth.user?.email ?? 'Account'}</span>
+                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 lg:block" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64">
