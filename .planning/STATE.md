@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: MCP Server Refactoring
-status: unknown
-stopped_at: "Completed quick-260322-q76: Двойной toggle календарь/тасклист"
-last_updated: "2026-03-21T13:04:40.735Z"
+status: complete
+stopped_at: "Milestone v3.0 complete"
+last_updated: "2026-03-22T16:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -14,16 +14,19 @@ progress:
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-18 22:45:37 UTC
+**Last updated:** 2026-03-22
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-03-17)
+See: `.planning/PROJECT.md` (updated 2026-03-22)
 
-**Current focus:** Phase 23 — filters
+**Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
+
+**Current focus:** Planning next milestone — use `/gsd:new-milestone`
 
 ## Current Position
 
+Milestone: v3.0 — COMPLETED
 Phase: 23 (filters) — COMPLETED
 Plan: 2 of 2 (all plans complete)
 
@@ -40,12 +43,19 @@ Plan: 2 of 2 (all plans complete)
 - [Phase 23]: Import filter functions from 'gantt-lib' main module (not 'gantt-lib/filters' subpath)
 - [Phase 23]: Return undefined when no active filters (shows all tasks)
 - [Phase 23]: Use onPointerDownCapture to prevent DropdownMenu from closing on input interaction
+- [v3.0]: Compact mode by default for get_tasks (token efficiency 50-90%)
+- [v3.0]: Max 20 session turns + 2-minute timeout (agent safety)
+- [v3.0]: parentId parameter for task hierarchy (simplicity)
 
 ## Recent Execution
 
-- `231afbb` - Fixed task count sync and removed sidebar auto-close on project switch.
-- `ecf2147` - Removed "current project" badge from sidebar and moved edit button to header.
-- `npm run build --workspace=packages/web` passed after quick task 260319-kol.
+**Milestone v3.0 Complete:** All 7 phases (17-23) shipped with 12 plans.
+
+Archived:
+- `.planning/milestones/v3.0-ROADMAP.md`
+- `.planning/milestones/v3.0-REQUIREMENTS.md`
+
+Git tag: `v3.0` (pending creation)
 
 ## Quick Tasks Completed
 
@@ -64,33 +74,26 @@ Plan: 2 of 2 (all plans complete)
 
 ## Session Continuity
 
-**Last session:** 2026-03-21T13:04:40.732Z
-**Stopped at:** Completed quick-260321-m9d: Primary button + Ctrl+Enter for task creation
-**Resume file:** None
+**Last session:** 2026-03-22
+**Milestone:** v3.0 COMPLETE
 
 **Next actions:**
 
-1. Review `.planning/phases/22-zustand-frontend-refactor/22-04-SUMMARY.md` for the completed shell decomposition details.
-2. Decide whether to close out the v3.0 milestone or queue follow-up frontend polish work.
-3. Keep phase 22 planning docs aligned with the newer frontmatter format so the GSD helpers can parse them reliably.
+1. Use `/gsd:new-milestone` to start the next milestone cycle
+2. Run `/clear` for fresh context window before next milestone
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
-- Phase 23 added: filters
+- Milestone v3.0 complete: Phases 17-23 (7 phases, 12 plans)
+- Token economy, agent hardening, task hierarchy, conversation history, tool quality
+- Zustand frontend refactor, UI filters
 
-**Context for next session:**
+**Context for next milestone:**
 
-- Summary written at `.planning/phases/22-zustand-frontend-refactor/22-01-SUMMARY.md`
-- Summary written at `.planning/phases/22-zustand-frontend-refactor/22-02-SUMMARY.md`
-- Summary written at `.planning/phases/22-zustand-frontend-refactor/22-03-SUMMARY.md`
-- Summary written at `.planning/phases/22-zustand-frontend-refactor/22-04-SUMMARY.md`
-- Summary written at `.planning/quick/260319-kol-zustand/260319-kol-SUMMARY.md`
-- Summary written at `.planning/quick/260320-fx2-popover-radix-id-popover/260320-fx2-SUMMARY.md`
-- Phase 22 now has four recorded summaries on disk
-- Quick task 260319-kol completed: fixed task count sync, removed current project badge, moved edit to header
-- Quick task 260320-fvq completed: added task search in header with navigation and scroll
-- Quick task 260320-fx2 completed: added Popover UI component and RelationChip component
-- `App.tsx` now routes workspace shells while `Toolbar` and `ProjectMenu` read layout state directly from `useUIStore`
-- Pre-existing unrelated worktree changes remain in `packages/web/src/components/OtpModal.tsx`
+- All phase summaries archived in `.planning/phases/17-*` through `23-*`
+- All quick tasks archived in `.planning/quick/`
+- MCP tools are production-ready with compact mode and pagination
+- Frontend uses Zustand for all state management
+- Task filtering UI shipped with localStorage persistence
