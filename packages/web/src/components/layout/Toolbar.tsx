@@ -108,7 +108,7 @@ export function Toolbar({
   };
 
   const actionButtonClassName =
-    'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900';
+    'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-primary hover:text-primary';
 
   return (
     <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
@@ -204,7 +204,7 @@ export function Toolbar({
         aria-pressed={disableTaskDrag}
         className={cn(
           actionButtonClassName,
-          disableTaskDrag && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+          disableTaskDrag && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
           'hidden lg:flex',
         )}
         title={disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
@@ -218,7 +218,7 @@ export function Toolbar({
           variant={hasActiveFilters ? 'secondary' : 'ghost'}
           className={cn(
             actionButtonClassName,
-            hasActiveFilters && 'border-slate-300 bg-white text-slate-900 shadow-sm',
+            hasActiveFilters && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
             'hidden lg:flex',
           )}
           title="Показать фильтры задач"
@@ -274,7 +274,7 @@ export function Toolbar({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none lg:hidden"
+            className="flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none lg:hidden"
             title="Ещё"
           >
             <Ellipsis className="h-4 w-4" />
@@ -365,7 +365,7 @@ export function Toolbar({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-white px-2 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-none"
+            className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none"
             title="Дополнительные параметры"
           >
             <Ellipsis className="h-4 w-4" />
