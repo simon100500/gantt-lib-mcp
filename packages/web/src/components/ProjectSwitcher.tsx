@@ -36,14 +36,17 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
       {/* Create new button - fixed at top */}
       <Button
         onClick={onCreateNew}
-        className="w-full shrink-0"
+        className="w-full shrink-0 mb-3"
         size="sm"
       >
         <Plus className="mr-2 h-4 w-4" /> Новый проект
       </Button>
 
+      {/* Divider */}
+      <div className="border-t border-slate-200" />
+
       {/* Projects list */}
-      <div className="flex flex-col gap-2 flex-1 overflow-y-auto pt-2">
+      <div className="flex flex-col gap-2 flex-1 overflow-y-auto pt-3">
         {/* All projects as simple list */}
         {projects.length > 0 ? (
           <div className="flex flex-col gap-1">
