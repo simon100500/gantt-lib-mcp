@@ -9,26 +9,18 @@ const currentPage = Astro.url.pathname;
   <nav
     class="container mx-auto flex h-full items-center justify-between px-4 lg:px-6"
   >
-    {/* Logo */}
+    {/* Logo — using favicon.svg from web editor */}
     <a
       href="/"
       class="flex items-center gap-[7px] text-sm font-bold text-foreground"
     >
-      <div
-        class="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] bg-primary"
-      >
-        <svg viewBox="0 0 14 14" fill="none" class="h-[14px] w-[14px]">
-          <rect x="1" y="3" width="8" height="2.5" rx="1.25" fill="white"
-          ></rect>
-          <rect
-            x="1"
-            y="8.5"
-            width="12"
-            height="2.5"
-            rx="1.25"
-            fill="rgba(255,255,255,0.55)"></rect>
-        </svg>
-      </div>
+      <img
+        src="/favicon.svg"
+        alt="GetGantt"
+        width="26"
+        height="26"
+        class="h-[26px] w-[26px]"
+      />
       <span class="text-[15px]">GetGantt</span>
     </a>
 
@@ -104,26 +96,19 @@ const currentPage = Astro.url.pathname;
     </button>
 
     {/* Logo */}
-    <div
+    <a
+      href="/"
       class="mb-8 flex items-center gap-[7px] text-sm font-bold text-foreground"
     >
-      <div
-        class="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] bg-primary"
-      >
-        <svg viewBox="0 0 14 14" fill="none" class="h-[14px] w-[14px]">
-          <rect x="1" y="3" width="8" height="2.5" rx="1.25" fill="white"
-          ></rect>
-          <rect
-            x="1"
-            y="8.5"
-            width="12"
-            height="2.5"
-            rx="1.25"
-            fill="rgba(255,255,255,0.55)"></rect>
-        </svg>
-      </div>
+      <img
+        src="/favicon.svg"
+        alt="GetGantt"
+        width="26"
+        height="26"
+        class="h-[26px] w-[26px]"
+      />
       <span class="text-[15px]">GetGantt</span>
-    </div>
+    </a>
 
     {/* Nav Links */}
     <nav class="flex-1 space-y-4">

@@ -4,15 +4,15 @@ import RotatingWords from "./RotatingWords";
 ---
 
 <section
-  class="relative mx-auto flex max-w-[1000px] flex-col items-center px-5 py-[60px] text-center md:py-20 lg:py-[100px]"
+  class="relative mx-auto flex max-w-[900px] flex-col items-center px-4 py-16 text-center md:py-24 lg:py-32"
 >
   {/* h1 with rotating words */}
   <h1
-    class="mb-7 flex w-full flex-col items-center gap-0 font-extrabold leading-[1.2] text-foreground animate-fade-up"
-    style="animation-delay: 70ms; font-family: 'Noto Sans', sans-serif; font-size: clamp(32px, 6vw, 64px); letter-spacing: -0.04em;"
+    class="mb-8 flex w-full flex-col items-center gap-1 font-extrabold leading-tight text-foreground animate-fade-up"
+    style="animation-delay: 70ms; font-family: 'Noto Sans', sans-serif; font-size: clamp(32px, 5.5vw, 56px); letter-spacing: -0.03em;"
   >
     {/* First line: Из [word] в Гантт */}
-    <div class="inline-flex flex-wrap items-center justify-center gap-[0.15em] whitespace-nowrap">
+    <div class="flex flex-wrap items-center justify-center gap-2">
       <span>Из</span>
 
       <RotatingWords
@@ -24,31 +24,34 @@ import RotatingWords from "./RotatingWords";
     </div>
 
     {/* Second line */}
-    <span class="mt-1.5 block font-bold text-secondary-foreground">за 30 секунд</span>
+    <span class="font-bold text-secondary-foreground">за 30 секунд</span>
   </h1>
 
   {/* Subheading */}
   <p
-    class="mb-10 max-w-[600px] text-[17px] leading-[1.6] text-secondary-foreground animate-fade-up"
+    class="mb-10 max-w-[520px] text-[17px] leading-relaxed text-secondary-foreground animate-fade-up"
     style="animation-delay: 140ms;"
   >
-    Мгновенно превращайте любые документы в наглядные графики работ с помощью искусственного интеллекта.
+    Вставьте любой документ или напишите своими словами. Получите <strong
+      class="font-semibold text-foreground"
+    >готовый график</strong
+    >, который можно редактировать
   </p>
 
   {/* CTAs */}
   <div
-    class="mb-20 flex flex-wrap justify-center gap-4 animate-fade-up"
+    class="flex flex-wrap justify-center gap-3 animate-fade-up"
     style="animation-delay: 210ms;"
   >
     <a
       href="https://ai.getgantt.ru"
-      class="inline-flex items-center justify-center rounded-[16px] bg-primary px-9 py-4 text-[16px] font-bold text-primary-foreground transition-all hover:opacity-90 hover:shadow-[0_15px_30px_-5px_rgba(97,88,224,0.3)] hover:-translate-y-0.5"
+      class="inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3.5 text-[15px] font-bold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5"
     >
-      Начать бесплатно
+      Попробовать бесплатно →
     </a>
     <button
       id="watch-demo-btn"
-      class="inline-flex items-center justify-center rounded-[16px] border border-border bg-card px-9 py-4 text-[16px] font-bold text-foreground transition-all hover:bg-border"
+      class="inline-flex items-center justify-center rounded-xl border border-border bg-card px-8 py-3.5 text-[15px] font-bold text-foreground transition-all hover:bg-muted"
     >
       Смотреть демо
     </button>
