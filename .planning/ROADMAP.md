@@ -17,7 +17,7 @@
 
 ## Phases
 
-- [ ] **Phase 24: Astro Site Foundation** - Astro site with hero, navigation, responsive layout
+- [x] **Phase 24: Astro Site Foundation** - Astro site with hero, navigation, responsive layout
 - [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
 - [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
 - [ ] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration
@@ -45,11 +45,13 @@
 8. User can click "Смотреть демо" CTA → scrolls to demo section (placeholder for Phase 25)
 9. User sees custom 404 page with CTA to homepage instead of default error
 
-**Plans:** 0/3 plans executed
+**Plans:** 3/3 plans executed
 
-- [ ] 24-01-PLAN.md — Astro project setup with React + Tailwind integrations, design system foundation
-- [ ] 24-02-PLAN.md — Header, Footer, Layout components with mobile navigation and 404 page
-- [ ] 24-03-PLAN.md — Hero section with rotating words, typewriter demo, gantt preview animations
+- [x] 24-01-PLAN.md — Astro project setup with React + Tailwind integrations, design system foundation
+- [x] 24-02-PLAN.md — Header, Footer, Layout components with mobile navigation and 404 page
+- [x] 24-03-PLAN.md — Hero section with rotating words, typewriter demo, gantt preview animations
+
+**Completed:** 2026-03-23
 
 **UI hint:** yes
 
@@ -122,7 +124,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 24. Astro Site Foundation | 0/3 | Planned    |  |
+| 24. Astro Site Foundation | 3/3 | Complete | 2026-03-23 |
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Not started | - |
 | 27. Domain Separation | 0/3 | Not started | - |
@@ -133,16 +135,16 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| SITE-01 | 24 | Pending |
-| SITE-02 | 24 | Pending |
-| SITE-03 | 24 | Pending |
-| SITE-04 | 24 | Pending |
-| SITE-05 | 24 | Pending |
-| HERO-01 | 24 | Pending |
-| HERO-02 | 24 | Pending |
-| HERO-03 | 24 | Pending |
-| HERO-04 | 24 | Pending |
-| HERO-05 | 24 | Pending |
+| SITE-01 | 24 | Complete |
+| SITE-02 | 24 | Complete |
+| SITE-03 | 24 | Complete |
+| SITE-04 | 24 | Complete |
+| SITE-05 | 24 | Complete |
+| HERO-01 | 24 | Complete |
+| HERO-02 | 24 | Complete |
+| HERO-03 | 24 | Deferred |
+| HERO-04 | 24 | Complete |
+| HERO-05 | 24 | Complete |
 | INTER-01 | 25 | Pending |
 | INTER-02 | 25 | Pending |
 | INTER-03 | 25 | Pending |

@@ -1,22 +1,22 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: MVP
-current_phase: 24
-status: unknown
-last_updated: "2026-03-23T19:47:56.157Z"
+milestone: v4.0
+milestone_name: Astro Landing
+current_phase: 25
+status: executing
+last_updated: "2026-03-23T20:00:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 9
+  completed_plans: 3
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-23
 **Current milestone:** v4.0 Astro Landing
-**Current phase:** 24
+**Current phase:** 25
 
 ---
 
@@ -34,10 +34,14 @@ AI может программно управлять диаграммами Г�
 
 ## Current Position
 
-Phase: 24 (astro-site-foundation) — EXECUTING
-Plan: 3 of 3
+Phase: 25 (Interactive Preview) — Planning
 
 ### Recent Work
+
+**v4.0 Phase 24 Complete (2026-03-23):**
+- Astro 5.0 site with React + Tailwind
+- Header, Footer, Layout components
+- Hero section with rotating words, typewriter demo, gantt preview
 
 **v3.0 Completed (2026-03-22):**
 
