@@ -71,6 +71,7 @@ export function ProjectWorkspace({
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const searchResults = useUIStore((state) => state.searchResults);
+  const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
@@ -209,6 +210,7 @@ export function ProjectWorkspace({
                 onDemoteTask={readOnly ? undefined : batchUpdate?.handleDemoteTask}
                 customDays={russianHolidays2026}
                 highlightedTaskIds={highlightedSearchTaskIds}
+                filterMode={filterMode}
               />
             )}
 
