@@ -1,0 +1,179 @@
+---
+// Header.astro — Desktop navigation bar with logo, links, CTAs
+const currentPage = Astro.url.pathname;
+---
+
+<header class="sticky top-0 z-50 h-[58px] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+  <nav class="container mx-auto flex h-full items-center justify-between px-4 lg:px-6">
+    {/* Logo */}
+    <a href="/" class="flex items-center gap-[7px] text-sm font-bold text-foreground">
+      <div class="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] bg-primary">
+        <svg viewBox="0 0 14 14" fill="none" class="h-[14px] w-[14px]">
+          <rect x="1" y="3" width="8" height="2.5" rx="1.25" fill="white"/>
+          <rect x="1" y="8.5" width="12" height="2.5" rx="1.25" fill="rgba(255,255,255,0.55)"/>
+        </svg>
+      </div>
+      <span class="text-[15px]">GanttAI</span>
+    </a>
+
+    {/* Desktop Nav Links */}
+    <ul class="hidden gap-[2px] md:flex">
+      <li>
+        <a
+          href="/features"
+          class="rounded-md px-[11px] py-[6px] text-[13px] font-medium text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
+        >
+          Features
+        </a>
+      </li>
+      <li>
+        <a
+          href="/faq"
+          class="rounded-md px-[11px] py-[6px] text-[13px] font-medium text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
+        >
+          FAQ
+        </a>
+      </li>
+    </ul>
+
+    {/* Desktop CTAs */}
+    <div class="hidden gap-[7px] md:flex">
+      <a
+        href="https://ai.getgantt.ru"
+        class="inline-flex items-center justify-center rounded-md border border-input bg-background px-[14px] py-[7px] text-[13px] font-semibold text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        Войти
+      </a>
+      <a
+        href="https://ai.getgantt.ru"
+        class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        Попробовать
+      </a>
+    </div>
+
+    {/* Mobile Hamburger */}
+    <button
+      id="mobile-menu-btn"
+      class="md:hidden"
+      aria-label="Open menu"
+    >
+      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6 stroke-foreground">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+  </nav>
+</header>
+
+{/* Mobile Drawer */}
+<div
+  id="mobile-drawer"
+  class="fixed inset-y-0 right-0 z-50 w-[280px] transform translate-x-full border-l border-border bg-background p-6 shadow-xl transition-transform duration-300 md:hidden"
+  aria-hidden="true"
+>
+  <div class="flex flex-col h-full">
+    {/* Close button */}
+    <button
+      id="mobile-menu-close"
+      class="self-end mb-8 rounded-md p-2 hover:bg-accent"
+      aria-label="Close menu"
+    >
+      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6 stroke-foreground">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+
+    {/* Logo */}
+    <div class="mb-8 flex items-center gap-[7px] text-sm font-bold text-foreground">
+      <div class="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] bg-primary">
+        <svg viewBox="0 0 14 14" fill="none" class="h-[14px] w-[14px]">
+          <rect x="1" y="3" width="8" height="2.5" rx="1.25" fill="white"/>
+          <rect x="1" y="8.5" width="12" height="2.5" rx="1.25" fill="rgba(255,255,255,0.55)"/>
+        </svg>
+      </div>
+      <span class="text-[15px]">GanttAI</span>
+    </div>
+
+    {/* Nav Links */}
+    <nav class="flex-1 space-y-4">
+      <a
+        href="/features"
+        class="block rounded-md px-4 py-3 text-[15px] font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        Features
+      </a>
+      <a
+        href="/faq"
+        class="block rounded-md px-4 py-3 text-[15px] font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        FAQ
+      </a>
+    </nav>
+
+    {/* CTAs */}
+    <div class="mt-8 space-y-3">
+      <a
+        href="https://ai.getgantt.ru"
+        class="block w-full rounded-md border border-input bg-background px-4 py-3 text-center text-[15px] font-semibold text-foreground transition-colors hover:bg-accent"
+      >
+        Войти
+      </a>
+      <a
+        href="https://ai.getgantt.ru"
+        class="block w-full rounded-md bg-primary px-4 py-3 text-center text-[15px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        Попробовать
+      </a>
+    </div>
+  </div>
+</div>
+
+{/* Overlay */}
+<div
+  id="mobile-overlay"
+  class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden"
+  aria-hidden="true"
+></div>
+
+<script>
+  // Mobile menu toggle logic
+  const menuBtn = document.getElementById('mobile-menu-btn');
+  const closeBtn = document.getElementById('mobile-menu-close');
+  const drawer = document.getElementById('mobile-drawer');
+  const overlay = document.getElementById('mobile-overlay');
+
+  function openMenu() {
+    drawer?.classList.remove('translate-x-full');
+    drawer?.classList.add('translate-x-0');
+    overlay?.classList.remove('opacity-0', 'pointer-events-none');
+    overlay?.classList.add('opacity-100', 'pointer-events-auto');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMenu() {
+    drawer?.classList.remove('translate-x-0');
+    drawer?.classList.add('translate-x-full');
+    overlay?.classList.remove('opacity-100', 'pointer-events-auto');
+    overlay?.classList.add('opacity-0', 'pointer-events-none');
+    document.body.style.overflow = '';
+  }
+
+  menuBtn?.addEventListener('click', openMenu);
+  closeBtn?.addEventListener('click', closeMenu);
+  overlay?.addEventListener('click', closeMenu);
+
+  // Close on ESC key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMenu();
+  });
+</script>
+
+<style>
+  /* Ensure sticky header works on mobile */
+  @media (max-width: 767px) {
+    header {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+</style>
