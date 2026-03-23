@@ -2,7 +2,7 @@
 
 **Current milestone:** v4.0 Astro Landing
 **Granularity:** Coarse
-**Last updated:** 2026-03-23
+**Last updated:** 2026-03-24
 
 ## Progress Summary
 
@@ -72,7 +72,10 @@
 4. User can collapse/expand parent tasks
 5. Developer can integrate gantt-lib using Astro islands pattern (iframe isolation if needed)
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+- [ ] 25-01-PLAN.md — Install gantt-lib dependency and create basic interactive GanttPreview component
+- [ ] 25-02-PLAN.md — Add hierarchical tasks, collapse/expand, CSS theme overrides, and polish
 
 **UI hint:** yes
 
@@ -189,4 +192,4 @@ Phases completed:
 - Phase 23: Task Filtering UI
 
 ---
-*Last updated: 2026-03-23*
+*Last updated:* 2026-03-24
