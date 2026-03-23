@@ -4,46 +4,125 @@ import type { Task } from 'gantt-lib';
 import 'gantt-lib/styles.css';
 
 const DEMO_TASKS: Task[] = [
+  // Parent 1: Фаза 1
   {
-    id: '1',
+    id: 'phase-1',
+    name: 'Фаза 1: Подготовка',
+    startDate: '2026-03-24',
+    endDate: '2026-04-10',
+    color: '#1d4ed8',
+  },
+  {
+    id: 'task-1-1',
     name: 'Анализ требований',
     startDate: '2026-03-24',
     endDate: '2026-03-28',
-    color: '#1d4ed8',
+    color: '#3b82f6',
     progress: 100,
     accepted: true,
+    parentId: 'phase-1',
   },
   {
-    id: '2',
+    id: 'task-1-2',
     name: 'Прототипирование',
     startDate: '2026-03-29',
     endDate: '2026-04-05',
-    color: '#7c3aed',
+    color: '#8b5cf6',
     progress: 40,
+    parentId: 'phase-1',
   },
   {
-    id: '3',
-    name: 'Разработка Frontend',
+    id: 'task-1-3',
+    name: 'Согласование',
     startDate: '2026-04-06',
-    endDate: '2026-04-15',
-    color: '#0891b2',
+    endDate: '2026-04-10',
+    color: '#06b6d4',
+    progress: 0,
+    parentId: 'phase-1',
+  },
+
+  // Parent 2: Фаза 2
+  {
+    id: 'phase-2',
+    name: 'Фаза 2: Разработка',
+    startDate: '2026-04-11',
+    endDate: '2026-05-05',
+    color: '#7c3aed',
+  },
+  {
+    id: 'task-2-1',
+    name: 'Frontend разработка',
+    startDate: '2026-04-11',
+    endDate: '2026-04-25',
+    color: '#a78bfa',
+    progress: 60,
+    parentId: 'phase-2',
+  },
+  {
+    id: 'task-2-2',
+    name: 'Backend API',
+    startDate: '2026-04-15',
+    endDate: '2026-04-28',
+    color: '#6366f1',
+    progress: 30,
+    parentId: 'phase-2',
+  },
+  {
+    id: 'task-2-3',
+    name: 'Интеграция',
+    startDate: '2026-04-29',
+    endDate: '2026-05-05',
+    color: '#3b82f6',
+    progress: 0,
+    parentId: 'phase-2',
+  },
+
+  // Independent tasks
+  {
+    id: 'task-design',
+    name: 'Дизайн UI',
+    startDate: '2026-04-01',
+    endDate: '2026-04-12',
+    color: '#ec4899',
+    progress: 80,
+    accepted: true,
+  },
+  {
+    id: 'task-qa',
+    name: 'QA тестирование',
+    startDate: '2026-05-06',
+    endDate: '2026-05-12',
+    color: '#ea580c',
     progress: 0,
   },
   {
-    id: '4',
-    name: 'Тестирование',
-    startDate: '2026-04-16',
-    endDate: '2026-04-20',
-    color: '#ea580c',
+    id: 'task-deploy',
+    name: 'Деплой на прод',
+    startDate: '2026-05-13',
+    endDate: '2026-05-15',
+    color: '#16a34a',
     progress: 0,
   },
 ];
 
 export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
+  const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
 
   const handleChange = (updatedTasks: Task[]) => {
     setTasks(prev => updatedTasks);
+  };
+
+  const handleToggleCollapse = (parentId: string) => {
+    setCollapsedParentIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(parentId)) {
+        newSet.delete(parentId);
+      } else {
+        newSet.add(parentId);
+      }
+      return newSet;
+    });
   };
 
   return (
@@ -59,25 +138,27 @@ export default function GanttPreview() {
         <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
           <span className="flex-1 text-sm font-medium text-slate-700">Интерактивный график</span>
-          <span className="text-sm text-slate-500">4 задачи</span>
+          <span className="text-sm text-slate-500">10 задач</span>
         </div>
 
         {/* Gantt Chart */}
-        <div className="p-4">
+        <div className="overflow-x-auto">
           <GanttChart
             tasks={tasks}
             month={new Date('2026-03-01')}
             dayWidth={35}
             rowHeight={42}
-            containerHeight="320px"
+            containerHeight="400px"
             onChange={handleChange}
+            collapsedParentIds={collapsedParentIds}
+            onToggleCollapse={handleToggleCollapse}
           />
         </div>
 
         {/* Footer hint */}
         <div className="flex items-center gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
           <span>💡</span>
-          <span className="text-slate-600">Перетащите задачи или растяните края</span>
+          <span className="text-slate-600">Перетащите задачи, растяните края, нажмите ▼ для сворачивания</span>
         </div>
       </div>
     </div>

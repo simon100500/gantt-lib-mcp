@@ -43,6 +43,15 @@
     --text-secondary: 240 4% 46%;
     --text-muted: 240 5% 65%;
     --accent-bg: 217 91% 97%;
+
+    /* gantt-lib theme overrides */
+    --gantt-grid-line-color: 214 14% 90%;
+    --gantt-cell-background: 0 0% 100%;
+    --gantt-row-hover-background: 210 20% 96%;
+    --gantt-task-bar-default-color: 221 83% 53%;
+    --gantt-task-bar-text-color: 0 0% 100%;
+    --gantt-progress-completed: 45 93% 47%;
+    --gantt-progress-accepted: 142 76% 36%;
   }
 
   * {
