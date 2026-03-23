@@ -47,13 +47,19 @@ export default function GanttPreview() {
   };
 
   return (
-    <div className="relative mx-auto mb-20 max-w-[900px] px-4 md:px-8">
-      <div className="overflow-hidden rounded-[14px] border border-border bg-card shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-        {/* Header */}
-        <div className="flex items-center gap-2 border-b border-border bg-muted px-4 py-3 text-[12px] font-bold text-secondary-foreground">
+    <div className="w-full max-w-[640px] px-6">
+      {/* Header */}
+      <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
+        Попробуйте интерактивный график
+      </h2>
+
+      {/* Gantt Chart Container */}
+      <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
+        {/* Chart header */}
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
-          <span className="flex-1">Интерактивный график</span>
-          <span className="font-medium text-muted-foreground">4 задачи</span>
+          <span className="flex-1 text-sm font-medium text-slate-700">Интерактивный график</span>
+          <span className="text-sm text-slate-500">4 задачи</span>
         </div>
 
         {/* Gantt Chart */}
@@ -61,16 +67,17 @@ export default function GanttPreview() {
           <GanttChart
             tasks={tasks}
             month={new Date('2026-03-01')}
-            dayWidth={40}
-            rowHeight={40}
+            dayWidth={35}
+            rowHeight={42}
+            containerHeight="320px"
             onChange={handleChange}
           />
         </div>
 
-        {/* Footer badge */}
-        <div className="flex items-center gap-1.5 border-t border-border bg-accent-bg px-4 py-2 text-[11px] font-semibold text-primary">
-          <span>&#10022;</span>
-          Перетащите задачи, чтобы изменить сроки &middot; Растяните края для длительности
+        {/* Footer hint */}
+        <div className="flex items-center gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
+          <span>💡</span>
+          <span className="text-slate-600">Перетащите задачи или растяните края</span>
         </div>
       </div>
     </div>
