@@ -127,7 +127,7 @@ const DAY_WIDTHS = {
 export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
   const ganttRef = useRef<{ scrollToToday: () => void }>(null);
 
   useEffect(() => {
