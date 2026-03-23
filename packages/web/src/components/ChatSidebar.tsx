@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createPhraseIterator } from "@/lib/loadingPhrases";
 
 export interface ChatMessage {
   id: string;
@@ -27,16 +28,6 @@ const QUICK_CHIPS = [
   "Показать сводку",
 ];
 
-const LOADING_PHRASES = [
-  "Собираем контекст",
-  "Проверяем зависимости",
-  "Уточняем сроки",
-  "Перестраиваем план",
-  "Ищем узкие места",
-  "Сверяем приоритеты",
-  "Подготавливаем ответ",
-];
-
 export function ChatSidebar({
   messages,
   streaming,
@@ -49,7 +40,8 @@ export function ChatSidebar({
   onLoginRequired,
 }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
-  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
+  const [currentPhrase, setCurrentPhrase] = useState("");
+  const phraseIteratorRef = useRef(createPhraseIterator());
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
@@ -60,12 +52,13 @@ export function ChatSidebar({
 
   useEffect(() => {
     if (!loading || streaming) {
-      setLoadingPhraseIndex(0);
+      phraseIteratorRef.current.reset();
+      setCurrentPhrase("");
       return;
     }
 
     const timer = window.setInterval(() => {
-      setLoadingPhraseIndex(Math.floor(Math.random() * LOADING_PHRASES.length));
+      setCurrentPhrase(phraseIteratorRef.current.next());
     }, 1800);
 
     return () => window.clearInterval(timer);
@@ -182,7 +175,7 @@ export function ChatSidebar({
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none" />
               </div>
               <span className="text-sm text-slate-600">
-                {LOADING_PHRASES[loadingPhraseIndex]}
+                {currentPhrase || "Загружаем..."}
               </span>
             </div>
           </div>

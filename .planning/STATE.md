@@ -62,6 +62,7 @@ Git tag: `v3.0` (pending creation)
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260323-kw2 | Loading phrases без повторов | 2026-03-23 | 92e756a | [260323-kw2](./quick/260323-kw2/) |
 | 260322-q76 | Двойной toggle календарь/тасклист | 2026-03-22 | d40b2c8 | [260322-q76](./quick/260322-q76-gantt-lib-grid-toggle/) |
 | 260321-m9d | Primary кнопка + Ctrl+Enter | 2026-03-21 | 662f153 | [260321-m9d](./quick/260321-m9d-primary-ctrl-enter/) |
 | 260321-m63 | Кнопка "+ задача" в поиске | 2026-03-21 | 2019ece | [260321-m63](./quick/260321-m63/) |
