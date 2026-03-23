@@ -77,7 +77,7 @@ export default function RotatingWords({
       {/* Word slot with animated width */}
       <span
         ref={slotRef}
-        class={`relative inline-block min-h-[1.1em] overflow-hidden align-baseline leading-none ${className}`}
+        class={`relative inline-block overflow-hidden align-middle leading-none ${className}`}
         style={{ width: `${width}px`, transition: 'width 350ms ease-out' }}
       >
         {/* Current word */}
