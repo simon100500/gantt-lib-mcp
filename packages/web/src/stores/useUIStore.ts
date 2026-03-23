@@ -37,6 +37,7 @@ interface UIState {
   filterSearchText: string;
   filterDateFrom: string;
   filterDateTo: string;
+  filterMode: 'highlight' | 'hide';
   // Search state
   searchQuery: string;
   searchResults: string[];
@@ -61,6 +62,7 @@ interface UIState {
   setFilterSearchText: (value: string) => void;
   setFilterDateFrom: (value: string) => void;
   setFilterDateTo: (value: string) => void;
+  setFilterMode: (value: 'highlight' | 'hide') => void;
   resetFilters: () => void;
   // Search actions
   setSearchQuery: (query: string, tasks: Task[]) => void;
@@ -91,6 +93,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   filterSearchText: '',
   filterDateFrom: '',
   filterDateTo: '',
+  filterMode: 'highlight',
   searchQuery: '',
   searchResults: [],
   searchIndex: -1,
@@ -117,12 +120,14 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setFilterSearchText: (filterSearchText) => set({ filterSearchText }),
   setFilterDateFrom: (filterDateFrom) => set({ filterDateFrom }),
   setFilterDateTo: (filterDateTo) => set({ filterDateTo }),
+  setFilterMode: (filterMode) => set({ filterMode }),
   resetFilters: () => set({
     filterWithoutDeps: false,
     filterExpired: false,
     filterSearchText: '',
     filterDateFrom: '',
     filterDateTo: '',
+    filterMode: 'highlight',
   }),
   setSearchQuery: (query, tasks) => {
     const normalizedQuery = query.trim().toLowerCase();
