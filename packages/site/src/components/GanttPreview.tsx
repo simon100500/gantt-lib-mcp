@@ -158,7 +158,7 @@ export default function GanttPreview() {
   };
 
   return (
-    <div className="mx-auto w-[80%]">
+    <div className="mx-auto w-[90%]">
       {/* Subtitle */}
       <p className="text-center text-sm text-slate-500 mb-3">
         Полностью редактируемый график — перетаскивайте задачи, растягивайте края, сворачивайте группы
@@ -236,7 +236,7 @@ export default function GanttPreview() {
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
             showTaskList={true}
-            taskListWidth={180}
+            taskListWidth={140}
             viewMode={viewMode}
           />
         </div>
