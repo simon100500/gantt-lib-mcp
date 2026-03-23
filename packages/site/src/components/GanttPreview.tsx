@@ -119,6 +119,7 @@ const DEMO_DEPENDENCIES: TaskDependency[] = [
 export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
 
   const handleChange = (updatedTasks: Task[]) => {
     setTasks(prev => updatedTasks);
@@ -141,10 +142,45 @@ export default function GanttPreview() {
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
-          <span className="flex-1 text-sm font-medium text-slate-700">Интерактивный график</span>
-          <span className="text-sm text-slate-500">10 задач</span>
+
+          {/* View mode toggle */}
+          <div className="inline-flex rounded-md">
+            {(['day', 'week', 'month'] as const).map((nextMode, index) => (
+              <button
+                key={nextMode}
+                type="button"
+                onClick={() => setViewMode(nextMode)}
+                className={`flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border ${
+                  index === 0 ? 'rounded-l-md' : ''
+                } ${index === 2 ? 'rounded-r-md' : ''} ${
+                  viewMode === nextMode
+                    ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+                    : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary'
+                }`}
+              >
+                {nextMode === 'day' && (
+                  <>
+                    <span className="hidden sm:inline">День</span>
+                    <span className="sm:hidden">Д</span>
+                  </>
+                )}
+                {nextMode === 'week' && (
+                  <>
+                    <span className="hidden sm:inline">Неделя</span>
+                    <span className="sm:hidden">Н</span>
+                  </>
+                )}
+                {nextMode === 'month' && (
+                  <>
+                    <span className="hidden sm:inline">Месяц</span>
+                    <span className="sm:hidden">М</span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Gantt Chart */}
@@ -161,13 +197,8 @@ export default function GanttPreview() {
             onToggleCollapse={handleToggleCollapse}
             showTaskList={true}
             taskListWidth={180}
+            viewMode={viewMode}
           />
-        </div>
-
-        {/* Footer hint */}
-        <div className="flex items-center gap-1.5 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
-          <span>💡</span>
-          <span className="text-slate-600">Перетащите задачи, растяните края, нажмите ▼ для сворачивания</span>
         </div>
       </div>
     </div>
