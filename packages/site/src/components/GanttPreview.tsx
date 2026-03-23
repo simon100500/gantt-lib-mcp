@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { Task, TaskDependency } from 'gantt-lib';
 import 'gantt-lib/styles.css';
@@ -116,10 +116,24 @@ const DEMO_DEPENDENCIES: TaskDependency[] = [
   { taskId: 'task-deploy', dependsOnTaskId: 'task-qa', type: 'FS' as const },
 ];
 
+const DAY_WIDTHS = {
+  day: 40,
+  week: 12,
+  month: 3,
+};
+
 export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
+  const ganttRef = useRef<{ scrollToToday: () => void }>(null);
+
+  useEffect(() => {
+    // Scroll to today after component mounts
+    setTimeout(() => {
+      ganttRef.current?.scrollToToday();
+    }, 100);
+  }, []);
 
   const handleChange = (updatedTasks: Task[]) => {
     setTasks(prev => updatedTasks);
@@ -186,12 +200,13 @@ export default function GanttPreview() {
         {/* Gantt Chart */}
         <div className="overflow-x-auto">
           <GanttChart
+            ref={ganttRef}
             tasks={tasks}
             dependencies={DEMO_DEPENDENCIES}
             month={new Date('2026-03-01')}
-            dayWidth={35}
+            dayWidth={DAY_WIDTHS[viewMode]}
             rowHeight={42}
-            containerHeight="400px"
+            containerHeight="500px"
             onChange={handleChange}
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
