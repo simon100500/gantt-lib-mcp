@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { GanttChart } from 'gantt-lib';
-import type { Task } from 'gantt-lib';
+import type { Task, TaskDependency } from 'gantt-lib';
 import 'gantt-lib/styles.css';
 
 const DEMO_TASKS: Task[] = [
@@ -105,6 +105,17 @@ const DEMO_TASKS: Task[] = [
   },
 ];
 
+const DEMO_DEPENDENCIES: TaskDependency[] = [
+  { taskId: 'task-1-2', dependsOnTaskId: 'task-1-1', type: 'FS' as const },
+  { taskId: 'task-1-3', dependsOnTaskId: 'task-1-2', type: 'FS' as const },
+  { taskId: 'task-2-1', dependsOnTaskId: 'task-1-3', type: 'FS' as const },
+  { taskId: 'task-2-2', dependsOnTaskId: 'task-1-3', type: 'FS' as const },
+  { taskId: 'task-2-3', dependsOnTaskId: 'task-2-1', type: 'FS' as const },
+  { taskId: 'task-2-3', dependsOnTaskId: 'task-2-2', type: 'FS' as const },
+  { taskId: 'task-qa', dependsOnTaskId: 'task-2-3', type: 'FS' as const },
+  { taskId: 'task-deploy', dependsOnTaskId: 'task-qa', type: 'FS' as const },
+];
+
 export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
@@ -140,6 +151,7 @@ export default function GanttPreview() {
         <div className="overflow-x-auto">
           <GanttChart
             tasks={tasks}
+            dependencies={DEMO_DEPENDENCIES}
             month={new Date('2026-03-01')}
             dayWidth={35}
             rowHeight={42}
@@ -147,6 +159,8 @@ export default function GanttPreview() {
             onChange={handleChange}
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
+            showTaskList={true}
+            taskListWidth={180}
           />
         </div>
 
