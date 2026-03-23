@@ -230,7 +230,7 @@ export default function GanttPreview() {
             tasks={tasks}
             month={new Date('2026-03-01')}
             dayWidth={DAY_WIDTHS[viewMode]}
-            rowHeight={42}
+            rowHeight={36}
             containerHeight="500px"
             onChange={handleChange}
             collapsedParentIds={collapsedParentIds}
