@@ -12,7 +12,8 @@
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
     "dev:server": "npm run dev -w packages/server",
-    "dev:web": "npm run dev -w packages/web"
+    "dev:web": "npm run dev -w packages/web",
+    "dev:site": "npm run dev -w packages/site"
   },
   "keywords": [
     "mcp",

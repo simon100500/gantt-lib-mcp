@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Neutral surface */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    /* Card / popover */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    /* Primary — indigo (from UI-SPEC: hsl(217 91% 60%) / #1d4ed8) */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 98%;
+
+    /* Secondary — бледно-серый */
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted — slate-100 / slate-500 */
+    --muted: 210 16% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent — same as primary for CTAs */
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 98%;
+
+    /* Destructive */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders & inputs — slate-200 */
+    --border: 214 14% 90%;
+    --input: 214 14% 90%;
+    --ring: 217 91% 60%;
+    --radius: 0.375rem;
+
+    /* Supporting colors from UI-SPEC */
+    --text-primary: 222 47% 11%;
+    --text-secondary: 240 4% 46%;
+    --text-muted: 240 5% 65%;
+    --accent-bg: 217 91% 97%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Noto Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Thin scrollbars */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-300;
+  }
+}
+
+@layer utilities {
+  /* Fade-up animation (from HTML reference) */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.5s ease-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-up {
+      animation: none;
+    }
+  }
+}
