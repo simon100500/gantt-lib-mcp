@@ -159,6 +159,11 @@ export default function GanttPreview() {
 
   return (
     <div className="mx-auto w-[80%]">
+      {/* Subtitle */}
+      <p className="text-center text-sm text-slate-500 mb-3">
+        Полностью редактируемый график — перетаскивайте задачи, растягивайте края, сворачивайте группы
+      </p>
+
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
