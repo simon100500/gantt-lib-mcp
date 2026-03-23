@@ -1,20 +1,19 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: MCP Server Refactoring
-status: complete
-stopped_at: "Milestone v3.0 complete"
-last_updated: "2026-03-22T16:00:00.000Z"
+milestone: v4.0
+milestone_name: Astro Landing
+status: in_progress
+last_updated: "2026-03-23T00:00:00.000Z"
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 12
-  completed_plans: 12
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # STATE: gantt-lib MCP Server
 
-**Last updated:** 2026-03-22
+**Last updated:** 2026-03-23
 
 ## Project Reference
 
@@ -26,9 +25,11 @@ See: `.planning/PROJECT.md` (updated 2026-03-22)
 
 ## Current Position
 
-Milestone: v3.0 — COMPLETED
-Phase: 23 (filters) — COMPLETED
-Plan: 2 of 2 (all plans complete)
+Milestone: v4.0 — STARTED
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-23 — Milestone v4.0 started
 
 ## Decisions
 
