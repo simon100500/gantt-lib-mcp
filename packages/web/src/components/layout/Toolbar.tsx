@@ -450,6 +450,7 @@ export function Toolbar({
           title={isChatOpen ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
         >
           <Sparkles className={cn('h-3.5 w-3.5', isChatOpen && 'fill-primary-foreground/20')} />
+          <span className="hidden md:inline lg:inline ml-1">AI ассистент</span>
         </Button>
       )}
     </div>
