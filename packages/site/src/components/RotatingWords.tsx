@@ -59,7 +59,7 @@ export default function RotatingWords({
         className="absolute -left-[9999px] top-0 font-extrabold"
         style={{
           fontFamily: 'Noto Sans, sans-serif',
-          fontSize: 'clamp(48px, 7vw, 84px)',
+          fontSize: 'clamp(36px, 5.5vw, 60px)',
           fontStyle: 'normal',
           fontWeight: 800,
         }}
@@ -70,7 +70,7 @@ export default function RotatingWords({
       {/* Word slot with animated width */}
       <span
         ref={slotRef}
-        className={`relative inline-block overflow-hidden align-baseline transition-all duration-[350ms] ease-out ${className}`}
+        className={`relative inline-block min-h-[1.15em] overflow-hidden align-baseline transition-all duration-[350ms] ease-out ${className}`}
         style={{ width: `${width}px` }}
       >
         {/* Current word (visible) */}
@@ -79,7 +79,7 @@ export default function RotatingWords({
           className="block animate-word-in text-primary"
           style={{
             fontFamily: 'Noto Sans, sans-serif',
-            fontSize: 'clamp(48px, 7vw, 84px)',
+            fontSize: 'clamp(36px, 5.5vw, 60px)',
             fontStyle: 'normal',
             fontWeight: 800,
           }}
@@ -94,7 +94,7 @@ export default function RotatingWords({
             className="absolute left-0 top-0 block animate-word-out text-primary"
             style={{
               fontFamily: 'Noto Sans, sans-serif',
-              fontSize: 'clamp(48px, 7vw, 84px)',
+              fontSize: 'clamp(36px, 5.5vw, 60px)',
               fontStyle: 'normal',
               fontWeight: 800,
             }}
