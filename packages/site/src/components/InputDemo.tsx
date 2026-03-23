@@ -1,93 +1,85 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState, useRef } from 'react';
 
-const TEXTS = [
-  'Разработка мобильного приложения для доставки еды. Старт 1 марта, дедлайн 30 мая. Команда: 2 разработчика, дизайнер, QA.',
-  'Смета на ремонт офиса: демонтаж — 2 нед, отделка — 3 нед, мебель — 1 нед. Бюджет 2.4 млн.',
-  'ТЗ на редизайн сайта. Этапы: аудит, прототип, дизайн, вёрстка, тестирование, запуск. 8 недель.',
+const CHIPS = [
+  { label: 'Загородный дом', prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт' },
+  { label: 'Ремонт офиса', prompt: 'Создай график ремонта офиса: демонтаж, электрика, отделка стен, пол, мебель' },
+  { label: 'ИТ-проект', prompt: 'Создай график разработки ИТ-проекта: аналитика, дизайн, разработка, тестирование, релиз' },
+  { label: 'Мероприятие', prompt: 'Создай график подготовки мероприятия: площадка, кейтеринг, программа, продвижение, проведение' },
 ];
 
-const TYPING_SPEED = 28; // ms per character (base)
-const TYPING_VARIANCE = 22; // ms random variance
-const PAUSE_AT_END = 2200; // ms before erasing
-const ERASE_SPEED = 12; // ms per character when erasing
-const PAUSE_BETWEEN = 400; // ms between texts
-
 export default function InputDemo() {
-  const [text, setText] = useState('');
-  const [isTyping, setIsTyping] = useState(true);
-  const textIndex = useRef(0);
-  const charIndex = useRef(0);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const [inputValue, setInputValue] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const currentText = TEXTS[textIndex.current];
+  function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+    el.style.height = 'auto';
+    const newHeight = el.scrollHeight;
+    el.style.height = newHeight + 'px';
+    el.style.overflowY = newHeight > 192 ? 'auto' : 'hidden';
+  }
 
-    function typeStep() {
-      if (isTyping) {
-        // Typing
-        charIndex.current++;
-        setText(currentText.slice(0, charIndex.current));
+  function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    const text = inputValue.trim();
+    if (!text) return;
+    // In demo mode, just redirect to the app
+    window.location.href = 'https://ai.getgantt.ru';
+  }
 
-        if (charIndex.current >= currentText.length) {
-          // Finished typing, pause
-          setIsTyping(false);
-          timeoutRef.current = setTimeout(typeStep, PAUSE_AT_END);
-          return;
-        }
-
-        // Continue typing with random variance
-        const delay = TYPING_SPEED + Math.random() * TYPING_VARIANCE;
-        timeoutRef.current = setTimeout(typeStep, delay);
-      } else {
-        // Erasing
-        charIndex.current--;
-        setText(currentText.slice(0, charIndex.current));
-
-        if (charIndex.current <= 0) {
-          // Finished erasing, move to next text
-          setIsTyping(true);
-          textIndex.current = (textIndex.current + 1) % TEXTS.length;
-          timeoutRef.current = setTimeout(typeStep, PAUSE_BETWEEN);
-          return;
-        }
-
-        // Continue erasing
-        timeoutRef.current = setTimeout(typeStep, ERASE_SPEED);
-      }
-    }
-
-    // Start typing after initial delay
-    timeoutRef.current = setTimeout(typeStep, 800);
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, [isTyping]);
+  function handleChipClick(prompt: string) {
+    setInputValue(prompt);
+    textareaRef.current?.focus();
+  }
 
   return (
-    <div className="relative mx-auto mt-12 max-w-[700px] animate-fade-up px-4 md:px-8" style={{ animationDelay: '350ms' }}>
-      <div className="overflow-hidden rounded-[14px] border border-border bg-card shadow-[0_4px_24px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)]">
-        {/* Top: avatar + typing text */}
-        <div className="flex items-start gap-2.5 border-b border-border bg-background p-3.5 px-4">
-          <div className="flex shrink-0 items-center justify-center rounded-lg bg-primary text-[13px] font-extrabold text-primary-foreground" style={{ width: 32, height: 32 }}>
-            G
-          </div>
-          <div className="pt-1 text-[14px] leading-[1.5] text-secondary-foreground" style={{ fontFamily: 'Noto Sans, sans-serif' }}>
-            {text}
-            <span className="ml-0.5 inline-block h-3.5 w-0.5 bg-primary animate-blink"></span>
-          </div>
-        </div>
+    <div className="relative mx-auto mt-12 max-w-[640px] px-4 md:px-8 animate-fade-up" style={{ animationDelay: '350ms' }}>
+      {/* Headline */}
+      <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
+        Какой график нужен?
+      </h2>
 
-        {/* Bottom: hint + button */}
-        <div className="flex items-center justify-between bg-muted px-4 py-2.5">
-          <span className="text-[12px] text-muted-foreground">
-            Поддерживает PDF, DOCX, Excel, текст
-          </span>
-          <button className="inline-flex items-center gap-1.5 rounded-[7px] bg-primary px-4 py-1.5 text-[13px] font-extrabold text-primary-foreground transition-all hover:opacity-90 hover:-translate-y-0.5">
-            Создать Гантт &rarr;
+      {/* Textarea form block */}
+      <form onSubmit={handleSubmit} className="flex flex-col">
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            rows={4}
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            onInput={handleTextareaInput}
+            placeholder="Опишите ваш проект или выберите пример ниже"
+            autoComplete="off"
+            spellCheck={false}
+            style={{ maxHeight: '12rem', overflowY: 'hidden' }}
+            className="w-full px-4 py-3 pr-12 text-base leading-6 bg-white resize-none border border-slate-200 rounded-xl shadow-md focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:border-transparent focus-visible:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!inputValue.trim()}
+            aria-label="Отправить"
+            className="absolute bottom-2.5 right-2.5 h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
-      </div>
+
+        {/* Chips row */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {CHIPS.map((chip, index) => (
+            <button
+              key={chip.label}
+              type="button"
+              onClick={() => handleChipClick(chip.prompt)}
+              className="text-sm px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 flex items-center gap-1.5 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      </form>
     </div>
   );
 }
