@@ -127,7 +127,6 @@ export const useUIStore = create<UIState>()((set, get) => ({
     filterSearchText: '',
     filterDateFrom: '',
     filterDateTo: '',
-    filterMode: 'highlight',
   }),
   setSearchQuery: (query, tasks) => {
     const normalizedQuery = query.trim().toLowerCase();

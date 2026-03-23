@@ -34,8 +34,7 @@ export function FilterPopup({ children }: FilterPopupProps) {
     filterWithoutDeps ||
     filterExpired ||
     filterSearchText.trim().length > 0 ||
-    (filterDateFrom && filterDateTo) ||
-    filterMode === 'hide';
+    (filterDateFrom && filterDateTo);
 
   const handleReset = () => {
     resetFilters();
@@ -51,22 +50,30 @@ export function FilterPopup({ children }: FilterPopupProps) {
         {children}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        {/* Filter mode checkbox - separate section at top */}
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            setFilterMode(filterMode === 'hide' ? 'highlight' : 'hide');
-          }}
-          className="flex cursor-pointer items-center gap-2"
-        >
-          <input
-            type="checkbox"
-            checked={filterMode === 'hide'}
-            readOnly
-            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
-          />
-          <span className="text-sm">Только найденные</span>
-        </DropdownMenuItem>
+        {/* Filter mode toggle - highlight / hide */}
+        <div className="px-2 py-1.5">
+          <Label className="text-xs font-medium mb-1.5 block">Режим поиска</Label>
+          <div className="flex">
+            <Button
+              type="button"
+              variant={filterMode === 'highlight' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilterMode('highlight')}
+              className="flex-1 h-7 text-xs rounded-r-none border-r-0"
+            >
+              Подсветка
+            </Button>
+            <Button
+              type="button"
+              variant={filterMode === 'hide' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilterMode('hide')}
+              className="flex-1 h-7 text-xs rounded-l-none"
+            >
+              Фильтр
+            </Button>
+          </div>
+        </div>
 
         <DropdownMenuSeparator />
 
