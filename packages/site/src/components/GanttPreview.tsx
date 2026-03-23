@@ -117,8 +117,8 @@ const DEMO_DEPENDENCIES: TaskDependency[] = [
 ];
 
 const DAY_WIDTHS = {
-  day: 40,
-  week: 12,
+  day: 28,
+  week: 8,
   month: 3,
 };
 
