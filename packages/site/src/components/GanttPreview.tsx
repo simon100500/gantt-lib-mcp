@@ -163,7 +163,7 @@ export default function GanttPreview() {
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           {/* Project name */}
           <span className="text-sm font-medium text-slate-700" style={{ fontFamily: 'Cascadia Mono, monospace' }}>
-            getgantt-demo
+            Разработка платформы
           </span>
 
           {/* Controls */}
