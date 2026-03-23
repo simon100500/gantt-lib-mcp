@@ -51,6 +51,25 @@ export function FilterPopup({ children }: FilterPopupProps) {
         {children}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
+        {/* Filter mode checkbox - separate section at top */}
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            setFilterMode(filterMode === 'hide' ? 'highlight' : 'hide');
+          }}
+          className="flex cursor-pointer items-center gap-2"
+        >
+          <input
+            type="checkbox"
+            checked={filterMode === 'hide'}
+            readOnly
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
+          />
+          <span className="text-sm">Только найденные</span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
         {/* Without deps checkbox */}
         <DropdownMenuItem
           onSelect={(event) => {
@@ -83,23 +102,6 @@ export function FilterPopup({ children }: FilterPopupProps) {
             className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
           />
           <span className="text-sm">Просроченные</span>
-        </DropdownMenuItem>
-
-        {/* Filter mode checkbox */}
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            setFilterMode(filterMode === 'hide' ? 'highlight' : 'hide');
-          }}
-          className="flex cursor-pointer items-center gap-2"
-        >
-          <input
-            type="checkbox"
-            checked={filterMode === 'hide'}
-            readOnly
-            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
-          />
-          <span className="text-sm">Только найденные</span>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
