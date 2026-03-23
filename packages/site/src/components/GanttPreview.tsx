@@ -151,49 +151,68 @@ export default function GanttPreview() {
     });
   };
 
+  const handleScrollToToday = () => {
+    ganttRef.current?.scrollToToday();
+  };
+
   return (
     <div className="mx-auto w-[80%]">
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <div className="h-2 w-2 rounded-full bg-green-500"></div>
+          {/* Project name */}
+          <span className="text-sm font-medium text-slate-700" style={{ fontFamily: 'Cascadia Mono, monospace' }}>
+            getgantt-demo
+          </span>
 
-          {/* View mode toggle */}
-          <div className="inline-flex rounded-md">
-            {(['day', 'week', 'month'] as const).map((nextMode, index) => (
-              <button
-                key={nextMode}
-                type="button"
-                onClick={() => setViewMode(nextMode)}
-                className={`flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border ${
-                  index === 0 ? 'rounded-l-md' : ''
-                } ${index === 2 ? 'rounded-r-md' : ''} ${
-                  viewMode === nextMode
-                    ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
-                    : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary'
-                }`}
-              >
-                {nextMode === 'day' && (
-                  <>
-                    <span className="hidden sm:inline">День</span>
-                    <span className="sm:hidden">Д</span>
-                  </>
-                )}
-                {nextMode === 'week' && (
-                  <>
-                    <span className="hidden sm:inline">Неделя</span>
-                    <span className="sm:hidden">Н</span>
-                  </>
-                )}
-                {nextMode === 'month' && (
-                  <>
-                    <span className="hidden sm:inline">Месяц</span>
-                    <span className="sm:hidden">М</span>
-                  </>
-                )}
-              </button>
-            ))}
+          {/* Controls */}
+          <div className="flex items-center gap-2">
+            {/* Today button */}
+            <button
+              type="button"
+              onClick={handleScrollToToday}
+              className="flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border border-slate-300 text-slate-600 rounded-md hover:border-primary hover:text-primary"
+            >
+              Сегодня
+            </button>
+
+            {/* View mode toggle */}
+            <div className="inline-flex rounded-md">
+              {(['day', 'week', 'month'] as const).map((nextMode, index) => (
+                <button
+                  key={nextMode}
+                  type="button"
+                  onClick={() => setViewMode(nextMode)}
+                  className={`flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border ${
+                    index === 0 ? 'rounded-l-md' : ''
+                  } ${index === 2 ? 'rounded-r-md' : ''} ${
+                    viewMode === nextMode
+                      ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+                      : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary'
+                  }`}
+                >
+                  {nextMode === 'day' && (
+                    <>
+                      <span className="hidden sm:inline">День</span>
+                      <span className="sm:hidden">Д</span>
+                    </>
+                  )}
+                  {nextMode === 'week' && (
+                    <>
+                      <span className="hidden sm:inline">Неделя</span>
+                      <span className="sm:hidden">Н</span>
+                    </>
+                  )}
+                  {nextMode === 'month' && (
+                    <>
+                      <span className="hidden sm:inline">Месяц</span>
+                      <span className="sm:hidden">М</span>
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
