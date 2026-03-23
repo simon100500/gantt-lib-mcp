@@ -8,16 +8,14 @@ const DEMO_TASKS: Task[] = [
   {
     id: 'phase-1',
     name: 'Фаза 1: Подготовка',
-    startDate: '2026-03-24',
-    endDate: '2026-04-10',
-    color: '#1d4ed8',
+    startDate: '2026-03-01',
+    endDate: '2026-03-20',
   },
   {
     id: 'task-1-1',
     name: 'Анализ требований',
-    startDate: '2026-03-24',
-    endDate: '2026-03-28',
-    color: '#3b82f6',
+    startDate: '2026-03-01',
+    endDate: '2026-03-08',
     progress: 100,
     accepted: true,
     parentId: 'phase-1',
@@ -26,19 +24,17 @@ const DEMO_TASKS: Task[] = [
   {
     id: 'task-1-2',
     name: 'Прототипирование',
-    startDate: '2026-03-29',
-    endDate: '2026-04-05',
-    color: '#8b5cf6',
-    progress: 40,
+    startDate: '2026-03-09',
+    endDate: '2026-03-18',
+    progress: 30,
     parentId: 'phase-1',
     dependencies: [{ taskId: 'task-1-1', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-1-3',
     name: 'Согласование',
-    startDate: '2026-04-06',
-    endDate: '2026-04-10',
-    color: '#06b6d4',
+    startDate: '2026-03-15',
+    endDate: '2026-03-20',
     progress: 0,
     parentId: 'phase-1',
     dependencies: [{ taskId: 'task-1-2', type: 'FS' as const, lag: 0 }],
@@ -48,37 +44,33 @@ const DEMO_TASKS: Task[] = [
   {
     id: 'phase-2',
     name: 'Фаза 2: Разработка',
-    startDate: '2026-04-11',
-    endDate: '2026-05-05',
-    color: '#7c3aed',
+    startDate: '2026-03-21',
+    endDate: '2026-04-20',
     dependencies: [{ taskId: 'phase-1', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-2-1',
     name: 'Frontend разработка',
-    startDate: '2026-04-11',
-    endDate: '2026-04-25',
-    color: '#a78bfa',
-    progress: 60,
+    startDate: '2026-03-21',
+    endDate: '2026-04-10',
+    progress: 25,
     parentId: 'phase-2',
     dependencies: [{ taskId: 'task-1-3', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-2-2',
     name: 'Backend API',
-    startDate: '2026-04-15',
-    endDate: '2026-04-28',
-    color: '#6366f1',
-    progress: 30,
+    startDate: '2026-03-25',
+    endDate: '2026-04-12',
+    progress: 15,
     parentId: 'phase-2',
     dependencies: [{ taskId: 'task-1-3', type: 'SS' as const, lag: 5 }],
   },
   {
     id: 'task-2-3',
     name: 'Интеграция',
-    startDate: '2026-04-29',
-    endDate: '2026-05-05',
-    color: '#3b82f6',
+    startDate: '2026-04-13',
+    endDate: '2026-04-20',
     progress: 0,
     parentId: 'phase-2',
     dependencies: [
@@ -91,28 +83,24 @@ const DEMO_TASKS: Task[] = [
   {
     id: 'task-design',
     name: 'Дизайн UI',
-    startDate: '2026-04-01',
-    endDate: '2026-04-12',
-    color: '#ec4899',
-    progress: 80,
-    accepted: true,
+    startDate: '2026-03-10',
+    endDate: '2026-03-22',
+    progress: 60,
     dependencies: [{ taskId: 'task-1-1', type: 'SS' as const, lag: 5 }],
   },
   {
     id: 'task-qa',
     name: 'QA тестирование',
-    startDate: '2026-05-06',
-    endDate: '2026-05-12',
-    color: '#ea580c',
+    startDate: '2026-04-21',
+    endDate: '2026-04-28',
     progress: 0,
     dependencies: [{ taskId: 'task-2-3', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-deploy',
     name: 'Деплой на прод',
-    startDate: '2026-05-13',
-    endDate: '2026-05-15',
-    color: '#16a34a',
+    startDate: '2026-04-29',
+    endDate: '2026-05-02',
     progress: 0,
     dependencies: [{ taskId: 'task-qa', type: 'FS' as const, lag: 0 }],
   },
@@ -155,9 +143,9 @@ export default function GanttPreview() {
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
     setTasks(prev => {
-      // Use the order from updatedTasks, but merge with properties from prev
-      const prevMap = new Map(prev.map(t => [t.id, t]));
-      return updatedTasks.map(t => prevMap.get(t.id) ? { ...prevMap.get(t.id)!, ...t } : t);
+      // updatedTasks contains ONLY the changed tasks - merge them into prev
+      const updatedMap = new Map(updatedTasks.map(t => [t.id, t]));
+      return prev.map(t => updatedMap.get(t.id) ?? t);
     });
   }, []);
 
@@ -286,11 +274,10 @@ export default function GanttPreview() {
           <GanttChart
             ref={ganttRef}
             tasks={tasks}
-            month={new Date('2026-03-01')}
             dayWidth={DAY_WIDTHS[viewMode]}
             rowHeight={36}
             containerHeight="500px"
-            onChange={handleChange}
+            onTasksChange={handleChange}
             onAdd={handleAdd}
             onDelete={handleDelete}
             onInsertAfter={handleInsertAfter}
@@ -300,6 +287,8 @@ export default function GanttPreview() {
             showTaskList={true}
             taskListWidth={140}
             viewMode={viewMode}
+            businessDays={true}
+            highlightExpiredTasks={true}
           />
         </div>
       </div>
