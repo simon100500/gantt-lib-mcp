@@ -126,12 +126,7 @@ export default function GanttPreview() {
   };
 
   return (
-    <div className="w-full max-w-[640px] px-6">
-      {/* Header */}
-      <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
-        Попробуйте интерактивный график
-      </h2>
-
+    <div className="mx-auto w-[80%]">
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
