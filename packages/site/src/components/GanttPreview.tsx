@@ -154,7 +154,11 @@ export default function GanttPreview() {
   }, []);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
-    setTasks(updatedTasks);
+    setTasks(prev => {
+      // Use the order from updatedTasks, but merge with properties from prev
+      const prevMap = new Map(prev.map(t => [t.id, t]));
+      return updatedTasks.map(t => prevMap.get(t.id) ? { ...prevMap.get(t.id)!, ...t } : t);
+    });
   }, []);
 
   const handleAdd = useCallback((newTask: Task) => {
