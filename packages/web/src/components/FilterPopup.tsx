@@ -20,6 +20,8 @@ export function FilterPopup({ children }: FilterPopupProps) {
   const filterSearchText = useUIStore((state) => state.filterSearchText);
   const filterDateFrom = useUIStore((state) => state.filterDateFrom);
   const filterDateTo = useUIStore((state) => state.filterDateTo);
+  const filterMode = useUIStore((state) => state.filterMode);
+  const setFilterMode = useUIStore((state) => state.setFilterMode);
 
   const setFilterWithoutDeps = useUIStore((state) => state.setFilterWithoutDeps);
   const setFilterExpired = useUIStore((state) => state.setFilterExpired);
@@ -32,7 +34,8 @@ export function FilterPopup({ children }: FilterPopupProps) {
     filterWithoutDeps ||
     filterExpired ||
     filterSearchText.trim().length > 0 ||
-    (filterDateFrom && filterDateTo);
+    (filterDateFrom && filterDateTo) ||
+    filterMode === 'hide';
 
   const handleReset = () => {
     resetFilters();
@@ -80,6 +83,23 @@ export function FilterPopup({ children }: FilterPopupProps) {
             className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
           />
           <span className="text-sm">Просроченные</span>
+        </DropdownMenuItem>
+
+        {/* Filter mode checkbox */}
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            setFilterMode(filterMode === 'hide' ? 'highlight' : 'hide');
+          }}
+          className="flex cursor-pointer items-center gap-2"
+        >
+          <input
+            type="checkbox"
+            checked={filterMode === 'hide'}
+            readOnly
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
+          />
+          <span className="text-sm">Только найденные</span>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
