@@ -8,101 +8,71 @@ interface RotatingWordsProps {
 
 export default function RotatingWords({
   words,
-  interval = 2500,
+  interval = 2800,
   className = '',
 }: RotatingWordsProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [nextIndex, setNextIndex] = useState(1);
-  const [width, setWidth] = useState(0);
+  const [prevIndex, setPrevIndex] = useState<number | null>(null);
   const slotRef = useRef<HTMLSpanElement>(null);
-  const measurerRef = useRef<HTMLSpanElement>(null);
-
-  // Measure word widths
-  const getWordWidth = (word: string) => {
-    if (!measurerRef.current) return 0;
-    measurerRef.current.textContent = word;
-    return measurerRef.current.offsetWidth;
-  };
-
-  useEffect(() => {
-    // Set initial width
-    if (slotRef.current && measurerRef.current) {
-      const initialWidth = getWordWidth(words[0]);
-      setWidth(initialWidth);
-      slotRef.current.style.width = `${initialWidth}px`;
-    }
-  }, [words]);
 
   useEffect(() => {
     const timer = setInterval(() => {
+      setPrevIndex(currentIndex);
       setCurrentIndex((prev) => (prev + 1) % words.length);
-      setNextIndex((prev) => (prev + 1) % words.length);
     }, interval);
 
     return () => clearInterval(timer);
-  }, [words.length, interval]);
+  }, [words.length, interval, currentIndex]);
 
-  // Animate width when word changes
+  // Clear prev index after animation completes
   useEffect(() => {
-    if (slotRef.current) {
-      const newWidth = getWordWidth(words[currentIndex]);
-      setWidth(newWidth);
-      slotRef.current.style.width = `${newWidth}px`;
+    if (prevIndex !== null) {
+      const timeout = setTimeout(() => {
+        setPrevIndex(null);
+      }, 500);
+      return () => clearTimeout(timeout);
     }
-  }, [currentIndex, words]);
+  }, [prevIndex]);
 
   return (
-    <>
-      {/* Hidden measurer for width calculation */}
-      <span
-        ref={measurerRef}
-        className="absolute -left-[9999px] top-0 font-extrabold"
-        style={{
-          fontFamily: 'Noto Sans, sans-serif',
-          fontSize: 'clamp(36px, 5.5vw, 60px)',
-          fontStyle: 'normal',
-          fontWeight: 800,
-        }}
-      >
-        {words[currentIndex]}
-      </span>
+    <span
+      ref={slotRef}
+      class={`relative inline-block h-[1.2em] w-[300px] overflow-hidden align-middle leading-none ${className}`}
+      style={{ transform: 'translateY(0.22em)' }}
+    >
+      {words.map((word, idx) => {
+        const isCurrent = idx === currentIndex;
+        const isExiting = idx === prevIndex;
 
-      {/* Word slot with animated width */}
-      <span
-        ref={slotRef}
-        className={`relative inline-block min-h-[1.15em] overflow-hidden align-baseline transition-all duration-[350ms] ease-out ${className}`}
-        style={{ width: `${width}px` }}
-      >
-        {/* Current word (visible) */}
-        <span
-          key={currentIndex}
-          className="block animate-word-in text-primary"
-          style={{
-            fontFamily: 'Noto Sans, sans-serif',
-            fontSize: 'clamp(36px, 5.5vw, 60px)',
-            fontStyle: 'normal',
-            fontWeight: 800,
-          }}
-        >
-          {words[currentIndex]}
-        </span>
+        let transform = 'translateY(100%)';
+        let opacity = '0';
 
-        {/* Previous word (exiting) */}
-        {currentIndex > 0 && (
+        if (isCurrent) {
+          transform = 'translateY(0)';
+          opacity = '1';
+        } else if (isExiting) {
+          transform = 'translateY(-100%)';
+          opacity = '0';
+        }
+
+        return (
           <span
-            key={currentIndex - 1}
-            className="absolute left-0 top-0 block animate-word-out text-primary"
+            key={word}
+            class="absolute left-0 top-0 block w-full text-center transition-all duration-[500ms] ease-out text-primary"
             style={{
               fontFamily: 'Noto Sans, sans-serif',
-              fontSize: 'clamp(36px, 5.5vw, 60px)',
+              fontSize: 'clamp(32px, 6vw, 64px)',
               fontStyle: 'normal',
               fontWeight: 800,
+              transform,
+              opacity,
+              transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
             }}
           >
-            {words[currentIndex - 1]}
+            {word}
           </span>
-        )}
-      </span>
-    </>
+        );
+      })}
+    </span>
   );
 }

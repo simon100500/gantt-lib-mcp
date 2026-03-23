@@ -12,8 +12,8 @@
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
-    /* Primary — indigo (from UI-SPEC: hsl(217 91% 60%) / #1d4ed8) */
-    --primary: 217 91% 60%;
+    /* Primary — violet from UI editor (hsl(245 70% 60%) / ≈#6158e0) */
+    --primary: 245 70% 60%;
     --primary-foreground: 0 0% 98%;
 
     /* Secondary — бледно-серый */
@@ -25,7 +25,7 @@
     --muted-foreground: 215 16% 47%;
 
     /* Accent — same as primary for CTAs */
-    --accent: 217 91% 60%;
+    --accent: 245 70% 60%;
     --accent-foreground: 0 0% 98%;
 
     /* Destructive */
@@ -35,7 +35,7 @@
     /* Borders & inputs — slate-200 */
     --border: 214 14% 90%;
     --input: 214 14% 90%;
-    --ring: 217 91% 60%;
+    --ring: 245 70% 60%;
     --radius: 0.375rem;
 
     /* Supporting colors from UI-SPEC */

@@ -193,7 +193,9 @@ None currently.
 
 ### Quick Tasks Completed
 
-See individual phase transitions in git history for completed quick tasks.
+| Date | Task | Files Changed |
+|------|------|---------------|
+| 2026-03-23 | Hero: обновить верстку и применить фиолетовый accent из web | Hero.astro, RotatingWords.tsx, global.css |
 
 ---
 
