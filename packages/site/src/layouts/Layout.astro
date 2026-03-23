@@ -1,12 +1,12 @@
 ---
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
 
 interface Props {
   title?: string;
 }
 
-const { title = 'GanttAI — Из текста в Гантт за 30 секунд' } = Astro.props;
+const { title = "GetGantt — Из текста в Гант за 30 секунд" } = Astro.props;
 ---
 
 <!doctype html>
@@ -15,9 +15,15 @@ const { title = 'GanttAI — Из текста в Гантт за 30 секун�
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&subset=cyrillic&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&subset=cyrillic&display=swap"
+      rel="stylesheet"
+    />
     <title>{title}</title>
-    <meta name="description" content="Вставьте любой документ или напишите своими словами. Получите готовый график с задачами, сроками и командой." />
+    <meta
+      name="description"
+      content="Вставьте любой документ или напишите своими словами. Получите готовый график с задачами, сроками и командой."
+    />
   </head>
   <body>
     <Header />
@@ -30,5 +36,5 @@ const { title = 'GanttAI — Из текста в Гантт за 30 секун�
 
 <style is:global>
   /* Import global CSS */
-  @import '../styles/global.css';
+  @import "../styles/global.css";
 </style>

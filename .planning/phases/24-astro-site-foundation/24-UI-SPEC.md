@@ -170,7 +170,7 @@ Declared values (must be multiples of 4):
 
 ### New Components (Phase 24)
 - **Header** (nav bar)
-  - Logo left: square icon + "GanttAI" text
+  - Logo left: square icon + "GetGantt" text
   - Links center: Features, FAQ (outline style on hover)
   - CTA right: "Войти" (outline), "Попробовать" (primary)
   - Height: 58px
@@ -200,7 +200,7 @@ Declared values (must be multiples of 4):
   - Product: Features link
   - Company: About, Contact
   - Legal: Privacy, Terms
-  - Copyright: © 2026 GanttAI
+  - Copyright: © 2026 GetGantt
 
 - **404 Page**
   - Heading: "Страница не найдена"
