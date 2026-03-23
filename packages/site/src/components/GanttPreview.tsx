@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { GanttChart } from 'gantt-lib';
-import type { Task, TaskDependency } from 'gantt-lib';
+import type { Task } from 'gantt-lib';
 import 'gantt-lib/styles.css';
 
 const DEMO_TASKS: Task[] = [
@@ -21,6 +21,7 @@ const DEMO_TASKS: Task[] = [
     progress: 100,
     accepted: true,
     parentId: 'phase-1',
+    dependencies: [],
   },
   {
     id: 'task-1-2',
@@ -30,6 +31,7 @@ const DEMO_TASKS: Task[] = [
     color: '#8b5cf6',
     progress: 40,
     parentId: 'phase-1',
+    dependencies: [{ taskId: 'task-1-1', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-1-3',
@@ -39,6 +41,7 @@ const DEMO_TASKS: Task[] = [
     color: '#06b6d4',
     progress: 0,
     parentId: 'phase-1',
+    dependencies: [{ taskId: 'task-1-2', type: 'FS' as const, lag: 0 }],
   },
 
   // Parent 2: Фаза 2
@@ -48,6 +51,7 @@ const DEMO_TASKS: Task[] = [
     startDate: '2026-04-11',
     endDate: '2026-05-05',
     color: '#7c3aed',
+    dependencies: [{ taskId: 'phase-1', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-2-1',
@@ -57,6 +61,7 @@ const DEMO_TASKS: Task[] = [
     color: '#a78bfa',
     progress: 60,
     parentId: 'phase-2',
+    dependencies: [{ taskId: 'task-1-3', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-2-2',
@@ -66,6 +71,7 @@ const DEMO_TASKS: Task[] = [
     color: '#6366f1',
     progress: 30,
     parentId: 'phase-2',
+    dependencies: [{ taskId: 'task-1-3', type: 'SS' as const, lag: 5 }],
   },
   {
     id: 'task-2-3',
@@ -75,6 +81,10 @@ const DEMO_TASKS: Task[] = [
     color: '#3b82f6',
     progress: 0,
     parentId: 'phase-2',
+    dependencies: [
+      { taskId: 'task-2-1', type: 'FS' as const, lag: 0 },
+      { taskId: 'task-2-2', type: 'FS' as const, lag: 0 },
+    ],
   },
 
   // Independent tasks
@@ -86,6 +96,7 @@ const DEMO_TASKS: Task[] = [
     color: '#ec4899',
     progress: 80,
     accepted: true,
+    dependencies: [{ taskId: 'task-1-1', type: 'SS' as const, lag: 5 }],
   },
   {
     id: 'task-qa',
@@ -94,6 +105,7 @@ const DEMO_TASKS: Task[] = [
     endDate: '2026-05-12',
     color: '#ea580c',
     progress: 0,
+    dependencies: [{ taskId: 'task-2-3', type: 'FS' as const, lag: 0 }],
   },
   {
     id: 'task-deploy',
@@ -102,18 +114,8 @@ const DEMO_TASKS: Task[] = [
     endDate: '2026-05-15',
     color: '#16a34a',
     progress: 0,
+    dependencies: [{ taskId: 'task-qa', type: 'FS' as const, lag: 0 }],
   },
-];
-
-const DEMO_DEPENDENCIES: TaskDependency[] = [
-  { taskId: 'task-1-2', dependsOnTaskId: 'task-1-1', type: 'FS' as const },
-  { taskId: 'task-1-3', dependsOnTaskId: 'task-1-2', type: 'FS' as const },
-  { taskId: 'task-2-1', dependsOnTaskId: 'task-1-3', type: 'FS' as const },
-  { taskId: 'task-2-2', dependsOnTaskId: 'task-1-3', type: 'FS' as const },
-  { taskId: 'task-2-3', dependsOnTaskId: 'task-2-1', type: 'FS' as const },
-  { taskId: 'task-2-3', dependsOnTaskId: 'task-2-2', type: 'FS' as const },
-  { taskId: 'task-qa', dependsOnTaskId: 'task-2-3', type: 'FS' as const },
-  { taskId: 'task-deploy', dependsOnTaskId: 'task-qa', type: 'FS' as const },
 ];
 
 const DAY_WIDTHS = {
@@ -221,7 +223,6 @@ export default function GanttPreview() {
           <GanttChart
             ref={ganttRef}
             tasks={tasks}
-            dependencies={DEMO_DEPENDENCIES}
             month={new Date('2026-03-01')}
             dayWidth={DAY_WIDTHS[viewMode]}
             rowHeight={42}
