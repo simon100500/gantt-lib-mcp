@@ -10,7 +10,7 @@ COPY packages/site/package.json packages/site/package-lock.json* ./
 RUN npm install --ignore-scripts
 
 # Copy source files from packages/site
-COPY packages/site . .
+COPY packages/site ./
 
 # Build the site
 RUN npm run build
