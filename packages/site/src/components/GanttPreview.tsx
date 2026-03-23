@@ -124,6 +124,22 @@ const DAY_WIDTHS = {
   month: 3,
 };
 
+// Helper function to check if task is a parent
+const isTaskParent = (taskId: string, tasks: Task[]): boolean => {
+  return tasks.some(t => t.parentId === taskId);
+};
+
+// Helper function to get all descendants of a parent task
+const getAllDescendants = (parentId: string, tasks: Task[]): Task[] => {
+  const descendants: Task[] = [];
+  const children = tasks.filter(t => t.parentId === parentId);
+  for (const child of children) {
+    descendants.push(child);
+    descendants.push(...getAllDescendants(child.id, tasks));
+  }
+  return descendants;
+};
+
 export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
@@ -143,6 +159,40 @@ export default function GanttPreview() {
 
   const handleAdd = useCallback((newTask: Task) => {
     setTasks(prev => [...prev, newTask]);
+  }, []);
+
+  const handleDelete = useCallback((taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }, []);
+
+  const handleInsertAfter = useCallback((taskId: string, newTask: Task) => {
+    setTasks(prev => {
+      const task = prev.find(t => t.id === taskId);
+      if (!task) return prev;
+
+      // Case 1: Task is a parent → insert after all descendants
+      if (isTaskParent(taskId, prev)) {
+        const descendants = getAllDescendants(taskId, prev);
+        const lastIndex = descendants.length > 0
+          ? prev.findIndex(t => t.id === descendants[descendants.length - 1].id)
+          : prev.findIndex(t => t.id === taskId);
+        if (lastIndex === -1) return prev;
+        const newTasks = [...prev];
+        newTasks.splice(lastIndex + 1, 0, { ...newTask, parentId: undefined });
+        return newTasks;
+      }
+
+      // Case 2: Task is a child → insert with same parentId after current task
+      const index = prev.findIndex(t => t.id === taskId);
+      if (index === -1) return prev;
+      const newTasks = [...prev];
+      newTasks.splice(index + 1, 0, { ...newTask, parentId: task.parentId });
+      return newTasks;
+    });
+  }, []);
+
+  const handleReorder = useCallback((reorderedTasks: Task[]) => {
+    setTasks(reorderedTasks);
   }, []);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
@@ -238,6 +288,9 @@ export default function GanttPreview() {
             containerHeight="500px"
             onChange={handleChange}
             onAdd={handleAdd}
+            onDelete={handleDelete}
+            onInsertAfter={handleInsertAfter}
+            onReorder={handleReorder}
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
             showTaskList={true}
