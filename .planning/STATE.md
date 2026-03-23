@@ -1,8 +1,22 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: MVP
+current_phase: 24
+status: unknown
+last_updated: "2026-03-23T19:47:56.157Z"
+progress:
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 0
+---
+
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-23
 **Current milestone:** v4.0 Astro Landing
-**Current phase:** Phase 24 (Astro Site Foundation)
+**Current phase:** 24
 
 ---
 
@@ -20,19 +34,13 @@ AI может программно управлять диаграммами Г�
 
 ## Current Position
 
-### Milestone: v4.0 Astro Landing
-
-**Goal:** Разделить marketing и app — создать Astro сайт на getgantt.ru, оставить редактор на ai.getgantt.ru
-
-**Phase:** 24 - Astro Site Foundation
-**Plan:** Not started
-**Status:** Planning
-
-**Progress:** Phase 24 of 27 (0% of milestone)
+Phase: 24 (astro-site-foundation) — EXECUTING
+Plan: 3 of 3
 
 ### Recent Work
 
 **v3.0 Completed (2026-03-22):**
+
 - Phase 17: Token Economy (compact mode, pagination, history limit)
 - Phase 18: Agent Hardening (max turns, timeout, tool restrictions)
 - Phase 19: Task Hierarchy (parentId in MCP tools)
@@ -42,6 +50,7 @@ AI может программно управлять диаграммами Г�
 - Phase 23: Task Filtering UI
 
 **Known Gaps:**
+
 - Phase 9 Plan 6: Auth UI (OTP modal, project switcher) — backend complete, UI pending
 
 ---
@@ -86,10 +95,14 @@ AI может программно управлять диаграммами Г�
 | parentId вместо nested task API | Проще, использует существующую структуру БД | ✓ Good (v3.0) |
 | Zustand для frontend state | Единый source of truth вместо scattered state | ✓ Good (v3.0) |
 | Astro для marketing site | Разделение marketing/app — независимый деплой, SEO | TBD (v4.0) |
+| Phase 24-astro-site-foundation P01 | 153 | 4 tasks | 8 files |
+| Phase 24 P02 | 180 | 5 tasks | 12 files |
+| Phase 24 P03 | 540 | 3 tasks | 15 files |
 
 ### Architecture
 
 **Monorepo structure:**
+
 ```
 packages/
   mcp/       — MCP server with stdio transport
@@ -99,6 +112,7 @@ packages/
 ```
 
 **Tech stack:**
+
 - MCP Server: @modelcontextprotocol/sdk
 - Web Server: Fastify + WebSocket + Prisma + PostgreSQL
 - Frontend: React + Vite + Zustand + gantt-lib
@@ -107,6 +121,7 @@ packages/
 - Deployment: Docker multi-stage build + Nginx + CapRover
 
 **Deployment (v4.0 target):**
+
 - getgantt.ru → packages/site (Astro static)
 - ai.getgantt.ru → packages/web + packages/server (React + Fastify)
 
@@ -129,6 +144,7 @@ packages/
 Creating a separate marketing site on Astro to split marketing concerns from the app. This allows independent deployment cycles and better SEO for the landing page while keeping the interactive editor on ai.getgantt.ru.
 
 **Key deliverables:**
+
 - packages/site with Astro 5.0 + React + Tailwind
 - Hero section with AI typing demo
 - Interactive gantt preview via Astro islands
@@ -139,6 +155,7 @@ Creating a separate marketing site on Astro to split marketing concerns from the
 ### Todos
 
 **Immediate (Phase 24):**
+
 - [ ] Set up Astro 5.0 project in packages/site
 - [ ] Configure React + Tailwind integrations
 - [ ] Create layout components (Header, Footer, Navigation)
@@ -146,11 +163,13 @@ Creating a separate marketing site on Astro to split marketing concerns from the
 - [ ] Add responsive design (mobile/desktop breakpoints)
 
 **Upcoming (Phase 25):**
+
 - [ ] Integrate gantt-lib via Astro islands
 - [ ] Create interactive demo with sample tasks
 - [ ] Implement drag-to-edit functionality
 
 **Upcoming (Phase 26):**
+
 - [ ] Create /features page with feature descriptions
 - [ ] Create /faq page with 10 Q&A
 - [ ] Create /privacy and /terms pages
@@ -158,6 +177,7 @@ Creating a separate marketing site on Astro to split marketing concerns from the
 - [ ] Configure meta tags and OG tags
 
 **Upcoming (Phase 27):**
+
 - [ ] Create Dockerfile.site for static build
 - [ ] Configure CapRover multi-domain deployment
 - [ ] Set up CORS for WebSocket on ai.getgantt.ru

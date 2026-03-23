@@ -45,7 +45,7 @@
 8. User can click "Смотреть демо" CTA → scrolls to demo section (placeholder for Phase 25)
 9. User sees custom 404 page with CTA to homepage instead of default error
 
-**Plans:** 3 plans
+**Plans:** 0/3 plans executed
 
 - [ ] 24-01-PLAN.md — Astro project setup with React + Tailwind integrations, design system foundation
 - [ ] 24-02-PLAN.md — Header, Footer, Layout components with mobile navigation and 404 page
@@ -122,7 +122,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 24. Astro Site Foundation | 0/3 | Planning | - |
+| 24. Astro Site Foundation | 0/3 | Planned    |  |
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Not started | - |
 | 27. Domain Separation | 0/3 | Not started | - |
