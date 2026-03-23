@@ -132,7 +132,18 @@ export default function GanttPreview() {
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  const [showTaskList, setShowTaskList] = useState(true);
   const ganttRef = useRef<{ scrollToToday: () => void }>(null);
+
+  // Hide task list on mobile screens
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 768px)');
+    setShowTaskList(!mql.matches);
+
+    const listener = (e: MediaQueryListEvent) => setShowTaskList(!e.matches);
+    mql.addEventListener('change', listener);
+    return () => mql.removeEventListener('change', listener);
+  }, []);
 
   useEffect(() => {
     // Scroll to today after component mounts
@@ -225,9 +236,10 @@ export default function GanttPreview() {
             <button
               type="button"
               onClick={handleScrollToToday}
-              className="flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border border-slate-300 text-slate-600 rounded-md hover:border-primary hover:text-primary"
+              className="flex h-8 items-center gap-1.5 px-3 text-xs font-medium transition-colors focus-visible:outline-none border border-slate-300 text-slate-600 rounded-md hover:border-primary hover:text-primary"
             >
-              Сегодня
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-flag-triangle-right"><path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5"/></svg>
+              <span className="hidden sm:inline">Сегодня</span>
             </button>
 
             {/* View mode toggle */}
@@ -284,7 +296,7 @@ export default function GanttPreview() {
             onReorder={handleReorder}
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
-            showTaskList={true}
+            showTaskList={showTaskList}
             taskListWidth={140}
             viewMode={viewMode}
             businessDays={true}
