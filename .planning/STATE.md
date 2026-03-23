@@ -196,6 +196,7 @@ None currently.
 | Date | Task | Files Changed |
 |------|------|---------------|
 | 2026-03-23 | Hero: обновить верстку и применить фиолетовый accent из web | Hero.astro, RotatingWords.tsx, global.css |
+| 2026-03-24 | Hero: favicon.svg лого и убрать дыры в верстке | Header.astro, Hero.astro, RotatingWords.tsx, favicon.svg |
 
 ---
 
