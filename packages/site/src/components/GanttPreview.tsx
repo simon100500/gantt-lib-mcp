@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { Task } from 'gantt-lib';
 import 'gantt-lib/styles.css';
@@ -137,11 +137,15 @@ export default function GanttPreview() {
     }, 100);
   }, []);
 
-  const handleChange = (updatedTasks: Task[]) => {
-    setTasks(prev => updatedTasks);
-  };
+  const handleChange = useCallback((updatedTasks: Task[]) => {
+    setTasks(updatedTasks);
+  }, []);
 
-  const handleToggleCollapse = (parentId: string) => {
+  const handleAdd = useCallback((newTask: Task) => {
+    setTasks(prev => [...prev, newTask]);
+  }, []);
+
+  const handleToggleCollapse = useCallback((parentId: string) => {
     setCollapsedParentIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(parentId)) {
@@ -151,7 +155,7 @@ export default function GanttPreview() {
       }
       return newSet;
     });
-  };
+  }, []);
 
   const handleScrollToToday = () => {
     ganttRef.current?.scrollToToday();
@@ -233,6 +237,7 @@ export default function GanttPreview() {
             rowHeight={36}
             containerHeight="500px"
             onChange={handleChange}
+            onAdd={handleAdd}
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
             showTaskList={true}
