@@ -1,101 +1,186 @@
----
-gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Astro Landing
-status: in_progress
-last_updated: "2026-03-23T00:00:00.000Z"
-progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
----
-
-# STATE: gantt-lib MCP Server
+# Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-23
+**Current milestone:** v4.0 Astro Landing
+**Current phase:** Phase 24 (Astro Site Foundation)
+
+---
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-03-22)
+### What This Is
 
-**Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях.
+Полноценный веб-редактор диаграмм Ганта с AI-ассистентом. MCP-сервер на TypeScript для программного управления задачами, React UI с интерактивным редактированием и WebSocket real-time sync. Деплой в один контейнер на CapRover с PostgreSQL персистентностью.
 
-**Current focus:** Planning next milestone — use `/gsd:new-milestone`
+### Core Value
+
+AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях. Пользователи могут редактировать диаграмму интерактивно (drag-to-edit) или через AI-чат.
+
+---
 
 ## Current Position
 
-Milestone: v4.0 — STARTED
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-23 — Milestone v4.0 started
+### Milestone: v4.0 Astro Landing
 
-## Decisions
+**Goal:** Разделить marketing и app — создать Astro сайт на getgantt.ru, оставить редактор на ai.getgantt.ru
 
-- Keep chat and UI types local to their store modules during the first Zustand pass so ownership can move without broad shared-type churn.
-- Route save-state transport through `useUIStore.getState()` while keeping `useBatchTaskUpdate` as the stable migration hook surface.
-- Keep `packages/web/src/hooks/useAuth.ts` as a compatibility wrapper so existing consumers can migrate incrementally to Zustand-backed auth state.
-- Keep token refresh scheduling, visibility refresh, and storage synchronization inside `packages/web/src/stores/useAuthStore.ts` instead of spreading auth orchestration across components.
-- Keep the existing task hooks as compatibility adapters while moving task source selection and loading into `useTaskStore`.
-- Route WebSocket task and chat events directly into Zustand stores so `App.tsx` no longer depends on callback-local task or chat state.
-- [Phase 22]: Keep App.tsx responsible for orchestration side effects while moving rendering into explicit workspace shells.
-- [Phase 22]: Let Toolbar and ProjectMenu read UI state from useUIStore directly instead of receiving App-local control props.
-- [Phase 23]: Import filter functions from 'gantt-lib' main module (not 'gantt-lib/filters' subpath)
-- [Phase 23]: Return undefined when no active filters (shows all tasks)
-- [Phase 23]: Use onPointerDownCapture to prevent DropdownMenu from closing on input interaction
-- [v3.0]: Compact mode by default for get_tasks (token efficiency 50-90%)
-- [v3.0]: Max 20 session turns + 2-minute timeout (agent safety)
-- [v3.0]: parentId parameter for task hierarchy (simplicity)
+**Phase:** 24 - Astro Site Foundation
+**Plan:** Not started
+**Status:** Planning
 
-## Recent Execution
+**Progress:** Phase 24 of 27 (0% of milestone)
 
-**Milestone v3.0 Complete:** All 7 phases (17-23) shipped with 12 plans.
+### Recent Work
 
-Archived:
-- `.planning/milestones/v3.0-ROADMAP.md`
-- `.planning/milestones/v3.0-REQUIREMENTS.md`
+**v3.0 Completed (2026-03-22):**
+- Phase 17: Token Economy (compact mode, pagination, history limit)
+- Phase 18: Agent Hardening (max turns, timeout, tool restrictions)
+- Phase 19: Task Hierarchy (parentId in MCP tools)
+- Phase 20: Conversation History (get_conversation_history, add_message)
+- Phase 21: Tool Quality (descriptions, error messages)
+- Phase 22: Zustand Frontend Refactor
+- Phase 23: Task Filtering UI
 
-Git tag: `v3.0` (pending creation)
+**Known Gaps:**
+- Phase 9 Plan 6: Auth UI (OTP modal, project switcher) — backend complete, UI pending
 
-## Quick Tasks Completed
+---
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260323-kw2 | Loading phrases без повторов | 2026-03-23 | 92e756a | [260323-kw2](./quick/260323-kw2/) |
-| 260322-q76 | Двойной toggle календарь/тасклист | 2026-03-22 | d40b2c8 | [260322-q76](./quick/260322-q76-gantt-lib-grid-toggle/) |
-| 260321-m9d | Primary кнопка + Ctrl+Enter | 2026-03-21 | 662f153 | [260321-m9d](./quick/260321-m9d-primary-ctrl-enter/) |
-| 260321-m63 | Кнопка "+ задача" в поиске | 2026-03-21 | 2019ece | [260321-m63](./quick/260321-m63/) |
-| 260320-fvq | Поиск по задачам в хедер | 2026-03-20 | 57ba246 | [260320-fvq-search-in-header](./quick/260320-fvq-search-in-header/) |
-| 260320-fx2 | Popover Radix UI для чипа связи | 2026-03-20 | 3bb023a | [260320-fx2-popover-radix-id-popover](./quick/260320-fx2-popover-radix-id-popover/) |
-| 260319-xbm | Recursive collapse all for parent tasks | 2026-03-20 | 4dbb2d7 | [260319-xbm](./quick/260319-xbm/) |
-| 260319-vc2 | UI localStorage persistence | 2026-03-19 | d471757 | [260319-vc2-ui-localstorage-viewmode-collapsedparent](./quick/260319-vc2-ui-localstorage-viewmode-collapsedparent/) |
-| 260319-uz3 | Loading Phrases | 2026-03-19 | fe3a27b | [260319-uz3-loading-phrases](./quick/260319-uz3-loading-phrases/) |
-| 260319-kol | Zustand project sidebar fixes | 2026-03-19 | d9bc17d | [260319-kol-zustand](./quick/260319-kol-zustand/) |
-| 260319-up3 | Auto-refresh projects on page load | 2026-03-19 | 55fd6e9 | [260319-up3](./quick/260319-up3/) |
+## Performance Metrics
 
-## Session Continuity
+### Milestone v3.0 Stats
 
-**Last session:** 2026-03-22
-**Milestone:** v3.0 COMPLETE
+- **Phases:** 7 (17-23)
+- **Plans:** 13
+- **Timeline:** 9 days (2026-03-13 → 2026-03-22)
+- **Commits:** 112
+- **Files changed:** 143 TypeScript files
+- **Lines added:** ~28,500
 
-**Next actions:**
+### Cumulative Stats (v1.0 - v3.0)
 
-1. Use `/gsd:new-milestone` to start the next milestone cycle
-2. Run `/clear` for fresh context window before next milestone
+- **Total phases:** 23
+- **Total plans:** 45
+- **Total timeline:** 31 days (2026-02-23 → 2026-03-22)
+- **Total commits:** 354
+- **Total LOC:** ~143,000 (TypeScript/JavaScript)
+
+---
 
 ## Accumulated Context
 
-### Roadmap Evolution
+### Key Decisions
 
-- Milestone v3.0 complete: Phases 17-23 (7 phases, 12 plans)
-- Token economy, agent hardening, task hierarchy, conversation history, tool quality
-- Zustand frontend refactor, UI filters
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| TypeScript вместо Python | gantt-lib написана на TS — естественная совместимость типов | ✓ Good |
+| npm workspaces вместо lerna/turborepo | 3 packages — достаточно простого workspace | ✓ Good |
+| Fastify + WebSocket вместо Express | Native WebSocket support, better performance | ✓ Good |
+| PostgreSQL для production | Несколько контейнеров + concurrent users — SQLite bottleneck | ✓ Complete (v2.0) |
+| gantt-lib вместо dhtmlx-gantt | TypeScript-first, lighter, better React integration | ✓ Good |
+| Multi-stage Docker build | Отдельные этапы сборки для web и server | ✓ Good |
+| OTP email вместо OAuth | Проще для internal tool, нет External dependencies | ✓ Good |
+| 127.0.0.1 вместо localhost в nginx | Alpine IPv6 DNS gotcha — localhost резолвится в ::1 | ✓ Good |
+| Compact mode по умолчанию | Экономия токенов для больших проектов — 50-90% reduction | ✓ Good (v3.0) |
+| Max 20 ходов агента + 2min timeout | Предотвращает infinite loops и hangs | ✓ Good (v3.0) |
+| parentId вместо nested task API | Проще, использует существующую структуру БД | ✓ Good (v3.0) |
+| Zustand для frontend state | Единый source of truth вместо scattered state | ✓ Good (v3.0) |
+| Astro для marketing site | Разделение marketing/app — независимый деплой, SEO | TBD (v4.0) |
 
-**Context for next milestone:**
+### Architecture
 
-- All phase summaries archived in `.planning/phases/17-*` through `23-*`
-- All quick tasks archived in `.planning/quick/`
-- MCP tools are production-ready with compact mode and pagination
-- Frontend uses Zustand for all state management
-- Task filtering UI shipped with localStorage persistence
+**Monorepo structure:**
+```
+packages/
+  mcp/       — MCP server with stdio transport
+  server/    — Fastify + WebSocket + Prisma + PostgreSQL
+  web/       — React + Vite + Zustand + gantt-lib
+  site/      — Astro marketing site (NEW in v4.0)
+```
+
+**Tech stack:**
+- MCP Server: @modelcontextprotocol/sdk
+- Web Server: Fastify + WebSocket + Prisma + PostgreSQL
+- Frontend: React + Vite + Zustand + gantt-lib
+- Marketing: Astro 5.0 + React + Tailwind
+- Auth: OTP email + JWT tokens
+- Deployment: Docker multi-stage build + Nginx + CapRover
+
+**Deployment (v4.0 target):**
+- getgantt.ru → packages/site (Astro static)
+- ai.getgantt.ru → packages/web + packages/server (React + Fastify)
+
+### Constraints
+
+- **Типизация:** Использовать типы из gantt-lib для совместимости (Task, TaskDependency)
+- **Хранение:** PostgreSQL для production scaling
+- **Язык:** TypeScript для соответствия gantt-lib экосистеме
+- **Деплой:** Docker контейнер на CapRover с внешней PostgreSQL базой данных
+- **State Management:** Zustand для всех frontend state
+
+---
+
+## Session Continuity
+
+### Current Focus
+
+**Milestone v4.0: Astro Landing**
+
+Creating a separate marketing site on Astro to split marketing concerns from the app. This allows independent deployment cycles and better SEO for the landing page while keeping the interactive editor on ai.getgantt.ru.
+
+**Key deliverables:**
+- packages/site with Astro 5.0 + React + Tailwind
+- Hero section with AI typing demo
+- Interactive gantt preview via Astro islands
+- Content pages (Features, FAQ, Privacy, Terms)
+- SEO fundamentals (sitemap, robots, meta tags)
+- Multi-domain deployment (getgantt.ru vs ai.getgantt.ru)
+
+### Todos
+
+**Immediate (Phase 24):**
+- [ ] Set up Astro 5.0 project in packages/site
+- [ ] Configure React + Tailwind integrations
+- [ ] Create layout components (Header, Footer, Navigation)
+- [ ] Implement hero section with typing demo
+- [ ] Add responsive design (mobile/desktop breakpoints)
+
+**Upcoming (Phase 25):**
+- [ ] Integrate gantt-lib via Astro islands
+- [ ] Create interactive demo with sample tasks
+- [ ] Implement drag-to-edit functionality
+
+**Upcoming (Phase 26):**
+- [ ] Create /features page with feature descriptions
+- [ ] Create /faq page with 10 Q&A
+- [ ] Create /privacy and /terms pages
+- [ ] Add sitemap.xml and robots.txt
+- [ ] Configure meta tags and OG tags
+
+**Upcoming (Phase 27):**
+- [ ] Create Dockerfile.site for static build
+- [ ] Configure CapRover multi-domain deployment
+- [ ] Set up CORS for WebSocket on ai.getgantt.ru
+- [ ] Update share link generation with PUBLIC_SHARE_URL
+
+### Blockers
+
+None currently.
+
+### Quick Tasks Completed
+
+See individual phase transitions in git history for completed quick tasks.
+
+---
+
+## Next Steps
+
+1. **Execute Phase 24:** `/gsd:plan-phase 24`
+2. **Complete Phase 24:** Implement Astro site foundation
+3. **Execute Phase 25:** Add interactive gantt preview
+4. **Execute Phase 26:** Add content pages and SEO
+5. **Execute Phase 27:** Configure domain separation
+6. **Complete Milestone:** `/gsd:complete-milestone`
+
+---
+*Last updated: 2026-03-23*

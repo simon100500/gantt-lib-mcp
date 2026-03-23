@@ -102,13 +102,35 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| SITE-01 through SITE-05 | TBD (roadmap) | Pending |
-| HERO-01 through HERO-05 | TBD (roadmap) | Pending |
-| INTER-01 through INTER-05 | TBD (roadmap) | Pending |
-| CONTENT-01 through CONTENT-07 | TBD (roadmap) | Pending |
-| DEPLOY-01 through DEPLOY-05 | TBD (roadmap) | Pending |
+| SITE-01 | 24 | Pending |
+| SITE-02 | 24 | Pending |
+| SITE-03 | 24 | Pending |
+| SITE-04 | 24 | Pending |
+| SITE-05 | 24 | Pending |
+| HERO-01 | 24 | Pending |
+| HERO-02 | 24 | Pending |
+| HERO-03 | 24 | Pending |
+| HERO-04 | 24 | Pending |
+| HERO-05 | 24 | Pending |
+| INTER-01 | 25 | Pending |
+| INTER-02 | 25 | Pending |
+| INTER-03 | 25 | Pending |
+| INTER-04 | 25 | Pending |
+| INTER-05 | 25 | Pending |
+| CONTENT-01 | 26 | Pending |
+| CONTENT-02 | 26 | Pending |
+| CONTENT-03 | 26 | Pending |
+| CONTENT-04 | 26 | Pending |
+| CONTENT-05 | 26 | Pending |
+| CONTENT-06 | 26 | Pending |
+| CONTENT-07 | 26 | Pending |
+| DEPLOY-01 | 27 | Pending |
+| DEPLOY-02 | 27 | Pending |
+| DEPLOY-03 | 27 | Pending |
+| DEPLOY-04 | 27 | Pending |
+| DEPLOY-05 | 27 | Pending |
 
-*Traceability будет заполнена после создания roadmap*
+**Coverage:** 27/27 requirements mapped to phases ✓
 
 ---
 

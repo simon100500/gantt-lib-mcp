@@ -1,128 +1,186 @@
-# ROADMAP: gantt-lib MCP Server
+# Roadmap: gantt-lib MCP Server
 
-**Created:** 2026-02-23
-**Current milestone:** Planning next milestone
-**Phase range:** 24+ (TBD)
+**Current milestone:** v4.0 Astro Landing
+**Granularity:** Coarse
+**Last updated:** 2026-03-23
 
-## Milestones
+## Progress Summary
 
-- ✅ **v1.0 MVP** — Phases 1-14 (shipped 2026-03-13)
-- ✅ **v2.0 PostgreSQL Migration** — Phases 15-16 (shipped 2026-03-17)
-- ✅ **v3.0 MCP Server Refactoring** — Phases 17-23 (shipped 2026-03-22)
+| Milestone | Phases | Status | Completed |
+|-----------|--------|--------|-----------|
+| v1.0 MVP | 1-14 | Shipped | 2026-03-13 |
+| v2.0 PostgreSQL | 15-16 | Shipped | 2026-03-17 |
+| v3.0 Hardening | 17-23 | Shipped | 2026-03-22 |
+| v4.0 Astro Landing | 24-27 | Active | - |
 
-## Progress
-
-| Phase | Milestone | Plans | Status | Completed |
-|-------|-----------|-------|--------|-----------|
-| 1-14 | v1.0 | 26 | Complete | 2026-03-13 |
-| 15-16 | v2.0 | 6 | Complete | 2026-03-17 |
-| 17-23 | v3.0 | 12 | Complete | 2026-03-22 |
+---
 
 ## Phases
 
-<details>
-<summary>✅ v1.0 MVP (Phases 1-14) — SHIPPED 2026-03-13</summary>
-
-**14 phases, 26 plans, 18 days**
-
-Complete archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-ROADMAP.md)
-
-- [x] Phase 1: MCP Server Foundation (1 plan)
-- [x] Phase 2: Task CRUD + Data Model (1 plan)
-- [x] Phase 3: Auto-schedule Engine (2 plans)
-- [x] Phase 4: Testing & Validation (0 plans)
-- [x] Phase 5: Batch Tasks (1 plan)
-- [x] Phase 6: qwen-agent (2 plans)
-- [x] Phase 7: Web UI with real-time Gantt editing (6 plans)
-- [x] Phase 8: Integrate gantt-lib library (2 plans)
-- [x] Phase 9: session-control (6 plans, 09-06 Auth UI pending)
-- [x] Phase 10: work-stability (2 plans)
-- [x] Phase 11: complete-design-system (0 plans)
-- [x] Phase 12: fix-auto-save-infinite-loop (1 plan)
-- [x] Phase 13: start-screen (1 plan)
-- [x] Phase 14: redesign-project-flow (1 plan)
-
-**Key accomplishments:**
-1. MCP server with stdio transport and auto-schedule engine
-2. Full-stack web app with AI chat and interactive Gantt chart
-3. Multi-user auth with OTP email and project isolation
-4. Production Docker deployment with CapRover
-
-**Known gaps:**
-- Phase 9 Plan 6: Auth UI (OTP modal, project switcher) — backend complete, UI pending
-
-</details>
+- [ ] **Phase 24: Astro Site Foundation** - Astro site with hero, navigation, responsive layout
+- [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
+- [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
+- [ ] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration
 
 ---
 
-<details>
-<summary>✅ v2.0 PostgreSQL Migration (Phases 15-16) — SHIPPED 2026-03-17</summary>
+## Phase Details
 
-**2 phases, 6 plans, 4 days**
+### Phase 24: Astro Site Foundation
 
-Complete archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2.0-ROADMAP.md)
+**Goal:** Users can discover the product through a marketing site with AI demo and conversion CTAs
 
-- [x] Phase 15: Prisma Setup (2 plans)
-- [x] Phase 16: Services Layer (4 plans)
+**Depends on:** Nothing (first phase of milestone)
 
-**Key accomplishments:**
-1. Prisma schema defines all tables with proper relationships
-2. Prisma client singleton with connection pooling
-3. TaskService, ProjectService, AuthService, MessageService, DependencyService
-4. All services use Prisma (no raw SQL)
-5. Services shared between packages/mcp and packages/server
+**Requirements:** SITE-01, SITE-02, SITE-03, SITE-04, SITE-05, HERO-01, HERO-02, HERO-03, HERO-04, HERO-05
 
-</details>
+**Success Criteria** (what must be TRUE):
+1. User can view a marketing site with responsive layout on mobile/desktop (breakpoints 768px/1024px)
+2. User can navigate the site through header navigation bar (logo, Features/FAQ links, CTA buttons)
+3. User can see footer with page links and copyright
+4. User can see hero section with rotating value props ("Из текста/сметы/брифа/ТЗ/письма/таблицы → Гантт за 30 секунд")
+5. User can watch AI typing demo animation (text types → gantt generates)
+6. User can see social proof (avatars, "★★★★★" rating, "12,000+ teams")
+7. User can click "Попробовать бесплатно" CTA → redirects to ai.getgantt.ru
+8. User can click "Смотреть демо" CTA → scrolls to demo section (placeholder for Phase 25)
+9. User sees custom 404 page with CTA to homepage instead of default error
 
----
+**Plans:** TBD
 
-<details>
-<summary>✅ v3.0 MCP Server Refactoring (Phases 17-23) — SHIPPED 2026-03-22</summary>
-
-**7 phases, 12 plans, 5 days**
-
-Complete archive: [.planning/milestones/v3.0-ROADMAP.md](.planning/milestones/v3.0-ROADMAP.md)
-
-- [x] Phase 17: Token Economy (2 plans)
-- [x] Phase 18: Qwen SDK Hardening (1 plan)
-- [x] Phase 19: Task Hierarchy (1 plan)
-- [x] Phase 20: Conversation History (1 plan)
-- [x] Phase 21: Tool Quality (1 plan)
-- [x] Phase 22: Zustand Frontend Refactor (4 plans)
-- [x] Phase 23: Filters (2 plans)
-
-**Key accomplishments:**
-1. Token economy: compact mode and pagination reduce context usage by 50-90%
-2. Agent hardening: max turns, timeout, tool exclusions prevent hangs
-3. Task hierarchy: parentId enables nested task structures
-4. Conversation history: agent can read/write chat context across sessions
-5. Tool quality: semantic descriptions and actionable error messages
-6. Zustand refactor: clean state management with workspace-oriented architecture
-7. UI filters: task filtering by dependencies, dates, search text
-
-</details>
+**UI hint:** yes
 
 ---
 
-### 📋 Next Milestone (Planned)
+### Phase 25: Interactive Preview
 
-**Use `/gsd:new-milestone` to start the next milestone cycle**
+**Goal:** Users can interact with a live gantt chart on the marketing page to experience drag-to-edit
+
+**Depends on:** Phase 24 (site foundation exists)
+
+**Requirements:** INTER-01, INTER-02, INTER-03, INTER-04, INTER-05
+
+**Success Criteria** (what must be TRUE):
+1. User can view an interactive gantt chart on the homepage (rendered via Astro islands)
+2. User can drag tasks on the chart to reschedule them (drag-to-edit via gantt-lib)
+3. User can stretch tasks to change duration
+4. User can collapse/expand parent tasks
+5. Developer can integrate gantt-lib using Astro islands pattern (iframe isolation if needed)
+
+**Plans:** TBD
+
+**UI hint:** yes
 
 ---
 
-## Coverage
+### Phase 26: Content & SEO
 
-**Total Requirements Shipped:** 57 (v1+v2+v3)
+**Goal:** Users can learn about features and find answers; search engines can discover and index the site
 
-| Milestone | Requirements | Status |
-|-----------|--------------|--------|
-| v1.0 | 32 | ✅ Complete |
-| v2.0 | 0 (infrastructure) | ✅ Complete |
-| v3.0 | 25 | ✅ Complete |
+**Depends on:** Phase 24 (site structure exists)
 
-**No orphaned requirements.**
-**No duplicates.**
+**Requirements:** CONTENT-01, CONTENT-02, CONTENT-03, CONTENT-04, CONTENT-05, CONTENT-06, CONTENT-07
+
+**Success Criteria** (what must be TRUE):
+1. User can read product feature overview on /features page (6-8 features with descriptions)
+2. User can find answers to common questions on /faq page (10 questions: features, pricing, onboarding, data)
+3. User can read Privacy Policy on /privacy page
+4. User can read Terms of Service on /terms page
+5. Search engines can discover all pages through sitemap.xml
+6. Search engines understand indexing rules via robots.txt
+7. Each page has proper meta title, description, and OG tags for social sharing
+
+**Plans:** TBD
+
+**UI hint:** yes
 
 ---
-*Roadmap created: 2026-02-23*
-*Last updated: 2026-03-22 after v3.0 milestone completion*
+
+### Phase 27: Domain Separation
+
+**Goal:** Marketing and app run on separate domains with independent deployment cycles
+
+**Depends on:** Phase 26 (site content complete)
+
+**Requirements:** DEPLOY-01, DEPLOY-02, DEPLOY-03, DEPLOY-04, DEPLOY-05
+
+**Success Criteria** (what must be TRUE):
+1. packages/site builds to static assets for nginx (Dockerfile.site)
+2. CapRover deploys site as separate app on getgantt.ru
+3. CapRover deploys app as separate app on ai.getgantt.ru
+4. WebSocket connections work with explicit CORS headers in nginx for ai.getgantt.ru
+5. Share links generate with PUBLIC_SHARE_URL env variable (always ai.getgantt.ru)
+
+**Plans:** TBD
+
+---
+
+## Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 24. Astro Site Foundation | 0/3 | Not started | - |
+| 25. Interactive Preview | 0/2 | Not started | - |
+| 26. Content & SEO | 0/2 | Not started | - |
+| 27. Domain Separation | 0/3 | Not started | - |
+
+---
+
+## Traceability
+
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| SITE-01 | 24 | Pending |
+| SITE-02 | 24 | Pending |
+| SITE-03 | 24 | Pending |
+| SITE-04 | 24 | Pending |
+| SITE-05 | 24 | Pending |
+| HERO-01 | 24 | Pending |
+| HERO-02 | 24 | Pending |
+| HERO-03 | 24 | Pending |
+| HERO-04 | 24 | Pending |
+| HERO-05 | 24 | Pending |
+| INTER-01 | 25 | Pending |
+| INTER-02 | 25 | Pending |
+| INTER-03 | 25 | Pending |
+| INTER-04 | 25 | Pending |
+| INTER-05 | 25 | Pending |
+| CONTENT-01 | 26 | Pending |
+| CONTENT-02 | 26 | Pending |
+| CONTENT-03 | 26 | Pending |
+| CONTENT-04 | 26 | Pending |
+| CONTENT-05 | 26 | Pending |
+| CONTENT-06 | 26 | Pending |
+| CONTENT-07 | 26 | Pending |
+| DEPLOY-01 | 27 | Pending |
+| DEPLOY-02 | 27 | Pending |
+| DEPLOY-03 | 27 | Pending |
+| DEPLOY-04 | 27 | Pending |
+| DEPLOY-05 | 27 | Pending |
+
+**Coverage:** 27/27 requirements mapped ✓
+
+---
+
+## Completed Phases Archive
+
+### v1.0 MVP (Phases 1-14)
+
+See `.planning/milestones/v1.0-ROADMAP.md` for archived roadmap.
+
+### v2.0 PostgreSQL (Phases 15-16)
+
+See `.planning/milestones/v2.0-ROADMAP.md` for archived roadmap.
+
+### v3.0 Hardening (Phases 17-23)
+
+Phases completed:
+- Phase 17: Token Economy (compact mode, pagination)
+- Phase 18: Agent Hardening (max turns, timeout)
+- Phase 19: Task Hierarchy (parentId support)
+- Phase 20: Conversation History
+- Phase 21: Tool Quality (descriptions, errors)
+- Phase 22: Zustand Refactor
+- Phase 23: Task Filtering UI
+
+---
+*Last updated: 2026-03-23*
