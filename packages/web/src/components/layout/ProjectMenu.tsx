@@ -171,10 +171,13 @@ export function ProjectMenu({
           </button>
 
           {/* Логотип сервиса - остаётся всегда */}
-          <div className={cn(
-            'flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight',
-            projectSidebarVisible && 'sm:hidden'
-          )}>
+          <a
+            href="https://getgantt.ru"
+            className={cn(
+              'flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight',
+              projectSidebarVisible && 'sm:hidden'
+            )}
+          >
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
             {(auth.isAuthenticated || hasShareToken) && (
@@ -182,7 +185,7 @@ export function ProjectMenu({
                 <span className="text-slate-300 hidden sm:inline">/</span>
               </>
             )}
-          </div>
+          </a>
 
           {(auth.isAuthenticated || hasShareToken) && (
             <>

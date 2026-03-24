@@ -304,13 +304,20 @@ export default function App() {
   }, [batchUpdate]);
 
   const handleEmptyChart = useCallback(async () => {
+    if (hasShareToken) {
+      return;
+    }
+    if (!auth.isAuthenticated) {
+      setShowOtpModal(true);
+      return;
+    }
     if (workspace.kind === 'draft') {
       await activateDraftWorkspace({ createEmptyChart: true });
       return;
     }
     void batchUpdate.handleAdd(createPlaceholderTask());
     openProjectChat();
-  }, [activateDraftWorkspace, batchUpdate, createPlaceholderTask, openProjectChat, workspace.kind]);
+  }, [activateDraftWorkspace, auth.isAuthenticated, batchUpdate, createPlaceholderTask, hasShareToken, openProjectChat, setShowOtpModal, workspace.kind]);
 
   const handleSwitchProject = useCallback(async (projectId: string) => {
     // Keep sidebar open after switching projects
