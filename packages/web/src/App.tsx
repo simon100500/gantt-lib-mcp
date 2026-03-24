@@ -248,7 +248,8 @@ export default function App() {
       ? { ...current, queuedPrompt: firstPrompt ?? null, activation: 'creating' }
       : current);
 
-    const newProject = await auth.createProject(workspace.draftName);
+    const projectName = workspace.draftName.trim() || getDefaultProjectName();
+    const newProject = await auth.createProject(projectName);
     if (!newProject) {
       useChatStore.getState().finishStreaming();
       queuedPromptRef.current = null;
@@ -274,7 +275,7 @@ export default function App() {
     setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: !createEmptyChart });
     activationInFlightRef.current = false;
     return true;
-  }, [auth, createPlaceholderTask, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setProjectSidebarVisible, setShowOtpModal, setTasks, setWorkspace, workspace]);
+  }, [auth, createPlaceholderTask, getDefaultProjectName, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setProjectSidebarVisible, setShowOtpModal, setTasks, setWorkspace, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
@@ -335,7 +336,7 @@ export default function App() {
       resetWorkspacePresentation();
       setWorkspace({
         kind: 'draft',
-        draftName: getDefaultProjectName(),
+        draftName: '',
         queuedPrompt: null,
         activation: 'idle',
       });
@@ -344,7 +345,7 @@ export default function App() {
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     setWorkspace({ kind: 'guest' });
-  }, [auth.isAuthenticated, getDefaultProjectName, resetWorkspacePresentation, setWorkspace]);
+  }, [auth.isAuthenticated, resetWorkspacePresentation, setWorkspace]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
     if (!auth.isAuthenticated) {
@@ -546,7 +547,7 @@ export default function App() {
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'draft'
-      ? workspace.draftName
+      ? undefined
       : auth.isAuthenticated
         ? auth.project?.name
         : (localTasks.projectName || 'Мой проект');

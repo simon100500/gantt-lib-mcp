@@ -52,6 +52,7 @@ export function ProjectMenu({
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
 
   const currentProject = useMemo(() => {
     if (workspace.kind === 'draft') {
@@ -180,14 +181,14 @@ export function ProjectMenu({
           >
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
-            {(auth.isAuthenticated || hasShareToken) && (
+            {showProjectContext && (
               <>
                 <span className="text-slate-300 hidden sm:inline">/</span>
               </>
             )}
           </a>
 
-          {(auth.isAuthenticated || hasShareToken) && (
+          {showProjectContext && (
             <>
               <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
                 {isRenamingProject && !hasShareToken ? (
