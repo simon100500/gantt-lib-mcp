@@ -182,7 +182,7 @@ export default function DemoSection() {
     <div ref={sectionRef}>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
-          <div className="max-w-[620px]">
+          <div className="max-w-[620px] px-8 lg:px-0">
             <h1
               className="flex flex-col gap-2 font-extrabold leading-[0.96] tracking-[-0.05em] text-foreground animate-fade-up"
               style={{ animationDelay: '120ms', fontSize: 'clamp(2.2rem, 4.6vw, 4rem)' }}
@@ -212,7 +212,7 @@ export default function DemoSection() {
                 href="https://ai.getgantt.ru"
                 className="inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3.5 text-[15px] font-bold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5"
               >
-                Войти
+                Начать
               </a>
             </div>
           </div>
@@ -257,13 +257,13 @@ export default function DemoSection() {
 
           <div className="relative mx-auto max-w-3xl">
             <h2
-              className="font-extrabold leading-[1.08] tracking-[-0.05em] text-slate-950"
+              className="font-extrabold leading-[1.5] tracking-[-0.05em] text-slate-950"
               style={{ fontSize: 'clamp(1.75rem, 4.2vw, 3.2rem)' }}
             >
               Быстро создать.
               <br className="hidden sm:block" /> Легко управлять
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-500 sm:text-base">
+            <p className="mx-auto mt-8 max-w-2xl text-base leading-7 text-slate-500 sm:text-lg sm:leading-8">
               Новый стандарт графиков. Быстро, красиво, онлайн
             </p>
 
