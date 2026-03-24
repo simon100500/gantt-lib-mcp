@@ -46,9 +46,9 @@ export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChip
         {/* Readonly textarea */}
         <textarea
           readOnly
-          rows={3}
+          rows={4}
           value={displayText}
-          placeholder="Выберите шаблон ниже…"
+          placeholder="Выберите вариант проекта…"
           aria-label="Описание проекта"
           name="project"
           style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}

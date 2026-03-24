@@ -28,9 +28,10 @@ const getAllDescendants = (parentId: string, tasks: Task[]): Task[] => {
 
 interface GanttPreviewProps {
   initialTasks?: Task[];
+  title?: string;
 }
 
-export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
+export default function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   const allTasks = initialTasks ?? [];
   const [tasks, setTasks] = useState<Task[]>([]);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
@@ -142,7 +143,7 @@ export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           {/* Project name */}
           <span className="text-sm font-medium text-slate-700" style={{ fontFamily: 'Cascadia Mono, monospace' }}>
-            Разработка платформы
+            {title ?? 'Мой проект'}
           </span>
 
           {/* Controls */}

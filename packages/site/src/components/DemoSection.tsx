@@ -91,21 +91,25 @@ const TASKS_EVENT: Task[] = [
 export const TEMPLATES = [
   {
     label: 'Загородный дом',
+    title: 'Строительство загородного дома',
     prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт',
     tasks: TASKS_HOUSE,
   },
   {
     label: 'Ремонт офиса',
+    title: 'Ремонт офиса',
     prompt: 'Создай график ремонта офиса: демонтаж, электрика, отделка стен, пол, мебель',
     tasks: TASKS_OFFICE,
   },
   {
     label: 'ИТ-проект',
+    title: 'ИТ-проект',
     prompt: 'Создай график разработки ИТ-проекта: аналитика, дизайн, разработка, тестирование, релиз',
     tasks: TASKS_IT,
   },
   {
     label: 'Мероприятие',
+    title: 'Подготовка мероприятия',
     prompt: 'Создай график подготовки мероприятия: площадка, кейтеринг, программа, продвижение, проведение',
     tasks: TASKS_EVENT,
   },
@@ -117,33 +121,41 @@ export default function DemoSection() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [ganttKey, setGanttKey] = useState(0);
   const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(undefined);
+  const [activeTitle, setActiveTitle] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
-  const triggered = useRef(false);
+  const ganttRef = useRef<HTMLDivElement>(null);
+  const isFirstGantt = useRef(true);
 
-  // Auto-trigger "Загородный дом" when section scrolls into view
+  // Scroll to gantt after re-render (ganttKey changes after each submit)
   useEffect(() => {
-    const el = sectionRef.current;
+    if (isFirstGantt.current) {
+      isFirstGantt.current = false;
+      return;
+    }
+    const el = ganttRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !triggered.current) {
-          triggered.current = true;
-          setSelectedIndex(0);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    const rect = el.getBoundingClientRect();
+    const targetY = window.scrollY + rect.top - (window.innerHeight - rect.height) / 2;
+    const startY = window.scrollY;
+    const distance = targetY - startY;
+    const duration = 1200;
+    const start = performance.now();
+    const easeInOutCubic = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      window.scrollTo(0, startY + distance * easeInOutCubic(t));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [ganttKey]);
 
   function handleSubmit() {
     if (selectedIndex === null) return;
     setIsSubmitting(true);
     setTimeout(() => {
       setActiveTasks(TEMPLATES[selectedIndex].tasks);
+      setActiveTitle(TEMPLATES[selectedIndex].title);
       setGanttKey(k => k + 1);
       setIsSubmitting(false);
     }, 700);
@@ -171,7 +183,9 @@ export default function DemoSection() {
       </div>
 
       {/* Gantt — remounts on each submit via key */}
-      <GanttPreview key={ganttKey} initialTasks={activeTasks} />
+      <div ref={ganttRef}>
+        <GanttPreview key={ganttKey} initialTasks={activeTasks} title={activeTitle} />
+      </div>
 
       {/* CTA */}
       <div className="mt-10 flex flex-col items-center gap-3">
