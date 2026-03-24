@@ -1,98 +1,87 @@
 import { useState, useRef, useEffect } from 'react';
 
-const CHIPS = [
-  { label: 'Загородный дом', prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт' },
-  { label: 'Ремонт офиса', prompt: 'Создай график ремонта офиса: демонтаж, электрика, отделка стен, пол, мебель' },
-  { label: 'ИТ-проект', prompt: 'Создай график разработки ИТ-проекта: аналитика, дизайн, разработка, тестирование, релиз' },
-  { label: 'Мероприятие', prompt: 'Создай график подготовки мероприятия: площадка, кейтеринг, программа, продвижение, проведение' },
-];
+interface Chip {
+  label: string;
+  prompt: string;
+}
 
-export default function InputDemo() {
-  const [inputValue, setInputValue] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+interface Props {
+  chips: Chip[];
+  selectedIndex: number | null;
+  selectedPrompt: string | null;
+  onChipSelect: (index: number) => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+}
 
+export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChipSelect, onSubmit, isSubmitting }: Props) {
+  const [displayText, setDisplayText] = useState('');
+  const timerId = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Typing animation when selected prompt changes
   useEffect(() => {
-    return () => {
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    const newHeight = el.scrollHeight;
-    el.style.height = newHeight + 'px';
-    el.style.overflowY = newHeight > 192 ? 'auto' : 'hidden';
-  }, [inputValue]);
-
-  function handleSubmit(e?: React.FormEvent) {
-    e?.preventDefault();
-    const text = inputValue.trim();
-    if (!text) return;
-    window.location.href = 'https://ai.getgantt.ru';
-  }
-
-  function handleChipClick(prompt: string) {
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    setInputValue('');
-    textareaRef.current?.focus();
-
+    if (timerId.current) clearTimeout(timerId.current);
+    if (!selectedPrompt) {
+      setDisplayText('');
+      return;
+    }
+    setDisplayText('');
     let i = 0;
     const type = () => {
       i++;
-      setInputValue(prompt.slice(0, i));
-      if (i < prompt.length) {
-        typingTimerRef.current = setTimeout(type, 22);
+      setDisplayText(selectedPrompt.slice(0, i));
+      if (i < selectedPrompt.length) {
+        timerId.current = setTimeout(type, 22);
       }
     };
-    typingTimerRef.current = setTimeout(type, 80);
-  }
+    timerId.current = setTimeout(type, 80);
+    return () => { if (timerId.current) clearTimeout(timerId.current); };
+  }, [selectedPrompt]);
 
   return (
     <div className="relative mx-auto mt-6 max-w-[640px] px-4 md:px-8 animate-fade-up" style={{ animationDelay: '350ms' }}>
-      {/* Headline */}
       <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
         Какой график нужен?
       </h2>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        {/* Chips row */}
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="flex flex-col gap-3">
+        {/* Chips */}
         <div className="flex flex-wrap gap-2">
-          {CHIPS.map((chip) => (
+          {chips.map((chip, i) => (
             <button
               key={chip.label}
               type="button"
-              onClick={() => handleChipClick(chip.prompt)}
-              className="text-sm px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 flex items-center gap-1.5 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
+              onClick={() => onChipSelect(i)}
+              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 ${
+                selectedIndex === i
+                  ? 'border-primary bg-primary/5 text-primary font-medium'
+                  : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+              }`}
             >
               {chip.label}
             </button>
           ))}
         </div>
 
-        {/* Textarea */}
+        {/* Readonly textarea */}
         <textarea
-          ref={textareaRef}
-          rows={4}
-          name="project"
-          value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
-          placeholder="Опишите ваш проект или выберите пример выше"
-          autoComplete="off"
+          readOnly
+          rows={3}
+          value={displayText}
+          placeholder={selectedIndex === null ? 'Выберите шаблон выше…' : ''}
           aria-label="Описание проекта"
-          style={{ maxHeight: '12rem', overflowY: 'hidden' }}
-          className="w-full px-4 py-3 text-base leading-6 bg-white resize-none border border-slate-200 rounded-xl shadow-md focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:border-transparent focus-visible:outline-none"
+          name="project"
+          style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}
+          className="w-full px-4 py-3 text-base leading-6 bg-white resize-none border border-slate-200 rounded-xl shadow-md focus:outline-none select-none text-slate-700"
         />
 
-        {/* Submit button */}
+        {/* Submit */}
         <button
           type="submit"
-          disabled={!inputValue.trim()}
-          className="w-full py-3 rounded-xl text-white font-semibold text-base btn-gradient-shimmer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-400"
+          disabled={selectedIndex === null || isSubmitting}
+          className="w-full py-3 rounded-xl text-white font-semibold text-base btn-gradient-shimmer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-400"
         >
-          Отправить
+          {isSubmitting ? 'Создаю график…' : 'Отправить'}
         </button>
       </form>
     </div>

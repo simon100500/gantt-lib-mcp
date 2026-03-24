@@ -128,8 +128,13 @@ const getAllDescendants = (parentId: string, tasks: Task[]): Task[] => {
   return descendants;
 };
 
-export default function GanttPreview() {
-  const [tasks, setTasks] = useState(DEMO_TASKS);
+interface GanttPreviewProps {
+  initialTasks?: Task[];
+}
+
+export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
+  const allTasks = initialTasks ?? DEMO_TASKS;
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
   const [showTaskList, setShowTaskList] = useState(true);
@@ -145,12 +150,28 @@ export default function GanttPreview() {
     return () => mql.removeEventListener('change', listener);
   }, []);
 
+  // Reveal tasks one by one on mount
   useEffect(() => {
-    // Scroll to today after component mounts
-    setTimeout(() => {
-      ganttRef.current?.scrollToToday();
-    }, 100);
+    if (!allTasks.length) return;
+    let i = 0;
+    const reveal = () => {
+      i++;
+      setTasks(allTasks.slice(0, i));
+      if (i < allTasks.length) {
+        setTimeout(reveal, 110);
+      }
+    };
+    const id = setTimeout(reveal, 150);
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Scroll to today once first task appears
+  useEffect(() => {
+    if (tasks.length === 1) {
+      ganttRef.current?.scrollToToday();
+    }
+  }, [tasks.length]);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
     setTasks(prev => {
