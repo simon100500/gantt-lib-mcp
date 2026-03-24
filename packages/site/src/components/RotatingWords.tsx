@@ -8,7 +8,7 @@ interface RotatingWordsProps {
 
 export default function RotatingWords({
   words,
-  interval = 2800,
+  interval = 1800,
   className = '',
 }: RotatingWordsProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -27,8 +27,8 @@ export default function RotatingWords({
   // Set initial width
   useEffect(() => {
     if (measurerRef.current) {
-      const initialWidth = getWordWidth(words[0]);
-      setWidth(initialWidth);
+      const maxWidth = words.reduce((max, word) => Math.max(max, getWordWidth(word)), 0);
+      setWidth(maxWidth);
     }
   }, [words]);
 
@@ -40,14 +40,6 @@ export default function RotatingWords({
 
     return () => clearInterval(timer);
   }, [words.length, interval, currentIndex]);
-
-  // Animate width when word changes
-  useEffect(() => {
-    if (measurerRef.current) {
-      const newWidth = getWordWidth(words[currentIndex]);
-      setWidth(newWidth);
-    }
-  }, [currentIndex, words]);
 
   // Clear prev index after animation completes
   useEffect(() => {
@@ -67,7 +59,7 @@ export default function RotatingWords({
         class="absolute -left-[9999px] top-0 font-extrabold"
         style={{
           fontFamily: 'Noto Sans, sans-serif',
-          fontSize: 'clamp(36px, 6.2vw, 64px)',
+          fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
           fontWeight: 800,
         }}
       >
@@ -77,16 +69,16 @@ export default function RotatingWords({
       {/* Word slot with animated width */}
       <span
         ref={slotRef}
-        class={`relative inline-block overflow-hidden align-middle leading-none ${className}`}
+        class={`relative inline-block overflow-hidden align-middle leading-none text-center ${className}`}
         style={{ width: `${width}px`, transition: 'width 350ms ease-out' }}
       >
         {/* Current word */}
         <span
           key={currentIndex}
-          class="block animate-word-in text-primary"
+          class="block w-full animate-word-in text-center text-primary"
           style={{
             fontFamily: 'Noto Sans, sans-serif',
-            fontSize: 'clamp(36px, 6.2vw, 64px)',
+            fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
             fontWeight: 800,
           }}
         >
@@ -97,10 +89,10 @@ export default function RotatingWords({
         {prevIndex !== null && (
           <span
             key={prevIndex}
-            class="absolute left-0 top-0 block animate-word-out text-primary"
+            class="absolute left-0 top-0 block w-full animate-word-out text-center text-primary"
             style={{
               fontFamily: 'Noto Sans, sans-serif',
-              fontSize: 'clamp(36px, 6.2vw, 64px)',
+              fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
               fontWeight: 800,
             }}
           >

@@ -181,23 +181,16 @@ export default function DemoSection() {
   return (
     <div ref={sectionRef}>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-14">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
           <div className="max-w-[620px]">
-            <p
-              className="mb-5 text-sm font-semibold tracking-[-0.02em] text-slate-500 animate-fade-up"
-              style={{ animationDelay: '60ms' }}
-            >
-              GetGantt
-            </p>
-
             <h1
               className="flex flex-col gap-2 font-extrabold leading-[0.96] tracking-[-0.05em] text-foreground animate-fade-up"
-              style={{ animationDelay: '120ms', fontSize: 'clamp(3rem, 6vw, 5.4rem)' }}
+              style={{ animationDelay: '120ms', fontSize: 'clamp(2.2rem, 4.6vw, 4rem)' }}
             >
               <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span>Из</span>
                 <RotatingWords
-                  words={['текста', 'сметы', 'брифа', 'письма', 'таблицы']}
+                  words={['текста', 'сметы', 'брифа', 'письма']}
                 />
                 <span>в гант</span>
               </span>
@@ -219,20 +212,14 @@ export default function DemoSection() {
                 href="https://ai.getgantt.ru"
                 className="inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3.5 text-[15px] font-bold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5"
               >
-                Начать бесплатно →
-              </a>
-              <a
-                href="#gantt-preview"
-                className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-8 py-3.5 text-[15px] font-bold text-foreground transition-all hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-              >
-                Смотреть пример
+                Войти
               </a>
             </div>
           </div>
 
-          <div className="relative lg:justify-self-end">
+          <div className="relative lg:-translate-y-4 lg:translate-x-6 lg:justify-self-end">
             <div className="absolute inset-0 rounded-[32px] bg-[radial-gradient(circle_at_top,rgba(97,88,224,0.08),transparent_62%)]" />
-            <div className="relative rounded-[28px] border border-slate-200/80 bg-white/88 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-5">
+            <div className="relative rounded-[28px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-6">
               <InputDemo
                 chips={TEMPLATES.map(t => ({ label: t.label, prompt: t.prompt }))}
                 selectedIndex={selectedIndex}

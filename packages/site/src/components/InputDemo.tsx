@@ -64,7 +64,7 @@ export default function InputDemo({
           aria-label="Описание проекта"
           name="project"
           style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}
-          className="w-full px-4 py-3 text-base leading-6 bg-white resize-none border border-slate-200 rounded-xl shadow-md focus:outline-none select-none text-slate-700"
+          className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-base leading-6 text-slate-700 select-none focus:outline-none"
         />
 
         {/* Chips */}
