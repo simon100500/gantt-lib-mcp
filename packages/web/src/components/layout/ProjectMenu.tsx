@@ -170,84 +170,90 @@ export function ProjectMenu({
             {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
           </button>
 
-          {/* Логотип и разделитель - скрываются на десктопе когда сайдбар открыт */}
+          {/* Логотип сервиса - остаётся всегда */}
           <div className={cn(
             'flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight',
             projectSidebarVisible && 'sm:hidden'
           )}>
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
-            <span className="text-slate-300 hidden sm:inline">/</span>
-          </div>
-
-          {/* Название проекта - всегда остаётся */}
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
-            {isRenamingProject && !hasShareToken ? (
-              <input
-                type="text"
-                name="project-name"
-                autoComplete="off"
-                spellCheck={false}
-                value={renameValue}
-                onChange={(event) => setRenameValue(event.target.value)}
-                onBlur={() => { void commitInlineRename(); }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void commitInlineRename();
-                  } else if (event.key === 'Escape') {
-                    setIsRenamingProject(false);
-                    setRenameValue('');
-                  }
-                }}
-                className="min-w-0 max-w-[120px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[240px]"
-                autoFocus
-                onFocus={(event) => event.target.select()}
-              />
-            ) : (
+            {(auth.isAuthenticated || hasShareToken) && (
               <>
-                <span
-                  className={cn(
-                    'truncate text-sm font-semibold font-cascadia tracking-tight text-slate-900',
-                    !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
-                  )}
-                  title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
-                  onClick={hasShareToken ? undefined : () => {
-                    setRenameValue(currentProjectLabel ?? '');
-                    setIsRenamingProject(true);
-                  }}
-                >
-                  {currentProjectLabel}
-                </span>
-                {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'draft' && (
-                  <button
-                    type="button"
-                    onClick={() => setShowEditProjectModal(true)}
-                    className="shrink-0 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                    aria-label="Переименовать проект"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                <span className="text-slate-300 hidden sm:inline">/</span>
               </>
             )}
-            {!hasShareToken && auth.isAuthenticated && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => void onCreateProject()}
-                className="hidden h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 sm:flex"
-                aria-label="Новый проект"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            )}
           </div>
 
-          {/* Поиск - только на больших экранах */}
-          <div className="hidden min-w-0 flex-1 px-4 lg:flex lg:px-8">
-            <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
-          </div>
+          {(auth.isAuthenticated || hasShareToken) && (
+            <>
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
+                {isRenamingProject && !hasShareToken ? (
+                  <input
+                    type="text"
+                    name="project-name"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={renameValue}
+                    onChange={(event) => setRenameValue(event.target.value)}
+                    onBlur={() => { void commitInlineRename(); }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void commitInlineRename();
+                      } else if (event.key === 'Escape') {
+                        setIsRenamingProject(false);
+                        setRenameValue('');
+                      }
+                    }}
+                    className="min-w-0 max-w-[120px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[240px]"
+                    autoFocus
+                    onFocus={(event) => event.target.select()}
+                  />
+                ) : (
+                  <>
+                    <span
+                      className={cn(
+                        'truncate text-sm font-semibold font-cascadia tracking-tight text-slate-900',
+                        !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
+                      )}
+                      title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
+                      onClick={hasShareToken ? undefined : () => {
+                        setRenameValue(currentProjectLabel ?? '');
+                        setIsRenamingProject(true);
+                      }}
+                    >
+                      {currentProjectLabel}
+                    </span>
+                    {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'draft' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowEditProjectModal(true)}
+                        className="shrink-0 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        aria-label="Переименовать проект"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
+                {!hasShareToken && auth.isAuthenticated && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => void onCreateProject()}
+                    className="hidden h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 sm:flex"
+                    aria-label="Новый проект"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="hidden min-w-0 flex-1 px-4 lg:flex lg:px-8">
+                <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
+              </div>
+            </>
+          )}
 
           {/* Логин - всегда справа */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
