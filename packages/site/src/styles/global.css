@@ -184,7 +184,7 @@
   .btn-gradient-shimmer {
     background: linear-gradient(135deg, hsl(245 70% 60%), hsl(270 65% 68%), hsl(220 80% 60%), hsl(245 70% 60%));
     background-size: 300% 300%;
-    animation: shimmer-gradient 3s ease infinite;
+    animation: shimmer-gradient 6s ease infinite;
   }
 
   @media (prefers-reduced-motion: reduce) {

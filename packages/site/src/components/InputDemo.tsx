@@ -32,6 +32,8 @@ export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChip
       setDisplayText(selectedPrompt.slice(0, i));
       if (i < selectedPrompt.length) {
         timerId.current = setTimeout(type, 22);
+      } else {
+        onSubmit();
       }
     };
     timerId.current = setTimeout(type, 80);
@@ -40,11 +42,19 @@ export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChip
 
   return (
     <div className="relative mx-auto mt-6 max-w-[640px] px-4 md:px-8 animate-fade-up" style={{ animationDelay: '350ms' }}>
-      <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
-        Какой график нужен?
-      </h2>
+      <div className="flex flex-col gap-3">
+        {/* Readonly textarea */}
+        <textarea
+          readOnly
+          rows={3}
+          value={displayText}
+          placeholder="Выберите шаблон ниже…"
+          aria-label="Описание проекта"
+          name="project"
+          style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}
+          className="w-full px-4 py-3 text-base leading-6 bg-white resize-none border border-slate-200 rounded-xl shadow-md focus:outline-none select-none text-slate-700"
+        />
 
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="flex flex-col gap-3">
         {/* Chips */}
         <div className="flex flex-wrap gap-2">
           {chips.map((chip, i) => (
@@ -52,7 +62,8 @@ export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChip
               key={chip.label}
               type="button"
               onClick={() => onChipSelect(i)}
-              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 ${
+              disabled={isSubmitting}
+              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 disabled:pointer-events-none ${
                 selectedIndex === i
                   ? 'border-primary bg-primary/5 text-primary font-medium'
                   : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
@@ -62,28 +73,7 @@ export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChip
             </button>
           ))}
         </div>
-
-        {/* Readonly textarea */}
-        <textarea
-          readOnly
-          rows={3}
-          value={displayText}
-          placeholder={selectedIndex === null ? 'Выберите шаблон выше…' : ''}
-          aria-label="Описание проекта"
-          name="project"
-          style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}
-          className="w-full px-4 py-3 text-base leading-6 bg-white resize-none border border-slate-200 rounded-xl shadow-md focus:outline-none select-none text-slate-700"
-        />
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={selectedIndex === null || isSubmitting}
-          className="w-full py-3 rounded-xl text-white font-semibold text-base btn-gradient-shimmer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-400"
-        >
-          {isSubmitting ? 'Создаю график…' : 'Отправить'}
-        </button>
-      </form>
+      </div>
     </div>
   );
 }
