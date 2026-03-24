@@ -1,110 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { GanttChart } from 'gantt-lib';
-import type { Task } from 'gantt-lib';
+import type { Task, GanttChartHandle } from 'gantt-lib';
 import 'gantt-lib/styles.css';
 
-const DEMO_TASKS: Task[] = [
-  // Parent 1: Фаза 1
-  {
-    id: 'phase-1',
-    name: 'Фаза 1: Подготовка',
-    startDate: '2026-03-01',
-    endDate: '2026-03-20',
-  },
-  {
-    id: 'task-1-1',
-    name: 'Анализ требований',
-    startDate: '2026-03-01',
-    endDate: '2026-03-08',
-    progress: 100,
-    accepted: true,
-    parentId: 'phase-1',
-    dependencies: [],
-  },
-  {
-    id: 'task-1-2',
-    name: 'Прототипирование',
-    startDate: '2026-03-09',
-    endDate: '2026-03-18',
-    progress: 30,
-    parentId: 'phase-1',
-    dependencies: [{ taskId: 'task-1-1', type: 'FS' as const, lag: 0 }],
-  },
-  {
-    id: 'task-1-3',
-    name: 'Согласование',
-    startDate: '2026-03-15',
-    endDate: '2026-03-20',
-    progress: 0,
-    parentId: 'phase-1',
-    dependencies: [{ taskId: 'task-1-2', type: 'FS' as const, lag: 0 }],
-  },
-
-  // Parent 2: Фаза 2
-  {
-    id: 'phase-2',
-    name: 'Фаза 2: Разработка',
-    startDate: '2026-03-21',
-    endDate: '2026-04-20',
-    dependencies: [{ taskId: 'phase-1', type: 'FS' as const, lag: 0 }],
-  },
-  {
-    id: 'task-2-1',
-    name: 'Frontend разработка',
-    startDate: '2026-03-21',
-    endDate: '2026-04-10',
-    progress: 25,
-    parentId: 'phase-2',
-    dependencies: [{ taskId: 'task-1-3', type: 'FS' as const, lag: 0 }],
-  },
-  {
-    id: 'task-2-2',
-    name: 'Backend API',
-    startDate: '2026-03-25',
-    endDate: '2026-04-12',
-    progress: 15,
-    parentId: 'phase-2',
-    dependencies: [{ taskId: 'task-1-3', type: 'SS' as const, lag: 5 }],
-  },
-  {
-    id: 'task-2-3',
-    name: 'Интеграция',
-    startDate: '2026-04-13',
-    endDate: '2026-04-20',
-    progress: 0,
-    parentId: 'phase-2',
-    dependencies: [
-      { taskId: 'task-2-1', type: 'FS' as const, lag: 0 },
-      { taskId: 'task-2-2', type: 'FS' as const, lag: 0 },
-    ],
-  },
-
-  // Independent tasks
-  {
-    id: 'task-design',
-    name: 'Дизайн UI',
-    startDate: '2026-03-10',
-    endDate: '2026-03-22',
-    progress: 60,
-    dependencies: [{ taskId: 'task-1-1', type: 'SS' as const, lag: 5 }],
-  },
-  {
-    id: 'task-qa',
-    name: 'QA тестирование',
-    startDate: '2026-04-21',
-    endDate: '2026-04-28',
-    progress: 0,
-    dependencies: [{ taskId: 'task-2-3', type: 'FS' as const, lag: 0 }],
-  },
-  {
-    id: 'task-deploy',
-    name: 'Деплой на прод',
-    startDate: '2026-04-29',
-    endDate: '2026-05-02',
-    progress: 0,
-    dependencies: [{ taskId: 'task-qa', type: 'FS' as const, lag: 0 }],
-  },
-];
 
 const DAY_WIDTHS = {
   day: 28,
@@ -133,12 +31,12 @@ interface GanttPreviewProps {
 }
 
 export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
-  const allTasks = initialTasks ?? DEMO_TASKS;
+  const allTasks = initialTasks ?? [];
   const [tasks, setTasks] = useState<Task[]>([]);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
   const [showTaskList, setShowTaskList] = useState(true);
-  const ganttRef = useRef<{ scrollToToday: () => void }>(null);
+  const ganttRef = useRef<GanttChartHandle>(null);
 
   // Hide task list on mobile screens
   useEffect(() => {
@@ -166,11 +64,12 @@ export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scroll to today once first task appears
+  // Scroll to first task once it appears
   useEffect(() => {
-    if (tasks.length === 1) {
-      ganttRef.current?.scrollToToday();
+    if (tasks.length === 1 && allTasks[0]) {
+      ganttRef.current?.scrollToTask(allTasks[0].id);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks.length]);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
@@ -237,11 +136,6 @@ export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
 
   return (
     <div className="mx-auto w-[90%]">
-      {/* Subtitle */}
-      <p className="text-center text-sm text-slate-500 mb-3">
-        Полностью редактируемый график — перетаскивайте задачи, растягивайте края, сворачивайте группы
-      </p>
-
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
@@ -305,7 +199,11 @@ export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
 
         {/* Gantt Chart */}
         <div className="overflow-x-auto">
-          <GanttChart
+          {tasks.length === 0 ? (
+            <div className="flex items-center justify-center text-slate-400 text-sm animate-pulse" style={{ height: '500px' }}>
+              Генерирую график…
+            </div>
+          ) : <GanttChart
             ref={ganttRef}
             tasks={tasks}
             dayWidth={DAY_WIDTHS[viewMode]}
@@ -323,7 +221,7 @@ export default function GanttPreview({ initialTasks }: GanttPreviewProps) {
             viewMode={viewMode}
             businessDays={true}
             highlightExpiredTasks={true}
-          />
+          />}
         </div>
       </div>
     </div>
