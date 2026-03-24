@@ -201,7 +201,7 @@ export default function DemoSection() {
               className="mt-8 max-w-[560px] text-lg leading-8 text-secondary-foreground animate-fade-up"
               style={{ animationDelay: '190ms' }}
             >
-              Соберите рабочий график из обычного описания проекта и сразу переходите к управлению сроками.
+              Соберите рабочий график из описания и начните управлять проектом
             </p>
 
             <div
@@ -217,9 +217,8 @@ export default function DemoSection() {
             </div>
           </div>
 
-          <div className="relative lg:-translate-y-4 lg:translate-x-6 lg:justify-self-end">
-            <div className="absolute inset-0 rounded-[32px] bg-[radial-gradient(circle_at_top,rgba(97,88,224,0.08),transparent_62%)]" />
-            <div className="relative rounded-[28px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-6">
+          <div className="relative lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
+            <div className="relative rounded-[28px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.16)] backdrop-blur-sm sm:p-6">
               <InputDemo
                 chips={TEMPLATES.map(t => ({ label: t.label, prompt: t.prompt }))}
                 selectedIndex={selectedIndex}
