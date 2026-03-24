@@ -46,6 +46,19 @@ export default function App() {
     void auth.refreshProjects();
   }, [auth.isAuthenticated, auth.accessToken, hasShareToken]);
 
+  useEffect(() => {
+    if (auth.isAuthenticated || hasShareToken) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth') !== 'otp') {
+      return;
+    }
+
+    setShowOtpModal(true);
+  }, [auth.isAuthenticated, hasShareToken, setShowOtpModal]);
+
   const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
   const { tasks, setTasks, loading, error } = hasShareToken
     ? sharedProject

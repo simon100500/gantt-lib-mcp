@@ -141,7 +141,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
             </svg>
           </button>
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl font-semibold">Вход в Gantt</CardTitle>
+            <CardTitle className="text-xl font-semibold">Вход в ГетГант</CardTitle>
             <CardDescription>Введите email для получения кода</CardDescription>
           </CardHeader>
           <form onSubmit={handleRequestOtp}>
