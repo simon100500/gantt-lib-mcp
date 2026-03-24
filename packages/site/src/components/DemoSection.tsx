@@ -115,17 +115,21 @@ export const TEMPLATES = [
   },
 ];
 
+const DEFAULT_TEMPLATE_INDEX = 0;
+
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function DemoSection() {
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(DEFAULT_TEMPLATE_INDEX);
+  const [activeIndex, setActiveIndex] = useState<number>(DEFAULT_TEMPLATE_INDEX);
   const [ganttKey, setGanttKey] = useState(0);
-  const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(undefined);
-  const [activeTitle, setActiveTitle] = useState<string | undefined>(undefined);
+  const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
+  const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
   const ganttRef = useRef<HTMLDivElement>(null);
   const isFirstGantt = useRef(true);
+  const shouldScrollAfterSubmit = useRef(false);
 
   // Scroll to gantt after re-render (ganttKey changes after each submit)
   useEffect(() => {
@@ -133,6 +137,10 @@ export default function DemoSection() {
       isFirstGantt.current = false;
       return;
     }
+    if (!shouldScrollAfterSubmit.current) {
+      return;
+    }
+    shouldScrollAfterSubmit.current = false;
     const el = ganttRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -152,10 +160,16 @@ export default function DemoSection() {
 
   function handleSubmit() {
     if (selectedIndex === null) return;
+    if (selectedIndex === activeIndex) {
+      shouldScrollAfterSubmit.current = false;
+      return;
+    }
+    shouldScrollAfterSubmit.current = selectedIndex !== activeIndex;
     setIsSubmitting(true);
     setTimeout(() => {
       setActiveTasks(TEMPLATES[selectedIndex].tasks);
       setActiveTitle(TEMPLATES[selectedIndex].title);
+      setActiveIndex(selectedIndex);
       setGanttKey(k => k + 1);
       setIsSubmitting(false);
     }, 700);
@@ -189,32 +203,29 @@ export default function DemoSection() {
 
       {/* CTA */}
       <section className="relative mx-auto mt-20 max-w-6xl px-4">
-        <div className="relative overflow-hidden rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(239,249,247,0.96)_0%,rgba(239,246,252,0.98)_100%)] px-6 py-12 text-center shadow-[0_24px_70px_rgba(148,163,184,0.12)] sm:px-10 sm:py-14 lg:px-12 lg:py-16">
+        <div className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,255,0.96)_100%)] px-6 py-12 text-center shadow-[0_24px_70px_rgba(148,163,184,0.12)] sm:px-10 sm:py-14 lg:px-12 lg:py-16">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-24 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full border border-white/45" />
-            <div className="absolute right-[-96px] top-1/2 h-72 w-72 -translate-y-1/2 rounded-full border border-white/40" />
-            <div className="absolute left-1/2 top-0 h-24 w-64 -translate-x-1/2 bg-white/30 blur-3xl" />
+            <div className="absolute -left-24 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full border border-slate-100" />
+            <div className="absolute right-[-96px] top-1/2 h-72 w-72 -translate-y-1/2 rounded-full border border-slate-100" />
+            <div className="absolute left-1/2 top-0 h-24 w-64 -translate-x-1/2 bg-slate-100/80 blur-3xl" />
           </div>
 
           <div className="relative mx-auto max-w-3xl">
-            <p className="mx-auto inline-flex rounded-full border border-white/80 bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500 shadow-sm backdrop-blur-sm sm:text-[11px]">
-              GetGantt
-            </p>
             <h2
-              className="mt-5 font-extrabold leading-[0.98] tracking-[-0.05em] text-slate-950"
-              style={{ fontSize: 'clamp(2rem, 5vw, 3.9rem)' }}
+              className="font-extrabold leading-[1.08] tracking-[-0.05em] text-slate-950"
+              style={{ fontSize: 'clamp(1.75rem, 4.2vw, 3.2rem)' }}
             >
-              Превратите описание
-              <br className="hidden sm:block" /> в готовый график
+              Быстро создать.
+              <br className="hidden sm:block" /> Легко управлять
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-500 sm:text-base">
-              Один запрос, и проект уже собран в диаграмму Ганта со сроками и зависимостями.
+              Новый стандарт графиков. Быстро, красиво, онлайн
             </p>
 
             <div className="mt-8">
               <a
                 href="https://ai.getgantt.ru"
-                className="inline-flex items-center justify-center rounded-full bg-slate-950 px-7 py-3 text-sm font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition-all hover:-translate-y-0.5 hover:bg-slate-900 hover:shadow-[0_18px_36px_rgba(15,23,42,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3.5 text-[15px] font-bold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
               >
                 Начать бесплатно
               </a>

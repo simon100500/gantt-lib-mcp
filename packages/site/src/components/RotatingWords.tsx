@@ -67,7 +67,7 @@ export default function RotatingWords({
         class="absolute -left-[9999px] top-0 font-extrabold"
         style={{
           fontFamily: 'Noto Sans, sans-serif',
-          fontSize: 'clamp(32px, 5.5vw, 56px)',
+          fontSize: 'clamp(36px, 6.2vw, 64px)',
           fontWeight: 800,
         }}
       >
@@ -86,7 +86,7 @@ export default function RotatingWords({
           class="block animate-word-in text-primary"
           style={{
             fontFamily: 'Noto Sans, sans-serif',
-            fontSize: 'clamp(32px, 5.5vw, 56px)',
+            fontSize: 'clamp(36px, 6.2vw, 64px)',
             fontWeight: 800,
           }}
         >
@@ -100,7 +100,7 @@ export default function RotatingWords({
             class="absolute left-0 top-0 block animate-word-out text-primary"
             style={{
               fontFamily: 'Noto Sans, sans-serif',
-              fontSize: 'clamp(32px, 5.5vw, 56px)',
+              fontSize: 'clamp(36px, 6.2vw, 64px)',
               fontWeight: 800,
             }}
           >

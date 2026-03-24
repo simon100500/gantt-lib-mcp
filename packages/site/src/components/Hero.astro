@@ -9,7 +9,7 @@ import RotatingWords from "./RotatingWords";
   {/* h1 with rotating words */}
   <h1
     class="mb-8 flex w-full flex-col items-center gap-1 font-extrabold leading-tight text-foreground animate-fade-up"
-    style="animation-delay: 70ms; font-family: 'Noto Sans', sans-serif; font-size: clamp(32px, 5.5vw, 56px); letter-spacing: -0.03em;"
+    style="animation-delay: 70ms; font-family: 'Noto Sans', sans-serif; font-size: clamp(36px, 6.2vw, 64px); letter-spacing: -0.03em;"
   >
     {/* First line: Из [word] в Гант */}
     <div class="flex flex-wrap items-center justify-center gap-4">
@@ -20,7 +20,7 @@ import RotatingWords from "./RotatingWords";
         client:load
       />
 
-      <span>в Гант</span>
+      <span>в гант</span>
     </div>
 
     {/* Second line */}
@@ -70,7 +70,8 @@ import RotatingWords from "./RotatingWords";
     const distance = targetY - startY;
     const duration = 1200;
     const start = performance.now();
-    const ease = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const ease = (t) =>
+      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const step = (now) => {
       const t = Math.min((now - start) / duration, 1);
       window.scrollTo(0, startY + distance * ease(t));
