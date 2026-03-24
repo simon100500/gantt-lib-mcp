@@ -35,4 +35,14 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /subtasks|child tasks|nested work/i);
     assert.match(prompt, /empty string/i);
   });
+
+  it('documents container-first planning and validation', () => {
+    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
+    const prompt = readFileSync(promptPath, 'utf-8');
+
+    assert.match(prompt, /Find the container/i);
+    assert.match(prompt, /WBS fragment/i);
+    assert.match(prompt, /Validate before finishing/i);
+    assert.match(prompt, /Avoid duplicates/i);
+  });
 });

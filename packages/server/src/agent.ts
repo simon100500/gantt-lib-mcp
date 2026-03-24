@@ -166,6 +166,9 @@ function buildPrompt(
   return [
     systemPrompt,
     `\n\n## State metadata:\n- projectId: ${projectId}\n- taskRevision: ${revision}\n- mutationRequested: ${mutationRequested}`,
+    mutationRequested
+      ? '\n\n## Mutation execution protocol:\n- Start by calling `get_tasks`.\n- Identify the target container or parent before creating anything.\n- If the request is broad, create a small structured WBS fragment instead of one vague task.\n- Add dependencies when they are part of the requested logic or are necessary to avoid isolated tasks.\n- Before finishing, verify the resulting structure against the current tasks.'
+      : '',
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
     `\n\nUser: ${userMessage}`,
@@ -503,7 +506,9 @@ export async function runAgentWithHistory(
       retryInstruction = [
         'The previous attempt did not perform any real mutation tool call.',
         'Call `get_tasks` again at the start of this retry.',
-        'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, or `delete_task`.',
+        'Identify the correct parent/container before mutating.',
+        'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, `delete_task`, `set_dependency`, or `remove_dependency`.',
+        'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',
         'A text-only success answer is invalid and will be rejected if no mutation event is recorded.',
