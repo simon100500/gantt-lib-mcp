@@ -12,9 +12,18 @@ interface Props {
   onChipSelect: (index: number) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
+  containerClassName?: string;
 }
 
-export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChipSelect, onSubmit, isSubmitting }: Props) {
+export default function InputDemo({
+  chips,
+  selectedIndex,
+  selectedPrompt,
+  onChipSelect,
+  onSubmit,
+  isSubmitting,
+  containerClassName = '',
+}: Props) {
   const [displayText, setDisplayText] = useState('');
   const timerId = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -41,7 +50,10 @@ export default function InputDemo({ chips, selectedIndex, selectedPrompt, onChip
   }, [selectedPrompt]);
 
   return (
-    <div className="relative mx-auto mt-6 max-w-[640px] px-4 md:px-8 animate-fade-up" style={{ animationDelay: '350ms' }}>
+    <div
+      className={`relative mx-auto mt-6 max-w-[640px] px-4 md:px-8 animate-fade-up ${containerClassName}`}
+      style={{ animationDelay: '350ms' }}
+    >
       <div className="flex flex-col gap-3">
         {/* Readonly textarea */}
         <textarea

@@ -1,16 +1,11 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import Hero from "../components/Hero.astro";
 import DemoSection from "../components/DemoSection";
 ---
 
 <Layout title="GetGantt — Из текста в Гант за 30 секунд">
   <main>
-    {/* Hero Section */}
-    <Hero />
-
-    {/* Demo Section */}
-    <div id="demo-section" class="bg-background py-3 pb-24">
+    <div id="demo-section" class="bg-background pb-24">
       <DemoSection client:load />
     </div>
   </main>
