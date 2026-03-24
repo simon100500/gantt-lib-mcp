@@ -102,16 +102,16 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| SITE-01 | 24 | Pending |
-| SITE-02 | 24 | Pending |
-| SITE-03 | 24 | Pending |
-| SITE-04 | 24 | Pending |
-| SITE-05 | 24 | Pending |
-| HERO-01 | 24 | Pending |
-| HERO-02 | 24 | Pending |
+| SITE-01 | 24 | Complete |
+| SITE-02 | 24 | Complete |
+| SITE-03 | 24 | Complete |
+| SITE-04 | 24 | Complete |
+| SITE-05 | 24 | Complete |
+| HERO-01 | 24 | Complete |
+| HERO-02 | 24 | Complete |
 | HERO-03 | 24 | Pending |
-| HERO-04 | 24 | Pending |
-| HERO-05 | 24 | Pending |
+| HERO-04 | 24 | Complete |
+| HERO-05 | 24 | Complete |
 | INTER-01 | 25 | Pending |
 | INTER-02 | 25 | Pending |
 | INTER-03 | 25 | Pending |

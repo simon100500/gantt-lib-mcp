@@ -67,7 +67,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center h-full bg-background">
+    <div className="flex h-full flex-1 justify-center bg-background pt-28 sm:pt-32">
       <div className="w-full max-w-[640px] px-6">
         {/* Headline */}
         <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">
@@ -79,7 +79,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
           <div className="relative">
             <textarea
               ref={textareaRef}
-              rows={4}
+              rows={6}
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
               onInput={handleTextareaInput}
@@ -98,7 +98,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
               disabled={!inputValue.trim()}
               aria-label="Отправить"
               className={cn(
-                'absolute bottom-2.5 right-2.5 h-8 w-8 rounded-lg',
+                'absolute bottom-4 right-2.5 h-8 w-8 rounded-lg',
                 'bg-primary text-primary-foreground',
                 'flex items-center justify-center',
                 'transition-colors hover:bg-primary/90',

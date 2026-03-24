@@ -1,0 +1,156 @@
+---
+// Header.astro — Desktop navigation bar with logo, links, CTAs
+const currentPage = Astro.url.pathname;
+---
+
+<header
+  class="sticky top-0 z-50 h-[58px] border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+>
+  <nav
+    class="container mx-auto flex h-full items-center justify-between px-4 lg:px-6"
+  >
+    {/* Logo — using favicon.svg from web editor */}
+    <a
+      href="/"
+      class="flex items-center gap-[7px] text-sm font-bold text-foreground"
+    >
+      <img
+        src="/favicon.svg"
+        alt="GetGantt"
+        width="26"
+        height="26"
+        class="h-[26px] w-[26px]"
+      />
+      <span class="text-[15px]">GetGantt</span>
+    </a>
+
+    {/* Desktop Nav Links */}
+    <ul class="hidden gap-[2px] md:flex">
+    </ul>
+
+    {/* Desktop CTAs */}
+    <div class="hidden gap-[7px] md:flex">
+      <a
+        href="https://ai.getgantt.ru/?auth=otp"
+        class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        Войти
+      </a>
+    </div>
+
+    {/* Mobile Hamburger */}
+    <button id="mobile-menu-btn" class="md:hidden" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6 stroke-foreground">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 6h16M4 12h16M4 18h16"></path>
+      </svg>
+    </button>
+  </nav>
+</header>
+
+{/* Mobile Drawer */}
+<div
+  id="mobile-drawer"
+  class="fixed inset-y-0 right-0 z-50 w-[280px] transform translate-x-full border-l border-border bg-background p-6 shadow-xl transition-transform duration-300 md:hidden"
+  aria-hidden="true"
+>
+  <div class="flex flex-col h-full">
+    {/* Close button */}
+    <button
+      id="mobile-menu-close"
+      class="self-end mb-8 rounded-md p-2 hover:bg-accent"
+      aria-label="Close menu"
+    >
+      <svg viewBox="0 0 24 24" fill="none" class="h-6 w-6 stroke-foreground">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M6 18L18 6M6 6l12 12"></path>
+      </svg>
+    </button>
+
+    {/* Logo */}
+    <a
+      href="/"
+      class="mb-8 flex items-center gap-[7px] text-sm font-bold text-foreground"
+    >
+      <img
+        src="/favicon.svg"
+        alt="GetGantt"
+        width="26"
+        height="26"
+        class="h-[26px] w-[26px]"
+      />
+      <span class="text-[15px]">GetGantt</span>
+    </a>
+
+    {/* Nav Links */}
+    <nav class="flex-1 space-y-4">
+    </nav>
+
+    {/* CTAs */}
+    <div class="mt-8 space-y-3">
+      <a
+        href="https://ai.getgantt.ru/?auth=otp"
+        class="block w-full rounded-md bg-primary px-4 py-3 text-center text-[15px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        Войти
+      </a>
+    </div>
+  </div>
+</div>
+
+{/* Overlay */}
+<div
+  id="mobile-overlay"
+  class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden"
+  aria-hidden="true"
+>
+</div>
+
+<script>
+  // Mobile menu toggle logic
+  const menuBtn = document.getElementById("mobile-menu-btn");
+  const closeBtn = document.getElementById("mobile-menu-close");
+  const drawer = document.getElementById("mobile-drawer");
+  const overlay = document.getElementById("mobile-overlay");
+
+  function openMenu() {
+    drawer?.classList.remove("translate-x-full");
+    drawer?.classList.add("translate-x-0");
+    overlay?.classList.remove("opacity-0", "pointer-events-none");
+    overlay?.classList.add("opacity-100", "pointer-events-auto");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeMenu() {
+    drawer?.classList.remove("translate-x-0");
+    drawer?.classList.add("translate-x-full");
+    overlay?.classList.remove("opacity-100", "pointer-events-auto");
+    overlay?.classList.add("opacity-0", "pointer-events-none");
+    document.body.style.overflow = "";
+  }
+
+  menuBtn?.addEventListener("click", openMenu);
+  closeBtn?.addEventListener("click", closeMenu);
+  overlay?.addEventListener("click", closeMenu);
+
+  // Close on ESC key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+  });
+</script>
+
+<style>
+  /* Ensure sticky header works on mobile */
+  @media (max-width: 767px) {
+    header {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+</style>

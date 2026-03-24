@@ -27,7 +27,7 @@ Features visitors assume exist. Missing these = site feels unprofessional or aba
 
 ### Differentiators (Competitive Advantage)
 
-Features that set GanttAI apart from other project management tools.
+Features that set GetGantt apart from other project management tools.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
@@ -129,7 +129,7 @@ Features to add once core site is driving traffic to app.
 - [ ] **Video demo** — 60-second explainer video in hero
 - [ ] **Integration showcase** — "Works with Notion, Jira, Slack" logos
 - [ ] **Changelog** — /updates page for release notes
-- [ ] **Comparison pages** — "GanttAI vs MS Project", "GanttAI vs Asana" (SEO play)
+- [ ] **Comparison pages** — "GetGantt vs MS Project", "GetGantt vs Asana" (SEO play)
 
 ### Future Consideration (v5.0+)
 
@@ -176,7 +176,7 @@ Features to defer until product-market fit is established.
 
 ## Competitor Feature Analysis
 
-| Feature | MS Project | Asana | Monday.com | GanttAI |
+| Feature | MS Project | Asana | Monday.com | GetGantt |
 |---------|------------|-------|------------|---------|
 | AI-first hero demo | ❌ Screenshot only | ❌ Static hero | ❌ Video only | ✅ Interactive typing demo |
 | Template library | ✅ 50+ templates | ✅ Templates | ✅ Templates | ✅ 8-12 focused templates (v1) |
@@ -328,7 +328,7 @@ Features to defer until product-market fit is established.
 ### Features (/features)
 
 **Sections:**
-1. **Hero** — "Все возможности GanttAI"
+1. **Hero** — "Все возможности GetGantt"
 2. **Core features** — 6-8 detailed features
    - AI generation
    - Drag-to-edit editor
@@ -367,7 +367,7 @@ Features to defer until product-market fit is established.
 
 ### Privacy (/privacy) + Terms (/terms)
 
-**Standard boilerplate** with GanttAI-specifics:
+**Standard boilerplate** with GetGantt-specifics:
 - Data collection (email, projects)
 - AI processing (OpenAI API usage)
 - Data storage (PostgreSQL, retention)
