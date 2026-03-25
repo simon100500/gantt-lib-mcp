@@ -19,7 +19,7 @@
 
 - [x] **Phase 24: Astro Site Foundation** - Astro site with hero, navigation, responsive layout
 - [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
-- [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
+- [x] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals (completed 2026-03-25)
 - [ ] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration
 
 ---
@@ -98,10 +98,10 @@
 6. Search engines understand indexing rules via robots.txt
 7. Each page has proper meta title, description, and OG tags for social sharing
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 - [x] 26-01-PLAN.md — Shared metadata contract, discoverable /features and /faq routes, and content-page copy
-- [ ] 26-02-PLAN.md — Legal pages plus sitemap.xml and robots.txt
+- [x] 26-02-PLAN.md — Legal pages plus sitemap.xml and robots.txt
 
 **UI hint:** yes
 
@@ -132,7 +132,7 @@
 |-------|----------------|--------|-----------|
 | 24. Astro Site Foundation | 3/3 | Complete | 2026-03-23 |
 | 25. Interactive Preview | 0/2 | Not started | - |
-| 26. Content & SEO | 1/2 | In Progress | - |
+| 26. Content & SEO | 2/2 | Complete | 2026-03-25 |
 | 27. Domain Separation | 0/3 | Not started | - |
 
 ---
@@ -158,10 +158,10 @@
 | INTER-05 | 25 | Pending |
 | CONTENT-01 | 26 | Complete |
 | CONTENT-02 | 26 | Complete |
-| CONTENT-03 | 26 | Pending |
-| CONTENT-04 | 26 | Pending |
-| CONTENT-05 | 26 | Pending |
-| CONTENT-06 | 26 | Pending |
+| CONTENT-03 | 26 | Complete |
+| CONTENT-04 | 26 | Complete |
+| CONTENT-05 | 26 | Complete |
+| CONTENT-06 | 26 | Complete |
 | CONTENT-07 | 26 | Complete |
 | DEPLOY-01 | 27 | Pending |
 | DEPLOY-02 | 27 | Pending |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: MVP
 current_phase: 26
-status: executing
-last_updated: "2026-03-25T14:42:20.932Z"
+status: ready
+last_updated: "2026-03-25T17:34:24.000Z"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 7
-  completed_plans: 4
-  percent: 94
+  completed_plans: 5
 ---
+
 
 # Project State: gantt-lib MCP Server
 
@@ -35,10 +35,24 @@ AI может программно управлять диаграммами Г�
 
 ## Current Position
 
-Phase: 26 (content-seo) — IN PROGRESS
-Plan: 1 of 2
+Phase: 26 (content-seo) — COMPLETE
+Plan: 2 of 2
 
 ### Recent Work
+
+**v4.0 Phase 26 Plan 02 Complete (2026-03-25):**
+
+- Published `/privacy` with practical Russian-first privacy copy and distinct metadata
+- Published `/terms` with plain-language usage rules, service limitations, and distinct metadata
+- Added `sitemap.xml` for `/`, `/features`, `/faq`, `/privacy`, and `/terms`
+- Added `robots.txt` allowing indexing and pointing crawlers to `https://getgantt.ru/sitemap.xml`
+- Verified the generated site build and emitted crawl assets after the approved checkpoint
+
+**v4.0 Phase 26 Complete (2026-03-25):**
+
+- Content pages now cover features, FAQ, privacy, and terms
+- Shared metadata contract is live across all marketing content pages
+- Search-discovery basics are complete with sitemap and robots assets
 
 **v4.0 Phase 26 Plan 01 Complete (2026-03-25):**
 
@@ -120,10 +134,13 @@ Plan: 1 of 2
 | Astro для marketing site | Разделение marketing/app — независимый деплой, SEO | TBD (v4.0) |
 | Shared Layout metadata props for Astro content pages | One SEO rendering path keeps per-route metadata consistent without duplicating tags | ✓ Good (v4.0) |
 | /features story stays AI-first before manual editing | Matches the locked product narrative and avoids promising future-scope collaboration or pricing | ✓ Good (v4.0) |
+| Legal pages stay practical and scope-honest | Avoids invented billing, compliance, or certification claims not documented in the repo | ✓ Good (v4.0) |
+| sitemap.xml includes only shipped marketing routes | Keeps crawler output aligned to actual published pages instead of future roadmap placeholders | ✓ Good (v4.0) |
 | Phase 24-astro-site-foundation P01 | 153 | 4 tasks | 8 files |
 | Phase 24 P02 | 180 | 5 tasks | 12 files |
 | Phase 24 P03 | 540 | 3 tasks | 15 files |
 | Phase 26 P01 | 11 min | 5 tasks | 5 files |
+| Phase 26 P02 | 5 min | 5 tasks | 4 files |
 
 ### Architecture
 
@@ -192,8 +209,8 @@ Creating a separate marketing site on Astro to split marketing concerns from the
 
 - [x] Create /features page with feature descriptions
 - [x] Create /faq page with 10 Q&A
-- [ ] Create /privacy and /terms pages
-- [ ] Add sitemap.xml and robots.txt
+- [x] Create /privacy and /terms pages
+- [x] Add sitemap.xml and robots.txt
 - [x] Configure meta tags and OG tags
 
 **Upcoming (Phase 27):**
@@ -220,9 +237,9 @@ None currently.
 
 ## Next Steps
 
-1. **Execute 26-02:** Add `/privacy`, `/terms`, `sitemap.xml`, and `robots.txt`
-2. **Complete Phase 26:** Finish remaining legal pages and crawler assets
-3. **Execute Phase 27:** Configure domain separation
+1. **Start Phase 27:** Configure domain separation for `getgantt.ru` and `ai.getgantt.ru`
+2. **Add site deployment path:** Create `Dockerfile.site` for Astro static output
+3. **Wire runtime boundaries:** Configure WebSocket CORS and `PUBLIC_SHARE_URL` for the app domain
 4. **Complete Milestone:** `/gsd:complete-milestone`
 
 ---

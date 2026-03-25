@@ -2,7 +2,7 @@
 
 **Milestone:** v4.0 Astro Landing
 **Status:** Active
-**Last updated:** 2026-03-23
+**Last updated:** 2026-03-25
 
 ## Overview
 
@@ -46,10 +46,10 @@
 
 - [x] **CONTENT-01:** Пользователь может прочитать overview фич продукта на странице /features (6-8 фич с описаниями)
 - [x] **CONTENT-02:** Пользователь может найти ответы на частые вопросы на странице /faq (10 вопросов: features, pricing, onboarding, data)
-- [ ] **CONTENT-03:** Пользователь может прочитать Privacy Policy на странице /privacy
-- [ ] **CONTENT-04:** Пользователь может прочитать Terms of Service на странице /terms
-- [ ] **CONTENT-05:** Поисковые системы могут discover сайт через sitemap.xml
-- [ ] **CONTENT-06:** Поисковые системы понимают правила индексации через robots.txt
+- [x] **CONTENT-03:** Пользователь может прочитать Privacy Policy на странице /privacy
+- [x] **CONTENT-04:** Пользователь может прочитать Terms of Service на странице /terms
+- [x] **CONTENT-05:** Поисковые системы могут discover сайт через sitemap.xml
+- [x] **CONTENT-06:** Поисковые системы понимают правила индексации через robots.txt
 - [x] **CONTENT-07:** Каждая страница имеет правильные meta title, description, OG tags для соцсетей
 
 ### DEPLOY — Deployment & Domains
@@ -119,10 +119,10 @@
 | INTER-05 | 25 | Pending |
 | CONTENT-01 | 26 | Complete |
 | CONTENT-02 | 26 | Complete |
-| CONTENT-03 | 26 | Pending |
-| CONTENT-04 | 26 | Pending |
-| CONTENT-05 | 26 | Pending |
-| CONTENT-06 | 26 | Pending |
+| CONTENT-03 | 26 | Complete |
+| CONTENT-04 | 26 | Complete |
+| CONTENT-05 | 26 | Complete |
+| CONTENT-06 | 26 | Complete |
 | CONTENT-07 | 26 | Complete |
 | DEPLOY-01 | 27 | Pending |
 | DEPLOY-02 | 27 | Pending |
