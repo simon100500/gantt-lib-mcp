@@ -3,18 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: MVP
 current_phase: 26
-status: planning
-last_updated: "2026-03-25T10:15:00.000Z"
+status: executing
+last_updated: "2026-03-25T14:42:20.932Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 2
+  total_plans: 7
+  completed_plans: 4
+  percent: 94
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-25
 **Current milestone:** v4.0 Astro Landing
 **Current phase:** 26
 
@@ -34,10 +35,17 @@ AI может программно управлять диаграммами Г�
 
 ## Current Position
 
-Phase: 26 (content-pages-seo) — PLANNING
-Plan: 0 of 1
+Phase: 26 (content-seo) — IN PROGRESS
+Plan: 1 of 2
 
 ### Recent Work
+
+**v4.0 Phase 26 Plan 01 Complete (2026-03-25):**
+
+- Shared `Layout.astro` metadata props for title, description, and OG tags
+- Header and footer aligned to published content routes only
+- `/features` page with six AI-first product sections and CTA to `ai.getgantt.ru`
+- `/faq` page with 10 concise answers covering onboarding, pricing status, privacy, and sharing
 
 **v4.0 Phase 25 Complete (2026-03-24):**
 
@@ -110,9 +118,12 @@ Plan: 0 of 1
 | parentId вместо nested task API | Проще, использует существующую структуру БД | ✓ Good (v3.0) |
 | Zustand для frontend state | Единый source of truth вместо scattered state | ✓ Good (v3.0) |
 | Astro для marketing site | Разделение marketing/app — независимый деплой, SEO | TBD (v4.0) |
+| Shared Layout metadata props for Astro content pages | One SEO rendering path keeps per-route metadata consistent without duplicating tags | ✓ Good (v4.0) |
+| /features story stays AI-first before manual editing | Matches the locked product narrative and avoids promising future-scope collaboration or pricing | ✓ Good (v4.0) |
 | Phase 24-astro-site-foundation P01 | 153 | 4 tasks | 8 files |
 | Phase 24 P02 | 180 | 5 tasks | 12 files |
 | Phase 24 P03 | 540 | 3 tasks | 15 files |
+| Phase 26 P01 | 11 min | 5 tasks | 5 files |
 
 ### Architecture
 
@@ -179,11 +190,11 @@ Creating a separate marketing site on Astro to split marketing concerns from the
 
 **Immediate (Phase 26):**
 
-- [ ] Create /features page with feature descriptions
-- [ ] Create /faq page with 10 Q&A
+- [x] Create /features page with feature descriptions
+- [x] Create /faq page with 10 Q&A
 - [ ] Create /privacy and /terms pages
 - [ ] Add sitemap.xml and robots.txt
-- [ ] Configure meta tags and OG tags
+- [x] Configure meta tags and OG tags
 
 **Upcoming (Phase 27):**
 
@@ -209,8 +220,8 @@ None currently.
 
 ## Next Steps
 
-1. **Execute Phase 26:** `/gsd:plan-phase 26`
-2. **Complete Phase 26:** Add content pages and SEO
+1. **Execute 26-02:** Add `/privacy`, `/terms`, `sitemap.xml`, and `robots.txt`
+2. **Complete Phase 26:** Finish remaining legal pages and crawler assets
 3. **Execute Phase 27:** Configure domain separation
 4. **Complete Milestone:** `/gsd:complete-milestone`
 

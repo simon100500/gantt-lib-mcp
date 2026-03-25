@@ -44,13 +44,13 @@
 
 Контентные страницы и SEO фундамент.
 
-- [ ] **CONTENT-01:** Пользователь может прочитать overview фич продукта на странице /features (6-8 фич с описаниями)
-- [ ] **CONTENT-02:** Пользователь может найти ответы на частые вопросы на странице /faq (10 вопросов: features, pricing, onboarding, data)
+- [x] **CONTENT-01:** Пользователь может прочитать overview фич продукта на странице /features (6-8 фич с описаниями)
+- [x] **CONTENT-02:** Пользователь может найти ответы на частые вопросы на странице /faq (10 вопросов: features, pricing, onboarding, data)
 - [ ] **CONTENT-03:** Пользователь может прочитать Privacy Policy на странице /privacy
 - [ ] **CONTENT-04:** Пользователь может прочитать Terms of Service на странице /terms
 - [ ] **CONTENT-05:** Поисковые системы могут discover сайт через sitemap.xml
 - [ ] **CONTENT-06:** Поисковые системы понимают правила индексации через robots.txt
-- [ ] **CONTENT-07:** Каждая страница имеет правильные meta title, description, OG tags для соцсетей
+- [x] **CONTENT-07:** Каждая страница имеет правильные meta title, description, OG tags для соцсетей
 
 ### DEPLOY — Deployment & Domains
 
@@ -117,13 +117,13 @@
 | INTER-03 | 25 | Pending |
 | INTER-04 | 25 | Pending |
 | INTER-05 | 25 | Pending |
-| CONTENT-01 | 26 | Pending |
-| CONTENT-02 | 26 | Pending |
+| CONTENT-01 | 26 | Complete |
+| CONTENT-02 | 26 | Complete |
 | CONTENT-03 | 26 | Pending |
 | CONTENT-04 | 26 | Pending |
 | CONTENT-05 | 26 | Pending |
 | CONTENT-06 | 26 | Pending |
-| CONTENT-07 | 26 | Pending |
+| CONTENT-07 | 26 | Complete |
 | DEPLOY-01 | 27 | Pending |
 | DEPLOY-02 | 27 | Pending |
 | DEPLOY-03 | 27 | Pending |

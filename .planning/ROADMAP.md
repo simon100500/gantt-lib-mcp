@@ -2,7 +2,7 @@
 
 **Current milestone:** v4.0 Astro Landing
 **Granularity:** Coarse
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-25
 
 ## Progress Summary
 
@@ -98,7 +98,10 @@
 6. Search engines understand indexing rules via robots.txt
 7. Each page has proper meta title, description, and OG tags for social sharing
 
-**Plans:** TBD
+**Plans:** 1/2 plans executed
+
+- [x] 26-01-PLAN.md — Shared metadata contract, discoverable /features and /faq routes, and content-page copy
+- [ ] 26-02-PLAN.md — Legal pages plus sitemap.xml and robots.txt
 
 **UI hint:** yes
 
@@ -129,7 +132,7 @@
 |-------|----------------|--------|-----------|
 | 24. Astro Site Foundation | 3/3 | Complete | 2026-03-23 |
 | 25. Interactive Preview | 0/2 | Not started | - |
-| 26. Content & SEO | 0/2 | Not started | - |
+| 26. Content & SEO | 1/2 | In Progress | - |
 | 27. Domain Separation | 0/3 | Not started | - |
 
 ---
@@ -153,13 +156,13 @@
 | INTER-03 | 25 | Pending |
 | INTER-04 | 25 | Pending |
 | INTER-05 | 25 | Pending |
-| CONTENT-01 | 26 | Pending |
-| CONTENT-02 | 26 | Pending |
+| CONTENT-01 | 26 | Complete |
+| CONTENT-02 | 26 | Complete |
 | CONTENT-03 | 26 | Pending |
 | CONTENT-04 | 26 | Pending |
 | CONTENT-05 | 26 | Pending |
 | CONTENT-06 | 26 | Pending |
-| CONTENT-07 | 26 | Pending |
+| CONTENT-07 | 26 | Complete |
 | DEPLOY-01 | 27 | Pending |
 | DEPLOY-02 | 27 | Pending |
 | DEPLOY-03 | 27 | Pending |
@@ -192,4 +195,4 @@ Phases completed:
 - Phase 23: Task Filtering UI
 
 ---
-*Last updated:* 2026-03-24
+*Last updated:* 2026-03-25
