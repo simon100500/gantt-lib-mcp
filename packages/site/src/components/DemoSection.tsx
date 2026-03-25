@@ -123,21 +123,14 @@ const DEFAULT_TEMPLATE_INDEX = 0;
 export default function DemoSection() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(DEFAULT_TEMPLATE_INDEX);
   const [activeIndex, setActiveIndex] = useState<number>(DEFAULT_TEMPLATE_INDEX);
-  const [ganttKey, setGanttKey] = useState(0);
   const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
   const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const sectionRef = useRef<HTMLDivElement>(null);
   const ganttRef = useRef<HTMLDivElement>(null);
-  const isFirstGantt = useRef(true);
   const shouldScrollAfterSubmit = useRef(false);
 
-  // Scroll to gantt after re-render (ganttKey changes after each submit)
+  // Smooth-scroll to the chart after the delayed template switch.
   useEffect(() => {
-    if (isFirstGantt.current) {
-      isFirstGantt.current = false;
-      return;
-    }
     if (!shouldScrollAfterSubmit.current) {
       return;
     }
@@ -157,7 +150,7 @@ export default function DemoSection() {
       if (t < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
-  }, [ganttKey]);
+  }, [activeIndex]);
 
   function handleSubmit() {
     if (selectedIndex === null) return;
@@ -171,7 +164,6 @@ export default function DemoSection() {
       setActiveTasks(TEMPLATES[selectedIndex].tasks);
       setActiveTitle(TEMPLATES[selectedIndex].title);
       setActiveIndex(selectedIndex);
-      setGanttKey(k => k + 1);
       setIsSubmitting(false);
     }, 700);
   }
@@ -179,7 +171,7 @@ export default function DemoSection() {
   const selectedPrompt = selectedIndex !== null ? TEMPLATES[selectedIndex].prompt : null;
 
   return (
-    <div ref={sectionRef}>
+    <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
           <div className="max-w-[620px] px-8 lg:px-0">
@@ -218,7 +210,7 @@ export default function DemoSection() {
           </div>
 
           <div className="relative lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
-            <div className="relative rounded-[28px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.16)] backdrop-blur-sm sm:p-6">
+            <div className="relative rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.12)] sm:p-6">
               <InputDemo
                 chips={TEMPLATES.map(t => ({ label: t.label, prompt: t.prompt }))}
                 selectedIndex={selectedIndex}
@@ -241,9 +233,9 @@ export default function DemoSection() {
         </svg>
       </div>
 
-      {/* Gantt — remounts on each submit via key */}
+      {/* Gantt preview */}
       <div id="gantt-preview" ref={ganttRef}>
-        <GanttPreview key={ganttKey} initialTasks={activeTasks} title={activeTitle} />
+        <GanttPreview initialTasks={activeTasks} title={activeTitle} />
       </div>
 
       {/* CTA */}
@@ -252,7 +244,7 @@ export default function DemoSection() {
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute -left-24 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full border border-slate-100" />
             <div className="absolute right-[-96px] top-1/2 h-72 w-72 -translate-y-1/2 rounded-full border border-slate-100" />
-            <div className="absolute left-1/2 top-0 h-24 w-64 -translate-x-1/2 bg-slate-100/80 blur-3xl" />
+            <div className="absolute left-1/2 top-0 h-24 w-64 -translate-x-1/2 bg-[radial-gradient(circle,rgba(241,245,249,0.9)_0%,rgba(241,245,249,0)_72%)]" />
           </div>
 
           <div className="relative mx-auto max-w-3xl">

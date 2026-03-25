@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { Task, GanttChartHandle } from 'gantt-lib';
 import 'gantt-lib/styles.css';
@@ -31,13 +31,14 @@ interface GanttPreviewProps {
   title?: string;
 }
 
-export default function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
+function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   const allTasks = initialTasks ?? [];
   const [tasks, setTasks] = useState<Task[]>([]);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
   const [showTaskList, setShowTaskList] = useState(true);
   const ganttRef = useRef<GanttChartHandle>(null);
+  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Hide task list on mobile screens
   useEffect(() => {
@@ -49,21 +50,32 @@ export default function GanttPreview({ initialTasks, title }: GanttPreviewProps)
     return () => mql.removeEventListener('change', listener);
   }, []);
 
-  // Reveal tasks one by one on mount
+  // Reveal tasks one by one when the selected template changes.
   useEffect(() => {
-    if (!allTasks.length) return;
+    revealTimersRef.current.forEach(clearTimeout);
+    revealTimersRef.current = [];
+    setTasks([]);
+    setCollapsedParentIds(new Set());
+
+    if (!allTasks.length) {
+      return;
+    }
+
     let i = 0;
     const reveal = () => {
       i++;
       setTasks(allTasks.slice(0, i));
       if (i < allTasks.length) {
-        setTimeout(reveal, 110);
+        revealTimersRef.current.push(setTimeout(reveal, 110));
       }
     };
-    const id = setTimeout(reveal, 150);
-    return () => clearTimeout(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    revealTimersRef.current.push(setTimeout(reveal, 150));
+
+    return () => {
+      revealTimersRef.current.forEach(clearTimeout);
+      revealTimersRef.current = [];
+    };
+  }, [allTasks]);
 
   // Scroll to first task once it appears
   useEffect(() => {
@@ -228,3 +240,5 @@ export default function GanttPreview({ initialTasks, title }: GanttPreviewProps)
     </div>
   );
 }
+
+export default memo(GanttPreview);
