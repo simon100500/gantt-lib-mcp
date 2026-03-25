@@ -1,0 +1,110 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const faqItems = [
+  {
+    question: "Что делает GetGantt?",
+    answer:
+      "GetGantt помогает превратить описание проекта в рабочий график Ганта. Сервис сочетает AI-чат, генерацию плана и ручное редактирование на таймлайне.",
+  },
+  {
+    question: "Как работает ввод через AI?",
+    answer:
+      "Вы пишете задачу обычным языком или вставляете бриф, письмо, ТЗ или другой текст. AI использует это описание как основу для структуры проекта, этапов и сроков.",
+  },
+  {
+    question: "Можно ли редактировать план вручную после генерации?",
+    answer:
+      "Да. После первого AI-черновика вы можете двигать задачи, менять длительность и уточнять план напрямую в редакторе.",
+  },
+  {
+    question: "Поддерживаются ли зависимости и пересчет сроков?",
+    answer:
+      "Да, в плане можно задавать зависимости между задачами. Когда сроки сдвигаются, график помогает увидеть и учесть влияние на связанные этапы.",
+  },
+  {
+    question: "Сколько времени занимает старт нового плана?",
+    answer:
+      "Обычно первые результаты появляются за минуты, потому что не нужно собирать пустой план с нуля. AI ускоряет старт, а дальше вы быстро доводите график до рабочего вида.",
+  },
+  {
+    question: "Есть ли уже финальная цена или отдельная страница с тарифами?",
+    answer:
+      "Пока нет: pricing-модель еще не зафиксирована, поэтому мы не обещаем тарифы на сайте заранее. Когда условия будут готовы, они появятся в отдельном и понятном виде.",
+  },
+  {
+    question: "Что происходит с моими данными и описанием проекта?",
+    answer:
+      "Данные используются для построения и отображения вашего плана внутри сервиса. Короткую сводку мы даем здесь, а полные условия и детали обработки будут описаны на странице /privacy.",
+  },
+  {
+    question: "Где смотреть юридические и privacy-условия?",
+    answer:
+      "Для правовых и privacy-вопросов ориентируйтесь на страницы /privacy и /terms. FAQ дает только короткие практические ответы без замены полной юридической информации.",
+  },
+  {
+    question: "Можно ли отправить план клиенту или коллеге по ссылке?",
+    answer:
+      "Да, продукт поддерживает read-only ссылки для просмотра. Это удобно для согласования и статуса, но не означает совместное редактирование в браузере.",
+  },
+  {
+    question: "Этот сайт и есть редактор или он ведет в приложение?",
+    answer:
+      "Маркетинговый сайт объясняет продукт и показывает возможности. Сам редактор и рабочий вход находятся на ai.getgantt.ru.",
+  },
+];
+---
+
+<Layout
+  title="FAQ GetGantt — ответы о работе AI-планировщика"
+  description="10 коротких ответов о том, как GetGantt строит план из текста, поддерживает ручное редактирование, зависимости, данные и read-only ссылки."
+  ogTitle="FAQ GetGantt"
+  ogDescription="Частые вопросы о GetGantt: AI-ввод, редактирование графика, зависимости, данные, privacy и путь в приложение."
+>
+  <section class="border-b border-border bg-background">
+    <div class="container mx-auto px-4 py-20 lg:px-6 lg:py-24">
+      <div class="max-w-3xl space-y-6">
+        <span class="inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+          FAQ
+        </span>
+        <h1 class="text-4xl font-extrabold tracking-tight text-foreground md:text-5xl">
+          Короткие ответы о том, как работает GetGantt.
+        </h1>
+        <p class="text-lg leading-8 text-muted-foreground">
+          Здесь собраны практические вопросы о продукте, AI-вводе, данных и
+          переходе в приложение. Если нужен полный юридический контекст,
+          используйте страницы /privacy и /terms.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-background">
+    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-20">
+      <div class="grid gap-5">
+        {
+          faqItems.map((item, index) => (
+            <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
+              <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div class="space-y-3">
+                  <p class="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                    Вопрос {index + 1}
+                  </p>
+                  <h2 class="text-2xl font-bold tracking-tight text-foreground">
+                    {item.question}
+                  </h2>
+                </div>
+                <span class="inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-foreground">
+                  GetGantt
+                </span>
+              </div>
+              <p class="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
+                {item.answer}
+              </p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</Layout>
