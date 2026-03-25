@@ -39,6 +39,8 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   const [showTaskList, setShowTaskList] = useState(true);
   const ganttRef = useRef<GanttChartHandle>(null);
   const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const pendingTasksRef = useRef<Task[] | null>(null);
+  const frameRef = useRef<number | null>(null);
 
   // Hide task list on mobile screens
   useEffect(() => {
@@ -56,6 +58,12 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
     revealTimersRef.current = [];
     setTasks([]);
     setCollapsedParentIds(new Set());
+    pendingTasksRef.current = null;
+
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
 
     if (!allTasks.length) {
       return;
@@ -77,6 +85,12 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
     };
   }, [allTasks]);
 
+  useEffect(() => () => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+    }
+  }, []);
+
   // Scroll to first task once it appears
   useEffect(() => {
     if (tasks.length === 1 && allTasks[0]) {
@@ -86,10 +100,26 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   }, [tasks.length]);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
-    setTasks(prev => {
-      // updatedTasks contains ONLY the changed tasks - merge them into prev
-      const updatedMap = new Map(updatedTasks.map(t => [t.id, t]));
-      return prev.map(t => updatedMap.get(t.id) ?? t);
+    pendingTasksRef.current = updatedTasks;
+
+    if (frameRef.current !== null) {
+      return;
+    }
+
+    frameRef.current = requestAnimationFrame(() => {
+      const pendingTasks = pendingTasksRef.current;
+      pendingTasksRef.current = null;
+      frameRef.current = null;
+
+      if (!pendingTasks || pendingTasks.length === 0) {
+        return;
+      }
+
+      setTasks(prev => {
+        // gantt-lib emits partial task updates during drag; merge once per frame.
+        const updatedMap = new Map(pendingTasks.map(t => [t.id, t]));
+        return prev.map(t => updatedMap.get(t.id) ?? t);
+      });
     });
   }, []);
 
@@ -211,7 +241,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
         </div>
 
         {/* Gantt Chart */}
-        <div className="overflow-x-auto">
+        <div>
           {tasks.length === 0 ? (
             <div className="flex items-center justify-center text-slate-400 text-sm animate-pulse" style={{ height: '500px' }}>
               Генерирую график…
