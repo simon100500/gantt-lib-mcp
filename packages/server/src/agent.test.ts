@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildHistoryContext, isMutationIntent } from './agent.js';
+import { buildHistoryContext, isMutationIntent, isSimpleMutationRequest } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -44,6 +44,18 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /WBS fragment/i);
     assert.match(prompt, /Validate before finishing/i);
     assert.match(prompt, /Avoid duplicates/i);
+  });
+});
+
+describe('agent simple mutation heuristic', () => {
+  it('detects short add-task requests as simple mutations', () => {
+    assert.equal(isSimpleMutationRequest('добавь задачи по штукатурке'), true);
+    assert.equal(isSimpleMutationRequest('add plaster tasks'), true);
+  });
+
+  it('treats broad planning requests as non-simple', () => {
+    assert.equal(isSimpleMutationRequest('Создай график строительства с этапами и зависимостями'), false);
+    assert.equal(isSimpleMutationRequest('add tasks for all floors with dependencies'), false);
   });
 });
 

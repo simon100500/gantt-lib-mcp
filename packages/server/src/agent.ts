@@ -59,6 +59,9 @@ const MUTATION_HISTORY_CHAR_LIMIT = 1_500;
 const READONLY_HISTORY_CHAR_LIMIT = 4_000;
 const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
 const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
+const SIMPLE_MUTATION_MAX_SESSION_TURNS = 8;
+const DEFAULT_MUTATION_MAX_SESSION_TURNS = 16;
+const READONLY_MAX_SESSION_TURNS = 12;
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -103,6 +106,44 @@ export function isMutationIntent(message: string): boolean {
   }
 
   return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b)/i.test(message);
+}
+
+export function isSimpleMutationRequest(message: string): boolean {
+  const normalized = message.toLowerCase().trim();
+
+  if (normalized.length > 120) {
+    return false;
+  }
+
+  const broadScopeMarkers = [
+    'график',
+    'проект',
+    'wbs',
+    'иерарх',
+    'структур',
+    'этап',
+    'блок',
+    'phase',
+    'schedule',
+    'plan',
+    'fragment',
+    'package',
+    'dependencies',
+    'dependency',
+    'floor',
+    'section',
+    'секци',
+    'этаж',
+    'for all',
+    'для всех',
+    'массов',
+  ];
+
+  if (broadScopeMarkers.some((marker) => normalized.includes(marker))) {
+    return false;
+  }
+
+  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|добав|созда|измени|обнов|удал|убер)/i.test(normalized);
 }
 
 function normalizeTask(task: ComparableTask): ComparableTask {
@@ -207,6 +248,7 @@ function buildPrompt(
   projectId: string,
   revision: number,
   mutationRequested: boolean,
+  simpleMutationRequested: boolean,
   historyContext: string,
   userMessage: string,
   retryInstruction?: string,
@@ -215,7 +257,16 @@ function buildPrompt(
     systemPrompt,
     `\n\n## State metadata:\n- projectId: ${projectId}\n- taskRevision: ${revision}\n- mutationRequested: ${mutationRequested}`,
     mutationRequested
-      ? '\n\n## Mutation execution protocol:\n- Start by calling `get_tasks`.\n- Make the smallest valid change that satisfies the request.\n- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.\n- Do not spend extra turns on optional restructuring.'
+      ? [
+        '\n\n## Mutation execution protocol:',
+        '- Start by calling `get_tasks`.',
+        simpleMutationRequested
+          ? '- Use compact `get_tasks` output first. Do not request full task data unless dependencies or deep hierarchy are required.'
+          : '- Use compact `get_tasks` first unless you explicitly need dependencies or detailed hierarchy.',
+        '- Make the smallest valid change that satisfies the request.',
+        '- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.',
+        '- Do not spend extra turns on optional restructuring.',
+      ].join('\n')
       : '',
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
@@ -230,6 +281,7 @@ async function executeAgentAttempt(
   sessionId: string,
   attempt: number,
   mutationRequested: boolean,
+  simpleMutationRequested: boolean,
   mcpServerPath: string,
   dbPath: string,
   env: ReturnType<typeof resolveEnv>,
@@ -245,7 +297,9 @@ async function executeAgentAttempt(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
-      maxSessionTurns: 20,  // HARD-01: Prevent infinite loops
+      maxSessionTurns: mutationRequested
+        ? (simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS)
+        : READONLY_MAX_SESSION_TURNS,
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: {
@@ -430,6 +484,7 @@ export async function runAgentWithHistory(
   try {
     const runId = crypto.randomUUID();
     const mutationRequested = isMutationIntent(userMessage);
+    const simpleMutationRequested = mutationRequested && isSimpleMutationRequest(userMessage);
     const { tasks: tasksBefore } = mutationRequested
       ? await taskService.list(projectId)
       : { tasks: [] };
@@ -441,6 +496,7 @@ export async function runAgentWithHistory(
       sessionId,
       userMessage,
       mutationRequested,
+      simpleMutationRequested,
       revisionBefore,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
@@ -497,6 +553,7 @@ export async function runAgentWithHistory(
         projectId,
         revisionBefore,
         mutationRequested,
+        simpleMutationRequested,
         historyContext,
         userMessage,
         retryInstruction,
@@ -508,6 +565,7 @@ export async function runAgentWithHistory(
         projectId,
         sessionId,
         historyCount: messages.length,
+        simpleMutationRequested,
         prompt: attemptPrompt,
       });
 
@@ -521,6 +579,7 @@ export async function runAgentWithHistory(
           sessionId,
           attempt,
           mutationRequested,
+          simpleMutationRequested,
           mcpServerPath,
           dbPath,
           env,
