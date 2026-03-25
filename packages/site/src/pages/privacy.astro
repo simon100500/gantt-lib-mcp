@@ -1,5 +1,28 @@
 ---
 import Layout from "../layouts/Layout.astro";
+
+const privacySections = [
+  {
+    title: "Какие данные мы можем получать",
+    body:
+      "Если вы используете сайт или приложение, сервис может обрабатывать текст, который вы вводите для построения плана: описание проекта, бриф, ТЗ, письмо, комментарии к задачам и другие рабочие вводные. Эти данные нужны, чтобы показать диаграмму, структуру задач и результат работы AI-функций внутри продукта.",
+  },
+  {
+    title: "Данные аккаунта и входа",
+    body:
+      "Для доступа в приложение могут использоваться базовые данные аутентификации, например email и техническая информация, необходимая для входа и поддержки сессии. Мы описываем это как рабочий минимум: только то, что требуется для доступа в сервис и связи с учетной записью.",
+  },
+  {
+    title: "Технические логи и работа сервиса",
+    body:
+      "При работе сайта и приложения могут появляться технические логи: ошибки, события авторизации, служебные записи о запросах и другая диагностическая информация, которая помогает поддерживать доступность и разбираться со сбоями. На этой странице мы не заявляем отдельные внешние analytics-инструменты или рекламные трекеры, потому что такие интеграции не описаны в текущем репозитории.",
+  },
+  {
+    title: "Как используются ваши данные",
+    body:
+      "Данные используются для трех практических задач: дать вам доступ к продукту, построить и показать план проекта, а также поддерживать стабильную работу сервиса. Мы не добавляем сюда обещания о специальных режимах обработки или compliance-статусах, которых нет в проектной документации.",
+  },
+];
 ---
 
 <Layout
@@ -8,99 +31,154 @@ import Layout from "../layouts/Layout.astro";
   ogTitle="Политика конфиденциальности GetGantt"
   ogDescription="Практическое описание того, какие данные может обрабатывать GetGantt и как связаться с командой по privacy-вопросам."
 >
-  <section class="border-b border-border bg-background">
-    <div class="container mx-auto px-4 py-20 lg:px-6 lg:py-24">
-      <div class="max-w-3xl space-y-6">
-        <span class="inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-          Privacy
-        </span>
-        <h1 class="text-4xl font-extrabold tracking-tight text-foreground md:text-5xl">
-          Политика конфиденциальности
-        </h1>
-        <p class="text-lg leading-8 text-muted-foreground">
+  <section class="privacy-hero">
+    <div class="privacy-shell">
+      <div class="privacy-hero__content">
+        <p class="privacy-label">Privacy</p>
+        <h1>Политика конфиденциальности</h1>
+        <p>
           Эта страница объясняет, какие данные GetGantt может обрабатывать на
-          маркетинговом сайте и в самом продукте. Текст описывает текущую
-          практическую логику сервиса и не обещает процессов или сертификатов,
-          которые не зафиксированы в кодовой базе.
+          сайте и в самом продукте. Текст описывает текущую практическую логику
+          сервиса и не обещает процессов или сертификатов, которые не
+          зафиксированы в кодовой базе.
         </p>
+      </div>
+      <div class="privacy-hero__note">
+        <span>Scope</span>
+        <strong>Маркетинговый сайт и приложение</strong>
+        <p>Рабочее описание без лишних юридических украшений.</p>
       </div>
     </div>
   </section>
 
-  <section class="bg-background">
-    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-20">
-      <div class="grid gap-5">
-        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
-          <h2 class="text-2xl font-bold tracking-tight text-foreground">
-            Какие данные мы можем получать
-          </h2>
-          <p class="mt-4 text-base leading-8 text-muted-foreground">
-            Если вы используете сайт или приложение, сервис может обрабатывать
-            текст, который вы вводите для построения плана: описание проекта,
-            бриф, ТЗ, письмо, комментарии к задачам и другие рабочие вводные.
-            Эти данные нужны, чтобы показать диаграмму, структуру задач и
-            результат работы AI-функций внутри продукта.
-          </p>
-        </article>
+  <section class="privacy-body">
+    <div class="privacy-shell">
+      <div class="privacy-stack">
+        {
+          privacySections.map((section) => (
+            <article class="privacy-band">
+              <h2>{section.title}</h2>
+              <p>{section.body}</p>
+            </article>
+          ))
+        }
 
-        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
-          <h2 class="text-2xl font-bold tracking-tight text-foreground">
-            Данные аккаунта и входа
-          </h2>
-          <p class="mt-4 text-base leading-8 text-muted-foreground">
-            Для доступа в приложение могут использоваться базовые данные
-            аутентификации, например email и техническая информация,
-            необходимая для входа и поддержки сессии. Мы описываем это как
-            рабочий минимум: только то, что требуется для входа в сервис и
-            связи с вашей учетной записью.
-          </p>
-        </article>
-
-        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
-          <h2 class="text-2xl font-bold tracking-tight text-foreground">
-            Технические логи и работа сервиса
-          </h2>
-          <p class="mt-4 text-base leading-8 text-muted-foreground">
-            При работе сайта и приложения могут появляться технические логи:
-            ошибки, события авторизации, служебные записи о запросах и другая
-            диагностическая информация, которая помогает поддерживать
-            доступность и разбираться со сбоями. На этой странице мы не
-            заявляем отдельные внешние analytics-инструменты или рекламные
-            трекеры, потому что такие интеграции не описаны в текущем репозитории.
-          </p>
-        </article>
-
-        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
-          <h2 class="text-2xl font-bold tracking-tight text-foreground">
-            Как используются ваши данные
-          </h2>
-          <p class="mt-4 text-base leading-8 text-muted-foreground">
-            Данные используются для трех практических задач: дать вам доступ к
-            продукту, построить и показать план проекта, а также поддерживать
-            стабильную работу сервиса. Мы не включаем сюда обещания о
-            специальных режимах обработки, аудиторских программах или
-            compliance-статусах, которых нет в проектной документации.
-          </p>
-        </article>
-
-        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
-          <h2 class="text-2xl font-bold tracking-tight text-foreground">
-            Вопросы по privacy и контакт
-          </h2>
-          <p class="mt-4 text-base leading-8 text-muted-foreground">
+        <article class="privacy-band privacy-band--contact">
+          <h2>Вопросы по privacy и контакт</h2>
+          <p>
             Если у вас есть вопрос о конфиденциальности, доступе к данным или
             содержимом проекта, напишите команде на
-            <a
-              href="mailto:hello@getgantt.ru"
-              class="font-semibold text-foreground underline decoration-border underline-offset-4"
-            >
-              hello@getgantt.ru
-            </a>.
-            В обращении лучше сразу указать email аккаунта или ссылку на
-            проект, чтобы мы могли быстрее понять контекст запроса.
+            <a href="mailto:hello@getgantt.ru">hello@getgantt.ru</a>. В
+            обращении лучше сразу указать email аккаунта или ссылку на проект,
+            чтобы быстрее восстановить контекст запроса.
           </p>
         </article>
       </div>
     </div>
   </section>
 </Layout>
+
+<style>
+  .privacy-shell {
+    width: min(1080px, calc(100% - 2rem));
+    margin: 0 auto;
+  }
+
+  .privacy-label,
+  .privacy-hero__note span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .privacy-hero {
+    padding: 4.5rem 0 3rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background:
+      radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 28%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  }
+
+  .privacy-hero .privacy-shell {
+    display: grid;
+    gap: 2rem;
+  }
+
+  .privacy-hero__content {
+    max-width: 48rem;
+  }
+
+  .privacy-hero h1 {
+    margin-top: 0.8rem;
+    font-size: clamp(2.6rem, 5vw, 5rem);
+    line-height: 0.94;
+    letter-spacing: -0.05em;
+    font-weight: 800;
+    color: hsl(var(--foreground));
+  }
+
+  .privacy-hero p,
+  .privacy-band p,
+  .privacy-hero__note p {
+    margin-top: 1rem;
+    font-size: 1.02rem;
+    line-height: 1.85;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .privacy-hero__note {
+    align-self: end;
+    max-width: 22rem;
+    padding: 1.35rem;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 1.5rem;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 18px 44px rgba(148, 163, 184, 0.12);
+  }
+
+  .privacy-hero__note strong {
+    display: block;
+    margin-top: 0.7rem;
+    font-size: 1.25rem;
+    letter-spacing: -0.03em;
+    color: hsl(var(--foreground));
+  }
+
+  .privacy-body {
+    padding: 3rem 0 5rem;
+  }
+
+  .privacy-stack {
+    display: grid;
+    gap: 1px;
+    background: hsl(var(--border));
+  }
+
+  .privacy-band {
+    padding: 1.45rem 0;
+    background: hsl(var(--background));
+  }
+
+  .privacy-band h2 {
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+
+  .privacy-band a {
+    color: hsl(var(--foreground));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--border));
+    text-underline-offset: 0.22em;
+  }
+
+  @media (min-width: 920px) {
+    .privacy-hero .privacy-shell {
+      grid-template-columns: minmax(0, 1fr) minmax(250px, 0.32fr);
+    }
+  }
+</style>

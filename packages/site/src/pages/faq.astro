@@ -1,56 +1,74 @@
 ---
 import Layout from "../layouts/Layout.astro";
 
-const faqItems = [
+const faqGroups = [
   {
-    question: "Что делает GetGantt?",
-    answer:
-      "GetGantt помогает превратить описание проекта в рабочий график Ганта. Сервис сочетает AI-чат, генерацию плана и ручное редактирование на таймлайне.",
+    label: "Продукт",
+    id: "product",
+    items: [
+      {
+        question: "Что делает GetGantt?",
+        answer:
+          "GetGantt превращает описание проекта в рабочий график Ганта. Сервис сочетает AI-чат, стартовую генерацию плана и ручное редактирование на таймлайне.",
+      },
+      {
+        question: "Как работает ввод через AI?",
+        answer:
+          "Вы пишете задачу обычным языком или вставляете бриф, письмо, ТЗ и другие рабочие вводные. Система использует этот текст как основу для структуры проекта, этапов и сроков.",
+      },
+      {
+        question: "Можно ли редактировать план вручную после генерации?",
+        answer:
+          "Да. После первого AI-черновика вы можете двигать задачи, менять длительность и уточнять график напрямую в редакторе.",
+      },
+      {
+        question: "Поддерживаются ли зависимости и пересчет сроков?",
+        answer:
+          "Да, в плане можно задавать зависимости между задачами. Это помогает видеть влияние сдвигов на связанные этапы проекта.",
+      },
+    ],
   },
   {
-    question: "Как работает ввод через AI?",
-    answer:
-      "Вы пишете задачу обычным языком или вставляете бриф, письмо, ТЗ или другой текст. AI использует это описание как основу для структуры проекта, этапов и сроков.",
+    label: "Использование",
+    id: "usage",
+    items: [
+      {
+        question: "Сколько времени занимает старт нового плана?",
+        answer:
+          "Обычно первые результаты появляются за минуты, потому что вам не нужно собирать пустой график вручную. AI ускоряет старт, а дальше вы быстро доводите план до рабочего вида.",
+      },
+      {
+        question: "Можно ли отправить план клиенту или коллеге по ссылке?",
+        answer:
+          "Да, продукт поддерживает read-only ссылки для просмотра. Это удобно для согласования и статуса, но не означает совместное редактирование в браузере.",
+      },
+      {
+        question: "Этот сайт и есть редактор или он ведет в приложение?",
+        answer:
+          "Маркетинговый сайт объясняет продукт и показывает возможности. Сам редактор и рабочий вход находятся на ai.getgantt.ru.",
+      },
+    ],
   },
   {
-    question: "Можно ли редактировать план вручную после генерации?",
-    answer:
-      "Да. После первого AI-черновика вы можете двигать задачи, менять длительность и уточнять план напрямую в редакторе.",
-  },
-  {
-    question: "Поддерживаются ли зависимости и пересчет сроков?",
-    answer:
-      "Да, в плане можно задавать зависимости между задачами. Когда сроки сдвигаются, график помогает увидеть и учесть влияние на связанные этапы.",
-  },
-  {
-    question: "Сколько времени занимает старт нового плана?",
-    answer:
-      "Обычно первые результаты появляются за минуты, потому что не нужно собирать пустой план с нуля. AI ускоряет старт, а дальше вы быстро доводите график до рабочего вида.",
-  },
-  {
-    question: "Есть ли уже финальная цена или отдельная страница с тарифами?",
-    answer:
-      "Пока нет: pricing-модель еще не зафиксирована, поэтому мы не обещаем тарифы на сайте заранее. Когда условия будут готовы, они появятся в отдельном и понятном виде.",
-  },
-  {
-    question: "Что происходит с моими данными и описанием проекта?",
-    answer:
-      "Данные используются для построения и отображения вашего плана внутри сервиса. Короткую сводку мы даем здесь, а полные условия и детали обработки будут описаны на странице /privacy.",
-  },
-  {
-    question: "Где смотреть юридические и privacy-условия?",
-    answer:
-      "Для правовых и privacy-вопросов ориентируйтесь на страницы /privacy и /terms. FAQ дает только короткие практические ответы без замены полной юридической информации.",
-  },
-  {
-    question: "Можно ли отправить план клиенту или коллеге по ссылке?",
-    answer:
-      "Да, продукт поддерживает read-only ссылки для просмотра. Это удобно для согласования и статуса, но не означает совместное редактирование в браузере.",
-  },
-  {
-    question: "Этот сайт и есть редактор или он ведет в приложение?",
-    answer:
-      "Маркетинговый сайт объясняет продукт и показывает возможности. Сам редактор и рабочий вход находятся на ai.getgantt.ru.",
+    label: "Условия и данные",
+    id: "policy",
+    items: [
+      {
+        question: "Есть ли уже финальная цена или отдельная страница с тарифами?",
+        answer:
+          "Пока нет. Ценовая модель еще не зафиксирована, поэтому сайт не обещает тарифы заранее. Когда условия будут готовы, они появятся отдельно и в явном виде.",
+      },
+      {
+        question: "Что происходит с моими данными и описанием проекта?",
+        answer:
+          "Данные используются для построения и отображения вашего плана внутри сервиса. Практическое описание обработки находится на странице privacy.",
+      },
+      {
+        question: "Где смотреть юридические и privacy-условия?",
+        answer:
+          "Для правовых и privacy-вопросов ориентируйтесь на страницы /privacy и /terms. FAQ дает только короткие практические ответы.",
+      },
+    ],
   },
 ];
 ---
@@ -61,50 +79,228 @@ const faqItems = [
   ogTitle="FAQ GetGantt"
   ogDescription="Частые вопросы о GetGantt: AI-ввод, редактирование графика, зависимости, данные, privacy и путь в приложение."
 >
-  <section class="border-b border-border bg-background">
-    <div class="container mx-auto px-4 py-20 lg:px-6 lg:py-24">
-      <div class="max-w-3xl space-y-6">
-        <span class="inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-          FAQ
-        </span>
-        <h1 class="text-4xl font-extrabold tracking-tight text-foreground md:text-5xl">
-          Короткие ответы о том, как работает GetGantt.
+  <section class="faq-hero">
+    <div class="faq-shell">
+      <div class="faq-hero__copy">
+        <p class="faq-label animate-fade-up" style="animation-delay: 80ms;">FAQ</p>
+        <h1 class="animate-fade-up" style="animation-delay: 140ms;">
+          Короткие ответы, чтобы быстро понять продукт и не искать их по сайту.
         </h1>
-        <p class="text-lg leading-8 text-muted-foreground">
-          Здесь собраны практические вопросы о продукте, AI-вводе, данных и
-          переходе в приложение. Если нужен полный юридический контекст,
-          используйте страницы /privacy и /terms.
+        <p class="animate-fade-up" style="animation-delay: 200ms;">
+          Здесь собраны практические вопросы о запуске, ручном редактировании,
+          зависимостях и данных. Если нужен полный юридический контекст,
+          используйте страницы privacy и terms.
         </p>
+      </div>
+      <div class="faq-hero__aside animate-fade-up" style="animation-delay: 260ms;">
+        <a href="/features">Посмотреть возможности</a>
+        <a href="/privacy">Открыть privacy</a>
+        <a href="/terms">Открыть terms</a>
       </div>
     </div>
   </section>
 
-  <section class="bg-background">
-    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-20">
-      <div class="grid gap-5">
+  <section class="faq-body">
+    <div class="faq-shell faq-layout">
+      <aside class="faq-nav">
+        <p class="faq-label">Разделы</p>
         {
-          faqItems.map((item, index) => (
-            <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
-              <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div class="space-y-3">
-                  <p class="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    Вопрос {index + 1}
-                  </p>
-                  <h2 class="text-2xl font-bold tracking-tight text-foreground">
-                    {item.question}
-                  </h2>
-                </div>
-                <span class="inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-foreground">
-                  GetGantt
-                </span>
+          faqGroups.map((group) => (
+            <a href={`#${group.id}`}>{group.label}</a>
+          ))
+        }
+      </aside>
+
+      <div class="faq-groups">
+        {
+          faqGroups.map((group) => (
+            <section id={group.id} class="faq-group">
+              <div class="faq-group__intro">
+                <p class="faq-label">{group.label}</p>
               </div>
-              <p class="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
-                {item.answer}
-              </p>
-            </article>
+              <div class="faq-group__items">
+                {group.items.map((item) => (
+                  <article class="faq-item">
+                    <h2>{item.question}</h2>
+                    <p>{item.answer}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
           ))
         }
       </div>
     </div>
   </section>
 </Layout>
+
+<style>
+  .faq-shell {
+    width: min(1120px, calc(100% - 2rem));
+    margin: 0 auto;
+  }
+
+  .faq-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .faq-hero {
+    padding: 4.5rem 0 3rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  }
+
+  .faq-hero .faq-shell {
+    display: grid;
+    gap: 2rem;
+  }
+
+  .faq-hero__copy {
+    max-width: 48rem;
+  }
+
+  .faq-hero h1 {
+    margin-top: 0.8rem;
+    font-size: clamp(2.5rem, 5vw, 4.8rem);
+    line-height: 0.94;
+    letter-spacing: -0.05em;
+    font-weight: 800;
+    color: hsl(var(--foreground));
+    text-wrap: balance;
+  }
+
+  .faq-hero p {
+    margin-top: 1rem;
+    font-size: 1.05rem;
+    line-height: 1.85;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .faq-hero__aside {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-content: start;
+  }
+
+  .faq-hero__aside a,
+  .faq-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.85rem;
+    padding: 0 1rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 999px;
+    color: hsl(var(--foreground));
+    transition:
+      border-color 180ms ease,
+      color 180ms ease,
+      transform 180ms ease;
+  }
+
+  .faq-hero__aside a:hover,
+  .faq-nav a:hover {
+    transform: translateY(-1px);
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+  }
+
+  .faq-body {
+    padding: 3rem 0 5rem;
+  }
+
+  .faq-layout {
+    display: grid;
+    gap: 2rem;
+  }
+
+  .faq-nav {
+    display: flex;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .faq-groups {
+    display: grid;
+    gap: 2.25rem;
+  }
+
+  .faq-group {
+    display: grid;
+    gap: 1.25rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .faq-group__items {
+    display: grid;
+    gap: 1px;
+    background: hsl(var(--border));
+  }
+
+  .faq-item {
+    padding: 1.35rem 0;
+    background: hsl(var(--background));
+  }
+
+  .faq-item h2 {
+    font-size: 1.45rem;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+
+  .faq-item p {
+    margin-top: 0.8rem;
+    max-width: 48rem;
+    font-size: 1rem;
+    line-height: 1.8;
+    color: hsl(var(--muted-foreground));
+  }
+
+  @media (min-width: 960px) {
+    .faq-hero .faq-shell,
+    .faq-layout {
+      grid-template-columns: minmax(220px, 0.28fr) minmax(0, 0.72fr);
+    }
+
+    .faq-hero__copy {
+      grid-column: 2;
+    }
+
+    .faq-hero__aside {
+      grid-column: 1;
+      grid-row: 1;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding-bottom: 0.5rem;
+    }
+
+    .faq-nav {
+      position: sticky;
+      top: 5.5rem;
+      align-self: start;
+      flex-direction: column;
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .faq-group {
+      grid-template-columns: minmax(140px, 0.22fr) minmax(0, 0.78fr);
+      gap: 2rem;
+    }
+
+    .faq-group__items {
+      padding-left: 0.25rem;
+    }
+  }
+</style>

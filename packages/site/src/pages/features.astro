@@ -1,65 +1,66 @@
 ---
 import Layout from "../layouts/Layout.astro";
 
-const featureSections = [
+const productFlow = [
+  {
+    kicker: "01",
+    title: "Текст превращается в структуру проекта",
+    body:
+      "Вставьте бриф, письмо, ТЗ или просто опишите задачу своими словами. GetGantt собирает этапы, задачи и стартовую логику графика без пустой таблицы.",
+  },
+  {
+    kicker: "02",
+    title: "Черновик сразу переходит в рабочий таймлайн",
+    body:
+      "После генерации вы не зависите от следующего промпта. План открывается в редакторе, где можно двигать задачи, менять длительность и быстро доводить график до реального состояния.",
+  },
+  {
+    kicker: "03",
+    title: "Связи и иерархия удерживают план в порядке",
+    body:
+      "Зависимости, этапы и вложенные блоки помогают не терять логику даже в длинных проектах. Сдвиги становятся читаемыми, а структура остается управляемой.",
+  },
+];
+
+const featureBands = [
   {
     eyebrow: "AI-first planning",
-    title: "Опишите проект обычным текстом и получите рабочий план Ганта.",
+    title: "Старт без ручного набора задач",
     body:
-      "GetGantt начинает с чата: вы пишете задачу своими словами, вставляете бриф, письмо или ТЗ, а система собирает структуру проекта, этапы и сроки. Это быстрее, чем собирать план вручную из пустой таблицы.",
+      "GetGantt ускоряет именно первый шаг: вместо пустого листа вы получаете готовый костяк проекта из исходного текста.",
     points: [
-      "AI-чат помогает уточнить состав работ, этапы и сроки.",
-      "План создается из текста без ручного переноса задач по строкам.",
+      "Подходит для брифов, писем, ТЗ и свободного описания.",
+      "Помогает быстро перевести обсуждение в формальный план.",
     ],
   },
   {
     eyebrow: "Interactive editing",
-    title: "После генерации вы редактируете график напрямую, а не зависите от промптов.",
+    title: "Ручной контроль после генерации",
     body:
-      "Любой план можно поправить руками: двигать задачи, менять длительность, корректировать даты и быстро доводить результат до рабочего состояния. AI ускоряет старт, а не забирает контроль.",
+      "AI не запирает вас внутри чата. Любой срок, этап или задача правятся прямо на диаграмме, как в нормальном рабочем инструменте.",
     points: [
-      "Перетаскивайте задачи по таймлайну и меняйте сроки прямо на диаграмме.",
-      "Редактор подходит для точной ручной настройки после первого AI-черновика.",
+      "Перетаскивание задач и корректировка длительности на таймлайне.",
+      "AI ускоряет старт, а не забирает управление.",
     ],
   },
   {
-    eyebrow: "Dependencies",
-    title: "Связи между задачами остаются понятными даже после изменений.",
+    eyebrow: "Dependencies and hierarchy",
+    title: "Сложные планы остаются читаемыми",
     body:
-      "Когда вы задаете зависимости, план учитывает их при пересчете сроков. Это помогает не держать в голове всю цепочку вручную и быстрее видеть последствия сдвигов.",
+      "Зависимости помогают удерживать логику сроков, а иерархия делает большой проект сканируемым сверху вниз.",
     points: [
-      "Поддерживаются зависимости между этапами и последовательными задачами.",
-      "Автоматический пересчет помогает удерживать план в актуальном состоянии.",
+      "Связи показывают последствия сдвигов между задачами.",
+      "Этапы и подэтапы собирают длинный график в понятную структуру.",
     ],
   },
   {
-    eyebrow: "Hierarchy",
-    title: "Собирайте проект в этапы, подпроекты и рабочие блоки без потери структуры.",
+    eyebrow: "Read-only sharing",
+    title: "План легко показать без риска лишних правок",
     body:
-      "Большие планы удобнее читать, когда задачи вложены по уровням. В GetGantt можно собирать иерархию, группировать работы по стадиям и держать обзор на одном экране.",
+      "Для согласования и статуса можно открыть read-only ссылку. Получатель видит актуальный график, но не ломает его случайным редактированием.",
     points: [
-      "Иерархия задач делает длинные планы управляемыми.",
-      "Этапы и подзадачи помогают быстро читать ход проекта сверху вниз.",
-    ],
-  },
-  {
-    eyebrow: "Sharing",
-    title: "Показывайте план клиенту или команде без риска случайных правок.",
-    body:
-      "Если нужно просто согласовать график, можно отправить read-only ссылку. Получатель увидит текущий план, но не изменит его случайно во время просмотра.",
-    points: [
-      "Read-only доступ подходит для статуса, согласования и отчетности.",
-      "Сценарий честный: просмотр и обсуждение, а не совместное редактирование в браузере.",
-    ],
-  },
-  {
-    eyebrow: "Workflow",
-    title: "Путь от идеи до рабочего таймлайна занимает минуты, а не отдельный этап подготовки.",
-    body:
-      "Сервис подходит, когда нужно быстро перевести хаотичное описание проекта в наглядный план и сразу начать его уточнять. Вместо разрыва между обсуждением и планированием вы получаете один непрерывный процесс.",
-    points: [
-      "Подходит для старта новых проектов и ускорения онбординга команды.",
-      "Переход в редактор на ai.getgantt.ru остается прямым и без лишних шагов.",
+      "Подходит для клиентов, руководителей и внешних согласований.",
+      "Честный сценарий просмотра без обещаний совместного редактирования.",
     ],
   },
 ];
@@ -71,131 +72,528 @@ const featureSections = [
   ogTitle="Возможности GetGantt"
   ogDescription="Узнайте, как GetGantt превращает текст в диаграмму Ганта и помогает редактировать план вручную без потери структуры."
 >
-  <section class="border-b border-border bg-background">
-    <div class="container mx-auto px-4 py-20 lg:px-6 lg:py-28">
-      <div class="max-w-4xl space-y-8">
-        <span class="inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+  <section class="feature-hero">
+    <div class="feature-hero__mesh" aria-hidden="true"></div>
+    <div class="feature-hero__glow feature-hero__glow--left" aria-hidden="true"></div>
+    <div class="feature-hero__glow feature-hero__glow--right" aria-hidden="true"></div>
+    <div class="feature-shell">
+      <div class="feature-hero__content">
+        <p class="feature-eyebrow animate-fade-up" style="animation-delay: 80ms;">
           Возможности
-        </span>
-        <div class="space-y-6">
-          <h1 class="max-w-3xl text-4xl font-extrabold tracking-tight text-foreground md:text-6xl">
-            Превращайте текст, брифы и хаотичные вводные в понятный план Ганта.
-          </h1>
-          <p class="max-w-2xl text-lg leading-8 text-muted-foreground md:text-xl">
-            GetGantt начинает с AI-чата, а затем передает план в интерактивный
-            редактор. Вы быстро получаете структуру проекта, видите зависимости
-            и можете довести график до точного рабочего состояния.
-          </p>
+        </p>
+        <h1 class="feature-hero__title animate-fade-up" style="animation-delay: 140ms;">
+          Из исходного текста в управляемый график без отдельного этапа подготовки.
+        </h1>
+        <p class="feature-hero__body animate-fade-up" style="animation-delay: 200ms;">
+          GetGantt начинает с AI-чата, а заканчивает нормальным рабочим
+          таймлайном. Вы быстро собираете структуру проекта, удерживаете
+          зависимости и вручную доводите план до точного состояния.
+        </p>
+        <div class="feature-hero__actions animate-fade-up" style="animation-delay: 260ms;">
+          <a href="https://ai.getgantt.ru/?auth=otp" class="feature-button feature-button--primary">
+            Открыть редактор
+          </a>
+          <a href="/faq" class="feature-button feature-button--ghost">
+            Перейти в FAQ
+          </a>
         </div>
-        <div class="flex flex-col gap-4 sm:flex-row">
-          <a
-            href="https://ai.getgantt.ru/?auth=otp"
-            class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Открыть ai.getgantt.ru
-          </a>
-          <a
-            href="/faq"
-            class="inline-flex items-center justify-center rounded-2xl border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
-          >
-            Посмотреть FAQ
-          </a>
+      </div>
+
+      <div class="feature-frame animate-fade-up" style="animation-delay: 320ms;">
+        <div class="feature-frame__header">
+          <span>Input</span>
+          <span>AI outline</span>
+          <span>Timeline</span>
+        </div>
+        <div class="feature-frame__lead">
+          Создай график запуска продукта: аналитика, дизайн, разработка, QA, релиз
+        </div>
+        <div class="feature-frame__tracks">
+          <div class="feature-frame__row">
+            <span>Аналитика</span>
+            <div><i style="width: 32%;"></i></div>
+          </div>
+          <div class="feature-frame__row">
+            <span>Дизайн</span>
+            <div><i style="width: 44%;"></i></div>
+          </div>
+          <div class="feature-frame__row">
+            <span>Разработка</span>
+            <div><i style="width: 74%;"></i></div>
+          </div>
+          <div class="feature-frame__row">
+            <span>QA</span>
+            <div><i style="width: 28%;"></i></div>
+          </div>
+        </div>
+        <div class="feature-frame__footer">
+          <p>Сначала текст. Потом структура. Потом ручная точность.</p>
+          <span>ai.getgantt.ru</span>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="bg-background">
-    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-24">
-      <div class="space-y-10">
+  <section class="feature-flow">
+    <div class="feature-shell">
+      <div class="feature-flow__intro">
+        <p class="feature-label">Как это работает</p>
+        <h2>Один непрерывный маршрут вместо прыжка между чатом, таблицей и графиком.</h2>
+      </div>
+      <div class="feature-flow__grid">
         {
-          featureSections.map((section, index) => (
-            <article
-              class:list={[
-                "grid gap-8 rounded-[32px] border border-border bg-card p-8 shadow-sm md:grid-cols-2 md:p-12",
-                index % 2 === 1 ? "md:[&>*:first-child]:order-2" : "",
-              ]}
-            >
-              <div class="space-y-5">
-                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                  {section.eyebrow}
-                </p>
-                <h2 class="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-                  {section.title}
-                </h2>
-                <p class="text-base leading-8 text-muted-foreground md:text-lg">
-                  {section.body}
-                </p>
-                <ul class="space-y-3">
-                  {section.points.map((point) => (
-                    <li class="flex gap-3 text-sm leading-7 text-foreground md:text-base">
-                      <span class="mt-2 h-2 w-2 rounded-full bg-primary"></span>
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div class="flex min-h-[280px] flex-col justify-between rounded-[28px] bg-secondary p-6 md:min-h-[340px] md:p-8">
-                <div class="space-y-3">
-                  <p class="text-sm font-semibold text-foreground">
-                    {section.eyebrow}
-                  </p>
-                  <div class="h-px w-full bg-border"></div>
-                </div>
-                <div class="space-y-4">
-                  <div class="rounded-2xl bg-background p-5 shadow-sm">
-                    <p class="text-sm font-semibold text-foreground">
-                      {index === 0
-                        ? "Чат превращает описание проекта в план."
-                        : index === 1
-                          ? "Правки происходят прямо на таймлайне."
-                          : index === 2
-                            ? "Зависимости помогают видеть последствия сдвигов."
-                            : index === 3
-                              ? "Иерархия удерживает большой проект читаемым."
-                              : index === 4
-                                ? "Read-only ссылка подходит для согласования."
-                                : "От текста до рабочего графика без лишнего этапа."}
-                    </p>
-                    <p class="mt-2 text-sm leading-6 text-muted-foreground">
-                      {index === 0
-                        ? "Сначала вы формулируете задачу естественным языком, затем уточняете ее вместе с AI."
-                        : index === 1
-                          ? "План остается управляемым вручную после генерации, поэтому результат не застревает на уровне черновика."
-                          : index === 2
-                            ? "Когда одна задача сдвигается, легче понять, как это влияет на остальные этапы проекта."
-                            : index === 3
-                              ? "Этапы, подэтапы и блоки работ собираются в одну структуру без визуального хаоса."
-                              : index === 4
-                                ? "Поделиться планом можно без обещаний совместного редактирования, которого пока нет."
-                                : "Сервис сокращает путь от идеи и брифа до готового графика, который уже можно обсуждать."}
-                    </p>
-                  </div>
-                  <div class="grid grid-cols-2 gap-3">
-                    <div class="rounded-2xl border border-border bg-background p-4">
-                      <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        Focus
-                      </p>
-                      <p class="mt-2 text-sm font-semibold text-foreground">
-                        {section.eyebrow}
-                      </p>
-                    </div>
-                    <div class="rounded-2xl border border-border bg-background p-4">
-                      <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        Route
-                      </p>
-                      <p class="mt-2 text-sm font-semibold text-foreground">
-                        ai.getgantt.ru
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          productFlow.map((item) => (
+            <article class="feature-flow__step">
+              <p class="feature-flow__kicker">{item.kicker}</p>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
             </article>
           ))
         }
       </div>
     </div>
   </section>
+
+  <section class="feature-bands">
+    {
+      featureBands.map((band, index) => (
+        <div class:list={["feature-band", index % 2 === 1 && "feature-band--reverse"]}>
+          <div class="feature-shell feature-band__shell">
+            <div class="feature-band__copy">
+              <p class="feature-label">{band.eyebrow}</p>
+              <h2>{band.title}</h2>
+              <p>{band.body}</p>
+              <ul>
+                {band.points.map((point) => <li>{point}</li>)}
+              </ul>
+            </div>
+
+            <div class="feature-band__visual" aria-hidden="true">
+              <div class="feature-band__visual-inner">
+                <div class="feature-band__line"></div>
+                <div class="feature-band__metric">
+                  <span>Focus</span>
+                  <strong>{band.eyebrow}</strong>
+                </div>
+                <div class="feature-band__quote">
+                  {index === 0 &&
+                    "GetGantt убирает стартовую пустоту и сразу дает материал для обсуждения."}
+                  {index === 1 &&
+                    "После генерации план остается живым инструментом, а не одноразовым AI-ответом."}
+                  {index === 2 &&
+                    "Структура и зависимости помогают читать проект как систему, а не как длинный список строк."}
+                  {index === 3 &&
+                    "Read-only режим подходит для показа статуса там, где совместное редактирование не нужно."}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))
+    }
+  </section>
+
+  <section class="feature-cta">
+    <div class="feature-shell">
+      <div class="feature-cta__panel">
+        <p class="feature-label">GetGantt</p>
+        <h2>Быстро собрать. Спокойно уточнить. Показать без лишнего хаоса.</h2>
+        <p>
+          Если проект уже описан словами, этого достаточно, чтобы начать рабочий
+          график. Остальное вы доводите внутри редактора.
+        </p>
+        <div class="feature-hero__actions">
+          <a href="https://ai.getgantt.ru/?auth=otp" class="feature-button feature-button--primary">
+            Начать в ai.getgantt.ru
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
 </Layout>
+
+<style>
+  .feature-shell {
+    width: min(1180px, calc(100% - 2rem));
+    margin: 0 auto;
+  }
+
+  .feature-hero {
+    position: relative;
+    overflow: clip;
+    padding: 4.5rem 0 3rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 1) 100%);
+  }
+
+  .feature-hero__mesh,
+  .feature-hero__glow {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .feature-hero__mesh {
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+  }
+
+  .feature-hero__glow--left {
+    left: -10rem;
+    top: 3rem;
+    width: 24rem;
+    height: 24rem;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.12), transparent 70%);
+  }
+
+  .feature-hero__glow--right {
+    right: -8rem;
+    bottom: 0;
+    width: 28rem;
+    height: 28rem;
+    background: radial-gradient(circle, rgba(148, 163, 184, 0.18), transparent 72%);
+  }
+
+  .feature-hero .feature-shell {
+    position: relative;
+    display: grid;
+    gap: 2.5rem;
+    align-items: end;
+  }
+
+  .feature-hero__content {
+    max-width: 42rem;
+  }
+
+  .feature-eyebrow,
+  .feature-label,
+  .feature-flow__kicker,
+  .feature-frame__header,
+  .feature-band__metric span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .feature-hero__title,
+  .feature-flow__intro h2,
+  .feature-band__copy h2,
+  .feature-cta__panel h2 {
+    font-size: clamp(2.7rem, 6vw, 5.5rem);
+    line-height: 0.94;
+    letter-spacing: -0.05em;
+    font-weight: 800;
+    color: hsl(var(--foreground));
+    text-wrap: balance;
+  }
+
+  .feature-hero__body,
+  .feature-band__copy p,
+  .feature-flow__step p,
+  .feature-cta__panel p {
+    max-width: 42rem;
+    font-size: 1.05rem;
+    line-height: 1.85;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .feature-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    margin-top: 2rem;
+  }
+
+  .feature-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.3rem;
+    padding: 0 1.35rem;
+    border-radius: 0.95rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease,
+      color 180ms ease;
+  }
+
+  .feature-button:hover {
+    transform: translateY(-1px);
+  }
+
+  .feature-button--primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    box-shadow: 0 18px 40px rgba(99, 102, 241, 0.2);
+  }
+
+  .feature-button--ghost {
+    border: 1px solid hsl(var(--border));
+    background: rgba(255, 255, 255, 0.78);
+    color: hsl(var(--foreground));
+  }
+
+  .feature-frame {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 1.9rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.12);
+  }
+
+  .feature-frame__header,
+  .feature-frame__lead,
+  .feature-frame__tracks,
+  .feature-frame__footer {
+    padding-inline: 1.35rem;
+  }
+
+  .feature-frame__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  }
+
+  .feature-frame__lead {
+    padding-top: 1.25rem;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: hsl(var(--foreground));
+  }
+
+  .feature-frame__tracks {
+    display: grid;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .feature-frame__row {
+    display: grid;
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: center;
+    font-size: 0.95rem;
+    color: hsl(var(--foreground));
+  }
+
+  .feature-frame__row div {
+    position: relative;
+    height: 2.2rem;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.82);
+    overflow: hidden;
+  }
+
+  .feature-frame__row i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(var(--primary)), rgba(99, 102, 241, 0.55));
+  }
+
+  .feature-frame__footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1rem;
+    padding-bottom: 1.25rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+  }
+
+  .feature-flow,
+  .feature-cta {
+    padding: 4.5rem 0;
+  }
+
+  .feature-flow__intro {
+    max-width: 52rem;
+    margin-bottom: 2.25rem;
+  }
+
+  .feature-flow__intro h2 {
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    margin-top: 0.75rem;
+  }
+
+  .feature-flow__grid {
+    display: grid;
+    gap: 1px;
+    border-top: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--border));
+  }
+
+  .feature-flow__step {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1.6rem 0;
+    background: hsl(var(--background));
+  }
+
+  .feature-flow__step h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: hsl(var(--foreground));
+  }
+
+  .feature-bands {
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .feature-band {
+    border-bottom: 1px solid hsl(var(--border));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 250, 252, 0.86));
+  }
+
+  .feature-band__shell {
+    display: grid;
+    gap: 2rem;
+    padding: 4rem 0;
+  }
+
+  .feature-band__copy h2 {
+    font-size: clamp(2rem, 3.8vw, 3.7rem);
+    margin-top: 0.75rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .feature-band__copy ul {
+    display: grid;
+    gap: 0.85rem;
+    margin-top: 1.6rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .feature-band__copy li {
+    position: relative;
+    padding-left: 1.15rem;
+    font-size: 1rem;
+    line-height: 1.75;
+    color: hsl(var(--foreground));
+  }
+
+  .feature-band__copy li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.8rem;
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: hsl(var(--primary));
+  }
+
+  .feature-band__visual {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .feature-band__visual-inner {
+    width: 100%;
+    min-height: 18rem;
+    padding: 1.4rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 1.75rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 0.9) 100%);
+    box-shadow: 0 22px 60px rgba(148, 163, 184, 0.12);
+  }
+
+  .feature-band__line {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.15), rgba(99, 102, 241, 0.35), rgba(148, 163, 184, 0.15));
+  }
+
+  .feature-band__metric {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+  }
+
+  .feature-band__metric strong {
+    font-size: 1.55rem;
+    letter-spacing: -0.04em;
+    color: hsl(var(--foreground));
+  }
+
+  .feature-band__quote {
+    margin-top: 3.6rem;
+    max-width: 26rem;
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: hsl(var(--foreground));
+  }
+
+  .feature-cta__panel {
+    position: relative;
+    overflow: hidden;
+    padding: 2rem 0 0;
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .feature-cta__panel h2 {
+    font-size: clamp(2rem, 4vw, 3.9rem);
+    margin-top: 0.75rem;
+    margin-bottom: 1rem;
+    max-width: 54rem;
+  }
+
+  @media (min-width: 900px) {
+    .feature-hero .feature-shell,
+    .feature-band__shell {
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+    }
+
+    .feature-band--reverse .feature-band__copy {
+      order: 2;
+    }
+
+    .feature-band--reverse .feature-band__visual {
+      order: 1;
+    }
+
+    .feature-flow__grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .feature-flow__step {
+      min-height: 16rem;
+      padding: 1.75rem 1.25rem 1.75rem 0;
+    }
+
+    .feature-flow__step:not(:last-child) {
+      border-right: 1px solid hsl(var(--border));
+    }
+  }
+
+  @media (max-width: 899px) {
+    .feature-frame__row {
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+    }
+
+    .feature-frame__footer {
+      flex-direction: column;
+    }
+  }
+</style>
