@@ -51,7 +51,7 @@ export default function InputDemo({
 
   return (
     <div
-      className={`relative mx-auto max-w-[640px] px-4 animate-fade-up ${containerClassName}`}
+      className={`relative mx-auto max-w-[640px] animate-fade-up ${containerClassName}`}
       style={{ animationDelay: '350ms' }}
     >
       <div className="flex flex-col gap-3">

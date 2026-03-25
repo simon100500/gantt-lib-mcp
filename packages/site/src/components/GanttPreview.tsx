@@ -44,8 +44,6 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   const ganttRef = useRef<GanttChartHandle>(null);
   const previewRootRef = useRef<HTMLDivElement>(null);
   const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const pendingTasksRef = useRef<Task[] | null>(null);
-  const frameRef = useRef<number | null>(null);
 
   // Hide task list on mobile screens
   useEffect(() => {
@@ -63,12 +61,6 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
     revealTimersRef.current = [];
     setTasks([]);
     setCollapsedParentIds(new Set());
-    pendingTasksRef.current = null;
-
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
 
     if (!allTasks.length) {
       return;
@@ -90,12 +82,6 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
     };
   }, [allTasks]);
 
-  useEffect(() => () => {
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-    }
-  }, []);
-
   useEffect(() => {
     const container = previewRootRef.current?.querySelector<HTMLElement>('.gantt-container');
     if (!container) return;
@@ -112,26 +98,9 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   }, [tasks.length]);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
-    pendingTasksRef.current = updatedTasks;
-
-    if (frameRef.current !== null) {
-      return;
-    }
-
-    frameRef.current = requestAnimationFrame(() => {
-      const pendingTasks = pendingTasksRef.current;
-      pendingTasksRef.current = null;
-      frameRef.current = null;
-
-      if (!pendingTasks || pendingTasks.length === 0) {
-        return;
-      }
-
-      setTasks(prev => {
-        // gantt-lib emits partial task updates during drag; merge once per frame.
-        const updatedMap = new Map(pendingTasks.map(t => [t.id, t]));
-        return prev.map(t => updatedMap.get(t.id) ?? t);
-      });
+    setTasks(prev => {
+      const updatedMap = new Map(updatedTasks.map(t => [t.id, t]));
+      return prev.map(t => updatedMap.get(t.id) ?? t);
     });
   }, []);
 
