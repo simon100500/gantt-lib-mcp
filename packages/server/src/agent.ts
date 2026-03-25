@@ -53,6 +53,12 @@ type VerificationResult = {
   externalMutations: MutationEvent[];
 };
 
+const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
+const READONLY_HISTORY_MESSAGE_LIMIT = 12;
+const MUTATION_HISTORY_CHAR_LIMIT = 1_500;
+const READONLY_HISTORY_CHAR_LIMIT = 4_000;
+const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
+const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -132,6 +138,48 @@ function buildStaleStateMessage(): string {
   return 'График изменился вручную во время ответа агента. Запрос нужно повторить на актуальном состоянии задач.';
 }
 
+function buildTimeoutRetryInstruction(): string {
+  return [
+    'The previous attempt timed out before completing.',
+    'Call `get_tasks` once, then perform the smallest valid mutation that satisfies the user request.',
+    'If the container is ambiguous after that single read, choose the closest existing phase or the top level and proceed.',
+    'Do not spend extra turns on optional restructuring or validation.',
+  ].join('\n');
+}
+
+export function buildHistoryContext(
+  messages: Array<{ role: string; content: string }>,
+  mutationRequested: boolean,
+): string {
+  const messageLimit = mutationRequested ? MUTATION_HISTORY_MESSAGE_LIMIT : READONLY_HISTORY_MESSAGE_LIMIT;
+  const charLimit = mutationRequested ? MUTATION_HISTORY_CHAR_LIMIT : READONLY_HISTORY_CHAR_LIMIT;
+  const relevantMessages = messages.slice(-messageLimit);
+  const lines = relevantMessages.map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`);
+
+  if (lines.length === 0) {
+    return '';
+  }
+
+  const selectedLines: string[] = [];
+  let totalChars = 0;
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    const nextChars = totalChars + line.length + 1;
+    if (selectedLines.length > 0 && nextChars > charLimit) {
+      break;
+    }
+    selectedLines.unshift(line);
+    totalChars = nextChars;
+  }
+
+  if (selectedLines.length < lines.length) {
+    selectedLines.unshift('[Earlier conversation omitted]');
+  }
+
+  return selectedLines.join('\n');
+}
+
 function sanitizeAssistantResponse(userMessage: string, response: string): string {
   const trimmed = response.trim();
   const userHasCyrillic = /[\u0400-\u04FF]/.test(userMessage);
@@ -167,7 +215,7 @@ function buildPrompt(
     systemPrompt,
     `\n\n## State metadata:\n- projectId: ${projectId}\n- taskRevision: ${revision}\n- mutationRequested: ${mutationRequested}`,
     mutationRequested
-      ? '\n\n## Mutation execution protocol:\n- Start by calling `get_tasks`.\n- Identify the target container or parent before creating anything.\n- If the request is broad, create a small structured WBS fragment instead of one vague task.\n- Add dependencies when they are part of the requested logic or are necessary to avoid isolated tasks.\n- Before finishing, verify the resulting structure against the current tasks.'
+      ? '\n\n## Mutation execution protocol:\n- Start by calling `get_tasks`.\n- Make the smallest valid change that satisfies the request.\n- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.\n- Do not spend extra turns on optional restructuring.'
       : '',
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
@@ -186,9 +234,8 @@ async function executeAgentAttempt(
   dbPath: string,
   env: ReturnType<typeof resolveEnv>,
 ): Promise<AgentAttemptResult> {
-  // HARD-02: 2-minute timeout to prevent hangs
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), 120_000); // 2 minutes
+  const timeoutMs = mutationRequested ? MUTATION_ATTEMPT_TIMEOUT_MS : READONLY_ATTEMPT_TIMEOUT_MS;
 
   const session = query({
     prompt,
@@ -225,89 +272,103 @@ async function executeAgentAttempt(
   let assistantResponse = '';
   let streamedContent = false;
   let capturedPartialContent = false;
+  let timeoutHandle: NodeJS.Timeout | undefined;
 
   try {
-    for await (const event of session) {
-    if (isSDKPartialAssistantMessage(event)) {
-      if (
-        event.event.type === 'content_block_delta'
-        && event.event.delta.type === 'text_delta'
-        && event.event.delta.text
-      ) {
-        assistantResponse += event.event.delta.text;
-        capturedPartialContent = true;
-        if (!mutationRequested) {
-          broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
-          streamedContent = true;
+    const sessionPromise = (async () => {
+      for await (const event of session) {
+        if (isSDKPartialAssistantMessage(event)) {
+          if (
+            event.event.type === 'content_block_delta'
+            && event.event.delta.type === 'text_delta'
+            && event.event.delta.text
+          ) {
+            assistantResponse += event.event.delta.text;
+            capturedPartialContent = true;
+            if (!mutationRequested) {
+              broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
+              streamedContent = true;
+            }
+            await writeServerDebugLog('sdk_text_delta', {
+              runId,
+              attempt,
+              sessionId,
+              projectId,
+              text: event.event.delta.text,
+            });
+          }
+          if (
+            event.event.type === 'content_block_delta'
+            && event.event.delta.type === 'thinking_delta'
+            && event.event.delta.thinking
+          ) {
+            await writeServerDebugLog('sdk_thinking_delta', {
+              runId,
+              attempt,
+              sessionId,
+              projectId,
+              thinking: event.event.delta.thinking,
+            });
+          }
+          continue;
         }
-        await writeServerDebugLog('sdk_text_delta', {
-          runId,
-          attempt,
-          sessionId,
-          projectId,
-          text: event.event.delta.text,
-        });
-      }
-      if (
-        event.event.type === 'content_block_delta'
-        && event.event.delta.type === 'thinking_delta'
-        && event.event.delta.thinking
-      ) {
-        await writeServerDebugLog('sdk_thinking_delta', {
-          runId,
-          attempt,
-          sessionId,
-          projectId,
-          thinking: event.event.delta.thinking,
-        });
-      }
-      continue;
-    }
 
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (!capturedPartialContent && text) {
-        assistantResponse += text;
-        if (!mutationRequested) {
-          broadcastToSession(sessionId, { type: 'token', content: text });
-          streamedContent = true;
+        if (isSDKAssistantMessage(event)) {
+          const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
+          if (!capturedPartialContent && text) {
+            assistantResponse += text;
+            if (!mutationRequested) {
+              broadcastToSession(sessionId, { type: 'token', content: text });
+              streamedContent = true;
+            }
+          }
+          await writeServerDebugLog('sdk_assistant_message', {
+            runId,
+            attempt,
+            sessionId,
+            projectId,
+            text,
+            capturedPartialContent,
+          });
         }
-      }
-      await writeServerDebugLog('sdk_assistant_message', {
-        runId,
-        attempt,
-        sessionId,
-        projectId,
-        text,
-        capturedPartialContent,
-      });
-    }
 
-    if (isSDKResultMessage(event)) {
-      const resultText = typeof event.result === 'string' ? event.result : '';
-      if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
-        assistantResponse = resultText;
-        if (!mutationRequested) {
-          broadcastToSession(sessionId, { type: 'token', content: resultText });
-          streamedContent = true;
+        if (isSDKResultMessage(event)) {
+          const resultText = typeof event.result === 'string' ? event.result : '';
+          if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
+            assistantResponse = resultText;
+            if (!mutationRequested) {
+              broadcastToSession(sessionId, { type: 'token', content: resultText });
+              streamedContent = true;
+            }
+          }
+          await writeServerDebugLog('sdk_result_message', {
+            runId,
+            attempt,
+            sessionId,
+            projectId,
+            subtype: event.subtype,
+            isError: event.is_error,
+            result: resultText,
+            error: event.is_error ? event.error : undefined,
+            turns: event.num_turns,
+          });
+          break;
         }
       }
-      await writeServerDebugLog('sdk_result_message', {
-        runId,
-        attempt,
-        sessionId,
-        projectId,
-        subtype: event.subtype,
-        isError: event.is_error,
-        result: resultText,
-        error: event.is_error ? event.error : undefined,
-        turns: event.num_turns,
-      });
-      break;
-    }
-  }
+    })();
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        abortController.abort();
+        reject(new Error(`Agent attempt timed out after ${Math.floor(timeoutMs / 1000)}s.`));
+      }, timeoutMs);
+    });
+
+    await Promise.race([sessionPromise, timeoutPromise]);
   } finally {
-    clearTimeout(timeout);
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 
   return {
@@ -395,10 +456,7 @@ export async function runAgentWithHistory(
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
 
-    const historyContext = messages
-      .slice(0, -1)
-      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n');
+    const historyContext = buildHistoryContext(messages.slice(0, -1), mutationRequested);
 
     const env = resolveEnv();
     if (!env.OPENAI_API_KEY) {
@@ -454,17 +512,36 @@ export async function runAgentWithHistory(
       });
 
       const attemptStartedAt = new Date().toISOString();
-      const attemptResult = await executeAgentAttempt(
-        attemptPrompt,
-        runId,
-        projectId,
-        sessionId,
-        attempt,
-        mutationRequested,
-        mcpServerPath,
-        dbPath,
-        env,
-      );
+      let attemptResult: AgentAttemptResult;
+      try {
+        attemptResult = await executeAgentAttempt(
+          attemptPrompt,
+          runId,
+          projectId,
+          sessionId,
+          attempt,
+          mutationRequested,
+          mcpServerPath,
+          dbPath,
+          env,
+        );
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await writeServerDebugLog('agent_attempt_failed', {
+          runId,
+          attempt,
+          projectId,
+          sessionId,
+          error: errorMessage,
+        });
+
+        if (mutationRequested && attempt < maxAttempts && /timed out/i.test(errorMessage)) {
+          retryInstruction = buildTimeoutRetryInstruction();
+          continue;
+        }
+
+        throw error;
+      }
       assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);
       streamedContent = streamedContent || attemptResult.streamedContent;
 

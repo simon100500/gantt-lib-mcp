@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isMutationIntent } from './agent.js';
+import { buildHistoryContext, isMutationIntent } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -44,5 +44,21 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /WBS fragment/i);
     assert.match(prompt, /Validate before finishing/i);
     assert.match(prompt, /Avoid duplicates/i);
+  });
+});
+
+describe('agent history context', () => {
+  it('trims mutation history aggressively', () => {
+    const history = buildHistoryContext(
+      Array.from({ length: 10 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `message-${index}-${'x'.repeat(200)}`,
+      })),
+      true,
+    );
+
+    assert.ok(history.length <= 1700, `expected compact history, got ${history.length} chars`);
+    assert.match(history, /\[Earlier conversation omitted\]/);
+    assert.doesNotMatch(history, /message-0-/);
   });
 });
