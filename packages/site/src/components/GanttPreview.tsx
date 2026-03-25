@@ -5,7 +5,7 @@ import 'gantt-lib/styles.css';
 
 
 const DAY_WIDTHS = {
-  day: 28,
+  day: 22,
   week: 8,
   month: 3,
 };
@@ -96,7 +96,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
     if (tasks.length === 1 && allTasks[0]) {
       ganttRef.current?.scrollToTask(allTasks[0].id);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks.length]);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
@@ -197,7 +197,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
               aria-label="Прокрутить к сегодня"
               className="flex h-8 items-center gap-1.5 px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 border border-slate-300 text-slate-600 rounded-md hover:border-primary hover:text-primary"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-flag-triangle-right"><path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-flag-triangle-right"><path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5" /></svg>
               <span className="hidden sm:inline">Сегодня</span>
             </button>
 
@@ -208,13 +208,11 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
                   key={nextMode}
                   type="button"
                   onClick={() => setViewMode(nextMode)}
-                  className={`flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border ${
-                    index === 0 ? 'rounded-l-md' : ''
-                  } ${index === 2 ? 'rounded-r-md' : ''} ${
-                    viewMode === nextMode
+                  className={`flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border ${index === 0 ? 'rounded-l-md' : ''
+                    } ${index === 2 ? 'rounded-r-md' : ''} ${viewMode === nextMode
                       ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
                       : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary'
-                  }`}
+                    }`}
                 >
                   {nextMode === 'day' && (
                     <>
@@ -260,7 +258,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
             collapsedParentIds={collapsedParentIds}
             onToggleCollapse={handleToggleCollapse}
             showTaskList={showTaskList}
-            taskListWidth={140}
+            taskListWidth={550}
             viewMode={viewMode}
             businessDays={true}
             highlightExpiredTasks={true}
