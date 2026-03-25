@@ -51,7 +51,7 @@ export default function InputDemo({
 
   return (
     <div
-      className={`relative mx-auto mt-6 max-w-[640px] px-4 md:px-8 animate-fade-up ${containerClassName}`}
+      className={`relative mx-auto max-w-[640px] px-4 animate-fade-up ${containerClassName}`}
       style={{ animationDelay: '350ms' }}
     >
       <div className="flex flex-col gap-3">
@@ -75,11 +75,10 @@ export default function InputDemo({
               type="button"
               onClick={() => onChipSelect(i)}
               disabled={isSubmitting}
-              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 disabled:pointer-events-none ${
-                selectedIndex === i
-                  ? 'border-primary bg-primary/5 text-primary font-medium'
-                  : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
-              }`}
+              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 disabled:pointer-events-none ${selectedIndex === i
+                ? 'border-primary bg-primary/5 text-primary font-medium'
+                : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+                }`}
             >
               {chip.label}
             </button>
