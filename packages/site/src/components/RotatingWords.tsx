@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface RotatingWordsProps {
   words: string[];
@@ -13,24 +13,10 @@ export default function RotatingWords({
 }: RotatingWordsProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [prevIndex, setPrevIndex] = useState<number | null>(null);
-  const [width, setWidth] = useState(0);
-  const slotRef = useRef<HTMLSpanElement>(null);
-  const measurerRef = useRef<HTMLSpanElement>(null);
-
-  // Measure word widths
-  const getWordWidth = (word: string) => {
-    if (!measurerRef.current) return 0;
-    measurerRef.current.textContent = word;
-    return measurerRef.current.offsetWidth;
-  };
-
-  // Set initial width
-  useEffect(() => {
-    if (measurerRef.current) {
-      const maxWidth = words.reduce((max, word) => Math.max(max, getWordWidth(word)), 0);
-      setWidth(maxWidth);
-    }
-  }, [words]);
+  const widestWord = useMemo(
+    () => words.reduce((widest, word) => (word.length > widest.length ? word : widest), words[0] ?? ''),
+    [words]
+  );
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -53,29 +39,27 @@ export default function RotatingWords({
 
   return (
     <>
-      {/* Hidden measurer for width calculation */}
+      {/* Word slot with intrinsic width reserved by the widest word */}
       <span
-        ref={measurerRef}
-        className="absolute -left-[9999px] top-0 font-extrabold"
-        style={{
-          fontFamily: 'Noto Sans, sans-serif',
-          fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
-          fontWeight: 800,
-        }}
-      >
-        {words[currentIndex]}
-      </span>
-
-      {/* Word slot with animated width */}
-      <span
-        ref={slotRef}
         className={`relative inline-block overflow-hidden align-middle leading-none text-center ${className}`}
-        style={{ width: `${width}px`, transition: 'width 350ms ease-out' }}
+        style={{ paddingInline: '0.3em' }}
       >
+        <span
+          className="invisible block text-center"
+          aria-hidden="true"
+          style={{
+            fontFamily: 'Noto Sans, sans-serif',
+            fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
+            fontWeight: 800,
+          }}
+        >
+          {widestWord}
+        </span>
+
         {/* Current word */}
         <span
           key={currentIndex}
-          className="block w-full animate-word-in text-center text-primary"
+          className="absolute inset-0 block w-full animate-word-in text-center text-primary"
           style={{
             fontFamily: 'Noto Sans, sans-serif',
             fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',

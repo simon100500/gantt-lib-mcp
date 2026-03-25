@@ -48,6 +48,7 @@
     --gantt-grid-line-color: 214 14% 90%;
     --gantt-cell-background: 0 0% 100%;
     --gantt-row-hover-background: 210 20% 96%;
+    --gantt-container-border-radius: 0px;
     --gantt-task-bar-default-color: 221 83% 53%;
     --gantt-task-bar-text-color: 0 0% 100%;
     --gantt-progress-completed: 45 93% 47%;
@@ -62,6 +63,11 @@
     @apply bg-background text-foreground;
     font-family: 'Noto Sans', sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+
+  .gantt-container {
+    --gantt-container-border-radius: 0px !important;
+    border-radius: 0 !important;
   }
 
   /* Thin scrollbars */

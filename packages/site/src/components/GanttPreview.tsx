@@ -42,6 +42,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
   const [showTaskList, setShowTaskList] = useState(true);
   const ganttRef = useRef<GanttChartHandle>(null);
+  const previewRootRef = useRef<HTMLDivElement>(null);
   const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const pendingTasksRef = useRef<Task[] | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -94,6 +95,13 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
       cancelAnimationFrame(frameRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    const container = previewRootRef.current?.querySelector<HTMLElement>('.gantt-container');
+    if (!container) return;
+    container.style.setProperty('--gantt-container-border-radius', '0px 0px 12px 12px');
+    container.style.borderRadius = '0px 0px 12px 12px';
+  }, [tasks.length, viewMode, showTaskList]);
 
   // Scroll to first task once it appears
   useEffect(() => {
@@ -190,7 +198,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   }, []);
 
   return (
-    <div className="mx-auto w-[90%]">
+    <div ref={previewRootRef} className="mx-auto w-[90%]">
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
