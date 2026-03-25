@@ -1,0 +1,201 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const featureSections = [
+  {
+    eyebrow: "AI-first planning",
+    title: "Опишите проект обычным текстом и получите рабочий план Ганта.",
+    body:
+      "GetGantt начинает с чата: вы пишете задачу своими словами, вставляете бриф, письмо или ТЗ, а система собирает структуру проекта, этапы и сроки. Это быстрее, чем собирать план вручную из пустой таблицы.",
+    points: [
+      "AI-чат помогает уточнить состав работ, этапы и сроки.",
+      "План создается из текста без ручного переноса задач по строкам.",
+    ],
+  },
+  {
+    eyebrow: "Interactive editing",
+    title: "После генерации вы редактируете график напрямую, а не зависите от промптов.",
+    body:
+      "Любой план можно поправить руками: двигать задачи, менять длительность, корректировать даты и быстро доводить результат до рабочего состояния. AI ускоряет старт, а не забирает контроль.",
+    points: [
+      "Перетаскивайте задачи по таймлайну и меняйте сроки прямо на диаграмме.",
+      "Редактор подходит для точной ручной настройки после первого AI-черновика.",
+    ],
+  },
+  {
+    eyebrow: "Dependencies",
+    title: "Связи между задачами остаются понятными даже после изменений.",
+    body:
+      "Когда вы задаете зависимости, план учитывает их при пересчете сроков. Это помогает не держать в голове всю цепочку вручную и быстрее видеть последствия сдвигов.",
+    points: [
+      "Поддерживаются зависимости между этапами и последовательными задачами.",
+      "Автоматический пересчет помогает удерживать план в актуальном состоянии.",
+    ],
+  },
+  {
+    eyebrow: "Hierarchy",
+    title: "Собирайте проект в этапы, подпроекты и рабочие блоки без потери структуры.",
+    body:
+      "Большие планы удобнее читать, когда задачи вложены по уровням. В GetGantt можно собирать иерархию, группировать работы по стадиям и держать обзор на одном экране.",
+    points: [
+      "Иерархия задач делает длинные планы управляемыми.",
+      "Этапы и подзадачи помогают быстро читать ход проекта сверху вниз.",
+    ],
+  },
+  {
+    eyebrow: "Sharing",
+    title: "Показывайте план клиенту или команде без риска случайных правок.",
+    body:
+      "Если нужно просто согласовать график, можно отправить read-only ссылку. Получатель увидит текущий план, но не изменит его случайно во время просмотра.",
+    points: [
+      "Read-only доступ подходит для статуса, согласования и отчетности.",
+      "Сценарий честный: просмотр и обсуждение, а не совместное редактирование в браузере.",
+    ],
+  },
+  {
+    eyebrow: "Workflow",
+    title: "Путь от идеи до рабочего таймлайна занимает минуты, а не отдельный этап подготовки.",
+    body:
+      "Сервис подходит, когда нужно быстро перевести хаотичное описание проекта в наглядный план и сразу начать его уточнять. Вместо разрыва между обсуждением и планированием вы получаете один непрерывный процесс.",
+    points: [
+      "Подходит для старта новых проектов и ускорения онбординга команды.",
+      "Переход в редактор на ai.getgantt.ru остается прямым и без лишних шагов.",
+    ],
+  },
+];
+---
+
+<Layout
+  title="Возможности GetGantt — AI-чат, диаграмма Ганта и зависимости"
+  description="Из текста в рабочий план: AI-чат, генерация графика Ганта, ручное редактирование, зависимости, иерархия задач и read-only ссылки."
+  ogTitle="Возможности GetGantt"
+  ogDescription="Узнайте, как GetGantt превращает текст в диаграмму Ганта и помогает редактировать план вручную без потери структуры."
+>
+  <section class="border-b border-border bg-background">
+    <div class="container mx-auto px-4 py-20 lg:px-6 lg:py-28">
+      <div class="max-w-4xl space-y-8">
+        <span class="inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+          Возможности
+        </span>
+        <div class="space-y-6">
+          <h1 class="max-w-3xl text-4xl font-extrabold tracking-tight text-foreground md:text-6xl">
+            Превращайте текст, брифы и хаотичные вводные в понятный план Ганта.
+          </h1>
+          <p class="max-w-2xl text-lg leading-8 text-muted-foreground md:text-xl">
+            GetGantt начинает с AI-чата, а затем передает план в интерактивный
+            редактор. Вы быстро получаете структуру проекта, видите зависимости
+            и можете довести график до точного рабочего состояния.
+          </p>
+        </div>
+        <div class="flex flex-col gap-4 sm:flex-row">
+          <a
+            href="https://ai.getgantt.ru/?auth=otp"
+            class="inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Открыть ai.getgantt.ru
+          </a>
+          <a
+            href="/faq"
+            class="inline-flex items-center justify-center rounded-2xl border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+          >
+            Посмотреть FAQ
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-background">
+    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-24">
+      <div class="space-y-10">
+        {
+          featureSections.map((section, index) => (
+            <article
+              class:list={[
+                "grid gap-8 rounded-[32px] border border-border bg-card p-8 shadow-sm md:grid-cols-2 md:p-12",
+                index % 2 === 1 ? "md:[&>*:first-child]:order-2" : "",
+              ]}
+            >
+              <div class="space-y-5">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                  {section.eyebrow}
+                </p>
+                <h2 class="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+                  {section.title}
+                </h2>
+                <p class="text-base leading-8 text-muted-foreground md:text-lg">
+                  {section.body}
+                </p>
+                <ul class="space-y-3">
+                  {section.points.map((point) => (
+                    <li class="flex gap-3 text-sm leading-7 text-foreground md:text-base">
+                      <span class="mt-2 h-2 w-2 rounded-full bg-primary"></span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div class="flex min-h-[280px] flex-col justify-between rounded-[28px] bg-secondary p-6 md:min-h-[340px] md:p-8">
+                <div class="space-y-3">
+                  <p class="text-sm font-semibold text-foreground">
+                    {section.eyebrow}
+                  </p>
+                  <div class="h-px w-full bg-border"></div>
+                </div>
+                <div class="space-y-4">
+                  <div class="rounded-2xl bg-background p-5 shadow-sm">
+                    <p class="text-sm font-semibold text-foreground">
+                      {index === 0
+                        ? "Чат превращает описание проекта в план."
+                        : index === 1
+                          ? "Правки происходят прямо на таймлайне."
+                          : index === 2
+                            ? "Зависимости помогают видеть последствия сдвигов."
+                            : index === 3
+                              ? "Иерархия удерживает большой проект читаемым."
+                              : index === 4
+                                ? "Read-only ссылка подходит для согласования."
+                                : "От текста до рабочего графика без лишнего этапа."}
+                    </p>
+                    <p class="mt-2 text-sm leading-6 text-muted-foreground">
+                      {index === 0
+                        ? "Сначала вы формулируете задачу естественным языком, затем уточняете ее вместе с AI."
+                        : index === 1
+                          ? "План остается управляемым вручную после генерации, поэтому результат не застревает на уровне черновика."
+                          : index === 2
+                            ? "Когда одна задача сдвигается, легче понять, как это влияет на остальные этапы проекта."
+                            : index === 3
+                              ? "Этапы, подэтапы и блоки работ собираются в одну структуру без визуального хаоса."
+                              : index === 4
+                                ? "Поделиться планом можно без обещаний совместного редактирования, которого пока нет."
+                                : "Сервис сокращает путь от идеи и брифа до готового графика, который уже можно обсуждать."}
+                    </p>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="rounded-2xl border border-border bg-background p-4">
+                      <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Focus
+                      </p>
+                      <p class="mt-2 text-sm font-semibold text-foreground">
+                        {section.eyebrow}
+                      </p>
+                    </div>
+                    <div class="rounded-2xl border border-border bg-background p-4">
+                      <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Route
+                      </p>
+                      <p class="mt-2 text-sm font-semibold text-foreground">
+                        ai.getgantt.ru
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</Layout>
