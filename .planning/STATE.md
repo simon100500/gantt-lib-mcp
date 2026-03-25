@@ -232,6 +232,7 @@ None currently.
 | 2026-03-24 | Hero: favicon.svg лого и убрать дыры в верстке | Header.astro, Hero.astro, RotatingWords.tsx, favicon.svg |
 | 2026-03-25 | Agent-run: inline dependencies для новых последовательных подзадач и cheap path для "отдельным блоком" | packages/mcp/agent/prompts/system.md, packages/server/src/agent.ts, packages/server/src/agent.test.ts |
 | 2026-03-25 | Agent-run: запрет guessed UUID для inline dependency и reuse exact createdTaskId | packages/mcp/agent/prompts/system.md, packages/server/src/agent.ts, packages/server/src/agent.test.ts |
+| 2026-03-25 | Redesign content pages: убраны fake visual panels, decorative cards, исправлен DOM-порядок в FAQ | packages/site/src/pages/features.astro, faq.astro, privacy.astro, terms.astro |
 
 ---
 
