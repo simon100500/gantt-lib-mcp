@@ -43,11 +43,6 @@ const privacySections = [
           зафиксированы в кодовой базе.
         </p>
       </div>
-      <div class="privacy-hero__note">
-        <span>Scope</span>
-        <strong>Маркетинговый сайт и приложение</strong>
-        <p>Рабочее описание без лишних юридических украшений.</p>
-      </div>
     </div>
   </section>
 
@@ -84,8 +79,7 @@ const privacySections = [
     margin: 0 auto;
   }
 
-  .privacy-label,
-  .privacy-hero__note span {
+  .privacy-label {
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.24em;
@@ -96,9 +90,7 @@ const privacySections = [
   .privacy-hero {
     padding: 4.5rem 0 3rem;
     border-bottom: 1px solid hsl(var(--border));
-    background:
-      radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 28%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
   }
 
   .privacy-hero .privacy-shell {
@@ -120,30 +112,11 @@ const privacySections = [
   }
 
   .privacy-hero p,
-  .privacy-band p,
-  .privacy-hero__note p {
+  .privacy-band p {
     margin-top: 1rem;
     font-size: 1.02rem;
     line-height: 1.85;
     color: hsl(var(--muted-foreground));
-  }
-
-  .privacy-hero__note {
-    align-self: end;
-    max-width: 22rem;
-    padding: 1.35rem;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 1.5rem;
-    background: rgba(255, 255, 255, 0.7);
-    box-shadow: 0 18px 44px rgba(148, 163, 184, 0.12);
-  }
-
-  .privacy-hero__note strong {
-    display: block;
-    margin-top: 0.7rem;
-    font-size: 1.25rem;
-    letter-spacing: -0.03em;
-    color: hsl(var(--foreground));
   }
 
   .privacy-body {
@@ -176,9 +149,4 @@ const privacySections = [
     text-underline-offset: 0.22em;
   }
 
-  @media (min-width: 920px) {
-    .privacy-hero .privacy-shell {
-      grid-template-columns: minmax(0, 1fr) minmax(250px, 0.32fr);
-    }
-  }
 </style>
