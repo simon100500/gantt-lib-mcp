@@ -117,13 +117,13 @@
 | INTER-03 | 25 | Pending |
 | INTER-04 | 25 | Pending |
 | INTER-05 | 25 | Pending |
-| CONTENT-01 | 26 | Pending |
-| CONTENT-02 | 26 | Pending |
+| CONTENT-01 | 26 | Complete |
+| CONTENT-02 | 26 | Complete |
 | CONTENT-03 | 26 | Pending |
 | CONTENT-04 | 26 | Pending |
 | CONTENT-05 | 26 | Pending |
 | CONTENT-06 | 26 | Pending |
-| CONTENT-07 | 26 | Pending |
+| CONTENT-07 | 26 | Complete |
 | DEPLOY-01 | 27 | Pending |
 | DEPLOY-02 | 27 | Pending |
 | DEPLOY-03 | 27 | Pending |

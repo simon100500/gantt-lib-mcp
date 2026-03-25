@@ -98,7 +98,7 @@
 6. Search engines understand indexing rules via robots.txt
 7. Each page has proper meta title, description, and OG tags for social sharing
 
-**Plans:** TBD
+**Plans:** 0/2 plans executed
 
 **UI hint:** yes
 
@@ -129,7 +129,7 @@
 |-------|----------------|--------|-----------|
 | 24. Astro Site Foundation | 3/3 | Complete | 2026-03-23 |
 | 25. Interactive Preview | 0/2 | Not started | - |
-| 26. Content & SEO | 0/2 | Not started | - |
+| 26. Content & SEO | 0/2 | Planned    |  |
 | 27. Domain Separation | 0/3 | Not started | - |
 
 ---

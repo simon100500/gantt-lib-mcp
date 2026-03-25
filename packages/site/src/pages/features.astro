@@ -3,44 +3,89 @@ import Layout from "../layouts/Layout.astro";
 
 const features = [
   {
-    id: "ai-chat",
-    tag: "AI-ассистент",
-    title: "Опишите проект — получите готовый план",
-    body: "Просто напишите, что нужно сделать. AI прочитает ваш текст, разобьёт работу на задачи, расставит сроки и построит диаграмму Ганта. Подходит как для чистого листа, так и для существующего документа или брифа.",
+    id: "ai-planning",
+    tag: "планируйте",
+    title: "План проекта из одной фразы",
+    paragraphs: [
+      "Просто напишите: «Построить дом из газобетона». ИИ проанализирует запрос, разобьет его на этапы, определит зависимости и расставит базовые сроки.",
+      "Это в десятки раз быстрее, чем вручную создавать десятки задач и связей.",
+    ],
     side: "left",
     accent: true,
   },
   {
-    id: "interactive-editing",
-    tag: "Интерактивное редактирование",
-    title: "Правьте диаграмму мышью или через чат",
-    body: "Перетащите задачу — срок сдвинется. Растяните — длительность изменится. Предпочитаете текст? Попросите AI переместить задачу, изменить исполнителя или разбить этап на подзадачи — и диаграмма обновится сразу.",
+    id: "ai-editing",
+    tag: "редактируйте",
+    title: "Управляйте графиком через чат",
+    paragraphs: [
+      "Вносите изменения простыми командами: «сдвинь фундамент на неделю» или «добавь этап электрики».",
+      "Система поймет контекст и пересчитает всю цепочку работ. Для точечных правок доступно и обычное управление мышью.",
+    ],
     side: "right",
     accent: false,
   },
   {
-    id: "dependencies",
-    tag: "Зависимости и автоматический пересчёт",
-    title: "Сдвинули одну задачу — остальные подстроятся",
-    body: "Настройте связи между задачами: «начать после», «начать вместе», «закончить до». Когда срок одного этапа меняется, всё, что от него зависит, пересчитывается автоматически. Никаких ручных правок цепочки.",
+    id: "workdays",
+    tag: "считайте",
+    title: "Реальные сроки с учётом календаря",
+    paragraphs: [
+      "Настройте график под производственный календарь с учётом выходных и праздников. При переносе задач сроки не «поплывут» на субботу — система автоматически перепрыгивает нерабочие дни.",
+      "Длительность этапов отображается в чистых рабочих днях, что делает график точным инструментом, а не формальной бумагой.",
+    ],
     side: "left",
     accent: false,
   },
   {
-    id: "hierarchy",
-    tag: "Иерархия и стадии",
-    title: "Группируйте задачи в этапы и стадии",
-    body: "Любую задачу можно сделать родительской: вложите в неё подзадачи, чтобы структура плана отражала реальные этапы проекта. Группы можно сворачивать и разворачивать — удобно для больших планов.",
+    id: "resources",
+    tag: "контролируйте",
+    title: "Управляйте ресурсами и бригадами",
+    paragraphs: [
+      "Назначайте людей и технику на задачи, чтобы видеть загрузку по всем объектам компании.",
+      "GetGantt подсветит конфликты, если одна бригада запланирована в двух местах одновременно. Это помогает избежать простоев и видеть реальную картину занятости персонала.",
+    ],
     side: "right",
+    accent: false,
+  },
+  {
+    id: "search-filters",
+    tag: "находите",
+    title: "Умный поиск и фильтрация",
+    paragraphs: [
+      "Мгновенно находите задачи через быстрый поиск и перемещайтесь между ними. Используйте фильтры, чтобы выявить ошибки планирования: задачи без связей, просроченные этапы или перегруженные ресурсы.",
+      "Новые задачи можно добавлять прямо из строки поиска — так же быстро, как в текстовом редакторе.",
+    ],
+    side: "left",
     accent: false,
   },
   {
     id: "share",
-    tag: "Ссылки для просмотра",
-    title: "Поделитесь планом одной ссылкой",
-    body: "Создайте ссылку для чтения и отправьте заказчику или команде. Получатель видит актуальную диаграмму без возможности редактирования. Никакой регистрации со стороны просматривающего.",
-    side: "left",
+    tag: "делитесь",
+    title: "Единый источник правды для всех",
+    paragraphs: [
+      "Создавайте ссылки на график для заказчиков, дизайнеров или подрядчиков. Им не нужно регистрироваться — актуальный план откроется в браузере на любом устройстве.",
+      "Вы сами определяете, кто может только просматривать график, а кто — вносить изменения.",
+    ],
+    side: "right",
     accent: false,
+  },
+];
+
+const extras = [
+  {
+    title: "Иерархия и этапы",
+    text: "Группируйте задачи в неограниченное количество уровней. Сворачивайте этапы, чтобы видеть общую картину, или разворачивайте для детальной работы с подзадачами.",
+  },
+  {
+    title: "Человеческий язык связей",
+    text: "Настраивайте зависимости без сложных терминов. Используйте понятные правила: «начать после окончания», «начать одновременно» или «с задержкой в 2 дня».",
+  },
+  {
+    title: "Защита от случайных правок",
+    text: "Используйте блокировку холста, чтобы случайно не сдвинуть сроки при просмотре графика. Все важные изменения фиксируются в истории.",
+  },
+  {
+    title: "Мобильная версия",
+    text: "Просматривайте график и отмечайте выполнение задач прямо со смартфона на стройплощадке.",
   },
 ];
 ---
@@ -53,15 +98,15 @@ const features = [
 >
   {/* Page Hero */}
   <section class="border-b border-border bg-background">
-    <div class="container mx-auto px-4 py-20 text-center lg:px-6 lg:py-28">
+    <div class="mx-auto max-w-5xl px-4 py-20 text-center lg:px-6 lg:py-28">
       <p class="mb-4 text-sm font-semibold uppercase tracking-widest text-primary">
         Возможности
       </p>
       <h1 class="mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight text-foreground lg:text-5xl">
-        Из текста — в рабочий план. Прямо сейчас.
+        Профессиональный график Ганта с помощью ИИ
       </h1>
       <p class="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-        GetGantt объединяет AI-ассистента и интерактивный редактор диаграмм Ганта. Опишите проект — получите готовую структуру. Отредактируйте руками или попросите AI — результат обновится сразу.
+        Опишите проект простыми словами. ИИ сам распределит задачи по этапам, свяжет их логикой и рассчитает сроки.
       </p>
       <div class="mt-10">
         <a
@@ -80,7 +125,7 @@ const features = [
       id={feature.id}
       class={`border-b border-border ${feature.accent ? "bg-accent/5" : "bg-background"}`}
     >
-      <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-24">
+      <div class="mx-auto max-w-5xl px-4 py-16 lg:px-6 lg:py-24">
         <div
           class={`flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-16 ${
             feature.side === "right" ? "lg:flex-row-reverse" : ""
@@ -94,19 +139,22 @@ const features = [
             <h2 class="mt-2 text-3xl font-bold leading-tight text-foreground lg:text-4xl">
               {feature.title}
             </h2>
-            <p class="mt-4 text-base leading-relaxed text-muted-foreground lg:text-lg">
-              {feature.body}
-            </p>
+            <div class="mt-4 space-y-3">
+              {feature.paragraphs.map((p) => (
+                <p class="text-base leading-relaxed text-muted-foreground lg:text-lg">{p}</p>
+              ))}
+            </div>
           </div>
 
           {/* Visual Placeholder */}
           <div class="flex-1">
             <div class="aspect-[4/3] rounded-2xl border border-border bg-muted/40 flex items-center justify-center">
               <span class="text-4xl opacity-20">
-                {feature.id === "ai-chat" && "🤖"}
-                {feature.id === "interactive-editing" && "🖱️"}
-                {feature.id === "dependencies" && "🔗"}
-                {feature.id === "hierarchy" && "🗂️"}
+                {feature.id === "ai-planning" && "🤖"}
+                {feature.id === "ai-editing" && "🖱️"}
+                {feature.id === "workdays" && "📅"}
+                {feature.id === "resources" && "👷"}
+                {feature.id === "search-filters" && "🔍"}
                 {feature.id === "share" && "🔗"}
               </span>
             </div>
@@ -116,14 +164,29 @@ const features = [
     </section>
   ))}
 
+  {/* Extras Grid */}
+  <section class="border-b border-border bg-background">
+    <div class="mx-auto max-w-5xl px-4 py-16 lg:px-6 lg:py-24">
+      <h2 class="mb-10 text-2xl font-bold text-foreground lg:text-3xl">Что ещё</h2>
+      <div class="grid gap-8 sm:grid-cols-2">
+        {extras.map((item) => (
+          <div>
+            <h3 class="text-lg font-semibold text-foreground">{item.title}</h3>
+            <p class="mt-2 text-base leading-relaxed text-muted-foreground">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
   {/* Bottom CTA */}
   <section class="bg-background">
-    <div class="container mx-auto px-4 py-20 text-center lg:px-6">
+    <div class="mx-auto max-w-5xl px-4 py-20 text-center lg:px-6">
       <h2 class="text-3xl font-bold text-foreground lg:text-4xl">
-        Готовы попробовать?
+        Попробуйте — это быстро
       </h2>
       <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
-        Зайдите в редактор и создайте первый план за несколько минут. Никаких настроек — просто напишите, что нужно сделать.
+        Зайдите, напишите что нужно сделать, и через минуту у вас будет план. Без регистрации по паролю — только почта или Telegram.
       </p>
       <div class="mt-8">
         <a
