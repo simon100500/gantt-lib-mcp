@@ -1,6 +1,11 @@
 ---
 // Header.astro — Desktop navigation bar with logo, links, CTAs
 const currentPage = Astro.url.pathname;
+
+const navLinks = [
+  { href: "/features", label: "Возможности" },
+  { href: "/faq", label: "FAQ" },
+];
 ---
 
 <header
@@ -26,6 +31,20 @@ const currentPage = Astro.url.pathname;
 
     {/* Desktop Nav Links */}
     <ul class="hidden gap-[2px] md:flex">
+      {navLinks.map((link) => (
+        <li>
+          <a
+            href={link.href}
+            class={`inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium transition-colors hover:text-foreground ${
+              currentPage === link.href
+                ? "text-foreground"
+                : "text-muted-foreground"
+            }`}
+          >
+            {link.label}
+          </a>
+        </li>
+      ))}
     </ul>
 
     {/* Desktop CTAs */}
@@ -89,7 +108,19 @@ const currentPage = Astro.url.pathname;
     </a>
 
     {/* Nav Links */}
-    <nav class="flex-1 space-y-4">
+    <nav class="flex-1 space-y-1">
+      {navLinks.map((link) => (
+        <a
+          href={link.href}
+          class={`block rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors hover:bg-accent hover:text-foreground ${
+            currentPage === link.href
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground"
+          }`}
+        >
+          {link.label}
+        </a>
+      ))}
     </nav>
 
     {/* CTAs */}
