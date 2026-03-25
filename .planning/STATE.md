@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: MVP
 current_phase: 26
 status: planning
-last_updated: "2026-03-25T10:04:37.462Z"
+last_updated: "2026-03-25T10:15:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 1
@@ -203,6 +203,7 @@ None currently.
 | 2026-03-23 | Hero: обновить верстку и применить фиолетовый accent из web | Hero.astro, RotatingWords.tsx, global.css |
 | 2026-03-24 | Hero: favicon.svg лого и убрать дыры в верстке | Header.astro, Hero.astro, RotatingWords.tsx, favicon.svg |
 | 2026-03-25 | Agent-run: inline dependencies для новых последовательных подзадач и cheap path для "отдельным блоком" | packages/mcp/agent/prompts/system.md, packages/server/src/agent.ts, packages/server/src/agent.test.ts |
+| 2026-03-25 | Agent-run: запрет guessed UUID для inline dependency и reuse exact createdTaskId | packages/mcp/agent/prompts/system.md, packages/server/src/agent.ts, packages/server/src/agent.test.ts |
 
 ---
 

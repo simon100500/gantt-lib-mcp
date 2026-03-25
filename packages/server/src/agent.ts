@@ -282,6 +282,8 @@ function buildPrompt(
         '- Make the smallest valid change that satisfies the request.',
         '- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.',
         '- If you create a new task and already know its predecessor, pass that link in `create_task.dependencies` instead of planning a later `set_dependency` call.',
+        '- For sequential new tasks, dependency task IDs must come from actual tool results. Reuse the exact `createdTaskId` from the immediately previous `create_task` result.',
+        '- Never guess, synthesize, or paraphrase a dependency task ID. If the predecessor ID is uncertain, do not send a speculative dependency.',
         '- Use `set_dependency` only as a fallback for links that cannot be known until after creation or for links between existing tasks.',
         simpleMutationRequested
           ? '- For a new standalone block with 2-5 child tasks, keep the reasoning path minimal: create the parent, then create the children once each, carrying forward sequential dependencies inline.'
@@ -692,6 +694,8 @@ export async function runAgentWithHistory(
         'Identify the correct parent/container before mutating.',
         'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, `delete_task`, `set_dependency`, or `remove_dependency`.',
         'If you create sequential new tasks and already know the predecessor, include that dependency inside `create_task` instead of scheduling a separate `set_dependency` step.',
+        'Reuse only real task IDs returned by tool results. Never invent a UUID for `dependencies.taskId`.',
+        'If the predecessor ID is uncertain, omit the speculative dependency and use a safe fallback instead of retrying with a guessed ID.',
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',

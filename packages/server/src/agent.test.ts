@@ -53,6 +53,8 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /pass `dependencies` directly in `create_task`/i);
     assert.match(prompt, /use `set_dependency`.*fallback/i);
     assert.match(prompt, /2-5 sequential child tasks/i);
+    assert.match(prompt, /exact `createdTaskId`/i);
+    assert.match(prompt, /never invent|never fabricate/i);
   });
 });
 
