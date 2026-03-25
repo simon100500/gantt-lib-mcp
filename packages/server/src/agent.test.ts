@@ -45,12 +45,23 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /Validate before finishing/i);
     assert.match(prompt, /Avoid duplicates/i);
   });
+
+  it('documents inline dependency creation for new sequential tasks', () => {
+    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
+    const prompt = readFileSync(promptPath, 'utf-8');
+
+    assert.match(prompt, /pass `dependencies` directly in `create_task`/i);
+    assert.match(prompt, /use `set_dependency`.*fallback/i);
+    assert.match(prompt, /2-5 sequential child tasks/i);
+  });
 });
 
 describe('agent simple mutation heuristic', () => {
   it('detects short add-task requests as simple mutations', () => {
     assert.equal(isSimpleMutationRequest('добавь задачи по штукатурке'), true);
     assert.equal(isSimpleMutationRequest('add plaster tasks'), true);
+    assert.equal(isSimpleMutationRequest('добавь отдельным блоком сантехнику'), true);
+    assert.equal(isSimpleMutationRequest('add separate block for plumbing'), true);
   });
 
   it('treats broad planning requests as non-simple', () => {
@@ -70,7 +81,8 @@ describe('agent history context', () => {
     );
 
     assert.ok(history.length <= 1700, `expected compact history, got ${history.length} chars`);
-    assert.match(history, /\[Earlier conversation omitted\]/);
     assert.doesNotMatch(history, /message-0-/);
+    assert.doesNotMatch(history, /message-3-/);
+    assert.match(history, /message-4-/);
   });
 });

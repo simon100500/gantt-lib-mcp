@@ -13,8 +13,6 @@ import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
-import { taskService, messageService } from '@gantt/mcp/services';
-import { broadcastToSession } from './ws.js';
 import { writeServerDebugLog } from './debug-log.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -62,6 +60,12 @@ const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
 const SIMPLE_MUTATION_MAX_SESSION_TURNS = 8;
 const DEFAULT_MUTATION_MAX_SESSION_TURNS = 16;
 const READONLY_MAX_SESSION_TURNS = 12;
+
+type TaskServiceModule = typeof import('@gantt/mcp/services');
+type WsModule = typeof import('./ws.js');
+
+let servicesModulePromise: Promise<TaskServiceModule> | undefined;
+let wsModulePromise: Promise<WsModule> | undefined;
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -113,6 +117,18 @@ export function isSimpleMutationRequest(message: string): boolean {
 
   if (normalized.length > 120) {
     return false;
+  }
+
+  const compactStructuralMarkers = [
+    'отдельным блоком',
+    'отдельный блок',
+    'новым блоком',
+    'new block',
+    'separate block',
+  ];
+
+  if (compactStructuralMarkers.some((marker) => normalized.includes(marker))) {
+    return true;
   }
 
   const broadScopeMarkers = [
@@ -265,6 +281,11 @@ function buildPrompt(
           : '- Use compact `get_tasks` first unless you explicitly need dependencies or detailed hierarchy.',
         '- Make the smallest valid change that satisfies the request.',
         '- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.',
+        '- If you create a new task and already know its predecessor, pass that link in `create_task.dependencies` instead of planning a later `set_dependency` call.',
+        '- Use `set_dependency` only as a fallback for links that cannot be known until after creation or for links between existing tasks.',
+        simpleMutationRequested
+          ? '- For a new standalone block with 2-5 child tasks, keep the reasoning path minimal: create the parent, then create the children once each, carrying forward sequential dependencies inline.'
+          : '- For structured additions, prefer inline dependency creation during `create_task` whenever the predecessor is already known.',
         '- Do not spend extra turns on optional restructuring.',
       ].join('\n')
       : '',
@@ -272,6 +293,22 @@ function buildPrompt(
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
     `\n\nUser: ${userMessage}`,
   ].join('');
+}
+
+async function getServicesModule(): Promise<TaskServiceModule> {
+  if (!servicesModulePromise) {
+    servicesModulePromise = import('@gantt/mcp/services');
+  }
+
+  return servicesModulePromise;
+}
+
+async function getWsModule(): Promise<WsModule> {
+  if (!wsModulePromise) {
+    wsModulePromise = import('./ws.js');
+  }
+
+  return wsModulePromise;
 }
 
 async function executeAgentAttempt(
@@ -285,6 +322,7 @@ async function executeAgentAttempt(
   mcpServerPath: string,
   dbPath: string,
   env: ReturnType<typeof resolveEnv>,
+  broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
   const timeoutMs = mutationRequested ? MUTATION_ATTEMPT_TIMEOUT_MS : READONLY_ATTEMPT_TIMEOUT_MS;
@@ -441,6 +479,7 @@ async function verifyMutationAttempt(
   tasksBefore: ComparableTask[],
   revisionBefore: number,
   assistantResponse: string,
+  taskService: TaskServiceModule['taskService'],
 ): Promise<VerificationResult> {
   const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
@@ -481,7 +520,13 @@ export async function runAgentWithHistory(
   projectId: string,
   sessionId: string
 ): Promise<void> {
+  let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
+    const [{ taskService, messageService }, wsModule] = await Promise.all([
+      getServicesModule(),
+      getWsModule(),
+    ]);
+    broadcastToSession = wsModule.broadcastToSession;
     const runId = crypto.randomUUID();
     const mutationRequested = isMutationIntent(userMessage);
     const simpleMutationRequested = mutationRequested && isSimpleMutationRequest(userMessage);
@@ -583,6 +628,7 @@ export async function runAgentWithHistory(
           mcpServerPath,
           dbPath,
           env,
+          broadcastToSession,
         );
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -614,6 +660,7 @@ export async function runAgentWithHistory(
         tasksBefore,
         revisionBefore,
         assistantResponse,
+        taskService,
       );
       tasksAfter = finalVerification.tasksAfter as ComparableTask[];
 
@@ -644,6 +691,7 @@ export async function runAgentWithHistory(
         'Call `get_tasks` again at the start of this retry.',
         'Identify the correct parent/container before mutating.',
         'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, `delete_task`, `set_dependency`, or `remove_dependency`.',
+        'If you create sequential new tasks and already know the predecessor, include that dependency inside `create_task` instead of scheduling a separate `set_dependency` step.',
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',
@@ -700,7 +748,8 @@ export async function runAgentWithHistory(
       sessionId,
     });
   } catch (err) {
-    broadcastToSession(sessionId, { type: 'error', message: String(err) });
+    const wsModule = broadcastToSession ? null : await getWsModule();
+    (broadcastToSession ?? wsModule?.broadcastToSession)?.(sessionId, { type: 'error', message: String(err) });
     await writeServerDebugLog('agent_run_failed', {
       projectId,
       sessionId,
