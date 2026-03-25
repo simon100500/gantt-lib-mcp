@@ -1,0 +1,106 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout
+  title="Политика конфиденциальности GetGantt"
+  description="Как GetGantt обрабатывает тексты проектов, данные аккаунта и технические логи, и куда написать по вопросам приватности."
+  ogTitle="Политика конфиденциальности GetGantt"
+  ogDescription="Практическое описание того, какие данные может обрабатывать GetGantt и как связаться с командой по privacy-вопросам."
+>
+  <section class="border-b border-border bg-background">
+    <div class="container mx-auto px-4 py-20 lg:px-6 lg:py-24">
+      <div class="max-w-3xl space-y-6">
+        <span class="inline-flex rounded-full bg-secondary px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+          Privacy
+        </span>
+        <h1 class="text-4xl font-extrabold tracking-tight text-foreground md:text-5xl">
+          Политика конфиденциальности
+        </h1>
+        <p class="text-lg leading-8 text-muted-foreground">
+          Эта страница объясняет, какие данные GetGantt может обрабатывать на
+          маркетинговом сайте и в самом продукте. Текст описывает текущую
+          практическую логику сервиса и не обещает процессов или сертификатов,
+          которые не зафиксированы в кодовой базе.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-background">
+    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-20">
+      <div class="grid gap-5">
+        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
+          <h2 class="text-2xl font-bold tracking-tight text-foreground">
+            Какие данные мы можем получать
+          </h2>
+          <p class="mt-4 text-base leading-8 text-muted-foreground">
+            Если вы используете сайт или приложение, сервис может обрабатывать
+            текст, который вы вводите для построения плана: описание проекта,
+            бриф, ТЗ, письмо, комментарии к задачам и другие рабочие вводные.
+            Эти данные нужны, чтобы показать диаграмму, структуру задач и
+            результат работы AI-функций внутри продукта.
+          </p>
+        </article>
+
+        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
+          <h2 class="text-2xl font-bold tracking-tight text-foreground">
+            Данные аккаунта и входа
+          </h2>
+          <p class="mt-4 text-base leading-8 text-muted-foreground">
+            Для доступа в приложение могут использоваться базовые данные
+            аутентификации, например email и техническая информация,
+            необходимая для входа и поддержки сессии. Мы описываем это как
+            рабочий минимум: только то, что требуется для входа в сервис и
+            связи с вашей учетной записью.
+          </p>
+        </article>
+
+        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
+          <h2 class="text-2xl font-bold tracking-tight text-foreground">
+            Технические логи и работа сервиса
+          </h2>
+          <p class="mt-4 text-base leading-8 text-muted-foreground">
+            При работе сайта и приложения могут появляться технические логи:
+            ошибки, события авторизации, служебные записи о запросах и другая
+            диагностическая информация, которая помогает поддерживать
+            доступность и разбираться со сбоями. На этой странице мы не
+            заявляем отдельные внешние analytics-инструменты или рекламные
+            трекеры, потому что такие интеграции не описаны в текущем репозитории.
+          </p>
+        </article>
+
+        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
+          <h2 class="text-2xl font-bold tracking-tight text-foreground">
+            Как используются ваши данные
+          </h2>
+          <p class="mt-4 text-base leading-8 text-muted-foreground">
+            Данные используются для трех практических задач: дать вам доступ к
+            продукту, построить и показать план проекта, а также поддерживать
+            стабильную работу сервиса. Мы не включаем сюда обещания о
+            специальных режимах обработки, аудиторских программах или
+            compliance-статусах, которых нет в проектной документации.
+          </p>
+        </article>
+
+        <article class="rounded-[28px] border border-border bg-card p-6 shadow-sm md:p-8">
+          <h2 class="text-2xl font-bold tracking-tight text-foreground">
+            Вопросы по privacy и контакт
+          </h2>
+          <p class="mt-4 text-base leading-8 text-muted-foreground">
+            Если у вас есть вопрос о конфиденциальности, доступе к данным или
+            содержимом проекта, напишите команде на
+            <a
+              href="mailto:hello@getgantt.ru"
+              class="font-semibold text-foreground underline decoration-border underline-offset-4"
+            >
+              hello@getgantt.ru
+            </a>.
+            В обращении лучше сразу указать email аккаунта или ссылку на
+            проект, чтобы мы могли быстрее понять контекст запроса.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+</Layout>
