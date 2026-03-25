@@ -4,9 +4,24 @@ import Footer from "../components/Footer.astro";
 
 interface Props {
   title?: string;
+  description?: string;
+  ogTitle?: string;
+  ogDescription?: string;
 }
 
-const { title = "GetGantt — Из текста в Гант за 30 секунд" } = Astro.props;
+const defaultTitle = "GetGantt — Из текста в Гант за 30 секунд";
+const defaultDescription =
+  "Опишите проект своими словами и получите готовый график Ганта с задачами, сроками и зависимостями.";
+
+const {
+  title = defaultTitle,
+  description = defaultDescription,
+  ogTitle,
+  ogDescription,
+} = Astro.props;
+
+const resolvedOgTitle = ogTitle ?? title;
+const resolvedOgDescription = ogDescription ?? description;
 ---
 
 <!doctype html>
@@ -20,10 +35,11 @@ const { title = "GetGantt — Из текста в Гант за 30 секунд
       rel="stylesheet"
     />
     <title>{title}</title>
-    <meta
-      name="description"
-      content="Вставьте любой документ или напишите своими словами. Получите готовый график с задачами, сроками и командой."
-    />
+    <meta name="description" content={description} />
+    <meta property="og:title" content={resolvedOgTitle} />
+    <meta property="og:description" content={resolvedOgDescription} />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ru_RU" />
 
     <!-- Favicon -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
