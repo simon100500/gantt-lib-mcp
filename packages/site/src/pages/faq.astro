@@ -81,20 +81,14 @@ const faqGroups = [
 >
   <section class="faq-hero">
     <div class="faq-shell">
-      <div class="faq-hero__aside animate-fade-up" style="animation-delay: 260ms;">
-        <a href="/features">Посмотреть возможности</a>
-        <a href="/privacy">Открыть privacy</a>
-        <a href="/terms">Открыть terms</a>
-      </div>
       <div class="faq-hero__copy">
         <p class="faq-label animate-fade-up" style="animation-delay: 80ms;">FAQ</p>
         <h1 class="animate-fade-up" style="animation-delay: 140ms;">
-          Короткие ответы, чтобы быстро понять продукт и не искать их по сайту.
+          Короткие ответы на частые вопросы о продукте.
         </h1>
         <p class="animate-fade-up" style="animation-delay: 200ms;">
-          Здесь собраны практические вопросы о запуске, ручном редактировании,
-          зависимостях и данных. Если нужен полный юридический контекст,
-          используйте страницы privacy и terms.
+          Как работает AI-ввод, что можно редактировать вручную, как устроены
+          зависимости и что происходит с данными.
         </p>
       </div>
     </div>
@@ -166,9 +160,9 @@ const faqGroups = [
 
   .faq-hero h1 {
     margin-top: 0.8rem;
-    font-size: clamp(2.5rem, 5vw, 4.8rem);
-    line-height: 0.94;
-    letter-spacing: -0.05em;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
     font-weight: 800;
     color: hsl(var(--foreground));
     text-wrap: balance;
@@ -181,21 +175,13 @@ const faqGroups = [
     color: hsl(var(--muted-foreground));
   }
 
-  .faq-hero__aside {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-content: start;
-  }
-
-  .faq-hero__aside a,
   .faq-nav a {
     display: inline-flex;
     align-items: center;
     min-height: 2.85rem;
     padding: 0 1rem;
     border: 1px solid hsl(var(--border));
-    border-radius: 999px;
+    border-radius: 0.5rem;
     color: hsl(var(--foreground));
     transition:
       border-color 180ms ease,
@@ -203,7 +189,6 @@ const faqGroups = [
       transform 180ms ease;
   }
 
-  .faq-hero__aside a:hover,
   .faq-nav a:hover {
     transform: translateY(-1px);
     border-color: hsl(var(--primary));
@@ -241,20 +226,22 @@ const faqGroups = [
 
   .faq-group__items {
     display: grid;
-    gap: 1px;
-    background: hsl(var(--border));
   }
 
   .faq-item {
     padding: 1.35rem 0;
-    background: hsl(var(--background));
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .faq-item:last-child {
+    border-bottom: none;
   }
 
   .faq-item h2 {
-    font-size: 1.45rem;
-    line-height: 1.2;
-    letter-spacing: -0.03em;
-    font-weight: 700;
+    font-size: 1.1rem;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    font-weight: 600;
     color: hsl(var(--foreground));
   }
 
@@ -267,16 +254,8 @@ const faqGroups = [
   }
 
   @media (min-width: 960px) {
-    .faq-hero .faq-shell,
     .faq-layout {
       grid-template-columns: minmax(220px, 0.28fr) minmax(0, 0.72fr);
-    }
-
-    .faq-hero__aside {
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: flex-end;
-      padding-bottom: 0.5rem;
     }
 
     .faq-nav {

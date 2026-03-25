@@ -194,7 +194,7 @@ const featureBands = [
 
 <style>
   .feature-shell {
-    width: min(1180px, calc(100% - 2rem));
+    width: min(900px, calc(100% - 2rem));
     margin: 0 auto;
   }
 
@@ -264,9 +264,9 @@ const featureBands = [
   .feature-flow__intro h2,
   .feature-band__copy h2,
   .feature-cta__panel h2 {
-    font-size: clamp(2.7rem, 6vw, 5.5rem);
-    line-height: 0.94;
-    letter-spacing: -0.05em;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
     font-weight: 800;
     color: hsl(var(--foreground));
     text-wrap: balance;
@@ -295,7 +295,7 @@ const featureBands = [
     justify-content: center;
     min-height: 3.3rem;
     padding: 0 1.35rem;
-    border-radius: 0.95rem;
+    border-radius: 0.5rem;
     font-size: 0.95rem;
     font-weight: 700;
     transition:
@@ -446,7 +446,8 @@ const featureBands = [
   .feature-band__shell {
     display: grid;
     gap: 2rem;
-    padding: 4rem 0;
+    padding: 2.5rem 0;
+    max-width: 680px;
   }
 
   .feature-band__copy {
@@ -454,7 +455,8 @@ const featureBands = [
   }
 
   .feature-band__copy h2 {
-    font-size: clamp(2rem, 3.8vw, 3.7rem);
+    font-size: clamp(1.4rem, 2.5vw, 1.75rem);
+    line-height: 1.2;
     margin-top: 0.75rem;
     margin-bottom: 1.1rem;
   }
