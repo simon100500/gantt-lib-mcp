@@ -1,6 +1,13 @@
 ---
 // Header.astro — Desktop navigation bar with logo, links, CTAs
 const currentPage = Astro.url.pathname;
+
+const navItems = [
+  { href: "/features", label: "Возможности" },
+  { href: "/faq", label: "FAQ" },
+];
+
+const isActivePage = (href: string) => currentPage === href;
 ---
 
 <header
@@ -26,6 +33,24 @@ const currentPage = Astro.url.pathname;
 
     {/* Desktop Nav Links */}
     <ul class="hidden gap-[2px] md:flex">
+      {
+        navItems.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              class:list={[
+                "rounded-xl px-3 py-2 text-[13px] font-medium transition-colors",
+                isActivePage(item.href)
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              ]}
+              aria-current={isActivePage(item.href) ? "page" : undefined}
+            >
+              {item.label}
+            </a>
+          </li>
+        ))
+      }
     </ul>
 
     {/* Desktop CTAs */}
@@ -90,6 +115,22 @@ const currentPage = Astro.url.pathname;
 
     {/* Nav Links */}
     <nav class="flex-1 space-y-4">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            class:list={[
+              "block rounded-xl px-3 py-3 text-[15px] font-medium transition-colors",
+              isActivePage(item.href)
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
+            ]}
+            aria-current={isActivePage(item.href) ? "page" : undefined}
+          >
+            {item.label}
+          </a>
+        ))
+      }
     </nav>
 
     {/* CTAs */}
