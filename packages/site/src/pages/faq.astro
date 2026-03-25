@@ -1,0 +1,121 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const faqs = [
+  {
+    q: "Что такое GetGantt?",
+    a: "GetGantt — это онлайн-редактор диаграмм Ганта с встроенным AI-ассистентом. Вы описываете проект текстом, а AI превращает его в готовый план с задачами, сроками и зависимостями. Диаграмму можно редактировать как через чат, так и мышью напрямую.",
+  },
+  {
+    q: "Как работает AI-ввод?",
+    a: "Напишите в чат всё, что нужно: бриф, список шагов, задачи в свободной форме. AI разберёт текст, создаст задачи, расставит сроки и построит диаграмму. При необходимости можно продолжить разговор, чтобы скорректировать результат.",
+  },
+  {
+    q: "Можно ли редактировать диаграмму вручную?",
+    a: "Да. Любую задачу можно перетащить, растянуть или изменить через боковую панель. AI и ручное редактирование работают параллельно: вы можете менять план как угодно, а диаграмма обновляется в реальном времени.",
+  },
+  {
+    q: "Как работают зависимости между задачами?",
+    a: "Вы можете задать связи типа «начать после», «начать вместе» или «закончить до». Когда один этап сдвигается, все зависимые задачи пересчитываются автоматически — не нужно вручную двигать каждую задачу цепочки.",
+  },
+  {
+    q: "Поддерживается ли иерархия задач?",
+    a: "Да. Любую задачу можно сделать родительской и вложить в неё подзадачи. Группы задач можно сворачивать и разворачивать прямо на диаграмме — удобно для больших проектов с несколькими этапами.",
+  },
+  {
+    q: "Как быстро можно начать работу?",
+    a: "Войдите через email (вам придёт одноразовый код), и вы сразу попадёте в редактор. Первый проект с несколькими задачами можно создать за пару минут, просто описав его в чате.",
+  },
+  {
+    q: "Сколько стоит GetGantt?",
+    a: "В данный момент GetGantt находится на стадии раннего доступа. Точные тарифы ещё не объявлены. Попробуйте сервис сейчас — мы сообщим об условиях заранее.",
+  },
+  {
+    q: "Что происходит с моими данными?",
+    a: "Ваши задачи и проекты хранятся в защищённой базе данных. Мы не передаём данные третьим лицам и не используем их для обучения моделей. Подробнее — в нашей Privacy Policy.",
+    link: { href: "/privacy", label: "Privacy Policy" },
+  },
+  {
+    q: "Можно ли поделиться планом с кем-то?",
+    a: "Да. Вы можете создать ссылку для чтения и отправить её кому угодно. Получатель увидит актуальную диаграмму без возможности редактирования и без необходимости регистрироваться.",
+  },
+  {
+    q: "getgantt.ru — это редактор или сайт с информацией?",
+    a: "Этот сайт (getgantt.ru) — информационный: здесь описание продукта, FAQ и правовые страницы. Сам редактор находится на ai.getgantt.ru — именно туда ведёт кнопка «Войти».",
+    link: { href: "https://ai.getgantt.ru/?auth=otp", label: "Открыть редактор" },
+  },
+];
+---
+
+<Layout
+  title="Частые вопросы — GetGantt"
+  description="Ответы на самые частые вопросы о GetGantt: как работает AI, редактирование, зависимости, данные и приватность."
+  ogTitle="Частые вопросы — GetGantt"
+  ogDescription="Ответы на самые частые вопросы о GetGantt: как работает AI, редактирование, зависимости, данные и приватность."
+>
+  <section class="bg-background">
+    <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-24">
+      {/* Header */}
+      <div class="mb-14 text-center">
+        <p class="mb-3 text-sm font-semibold uppercase tracking-widest text-primary">
+          FAQ
+        </p>
+        <h1 class="text-4xl font-extrabold leading-tight tracking-tight text-foreground lg:text-5xl">
+          Частые вопросы
+        </h1>
+        <p class="mx-auto mt-4 max-w-xl text-lg text-muted-foreground">
+          Не нашли ответ? Напишите нам или попробуйте редактор прямо сейчас.
+        </p>
+      </div>
+
+      {/* FAQ List */}
+      <div class="mx-auto max-w-2xl space-y-4">
+        {faqs.map((item, index) => (
+          <details
+            class="group rounded-xl border border-border bg-card p-0 open:shadow-sm transition-shadow"
+          >
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 text-base font-semibold text-foreground">
+              <span>
+                <span class="mr-3 text-primary opacity-50">{String(index + 1).padStart(2, "0")}</span>
+                {item.q}
+              </span>
+              <svg
+                class="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </summary>
+            <div class="px-6 pb-5 text-sm leading-relaxed text-muted-foreground">
+              <p>{item.a}</p>
+              {item.link && (
+                <a
+                  href={item.link.href}
+                  class="mt-3 inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  {item.link.label} →
+                </a>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+
+      {/* CTA */}
+      <div class="mt-16 text-center">
+        <p class="mb-6 text-muted-foreground">Хотите убедиться сами?</p>
+        <a
+          href="https://ai.getgantt.ru/?auth=otp"
+          class="btn-gradient-shimmer inline-flex items-center justify-center rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white shadow-lg transition-opacity hover:opacity-90"
+        >
+          Попробовать GetGantt →
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>
