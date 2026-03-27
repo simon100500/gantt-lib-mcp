@@ -155,5 +155,30 @@ export async function getDb(): Promise<Client> {
     )
   `);
 
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      plan TEXT NOT NULL DEFAULT 'free',
+      period_start TEXT,
+      period_end TEXT,
+      ai_used INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `);
+
+  await _db.execute(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      plan TEXT NOT NULL,
+      period TEXT NOT NULL CHECK(period IN ('monthly', 'yearly')),
+      amount REAL NOT NULL,
+      yookassa_payment_id TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'succeeded', 'failed', 'refunded')),
+      created_at TEXT NOT NULL
+    )
+  `);
+
   return _db;
 }
