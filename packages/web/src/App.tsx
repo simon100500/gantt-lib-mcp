@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { BillingPage } from './components/BillingPage.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
@@ -34,6 +35,14 @@ export default function App() {
   const setShowOtpModal = useUIStore((state) => state.setShowOtpModal);
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
   const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
+  const [showBilling, setShowBilling] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('billing') || params.has('plan');
+  });
+  const [initialUpgradePlan, setInitialUpgradePlan] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('plan');
+  });
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const hasShareToken = Boolean(sharedProject.shareToken);
@@ -613,19 +622,33 @@ export default function App() {
 
   return (
     <>
-      <ProjectMenu
-        error={error}
-        hasShareToken={hasShareToken}
-        currentProjectLabel={currentProjectLabel}
-        onCreateProject={handleCreateProject}
-        onSwitchProject={handleSwitchProject}
-        onSaveProjectName={handleSaveProjectName}
-        onCreateShareLink={handleCreateShareLink}
-        onLoginRequired={() => setShowOtpModal(true)}
-        ganttRef={ganttRef}
-      >
-        {workspaceShell}
-      </ProjectMenu>
+      {showBilling && auth.isAuthenticated ? (
+        <BillingPage
+          initialPlan={initialUpgradePlan}
+          onClose={() => {
+            setShowBilling(false);
+            setInitialUpgradePlan(null);
+            const url = new URL(window.location.href);
+            url.searchParams.delete('billing');
+            url.searchParams.delete('plan');
+            window.history.replaceState({}, '', url.toString());
+          }}
+        />
+      ) : (
+        <ProjectMenu
+          error={error}
+          hasShareToken={hasShareToken}
+          currentProjectLabel={currentProjectLabel}
+          onCreateProject={handleCreateProject}
+          onSwitchProject={handleSwitchProject}
+          onSaveProjectName={handleSaveProjectName}
+          onCreateShareLink={handleCreateShareLink}
+          onLoginRequired={() => setShowOtpModal(true)}
+          ganttRef={ganttRef}
+        >
+          {workspaceShell}
+        </ProjectMenu>
+      )}
 
       {showOtpModal && (
         <OtpModal
