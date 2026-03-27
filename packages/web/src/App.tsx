@@ -35,7 +35,9 @@ export default function App() {
   const setShowOtpModal = useUIStore((state) => state.setShowOtpModal);
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
   const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
-  const [showBilling, setShowBilling] = useState(() => {
+  const showBillingPage = useUIStore((state) => state.showBillingPage);
+  const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
+  const [showBillingFromUrl, setShowBillingFromUrl] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('billing') || params.has('plan');
   });
@@ -43,6 +45,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('plan');
   });
+  const showBilling = showBillingFromUrl || showBillingPage;
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const hasShareToken = Boolean(sharedProject.shareToken);
@@ -626,7 +629,8 @@ export default function App() {
         <BillingPage
           initialPlan={initialUpgradePlan}
           onClose={() => {
-            setShowBilling(false);
+            setShowBillingFromUrl(false);
+            setShowBillingPage(false);
             setInitialUpgradePlan(null);
             const url = new URL(window.location.href);
             url.searchParams.delete('billing');

@@ -21,6 +21,7 @@ interface UIState {
   workspace: WorkspaceMode;
   showOtpModal: boolean;
   showEditProjectModal: boolean;
+  showBillingPage: boolean;
   projectSidebarVisible: boolean;
   viewMode: ViewMode;
   showTaskList: boolean;
@@ -46,6 +47,7 @@ interface UIState {
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
+  setShowBillingPage: (visible: boolean) => void;
   setProjectSidebarVisible: (visible: boolean) => void;
   setViewMode: (viewMode: ViewMode) => void;
   setShowTaskList: (visible: boolean) => void;
@@ -78,6 +80,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   workspace: initialWorkspace,
   showOtpModal: false,
   showEditProjectModal: false,
+  showBillingPage: false,
   projectSidebarVisible: false,
   viewMode: 'day',
   showTaskList: true,
@@ -105,6 +108,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   },
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
+  setShowBillingPage: (showBillingPage) => set({ showBillingPage }),
   setProjectSidebarVisible: (projectSidebarVisible) => set({ projectSidebarVisible }),
   setViewMode: (viewMode) => set({ viewMode }),
   setShowTaskList: (showTaskList) => set({ showTaskList }),

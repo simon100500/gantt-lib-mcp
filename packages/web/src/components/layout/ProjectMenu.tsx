@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
+import { ChevronDown, CreditCard, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -50,6 +50,7 @@ export function ProjectMenu({
   const projectSidebarVisible = useUIStore((state) => state.projectSidebarVisible);
   const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
+  const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
@@ -290,6 +291,11 @@ export function ProjectMenu({
                   <DropdownMenuLabel className="truncate text-slate-700">
                     {auth.user?.email ?? 'Account'}
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setShowBillingPage(true)} className="text-slate-700 focus:text-slate-900">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    <span>Подписка</span>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
                     <LogOut className="mr-2 h-4 w-4" />
