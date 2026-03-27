@@ -17,6 +17,7 @@ import type { CreateTaskInput, UpdateTaskInput } from '@gantt/mcp/types';
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
+import { subscriptionMiddleware, incrementAiUsage } from './middleware/subscription-middleware.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
@@ -41,12 +42,14 @@ fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) =
   return reply.send(tasks);
 });
 
-fastify.post('/api/chat', { preHandler: [authMiddleware] }, async (req, reply) => {
+fastify.post('/api/chat', { preHandler: [authMiddleware, subscriptionMiddleware] }, async (req, reply) => {
   const body = req.body as { message?: string };
   const message = body?.message;
   if (!message) {
     return reply.status(400).send({ error: 'message required' });
   }
+  // Increment AI counter (D-07: 1 message = 1 generation)
+  await incrementAiUsage(req.user!.userId);
   await writeServerDebugLog('rest_chat_received', {
     userId: req.user!.userId,
     projectId: req.user!.projectId,
