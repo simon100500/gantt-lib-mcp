@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: MVP
-current_phase: 26
+current_phase: 28
 status: unknown
-last_updated: "2026-03-25T20:24:02.240Z"
+last_updated: "2026-03-27T14:54:09.917Z"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 3
+  total_plans: 10
+  completed_plans: 5
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-24
 **Current milestone:** v4.0 Astro Landing
-**Current phase:** 26
+**Current phase:** 28
 
 ---
 
@@ -34,8 +34,8 @@ AI может программно управлять диаграммами Г�
 
 ## Current Position
 
-Phase: 26 (content-seo) — EXECUTING
-Plan: 2 of 2
+Phase: 28 (billing) — EXECUTING
+Plan: 2 of 3
 
 ### Recent Work
 
@@ -114,6 +114,7 @@ Plan: 2 of 2
 | Phase 24 P02 | 180 | 5 tasks | 12 files |
 | Phase 24 P03 | 540 | 3 tasks | 15 files |
 | Phase 26 P01 | 170 | 4 tasks | 5 files |
+| Phase 28 P01 | 216 | 2 tasks | 5 files |
 
 ### Architecture
 
