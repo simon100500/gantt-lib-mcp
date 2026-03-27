@@ -21,7 +21,7 @@
 - [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
 - [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
 - [ ] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration
-- [ ] **Phase 28: Billing** - YooKassa integration, subscription management, plan enforcement
+- [x] **Phase 28: Billing** - YooKassa integration, subscription management, plan enforcement (completed 2026-03-27)
 
 ---
 
@@ -142,11 +142,11 @@
 7. Enterprise plan shows "contact us" instead of payment flow
 8. Subscription expiry triggers read-only mode
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 - [x] 28-01-PLAN.md — Database schema, plan config, billing backend with YooKassa integration
 - [x] 28-02-PLAN.md — Subscription enforcement middleware, billing frontend store and page
-- [ ] 28-03-PLAN.md — Pricing CTA integration, in-app billing navigation, visual verification
+- [x] 28-03-PLAN.md — Pricing CTA integration, in-app billing navigation, visual verification
 
 ---
 
@@ -158,7 +158,7 @@
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Planned    |  |
 | 27. Domain Separation | 0/3 | Not started | - |
-| 28. Billing | 2/3 | In Progress|  |
+| 28. Billing | 3/3 | Complete   | 2026-03-27 |
 
 ---
 
