@@ -2,7 +2,7 @@
 
 **Current milestone:** v4.0 Astro Landing
 **Granularity:** Coarse
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-27
 
 ## Progress Summary
 
@@ -11,7 +11,7 @@
 | v1.0 MVP | 1-14 | Shipped | 2026-03-13 |
 | v2.0 PostgreSQL | 15-16 | Shipped | 2026-03-17 |
 | v3.0 Hardening | 17-23 | Shipped | 2026-03-22 |
-| v4.0 Astro Landing | 24-27 | Active | - |
+| v4.0 Astro Landing | 24-28 | Active | - |
 
 ---
 
@@ -21,6 +21,7 @@
 - [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
 - [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
 - [ ] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration
+- [ ] **Phase 28: Billing** - YooKassa integration, subscription management, plan enforcement
 
 ---
 
@@ -123,6 +124,32 @@
 
 ---
 
+### Phase 28: Billing
+
+**Goal:** Users can purchase subscription plans via YooKassa, with plan enforcement limiting features based on active subscription
+
+**Depends on:** Phase 27
+
+**Requirements:** BILL-DB, BILL-BACKEND, BILL-YOOKASSA, BILL-ENFORCE, BILL-UI, BILL-CTA, BILL-NAV
+
+**Success Criteria** (what must be TRUE):
+1. Database has payments and subscriptions tables for tracking billing state
+2. Backend creates YooKassa embedded widget payments and handles webhooks with idempotency
+3. POST /api/chat enforces AI generation limits (403 when limit reached)
+4. User sees billing page with current plan, usage limits, and payment history
+5. User can start YooKassa embedded payment from billing page
+6. Pricing page CTAs redirect to billing page with correct plan pre-selected
+7. Enterprise plan shows "contact us" instead of payment flow
+8. Subscription expiry triggers read-only mode
+
+**Plans:** 3 plans
+
+- [ ] 28-01-PLAN.md — Database schema, plan config, billing backend with YooKassa integration
+- [ ] 28-02-PLAN.md — Subscription enforcement middleware, billing frontend store and page
+- [ ] 28-03-PLAN.md — Pricing CTA integration, in-app billing navigation, visual verification
+
+---
+
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
@@ -131,6 +158,7 @@
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Planned    |  |
 | 27. Domain Separation | 0/3 | Not started | - |
+| 28. Billing | 0/3 | Planned | - |
 
 ---
 
@@ -165,8 +193,15 @@
 | DEPLOY-03 | 27 | Pending |
 | DEPLOY-04 | 27 | Pending |
 | DEPLOY-05 | 27 | Pending |
+| BILL-DB | 28 | Pending |
+| BILL-BACKEND | 28 | Pending |
+| BILL-YOOKASSA | 28 | Pending |
+| BILL-ENFORCE | 28 | Pending |
+| BILL-UI | 28 | Pending |
+| BILL-CTA | 28 | Pending |
+| BILL-NAV | 28 | Pending |
 
-**Coverage:** 27/27 requirements mapped ✓
+**Coverage:** 34/34 requirements mapped
 
 ---
 
@@ -192,4 +227,4 @@ Phases completed:
 - Phase 23: Task Filtering UI
 
 ---
-*Last updated:* 2026-03-24
+*Last updated:* 2026-03-27
