@@ -41,16 +41,16 @@ export default function RotatingWords({
     <>
       {/* Word slot with intrinsic width reserved by the widest word */}
       <span
-        className={`relative inline-block overflow-hidden align-middle leading-none text-center ${className}`}
-        style={{ paddingInline: '0.3em' }}
+        className={`relative inline-block overflow-hidden align-middle leading-none text-left ${className}`}
+        style={{ paddingInline: '0.25em' }}
       >
         <span
-          className="invisible block text-center"
+          className="invisible block text-left"
           aria-hidden="true"
           style={{
             fontFamily: 'TT Neoris, sans-serif',
-            fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
-            fontWeight: 800,
+            fontSize: '3.5rem',
+            fontWeight: 600,
           }}
         >
           {widestWord}
@@ -59,11 +59,11 @@ export default function RotatingWords({
         {/* Current word */}
         <span
           key={currentIndex}
-          className="absolute inset-0 block w-full animate-word-in text-center text-primary"
+          className="absolute inset-0 block w-full animate-word-in text-left text-primary"
           style={{
             fontFamily: 'TT Neoris, sans-serif',
-            fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
-            fontWeight: 800,
+            fontSize: '3.5rem',
+            fontWeight: 600,
           }}
         >
           {words[currentIndex]}
@@ -73,11 +73,11 @@ export default function RotatingWords({
         {prevIndex !== null && (
           <span
             key={prevIndex}
-            className="absolute left-0 top-0 block w-full animate-word-out text-center text-primary"
+            className="absolute left-0 top-0 block w-full animate-word-out text-left text-primary"
             style={{
               fontFamily: 'TT Neoris, sans-serif',
-              fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
-              fontWeight: 800,
+              fontSize: '3.5rem',
+              fontWeight: 600,
             }}
           >
             {words[prevIndex]}
