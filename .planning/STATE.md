@@ -208,12 +208,17 @@ None currently.
 
 ---
 
+### Roadmap Evolution
+
+- Phase 28 added: billing
+
 ## Next Steps
 
 1. **Execute Phase 26:** `/gsd:plan-phase 26`
 2. **Complete Phase 26:** Add content pages and SEO
 3. **Execute Phase 27:** Configure domain separation
-4. **Complete Milestone:** `/gsd:complete-milestone`
+4. **Execute Phase 28:** `/gsd:plan-phase 28`
+5. **Complete Milestone:** `/gsd:complete-milestone`
 
 ---
 *Last updated: 2026-03-25*
