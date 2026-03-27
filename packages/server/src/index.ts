@@ -19,12 +19,14 @@ import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
+import { registerBillingRoutes } from './routes/billing-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 
 const fastify = Fastify({ logger: true });
 await fastify.register(websocket);
 await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
+await registerBillingRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // REST routes
