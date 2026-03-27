@@ -1,0 +1,365 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const plans = [
+  {
+    name: "Бесплатный",
+    subtitle: "Для личных тестов и первых сценариев после входа.",
+    monthlyPrice: "0 ₽",
+    yearlyPrice: "0 ₽",
+    monthlyPeriod: "/ всегда",
+    yearlyPeriod: "/ всегда",
+    accent: false,
+    ctaLabel: "Войти и начать",
+    ctaHref: "https://ai.getgantt.ru/?auth=otp",
+    features: [
+      "2 графика",
+      "3 AI-генерации графика",
+      "5 AI-уточнений на каждый график",
+      "Публичная ссылка на 12 часов",
+      "1 ресурс",
+      "Экспорт в PDF",
+    ],
+  },
+  {
+    name: "Старт",
+    subtitle: "Для частных специалистов и небольших команд.",
+    monthlyPrice: "1 490 ₽",
+    yearlyPrice: "12 000 ₽",
+    monthlyPeriod: "/ мес",
+    yearlyPeriod: "/ год",
+    accent: true,
+    badge: "Популярный",
+    ctaLabel: "Выбрать Старт",
+    ctaHref: "https://ai.getgantt.ru/?auth=otp",
+    features: [
+      "5 проектов",
+      "10 AI-генераций графика",
+      "20 AI-уточнений на каждый проект",
+      "Бессрочная гостевая ссылка",
+      "Экспорт в PDF и Excel",
+      "До 20 ресурсов",
+      "Пул проектов",
+      "Встраивание через iframe",
+    ],
+  },
+  {
+    name: "Команда",
+    subtitle: "Для операционной работы по нескольким объектам.",
+    monthlyPrice: "4 990 ₽",
+    yearlyPrice: "59 880 ₽",
+    monthlyPeriod: "/ мес",
+    yearlyPeriod: "/ год",
+    accent: false,
+    ctaLabel: "Выбрать Команду",
+    ctaHref: "https://ai.getgantt.ru/?auth=otp",
+    features: [
+      "20 проектов",
+      "Безлимит AI-генераций и уточнений",
+      "Бессрочная гостевая ссылка",
+      "Экспорт в PDF и Excel",
+      "Безлимит ресурсов",
+      "Пул проектов",
+      "До 5 пользователей в команде",
+      "API",
+      "Встраивание через iframe",
+    ],
+  },
+  {
+    name: "Корпоративный",
+    subtitle: "Для компаний с постоянным портфелем проектов.",
+    monthlyPrice: "12 900 ₽",
+    yearlyPrice: "154 800 ₽",
+    monthlyPeriod: "/ мес",
+    yearlyPeriod: "/ год",
+    accent: false,
+    ctaLabel: "Выбрать Business",
+    ctaHref: "https://ai.getgantt.ru/?auth=otp",
+    features: [
+      "Всё из Команды",
+      "Безлимит проектов",
+      "Безлимит AI-генераций",
+      "До 20 пользователей в команде",
+    ],
+  },
+];
+
+const mainPlans = plans.filter((plan) => plan.name !== "Корпоративный");
+
+const compareRows = [
+  {
+    label: "Цена",
+    values: ["0 ₽", "1 490 ₽/мес", "4 990 ₽/мес", "По запросу"],
+  },
+  {
+    label: "Количество проектов",
+    values: ["2 графика", "5 проектов", "20 проектов", "Безлимит"],
+  },
+  {
+    label: "AI-генерации",
+    values: ["3", "10", "Безлимит", "Безлимит"],
+  },
+  {
+    label: "AI-уточнения",
+    values: ["5 на график", "20 на проект", "Безлимит", "Безлимит"],
+  },
+  {
+    label: "Ссылка для гостей",
+    values: ["12 часов", "Без срока", "Без срока", "Без срока"],
+  },
+  {
+    label: "Экспорт",
+    values: ["PDF", "PDF, Excel", "PDF, Excel", "PDF, Excel"],
+  },
+  {
+    label: "Ресурсы",
+    values: ["1", "20", "Безлимит", "Безлимит"],
+  },
+  {
+    label: "Команда",
+    values: ["1 пользователь", "1 пользователь", "До 5", "От 6 и более"],
+  },
+  {
+    label: "API / iframe",
+    values: ["-", "iframe", "API, iframe", "API, iframe"],
+  },
+];
+---
+
+<Layout
+  title="Тарифы GetGantt — цены и возможности"
+  description="Сравните тарифы GetGantt: бесплатный доступ, Start, Pro и Business. AI-генерация графиков, экспорт, ресурсы, команда и API."
+  ogTitle="Тарифы GetGantt — цены и возможности"
+  ogDescription="Сравните тарифы GetGantt: бесплатный доступ, Start, Pro и Business."
+>
+  <section class="border-b border-border bg-background">
+    <div class="mx-auto max-w-7xl px-4 py-16 lg:px-6 lg:py-20">
+      <div class="mb-10 flex flex-col items-center gap-6 text-center">
+        <h1
+          class="text-4xl font-extrabold tracking-tight text-foreground lg:text-5xl"
+        >
+          Тарифы
+        </h1>
+        <div
+          class="inline-flex w-fit rounded-full border border-border bg-slate-100 p-1"
+          data-billing-toggle
+        >
+          <button
+            type="button"
+            class="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
+            data-billing-option="monthly"
+            data-active="true"
+          >
+            Месяц
+          </button>
+          <button
+            type="button"
+            class="rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors"
+            data-billing-option="yearly"
+            data-active="false"
+          >
+            Год
+          </button>
+        </div>
+      </div>
+
+      <div class="grid gap-6 xl:grid-cols-3">
+        {
+          mainPlans.map((plan) => (
+            <article
+              class={`flex h-full flex-col rounded-[28px] border p-7 ${
+                plan.accent
+                  ? "border-primary/30 bg-primary/[0.045] shadow-[0_20px_60px_-36px_rgba(97,88,224,0.55)]"
+                  : "border-border bg-card"
+              }`}
+            >
+              <div class="flex min-h-[9.5rem] flex-col">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 class="text-2xl font-bold text-foreground">
+                      {plan.name}
+                    </h2>
+                    <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {plan.subtitle}
+                    </p>
+                  </div>
+                  {plan.badge && (
+                    <span class="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+                      {plan.badge}
+                    </span>
+                  )}
+                </div>
+
+                <div class="mt-6 flex items-end gap-2">
+                  <span
+                    class="text-4xl font-extrabold tracking-tight text-foreground"
+                    data-price-monthly={plan.monthlyPrice}
+                    data-price-yearly={plan.yearlyPrice}
+                  >
+                    {plan.monthlyPrice}
+                  </span>
+                  <span
+                    class="pb-1 text-sm text-muted-foreground"
+                    data-period-monthly={plan.monthlyPeriod}
+                    data-period-yearly={plan.yearlyPeriod}
+                  >
+                    {plan.monthlyPeriod}
+                  </span>
+                </div>
+              </div>
+
+              <ul class="mt-8 space-y-3 text-sm leading-relaxed text-foreground">
+                {plan.features.map((feature) => (
+                  <li class="flex items-start gap-3">
+                    <span class="mt-[0.45rem] h-2 w-2 shrink-0 rounded-full bg-primary" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div class="mt-auto pt-8">
+                <a
+                  href={plan.ctaHref}
+                  class={`inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold transition-colors ${
+                    plan.accent
+                      ? "bg-primary text-white hover:bg-primary/90"
+                      : "bg-secondary text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {plan.ctaLabel}
+                </a>
+              </div>
+            </article>
+          ))
+        }
+      </div>
+
+      <div
+        class="mt-8 text-center text-sm leading-relaxed text-muted-foreground"
+      >
+        Если вам нужен безлимит проектов, у нас есть тариф «Корпоративный».
+        Напишите нам.
+      </div>
+    </div>
+  </section>
+
+  <section class="border-b border-border bg-slate-100/80">
+    <div class="mx-auto max-w-7xl px-4 py-16 lg:px-6 lg:py-20">
+      <div class="max-w-2xl">
+        <h2
+          class="text-3xl font-bold tracking-tight text-foreground lg:text-4xl"
+        >
+          Сравнение тарифов
+        </h2>
+      </div>
+
+      <div class="mt-8 rounded-[28px] border border-border bg-white shadow-sm">
+        <div class="overflow-x-auto rounded-[28px]">
+          <table class="min-w-full border-collapse text-left text-sm">
+            <thead class="bg-slate-50 text-foreground">
+              <tr>
+                <th class="bg-slate-50 px-5 py-4 font-semibold">Параметр</th>
+                <th class="bg-slate-50 px-5 py-4 font-semibold">Бесплатный</th>
+                <th class="bg-slate-50 px-5 py-4 font-semibold">Старт</th>
+                <th class="bg-slate-50 px-5 py-4 font-semibold">Команда</th>
+                <th class="bg-slate-50 px-5 py-4 font-semibold"
+                  >Корпоративный</th
+                >
+              </tr>
+            </thead>
+            <tbody>
+              {
+                compareRows.map((row, rowIndex) => (
+                  <tr
+                    class={`transition-colors hover:bg-primary/[0.06] ${
+                      rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                    }`}
+                  >
+                    <td class="px-5 py-4 font-medium text-foreground">
+                      {row.label}
+                    </td>
+                    {row.values.map((value) => (
+                      <td class="px-5 py-4 text-muted-foreground">{value}</td>
+                    ))}
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-background">
+    <div class="mx-auto max-w-5xl px-4 py-20 text-center lg:px-6">
+      <h2 class="text-3xl font-bold text-foreground lg:text-4xl">
+        Пора начинать!
+      </h2>
+      <p
+        class="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground lg:text-base"
+      >
+        Попробуйте на небольшом проекте.
+        <br />Переходите на платный тариф когда упрётесь в лимиты.
+      </p>
+      <div
+        class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
+      >
+        <a
+          href="https://ai.getgantt.ru/?auth=otp"
+          class="btn-gradient-shimmer inline-flex items-center justify-center rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white shadow-lg transition-opacity hover:opacity-90"
+        >
+          Попробовать GetGantt →
+        </a>
+        <a
+          href="/faq"
+          class="inline-flex items-center justify-center rounded-xl border border-border px-8 py-3.5 text-[15px] font-semibold text-foreground transition-colors hover:bg-secondary"
+        >
+          Посмотреть FAQ
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const toggle = document.querySelector("[data-billing-toggle]");
+    const optionButtons =
+      toggle?.querySelectorAll("[data-billing-option]") ?? [];
+    const priceNodes = document.querySelectorAll("[data-price-monthly]");
+    const periodNodes = document.querySelectorAll("[data-period-monthly]");
+
+    function setBilling(mode) {
+      optionButtons.forEach((button) => {
+        const isActive = button.getAttribute("data-billing-option") === mode;
+        button.setAttribute("data-active", String(isActive));
+        button.classList.toggle("bg-white", isActive);
+        button.classList.toggle("text-foreground", isActive);
+        button.classList.toggle("shadow-sm", isActive);
+        button.classList.toggle("text-muted-foreground", !isActive);
+      });
+
+      priceNodes.forEach((node) => {
+        node.textContent =
+          mode === "yearly"
+            ? node.getAttribute("data-price-yearly")
+            : node.getAttribute("data-price-monthly");
+      });
+
+      periodNodes.forEach((node) => {
+        node.textContent =
+          mode === "yearly"
+            ? node.getAttribute("data-period-yearly")
+            : node.getAttribute("data-period-monthly");
+      });
+    }
+
+    optionButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.getAttribute("data-billing-option");
+        if (mode) setBilling(mode);
+      });
+    });
+
+    setBilling("monthly");
+  </script>
+</Layout>
