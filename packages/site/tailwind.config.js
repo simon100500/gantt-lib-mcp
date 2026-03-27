@@ -41,6 +41,7 @@ export default {
       },
       fontFamily: {
         sans: ['Noto Sans', 'sans-serif'],
+        neoris: ['TT Neoris', 'sans-serif'],
       },
       keyframes: {
         'accordion-down': {

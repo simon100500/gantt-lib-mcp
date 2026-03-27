@@ -48,7 +48,7 @@ export default function RotatingWords({
           className="invisible block text-center"
           aria-hidden="true"
           style={{
-            fontFamily: 'Noto Sans, sans-serif',
+            fontFamily: 'TT Neoris, sans-serif',
             fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
             fontWeight: 800,
           }}
@@ -61,7 +61,7 @@ export default function RotatingWords({
           key={currentIndex}
           className="absolute inset-0 block w-full animate-word-in text-center text-primary"
           style={{
-            fontFamily: 'Noto Sans, sans-serif',
+            fontFamily: 'TT Neoris, sans-serif',
             fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
             fontWeight: 800,
           }}
@@ -75,7 +75,7 @@ export default function RotatingWords({
             key={prevIndex}
             className="absolute left-0 top-0 block w-full animate-word-out text-center text-primary"
             style={{
-              fontFamily: 'Noto Sans, sans-serif',
+              fontFamily: 'TT Neoris, sans-serif',
               fontSize: 'clamp(2.2rem, 4.6vw, 4rem)',
               fontWeight: 800,
             }}

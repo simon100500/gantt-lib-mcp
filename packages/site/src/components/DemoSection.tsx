@@ -176,7 +176,7 @@ export default function DemoSection() {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
           <div className="max-w-[620px] px-8 lg:px-0">
             <h1
-              className="flex flex-col gap-2 font-extrabold leading-[0.96] tracking-[-0.05em] text-foreground animate-fade-up"
+              className="flex flex-col gap-2 font-extrabold leading-[0.96] text-foreground animate-fade-up"
               style={{ animationDelay: '120ms', fontSize: 'clamp(2.2rem, 4.6vw, 4rem)' }}
             >
               <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -249,7 +249,7 @@ export default function DemoSection() {
 
           <div className="relative mx-auto max-w-3xl">
             <h2
-              className="font-extrabold leading-[1.5] tracking-[-0.05em] text-slate-950"
+              className="font-extrabold leading-[1.5] text-slate-950"
               style={{ fontSize: 'clamp(1.75rem, 4.2vw, 3.2rem)' }}
             >
               Быстро создать.

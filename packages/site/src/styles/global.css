@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TT Neoris Variable */
+@font-face {
+  font-family: 'TT Neoris';
+  src: url('/fonts/TT_Neoris_Variable.woff2') format('woff2-variations'),
+    url('/fonts/TT_Neoris_Variable.woff2') format('woff2');
+  font-weight: 100 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     /* Neutral surface */
@@ -65,6 +75,15 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'TT Neoris', sans-serif;
+  }
+
   .gantt-container {
     --gantt-container-border-radius: 0px !important;
     border-radius: 0 !important;
@@ -90,12 +109,14 @@
 }
 
 @layer utilities {
+
   /* Fade-up animation (from HTML reference) */
   @keyframes fade-up {
     from {
       opacity: 0;
       transform: translateY(14px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -112,6 +133,7 @@
       transform: translateY(110%);
       opacity: 0;
     }
+
     to {
       transform: translateY(0);
       opacity: 1;
@@ -128,6 +150,7 @@
       transform: translateY(0);
       opacity: 1;
     }
+
     to {
       transform: translateY(-110%);
       opacity: 0;
@@ -140,8 +163,15 @@
 
   /* Blink animation for cursor */
   @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0;
+    }
   }
 
   .animate-blink {
@@ -150,9 +180,12 @@
 
   /* Bob animation for arrow */
   @keyframes bob {
-    0%, 100% {
+
+    0%,
+    100% {
       transform: translateY(0);
     }
+
     50% {
       transform: translateY(5px);
     }
@@ -169,6 +202,7 @@
       transform-origin: left;
       opacity: 0;
     }
+
     to {
       transform: scaleX(1);
       transform-origin: left;
@@ -182,9 +216,17 @@
 
   /* Gradient shimmer button */
   @keyframes shimmer-gradient {
-    0%   { background-position: 0% 50%; }
-    50%  { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+    0% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
   }
 
   .btn-gradient-shimmer {
@@ -194,6 +236,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+
     .animate-fade-up,
     .animate-word-in,
     .animate-word-out,
