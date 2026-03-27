@@ -192,7 +192,7 @@ export default function DemoSection() {
               className="mt-8 max-w-[560px] text-lg leading-8 text-secondary-foreground animate-fade-up"
               style={{ animationDelay: '190ms' }}
             >
-              Соберите рабочий график из описания и начните управлять проектом за 30 секунд
+              Опишите проект и получите живой график Ганта, которым можно управлять
             </p>
 
             <div
