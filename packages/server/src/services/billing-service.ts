@@ -1,21 +1,11 @@
 /**
  * Billing service — business logic for payments, subscriptions, and plan management
  *
- * Uses getDb() from @gantt/mcp/db for all database operations.
+ * Uses Prisma (PostgreSQL) for all database operations.
  */
 
-import { getDb } from '../db.js';
+import { getPrisma } from '@gantt/mcp/prisma';
 import { getPlanLimits, isPlanActive, type PlanKey } from './plan-config.js';
-
-export interface SubscriptionRow {
-  id: string;
-  user_id: string;
-  plan: string;
-  period_start: string | null;
-  period_end: string | null;
-  ai_used: number;
-  created_at: string;
-}
 
 export interface PaymentRow {
   id: string;
@@ -33,35 +23,18 @@ export class BillingService {
    * Get or create a subscription for the user.
    * If no subscription exists, creates one with plan='free'.
    */
-  async getOrCreateSubscription(userId: string): Promise<SubscriptionRow> {
-    const db = await getDb();
-    const result = await db.execute({
-      sql: 'SELECT * FROM subscriptions WHERE user_id = ?',
-      args: [userId],
+  async getOrCreateSubscription(userId: string) {
+    const prisma = getPrisma();
+
+    const sub = await prisma.subscription.findUnique({
+      where: { userId },
     });
 
-    if (result.rows.length > 0) {
-      return result.rows[0] as unknown as SubscriptionRow;
-    }
+    if (sub) return sub;
 
-    // Create free subscription
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await db.execute({
-      sql: `INSERT INTO subscriptions (id, user_id, plan, period_start, period_end, ai_used, created_at)
-            VALUES (?, ?, 'free', NULL, NULL, 0, ?)`,
-      args: [id, userId, now],
+    return prisma.subscription.create({
+      data: { userId, plan: 'free', aiUsed: 0 },
     });
-
-    return {
-      id,
-      user_id: userId,
-      plan: 'free',
-      period_start: null,
-      period_end: null,
-      ai_used: 0,
-      created_at: now,
-    };
   }
 
   /**
@@ -76,12 +49,12 @@ export class BillingService {
   }> {
     const sub = await this.getOrCreateSubscription(userId);
     const limits = getPlanLimits(sub.plan as PlanKey);
-    const active = isPlanActive(sub.period_end);
+    const active = isPlanActive(sub.periodEnd?.toISOString() ?? null);
 
     return {
       plan: sub.plan as PlanKey,
-      periodEnd: sub.period_end,
-      aiUsed: sub.ai_used,
+      periodEnd: sub.periodEnd?.toISOString() ?? null,
+      aiUsed: sub.aiUsed,
       aiLimit: limits.aiGenerations,
       isActive: active,
     };
@@ -93,16 +66,19 @@ export class BillingService {
    * AI counter is reset on plan purchase (D-08).
    */
   async applyPlan(userId: string, plan: PlanKey, period: 'monthly' | 'yearly'): Promise<void> {
-    const db = await getDb();
+    const prisma = getPrisma();
     const now = new Date();
     const periodDays = period === 'monthly' ? 31 : 365;
-    const periodEnd = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString();
+    const periodEnd = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
 
-    await db.execute({
-      sql: `UPDATE subscriptions
-            SET plan = ?, period_start = ?, period_end = ?, ai_used = 0
-            WHERE user_id = ?`,
-      args: [plan, now.toISOString(), periodEnd, userId],
+    await prisma.subscription.update({
+      where: { userId },
+      data: {
+        plan,
+        periodStart: now,
+        periodEnd,
+        aiUsed: 0,
+      },
     });
   }
 
@@ -110,25 +86,15 @@ export class BillingService {
    * Increment AI usage counter. Returns current used/limit.
    */
   async incrementAiUsage(userId: string): Promise<{ used: number; limit: number }> {
-    const db = await getDb();
-    await db.execute({
-      sql: 'UPDATE subscriptions SET ai_used = ai_used + 1 WHERE user_id = ?',
-      args: [userId],
+    const prisma = getPrisma();
+
+    const sub = await prisma.subscription.update({
+      where: { userId },
+      data: { aiUsed: { increment: 1 } },
     });
 
-    const result = await db.execute({
-      sql: 'SELECT plan, ai_used FROM subscriptions WHERE user_id = ?',
-      args: [userId],
-    });
-
-    const row = result.rows[0];
-    if (!row) return { used: 0, limit: 0 };
-
-    const plan = String(row['plan'] ?? 'free') as PlanKey;
-    const used = Number(row['ai_used'] ?? 0);
-    const limit = getPlanLimits(plan).aiGenerations;
-
-    return { used, limit };
+    const plan = sub.plan as PlanKey;
+    return { used: sub.aiUsed, limit: getPlanLimits(plan).aiGenerations };
   }
 
   /**
@@ -141,25 +107,27 @@ export class BillingService {
     amount: number,
     yookassaPaymentId: string,
   ): Promise<PaymentRow> {
-    const db = await getDb();
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
+    const prisma = getPrisma();
 
-    await db.execute({
-      sql: `INSERT INTO payments (id, user_id, plan, period, amount, yookassa_payment_id, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-      args: [id, userId, plan, period, amount, yookassaPaymentId, now],
+    const payment = await prisma.payment.create({
+      data: {
+        userId,
+        plan,
+        period,
+        amount,
+        yookassaPaymentId,
+      },
     });
 
     return {
-      id,
-      user_id: userId,
-      plan,
-      period,
-      amount,
-      yookassa_payment_id: yookassaPaymentId,
-      status: 'pending',
-      created_at: now,
+      id: payment.id,
+      user_id: payment.userId,
+      plan: payment.plan,
+      period: payment.period,
+      amount: payment.amount,
+      yookassa_payment_id: payment.yookassaPaymentId,
+      status: payment.status,
+      created_at: payment.createdAt.toISOString(),
     };
   }
 
@@ -167,43 +135,63 @@ export class BillingService {
    * Mark a payment as succeeded by YooKassa payment ID.
    */
   async markPaymentSucceeded(yookassaPaymentId: string): Promise<PaymentRow | null> {
-    const db = await getDb();
-    await db.execute({
-      sql: "UPDATE payments SET status = 'succeeded' WHERE yookassa_payment_id = ?",
-      args: [yookassaPaymentId],
-    });
+    const prisma = getPrisma();
 
-    const result = await db.execute({
-      sql: 'SELECT * FROM payments WHERE yookassa_payment_id = ?',
-      args: [yookassaPaymentId],
-    });
+    const payment = await prisma.payment.update({
+      where: { yookassaPaymentId },
+      data: { status: 'succeeded' },
+    }).catch(() => null);
 
-    if (result.rows.length === 0) return null;
-    return result.rows[0] as unknown as PaymentRow;
+    if (!payment) return null;
+
+    return {
+      id: payment.id,
+      user_id: payment.userId,
+      plan: payment.plan,
+      period: payment.period,
+      amount: payment.amount,
+      yookassa_payment_id: payment.yookassaPaymentId,
+      status: payment.status,
+      created_at: payment.createdAt.toISOString(),
+    };
   }
 
   /**
    * Get payment history for a user, most recent first.
    */
   async getPaymentHistory(userId: string): Promise<PaymentRow[]> {
-    const db = await getDb();
-    const result = await db.execute({
-      sql: 'SELECT * FROM payments WHERE user_id = ? ORDER BY created_at DESC',
-      args: [userId],
+    const prisma = getPrisma();
+
+    const payments = await prisma.payment.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
     });
 
-    return result.rows as unknown as PaymentRow[];
+    return payments.map((p) => ({
+      id: p.id,
+      user_id: p.userId,
+      plan: p.plan,
+      period: p.period,
+      amount: p.amount,
+      yookassa_payment_id: p.yookassaPaymentId,
+      status: p.status,
+      created_at: p.createdAt.toISOString(),
+    }));
   }
 
   /**
    * Check if a payment has already been processed (for webhook idempotency).
    */
   async isPaymentProcessed(yookassaPaymentId: string): Promise<boolean> {
-    const db = await getDb();
-    const result = await db.execute({
-      sql: "SELECT 1 FROM payments WHERE yookassa_payment_id = ? AND status = 'succeeded'",
-      args: [yookassaPaymentId],
+    const prisma = getPrisma();
+
+    const count = await prisma.payment.count({
+      where: {
+        yookassaPaymentId,
+        status: 'succeeded',
+      },
     });
-    return result.rows.length > 0;
+
+    return count > 0;
   }
 }

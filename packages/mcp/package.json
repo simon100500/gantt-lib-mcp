@@ -8,7 +8,7 @@
     "./db": "./dist/db.js",
     "./types": "./dist/types.js",
     "./auth-store": "./dist/auth-store.js",
-    "./prisma": "./dist/prisma-client.js",
+    "./prisma": "./dist/prisma.js",
     "./services": "./dist/services/index.js"
   },
   "scripts": {

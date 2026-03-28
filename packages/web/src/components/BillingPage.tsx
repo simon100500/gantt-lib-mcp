@@ -171,10 +171,10 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen overflow-y-auto bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-4">
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-800 transition-colors"
@@ -187,7 +187,7 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         {/* Current Plan */}
         <div className="bg-white rounded-xl border p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Текущий план</h2>
@@ -271,7 +271,7 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
           </div>
 
           {/* Plan Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {(['start', 'team', 'enterprise'] as const).map((plan) => {
               const prices = PLAN_PRICES[plan];
               const features = PLAN_FEATURES[plan];
