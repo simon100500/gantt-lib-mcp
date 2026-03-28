@@ -62,9 +62,7 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
       <PageHeader>
         <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
       </PageHeader>
-      <div className="flex-1 overflow-hidden">
-        <AccountBillingPage />
-      </div>
+      <AccountBillingPage />
     </div>
   );
 }
