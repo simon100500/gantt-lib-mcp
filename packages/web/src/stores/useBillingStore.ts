@@ -40,8 +40,10 @@ export interface BillingState {
   error: string | null;
   // Payment flow state
   paymentLoading: boolean;
+  paymentStatusChecking: boolean;
   paymentSuccess: string | null;
   paymentError: string | null;
+  activePaymentId: string | null;
 }
 
 export interface BillingActions {
@@ -49,10 +51,16 @@ export interface BillingActions {
   fetchPayments(): Promise<void>;
   createPayment(plan: string, period: 'monthly' | 'yearly'): Promise<{ paymentId: string; confirmationToken: string } | null>;
   pollPaymentStatus(paymentId: string): Promise<boolean>;
+  resumePaymentStatusCheck(): Promise<void>;
   resetPaymentState(): void;
 }
 
 export type BillingStore = BillingState & BillingActions;
+
+const ACTIVE_PAYMENT_ID_KEY = 'gantt_active_payment_id';
+
+let pollingPromise: Promise<boolean> | null = null;
+let pollingPaymentId: string | null = null;
 
 async function fetchWithAuthRetry(
   input: RequestInfo | URL,
@@ -91,8 +99,10 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
   loading: false,
   error: null,
   paymentLoading: false,
+  paymentStatusChecking: false,
   paymentSuccess: null,
   paymentError: null,
+  activePaymentId: typeof window !== 'undefined' ? localStorage.getItem(ACTIVE_PAYMENT_ID_KEY) : null,
 
   async fetchSubscription() {
     set({ loading: true, error: null });
@@ -123,7 +133,7 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
   },
 
   async createPayment(plan, period) {
-    set({ paymentLoading: true, paymentError: null, paymentSuccess: null });
+    set({ paymentLoading: true, paymentStatusChecking: false, paymentError: null, paymentSuccess: null });
     try {
       const { response } = await fetchWithAuthRetry('/api/billing/create', {
         method: 'POST',
@@ -135,46 +145,92 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
         throw new Error(data.error || `HTTP ${response.status}`);
       }
       const data = await response.json() as { paymentId: string; confirmationToken: string };
-      set({ paymentLoading: false });
+      localStorage.setItem(ACTIVE_PAYMENT_ID_KEY, data.paymentId);
+      set({ paymentLoading: false, activePaymentId: data.paymentId, paymentStatusChecking: true });
       return data;
     } catch (err) {
       console.error('[useBillingStore] createPayment failed:', err);
-      set({ paymentError: String(err), paymentLoading: false });
+      set({ paymentError: String(err), paymentLoading: false, paymentStatusChecking: false, activePaymentId: null });
       return null;
     }
   },
 
   async pollPaymentStatus(paymentId) {
-    const maxAttempts = 60; // 120 seconds at 2-second intervals
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        const { response } = await fetchWithAuthRetry(`/api/billing/status?paymentId=${paymentId}`);
-        if (!response.ok) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          continue;
-        }
-        const data = await response.json() as { status: string };
-        if (data.status === 'succeeded') {
-          // Refresh subscription and payments after successful payment
-          await get().fetchSubscription();
-          await get().fetchPayments();
-          set({ paymentSuccess: 'payment_succeeded' });
-          return true;
-        }
-        if (data.status === 'canceled') {
-          set({ paymentError: 'Платеж отменён' });
-          return false;
-        }
-      } catch (err) {
-        console.error('[useBillingStore] pollPaymentStatus error:', err);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (pollingPromise && pollingPaymentId === paymentId) {
+      return pollingPromise;
     }
-    set({ paymentError: 'Таймаут ожидания платежа. Обновите страницу.' });
-    return false;
+
+    pollingPaymentId = paymentId;
+    pollingPromise = (async () => {
+      set({ paymentStatusChecking: true, activePaymentId: paymentId });
+      const maxAttempts = 180; // 6 minutes at 2-second intervals
+
+      for (let i = 0; i < maxAttempts; i++) {
+        try {
+          const { response } = await fetchWithAuthRetry(`/api/billing/status?paymentId=${paymentId}`);
+          if (!response.ok) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            continue;
+          }
+          const data = await response.json() as { status: string };
+          if (data.status === 'succeeded') {
+            localStorage.removeItem(ACTIVE_PAYMENT_ID_KEY);
+            await get().fetchSubscription();
+            await get().fetchPayments();
+            set({
+              paymentSuccess: 'payment_succeeded',
+              paymentError: null,
+              paymentStatusChecking: false,
+              activePaymentId: null,
+            });
+            return true;
+          }
+          if (data.status === 'canceled') {
+            localStorage.removeItem(ACTIVE_PAYMENT_ID_KEY);
+            set({
+              paymentError: 'Платеж отменён',
+              paymentStatusChecking: false,
+              activePaymentId: null,
+            });
+            return false;
+          }
+        } catch (err) {
+          console.error('[useBillingStore] pollPaymentStatus error:', err);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      set({
+        paymentError: 'Проверяем статус платежа дольше обычного. Оставьте страницу открытой, проверка продолжится автоматически.',
+        paymentStatusChecking: false,
+      });
+      return false;
+    })();
+
+    try {
+      return await pollingPromise;
+    } finally {
+      pollingPromise = null;
+      pollingPaymentId = null;
+    }
+  },
+
+  async resumePaymentStatusCheck() {
+    const activePaymentId = get().activePaymentId ?? localStorage.getItem(ACTIVE_PAYMENT_ID_KEY);
+    if (!activePaymentId) {
+      return;
+    }
+    await get().pollPaymentStatus(activePaymentId);
   },
 
   resetPaymentState() {
-    set({ paymentLoading: false, paymentSuccess: null, paymentError: null });
+    localStorage.removeItem(ACTIVE_PAYMENT_ID_KEY);
+    set({
+      paymentLoading: false,
+      paymentStatusChecking: false,
+      paymentSuccess: null,
+      paymentError: null,
+      activePaymentId: null,
+    });
   },
 }));

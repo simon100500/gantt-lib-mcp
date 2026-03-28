@@ -18,6 +18,19 @@ export interface PaymentRow {
   created_at: string;
 }
 
+export function computeNextPeriodEnd(
+  currentPeriodEnd: Date | null | undefined,
+  now: Date,
+  period: 'monthly' | 'yearly',
+): Date {
+  const periodDays = period === 'monthly' ? 31 : 365;
+  const baseDate = currentPeriodEnd && currentPeriodEnd.getTime() > now.getTime()
+    ? currentPeriodEnd
+    : now;
+
+  return new Date(baseDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
+}
+
 export class BillingService {
   /**
    * Get or create a subscription for the user.
@@ -67,9 +80,9 @@ export class BillingService {
    */
   async applyPlan(userId: string, plan: PlanKey, period: 'monthly' | 'yearly'): Promise<void> {
     const prisma = getPrisma();
+    const sub = await this.getOrCreateSubscription(userId);
     const now = new Date();
-    const periodDays = period === 'monthly' ? 31 : 365;
-    const periodEnd = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
+    const periodEnd = computeNextPeriodEnd(sub.periodEnd, now, period);
 
     await prisma.subscription.update({
       where: { userId },
@@ -141,6 +154,27 @@ export class BillingService {
       where: { yookassaPaymentId },
       data: { status: 'succeeded' },
     }).catch(() => null);
+
+    if (!payment) return null;
+
+    return {
+      id: payment.id,
+      user_id: payment.userId,
+      plan: payment.plan,
+      period: payment.period,
+      amount: payment.amount,
+      yookassa_payment_id: payment.yookassaPaymentId,
+      status: payment.status,
+      created_at: payment.createdAt.toISOString(),
+    };
+  }
+
+  async getPaymentByYookassaPaymentId(yookassaPaymentId: string): Promise<PaymentRow | null> {
+    const prisma = getPrisma();
+
+    const payment = await prisma.payment.findUnique({
+      where: { yookassaPaymentId },
+    });
 
     if (!payment) return null;
 

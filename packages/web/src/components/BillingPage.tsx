@@ -85,12 +85,15 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
     payments,
     loading,
     paymentLoading,
+    paymentStatusChecking,
     paymentSuccess,
     paymentError,
+    activePaymentId,
     fetchSubscription,
     fetchPayments,
     createPayment,
     pollPaymentStatus,
+    resumePaymentStatusCheck,
     resetPaymentState,
   } = useBillingStore();
 
@@ -102,7 +105,8 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
   useEffect(() => {
     void fetchSubscription();
     void fetchPayments();
-  }, [fetchSubscription, fetchPayments]);
+    void resumePaymentStatusCheck();
+  }, [fetchSubscription, fetchPayments, resumePaymentStatusCheck]);
 
   // If initialPlan is set, pre-select the upgrade flow
   useEffect(() => {
@@ -219,6 +223,14 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
                 >
                   Скрыть ошибку
                 </button>
+                {activePaymentId && !paymentStatusChecking && (
+                  <button
+                    onClick={() => void resumePaymentStatusCheck()}
+                    className="ml-4 mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                  >
+                    Проверить снова
+                  </button>
+                )}
               </div>
             )}
           </div>

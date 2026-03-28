@@ -178,6 +178,21 @@ export async function registerBillingRoutes(fastify: FastifyInstance): Promise<v
         metadata?: { plan?: string };
       };
 
+      if (yooData.paid && yooData.status === 'succeeded') {
+        const alreadyProcessed = await billingService.isPaymentProcessed(paymentId);
+        if (!alreadyProcessed) {
+          const payment = await billingService.getPaymentByYookassaPaymentId(paymentId);
+          if (payment) {
+            await billingService.applyPlan(
+              payment.user_id,
+              payment.plan as PlanKey,
+              payment.period as 'monthly' | 'yearly',
+            );
+            await billingService.markPaymentSucceeded(paymentId);
+          }
+        }
+      }
+
       return reply.send({
         status: yooData.status,
         paid: yooData.paid,
