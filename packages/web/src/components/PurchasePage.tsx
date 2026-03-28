@@ -167,10 +167,11 @@ export function PurchasePage({
       <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
         <PublicPurchaseHeader
           isAuthenticated={isAuthenticated}
+          userEmail={userEmail}
           onLoginRequired={onLoginRequired}
         />
         <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -230,11 +231,12 @@ export function PurchasePage({
     <div className="flex h-dvh flex-col overflow-hidden bg-white text-slate-900">
       <PublicPurchaseHeader
         isAuthenticated={isAuthenticated}
+        userEmail={userEmail}
         onLoginRequired={onLoginRequired}
       />
 
-      <main className="flex-1 overflow-y-auto border-t border-slate-200 bg-white px-4 pb-12 pt-8 sm:px-6 sm:pt-10">
-        <section className="mx-auto max-w-6xl">
+      <main className="flex-1 overflow-y-auto bg-white px-4 pb-12 pt-8 sm:px-6 sm:pt-10">
+        <section className="mx-auto max-w-5xl">
           <a
             href="/account"
             className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 rounded"
@@ -396,13 +398,14 @@ export function PurchasePage({
 
 interface PublicPurchaseHeaderProps {
   isAuthenticated: boolean;
+  userEmail?: string | null;
   onLoginRequired: () => void;
 }
 
-function PublicPurchaseHeader({ isAuthenticated, onLoginRequired }: PublicPurchaseHeaderProps) {
+function PublicPurchaseHeader({ isAuthenticated, userEmail, onLoginRequired }: PublicPurchaseHeaderProps) {
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4 sm:px-6">
         <a href="/" className="flex items-center gap-3 text-slate-900">
           <img
             src="/favicon.svg"
@@ -419,11 +422,13 @@ function PublicPurchaseHeader({ isAuthenticated, onLoginRequired }: PublicPurcha
         <span className="text-sm text-slate-400" aria-hidden="true">/</span>
         <span className="text-sm font-medium text-slate-900">Тарифы</span>
 
-        {isAuthenticated ? null : (
-          <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          {isAuthenticated ? (
+            <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
+          ) : (
             <LoginButton onClick={onLoginRequired} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );
