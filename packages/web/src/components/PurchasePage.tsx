@@ -180,7 +180,7 @@ export function PurchasePage({
                   resetPaymentState();
                   setCheckoutPlan(null);
                 }}
-                className="text-slate-500 transition-colors hover:text-slate-800"
+                className="text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
                 aria-label="Вернуться к тарифам"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -240,7 +240,7 @@ export function PurchasePage({
         <section className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Тарифы</h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl" style={{ textWrap: 'balance' }}>Тарифы</h1>
               {paymentSuccess && (
                 <p className="mt-2 text-sm text-green-700">Оплата прошла успешно. Переходим в аккаунт...</p>
               )}
@@ -250,7 +250,7 @@ export function PurchasePage({
               <button
                 type="button"
                 onClick={() => setBillingPeriod('monthly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors ${
+                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${
                   billingPeriod === 'monthly'
                     ? 'bg-slate-900 font-medium text-white'
                     : 'text-slate-500 hover:text-slate-700'
@@ -261,7 +261,7 @@ export function PurchasePage({
               <button
                 type="button"
                 onClick={() => setBillingPeriod('yearly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors ${
+                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${
                   billingPeriod === 'yearly'
                     ? 'bg-slate-900 font-medium text-white'
                     : 'text-slate-500 hover:text-slate-700'
@@ -323,7 +323,7 @@ export function PurchasePage({
                   <ul className="mt-6 flex-1 space-y-3 text-sm text-slate-600">
                     {features.map((feature) => (
                       <li key={feature} className="flex items-start gap-3">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                         <span>{feature}</span>
                       </li>
                     ))}
@@ -338,7 +338,7 @@ export function PurchasePage({
                       }
                       handleChoosePlan(plan);
                     }}
-                    className={`mt-8 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`mt-8 rounded-xl px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${
                       plan === 'free'
                         ? 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                         : isAccent
@@ -371,7 +371,7 @@ export function PurchasePage({
               <button
                 type="button"
                 onClick={() => { window.location.href = 'mailto:support@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф'; }}
-                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
               >
                 Напишите нам
               </button>

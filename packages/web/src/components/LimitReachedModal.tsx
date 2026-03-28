@@ -1,3 +1,6 @@
+import { useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
+
 interface LimitReachedModalProps {
   scenario: 'free-ai' | 'paid-ai' | 'project-limit';
   onClose: () => void;
@@ -7,61 +10,84 @@ const SCENARIOS = {
   'free-ai': {
     title: 'Вы сделали много изменений сегодня',
     body: 'Снимите ограничения и продолжайте работу.',
-    primaryButton: 'Обновить тариф',
+    primaryButton: 'Перейти на тарифы',
     secondaryButton: 'Не сейчас',
+    href: '/purchase',
   },
   'paid-ai': {
     title: 'Вы сделали много изменений сегодня',
     body: 'Лимит обновится завтра в 00:00.',
     primaryButton: 'Расширить тариф',
     secondaryButton: 'Понятно',
+    href: '/purchase',
   },
   'project-limit': {
     title: 'Чтобы создать новый проект, освободите место или расширьте тариф.',
     body: 'Текущий лимит проектов достигнут.',
     primaryButton: 'Расширить тариф',
     secondaryButton: 'Закрыть',
+    href: '/purchase',
   },
 } as const;
 
 export function LimitReachedModal({ scenario, onClose }: LimitReachedModalProps) {
   const content = SCENARIOS[scenario];
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      style={{ overscrollBehavior: 'contain' }}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
-        className="relative w-[420px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border-0 p-6"
+        ref={dialogRef}
+        className="relative w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border-0 bg-white p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={content.title}
+        tabIndex={-1}
       >
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+          className="absolute top-4 right-4 text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           aria-label="Закрыть"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <X className="h-5 w-5" aria-hidden="true" />
         </button>
 
-        <h3 className="text-xl font-semibold text-slate-900 pr-8 mb-2">
+        <h3 className="mb-2 pr-8 text-xl font-semibold text-slate-900" style={{ textWrap: 'balance' }}>
           {content.title}
         </h3>
 
-        <p className="text-slate-600 text-sm mb-6">
+        <p className="mb-6 text-sm text-slate-600">
           {content.body}
         </p>
 
         <div className="flex gap-3">
           <button
-            onClick={() => { window.location.href = '/purchase'; }}
-            className="flex-1 h-11 bg-primary text-white rounded-xl font-medium text-sm hover:bg-primary/90 transition-colors"
+            type="button"
+            onClick={() => { window.location.href = content.href; }}
+            className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
           >
             {content.primaryButton}
           </button>
           <button
+            type="button"
             onClick={onClose}
-            className="flex-1 h-11 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 transition-colors"
+            className="flex-1 h-11 rounded-xl bg-slate-100 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
           >
             {content.secondaryButton}
           </button>

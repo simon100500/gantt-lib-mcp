@@ -158,6 +158,7 @@ function toAuthState(storedState: StoredAuthState | null): AuthState {
     project: storedState.project,
     accessToken: storedState.accessToken,
     projects: storedState.projects.length > 0 ? storedState.projects : [storedState.project],
+    projectLimitReached: false,
   };
 }
 
