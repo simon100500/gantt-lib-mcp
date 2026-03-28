@@ -182,7 +182,7 @@ export function AccountBillingPage() {
           {/* Right: upgrade card */}
           {upgrade && (
             <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900">Расширение до: {upgrade.title}</h2>
+              <h2 className="text-base font-semibold text-slate-900">Расширение до {upgrade.title}</h2>
               <p className="mt-1 text-sm text-slate-500">Будет доступно:</p>
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
                 {upgrade.gains.map((gain) => (
