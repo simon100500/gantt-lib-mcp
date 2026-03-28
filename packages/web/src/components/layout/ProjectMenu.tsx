@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, CreditCard, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
@@ -14,8 +14,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx';
+import { PLAN_LABELS } from '../../lib/billing';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
+import { useBillingStore } from '../../stores/useBillingStore.ts';
 import { useTaskStore } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 
@@ -51,9 +53,17 @@ export function ProjectMenu({
   const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
+  const subscription = useBillingStore((state) => state.subscription);
+  const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
+
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      void fetchSubscription();
+    }
+  }, [auth.isAuthenticated, fetchSubscription]);
 
   const currentProject = useMemo(() => {
     if (workspace.kind === 'draft') {
@@ -112,12 +122,12 @@ export function ProjectMenu({
       {!hasShareToken && (
         <aside
           className={cn(
-            'flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
+            'flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
             'fixed inset-y-0 left-0 z-50 sm:relative sm:inset-auto',
             projectSidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0',
           )}
         >
-          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
+          <div className="flex-1 min-h-0 px-3 pt-3">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
                 currentProject={currentProject}
@@ -145,6 +155,26 @@ export function ProjectMenu({
               />
             )}
           </div>
+
+          {auth.isAuthenticated && subscription && (
+            <div className="shrink-0 border-t border-slate-200 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-primary">
+                  {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {subscription.limits.projects === -1 ? '∞' : `${auth.projects.length}/${subscription.limits.projects}`} проектов
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBillingPage(true)}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+              >
+                Расширить
+              </button>
+            </div>
+          )}
         </aside>
       )}
 
