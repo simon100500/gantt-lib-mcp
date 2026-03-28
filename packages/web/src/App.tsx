@@ -625,34 +625,35 @@ export default function App() {
 
   return (
     <>
-      {showBilling && auth.isAuthenticated ? (
-        <BillingPage
-          initialPlan={initialUpgradePlan}
-          onClose={() => {
-            setShowBillingFromUrl(false);
-            setShowBillingPage(false);
-            setInitialUpgradePlan(null);
-            const url = new URL(window.location.href);
-            url.searchParams.delete('billing');
-            url.searchParams.delete('plan');
-            window.history.replaceState({}, '', url.toString());
-          }}
-        />
-      ) : (
-        <ProjectMenu
-          error={error}
-          hasShareToken={hasShareToken}
-          currentProjectLabel={currentProjectLabel}
-          onCreateProject={handleCreateProject}
-          onSwitchProject={handleSwitchProject}
-          onSaveProjectName={handleSaveProjectName}
-          onCreateShareLink={handleCreateShareLink}
-          onLoginRequired={() => setShowOtpModal(true)}
-          ganttRef={ganttRef}
-        >
-          {workspaceShell}
-        </ProjectMenu>
-      )}
+      <ProjectMenu
+        error={error}
+        hasShareToken={hasShareToken}
+        currentProjectLabel={currentProjectLabel}
+        onCreateProject={handleCreateProject}
+        onSwitchProject={handleSwitchProject}
+        onSaveProjectName={handleSaveProjectName}
+        onCreateShareLink={handleCreateShareLink}
+        onLoginRequired={() => setShowOtpModal(true)}
+        ganttRef={ganttRef}
+        billingMode={showBilling && auth.isAuthenticated}
+      >
+        {showBilling && auth.isAuthenticated ? (
+          <BillingPage
+            initialPlan={initialUpgradePlan}
+            onClose={() => {
+              setShowBillingFromUrl(false);
+              setShowBillingPage(false);
+              setInitialUpgradePlan(null);
+              const url = new URL(window.location.href);
+              url.searchParams.delete('billing');
+              url.searchParams.delete('plan');
+              window.history.replaceState({}, '', url.toString());
+            }}
+          />
+        ) : (
+          workspaceShell
+        )}
+      </ProjectMenu>
 
       {showOtpModal && (
         <OtpModal

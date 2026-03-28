@@ -30,6 +30,7 @@ interface ProjectMenuProps {
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
   ganttRef: React.RefObject<GanttChartRef>;
+  billingMode?: boolean;
 }
 
 export function ProjectMenu({
@@ -43,6 +44,7 @@ export function ProjectMenu({
   onCreateShareLink,
   onLoginRequired,
   ganttRef,
+  billingMode = false,
 }: ProjectMenuProps) {
   const auth = useAuthStore();
   const localProjectName = useTaskStore((state) => state.projectName);
@@ -102,14 +104,14 @@ export function ProjectMenu({
       )}
 
       {/* Mobile sidebar overlay */}
-      {!hasShareToken && projectSidebarVisible && (
+      {!hasShareToken && !billingMode && projectSidebarVisible && (
         <div
           className="fixed inset-0 z-40 bg-black/20 sm:hidden"
           onClick={() => setProjectSidebarVisible(false)}
         />
       )}
 
-      {!hasShareToken && (
+      {!hasShareToken && !billingMode && (
         <aside
           className={cn(
             'flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
@@ -156,18 +158,19 @@ export function ProjectMenu({
             onClick={() => setProjectSidebarVisible(!projectSidebarVisible)}
             aria-pressed={projectSidebarVisible}
             aria-label={hasShareToken ? 'Режим только чтения' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
-            disabled={hasShareToken}
+            disabled={hasShareToken || billingMode}
             className={cn(
               'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-              hasShareToken
+              hasShareToken || billingMode
                 ? 'cursor-default bg-slate-50 text-slate-300'
                 : projectSidebarVisible
                   ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
                   : 'text-slate-500 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700',
               // Скрываем на десктопе когда сайдбар открыт
-              projectSidebarVisible && 'sm:hidden',
+              projectSidebarVisible && !billingMode && 'sm:hidden',
+              billingMode && 'invisible',
             )}
-            title={hasShareToken ? 'Только чтение' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
+            title={hasShareToken ? 'Только чтение' : billingMode ? 'Billing mode' : projectSidebarVisible ? 'Скрыть проекты' : 'Показать проекты'}
           >
             {projectSidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
           </button>
@@ -182,14 +185,14 @@ export function ProjectMenu({
           >
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
-            {showProjectContext && (
+            {showProjectContext && !billingMode && (
               <>
                 <span className="text-slate-300 hidden sm:inline">/</span>
               </>
             )}
           </a>
 
-          {showProjectContext && (
+          {showProjectContext && !billingMode && (
             <>
               <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
                 {isRenamingProject && !hasShareToken ? (
@@ -307,7 +310,10 @@ export function ProjectMenu({
           </div>
         </header>
 
-        <div className="flex flex-1 overflow-hidden bg-[#f4f5f7]">
+        <div className={cn(
+          'flex flex-1 overflow-hidden bg-[#f4f5f7]',
+          billingMode && 'overflow-y-auto',
+        )}>
           {children}
         </div>
       </div>

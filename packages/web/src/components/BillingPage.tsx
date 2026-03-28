@@ -111,6 +111,13 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
     }
   }, [initialPlan]);
 
+  useEffect(() => () => {
+    if (paymentContainerRef.current) {
+      paymentContainerRef.current.innerHTML = '';
+    }
+    checkoutRef.current = null;
+  }, []);
+
   const handleUpgrade = useCallback(async (plan: string) => {
     resetPaymentState();
     setSelectedPlan(plan);
@@ -169,15 +176,65 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
   const aiUsagePercent = !aiUnlimited && subscription
     ? Math.min(100, Math.round((subscription.aiUsed / subscription.aiLimit) * 100))
     : 0;
+  const checkoutMode = Boolean(selectedPlan && selectedPlan !== 'enterprise' && !paymentSuccess);
+
+  if (checkoutMode) {
+    return (
+      <div className="min-h-full w-full bg-gray-50 px-6 py-8">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                resetPaymentState();
+                setSelectedPlan(null);
+              }}
+              className="text-gray-500 hover:text-gray-800 transition-colors"
+              aria-label="Вернуться к тарифам"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">Оплата тарифа {PLAN_LABELS[selectedPlan!]}</h1>
+              <p className="text-sm text-gray-500">
+                {formatPrice(PLAN_PRICES[selectedPlan!][billingPeriod])} / {billingPeriod === 'monthly' ? 'месяц' : 'год'}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <div id="payment-form-container" ref={paymentContainerRef} />
+
+            {paymentLoading && !paymentContainerRef.current?.innerHTML && (
+              <div className="text-gray-400 text-sm">Загрузка формы оплаты...</div>
+            )}
+
+            {paymentError && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm text-red-700">{paymentError}</p>
+                <button
+                  onClick={resetPaymentState}
+                  className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                >
+                  Скрыть ошибку
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-screen overflow-y-auto bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center gap-4">
+    <div className="min-h-full w-full bg-gray-50 px-6 py-8">
+      <div className="max-w-5xl mx-auto space-y-8">
+        <div className="flex items-center gap-4">
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-800 transition-colors"
+            aria-label="Закрыть биллинг"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
@@ -185,9 +242,7 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
           </button>
           <h1 className="text-xl font-semibold text-gray-900">Управление подпиской</h1>
         </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         {/* Current Plan */}
         <div className="bg-white rounded-xl border p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Текущий план</h2>
@@ -322,18 +377,6 @@ export function BillingPage({ initialPlan, onClose }: BillingPageProps) {
             })}
           </div>
         </div>
-
-        {/* Payment Widget Container */}
-        {selectedPlan && selectedPlan !== 'enterprise' && (
-          <div className="bg-white rounded-xl border p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Оплата</h2>
-            <div id="payment-form-container" ref={paymentContainerRef} />
-
-            {paymentLoading && !paymentContainerRef.current?.innerHTML && (
-              <div className="text-gray-400 text-sm">Загрузка формы оплаты...</div>
-            )}
-          </div>
-        )}
 
         {/* Payment Success */}
         {paymentSuccess && (
