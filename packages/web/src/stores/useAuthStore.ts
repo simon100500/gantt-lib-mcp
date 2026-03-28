@@ -34,6 +34,7 @@ export interface AuthState {
   project: AuthProject | null;
   accessToken: string | null;
   projects: AuthProject[];
+  projectLimitReached: boolean;
 }
 
 export interface UseAuthResult extends AuthState {
@@ -62,6 +63,7 @@ const INITIAL_AUTH_STATE: AuthState = {
   project: null,
   accessToken: null,
   projects: [],
+  projectLimitReached: false,
 };
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -445,6 +447,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         },
         body: JSON.stringify({ name }),
       });
+
+      if (response.status === 403) {
+        set({ projectLimitReached: true });
+        return null;
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

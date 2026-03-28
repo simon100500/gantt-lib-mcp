@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { AccountPage } from './components/AccountPage.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
+import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
@@ -17,6 +18,8 @@ import { useSharedProject } from './hooks/useSharedProject.ts';
 import { useTaskMutation } from './hooks/useTaskMutation.ts';
 import { useTasks } from './hooks/useTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import { useAuthStore } from './stores/useAuthStore.ts';
+import { useBillingStore } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
@@ -203,6 +206,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
+  const [limitModalScenario, setLimitModalScenario] = useState<'free-ai' | 'paid-ai' | null>(null);
+  const projectLimitReached = useAuthStore((s) => s.projectLimitReached);
+
+  // Fetch billing subscription on auth to know current plan for modal scenario
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      void useBillingStore.getState().fetchSubscription();
+    }
+  }, [auth.isAuthenticated]);
+
+  // Watch projectLimitReached from auth store -> show modal
+  useEffect(() => {
+    if (projectLimitReached) {
+      setLimitModalScenario('project-limit');
+      useAuthStore.setState({ projectLimitReached: false });
+    }
+  }, [projectLimitReached]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
@@ -347,6 +367,20 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         },
         body: JSON.stringify({ message }),
       });
+    }
+
+    if (response.status === 403) {
+      try {
+        const body = await response.json() as { code?: string };
+        if (body.code === 'AI_LIMIT_REACHED') {
+          const plan = useBillingStore.getState().subscription?.plan ?? 'free';
+          setLimitModalScenario(plan === 'free' ? 'free-ai' : 'paid-ai');
+          return false;
+        }
+      } catch {
+        // response body not JSON — fall through to generic error
+      }
+      throw new Error(`HTTP 403`);
     }
 
     if (!response.ok) {
@@ -764,6 +798,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         workspaceShell
       )}
     </ProjectMenu>
+
+    {limitModalScenario && (
+      <LimitReachedModal
+        scenario={limitModalScenario}
+        onClose={() => setLimitModalScenario(null)}
+      />
+    )}
   );
 }
 
