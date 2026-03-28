@@ -1,3 +1,4 @@
+import { ArrowLeft } from 'lucide-react';
 import { LoginButton } from './LoginButton';
 import { AccountBillingPage } from './AccountBillingPage';
 
@@ -7,19 +8,47 @@ interface AccountPageProps {
   onLoginRequired: () => void;
 }
 
+function PageHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <header className="border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4 sm:px-6">
+        <a
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+          aria-label="Назад"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Назад
+        </a>
+        <a href="/" className="flex items-center gap-3 text-slate-900">
+          <img
+            src="/favicon.svg"
+            alt=""
+            width="18"
+            height="18"
+            className="h-[18px] w-[18px]"
+            aria-hidden="true"
+          />
+          <div>
+            <div className="text-sm font-semibold tracking-tight">GetGantt</div>
+            <div className="text-xs text-slate-500">Аккаунт</div>
+          </div>
+        </a>
+        {children}
+      </div>
+    </header>
+  );
+}
+
 export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: AccountPageProps) {
   if (!isAuthenticated) {
     return (
-      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-            <a href="/" className="flex items-center gap-3 text-slate-900">
-              <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-              <span className="text-sm font-semibold tracking-tight">GetGantt Account</span>
-            </a>
+      <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
+        <PageHeader>
+          <div className="ml-auto">
             <LoginButton onClick={onLoginRequired} />
           </div>
-        </header>
+        </PageHeader>
 
         <main className="flex-1 overflow-y-auto px-4 py-12 sm:px-6">
           <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -37,19 +66,12 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <a href="/" className="flex items-center gap-3 text-slate-900">
-            <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-            <span className="text-sm font-semibold tracking-tight">GetGantt Account</span>
-          </a>
-          <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
-        </div>
-      </header>
-
+    <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
+      <PageHeader>
+        <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
+      </PageHeader>
       <div className="flex-1 overflow-hidden">
-        <AccountBillingPage onClose={() => { window.location.href = '/'; }} />
+        <AccountBillingPage />
       </div>
     </div>
   );

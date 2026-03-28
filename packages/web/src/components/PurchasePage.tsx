@@ -400,21 +400,36 @@ interface PublicPurchaseHeaderProps {
 function PublicPurchaseHeader({ isAuthenticated, userEmail, onLoginRequired }: PublicPurchaseHeaderProps) {
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-4 sm:px-6">
+        <a
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+          aria-label="Назад"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Назад
+        </a>
         <a href="/" className="flex items-center gap-3 text-slate-900">
-          <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
+          <img
+            src="/favicon.svg"
+            alt=""
+            width="18"
+            height="18"
+            className="h-[18px] w-[18px]"
+            aria-hidden="true"
+          />
           <div>
             <div className="text-sm font-semibold tracking-tight">GetGantt</div>
-            <div className="text-xs text-slate-500">Оплата</div>
+            <div className="text-xs text-slate-500">Тарифы</div>
           </div>
         </a>
 
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
           {isAuthenticated ? (
             <>
               <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
               <Button variant="outline" size="sm" onClick={() => { window.location.href = '/account'; }}>
-                В аккаунт
+                Аккаунт
               </Button>
             </>
           ) : (
