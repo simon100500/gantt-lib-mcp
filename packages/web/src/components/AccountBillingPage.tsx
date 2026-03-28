@@ -127,6 +127,10 @@ export function AccountBillingPage() {
                   )}
                 </div>
 
+                {upgrade && (
+                  <p className="text-sm text-slate-500">Расширение до: <span className="font-medium text-slate-700">{upgrade.title}</span></p>
+                )}
+
                 {CURRENT_PLAN_FEATURES[subscription.plan] && (
                   <ul className="space-y-1.5 text-sm text-slate-600">
                     {CURRENT_PLAN_FEATURES[subscription.plan].map((f) => (
@@ -182,8 +186,7 @@ export function AccountBillingPage() {
           {/* Right: upgrade card */}
           {upgrade && (
             <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-6 shadow-sm">
-              <p className="text-sm text-slate-500">Расширение до:</p>
-              <h2 className="mt-1 text-base font-semibold text-slate-900">{upgrade.title}</h2>
+              <h2 className="text-base font-semibold text-slate-900">{upgrade.title}</h2>
               <ul className="mt-4 space-y-2 text-sm text-slate-600">
                 {upgrade.gains.map((gain) => (
                   <li key={gain} className="flex items-center gap-2">
