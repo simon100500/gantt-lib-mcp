@@ -142,7 +142,7 @@
 7. Enterprise plan shows "contact us" instead of payment flow
 8. Subscription expiry triggers read-only mode
 
-**Plans:** 3/3 plans complete
+**Plans:** 4/4 plans complete
 
 - [x] 28-01-PLAN.md — Database schema, plan config, billing backend with YooKassa integration
 - [x] 28-02-PLAN.md — Subscription enforcement middleware, billing frontend store and page
@@ -158,7 +158,7 @@
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Planned    |  |
 | 27. Domain Separation | 0/3 | Not started | - |
-| 28. Billing | 3/3 | Complete   | 2026-03-27 |
+| 28. Billing | 4/4 | Complete   | 2026-03-28 |
 
 ---
 
