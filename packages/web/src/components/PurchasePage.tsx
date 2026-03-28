@@ -15,7 +15,7 @@ import {
 
 const FREE_FEATURES = [
   '1 проект',
-  '20 AI-запросов (навсегда)',
+  '20 AI-запросов (разово)',
   'Гостевые ссылки',
 ];
 
@@ -255,22 +255,20 @@ export function PurchasePage({
               <button
                 type="button"
                 onClick={() => setBillingPeriod('monthly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${
-                  billingPeriod === 'monthly'
-                    ? 'bg-slate-900 font-medium text-white'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'monthly'
+                  ? 'bg-slate-900 font-medium text-white'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 Месяц
               </button>
               <button
                 type="button"
                 onClick={() => setBillingPeriod('yearly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${
-                  billingPeriod === 'yearly'
-                    ? 'bg-slate-900 font-medium text-white'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
+                  ? 'bg-slate-900 font-medium text-white'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 Год
               </button>
@@ -287,18 +285,16 @@ export function PurchasePage({
               return (
                 <article
                   key={plan}
-                  className={`flex flex-col rounded-3xl border p-6 shadow-sm transition-all ${
-                    isAccent
-                      ? 'border-primary/30 bg-primary/[0.045] text-slate-900 shadow-[0_20px_60px_-36px_rgba(97,88,224,0.35)]'
-                      : 'border-slate-200 bg-white text-slate-900'
-                  }`}
+                  className={`flex flex-col rounded-3xl border p-6 shadow-sm transition-all ${isAccent
+                    ? 'border-primary/30 bg-primary/[0.045] text-slate-900 shadow-[0_20px_60px_-36px_rgba(97,88,224,0.35)]'
+                    : 'border-slate-200 bg-white text-slate-900'
+                    }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-xl font-semibold">{PLAN_LABELS[plan]}</h3>
                     {plan === 'start' && (
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        isAccent ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isAccent ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
                         Популярный
                       </span>
                     )}
@@ -343,13 +339,12 @@ export function PurchasePage({
                       }
                       handleChoosePlan(plan);
                     }}
-                    className={`mt-8 rounded-xl px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${
-                      plan === 'free'
-                        ? 'bg-slate-100 text-slate-900 hover:bg-slate-200'
-                        : isAccent
+                    className={`mt-8 rounded-xl px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${plan === 'free'
+                      ? 'bg-slate-100 text-slate-900 hover:bg-slate-200'
+                      : isAccent
                         ? 'bg-primary text-white hover:bg-primary/90'
                         : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
-                    }`}
+                      }`}
                   >
                     {plan === 'free' ? 'Продолжить бесплатно' : isAuthenticated ? 'Купить' : 'Войти и купить'}
                   </button>
@@ -416,7 +411,7 @@ function PublicPurchaseHeader({ isAuthenticated, userEmail, onLoginRequired }: P
             aria-hidden="true"
           />
           <div>
-            <div className="text-sm font-semibold tracking-tight">GetGantt</div>
+            <div className="text-sm font-semibold tracking-tight">ГетГант</div>
           </div>
         </a>
         <span className="text-sm text-slate-400" aria-hidden="true">/</span>

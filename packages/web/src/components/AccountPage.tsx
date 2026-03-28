@@ -21,7 +21,7 @@ function PageHeader({ children }: { children: React.ReactNode }) {
             aria-hidden="true"
           />
           <div>
-            <div className="text-sm font-semibold tracking-tight">GetGantt</div>
+            <div className="text-sm font-semibold tracking-tight">ГетГант</div>
           </div>
         </a>
         <span className="text-sm text-slate-400" aria-hidden="true">/</span>
