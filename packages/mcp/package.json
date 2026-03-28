@@ -5,9 +5,7 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./db": "./dist/db.js",
     "./types": "./dist/types.js",
-    "./auth-store": "./dist/auth-store.js",
     "./prisma": "./dist/prisma.js",
     "./services": "./dist/services/index.js"
   },
@@ -18,7 +16,6 @@
     "test": "node --test src/scheduler.test.ts"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@prisma/client": "^5.22.0",
     "@qwen-code/sdk": "^0.1.5",
