@@ -215,6 +215,7 @@ None currently.
 ### Roadmap Evolution
 
 - Phase 28 added: billing
+- Phase 29 added: paywall-enhance
 
 ## Next Steps
 
