@@ -1,12 +1,45 @@
 import { useEffect } from 'react';
-import { ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft, Check, ArrowRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { useBillingStore } from '../stores/useBillingStore';
-import { PLAN_LABELS, PLAN_PRICES, formatAmount, formatDate, formatPrice } from '../lib/billing';
+import { PLAN_LABELS, formatAmount, formatDate } from '../lib/billing';
+import type { PlanId } from '../lib/billing';
 
 interface AccountBillingPageProps {
   onClose: () => void;
 }
+
+const UPGRADE_GAINS: Record<string, { title: string; gains: string[] }> = {
+  free: {
+    title: 'Старт',
+    gains: [
+      '+2&nbsp;проекта',
+      '25&nbsp;AI-запросов в день',
+      'Архив проектов',
+      'Пул ресурсов',
+      'PDF-экспорт',
+    ],
+  },
+  start: {
+    title: 'Команда',
+    gains: [
+      '+4&nbsp;проекта',
+      '50&nbsp;AI-запросов в день',
+      '5&nbsp;участников',
+      'Excel-экспорт',
+    ],
+  },
+  team: {
+    title: 'Корпоративный',
+    gains: [
+      'Безлимит проектов',
+      '100&nbsp;AI-запросов в день',
+      '20&nbsp;участников',
+      'API-экспорт',
+      'Приоритетная поддержка',
+    ],
+  },
+};
 
 export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
   const {
@@ -29,7 +62,8 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
     ? Math.min(100, Math.round((subscription.aiUsed / subscription.aiLimit) * 100))
     : 0;
 
-  const upgrade = getNextPlanUpgrade(subscription?.plan);
+  const currentPlan = subscription?.plan as PlanId | undefined;
+  const upgrade = currentPlan ? UPGRADE_GAINS[currentPlan] : null;
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
@@ -71,101 +105,118 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h1 className="text-lg font-semibold text-slate-900" style={{ textWrap: 'balance' }}>
-              Текущий тариф
-            </h1>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+            {/* Left: current plan */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h1 className="text-lg font-semibold text-slate-900" style={{ textWrap: 'balance' }}>
+                Текущий тариф
+              </h1>
 
-            {loading ? (
-              <div className="mt-4 text-sm text-slate-400">Загрузка…</div>
-            ) : error ? (
-              <div className="mt-4 text-sm text-red-600">{error}</div>
-            ) : subscription ? (
-              <div className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <span className="text-2xl font-bold text-primary">
-                      {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
-                    </span>
-                    {subscription.periodEnd && (
-                      <p className="mt-2 text-sm text-slate-500">Действует до: {formatDate(subscription.periodEnd)}</p>
+              {loading ? (
+                <div className="mt-4 text-sm text-slate-400">Загрузка…</div>
+              ) : error ? (
+                <div className="mt-4 text-sm text-red-600">{error}</div>
+              ) : subscription ? (
+                <div className="mt-4 space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <span className="text-2xl font-bold text-primary">
+                        {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
+                      </span>
+                      {subscription.periodEnd && (
+                        <p className="mt-2 text-sm text-slate-500">Действует до: {formatDate(subscription.periodEnd)}</p>
+                      )}
+                    </div>
+                    {subscription.plan !== 'free' && (
+                      <span className={`rounded-full px-3 py-1 text-sm ${
+                        subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {subscription.isActive ? 'Активна' : 'Истекла'}
+                      </span>
                     )}
                   </div>
-                  {subscription.plan !== 'free' && (
-                    <span className={`rounded-full px-3 py-1 text-sm ${
-                      subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                      {subscription.isActive ? 'Активна' : 'Истекла'}
-                    </span>
+
+                  {subscription.plan === 'free' && (
+                    <ul className="space-y-1.5 text-sm text-slate-600">
+                      <li className="flex items-center gap-2">
+                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        1&nbsp;проект
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        20&nbsp;AI-запросов (навсегда)
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        Гостевые ссылки
+                      </li>
+                    </ul>
                   )}
-                </div>
 
-                {subscription.plan === 'free' && (
-                  <ul className="space-y-1.5 text-sm text-slate-600">
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      1&nbsp;проект
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      20&nbsp;AI-запросов (навсегда)
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      Гостевые ссылки
-                    </li>
-                  </ul>
-                )}
-
-                <div>
-                  <div className="mb-1 flex justify-between text-sm">
-                    <span className="text-slate-600">AI-запросы</span>
-                    <span className="font-medium tabular-nums text-slate-900">
-                      {aiUnlimited ? 'Безлимит' : `${subscription.aiUsed} / ${subscription.aiLimit}`}
-                    </span>
-                  </div>
-                  {!aiUnlimited && (
-                    <div
-                      className="h-2.5 w-full rounded-full bg-slate-200"
-                      role="progressbar"
-                      aria-valuenow={aiUsagePercent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
+                  <div>
+                    <div className="mb-1 flex justify-between text-sm">
+                      <span className="text-slate-600">AI-запросы</span>
+                      <span className="font-medium tabular-nums text-slate-900">
+                        {aiUnlimited ? 'Безлимит' : `${subscription.aiUsed} / ${subscription.aiLimit}`}
+                      </span>
+                    </div>
+                    {!aiUnlimited && (
                       <div
-                        className={`h-2.5 rounded-full transition-all ${
-                          aiUsagePercent >= 90 ? 'bg-red-500' : aiUsagePercent >= 70 ? 'bg-yellow-500' : 'bg-primary'
-                        }`}
-                        style={{ width: `${aiUsagePercent}%` }}
-                      />
+                        className="h-2.5 w-full rounded-full bg-slate-200"
+                        role="progressbar"
+                        aria-valuenow={aiUsagePercent}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      >
+                        <div
+                          className={`h-2.5 rounded-full transition-all ${
+                            aiUsagePercent >= 90 ? 'bg-red-500' : aiUsagePercent >= 70 ? 'bg-yellow-500' : 'bg-primary'
+                          }`}
+                          style={{ width: `${aiUsagePercent}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {!aiUnlimited && aiUsagePercent >= 80 && aiUsagePercent < 100 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4" role="alert">
+                      <p className="text-sm text-amber-800">Осталось мало запросов. Расширьте тариф, чтобы не останавливать работу.</p>
+                    </div>
+                  )}
+
+                  {!aiUnlimited && aiUsagePercent >= 100 && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
+                      <p className="text-sm text-red-800">AI-запросы закончились. Обновите тариф для продолжения работы.</p>
                     </div>
                   )}
                 </div>
+              ) : (
+                <div className="mt-4 text-sm text-slate-400">Не удалось загрузить данные подписки.</div>
+              )}
+            </div>
 
-                {!aiUnlimited && aiUsagePercent >= 80 && aiUsagePercent < 100 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4" role="alert">
-                    <p className="text-sm text-amber-800">Осталось мало запросов. Расширьте тариф, чтобы не останавливать работу.</p>
-                  </div>
-                )}
-
-                {!aiUnlimited && aiUsagePercent >= 100 && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
-                    <p className="text-sm text-red-800">AI-запросы закончились. Обновите тариф для продолжения работы.</p>
-                  </div>
-                )}
-
-                {upgrade && (
-                  <button
-                    type="button"
-                    onClick={() => { window.location.href = upgrade.href; }}
-                    className="mt-2 w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
-                  >
-                    {upgrade.label}
-                  </button>
-                )}
+            {/* Right: upgrade card */}
+            {upgrade && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-6 shadow-sm">
+                <h2 className="text-base font-semibold text-slate-900" style={{ textWrap: 'balance' }}>
+                  Расширить до {upgrade.title}
+                </h2>
+                <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                  {upgrade.gains.map((gain) => (
+                    <li key={gain} className="flex items-center gap-2">
+                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <span dangerouslySetInnerHTML={{ __html: gain }} />
+                    </li>
+                  ))}
+                </ul>
+                <a
+                  href="/purchase"
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+                >
+                  Перейти на {upgrade.title}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </a>
               </div>
-            ) : (
-              <div className="mt-4 text-sm text-slate-400">Не удалось загрузить данные подписки.</div>
             )}
           </div>
 
@@ -216,20 +267,4 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
       </main>
     </div>
   );
-}
-
-function getNextPlanUpgrade(currentPlan: string | undefined): { label: string; href: string } | null {
-  switch (currentPlan) {
-    case 'free':
-      return { label: `Перейти на Старт — ${formatPrice(PLAN_PRICES.start.monthly)}/мес`, href: '/purchase' };
-    case 'start':
-      return { label: `Перейти на Команду — ${formatPrice(PLAN_PRICES.team.monthly)}/мес`, href: '/purchase' };
-    case 'team':
-      return {
-        label: `Перейти на Корпоративный — ${formatPrice(PLAN_PRICES.enterprise.monthly)}/мес`,
-        href: 'mailto:support@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф',
-      };
-    default:
-      return null;
-  }
 }
