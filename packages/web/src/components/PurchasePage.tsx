@@ -236,7 +236,7 @@ export function PurchasePage({
       <main className="flex-1 overflow-y-auto border-t border-slate-200 bg-white px-4 pb-12 pt-8 sm:px-6 sm:pt-10">
         <section className="mx-auto max-w-6xl">
           <a
-            href="/"
+            href="/account"
             className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 rounded"
           >
             ← Назад к Аккаунту
