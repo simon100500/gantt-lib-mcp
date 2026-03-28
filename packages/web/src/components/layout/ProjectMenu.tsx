@@ -171,6 +171,7 @@ export function ProjectMenu({
                 onClick={() => setShowBillingPage(true)}
                 className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
               >
+                <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
                 Расширить
               </button>
             </div>
