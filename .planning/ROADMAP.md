@@ -2,7 +2,7 @@
 
 **Current milestone:** v4.0 Astro Landing
 **Granularity:** Coarse
-**Last updated:** 2026-03-27
+**Last updated:** 2026-03-29
 
 ## Progress Summary
 
@@ -226,5 +226,16 @@ Phases completed:
 - Phase 22: Zustand Refactor
 - Phase 23: Task Filtering UI
 
+### Phase 29: paywall-enhance
+
+**Goal:** Sync billing with v5 pricing grid + CRO improvements for upgrade flow
+**Requirements**: (no formal REQ-IDs — driven by CONTEXT.md decisions A1-B7)
+**Depends on:** Phase 28
+**Plans:** 2 plans
+
+Plans:
+- [ ] 29-01-PLAN.md — v5 prices/features sync, PurchasePage CRO (savings, social proof, text fixes), AccountBillingPage upsell
+- [ ] 29-02-PLAN.md — Feature gate modal (LimitReachedModal) + integration in AI/project creation flow
+
 ---
-*Last updated:* 2026-03-27
+*Last updated:* 2026-03-29
