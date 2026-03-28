@@ -63,6 +63,12 @@ export function AccountBillingPage() {
   return (
     <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
       <div className="mx-auto max-w-5xl space-y-6">
+        <a
+          href="/"
+          className="inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 rounded"
+        >
+          ← Назад к приложению
+        </a>
         {paymentSuccess && (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-green-800" role="alert">
             <h2 className="text-base font-semibold">Оплата прошла успешно</h2>

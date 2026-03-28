@@ -1,5 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
-import { Button } from './ui/button';
 import { LoginButton } from './LoginButton';
 import { AccountBillingPage } from './AccountBillingPage';
 
@@ -12,22 +10,24 @@ interface AccountPageProps {
 function PageHeader({ children }: { children: React.ReactNode }) {
   return (
     <header className="border-b border-slate-200 bg-white">
-      <nav className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4 sm:px-6" aria-label="Хлебные крошки">
-        <Button
-          variant="outline"
-          size="sm"
-          asChild
-          className="shrink-0 gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
-        >
-          <a href="/">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Главная
-          </a>
-        </Button>
+      <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4 sm:px-6">
+        <a href="/" className="flex items-center gap-3 text-slate-900">
+          <img
+            src="/favicon.svg"
+            alt=""
+            width="18"
+            height="18"
+            className="h-[18px] w-[18px]"
+            aria-hidden="true"
+          />
+          <div>
+            <div className="text-sm font-semibold tracking-tight">GetGantt</div>
+          </div>
+        </a>
         <span className="text-sm text-slate-400" aria-hidden="true">/</span>
         <span className="text-sm font-medium text-slate-900">Аккаунт</span>
         {children}
-      </nav>
+      </div>
     </header>
   );
 }
