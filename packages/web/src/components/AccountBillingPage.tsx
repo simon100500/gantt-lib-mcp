@@ -4,11 +4,32 @@ import { useBillingStore } from '../stores/useBillingStore';
 import { PLAN_LABELS, formatAmount, formatDate } from '../lib/billing';
 import type { PlanId } from '../lib/billing';
 
+const CURRENT_PLAN_FEATURES: Record<string, string[]> = {
+  free: [
+    '1&nbsp;проект',
+    '20&nbsp;AI-запросов (разово)',
+    'Гостевые ссылки',
+  ],
+  start: [
+    '3&nbsp;проекта',
+    '25&nbsp;AI-запросов в день',
+    'Архив проектов',
+    'Пул ресурсов',
+    'PDF-экспорт',
+  ],
+  team: [
+    '7&nbsp;проектов',
+    '50&nbsp;AI-запросов в день',
+    '5&nbsp;участников',
+    'Excel-экспорт',
+  ],
+};
+
 const UPGRADE_GAINS: Record<string, { title: string; gains: string[] }> = {
   free: {
     title: 'Старт',
     gains: [
-      '+2&nbsp;проекта',
+      '3&nbsp;проекта',
       '25&nbsp;AI-запросов в день',
       'Архив проектов',
       'Пул ресурсов',
@@ -18,7 +39,7 @@ const UPGRADE_GAINS: Record<string, { title: string; gains: string[] }> = {
   start: {
     title: 'Команда',
     gains: [
-      '+4&nbsp;проекта',
+      '7&nbsp;проектов',
       '50&nbsp;AI-запросов в день',
       '5&nbsp;участников',
       'Excel-экспорт',
@@ -99,28 +120,21 @@ export function AccountBillingPage() {
                     )}
                   </div>
                   {subscription.plan !== 'free' && (
-                    <span className={`rounded-full px-3 py-1 text-sm ${
-                      subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
+                    <span className={`rounded-full px-3 py-1 text-sm ${subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
                       {subscription.isActive ? 'Активна' : 'Истекла'}
                     </span>
                   )}
                 </div>
 
-                {subscription.plan === 'free' && (
+                {CURRENT_PLAN_FEATURES[subscription.plan] && (
                   <ul className="space-y-1.5 text-sm text-slate-600">
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      1&nbsp;проект
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      20&nbsp;AI-запросов (навсегда)
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                      Гостевые ссылки
-                    </li>
+                    {CURRENT_PLAN_FEATURES[subscription.plan].map((f) => (
+                      <li key={f} className="flex items-center gap-2">
+                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        <span dangerouslySetInnerHTML={{ __html: f }} />
+                      </li>
+                    ))}
                   </ul>
                 )}
 
@@ -140,9 +154,8 @@ export function AccountBillingPage() {
                       aria-valuemax={100}
                     >
                       <div
-                        className={`h-2.5 rounded-full transition-all ${
-                          aiUsagePercent >= 90 ? 'bg-red-500' : aiUsagePercent >= 70 ? 'bg-yellow-500' : 'bg-primary'
-                        }`}
+                        className={`h-2.5 rounded-full transition-all ${aiUsagePercent >= 90 ? 'bg-red-500' : aiUsagePercent >= 70 ? 'bg-yellow-500' : 'bg-primary'
+                          }`}
                         style={{ width: `${aiUsagePercent}%` }}
                       />
                     </div>
@@ -217,13 +230,12 @@ export function AccountBillingPage() {
                       <td className="py-2.5 text-slate-700">{payment.period === 'monthly' ? 'Месяц' : 'Год'}</td>
                       <td className="py-2.5 tabular-nums text-slate-700">{formatAmount(payment.amount)}</td>
                       <td className="py-2.5">
-                        <span className={`rounded-full px-2 py-0.5 text-xs ${
-                          payment.status === 'succeeded'
-                            ? 'bg-green-100 text-green-700'
-                            : payment.status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-slate-100 text-slate-600'
-                        }`}>
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${payment.status === 'succeeded'
+                          ? 'bg-green-100 text-green-700'
+                          : payment.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-slate-100 text-slate-600'
+                          }`}>
                           {payment.status === 'succeeded' ? 'Успешно' : payment.status}
                         </span>
                       </td>
