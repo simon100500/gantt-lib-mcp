@@ -168,7 +168,6 @@ export function PurchasePage({
       <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
         <PublicPurchaseHeader
           isAuthenticated={isAuthenticated}
-          userEmail={userEmail}
           onLoginRequired={onLoginRequired}
         />
         <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
@@ -232,7 +231,6 @@ export function PurchasePage({
     <div className="flex h-dvh flex-col overflow-hidden bg-white text-slate-900">
       <PublicPurchaseHeader
         isAuthenticated={isAuthenticated}
-        userEmail={userEmail}
         onLoginRequired={onLoginRequired}
       />
 
@@ -393,50 +391,33 @@ export function PurchasePage({
 
 interface PublicPurchaseHeaderProps {
   isAuthenticated: boolean;
-  userEmail?: string | null;
   onLoginRequired: () => void;
 }
 
-function PublicPurchaseHeader({ isAuthenticated, userEmail, onLoginRequired }: PublicPurchaseHeaderProps) {
+function PublicPurchaseHeader({ isAuthenticated, onLoginRequired }: PublicPurchaseHeaderProps) {
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-4 sm:px-6">
-        <a
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
-          aria-label="Назад"
+      <nav className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6" aria-label="Хлебные крошки">
+        <Button
+          variant="outline"
+          size="sm"
+          asChild
+          className="shrink-0 gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
         >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Назад
-        </a>
-        <a href="/" className="flex items-center gap-3 text-slate-900">
-          <img
-            src="/favicon.svg"
-            alt=""
-            width="18"
-            height="18"
-            className="h-[18px] w-[18px]"
-            aria-hidden="true"
-          />
-          <div>
-            <div className="text-sm font-semibold tracking-tight">GetGantt</div>
-            <div className="text-xs text-slate-500">Тарифы</div>
-          </div>
-        </a>
+          <a href="/">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Главная
+          </a>
+        </Button>
+        <span className="text-sm text-slate-400" aria-hidden="true">/</span>
+        <span className="text-sm font-medium text-slate-900">Тарифы</span>
 
-        <div className="ml-auto flex items-center gap-3">
-          {isAuthenticated ? (
-            <>
-              <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
-              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/account'; }}>
-                Аккаунт
-              </Button>
-            </>
-          ) : (
+        {isAuthenticated ? null : (
+          <div className="ml-auto">
             <LoginButton onClick={onLoginRequired} />
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </nav>
     </header>
   );
 }
