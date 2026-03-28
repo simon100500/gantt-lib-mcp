@@ -231,11 +231,11 @@ Phases completed:
 **Goal:** Sync billing with v5 pricing grid + CRO improvements for upgrade flow
 **Requirements**: (no formal REQ-IDs — driven by CONTEXT.md decisions A1-B7)
 **Depends on:** Phase 28
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 29-01-PLAN.md — v5 prices/features sync, PurchasePage CRO (savings, social proof, text fixes), AccountBillingPage upsell
-- [ ] 29-02-PLAN.md — Feature gate modal (LimitReachedModal) + integration in AI/project creation flow
+- [x] 29-02-PLAN.md — Feature gate modal (LimitReachedModal) + integration in AI/project creation flow
 
 ---
 *Last updated:* 2026-03-29

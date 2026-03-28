@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: MVP
 current_phase: 28
 status: unknown
-last_updated: "2026-03-28T21:22:56.512Z"
+last_updated: "2026-03-28T21:26:01.029Z"
 progress:
   total_phases: 5
   completed_phases: 2
@@ -34,8 +34,8 @@ AI может программно управлять диаграммами Г�
 
 ## Current Position
 
-Phase: 28 (billing) — EXECUTING
-Plan: Not started
+Phase: 29 (paywall-enhance) — EXECUTING
+Plan: 02 complete
 
 ### Recent Work
 
@@ -119,6 +119,7 @@ Plan: Not started
 | Phase 28 P03 | 98 | 1 tasks | 4 files |
 | Phase 28 P04 | 74 | 3 tasks | 6 files |
 | Phase 29 P01 | 94 | 2 tasks | 4 files |
+| Phase 29 P02 | 66 | 2 tasks | 3 files |
 
 ### Architecture
 
