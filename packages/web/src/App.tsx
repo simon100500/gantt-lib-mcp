@@ -206,7 +206,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
-  const [limitModalScenario, setLimitModalScenario] = useState<'free-ai' | 'paid-ai' | null>(null);
+  const [limitModalScenario, setLimitModalScenario] = useState<'free-ai' | 'paid-ai' | 'project-limit' | null>(null);
   const projectLimitReached = useAuthStore((s) => s.projectLimitReached);
 
   // Fetch billing subscription on auth to know current plan for modal scenario
@@ -781,6 +781,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         );
 
   return (
+    <>
     <ProjectMenu
       error={error}
       hasShareToken={hasShareToken}
@@ -805,6 +806,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         onClose={() => setLimitModalScenario(null)}
       />
     )}
+    </>
   );
 }
 
