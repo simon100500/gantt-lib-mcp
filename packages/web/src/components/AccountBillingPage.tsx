@@ -181,8 +181,8 @@ export function AccountBillingPage() {
 
           {/* Right: upgrade card */}
           {upgrade && (
-            <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900">Расширение до {upgrade.title}</h2>
+            <div className="flex flex-col rounded-2xl border border-primary/20 bg-primary/[0.03] p-6 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-900">Расширяйтесь до тарифа «{upgrade.title}»</h2>
               <p className="mt-1 text-sm text-slate-500">Будет доступно:</p>
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
                 {upgrade.gains.map((gain) => (
@@ -194,9 +194,9 @@ export function AccountBillingPage() {
               </ul>
               <a
                 href="/purchase"
-                className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+                className="mt-auto inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
               >
-                Перейти на {upgrade.title}
+                Перейти
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
             </div>

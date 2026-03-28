@@ -324,8 +324,12 @@ export function ProjectMenu({
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setShowBillingPage(true)} className="text-slate-700 focus:text-slate-900">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    <span>Подписка</span>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Аккаунт</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.href = '/purchase'} className="text-slate-700 focus:text-slate-900">
+                    <img src="/premium.svg" alt="" className="mr-2 h-4 w-4 inline align-[-3px]" />
+                    <span>Тарифы</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">

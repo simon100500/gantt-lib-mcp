@@ -346,18 +346,11 @@ export function PurchasePage({
                         : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                       }`}
                   >
-                    {plan === 'free' ? 'Продолжить бесплатно' : isAuthenticated ? 'Купить' : 'Войти и купить'}
+                    {plan === 'free' ? 'Продолжить бесплатно' : isAuthenticated ? `Перейти на ${PLAN_LABELS[plan]}` : `Войти и перейти на ${PLAN_LABELS[plan]}`}
                   </button>
                 </article>
               );
             })}
-          </div>
-
-          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 px-8 py-6 text-center">
-            <blockquote className="text-lg font-medium text-slate-700">
-              &laquo;Бомба, такого на рынке нет!&raquo;
-            </blockquote>
-            <p className="mt-2 text-sm text-slate-500">&mdash; прораб, ранний доступ</p>
           </div>
 
           <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
@@ -384,6 +377,13 @@ export function PurchasePage({
               <p>Подписка не продлевается автоматически. Каждый платёж вы подтверждаете вручную.</p>
               <p>Вернём деньги, если тариф не понравится.</p>
             </div>
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 px-8 py-6 text-center">
+            <blockquote className="text-lg font-medium text-slate-700">
+              &laquo;Бомба, такого на рынке нет!&raquo;
+            </blockquote>
+            <p className="mt-2 text-sm text-slate-500">&mdash; прораб, ранний доступ</p>
           </div>
         </section>
       </main>
