@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: MVP
-current_phase: 28
+current_phase: 29
 status: unknown
-last_updated: "2026-03-28T21:26:01.029Z"
+last_updated: "2026-03-28T21:19:52.221Z"
 progress:
   total_phases: 5
   completed_phases: 2
@@ -16,7 +16,7 @@ progress:
 
 **Last updated:** 2026-03-24
 **Current milestone:** v4.0 Astro Landing
-**Current phase:** 28
+**Current phase:** 29
 
 ---
 
@@ -35,7 +35,7 @@ AI может программно управлять диаграммами Г�
 ## Current Position
 
 Phase: 29 (paywall-enhance) — EXECUTING
-Plan: 02 complete
+Plan: 1 of 2
 
 ### Recent Work
 
@@ -118,8 +118,6 @@ Plan: 02 complete
 | Phase 28 P02 | 4 | 2 tasks | 5 files |
 | Phase 28 P03 | 98 | 1 tasks | 4 files |
 | Phase 28 P04 | 74 | 3 tasks | 6 files |
-| Phase 29 P01 | 94 | 2 tasks | 4 files |
-| Phase 29 P02 | 66 | 2 tasks | 3 files |
 
 ### Architecture
 
