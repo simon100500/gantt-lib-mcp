@@ -11,7 +11,7 @@ interface AccountPageProps {
 export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: AccountPageProps) {
   if (!isAuthenticated) {
     return (
-      <div className="min-h-dvh bg-slate-50">
+      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
         <header className="border-b border-slate-200 bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <a href="/" className="flex items-center gap-3 text-slate-900">
@@ -22,7 +22,7 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
           </div>
         </header>
 
-        <main className="px-4 py-12 sm:px-6">
+        <main className="flex-1 overflow-y-auto px-4 py-12 sm:px-6">
           <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <h1 className="text-2xl font-semibold text-slate-900">Аккаунт</h1>
             <p className="mt-3 text-sm text-slate-600">
@@ -38,7 +38,7 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
   }
 
   return (
-    <div className="min-h-dvh bg-slate-50">
+    <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <a href="/" className="flex items-center gap-3 text-slate-900">
@@ -54,7 +54,9 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
         </div>
       </header>
 
-      <AccountBillingPage onClose={() => { window.location.href = '/'; }} />
+      <div className="flex-1 overflow-hidden">
+        <AccountBillingPage onClose={() => { window.location.href = '/'; }} />
+      </div>
     </div>
   );
 }
