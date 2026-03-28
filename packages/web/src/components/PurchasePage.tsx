@@ -15,10 +15,9 @@ import {
 } from '../lib/billing';
 
 const FREE_FEATURES = [
-  '2 графика',
-  '3 AI-генерации графика',
-  '5 AI-уточнений на каждый график',
-  '1 ресурс',
+  '1 проект',
+  '20 AI-запросов (навсегда)',
+  'Гостевые ссылки',
 ];
 
 interface PurchasePageProps {
@@ -241,7 +240,7 @@ export function PurchasePage({
         <section className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Расширить тариф</h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Тарифы</h1>
               {paymentSuccess && (
                 <p className="mt-2 text-sm text-green-700">Оплата прошла успешно. Переходим в аккаунт...</p>
               )}
@@ -269,7 +268,6 @@ export function PurchasePage({
                 }`}
               >
                 Год
-                <span className="ml-1 text-xs text-emerald-400">-33%</span>
               </button>
             </div>
           </div>
@@ -313,6 +311,11 @@ export function PurchasePage({
                         <span className="ml-1 text-sm text-slate-500">
                           /{billingPeriod === 'monthly' ? 'мес' : 'год'}
                         </span>
+                        {billingPeriod === 'yearly' && (
+                          <span className="mt-1 block text-sm text-emerald-600">
+                            Экономия {formatPrice(PLAN_PRICES[plan].monthly * 12 - PLAN_PRICES[plan].yearly)} в год
+                          </span>
+                        )}
                       </>
                     )}
                   </div>
@@ -343,11 +346,18 @@ export function PurchasePage({
                         : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                     }`}
                   >
-                    {plan === 'free' ? 'Остаться на free' : isAuthenticated ? 'Купить' : 'Войти и купить'}
+                    {plan === 'free' ? 'Продолжить бесплатно' : isAuthenticated ? 'Купить' : 'Войти и купить'}
                   </button>
                 </article>
               );
             })}
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 px-8 py-6 text-center">
+            <blockquote className="text-lg font-medium text-slate-700">
+              &laquo;Бомба, такого на рынке нет!&raquo;
+            </blockquote>
+            <p className="mt-2 text-sm text-slate-500">&mdash; прораб, ранний доступ</p>
           </div>
 
           <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
