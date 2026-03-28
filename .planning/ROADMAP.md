@@ -158,7 +158,7 @@
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Planned    |  |
 | 27. Domain Separation | 0/3 | Not started | - |
-| 28. Billing | 4/4 | Complete   | 2026-03-28 |
+| 28. Billing | 4/4 | Complete    | 2026-03-28 |
 
 ---
 
