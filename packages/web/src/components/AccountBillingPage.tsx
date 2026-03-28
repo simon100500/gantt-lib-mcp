@@ -52,13 +52,21 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-lg font-semibold text-slate-900">Текущий тариф</h1>
-            <button
-              type="button"
-              onClick={() => { window.location.href = '/purchase'; }}
-              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-            >
-              Расширить
-            </button>
+            {subscription?.plan !== 'enterprise' && (
+              <button
+                type="button"
+                onClick={() => { window.location.href = '/purchase'; }}
+                className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+              >
+                {subscription?.plan === 'free'
+                  ? 'Перейти на Старт — 1 490 ₽/мес'
+                  : subscription?.plan === 'start'
+                    ? 'Расширить до Команды'
+                    : subscription?.plan === 'team'
+                      ? 'Корпоративный — безлимит'
+                      : 'Расширить'}
+              </button>
+            )}
           </div>
           {loading ? (
             <div className="mt-4 text-sm text-slate-400">Загрузка...</div>
@@ -86,9 +94,29 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
                 )}
               </div>
 
+              {subscription.plan === 'free' && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <ul className="space-y-1.5 text-sm text-slate-600">
+                    <li>1 проект</li>
+                    <li>20 AI-запросов (навсегда)</li>
+                    <li>Гостевые ссылки</li>
+                  </ul>
+                  <p className="mt-3 text-sm text-slate-500">
+                    Нужно больше? Тариф Старт — 3 проекта и 25 запросов в день.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = '/purchase'; }}
+                    className="mt-2 text-sm font-medium text-primary underline hover:text-primary/80"
+                  >
+                    Посмотреть тарифы
+                  </button>
+                </div>
+              )}
+
               <div>
                 <div className="mb-1 flex justify-between text-sm">
-                  <span className="text-slate-600">AI-генерации</span>
+                  <span className="text-slate-600">AI-запросы</span>
                   <span className="font-medium text-slate-900">
                     {aiUnlimited ? 'Безлимит' : `${subscription.aiUsed} / ${subscription.aiLimit}`}
                   </span>
@@ -104,6 +132,32 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
                   </div>
                 )}
               </div>
+
+              {!aiUnlimited && aiUsagePercent >= 80 && aiUsagePercent < 100 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm text-amber-800">Осталось мало запросов. Расширьте тариф, чтобы не останавливать работу.</p>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = '/purchase'; }}
+                    className="mt-2 text-sm font-medium text-amber-700 underline hover:text-amber-900"
+                  >
+                    Расширить тариф
+                  </button>
+                </div>
+              )}
+
+              {!aiUnlimited && aiUsagePercent >= 100 && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm text-red-800">AI-запросы закончились. Обновите тариф для продолжения работы.</p>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = '/purchase'; }}
+                    className="mt-2 text-sm font-medium text-red-700 underline hover:text-red-900"
+                  >
+                    Обновить тариф
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-4 text-sm text-slate-400">Не удалось загрузить данные подписки.</div>
