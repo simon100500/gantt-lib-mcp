@@ -1,11 +1,11 @@
 /**
- * SQLite admin viewer routes
+ * DB admin viewer routes
  * GET /admin/db — HTML interface
  * GET /admin/api/tables — list tables
  * GET /admin/api/table/:name — get table data
  */
 
-import { getDb } from './db.js';
+import { getPrisma } from './db.js';
 
 export async function registerAdminRoutes(fastify: any) {
   // Serve HTML viewer
@@ -16,39 +16,61 @@ export async function registerAdminRoutes(fastify: any) {
 
   // List all tables
   fastify.get('/admin/api/tables', async () => {
-    const db = await getDb();
-    const result = await db.execute(`
-      SELECT name FROM sqlite_master
-      WHERE type IN ('table','view')
-      ORDER BY name
+    const prisma = getPrisma();
+    const tables: any[] = await prisma.$queryRawUnsafe(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      ORDER BY table_name
     `);
-    return result.rows.map((r: any) => r.name);
+    return tables.map((r: any) => r.table_name);
   });
 
   // Get table structure and data
   fastify.get('/admin/api/table/:name', async (req: any) => {
     const tableName = req.params.name;
-    const db = await getDb();
+    const prisma = getPrisma();
+
+    // Sanitize table name to prevent SQL injection
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) {
+      return { error: 'Invalid table name' };
+    }
 
     // Get table schema
-    const schema = await db.execute(`PRAGMA table_info('${tableName}')`);
+    const columns: any[] = await prisma.$queryRawUnsafe(`
+      SELECT column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_name = '${tableName}' AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `);
+
+    // Get primary key columns
+    const pkColumns: any[] = await prisma.$queryRawUnsafe(`
+      SELECT a.attname
+      FROM pg_index i
+      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+      WHERE i.indrelid = '"${tableName}"'::regclass AND i.indisprimary
+    `);
+    const pkSet = new Set(pkColumns.map((r: any) => r.attname));
 
     // Get row count
-    const countResult = await db.execute(`SELECT COUNT(*) as count FROM "${tableName}"`);
-    const count = countResult.rows[0].count;
+    const countResult: any[] = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM "${tableName}"`);
+    const count = countResult[0].count;
 
     // Get data (limit to 1000 rows)
-    const data = await db.execute(`SELECT * FROM "${tableName}" LIMIT 1000`);
+    const rows: any[] = await prisma.$queryRawUnsafe(`SELECT * FROM "${tableName}" LIMIT 1000`);
 
     return {
       table: tableName,
-      columns: schema.rows.map((r: any) => ({
-        name: r.name,
-        type: r.type,
-        pk: r.pk > 0,
+      columns: columns.map((r: any) => ({
+        name: r.column_name,
+        type: r.data_type,
+        pk: pkSet.has(r.column_name),
+        nullable: r.is_nullable === 'YES',
+        default: r.column_default,
       })),
       count,
-      rows: data.rows,
+      rows,
     };
   });
 
@@ -64,11 +86,15 @@ export async function registerAdminRoutes(fastify: any) {
     }
 
     try {
-      const db = await getDb();
-      const result = await db.execute(sql);
+      const prisma = getPrisma();
+      const rows: any[] = await prisma.$queryRawUnsafe(sql);
+
+      // Extract column names from first row keys
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
       return {
-        columns: result.columns,
-        rows: result.rows,
+        columns,
+        rows,
       };
     } catch (err: any) {
       return { error: err.message };
@@ -81,7 +107,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SQLite Admin</title>
+  <title>DB Admin</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
@@ -107,12 +133,12 @@ const ADMIN_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <h1>🗄️ SQLite Admin</h1>
+  <h1>DB Admin</h1>
   <div class="container">
     <div class="nav" id="nav"></div>
     <div class="query-box">
       <textarea id="sqlInput" placeholder="SELECT * FROM tasks LIMIT 10">SELECT * FROM tasks LIMIT 10</textarea>
-      <button onclick="runQuery()">▶ Run Query</button>
+      <button onclick="runQuery()">&#9654; Run Query</button>
     </div>
     <div class="table-info" id="info"></div>
     <div id="content"></div>
@@ -137,6 +163,11 @@ const ADMIN_HTML = `<!DOCTYPE html>
 
       const res = await fetch(\`/admin/api/table/\${name}\`);
       const data = await res.json();
+
+      if (data.error) {
+        document.getElementById('content').innerHTML = \`<div class="error">\${data.error}</div>\`;
+        return;
+      }
 
       document.getElementById('info').innerHTML = \`
         <strong>\${data.table}</strong>
