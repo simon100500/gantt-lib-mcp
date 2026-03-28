@@ -31,18 +31,15 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
   return (
     <div className="h-full w-full overflow-y-auto bg-[#f4f5f7] px-4 py-6 sm:px-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="mb-3 inline-flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-800"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Назад к проекту
-            </button>
-            <h1 className="text-2xl font-semibold text-slate-900">Подписка и платежи</h1>
-          </div>
+        <div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-800"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Назад в приложение
+          </button>
         </div>
 
         {paymentSuccess && (
@@ -53,7 +50,16 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
         )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Текущий план</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-lg font-semibold text-slate-900">Текущий тариф</h1>
+            <button
+              type="button"
+              onClick={() => { window.location.href = '/purchase'; }}
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              Расширить
+            </button>
+          </div>
           {loading ? (
             <div className="mt-4 text-sm text-slate-400">Загрузка...</div>
           ) : error ? (
@@ -69,22 +75,15 @@ export function AccountBillingPage({ onClose }: AccountBillingPageProps) {
                     <p className="mt-2 text-sm text-slate-500">Действует до: {formatDate(subscription.periodEnd)}</p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  {subscription.plan !== 'free' && (
+                {subscription.plan !== 'free' && (
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className={`rounded-full px-3 py-1 text-sm ${
                       subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}>
                       {subscription.isActive ? 'Активна' : 'Истекла'}
                     </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => { window.location.href = '/purchase'; }}
-                    className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-                  >
-                    Расширить
-                  </button>
-                </div>
+                  </div>
+                )}
               </div>
 
               <div>

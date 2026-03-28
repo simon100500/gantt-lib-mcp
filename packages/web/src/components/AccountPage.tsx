@@ -1,5 +1,4 @@
 import { LoginButton } from './LoginButton';
-import { Button } from './ui/button';
 import { AccountBillingPage } from './AccountBillingPage';
 
 interface AccountPageProps {
@@ -45,12 +44,7 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="text-sm font-semibold tracking-tight">GetGantt Account</span>
           </a>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
-            <Button variant="outline" size="sm" onClick={() => { window.location.href = '/'; }}>
-              В приложение
-            </Button>
-          </div>
+          <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
         </div>
       </header>
 
