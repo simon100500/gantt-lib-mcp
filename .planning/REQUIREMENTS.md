@@ -124,11 +124,11 @@
 | CONTENT-05 | 26 | Pending |
 | CONTENT-06 | 26 | Pending |
 | CONTENT-07 | 26 | Complete |
-| DEPLOY-01 | 27 | Pending |
-| DEPLOY-02 | 27 | Pending |
-| DEPLOY-03 | 27 | Pending |
-| DEPLOY-04 | 27 | Pending |
-| DEPLOY-05 | 27 | Pending |
+| DEPLOY-01 | 27 | Complete |
+| DEPLOY-02 | 27 | Complete |
+| DEPLOY-03 | 27 | Complete |
+| DEPLOY-04 | 27 | Complete |
+| DEPLOY-05 | 27 | Complete |
 
 **Coverage:** 27/27 requirements mapped to phases ✓
 

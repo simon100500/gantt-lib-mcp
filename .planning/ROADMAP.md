@@ -20,7 +20,7 @@
 - [x] **Phase 24: Astro Site Foundation** - Astro site with hero, navigation, responsive layout
 - [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
 - [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
-- [ ] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration
+- [x] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration (completed 2026-03-29)
 - [x] **Phase 28: Billing** - YooKassa integration, subscription management, plan enforcement (completed 2026-03-27)
 
 ---
@@ -157,7 +157,7 @@
 | 24. Astro Site Foundation | 3/3 | Complete | 2026-03-23 |
 | 25. Interactive Preview | 0/2 | Not started | - |
 | 26. Content & SEO | 0/2 | Planned    |  |
-| 27. Domain Separation | 0/3 | Not started | - |
+| 27. Domain Separation | -/3 | Complete | 2026-03-29 |
 | 28. Billing | 4/4 | Complete    | 2026-03-28 |
 
 ---
@@ -188,11 +188,11 @@
 | CONTENT-05 | 26 | Pending |
 | CONTENT-06 | 26 | Pending |
 | CONTENT-07 | 26 | Pending |
-| DEPLOY-01 | 27 | Pending |
-| DEPLOY-02 | 27 | Pending |
-| DEPLOY-03 | 27 | Pending |
-| DEPLOY-04 | 27 | Pending |
-| DEPLOY-05 | 27 | Pending |
+| DEPLOY-01 | 27 | Complete |
+| DEPLOY-02 | 27 | Complete |
+| DEPLOY-03 | 27 | Complete |
+| DEPLOY-04 | 27 | Complete |
+| DEPLOY-05 | 27 | Complete |
 | BILL-DB | 28 | Pending |
 | BILL-BACKEND | 28 | Pending |
 | BILL-YOOKASSA | 28 | Pending |
