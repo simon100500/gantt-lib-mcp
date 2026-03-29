@@ -146,7 +146,7 @@ export function PurchasePage({
 
   const handleChoosePlan = useCallback((plan: 'start' | 'team' | 'enterprise') => {
     if (plan === 'enterprise') {
-      window.location.href = 'mailto:support@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф';
+      window.location.href = 'mailto:ai@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф';
       return;
     }
 
@@ -363,7 +363,7 @@ export function PurchasePage({
               </div>
               <button
                 type="button"
-                onClick={() => { window.location.href = 'mailto:support@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф'; }}
+                onClick={() => { window.location.href = 'mailto:ai@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф'; }}
                 className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
               >
                 Напишите нам
@@ -371,19 +371,39 @@ export function PurchasePage({
             </div>
           </div>
 
-          <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mt-6 text-sm leading-relaxed text-slate-600">
             <h2 className="text-base font-semibold text-slate-900">Гарантии</h2>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              <p>Подписка не продлевается автоматически. Каждый платёж вы подтверждаете вручную.</p>
-              <p>Вернём деньги, если тариф не понравится.</p>
+            <div className="mt-3 space-y-2">
+              <p>Это разовые платежи, не подписка. Каждый платёж вы подтверждаете вручную. Не продлевается автоматически. Вернём деньги, если тариф не понравится.</p>
             </div>
           </div>
 
-          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 px-8 py-6 text-center">
-            <blockquote className="text-lg font-medium text-slate-700">
-              &laquo;Бомба, такого на рынке нет!&raquo;
-            </blockquote>
-            <p className="mt-2 text-sm text-slate-500">&mdash; прораб, ранний доступ</p>
+          <div className="mt-6 text-sm leading-relaxed text-slate-600">
+            <div className="space-y-2">
+              <p>GetGantt предоставляет доступ к цифровому онлайн-сервису. Условия выбранного тарифа указаны на этой странице.</p>
+              <p>
+                Продолжая оплату, вы соглашаетесь с{' '}
+                <a
+                  href="https://getgantt.ru/terms"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline underline-offset-2 hover:text-primary/80"
+                >
+                  пользовательским соглашением
+                </a>
+                .
+              </p>
+              <p>ИП Волобуев Дмитрий Юрьевич, ИНН 781902818607</p>
+              <p>
+                Контакт для обращений:{' '}
+                <a
+                  href="mailto:ai@getgantt.ru"
+                  className="text-primary underline underline-offset-2 hover:text-primary/80"
+                >
+                  ai@getgantt.ru
+                </a>
+              </p>
+            </div>
           </div>
         </section>
       </main>

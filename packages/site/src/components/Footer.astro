@@ -4,7 +4,43 @@
 
 <footer class="border-t border-border bg-background">
   <div class="mx-auto max-w-7xl px-4 py-12 lg:px-6">
-    <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-[1.35fr_1fr_1fr]">
+      {/* Brand Column */}
+      <div>
+        <a
+          href="/"
+          class="inline-flex items-center gap-3 text-foreground transition-opacity hover:opacity-90"
+        >
+          <img
+            src="/favicon.svg"
+            alt="GetGantt"
+            width="26"
+            height="26"
+            class="h-[26px] w-[26px]"
+          />
+          <span class="text-base font-semibold tracking-tight">GetGantt</span>
+        </a>
+        <p class="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+          Сервис для быстрого создания графиков с помощью ИИ и полноценного
+          управления проектами. Лёгкая и простая онлайн-замена MS Project,
+          Primavera и GanttPRO
+        </p>
+        <div
+          class="mt-5 space-y-1 text-sm leading-relaxed text-muted-foreground"
+        >
+          <p>
+            <a
+              href="mailto:ai@getgantt.ru"
+              class="text-primary transition-colors hover:text-primary/80"
+            >
+              ai@getgantt.ru
+            </a>
+          </p>
+          <p>ИП Волобуев Дмитрий Юрьевич</p>
+          <p>ИНН: 781902818607</p>
+        </div>
+      </div>
+
       {/* Product Column */}
       <div>
         <h3 class="mb-4 text-sm font-semibold text-foreground">Продукт</h3>
@@ -36,9 +72,9 @@
         </ul>
       </div>
 
-      {/* App Column */}
+      {/* Links Column */}
       <div>
-        <h3 class="mb-4 text-sm font-semibold text-foreground">Приложение</h3>
+        <h3 class="mb-4 text-sm font-semibold text-foreground">Ссылки</h3>
         <ul class="space-y-3">
           <li>
             <a
@@ -48,15 +84,6 @@
               Открыть редактор
             </a>
           </li>
-        </ul>
-      </div>
-
-      {/* Legal Column */}
-      <div>
-        <h3 class="mb-4 text-sm font-semibold text-foreground">
-          Правовая информация
-        </h3>
-        <ul class="space-y-3">
           <li>
             <a
               href="/privacy"
@@ -74,14 +101,10 @@
             </a>
           </li>
         </ul>
+        <p class="pt-6 text-sm text-muted-foreground">
+          &copy; 2026 GetGantt. Все права защищены.
+        </p>
       </div>
-    </div>
-
-    {/* Copyright */}
-    <div
-      class="mt-12 border-t border-border pt-8 text-center text-sm text-muted-foreground"
-    >
-      <p>&copy; 2026 GetGantt. Все права защищены.</p>
     </div>
   </div>
 </footer>

@@ -238,7 +238,7 @@ export default function DemoSection() {
       </div>
 
       {/* CTA */}
-      <section className="relative mx-auto mt-20 max-w-6xl px-4">
+      <section className="relative mx-auto mt-20 max-w-7xl px-4 lg:px-6">
         <div className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,255,0.96)_100%)] px-6 py-12 text-center shadow-[0_24px_70px_rgba(148,163,184,0.12)] sm:px-10 sm:py-14 lg:px-12 lg:py-16">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute -left-24 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full border border-slate-100" />
