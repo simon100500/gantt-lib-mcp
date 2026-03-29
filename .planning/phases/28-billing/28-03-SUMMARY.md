@@ -31,7 +31,7 @@ key-files:
 
 key-decisions:
   - "Used Zustand store (showBillingPage) for billing nav instead of module-level callback pattern - simpler and consistent with existing state management"
-  - "Enterprise CTA uses mailto:support@getgantt.ru with subject line (D-02)"
+  - "Enterprise CTA uses mailto:ai@getgantt.ru with subject line (D-02)"
 
 patterns-established:
   - "Billing page triggered via dual source: URL params on mount OR Zustand store for in-app navigation"
@@ -76,7 +76,7 @@ status: pending-verification
 
 ## Decisions Made
 - Used Zustand store (showBillingPage) for billing nav instead of module-level callback pattern - simpler and consistent with existing state management (all other modal/page visibility is in useUIStore)
-- Enterprise CTA uses mailto:support@getgantt.ru with subject line per D-02
+- Enterprise CTA uses mailto:ai@getgantt.ru with subject line per D-02
 
 ## Deviations from Plan
 
