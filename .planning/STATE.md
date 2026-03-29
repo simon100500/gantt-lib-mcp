@@ -14,7 +14,7 @@ progress:
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-29
 **Current milestone:** v4.0 Astro Landing
 **Current phase:** 26
 

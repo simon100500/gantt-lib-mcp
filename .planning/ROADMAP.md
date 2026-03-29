@@ -19,7 +19,7 @@
 
 - [x] **Phase 24: Astro Site Foundation** - Astro site with hero, navigation, responsive layout
 - [ ] **Phase 25: Interactive Preview** - Astro islands with drag-to-edit gantt chart
-- [ ] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals
+- [x] **Phase 26: Content & SEO** - Features, FAQ, legal pages, SEO fundamentals (completed 2026-03-29)
 - [x] **Phase 27: Domain Separation** - Multi-domain deployment, CORS, share link migration (completed 2026-03-29)
 - [x] **Phase 28: Billing** - YooKassa integration, subscription management, plan enforcement (completed 2026-03-27)
 
@@ -99,7 +99,12 @@
 6. Search engines understand indexing rules via robots.txt
 7. Each page has proper meta title, description, and OG tags for social sharing
 
-**Plans:** 0/2 plans executed
+**Plans:** 2/2 plans executed
+
+- [x] 26-01-PLAN.md — Features, FAQ, and shared metadata contract
+- [x] 26-02-PLAN.md — Privacy, terms, sitemap.xml, and robots.txt
+
+**Completed:** 2026-03-29
 
 **UI hint:** yes
 
@@ -156,7 +161,7 @@
 |-------|----------------|--------|-----------|
 | 24. Astro Site Foundation | 3/3 | Complete | 2026-03-23 |
 | 25. Interactive Preview | 0/2 | Not started | - |
-| 26. Content & SEO | 0/2 | Planned    |  |
+| 26. Content & SEO | 2/2 | Complete    | 2026-03-29 |
 | 27. Domain Separation | -/3 | Complete | 2026-03-29 |
 | 28. Billing | 4/4 | Complete    | 2026-03-28 |
 
@@ -183,10 +188,10 @@
 | INTER-05 | 25 | Pending |
 | CONTENT-01 | 26 | Pending |
 | CONTENT-02 | 26 | Pending |
-| CONTENT-03 | 26 | Pending |
-| CONTENT-04 | 26 | Pending |
-| CONTENT-05 | 26 | Pending |
-| CONTENT-06 | 26 | Pending |
+| CONTENT-03 | 26 | Complete |
+| CONTENT-04 | 26 | Complete |
+| CONTENT-05 | 26 | Complete |
+| CONTENT-06 | 26 | Complete |
 | CONTENT-07 | 26 | Pending |
 | DEPLOY-01 | 27 | Complete |
 | DEPLOY-02 | 27 | Complete |
