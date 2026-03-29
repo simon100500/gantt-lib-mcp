@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check } from 'lucide-react';
 import { LoginButton } from './LoginButton';
-import { Button } from './ui/button';
 import { useBillingStore } from '../stores/useBillingStore';
 import {
   PLAN_FEATURES,
@@ -13,6 +12,12 @@ import {
   type BillingPeriod,
   type PaidPlanId,
 } from '../lib/billing';
+
+const FREE_FEATURES = [
+  '1 проект',
+  '20 AI-запросов (разово)',
+  'Гостевые ссылки',
+];
 
 interface PurchasePageProps {
   initialPlan?: string | null;
@@ -159,14 +164,14 @@ export function PurchasePage({
 
   if (checkoutMode && checkoutPlan) {
     return (
-      <div className="min-h-dvh bg-slate-50">
+      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
         <PublicPurchaseHeader
           isAuthenticated={isAuthenticated}
           userEmail={userEmail}
           onLoginRequired={onLoginRequired}
         />
-        <div className="px-4 py-8 sm:px-6">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -174,7 +179,7 @@ export function PurchasePage({
                   resetPaymentState();
                   setCheckoutPlan(null);
                 }}
-                className="text-slate-500 transition-colors hover:text-slate-800"
+                className="text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
                 aria-label="Вернуться к тарифам"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -223,18 +228,24 @@ export function PurchasePage({
   }
 
   return (
-    <div className="min-h-dvh bg-[linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] text-slate-900">
+    <div className="flex h-dvh flex-col overflow-hidden bg-white text-slate-900">
       <PublicPurchaseHeader
         isAuthenticated={isAuthenticated}
         userEmail={userEmail}
         onLoginRequired={onLoginRequired}
       />
 
-      <main className="px-4 pb-12 pt-8 sm:px-6 sm:pt-10">
-        <section className="mx-auto max-w-6xl">
+      <main className="flex-1 overflow-y-auto bg-white px-4 pb-12 pt-8 sm:px-6 sm:pt-10">
+        <section className="mx-auto max-w-5xl">
+          <a
+            href="/account"
+            className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 rounded"
+          >
+            ← Назад к Аккаунту
+          </a>
           <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Оплата</h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl" style={{ textWrap: 'balance' }}>Тарифы</h1>
               {paymentSuccess && (
                 <p className="mt-2 text-sm text-green-700">Оплата прошла успешно. Переходим в аккаунт...</p>
               )}
@@ -244,66 +255,76 @@ export function PurchasePage({
               <button
                 type="button"
                 onClick={() => setBillingPeriod('monthly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors ${
-                  billingPeriod === 'monthly'
-                    ? 'bg-slate-900 font-medium text-white'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'monthly'
+                  ? 'bg-slate-900 font-medium text-white'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 Месяц
               </button>
               <button
                 type="button"
                 onClick={() => setBillingPeriod('yearly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors ${
-                  billingPeriod === 'yearly'
-                    ? 'bg-slate-900 font-medium text-white'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
+                  ? 'bg-slate-900 font-medium text-white'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 Год
-                <span className="ml-1 text-xs text-emerald-400">-33%</span>
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {(['start', 'team', 'enterprise'] as const).map((plan) => {
-              const prices = PLAN_PRICES[plan];
-              const features = PLAN_FEATURES[plan];
+            {(['free', 'start', 'team'] as const).map((plan) => {
+              const prices = plan === 'free' ? null : PLAN_PRICES[plan];
+              const features = plan === 'free' ? FREE_FEATURES : PLAN_FEATURES[plan];
               const isPreferred = preferredPlan === plan;
+              const isAccent = plan === 'start';
 
               return (
                 <article
                   key={plan}
-                  className={`flex flex-col rounded-3xl border p-6 shadow-sm transition-all ${
-                    isPreferred
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-900'
-                  }`}
+                  className={`flex flex-col rounded-3xl border p-6 shadow-sm transition-all ${isAccent
+                    ? 'border-primary/30 bg-primary/[0.045] text-slate-900 shadow-[0_20px_60px_-36px_rgba(97,88,224,0.35)]'
+                    : 'border-slate-200 bg-white text-slate-900'
+                    }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-xl font-semibold">{PLAN_LABELS[plan]}</h3>
                     {plan === 'start' && (
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        isPreferred ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isAccent ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
                         Популярный
                       </span>
                     )}
                   </div>
 
                   <div className="mt-4">
-                    <span className="text-4xl font-bold">{formatPrice(prices[billingPeriod])}</span>
-                    <span className={`ml-1 text-sm ${isPreferred ? 'text-slate-300' : 'text-slate-500'}`}>
-                      /{billingPeriod === 'monthly' ? 'мес' : 'год'}
-                    </span>
+                    {plan === 'free' ? (
+                      <>
+                        <span className="text-4xl font-bold">0 ₽</span>
+                        <span className="ml-1 text-sm text-slate-500">/ всегда</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-bold">{formatPrice(PLAN_PRICES[plan][billingPeriod])}</span>
+                        <span className="ml-1 text-sm text-slate-500">
+                          /{billingPeriod === 'monthly' ? 'мес' : 'год'}
+                        </span>
+                        {billingPeriod === 'yearly' && (
+                          <span className="mt-1 block text-sm text-emerald-600">
+                            Экономия {formatPrice(PLAN_PRICES[plan].monthly * 12 - PLAN_PRICES[plan].yearly)} в год
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
 
-                  <ul className={`mt-6 flex-1 space-y-3 text-sm ${isPreferred ? 'text-slate-100' : 'text-slate-600'}`}>
+                  <ul className="mt-6 flex-1 space-y-3 text-sm text-slate-600">
                     {features.map((feature) => (
                       <li key={feature} className="flex items-start gap-3">
-                        <Check className={`mt-0.5 h-4 w-4 shrink-0 ${isPreferred ? 'text-emerald-300' : 'text-emerald-500'}`} />
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                         <span>{feature}</span>
                       </li>
                     ))}
@@ -311,18 +332,58 @@ export function PurchasePage({
 
                   <button
                     type="button"
-                    onClick={() => handleChoosePlan(plan)}
-                    className={`mt-8 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                      isPreferred
-                        ? 'bg-white text-slate-900 hover:bg-slate-100'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
-                    }`}
+                    onClick={() => {
+                      if (plan === 'free') {
+                        window.location.href = isAuthenticated ? '/account' : '/';
+                        return;
+                      }
+                      handleChoosePlan(plan);
+                    }}
+                    className={`mt-8 rounded-xl px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${plan === 'free'
+                      ? 'bg-slate-100 text-slate-900 hover:bg-slate-200'
+                      : isAccent
+                        ? 'bg-primary text-white hover:bg-primary/90'
+                        : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
+                      }`}
                   >
-                    {plan === 'enterprise' ? 'Напишите нам' : isAuthenticated ? 'Купить' : 'Войти и купить'}
+                    {plan === 'free' ? 'Продолжить бесплатно' : isAuthenticated ? `Перейти на ${PLAN_LABELS[plan]}` : `Войти и перейти на ${PLAN_LABELS[plan]}`}
                   </button>
                 </article>
               );
             })}
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Корпоративный от {formatPrice(PLAN_PRICES.enterprise.monthly)}</h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Безлимит проектов, расширенная команда и приоритетная поддержка для постоянного портфеля.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { window.location.href = 'mailto:support@getgantt.ru?subject=Запрос%20на%20корпоративный%20тариф'; }}
+                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+              >
+                Напишите нам
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Гарантии</h2>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              <p>Подписка не продлевается автоматически. Каждый платёж вы подтверждаете вручную.</p>
+              <p>Вернём деньги, если тариф не понравится.</p>
+            </div>
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 px-8 py-6 text-center">
+            <blockquote className="text-lg font-medium text-slate-700">
+              &laquo;Бомба, такого на рынке нет!&raquo;
+            </blockquote>
+            <p className="mt-2 text-sm text-slate-500">&mdash; прораб, ранний доступ</p>
           </div>
         </section>
       </main>
@@ -338,24 +399,27 @@ interface PublicPurchaseHeaderProps {
 
 function PublicPurchaseHeader({ isAuthenticated, userEmail, onLoginRequired }: PublicPurchaseHeaderProps) {
   return (
-    <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+    <header className="border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4 sm:px-6">
         <a href="/" className="flex items-center gap-3 text-slate-900">
-          <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
+          <img
+            src="/favicon.svg"
+            alt=""
+            width="18"
+            height="18"
+            className="h-[18px] w-[18px]"
+            aria-hidden="true"
+          />
           <div>
-            <div className="text-sm font-semibold tracking-tight">GetGantt Purchase</div>
-            <div className="text-xs text-slate-500">Тарифы и оплата</div>
+            <div className="text-sm font-semibold tracking-tight">ГетГант</div>
           </div>
         </a>
+        <span className="text-sm text-slate-400" aria-hidden="true">/</span>
+        <span className="text-sm font-medium text-slate-900">Тарифы</span>
 
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
           {isAuthenticated ? (
-            <>
-              <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
-              <Button variant="outline" size="sm" onClick={() => { window.location.href = '/account'; }}>
-                В аккаунт
-              </Button>
-            </>
+            <span className="hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
           ) : (
             <LoginButton onClick={onLoginRequired} />
           )}

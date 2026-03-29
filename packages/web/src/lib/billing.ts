@@ -10,28 +10,34 @@ export const PLAN_LABELS: Record<PlanId, string> = {
 };
 
 export const PLAN_PRICES: Record<'start' | 'team' | 'enterprise', Record<BillingPeriod, number>> = {
-  start: { monthly: 1490, yearly: 12000 },
-  team: { monthly: 4990, yearly: 59880 },
-  enterprise: { monthly: 12900, yearly: 154800 },
+  start: { monthly: 1490, yearly: 11900 },
+  team: { monthly: 4990, yearly: 47900 },
+  enterprise: { monthly: 12900, yearly: 129000 },
 };
 
 export const PLAN_FEATURES: Record<'start' | 'team' | 'enterprise', string[]> = {
   start: [
-    '5 проектов',
-    '10 AI-генераций в месяц',
-    '20 уточнений на проект',
-    '20 ресурсов',
+    '3 активных проекта',
+    '25 AI-запросов в день',
+    'Архив проектов',
+    'Пул ресурсов',
+    'Экспорт в PDF',
+    'Гостевые ссылки',
   ],
   team: [
-    '20 проектов',
-    'Безлимит AI-генераций',
-    'Безлимит уточнений',
-    'Безлимит ресурсов',
+    '7 активных проекта',
+    '50 AI-запросов в день',
+    'Архив проектов',
+    'Пул ресурсов',
     '5 участников команды',
+    'Экспорт PDF + Excel',
+    'Гостевые ссылки',
   ],
   enterprise: [
-    'Безлимит всего',
-    '20+ участников команды',
+    'Безлимит проектов',
+    '100 AI-запросов в день',
+    '20 участников команды',
+    'Экспорт PDF + Excel + API',
     'Приоритетная поддержка',
   ],
 };
