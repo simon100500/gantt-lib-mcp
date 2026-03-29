@@ -3,6 +3,7 @@
 const currentPage = Astro.url.pathname;
 
 const navLinks = [
+  { href: "/#demo", label: "Демо" },
   { href: "/features", label: "Возможности" },
   { href: "/pricing", label: "Тарифы" },
   { href: "/faq", label: "FAQ" },
@@ -176,5 +177,17 @@ const navLinks = [
   // Close on ESC key
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeMenu();
+  });
+
+  // Handle "Демо" link — close mobile menu, set hash without browser scroll
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest('a[href="/#demo"]');
+    if (!link) return;
+    closeMenu();
+    if (window.location.pathname === "/") {
+      e.preventDefault();
+      history.pushState(null, "", "/#demo");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    }
   });
 </script>

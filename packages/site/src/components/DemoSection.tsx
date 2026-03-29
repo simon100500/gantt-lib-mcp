@@ -126,6 +126,7 @@ export default function DemoSection() {
   const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
   const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [highlightDemo, setHighlightDemo] = useState(false);
   const ganttRef = useRef<HTMLDivElement>(null);
   const shouldScrollAfterSubmit = useRef(false);
 
@@ -151,6 +152,29 @@ export default function DemoSection() {
     };
     requestAnimationFrame(step);
   }, [activeIndex]);
+
+  // Handle #demo hash — highlight input, scroll only if not visible
+  useEffect(() => {
+    function checkDemo() {
+      if (window.location.hash !== '#demo') return;
+      setTimeout(() => {
+        const el = document.getElementById('demo');
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const isVisible = rect.top >= -50 && rect.bottom <= window.innerHeight + 50;
+          if (!isVisible) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+        setHighlightDemo(true);
+        setTimeout(() => setHighlightDemo(false), 6000);
+      }, 100);
+    }
+
+    checkDemo();
+    window.addEventListener('hashchange', checkDemo);
+    return () => window.removeEventListener('hashchange', checkDemo);
+  }, []);
 
   function handleSubmit() {
     if (selectedIndex === null) return;
@@ -208,8 +232,14 @@ export default function DemoSection() {
             </div>
           </div>
 
-          <div className="relative lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
-            <div className="relative rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.12)] sm:p-6">
+          <div id="demo" className="relative lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
+            {highlightDemo && (
+              <div className="absolute -top-11 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg">
+                Выберите пример проекта
+                <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-primary" />
+              </div>
+            )}
+            <div className={`relative rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.12)] sm:p-6 transition-shadow duration-500 ${highlightDemo ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
               <InputDemo
                 chips={TEMPLATES.map(t => ({ label: t.label, prompt: t.prompt }))}
                 selectedIndex={selectedIndex}
