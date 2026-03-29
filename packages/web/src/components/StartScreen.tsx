@@ -67,7 +67,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
   }
 
   return (
-    <div className="flex h-full flex-1 justify-center bg-background pt-28 sm:pt-32">
+    <div className="flex h-full flex-1 flex-col items-center bg-background pt-28 sm:pt-32">
       <div className="w-full max-w-[640px] px-6">
         {/* Headline */}
         <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">
@@ -131,6 +131,15 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
           </div>
         </form>
       </div>
+
+      {!isAuthenticated && (
+        <div className="mt-auto flex w-full max-w-[640px] flex-wrap justify-center gap-x-4 gap-y-1 px-6 pt-6 pb-6 text-sm text-slate-400">
+          <a href="https://getgantt.ru/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">О продукте</a>
+          <a href="https://ai.getgantt.ru/purchase" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Тарифы</a>
+          <a href="https://getgantt.ru/privacy/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Политика конфиденциальности</a>
+          <a href="https://getgantt.ru/terms/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Условия</a>
+        </div>
+      )}
     </div>
   );
 }
