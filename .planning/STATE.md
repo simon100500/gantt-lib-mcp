@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Astro Landing
+milestone: v5.0
+milestone_name: Plan Constraints
 current_phase: null
-status: shipped
-last_updated: "2026-03-29T13:40:00.000Z"
+status: defining_requirements
+last_updated: "2026-03-29T14:00:00.000Z"
 progress:
   total_phases: 0
   completed_phases: 0
@@ -15,8 +15,8 @@ progress:
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-29
-**Current milestone:** None (v4.0 shipped)
-**Status:** Awaiting next milestone
+**Current milestone:** v5.0 Plan Constraints
+**Status:** Defining requirements
 
 ---
 
@@ -25,7 +25,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта: создавать задачи, устанавливать зависимости и автоматически пересчитывать сроки при изменениях
-**Current focus:** Planning next milestone
+**Current focus:** v5.0 — Constraint engine + enforcement
 
 ---
 
@@ -51,9 +51,13 @@ packages/
 
 ---
 
-## Next Steps
+## Accumulated Context
 
-1. **Start next milestone:** `/gsd:new-milestone`
+- v1.0-v4.0 shipped successfully
+- Billing infrastructure exists (YooKassa, subscription management)
+- Plan definitions exist in code but no enforcement mechanism
+- LimitReachedModal component exists from v4.0 (basic feature gate modal)
 
 ---
-*Last updated: 2026-03-29 after v4.0 milestone completion*
+
+*Last updated: 2026-03-29 — Milestone v5.0 started*
