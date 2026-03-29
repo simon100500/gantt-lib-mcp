@@ -25,7 +25,7 @@ const plans = [
     name: "Старт",
     subtitle: "Для частных специалистов и небольших команд",
     monthlyPrice: "1 490 ₽",
-    yearlyPrice: "12 000 ₽",
+    yearlyPrice: "11 900 ₽",
     monthlyPeriod: "/ мес",
     yearlyPeriod: "/ год",
     accent: true,
@@ -47,7 +47,7 @@ const plans = [
     name: "Команда",
     subtitle: "Для операционной работы по нескольким объектам",
     monthlyPrice: "4 990 ₽",
-    yearlyPrice: "59 880 ₽",
+    yearlyPrice: "47 900 ₽",
     monthlyPeriod: "/ мес",
     yearlyPeriod: "/ год",
     accent: false,
@@ -69,7 +69,7 @@ const plans = [
     name: "Корпоративный",
     subtitle: "Для компаний с постоянным портфелем проектов",
     monthlyPrice: "12 900 ₽",
-    yearlyPrice: "154 800 ₽",
+    yearlyPrice: "129 000 ₽",
     monthlyPeriod: "/ мес",
     yearlyPeriod: "/ год",
     accent: false,
@@ -234,32 +234,26 @@ const compareRows = [
         }
       </div>
 
-      <div
-        class="mt-8 text-center text-sm leading-relaxed text-muted-foreground"
-      >
-        Если вам нужен безлимит проектов, у нас есть тариф «Корпоративный».
-        Напишите нам.
+      <div class="mt-8 rounded-[28px] border border-border bg-slate-50 p-6 shadow-sm">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="text-xl font-semibold text-foreground">
+              Корпоративный от 12 900 ₽
+              <span class="ml-1 text-sm font-normal text-muted-foreground">/ в мес</span>
+            </h2>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Безлимит проектов, расширенная команда и приоритетная поддержка для постоянного портфеля.
+            </p>
+          </div>
+          <a
+            href="mailto:ai@getgantt.ru?subject=GetGantt%20Enterprise"
+            class="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+          >
+            Напишите нам
+          </a>
+        </div>
       </div>
 
-      <div
-        class="mt-8 text-sm leading-relaxed text-muted-foreground"
-      >
-        <p>
-          GetGantt предоставляет доступ к цифровому онлайн-сервису. Актуальные
-          тарифы опубликованы на этой странице, а порядок использования сервиса
-          описан в
-          <a href="/terms" class="text-primary hover:underline">
-            пользовательском соглашении</a
-          >.
-        </p>
-        <p class="mt-3">ИП Волобуев Дмитрий Юрьевич, ИНН 781902818607</p>
-        <p class="mt-1">
-          Контакт для обращений:
-          <a href="mailto:ai@getgantt.ru" class="text-primary hover:underline"
-            >ai@getgantt.ru</a
-          >
-        </p>
-      </div>
     </div>
   </section>
 
@@ -308,6 +302,24 @@ const compareRows = [
           </table>
         </div>
       </div>
+
+      <div class="mt-8 max-w-5xl text-sm leading-relaxed text-muted-foreground">
+        <p>
+          GetGantt предоставляет доступ к цифровому онлайн-сервису. Актуальные
+          тарифы опубликованы на этой странице, а порядок использования сервиса
+          описан в
+          <a href="/terms" class="text-primary hover:underline">
+            пользовательском соглашении</a
+          >.
+        </p>
+        <p class="mt-3">ИП Волобуев Дмитрий Юрьевич, ИНН 781902818607</p>
+        <p class="mt-1">
+          Контакт для обращений:
+          <a href="mailto:ai@getgantt.ru" class="text-primary hover:underline"
+            >ai@getgantt.ru</a
+          >
+        </p>
+      </div>
     </div>
   </section>
 
@@ -338,6 +350,7 @@ const compareRows = [
           Посмотреть FAQ
         </a>
       </div>
+
     </div>
   </section>
 
