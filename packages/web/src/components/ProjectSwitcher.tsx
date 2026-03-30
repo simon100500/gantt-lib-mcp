@@ -15,7 +15,7 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
   return (
     <div className="flex flex-col h-full">
       {/* Logo and close/collapse button - on all screens */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 px-3">
         <div className="flex items-center gap-2">
           <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
           <span className="text-base font-semibold text-slate-900">ГетГант</span>
@@ -34,19 +34,21 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
       </div>
 
       {/* Create new button - fixed at top */}
-      <Button
-        onClick={onCreateNew}
-        className="w-full shrink-0 mb-3"
-        size="sm"
-      >
-        <Plus className="mr-2 h-4 w-4" /> Новый проект
-      </Button>
+      <div className="px-3 mb-3">
+        <Button
+          onClick={onCreateNew}
+          className="w-full shrink-0"
+          size="sm"
+        >
+          <Plus className="mr-2 h-4 w-4" /> Новый проект
+        </Button>
+      </div>
 
       {/* Divider */}
-      <div className="border-t border-slate-200" />
+      <div className="border-t border-slate-200 mx-3" />
 
       {/* Projects list */}
-      <div className="flex flex-col gap-2 flex-1 overflow-y-auto pt-3">
+      <div className="flex flex-col gap-2 flex-1 overflow-y-auto pt-3 px-1.5">
         {/* All projects as simple list */}
         {projects.length > 0 ? (
           <div className="flex flex-col gap-1">
@@ -55,14 +57,14 @@ export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNe
                 key={p.id}
                 onClick={() => onSwitch(p.id)}
                 className={cn(
-                  "flex items-center justify-between gap-2 px-2 py-2 rounded-md text-left transition-colors",
+                  "flex items-center justify-between gap-2 px-3 py-1.5 rounded-md text-left transition-colors",
                   "hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   p.id === currentProject.id
                     ? "bg-slate-100 text-slate-900 font-medium"
                     : "text-slate-700"
                 )}
               >
-                <span className="truncate text-sm">{p.name}</span>
+                <span className="truncate text-xs">{p.name}</span>
                 {p.taskCount === undefined ? (
                   <span className="text-xs text-slate-200 shrink-0 w-4 text-center">—</span>
                 ) : p.taskCount > 0 ? (

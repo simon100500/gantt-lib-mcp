@@ -127,7 +127,7 @@ export function ProjectMenu({
             projectSidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0',
           )}
         >
-          <div className="flex-1 min-h-0 px-3 pt-3">
+          <div className="flex-1 min-h-0 pt-3">
             {auth.isAuthenticated && auth.project ? (
               <ProjectSwitcher
                 currentProject={currentProject}
@@ -146,7 +146,7 @@ export function ProjectMenu({
               <ProjectSwitcher
                 currentProject={currentProject}
                 projects={[]}
-                onSwitch={() => {}}
+                onSwitch={() => { }}
                 onCreateNew={() => {
                   void onCreateProject();
                 }}
