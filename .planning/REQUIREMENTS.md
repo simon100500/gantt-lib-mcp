@@ -1,0 +1,88 @@
+# Requirements: gantt-lib MCP Server
+
+**Defined:** 2026-03-29
+**Core Value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
+
+## v5.0 Requirements
+
+Requirements for Plan Constraints milestone. Each maps to roadmap phases.
+
+### Constraint Engine
+
+- [ ] **ENG-01**: Plan config определяет лимиты для каждого тарифа в едином source of truth (4 тарифа: Бесплатный, Старт, Команда, Корпоративный)
+- [ ] **ENG-02**: ConstraintService предоставляет checkLimit(), getRemaining(), getUsage() для любого лимита
+- [ ] **ENG-03**: Система поддерживает типы лимитов: count (проекты), daily (AI запросы paid), lifetime (AI запросы free), boolean (feature gates)
+- [ ] **ENG-04**: Usage counters хранятся в PostgreSQL с Prisma schema для persistence и atomic increments
+
+### Backend Enforcement
+
+- [ ] **ENF-01**: API middleware проверяет лимиты перед обработкой protected endpoints (create project, AI query)
+- [ ] **ENF-02**: MCP tools проверяют лимиты — AI не может превысить лимит через tool call (create_task внутри лимитированного проекта, AI chat при исчерпанных запросах)
+- [ ] **ENF-03**: Error response содержит limit info (remaining, plan name, upgrade hint) в структурированном формате
+
+### Usage Tracking
+
+- [ ] **TRK-01**: AI query counter — daily reset для paid планов (25/50/100), lifetime counter для free (20 навсегда)
+- [ ] **TRK-02**: Active project count tracking per user (1/3/7/unlimited по тарифу)
+- [ ] **TRK-03**: GET /api/usage возвращает текущий usage для всех лимитов — frontend может показать remaining
+
+### Frontend Constraints UX
+
+- [ ] **FUX-01**: Usage indicators показывают remaining/used рядом с ключевыми действиями (projects, AI chat)
+- [ ] **FUX-02**: LimitReachedModal обновлён с контекстной информацией — какой лимит, текущий тариф, сколько стоит апгрейд
+- [ ] **FUX-03**: Proactive UI guards — кнопки создания/disabled при достижении лимита, tooltip объясняет почему
+
+### Feature Gates
+
+- [ ] **GATE-01**: Feature gate для archive — доступно на Старт+ (бесплатный видит upsell)
+- [ ] **GATE-02**: Feature gate для resource pool — доступно на Старт+ (бесплатный видит upsell)
+- [ ] **GATE-03**: Feature gate для export formats — PDF на Старт, PDF+Excel на Команда, PDF+Excel+API на Корпоративный
+
+## Future Requirements
+
+### Deferred to future milestones
+
+- **MEMBER-01**: Member count enforcement (1/1/5/20) — когда командные функции будут реализованы
+- **GUEST-01**: Guest link management — безлимит для всех, без enforcement нужен
+- **DASH-01**: Usage dashboard page — детальный обзор использования в settings
+- **TRIAL-01**: Trial period для paid планов — 14 дней trial
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Rate limiting (per-second) | Это не тарифные лимиты — separate concern |
+| Admin panel для plan management | Plans hardcoded в config, admin panel позже |
+| Custom plans | Только 4 предустановленных тарифа |
+| Plan downgrade flow | Downgrade требует data migration — отдельная задача |
+| Granular permissions | Тарифы управляют лимитами, не permissions |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ENG-01 | — | Pending |
+| ENG-02 | — | Pending |
+| ENG-03 | — | Pending |
+| ENG-04 | — | Pending |
+| ENF-01 | — | Pending |
+| ENF-02 | — | Pending |
+| ENF-03 | — | Pending |
+| TRK-01 | — | Pending |
+| TRK-02 | — | Pending |
+| TRK-03 | — | Pending |
+| FUX-01 | — | Pending |
+| FUX-02 | — | Pending |
+| FUX-03 | — | Pending |
+| GATE-01 | — | Pending |
+| GATE-02 | — | Pending |
+| GATE-03 | — | Pending |
+
+**Coverage:**
+- v5.0 requirements: 16 total
+- Mapped to phases: 0
+- Unmapped: 16 ⚠️
+
+---
+*Requirements defined: 2026-03-29*
+*Last updated: 2026-03-29 after initial definition*
