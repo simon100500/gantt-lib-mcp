@@ -343,78 +343,36 @@ export function useBatchTaskUpdate({
         : updated;
       setTasks(optimisticTasks);
 
-      // Find all tasks whose sortOrder changed (not just the moved one).
-      // When a task changes position, ALL tasks that shifted also get new sortOrder values.
-      // We must persist all of them, otherwise the DB retains stale sortOrders for shifted tasks.
-      const tasksWithChangedOrder: Task[] = [];
-      for (const newTask of updated) {
-        const oldTask = tasks.find(t => t.id === newTask.id);
-        // Include the moved task (parentId changed) and any task with a different sortOrder
-        const oldSortOrder = (oldTask as any)?.sortOrder ?? -1;
-        const parentChanged = newTask.id === movedTaskId;
-        if (parentChanged || oldSortOrder !== newTask.sortOrder) {
-          tasksWithChangedOrder.push(newTask);
+      // Persist the full ordered array after reorder/duplicate/move.
+      // Partial sortOrder saves are fragile for hierarchy operations because
+      // unchanged tasks can still affect the final flattened order on reload.
+      try {
+        setSavingStateWithReset('saving');
+        await batchImportTasks(updated);
+        if (accessToken) {
+          setTasks(await fetchTasksSnapshot());
         }
-      }
-
-      console.log('[useBatchTaskUpdate] Tasks with changed sortOrder (with parent change):', tasksWithChangedOrder.length);
-
-      if (tasksWithChangedOrder.length > 1) {
-        try {
-          setSavingStateWithReset('saving');
-          await batchImportTasks(tasksWithChangedOrder);
-          if (accessToken) {
-            setTasks(await fetchTasksSnapshot());
-          }
-          setSavingStateWithReset('saved');
-        } catch (error) {
-          console.error(`[useBatchTaskUpdate] Failed to batch update tasks with parent change:`, error);
-          setSavingStateWithReset('error');
-        }
-      } else if (tasksWithChangedOrder.length === 1) {
-        try {
-          setSavingStateWithReset('saving');
-          await mutateTask(tasksWithChangedOrder[0]);
-          if (accessToken) {
-            setTasks(await fetchTasksSnapshot());
-          }
-          setSavingStateWithReset('saved');
-        } catch (error) {
-          console.error(`[useBatchTaskUpdate] Failed to update task ${movedTaskId}:`, error);
-          setSavingStateWithReset('error');
-        }
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to persist reordered hierarchy with parent change:', error);
+        setSavingStateWithReset('error');
       }
     } else {
-      // When just reordering (no parent change), we need to update sortOrder for ALL tasks
-      // that have changed position
       setTasks(tasksWithOrder);
-
-      // Find tasks whose sortOrder has changed
-      const tasksWithChangedOrder: Task[] = [];
-      for (const newTask of tasksWithOrder) {
-        const oldTask = tasks.find(t => t.id === newTask.id);
-        const oldSortOrder = (oldTask as any)?.sortOrder ?? -1;
-        if (oldSortOrder !== newTask.sortOrder) {
-          tasksWithChangedOrder.push(newTask);
+      try {
+        setSavingStateWithReset('saving');
+        await batchImportTasks(tasksWithOrder);
+        if (accessToken) {
+          setTasks(await fetchTasksSnapshot());
         }
-      }
-
-      console.log('[useBatchTaskUpdate] Tasks with changed sortOrder:', tasksWithChangedOrder.length);
-
-      // Batch update all tasks with changed sortOrder
-      if (tasksWithChangedOrder.length > 0) {
-        try {
-          setSavingStateWithReset('saving');
-          await batchImportTasks(tasksWithChangedOrder);
-          setSavingStateWithReset('saved');
-          console.log('[useBatchTaskUpdate] Batch updated sortOrder for', tasksWithChangedOrder.length, 'tasks');
-        } catch (error) {
-          console.error('[useBatchTaskUpdate] Failed to update sortOrder:', error);
-          setSavingStateWithReset('error');
-        }
+        setSavingStateWithReset('saved');
+        console.log('[useBatchTaskUpdate] Persisted full reordered task list:', tasksWithOrder.length);
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to persist reordered task list:', error);
+        setSavingStateWithReset('error');
       }
     }
-  }, [accessToken, batchImportTasks, fetchTasksSnapshot, mutateTask, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
+  }, [accessToken, batchImportTasks, fetchTasksSnapshot, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
     console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);
