@@ -397,27 +397,17 @@ export function Toolbar({
             disabled={!onGanttDayModeChange}
             onSelect={(event) => {
               event.preventDefault();
-              onGanttDayModeChange?.('business');
+              onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
             }}
             className="flex cursor-pointer items-center gap-2"
           >
-            <span className="flex h-4 w-4 items-center justify-center">
-              {ganttDayMode === 'business' ? <Check className="h-4 w-4" /> : null}
-            </span>
+            <input
+              type="checkbox"
+              checked={ganttDayMode === 'business'}
+              readOnly
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+            />
             <span className="text-sm">Рабочие дни</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!onGanttDayModeChange}
-            onSelect={(event) => {
-              event.preventDefault();
-              onGanttDayModeChange?.('calendar');
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <span className="flex h-4 w-4 items-center justify-center">
-              {ganttDayMode === 'calendar' ? <Check className="h-4 w-4" /> : null}
-            </span>
-            <span className="text-sm">Календарные дни</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -467,27 +457,17 @@ export function Toolbar({
             disabled={!onGanttDayModeChange}
             onSelect={(event) => {
               event.preventDefault();
-              onGanttDayModeChange?.('business');
+              onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
             }}
             className="flex cursor-pointer items-center gap-2"
           >
-            <span className="flex h-4 w-4 items-center justify-center">
-              {ganttDayMode === 'business' ? <Check className="h-4 w-4" /> : null}
-            </span>
+            <input
+              type="checkbox"
+              checked={ganttDayMode === 'business'}
+              readOnly
+              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+            />
             <span className="text-sm">Рабочие дни</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!onGanttDayModeChange}
-            onSelect={(event) => {
-              event.preventDefault();
-              onGanttDayModeChange?.('calendar');
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <span className="flex h-4 w-4 items-center justify-center">
-              {ganttDayMode === 'calendar' ? <Check className="h-4 w-4" /> : null}
-            </span>
-            <span className="text-sm">Календарные дни</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

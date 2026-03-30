@@ -736,7 +736,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCreateShareLink={handleCreateShareLink}
             ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
             onGanttDayModeChange={(ganttDayMode) => {
-              void handleGanttDayModeChange(ganttDayMode);
+              void handleGanttDayModeChange(ganttDayMode).catch((error) => {
+                console.error('Failed to update gantt day mode:', error);
+              });
             }}
           />
         )

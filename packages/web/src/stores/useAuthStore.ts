@@ -505,6 +505,27 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       throw new Error('Not authenticated');
     }
 
+    const previousProject = state.project;
+    const previousProjects = state.projects;
+    const optimisticProject = state.project?.id === projectId
+      ? { ...state.project, ...updates }
+      : state.project;
+    const optimisticProjects = state.projects.map((item) => (
+      item.id === projectId
+        ? { ...item, ...updates }
+        : item
+    ));
+
+    persistAuthSnapshot({
+      accessToken: state.accessToken,
+      refreshToken: getRefreshToken(),
+      user: state.user,
+      project: optimisticProject,
+      projects: optimisticProjects,
+    });
+
+    set({ project: optimisticProject, projects: optimisticProjects });
+
     const { response, token } = await fetchWithAuthRetry(`/api/projects/${projectId}`, {
       method: 'PATCH',
       headers: {
@@ -514,16 +535,26 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     });
 
     if (!response.ok) {
+      persistAuthSnapshot({
+        accessToken: state.accessToken,
+        refreshToken: getRefreshToken(),
+        user: state.user,
+        project: previousProject,
+        projects: previousProjects,
+      });
+
+      set({ project: previousProject, projects: previousProjects });
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
       throw new Error(data.error || 'Failed to update project');
     }
 
     const data = await response.json() as { project: AuthProject };
-    const project = state.project?.id === data.project.id ? { ...state.project, ...data.project } : state.project;
-    const hasProject = state.projects.some((item) => item.id === data.project.id);
+    const nextState = get();
+    const project = nextState.project?.id === data.project.id ? { ...nextState.project, ...data.project } : nextState.project;
+    const hasProject = nextState.projects.some((item) => item.id === data.project.id);
     const projects = hasProject
-      ? state.projects.map((item) => (item.id === data.project.id ? { ...item, ...data.project } : item))
-      : [...state.projects, data.project];
+      ? nextState.projects.map((item) => (item.id === data.project.id ? { ...item, ...data.project } : item))
+      : [...nextState.projects, data.project];
     const accessToken = token ?? state.accessToken;
 
     persistAuthSnapshot({
