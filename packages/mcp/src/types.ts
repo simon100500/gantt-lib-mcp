@@ -185,6 +185,7 @@ export interface AddMessageInput {
 }
 
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
+export type GanttDayMode = 'business' | 'calendar';
 
 export interface TaskMutationEvent {
   id: string;
@@ -219,6 +220,8 @@ export interface Project {
   userId: string;
   /** Project name */
   name: string;
+  /** Day-counting mode for gantt duration calculations */
+  ganttDayMode: GanttDayMode;
   /** ISO timestamp of creation */
   createdAt: string;
 }

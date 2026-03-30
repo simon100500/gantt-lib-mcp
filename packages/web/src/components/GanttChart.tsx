@@ -34,6 +34,7 @@ export interface GanttChartProps {
   taskFilter?: import('gantt-lib').TaskPredicate;
   highlightedTaskIds?: Set<string>;
   filterMode?: 'highlight' | 'hide';
+  businessDays?: boolean;
 }
 
 export interface GanttChartRef {
@@ -75,6 +76,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   taskFilter,
   highlightedTaskIds,
   filterMode,
+  businessDays,
 }, ref) => {
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
@@ -130,6 +132,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       taskFilter={taskFilter}
       highlightedTaskIds={highlightedTaskIds}
       filterMode={filterMode}
+      businessDays={businessDays}
     />
   );
 });

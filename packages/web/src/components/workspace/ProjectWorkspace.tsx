@@ -35,6 +35,8 @@ interface ProjectWorkspaceProps {
   showChat?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
+  ganttDayMode: 'business' | 'calendar';
+  onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
 }
 
 export function ProjectWorkspace({
@@ -56,6 +58,8 @@ export function ProjectWorkspace({
   showChat = true,
   shareStatus = 'idle',
   onCreateShareLink,
+  ganttDayMode,
+  onGanttDayModeChange,
 }: ProjectWorkspaceProps) {
   const tasks = useTaskStore((state) => state.tasks);
   const loading = useTaskStore((state) => state.loading);
@@ -164,6 +168,8 @@ export function ProjectWorkspace({
           onViewModeChange={handleViewModeChange}
           disableTaskDrag={disableTaskDrag}
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
+          ganttDayMode={ganttDayMode}
+          onGanttDayModeChange={onGanttDayModeChange}
         />
       </div>
 
@@ -211,6 +217,7 @@ export function ProjectWorkspace({
                 customDays={russianHolidays2026}
                 highlightedTaskIds={highlightedSearchTaskIds}
                 filterMode={filterMode}
+                businessDays={ganttDayMode !== 'calendar'}
               />
             )}
 

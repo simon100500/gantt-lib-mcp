@@ -22,9 +22,12 @@ export interface AuthUser {
   email: string;
 }
 
+export type GanttDayMode = 'business' | 'calendar';
+
 export interface AuthProject {
   id: string;
   name: string;
+  ganttDayMode: GanttDayMode;
   taskCount?: number;
 }
 
@@ -42,6 +45,7 @@ export interface UseAuthResult extends AuthState {
   logout(): void;
   switchProject(projectId: string): Promise<void>;
   createProject(name: string): Promise<AuthProject | null>;
+  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode }): Promise<AuthProject>;
   syncProjectTaskCount(projectId: string, taskCount: number): void;
   refreshAccessToken(): Promise<string | null>;
   refreshProjects(): Promise<void>;
@@ -281,6 +285,22 @@ function initializeStoreListeners(): void {
   });
 }
 
+function persistAuthSnapshot(state: {
+  accessToken: string | null;
+  refreshToken: string | null;
+  user: AuthUser | null;
+  project: AuthProject | null;
+  projects: AuthProject[];
+}): void {
+  persistStoredAuth({
+    accessToken: state.accessToken,
+    refreshToken: state.refreshToken,
+    user: state.user,
+    project: state.project,
+    projects: state.projects,
+  });
+}
+
 export const useAuthStore = create<AuthStore>((set, get) => ({
   ...INITIAL_AUTH_STATE,
 
@@ -479,6 +499,45 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
+  async updateProject(projectId, updates) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response, token } = await fetchWithAuthRetry(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to update project');
+    }
+
+    const data = await response.json() as { project: AuthProject };
+    const project = state.project?.id === data.project.id ? { ...state.project, ...data.project } : state.project;
+    const hasProject = state.projects.some((item) => item.id === data.project.id);
+    const projects = hasProject
+      ? state.projects.map((item) => (item.id === data.project.id ? { ...item, ...data.project } : item))
+      : [...state.projects, data.project];
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: state.user,
+      project,
+      projects,
+    });
+
+    set({ accessToken, project, projects });
+    return data.project;
+  },
+
   async refreshProjects() {
     const token = get().accessToken;
     if (!token) {
@@ -527,7 +586,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       ? { ...state.project, taskCount }
       : state.project;
 
-    persistStoredAuth({
+    persistAuthSnapshot({
       accessToken: state.accessToken,
       refreshToken: getRefreshToken(),
       user: state.user,

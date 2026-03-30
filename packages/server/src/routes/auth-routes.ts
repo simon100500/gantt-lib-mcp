@@ -97,7 +97,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       accessToken,
       refreshToken,
       user: { id: user.id, email: user.email },
-      project: { id: project.id, name: project.name },
+      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
     });
   });
 
@@ -243,7 +243,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({
       accessToken: newAccessToken,
       refreshToken: currentSession.refreshToken, // Return the same refresh token (no rotation)
-      project: { id: project.id, name: project.name },
+      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
     });
   });
 
@@ -265,7 +265,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({
       token: shareLink.id,
       url,
-      project: { id: project.id, name: project.name },
+      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
     });
   });
 
@@ -287,7 +287,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     const { tasks } = await taskService.list(project.id);
     return reply.send({
-      project: { id: project.id, name: project.name },
+      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
       tasks,
     });
   });
@@ -320,14 +320,27 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   fastify.patch<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const body = req.body as { name?: string };
-    const { name } = body;
+    const body = req.body as { name?: string; ganttDayMode?: 'business' | 'calendar' };
+    const name = body.name?.trim();
+    const hasName = body.name !== undefined;
+    const hasGanttDayMode = body.ganttDayMode === 'business' || body.ganttDayMode === 'calendar';
 
-    if (!name || !name.trim()) {
+    if (!hasName && body.ganttDayMode === undefined) {
+      return reply.status(400).send({ error: 'No project fields provided' });
+    }
+
+    if (hasName && !name) {
       return reply.status(400).send({ error: 'name required' });
     }
 
-    const project = await authService.updateProject(projectId, req.user!.userId, name.trim());
+    if (body.ganttDayMode !== undefined && !hasGanttDayMode) {
+      return reply.status(400).send({ error: 'Invalid ganttDayMode' });
+    }
+
+    const project = await authService.updateProject(projectId, req.user!.userId, {
+      ...(hasName ? { name } : {}),
+      ...(hasGanttDayMode ? { ganttDayMode: body.ganttDayMode } : {}),
+    });
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });

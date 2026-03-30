@@ -11,6 +11,7 @@ interface SharedWorkspaceProps {
   onCollapseAll: () => void;
   onExpandAll: () => void;
   onValidation: (result: ValidationResult) => void;
+  ganttDayMode: 'business' | 'calendar';
 }
 
 export function SharedWorkspace({
@@ -20,6 +21,7 @@ export function SharedWorkspace({
   onCollapseAll,
   onExpandAll,
   onValidation,
+  ganttDayMode,
 }: SharedWorkspaceProps) {
   return (
     <ProjectWorkspace
@@ -32,6 +34,7 @@ export function SharedWorkspace({
       onCollapseAll={onCollapseAll}
       onExpandAll={onExpandAll}
       onValidation={onValidation}
+      ganttDayMode={ganttDayMode}
       readOnly
       showChat={false}
     />

@@ -21,6 +21,7 @@ export class ProjectService {
       id: project.id,
       userId: project.userId,
       name: project.name,
+      ganttDayMode: project.ganttDayMode,
       createdAt: project.createdAt.toISOString(),
     };
   }
@@ -38,6 +39,7 @@ export class ProjectService {
         id: randomUUID(),
         userId,
         name,
+        ganttDayMode: 'business',
       },
     });
 
@@ -93,22 +95,27 @@ export class ProjectService {
       id: project.id,
       userId: project.userId,
       name: project.name,
+      ganttDayMode: project.ganttDayMode,
       createdAt: project.createdAt.toISOString(),
       taskCount: project._count.tasks,
     }));
   }
 
   /**
-   * Update project name
+   * Update project settings
    *
    * Verifies project belongs to user before updating.
    *
    * @param projectId - Project ID to update
    * @param userId - User ID for ownership verification
-   * @param name - New project name
+   * @param updates - New project fields
    * @returns Updated Project if found and owned, null otherwise
    */
-  async update(projectId: string, userId: string, name: string): Promise<Project | null> {
+  async update(
+    projectId: string,
+    userId: string,
+    updates: { name?: string; ganttDayMode?: 'business' | 'calendar' },
+  ): Promise<Project | null> {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
       where: { id: projectId },
@@ -121,7 +128,10 @@ export class ProjectService {
 
     const updated = await this.prisma.project.update({
       where: { id: projectId },
-      data: { name },
+      data: {
+        ...(updates.name !== undefined ? { name: updates.name } : {}),
+        ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
+      },
     });
 
     return this.projectToDomain(updated);

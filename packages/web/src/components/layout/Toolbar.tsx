@@ -40,6 +40,8 @@ interface ToolbarProps {
   onViewModeChange?: (viewMode: 'day' | 'week' | 'month') => void;
   disableTaskDrag?: boolean;
   onToggleDisableTaskDrag?: (enabled: boolean) => void;
+  ganttDayMode?: 'business' | 'calendar';
+  onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
 }
 
 export function Toolbar({
@@ -56,6 +58,8 @@ export function Toolbar({
   onViewModeChange,
   disableTaskDrag: externalDisableTaskDrag,
   onToggleDisableTaskDrag,
+  ganttDayMode = 'business',
+  onGanttDayModeChange,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
@@ -389,6 +393,32 @@ export function Toolbar({
             />
             <span className="text-sm">Просроченные</span>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onGanttDayModeChange}
+            onSelect={(event) => {
+              event.preventDefault();
+              onGanttDayModeChange?.('business');
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <span className="flex h-4 w-4 items-center justify-center">
+              {ganttDayMode === 'business' ? <Check className="h-4 w-4" /> : null}
+            </span>
+            <span className="text-sm">Рабочие дни</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onGanttDayModeChange}
+            onSelect={(event) => {
+              event.preventDefault();
+              onGanttDayModeChange?.('calendar');
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <span className="flex h-4 w-4 items-center justify-center">
+              {ganttDayMode === 'calendar' ? <Check className="h-4 w-4" /> : null}
+            </span>
+            <span className="text-sm">Календарные дни</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -432,6 +462,32 @@ export function Toolbar({
               className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
             />
             <span className="text-sm">Просроченные</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onGanttDayModeChange}
+            onSelect={(event) => {
+              event.preventDefault();
+              onGanttDayModeChange?.('business');
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <span className="flex h-4 w-4 items-center justify-center">
+              {ganttDayMode === 'business' ? <Check className="h-4 w-4" /> : null}
+            </span>
+            <span className="text-sm">Рабочие дни</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onGanttDayModeChange}
+            onSelect={(event) => {
+              event.preventDefault();
+              onGanttDayModeChange?.('calendar');
+            }}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <span className="flex h-4 w-4 items-center justify-center">
+              {ganttDayMode === 'calendar' ? <Check className="h-4 w-4" /> : null}
+            </span>
+            <span className="text-sm">Календарные дни</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

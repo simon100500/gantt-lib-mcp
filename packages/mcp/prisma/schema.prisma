@@ -52,6 +52,11 @@ enum MutationType {
   import
 }
 
+enum GanttDayMode {
+  business
+  calendar
+}
+
 // Users table
 model User {
   id        String   @id @default(uuid())
@@ -69,10 +74,11 @@ model User {
 
 // Projects table
 model Project {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String
-  createdAt DateTime @default(now()) @map("created_at")
+  id           String       @id @default(uuid())
+  userId       String       @map("user_id")
+  name         String
+  ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relations
   user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)

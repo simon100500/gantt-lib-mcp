@@ -206,17 +206,21 @@ export class AuthService {
   }
 
   /**
-   * Update project name
+   * Update project settings
    *
    * Delegates to ProjectService.
    *
    * @param projectId - Project ID to update
    * @param userId - User ID for ownership verification
-   * @param name - New project name
+   * @param updates - New project fields
    * @returns Updated Project if found, null otherwise
    */
-  async updateProject(projectId: string, userId: string, name: string): Promise<Project | null> {
-    return projectService.update(projectId, userId, name);
+  async updateProject(
+    projectId: string,
+    userId: string,
+    updates: { name?: string; ganttDayMode?: 'business' | 'calendar' },
+  ): Promise<Project | null> {
+    return projectService.update(projectId, userId, updates);
   }
 
   /**

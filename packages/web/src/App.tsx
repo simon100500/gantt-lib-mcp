@@ -74,7 +74,7 @@ export default function App() {
     accessToken: string;
     refreshToken: string;
     user: { id: string; email: string };
-    project: { id: string; name: string };
+    project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
   }) => {
     auth.login(result, result.user, result.project);
     setShowOtpModal(false);
@@ -161,26 +161,7 @@ export default function App() {
               throw new Error('Not authenticated');
             }
 
-            const response = await fetch(`/api/projects/${auth.project.id}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${auth.accessToken}`,
-              },
-              body: JSON.stringify({ name }),
-            });
-
-            if (!response.ok) {
-              const data = await response.json() as { error?: string };
-              throw new Error(data.error || 'Failed to update project name');
-            }
-
-            const data = await response.json() as { project: { id: string; name: string } };
-            auth.login(
-              { accessToken: auth.accessToken, refreshToken: localStorage.getItem('gantt_refresh_token') || '' },
-              auth.user,
-              data.project,
-            );
+            await auth.updateProject(auth.project.id, { name });
           }}
           onClose={() => setShowEditProjectModal(false)}
         />
@@ -537,31 +518,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       localTasks.setProjectName(newName);
       return;
     }
-    if (!auth.accessToken || !auth.project || !auth.user) {
+    if (!auth.project) {
+      throw new Error('Not authenticated');
+    }
+    await auth.updateProject(auth.project.id, { name: newName });
+  }, [auth, localTasks]);
+
+  const handleGanttDayModeChange = useCallback(async (ganttDayMode: 'business' | 'calendar') => {
+    if (!auth.project) {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`/api/projects/${auth.project.id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${auth.accessToken}`,
-      },
-      body: JSON.stringify({ name: newName }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json() as { error?: string };
-      throw new Error(data.error || 'Failed to update project name');
+    if (auth.project.ganttDayMode === ganttDayMode) {
+      return;
     }
 
-    const data = await response.json() as { project: { id: string; name: string } };
-    auth.login(
-      { accessToken: auth.accessToken, refreshToken: localStorage.getItem('gantt_refresh_token') || '' },
-      auth.user,
-      data.project,
-    );
-  }, [auth, localTasks]);
+    await auth.updateProject(auth.project.id, { ganttDayMode });
+  }, [auth]);
 
   const handleCreateShareLink = useCallback(async () => {
     if (!auth.accessToken || !auth.project) {
@@ -730,6 +703,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         onCollapseAll={handleCollapseAll}
         onExpandAll={handleExpandAll}
         onValidation={handleValidation}
+        ganttDayMode={sharedProject.project?.ganttDayMode ?? 'business'}
       />
     )
     : workspace.kind === 'draft'
@@ -760,6 +734,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCascade={handleCascade}
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
+            ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
+            onGanttDayModeChange={(ganttDayMode) => {
+              void handleGanttDayModeChange(ganttDayMode);
+            }}
           />
         )
         : (
@@ -777,6 +755,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCascade={handleCascade}
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
+            ganttDayMode="business"
           />
         );
 

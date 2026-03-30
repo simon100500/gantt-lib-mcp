@@ -21,6 +21,7 @@ interface GuestWorkspaceProps {
   onCascade: (shiftedTasks: Task[]) => void;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
+  ganttDayMode: 'business' | 'calendar';
 }
 
 export function GuestWorkspace(props: GuestWorkspaceProps) {
@@ -51,6 +52,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       onExpandAll={props.onExpandAll}
       onValidation={props.onValidation}
       onCascade={props.onCascade}
+      ganttDayMode={props.ganttDayMode}
       showChat={false}
       shareStatus={props.shareStatus}
       onCreateShareLink={props.onCreateShareLink}

@@ -9,6 +9,7 @@ const DEFAULT_PROJECT_NAME = 'Мой проект';
 export interface SharedTaskProject {
   id: string;
   name: string;
+  ganttDayMode: 'business' | 'calendar';
 }
 
 export type TaskSource = 'local' | 'auth' | 'shared';

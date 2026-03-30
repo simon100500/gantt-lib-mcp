@@ -10,7 +10,7 @@ interface OtpModalProps {
     accessToken: string;
     refreshToken: string;
     user: { id: string; email: string };
-    project: { id: string; name: string };
+    project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
   }) => void;
   onClose: () => void;
 }
@@ -105,7 +105,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
         accessToken: string;
         refreshToken: string;
         user: { id: string; email: string };
-        project: { id: string; name: string };
+        project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
       };
 
       onSuccess(result);
