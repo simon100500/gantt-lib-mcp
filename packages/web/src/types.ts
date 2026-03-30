@@ -52,3 +52,63 @@ export function normalizeTask(task: RawTask): Task {
 export function normalizeTasks(tasks: RawTask[]): Task[] {
   return tasks.map(normalizeTask);
 }
+
+export function sanitizeHierarchyDependencies(tasks: Task[]): Task[] {
+  const parentById = new Map(tasks.map(task => [task.id, task.parentId]));
+  const childrenById = new Map<string, string[]>();
+
+  for (const task of tasks) {
+    if (!task.parentId) continue;
+    const children = childrenById.get(task.parentId) ?? [];
+    children.push(task.id);
+    childrenById.set(task.parentId, children);
+  }
+
+  const descendantMemo = new Map<string, Set<string>>();
+
+  const collectDescendants = (taskId: string): Set<string> => {
+    const memoized = descendantMemo.get(taskId);
+    if (memoized) {
+      return memoized;
+    }
+
+    const descendants = new Set<string>();
+    for (const childId of childrenById.get(taskId) ?? []) {
+      descendants.add(childId);
+      for (const nestedChildId of collectDescendants(childId)) {
+        descendants.add(nestedChildId);
+      }
+    }
+
+    descendantMemo.set(taskId, descendants);
+    return descendants;
+  };
+
+  const isAncestor = (ancestorId: string, taskId: string): boolean => {
+    let currentParentId = parentById.get(taskId);
+    while (currentParentId) {
+      if (currentParentId === ancestorId) {
+        return true;
+      }
+      currentParentId = parentById.get(currentParentId);
+    }
+    return false;
+  };
+
+  return tasks.map(task => {
+    const dependencies = task.dependencies ?? [];
+    const descendants = collectDescendants(task.id);
+    const sanitizedDependencies = dependencies.filter(dep =>
+      !descendants.has(dep.taskId) && !isAncestor(dep.taskId, task.id)
+    );
+
+    if (sanitizedDependencies.length === dependencies.length) {
+      return task;
+    }
+
+    return {
+      ...task,
+      dependencies: sanitizedDependencies,
+    };
+  });
+}

@@ -12,6 +12,7 @@ import type { Task, CreateTaskInput, UpdateTaskInput, TaskDependency, TaskMutati
 import { dependencyService } from './dependency.service.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
+import { sanitizeHierarchyDependencies } from './hierarchy-dependency-sanitizer.js';
 
 export class TaskService {
   private _prisma: ReturnType<typeof getPrisma> | undefined;
@@ -21,25 +22,6 @@ export class TaskService {
       this._prisma = getPrisma();
     }
     return this._prisma;
-  }
-
-  // Helper: Compute parent task dates from its children
-  private async computeParentDates(parentId: string, projectId?: string): Promise<{ startDate: Date; endDate: Date } | null> {
-    const children = await this.prisma.task.findMany({
-      where: { parentId },
-      select: { startDate: true, endDate: true },
-    });
-
-    if (children.length === 0) {
-      return null;
-    }
-
-    // Parent start = min of children starts
-    // Parent end = max of children ends
-    const startDate = new Date(Math.min(...children.map(c => c.startDate.getTime())));
-    const endDate = new Date(Math.max(...children.map(c => c.endDate.getTime())));
-
-    return { startDate, endDate };
   }
 
   // Helper: Convert Prisma Task to domain Task
@@ -74,6 +56,155 @@ export class TaskService {
       map.set(task.id, this.taskToDomain(task, deps));
     }
     return map;
+  }
+
+  private async removeHierarchyDependencies(projectId?: string): Promise<string[]> {
+    const snapshot = await this.loadSnapshot(projectId);
+    const tasks = Array.from(snapshot.values());
+    const { sanitizedTasks } = sanitizeHierarchyDependencies(tasks);
+    const changedTasks = sanitizedTasks.filter((task, index) => {
+      const originalDependencies = tasks[index].dependencies ?? [];
+      const sanitizedDependencies = task.dependencies ?? [];
+
+      if (originalDependencies.length !== sanitizedDependencies.length) {
+        return true;
+      }
+
+      return originalDependencies.some((dep, depIndex) => {
+        const sanitizedDep = sanitizedDependencies[depIndex];
+        return (
+          sanitizedDep?.taskId !== dep.taskId ||
+          sanitizedDep?.type !== dep.type ||
+          (sanitizedDep?.lag ?? 0) !== (dep.lag ?? 0)
+        );
+      });
+    });
+
+    if (changedTasks.length === 0) {
+      return [];
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const task of changedTasks) {
+        await tx.dependency.deleteMany({
+          where: { taskId: task.id },
+        });
+
+        if ((task.dependencies ?? []).length > 0) {
+          await tx.dependency.createMany({
+            data: (task.dependencies ?? []).map(dep => ({
+              taskId: task.id,
+              depTaskId: dep.taskId,
+              type: dep.type,
+              lag: dep.lag ?? 0,
+            })),
+          });
+        }
+      }
+    });
+
+    return changedTasks.map(task => task.id);
+  }
+
+  private async syncParentDates(projectId?: string): Promise<void> {
+    const tasks = await this.prisma.task.findMany({
+      where: projectId ? { projectId } : undefined,
+      select: {
+        id: true,
+        parentId: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+
+    const taskById = new Map(tasks.map(task => [task.id, task]));
+    const childrenById = new Map<string, string[]>();
+
+    for (const task of tasks) {
+      if (!task.parentId) continue;
+      const children = childrenById.get(task.parentId) ?? [];
+      children.push(task.id);
+      childrenById.set(task.parentId, children);
+    }
+
+    const rangeMemo = new Map<string, { startDate: Date; endDate: Date }>();
+
+    const computeRange = (taskId: string): { startDate: Date; endDate: Date } | null => {
+      const memoized = rangeMemo.get(taskId);
+      if (memoized) {
+        return memoized;
+      }
+
+      const task = taskById.get(taskId);
+      if (!task) {
+        return null;
+      }
+
+      const childIds = childrenById.get(taskId) ?? [];
+      if (childIds.length === 0) {
+        const ownRange = {
+          startDate: task.startDate,
+          endDate: task.endDate,
+        };
+        rangeMemo.set(taskId, ownRange);
+        return ownRange;
+      }
+
+      const childRanges = childIds
+        .map(childId => computeRange(childId))
+        .filter((range): range is { startDate: Date; endDate: Date } => range !== null);
+
+      if (childRanges.length === 0) {
+        return null;
+      }
+
+      const derivedRange = {
+        startDate: new Date(Math.min(...childRanges.map(range => range.startDate.getTime()))),
+        endDate: new Date(Math.max(...childRanges.map(range => range.endDate.getTime()))),
+      };
+
+      rangeMemo.set(taskId, derivedRange);
+      return derivedRange;
+    };
+
+    const updates = tasks
+      .filter(task => (childrenById.get(task.id) ?? []).length > 0)
+      .map(task => {
+        const derivedRange = computeRange(task.id);
+        if (!derivedRange) {
+          return null;
+        }
+
+        const startChanged = task.startDate.getTime() !== derivedRange.startDate.getTime();
+        const endChanged = task.endDate.getTime() !== derivedRange.endDate.getTime();
+
+        if (!startChanged && !endChanged) {
+          return null;
+        }
+
+        return {
+          id: task.id,
+          startDate: derivedRange.startDate,
+          endDate: derivedRange.endDate,
+        };
+      })
+      .filter((update): update is { id: string; startDate: Date; endDate: Date } => update !== null);
+
+    if (updates.length === 0) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const update of updates) {
+        await tx.task.update({
+          where: { id: update.id },
+          data: {
+            startDate: update.startDate,
+            endDate: update.endDate,
+          },
+        });
+      }
+    });
   }
 
   // Helper: Run scheduler and update affected tasks
@@ -192,7 +323,13 @@ export class TaskService {
       throw new Error('Circular dependency detected');
     }
 
-    // Recalculate dates if task has dependencies
+    if (input.parentId) {
+      await this.removeHierarchyDependencies(projectId);
+      await this.syncParentDates(projectId);
+    }
+
+    // Recalculate dates only after hierarchy cleanup so impossible
+    // ancestor/descendant dependencies cannot move the task first.
     if (input.dependencies && input.dependencies.length > 0) {
       await this.runScheduler(id, false, projectId);
     }
@@ -318,13 +455,14 @@ export class TaskService {
   async update(id: string, input: UpdateTaskInput, source?: TaskMutationSource): Promise<Task | undefined> {
     const existing = await this.prisma.task.findUnique({
       where: { id },
-      select: { projectId: true },
+      select: { projectId: true, parentId: true },
     });
 
     if (!existing) return undefined;
 
     const dependenciesUpdated = input.dependencies !== undefined;
     const datesChanged = input.startDate !== undefined || input.endDate !== undefined;
+    const hierarchyChanged = input.parentId !== undefined && input.parentId !== existing.parentId;
 
     // Validate new dependencies
     if (input.dependencies) {
@@ -384,7 +522,10 @@ export class TaskService {
       throw new Error('Circular dependency detected');
     }
 
-    // Recalculate dates
+    if (hierarchyChanged) {
+      await this.removeHierarchyDependencies(existing.projectId || undefined);
+    }
+
     if (datesChanged || dependenciesUpdated) {
       const skipStart = datesChanged && !dependenciesUpdated;
       await this.runScheduler(id, skipStart, existing.projectId || undefined);
@@ -393,61 +534,8 @@ export class TaskService {
     // Record mutation
     await this.recordMutation('update', existing.projectId || undefined, id, source);
 
-    // After updating a task, recompute parent dates if this is a child task
-    if (updateData.parentId !== undefined) {
-      // If parentId changed, recompute both old and new parent
-      const oldParentId = (await this.prisma.task.findUnique({
-        where: { id },
-        select: { parentId: true },
-      }))?.parentId;
-
-      if (oldParentId) {
-        const oldParentDates = await this.computeParentDates(oldParentId, existing.projectId || undefined);
-        if (oldParentDates) {
-          await this.prisma.task.update({
-            where: { id: oldParentId },
-            data: {
-              startDate: oldParentDates.startDate,
-              endDate: oldParentDates.endDate,
-            },
-          });
-        }
-      }
-
-      if (updateData.parentId) {
-        const newParentDates = await this.computeParentDates(updateData.parentId, existing.projectId || undefined);
-        if (newParentDates) {
-          await this.prisma.task.update({
-            where: { id: updateData.parentId },
-            data: {
-              startDate: newParentDates.startDate,
-              endDate: newParentDates.endDate,
-            },
-          });
-        }
-      }
-    } else if ((await this.prisma.task.findUnique({
-      where: { id },
-      select: { parentId: true },
-    }))?.parentId) {
-      // If this is a child task, recompute its parent's dates
-      const currentTask = await this.prisma.task.findUnique({
-        where: { id },
-        select: { parentId: true },
-      });
-
-      if (currentTask?.parentId) {
-        const parentDates = await this.computeParentDates(currentTask.parentId, existing.projectId || undefined);
-        if (parentDates) {
-          await this.prisma.task.update({
-            where: { id: currentTask.parentId },
-            data: {
-              startDate: parentDates.startDate,
-              endDate: parentDates.endDate,
-            },
-          });
-        }
-      }
+    if (hierarchyChanged || datesChanged || existing.parentId || input.parentId) {
+      await this.syncParentDates(existing.projectId || undefined);
     }
 
     return this.get(id);
@@ -472,6 +560,8 @@ export class TaskService {
 
     // Delete the task itself
     await this.prisma.task.delete({ where: { id } });
+
+    await this.syncParentDates(task.projectId || undefined);
 
     await this.recordMutation('delete', task.projectId || undefined, id, source);
 
@@ -686,30 +776,12 @@ export class TaskService {
       }
     });
 
+    await this.removeHierarchyDependencies(projectId);
+    await this.syncParentDates(projectId);
+
     // Record mutation for each task
     for (const task of tasks) {
       await this.recordMutation('update', projectId, task.id, source);
-    }
-
-    // After batch update, recompute parent dates for all affected parents
-    const affectedParentIds = new Set<string>();
-    for (const task of tasks) {
-      if (task.parentId) {
-        affectedParentIds.add(task.parentId);
-      }
-    }
-
-    for (const parentId of affectedParentIds) {
-      const parentDates = await this.computeParentDates(parentId, projectId);
-      if (parentDates) {
-        await this.prisma.task.update({
-          where: { id: parentId },
-          data: {
-            startDate: parentDates.startDate,
-            endDate: parentDates.endDate,
-          },
-        });
-      }
     }
 
     return tasks.length;
@@ -798,6 +870,9 @@ export class TaskService {
         });
       }
     });
+
+    await this.removeHierarchyDependencies(projectId);
+    await this.syncParentDates(projectId);
 
     await this.recordMutation('import', projectId, undefined, source);
 

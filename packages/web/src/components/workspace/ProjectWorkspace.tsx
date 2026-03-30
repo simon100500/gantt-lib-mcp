@@ -40,6 +40,25 @@ interface ProjectWorkspaceProps {
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
 }
 
+function formatTaskCount(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod100 >= 11 && mod100 <= 14) {
+    return `${count} задач`;
+  }
+
+  if (mod10 === 1) {
+    return `${count} задача`;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4) {
+    return `${count} задачи`;
+  }
+
+  return `${count} задач`;
+}
+
 export function ProjectWorkspace({
   ganttRef,
   hasShareToken,
@@ -253,7 +272,11 @@ export function ProjectWorkspace({
             {tasks.length > 0 && (
               <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
                 <span className="font-mono text-[11px] text-slate-400">
-                  {tasks.length} задач{tasks.length === 1 ? 'а' : tasks.length > 1 && tasks.length < 5 ? 'и' : ''}
+                  {formatTaskCount(tasks.length)}
+                </span>
+
+                <span className="font-mono text-[11px] text-slate-400">
+                  {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
 
                 <span

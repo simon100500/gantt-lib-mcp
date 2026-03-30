@@ -1,4 +1,4 @@
-import type { Task, TaskDependency } from '../types';
+import { normalizeTasks, type Task, type TaskDependency } from '../types';
 
 export interface CreateTaskInput {
   name: string;
@@ -26,6 +26,7 @@ export interface UseTaskMutationResult {
   createTask: (input: CreateTaskInput) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
   batchImportTasks: (tasks: Task[]) => Promise<number>;
+  fetchTasksSnapshot: () => Promise<Task[]>;
 }
 
 /**
@@ -137,5 +138,18 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
     return result.saved;
   };
 
-  return { mutateTask, createTask, deleteTask, batchImportTasks };
+  const fetchTasksSnapshot = async (): Promise<Task[]> => {
+    const response = await fetch('/api/tasks', {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch tasks: ${response.status} ${response.statusText}`);
+    }
+
+    return normalizeTasks(await response.json() as Task[]);
+  };
+
+  return { mutateTask, createTask, deleteTask, batchImportTasks, fetchTasksSnapshot };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { Task } from '../types';
+import { sanitizeHierarchyDependencies, type Task } from '../types';
 import { useUIStore, type SavingState } from '../stores/useUIStore';
 import { useTaskMutation } from './useTaskMutation';
 
@@ -27,9 +27,13 @@ export function useBatchTaskUpdate({
   accessToken,
   onCascade,
 }: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
-  const { mutateTask, createTask, deleteTask, batchImportTasks } = useTaskMutation(accessToken);
+  const { mutateTask, createTask, deleteTask, batchImportTasks, fetchTasksSnapshot } = useTaskMutation(accessToken);
   const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sanitizeIfHierarchyChanged = useCallback((nextTasks: Task[], hierarchyChanged: boolean) => (
+    hierarchyChanged ? sanitizeHierarchyDependencies(nextTasks) : nextTasks
+  ), []);
 
   // Helper to update saving state and reset after delay
   const setSavingStateWithReset = useCallback((state: SavingState) => {
@@ -139,6 +143,10 @@ export function useBatchTaskUpdate({
     })));
 
     const filteredTasks = changedTasks;
+    const hierarchyChanged = changedTasks.some(t => {
+      const original = tasks.find(orig => orig.id === t.id);
+      return original && (original.parentId ?? null) !== (t.parentId ?? null);
+    });
 
     // Strip sortOrder before sending to server.
     // handleTasksChange is called by gantt-lib's onTasksChange which fires for EVERY drag event
@@ -155,7 +163,10 @@ export function useBatchTaskUpdate({
 
     // Optimistic update: merge changed tasks into state immediately
     const changedMap = new Map(filteredTasks.map(t => [t.id, t]));
-    setTasks(prev => prev.map(t => changedMap.get(t.id) ?? t));
+    setTasks(prev => sanitizeIfHierarchyChanged(
+      prev.map(t => changedMap.get(t.id) ?? t),
+      hierarchyChanged,
+    ));
     console.log('[useBatchTaskUpdate] Optimistic state updated');
 
     // Server update: use batch API for multiple tasks, single PATCH for one task
@@ -165,6 +176,9 @@ export function useBatchTaskUpdate({
         setSavingStateWithReset('saving');
         const saved = await batchImportTasks(tasksWithoutSortOrder);
         console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
+        if (hierarchyChanged && accessToken) {
+          setTasks(await fetchTasksSnapshot());
+        }
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Batch save failed:', error);
@@ -177,6 +191,9 @@ export function useBatchTaskUpdate({
         setSavingStateWithReset('saving');
         await mutateTask(tasksWithoutSortOrder[0]);
         console.log('[useBatchTaskUpdate] Single task saved');
+        if (hierarchyChanged && accessToken) {
+          setTasks(await fetchTasksSnapshot());
+        }
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Single task save failed:', error);
@@ -185,7 +202,7 @@ export function useBatchTaskUpdate({
     }
 
     console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-  }, [setTasks, mutateTask, batchImportTasks, setSavingStateWithReset, tasks]);
+  }, [accessToken, batchImportTasks, fetchTasksSnapshot, mutateTask, sanitizeIfHierarchyChanged, setSavingStateWithReset, setTasks, tasks]);
 
   const handleAdd = useCallback(async (task: Task) => {
     // Optimistic update
@@ -310,7 +327,7 @@ export function useBatchTaskUpdate({
           ? { ...t, parentId: inferredParentId || undefined }
           : t
       );
-      setTasks(updated);
+      setTasks(sanitizeHierarchyDependencies(updated));
 
       // Find all tasks whose sortOrder changed (not just the moved one).
       // When a task changes position, ALL tasks that shifted also get new sortOrder values.
@@ -332,6 +349,9 @@ export function useBatchTaskUpdate({
         try {
           setSavingStateWithReset('saving');
           await batchImportTasks(tasksWithChangedOrder);
+          if (accessToken) {
+            setTasks(await fetchTasksSnapshot());
+          }
           setSavingStateWithReset('saved');
         } catch (error) {
           console.error(`[useBatchTaskUpdate] Failed to batch update tasks with parent change:`, error);
@@ -341,6 +361,9 @@ export function useBatchTaskUpdate({
         try {
           setSavingStateWithReset('saving');
           await mutateTask(tasksWithChangedOrder[0]);
+          if (accessToken) {
+            setTasks(await fetchTasksSnapshot());
+          }
           setSavingStateWithReset('saved');
         } catch (error) {
           console.error(`[useBatchTaskUpdate] Failed to update task ${movedTaskId}:`, error);
@@ -377,7 +400,7 @@ export function useBatchTaskUpdate({
         }
       }
     }
-  }, [setTasks, mutateTask, batchImportTasks, setSavingStateWithReset, tasks]);
+  }, [accessToken, batchImportTasks, fetchTasksSnapshot, mutateTask, setSavingStateWithReset, setTasks, tasks]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
     console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);
@@ -394,7 +417,9 @@ export function useBatchTaskUpdate({
       const siblings = currentTasks.filter(t => t.parentId === parentId);
 
       if (siblings.length <= 1) {
-        return currentTasks.map(t => t.id === taskId ? { ...t, parentId: undefined } : t);
+        return sanitizeHierarchyDependencies(
+          currentTasks.map(t => t.id === taskId ? { ...t, parentId: undefined } : t)
+        );
       }
 
       const withoutPromoted = currentTasks.filter(t => t.id !== taskId);
@@ -410,11 +435,11 @@ export function useBatchTaskUpdate({
       const insertIndex = (lastSiblingInWithout?.index ?? -1) + 1;
       const promotedTask = { ...task, parentId: undefined };
 
-      return [
+      return sanitizeHierarchyDependencies([
         ...withoutPromoted.slice(0, insertIndex),
         promotedTask,
         ...withoutPromoted.slice(insertIndex)
-      ];
+      ]);
     });
 
     // Server update
@@ -423,6 +448,9 @@ export function useBatchTaskUpdate({
       setSavingStateWithReset('saving');
       const result = await mutateTask({ ...task, parentId: undefined });
       console.log('[useBatchTaskUpdate] mutateTask succeeded, result:', result);
+      if (accessToken) {
+        setTasks(await fetchTasksSnapshot());
+      }
       setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to promote task:', error);
@@ -430,7 +458,7 @@ export function useBatchTaskUpdate({
       // Revert on error
       setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? task : t));
     }
-  }, [tasks, setTasks, mutateTask, setSavingStateWithReset]);
+  }, [accessToken, fetchTasksSnapshot, mutateTask, setSavingStateWithReset, setTasks, tasks]);
 
   const handleDemoteTask = useCallback(async (taskId: string, newParentId: string) => {
     console.log('[useBatchTaskUpdate] handleDemoteTask called for taskId:', taskId, 'newParentId:', newParentId);
@@ -443,15 +471,18 @@ export function useBatchTaskUpdate({
 
     // Optimistic update: set parentId
     setTasks(currentTasks =>
-      currentTasks.map(t =>
+      sanitizeHierarchyDependencies(currentTasks.map(t =>
         t.id === taskId ? { ...t, parentId: newParentId } : t
-      )
+      ))
     );
 
     // Server update
     try {
       setSavingStateWithReset('saving');
       await mutateTask({ ...task, parentId: newParentId });
+      if (accessToken) {
+        setTasks(await fetchTasksSnapshot());
+      }
       setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to demote task:', error);
@@ -459,7 +490,7 @@ export function useBatchTaskUpdate({
       // Revert on error
       setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? task : t));
     }
-  }, [tasks, setTasks, mutateTask, setSavingStateWithReset]);
+  }, [accessToken, fetchTasksSnapshot, mutateTask, setSavingStateWithReset, setTasks, tasks]);
 
   return {
     handleTasksChange,
