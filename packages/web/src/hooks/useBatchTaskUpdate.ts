@@ -78,6 +78,41 @@ export function useBatchTaskUpdate({
     console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
     console.log('[useBatchTaskUpdate] FULL STACK:', new Error().stack);
 
+    // Duplicate/reorder path from gantt-lib:
+    // GanttChart.handleReorder emits onTasksChange(full list) and then onReorder(full list).
+    // For duplicate, onTasksChange contains brand-new ids, but existing tasks are otherwise unchanged.
+    // If we save here, this request can finish before handleReorder's save and briefly overwrite
+    // optimistic state with an older snapshot where the clone is still missing.
+    const existingTaskIds = new Set(tasks.map(t => t.id));
+    const newTasksInBatch = changedTasks.filter(t => !existingTaskIds.has(t.id));
+    const existingTasksUnchanged = changedTasks
+      .filter(t => existingTaskIds.has(t.id))
+      .every(t => {
+        const original = tasks.find(orig => orig.id === t.id);
+        if (!original) return false;
+        const startOrig = typeof original.startDate === 'string' ? original.startDate : (original.startDate as Date).toISOString().split('T')[0];
+        const startNew = typeof t.startDate === 'string' ? t.startDate : (t.startDate as Date).toISOString().split('T')[0];
+        const endOrig = typeof original.endDate === 'string' ? original.endDate : (original.endDate as Date).toISOString().split('T')[0];
+        const endNew = typeof t.endDate === 'string' ? t.endDate : (t.endDate as Date).toISOString().split('T')[0];
+        return (
+          original.name === t.name &&
+          startOrig === startNew &&
+          endOrig === endNew &&
+          (original.parentId ?? null) === (t.parentId ?? null) &&
+          (original.color ?? null) === (t.color ?? null) &&
+          (original.progress ?? 0) === (t.progress ?? 0) &&
+          JSON.stringify(original.dependencies ?? []) === JSON.stringify(t.dependencies ?? [])
+        );
+      });
+
+    const isDuplicateFlow = newTasksInBatch.length > 0 && existingTasksUnchanged;
+
+    if (isDuplicateFlow) {
+      console.log('%c[useBatchTaskUpdate] handleTasksChange: duplicate flow detected — skipping, handleReorder will save', 'background: #845ef7; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE (duplicate flow, skipped)`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      return;
+    }
+
     // Check if this is a deletion-related call (only dependency updates, no actual task changes)
     // This happens when gantt-lib's handleDelete calls onTasksChange before onDelete
     // We should skip the optimistic update in this case to avoid reordering issues
