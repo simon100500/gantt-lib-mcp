@@ -1,6 +1,7 @@
 import type { Ref, RefObject } from 'react';
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useRef } from 'react';
 import { Check } from 'lucide-react';
+import { createCustomDayPredicate, reflowTasksOnModeSwitch } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -62,6 +63,7 @@ export function ProjectWorkspace({
   onGanttDayModeChange,
 }: ProjectWorkspaceProps) {
   const tasks = useTaskStore((state) => state.tasks);
+  const setTasks = useTaskStore((state) => state.setTasks);
   const loading = useTaskStore((state) => state.loading);
   const sharedProject = useTaskStore((state) => state.project);
   const shareToken = useTaskStore((state) => state.shareToken);
@@ -149,6 +151,33 @@ export function ProjectWorkspace({
     }
     return ids;
   }, [searchResults, tempHighlightedTaskId]);
+  const previousGanttDayModeRef = useRef(ganttDayMode);
+  const weekendPredicate = useMemo(
+    () => createCustomDayPredicate({ customDays: russianHolidays2026 }),
+    [],
+  );
+
+  useEffect(() => {
+    const previousMode = previousGanttDayModeRef.current;
+    if (previousMode === ganttDayMode) {
+      return;
+    }
+
+    previousGanttDayModeRef.current = ganttDayMode;
+
+    if (tasks.length === 0) {
+      return;
+    }
+
+    const reflowedTasks = reflowTasksOnModeSwitch(tasks, ganttDayMode === 'business', weekendPredicate) as Task[];
+
+    if (readOnly || !batchUpdate) {
+      setTasks(reflowedTasks);
+      return;
+    }
+
+    void batchUpdate.handleTasksChange(reflowedTasks);
+  }, [batchUpdate, ganttDayMode, readOnly, setTasks, tasks, weekendPredicate]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
