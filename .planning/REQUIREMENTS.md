@@ -61,28 +61,28 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | — | Pending |
-| ENG-02 | — | Pending |
-| ENG-03 | — | Pending |
-| ENG-04 | — | Pending |
-| ENF-01 | — | Pending |
-| ENF-02 | — | Pending |
-| ENF-03 | — | Pending |
-| TRK-01 | — | Pending |
-| TRK-02 | — | Pending |
-| TRK-03 | — | Pending |
-| FUX-01 | — | Pending |
-| FUX-02 | — | Pending |
-| FUX-03 | — | Pending |
-| GATE-01 | — | Pending |
-| GATE-02 | — | Pending |
-| GATE-03 | — | Pending |
+| ENG-01 | Phase 30 | Pending |
+| ENG-02 | Phase 30 | Pending |
+| ENG-03 | Phase 30 | Pending |
+| ENG-04 | Phase 30 | Pending |
+| TRK-01 | Phase 31 | Pending |
+| TRK-02 | Phase 31 | Pending |
+| TRK-03 | Phase 31 | Pending |
+| ENF-01 | Phase 32 | Pending |
+| ENF-02 | Phase 32 | Pending |
+| ENF-03 | Phase 32 | Pending |
+| FUX-01 | Phase 33 | Pending |
+| FUX-02 | Phase 33 | Pending |
+| FUX-03 | Phase 33 | Pending |
+| GATE-01 | Phase 34 | Pending |
+| GATE-02 | Phase 34 | Pending |
+| GATE-03 | Phase 34 | Pending |
 
 **Coverage:**
 - v5.0 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-03-29 after initial definition*
+*Last updated: 2026-03-29 after roadmap creation*
