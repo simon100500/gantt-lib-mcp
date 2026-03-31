@@ -289,7 +289,7 @@ export function ProjectMenu({
             )}
             title={hasShareToken ? 'Только чтение' : sidebarState !== 'closed' ? 'Скрыть проекты' : 'Показать проекты'}
           >
-            {sidebarState !== 'closed' ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
+            {sidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
           </button>
 
           {/* Logo */}
@@ -435,8 +435,8 @@ export function ProjectMenu({
         {!hasShareToken && (
           <div
             className={cn(
-              'absolute top-[56px] left-0 z-50 flex flex-col overflow-hidden bg-white border-r border-b border-slate-200 rounded-br-lg shadow-lg transition-all duration-200 ease-in-out',
-              overlayVisible ? 'w-60 opacity-100' : 'w-0 opacity-0 pointer-events-none',
+              'absolute top-[56px] left-0 z-50 w-60 flex flex-col bg-white border-r border-b border-slate-200 rounded-br-lg shadow-lg transition-transform duration-200 ease-in-out',
+              overlayVisible ? 'translate-x-0' : '-translate-x-full pointer-events-none',
             )}
             onMouseEnter={handleOverlayMouseEnter}
             onMouseLeave={handleOverlayMouseLeave}
