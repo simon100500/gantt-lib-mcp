@@ -212,7 +212,7 @@ export function ProjectMenu({
       {!hasShareToken && (
         <aside
           className={cn(
-            'flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white transition-all duration-300 ease-in-out',
+            'flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white',
             'fixed inset-y-0 left-0 z-50 sm:relative sm:inset-auto',
             sidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0',
           )}
@@ -431,8 +431,8 @@ export function ProjectMenu({
           </div>
         </header>
 
-        {/* Overlay panel (hover mode) — always rendered for smooth transition */}
-        {!hasShareToken && (
+        {/* Overlay panel (hover mode) — only rendered when overlay or closed, hidden by transform */}
+        {!hasShareToken && !sidebarVisible && (
           <div
             className={cn(
               'absolute top-[56px] left-0 z-50 w-60 flex flex-col bg-white border-r border-b border-slate-200 rounded-br-lg shadow-lg transition-transform duration-200 ease-in-out',
