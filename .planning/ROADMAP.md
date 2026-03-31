@@ -165,5 +165,15 @@ Plans:
 - [x] 35-02 — TaskService + MCP schedule command integration
 - [x] 35-03 — Agent/web authoritative scheduling adoption — completed 2026-03-31, verified passed
 
+### Phase 36: unified-scheduling-core
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 35
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 36 to break down)
+
 ---
 *Last updated: 2026-03-31 — phase 35 verified and marked complete*

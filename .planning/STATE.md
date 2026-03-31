@@ -78,6 +78,7 @@ packages/
 - Plan definitions exist in code but no enforcement mechanism
 - LimitReachedModal component exists from v4.0 (basic feature gate modal)
 - Phase 35 added: Scheduling Core Adoption
+- Phase 36 added: unified-scheduling-core
 - MCP scheduler now uses a headless command core with authoritative changed-set responses
 - `TaskService` and MCP tools expose move/resize/recalculate schedule commands for linked edits
 - Agent verification and web persistence now treat server-returned changed tasks as authoritative for linked edits
