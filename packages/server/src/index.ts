@@ -97,22 +97,23 @@ fastify.patch('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, re
   }
 
   try {
-    const task = await taskService.update(taskId, updates, 'manual-save');
+    const result = await taskService.updateWithResult(taskId, updates, 'manual-save');
 
-    if (!task) {
+    if (!result?.task) {
       console.log('[SERVER] Task not found:', taskId);
       return reply.status(404).send({ error: 'Task not found' });
     }
 
     console.log('%c[SERVER] Task updated successfully', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
     console.log('[SERVER] Updated task:', {
-      id: task.id,
-      name: task.name,
-      parentId: task.parentId,
-      startDate: task.startDate,
-      endDate: task.endDate,
+      id: result.task.id,
+      name: result.task.name,
+      parentId: result.task.parentId,
+      startDate: result.task.startDate,
+      endDate: result.task.endDate,
+      changedIds: result.changedIds,
     });
-    return reply.send(task);
+    return reply.send(result);
   } catch (error) {
     console.error('[SERVER] Failed to update task:', error);
     fastify.log.error(error, 'Failed to update task');

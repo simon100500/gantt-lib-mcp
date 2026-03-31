@@ -46,6 +46,9 @@ type AgentAttemptResult = {
 type VerificationResult = {
   tasksAfter: ComparableTask[];
   tasksChanged: boolean;
+  actualChangedTaskIds: string[];
+  runChangedTaskIds: string[];
+  changedSetConsistent: boolean;
   revisionAfter: number;
   runMutations: MutationEvent[];
   externalMutations: MutationEvent[];
@@ -185,6 +188,14 @@ function haveTasksChanged(before: ComparableTask[], after: ComparableTask[]): bo
   const beforeJson = JSON.stringify(before.map(normalizeTask));
   const afterJson = JSON.stringify(after.map(normalizeTask));
   return beforeJson !== afterJson;
+}
+
+function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): string[] {
+  const beforeMap = new Map(before.map((task) => [task.id, JSON.stringify(normalizeTask(task))]));
+  const afterMap = new Map(after.map((task) => [task.id, JSON.stringify(normalizeTask(task))]));
+  const ids = new Set<string>([...beforeMap.keys(), ...afterMap.keys()]);
+
+  return Array.from(ids).filter((id) => beforeMap.get(id) !== afterMap.get(id)).sort();
 }
 
 function buildNoMutationMessage(): string {
@@ -485,10 +496,16 @@ async function verifyMutationAttempt(
 ): Promise<VerificationResult> {
   const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
+  const actualChangedTaskIds = mutationRequested ? getChangedTaskIds(tasksBefore, tasksAfter) : [];
   const revisionAfter = await taskService.getTaskRevision(projectId);
   const runMutations = await taskService.getMutationEventsByRun(runId, projectId);
+  const runChangedTaskIds = Array.from(
+    new Set(runMutations.map((event) => event.taskId).filter((taskId): taskId is string => Boolean(taskId))),
+  ).sort();
   const mutationsSinceStart = await taskService.getMutationEventsSince(runStartedAt, projectId);
   const externalMutations = mutationsSinceStart.filter((event: MutationEvent) => event.runId !== runId);
+  const changedSetConsistent = !mutationRequested
+    || JSON.stringify(actualChangedTaskIds) === JSON.stringify(runChangedTaskIds);
 
   await writeServerDebugLog('mutation_verification', {
     runId,
@@ -499,6 +516,9 @@ async function verifyMutationAttempt(
     revisionBefore,
     revisionAfter,
     tasksChanged,
+    actualChangedTaskIds,
+    runChangedTaskIds,
+    changedSetConsistent,
     runMutationCount: runMutations.length,
     runMutations,
     externalMutationCount: externalMutations.length,
@@ -511,6 +531,9 @@ async function verifyMutationAttempt(
   return {
     tasksAfter,
     tasksChanged,
+    actualChangedTaskIds,
+    runChangedTaskIds,
+    changedSetConsistent,
     revisionAfter,
     runMutations,
     externalMutations,
@@ -586,6 +609,9 @@ export async function runAgentWithHistory(
     let finalVerification: VerificationResult = {
       tasksAfter: tasksBefore,
       tasksChanged: false,
+      actualChangedTaskIds: [],
+      runChangedTaskIds: [],
+      changedSetConsistent: true,
       revisionAfter: revisionBefore,
       runMutations: [],
       externalMutations: [],
@@ -675,7 +701,11 @@ export async function runAgentWithHistory(
         break;
       }
 
-      if (finalVerification.runMutations.length > 0 && finalVerification.tasksChanged) {
+      if (
+        finalVerification.runMutations.length > 0
+        && finalVerification.tasksChanged
+        && finalVerification.changedSetConsistent
+      ) {
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
           assistantResponse.trim() || 'Изменения применены.',
@@ -696,6 +726,7 @@ export async function runAgentWithHistory(
         'If you create sequential new tasks and already know the predecessor, include that dependency inside `create_task` instead of scheduling a separate `set_dependency` step.',
         'Reuse only real task IDs returned by tool results. Never invent a UUID for `dependencies.taskId`.',
         'If the predecessor ID is uncertain, omit the speculative dependency and use a safe fallback instead of retrying with a guessed ID.',
+        'When moving or resizing dependency-linked tasks, prefer `move_task`, `resize_task`, or `recalculate_schedule` so the authoritative changed set is returned by the server.',
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',

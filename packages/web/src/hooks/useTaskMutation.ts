@@ -22,11 +22,46 @@ export interface UpdateTaskInput {
 }
 
 export interface UseTaskMutationResult {
-  mutateTask: (task: Task) => Promise<Task>;
+  mutateTask: (task: Task) => Promise<TaskMutationResponse>;
   createTask: (input: CreateTaskInput) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
   batchImportTasks: (tasks: Task[]) => Promise<number>;
   fetchTasksSnapshot: () => Promise<Task[]>;
+}
+
+export interface TaskMutationResponse {
+  task: Task;
+  changedTasks: Task[];
+  changedIds: string[];
+}
+
+type RawTaskMutationResponse = {
+  task?: Task;
+  changedTasks?: Task[];
+  changedIds?: string[];
+};
+
+function isTaskMutationPayload(payload: RawTaskMutationResponse | Task): payload is RawTaskMutationResponse {
+  return 'task' in payload || 'changedTasks' in payload || 'changedIds' in payload;
+}
+
+function normalizeMutationResponse(payload: RawTaskMutationResponse | Task): TaskMutationResponse {
+  if (isTaskMutationPayload(payload)) {
+    const task = payload.task ? normalizeTasks([payload.task])[0] : undefined;
+    const changedTasks = normalizeTasks(payload.changedTasks ?? []);
+    return {
+      task: task ?? changedTasks[0],
+      changedTasks,
+      changedIds: payload.changedIds ?? changedTasks.map((changedTask) => changedTask.id),
+    };
+  }
+
+  const task = normalizeTasks([payload])[0];
+  return {
+    task,
+    changedTasks: [task],
+    changedIds: [task.id],
+  };
 }
 
 /**
@@ -45,7 +80,7 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
     ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
   });
 
-  const mutateTask = async (task: Task): Promise<Task> => {
+  const mutateTask = async (task: Task): Promise<TaskMutationResponse> => {
     const body = {
       name: task.name,
       startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
@@ -71,14 +106,15 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
       throw new Error(`Failed to update task: ${response.status} ${response.statusText}`);
     }
 
-    const result = await response.json() as Task;
+    const result = normalizeMutationResponse(await response.json() as RawTaskMutationResponse | Task);
     console.log('%c[useTaskMutation] Response OK', 'background: #51cf66; color: white; padding: 2px 6px; border-radius: 3px;');
     console.log('[useTaskMutation] Server returned:', {
-      id: result.id,
-      name: result.name,
-      parentId: result.parentId,
-      startDate: result.startDate,
-      endDate: result.endDate,
+      id: result.task.id,
+      name: result.task.name,
+      parentId: result.task.parentId,
+      startDate: result.task.startDate,
+      endDate: result.task.endDate,
+      changedIds: result.changedIds,
     });
     console.log('[useTaskMutation] Full response:', result);
     return result;
