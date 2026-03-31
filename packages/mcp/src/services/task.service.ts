@@ -336,6 +336,7 @@ export class TaskService {
     };
   }
 
+  /** @deprecated Use commandService.commitCommand instead. Kept for backward compat. */
   async executeScheduleCommand(
     projectId: string | undefined,
     command: ScheduleCommand,

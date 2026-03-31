@@ -17,8 +17,10 @@ import { writeMcpDebugLog } from './debug-log.js';
 
 // Import services AFTER dotenv is configured
 import { taskService } from './services/task.service.js';
+import { commandService } from './services/command.service.js';
 import { messageService } from './services/message.service.js';
 import { dependencyService } from './services/dependency.service.js';
+import { getPrisma } from './prisma.js';
 import type {
   CreateTaskInput,
   UpdateTaskInput,
@@ -27,7 +29,10 @@ import type {
   TaskDependency,
   GetConversationHistoryInput,
   AddMessageInput,
+  ProjectCommand,
+  CommitProjectCommandRequest,
 } from './types.js';
+import { randomUUID } from 'node:crypto';
 
 // Create MCP server instance
 const server = new Server(
@@ -80,6 +85,18 @@ function isValidDateRange(startDate: string, endDate: string): boolean {
  */
 function isValidDependencyType(type: string): type is 'FS' | 'SS' | 'FF' | 'SF' {
   return VALID_DEPENDENCY_TYPES.includes(type);
+}
+
+/**
+ * Get current project version for optimistic concurrency
+ */
+async function getProjectVersion(projectId: string): Promise<number> {
+  const prisma = getPrisma();
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { version: true },
+  });
+  return project?.version ?? 0;
 }
 
 // Register list tools handler
@@ -569,6 +586,49 @@ Fix: Use valid dependency type.`);
       }
     }
 
+    // Route through CommandService for versioned event logging
+    if (resolvedProjectId) {
+      const version = await getProjectVersion(resolvedProjectId);
+      const response = await commandService.commitCommand({
+        projectId: resolvedProjectId,
+        clientRequestId: randomUUID(),
+        baseVersion: version,
+        command: { type: 'create_task', task: input },
+      }, 'agent');
+
+      if (!response.accepted) {
+        return {
+          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+        };
+      }
+
+      const createdTask = response.result.snapshot.tasks.find(t =>
+        !input.dependencies?.length || t.dependencies?.some(d =>
+          input.dependencies!.some(id => id.taskId === d.taskId)
+        )
+      ) || response.snapshot.tasks[response.snapshot.tasks.length - 1];
+
+      await writeMcpDebugLog('tool_call_completed', {
+        tool: name,
+        resolvedProjectId,
+        createdTaskId: createdTask?.id,
+        viaCommandService: true,
+        newVersion: response.newVersion,
+      });
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            task: createdTask,
+            message: 'Task created successfully',
+            affectedTasks: response.result.changedTaskIds.length,
+          }, null, 2),
+        }],
+      };
+    }
+
+    // Fallback for no projectId — use legacy path
     const task = await taskService.create(input, resolvedProjectId, 'agent');
 
     // Return the task with cascade info (scoped to same project)
@@ -734,6 +794,62 @@ Fix: Use valid dependency type.`);
     const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
     const hasDependencyChanges = input.dependencies !== undefined;
 
+    // Route schedule-affecting updates through CommandService
+    const resolvedProjectId = resolveProjectId(undefined);
+    if ((hasDateChanges || hasDependencyChanges) && resolvedProjectId) {
+      const version = await getProjectVersion(resolvedProjectId!);
+
+      // Build appropriate command based on what changed
+      let command: ProjectCommand | undefined;
+      if (hasDateChanges && input.startDate !== undefined && input.endDate !== undefined) {
+        command = { type: 'move_task', taskId: id, startDate: input.startDate };
+      } else if (input.startDate !== undefined && input.endDate === undefined) {
+        command = { type: 'resize_task', taskId: id, anchor: 'start', date: input.startDate };
+      } else if (input.endDate !== undefined && input.startDate === undefined) {
+        command = { type: 'resize_task', taskId: id, anchor: 'end', date: input.endDate };
+      }
+
+      if (command) {
+        const response = await commandService.commitCommand({
+          projectId: resolvedProjectId,
+          clientRequestId: randomUUID(),
+          baseVersion: version,
+          command,
+        }, 'agent');
+
+        if (!response.accepted) {
+          return {
+            content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+          };
+        }
+
+        const updatedTask = response.result.snapshot.tasks.find(t => t.id === id);
+        const changedTasks = response.result.changedTaskIds
+          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+          .filter((t): t is NonNullable<typeof t> => t !== undefined);
+
+        await writeMcpDebugLog('update_task_completed', {
+          id,
+          input,
+          viaCommandService: true,
+          newVersion: response.newVersion,
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              task: updatedTask,
+              message: 'Task updated successfully',
+              changedTasks,
+              changedIds: response.result.changedTaskIds,
+            }, null, 2),
+          }],
+        };
+      }
+    }
+
+    // Non-schedule changes or no projectId — use legacy path
     const updateResult = await taskService.updateWithResult(id, input, 'agent');
     if (!updateResult?.task) {
       throw new Error(`[Permanent] Task not found: ${id}.
@@ -796,6 +912,35 @@ Expected: YYYY-MM-DD (ISO date format).
 Fix: Use format like 2026-03-18.`);
     }
 
+    if (resolvedProjectId) {
+      const version = await getProjectVersion(resolvedProjectId);
+      const response = await commandService.commitCommand({
+        projectId: resolvedProjectId,
+        clientRequestId: randomUUID(),
+        baseVersion: version,
+        command: { type: 'move_task', taskId, startDate },
+      }, 'agent');
+
+      if (!response.accepted) {
+        return {
+          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+        };
+      }
+
+      const result = {
+        task: response.result.snapshot.tasks.find(t => t.id === taskId),
+        changedTasks: response.result.changedTaskIds
+          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+          .filter((t): t is NonNullable<typeof t> => t !== undefined),
+        changedIds: response.result.changedTaskIds,
+      };
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // Fallback: legacy path without command service
     const result = await taskService.executeScheduleCommand(
       resolvedProjectId,
       { type: 'move_task', taskId, startDate },
@@ -837,6 +982,35 @@ Expected: YYYY-MM-DD (ISO date format).
 Fix: Use format like 2026-03-18.`);
     }
 
+    if (resolvedProjectId) {
+      const version = await getProjectVersion(resolvedProjectId);
+      const response = await commandService.commitCommand({
+        projectId: resolvedProjectId,
+        clientRequestId: randomUUID(),
+        baseVersion: version,
+        command: { type: 'resize_task', taskId, anchor, date },
+      }, 'agent');
+
+      if (!response.accepted) {
+        return {
+          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+        };
+      }
+
+      const result = {
+        task: response.result.snapshot.tasks.find(t => t.id === taskId),
+        changedTasks: response.result.changedTaskIds
+          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+          .filter((t): t is NonNullable<typeof t> => t !== undefined),
+        changedIds: response.result.changedTaskIds,
+      };
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // Fallback: legacy path without command service
     const result = await taskService.executeScheduleCommand(
       resolvedProjectId,
       { type: 'resize_task', taskId, anchor, date },
@@ -859,6 +1033,36 @@ Fix: Use format like 2026-03-18.`);
       projectId?: string;
     };
     const resolvedProjectId = resolveProjectId(argProjectId);
+
+    if (resolvedProjectId) {
+      const version = await getProjectVersion(resolvedProjectId);
+      const response = await commandService.commitCommand({
+        projectId: resolvedProjectId,
+        clientRequestId: randomUUID(),
+        baseVersion: version,
+        command: { type: 'recalculate_schedule', taskId },
+      }, 'agent');
+
+      if (!response.accepted) {
+        return {
+          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+        };
+      }
+
+      const result = {
+        task: taskId ? response.result.snapshot.tasks.find(t => t.id === taskId) : undefined,
+        changedTasks: response.result.changedTaskIds
+          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+          .filter((t): t is NonNullable<typeof t> => t !== undefined),
+        changedIds: response.result.changedTaskIds,
+      };
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // Fallback: legacy path without command service
     const result = await taskService.executeScheduleCommand(
       resolvedProjectId,
       { type: 'recalculate_schedule', taskId },
@@ -884,6 +1088,45 @@ Reason: Task ID is required to identify which task to delete.
 Fix: Provide the task ID as a string parameter.`);
     }
 
+    // Try routing through CommandService if projectId is available
+    const resolvedProjectId = resolveProjectId(undefined);
+    if (resolvedProjectId) {
+      const version = await getProjectVersion(resolvedProjectId);
+      const response = await commandService.commitCommand({
+        projectId: resolvedProjectId,
+        clientRequestId: randomUUID(),
+        baseVersion: version,
+        command: { type: 'delete_task', taskId: id },
+      }, 'agent');
+
+      if (!response.accepted) {
+        return {
+          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+        };
+      }
+
+      await writeMcpDebugLog('tool_call_completed', {
+        tool: name,
+        deletedTaskId: id,
+        viaCommandService: true,
+        changedIds: response.result.changedTaskIds,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              deleted: id,
+              changedIds: response.result.changedTaskIds,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    // Fallback: legacy path without command service
     const deleted = await taskService.delete(id, 'agent');
     if (!deleted) {
       throw new Error(`[Permanent] Task not found: ${id}.
