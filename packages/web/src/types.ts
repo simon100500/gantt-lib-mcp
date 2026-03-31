@@ -52,3 +52,42 @@ export function normalizeTask(task: RawTask): Task {
 export function normalizeTasks(tasks: RawTask[]): Task[] {
   return tasks.map(normalizeTask);
 }
+
+// === Phase 36: Command types for frontend state model ===
+
+export type FrontendProjectCommand =
+  | { type: 'move_task'; taskId: string; startDate: string; }
+  | { type: 'resize_task'; taskId: string; anchor: 'start' | 'end'; date: string; }
+  | { type: 'set_task_start'; taskId: string; startDate: string; }
+  | { type: 'set_task_end'; taskId: string; endDate: string; }
+  | { type: 'change_duration'; taskId: string; duration: number; anchor?: 'start' | 'end'; }
+  | { type: 'create_task'; task: Omit<Task, 'id'> & { id?: string }; }
+  | { type: 'delete_task'; taskId: string; }
+  | { type: 'create_dependency'; taskId: string; dependency: { taskId: string; type: string; lag?: number; }; }
+  | { type: 'remove_dependency'; taskId: string; depTaskId: string; }
+  | { type: 'change_dependency_lag'; taskId: string; depTaskId: string; lag: number; }
+  | { type: 'recalculate_schedule'; taskId?: string; }
+  | { type: 'reparent_task'; taskId: string; newParentId: string | null; }
+  | { type: 'reorder_task'; taskId: string; sortOrder: number; };
+
+export interface ProjectSnapshot {
+  tasks: Task[];
+}
+
+export interface PendingCommand {
+  requestId: string;
+  baseVersion: number;
+  command: FrontendProjectCommand;
+}
+
+export interface ProjectState {
+  confirmed: {
+    version: number;
+    snapshot: ProjectSnapshot;
+  };
+  pending: PendingCommand[];
+  dragPreview?: {
+    command: FrontendProjectCommand;
+    snapshot: ProjectSnapshot;
+  };
+}
