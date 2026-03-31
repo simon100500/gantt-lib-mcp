@@ -50,6 +50,12 @@ export interface Task {
   sortOrder?: number;
   /** Optional child tasks for hierarchical loading */
   children?: Task[];
+  /** Optional flag to prevent drag/resize interactions */
+  locked?: boolean;
+  /** Optional accepted flag used by the web client */
+  accepted?: boolean;
+  /** Optional divider hint used by the web client */
+  divider?: 'top' | 'bottom';
 }
 
 /**
@@ -186,6 +192,46 @@ export interface AddMessageInput {
 
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
 export type GanttDayMode = 'business' | 'calendar';
+
+export interface ScheduleCommandOptions {
+  /** Account for business days during scheduling */
+  businessDays?: boolean;
+  /** Weekend predicate for business-day mode */
+  weekendPredicate?: (date: Date) => boolean;
+  /** Include the normalized final snapshot in the response */
+  includeSnapshot?: boolean;
+}
+
+export type ScheduleCommand =
+  | {
+      type: 'move_task';
+      taskId: string;
+      startDate: string;
+    }
+  | {
+      type: 'resize_task';
+      taskId: string;
+      anchor: 'start' | 'end';
+      date: string;
+    }
+  | {
+      type: 'recalculate_schedule';
+      taskId?: string;
+    };
+
+export interface ScheduleCommandResult {
+  /** Tasks whose normalized persisted state changed */
+  changedTasks: Task[];
+  /** IDs of changed tasks */
+  changedIds: string[];
+  /** Optional full normalized snapshot after command execution */
+  snapshot?: Task[];
+}
+
+export interface TaskMutationResult extends ScheduleCommandResult {
+  /** Primary task addressed by the mutation when applicable */
+  task?: Task;
+}
 
 export interface TaskMutationEvent {
   id: string;
