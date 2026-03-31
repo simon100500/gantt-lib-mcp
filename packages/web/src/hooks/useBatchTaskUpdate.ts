@@ -1,7 +1,28 @@
 import { useCallback, useRef } from 'react';
-import type { Task } from '../types';
+import type { Task, FrontendProjectCommand } from '../types';
 import { useUIStore, type SavingState } from '../stores/useUIStore';
 import { useTaskMutation, type TaskMutationResponse } from './useTaskMutation';
+import { useCommandCommit } from './useCommandCommit';
+
+function isScheduleChange(original: Task, updated: Task): boolean {
+  return original.startDate !== updated.startDate || original.endDate !== updated.endDate;
+}
+
+function buildCommandFromChange(original: Task, updated: Task): FrontendProjectCommand | null {
+  const startChanged = original.startDate !== updated.startDate;
+  const endChanged = original.endDate !== updated.endDate;
+
+  if (startChanged && !endChanged) {
+    return { type: 'resize_task', taskId: updated.id, anchor: 'start', date: typeof updated.startDate === 'string' ? updated.startDate : updated.startDate.toISOString().split('T')[0] };
+  }
+  if (endChanged && !startChanged) {
+    return { type: 'resize_task', taskId: updated.id, anchor: 'end', date: typeof updated.endDate === 'string' ? updated.endDate : updated.endDate.toISOString().split('T')[0] };
+  }
+  if (startChanged && endChanged) {
+    return { type: 'move_task', taskId: updated.id, startDate: typeof updated.startDate === 'string' ? updated.startDate : updated.startDate.toISOString().split('T')[0] };
+  }
+  return null;
+}
 
 export interface UseBatchTaskUpdateOptions {
   tasks: Task[];
@@ -28,6 +49,7 @@ export function useBatchTaskUpdate({
   onCascade,
 }: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
   const { mutateTask, createTask, deleteTask, batchImportTasks, fetchTasksSnapshot } = useTaskMutation(accessToken);
+  const { commitCommand } = useCommandCommit(accessToken);
   const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -261,6 +283,30 @@ export function useBatchTaskUpdate({
 
     const filteredTasks = changedTasks;
 
+    // Command commit path: for single-task schedule changes, route through
+    // the command commit flow (POST /api/commands/commit) instead of raw PATCH.
+    // Non-schedule changes fall through to existing PATCH flow below.
+    if (changedTasks.length === 1) {
+      const original = tasks.find(t => t.id === changedTasks[0].id);
+      if (original && isScheduleChange(original, changedTasks[0])) {
+        const cmd = buildCommandFromChange(original, changedTasks[0]);
+        if (cmd) {
+          try {
+            setSavingStateWithReset('saving');
+            const result = await commitCommand(cmd);
+            if (result.accepted && onCascade) {
+              onCascade(result.snapshot.tasks);
+            }
+            setSavingStateWithReset('saved');
+            console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE (command commit)`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+            return;
+          } catch (error) {
+            console.error('[useBatchTaskUpdate] Command commit failed, falling back to PATCH:', error);
+            // Fall through to existing PATCH flow
+          }
+        }
+      }
+    }
     // Strip sortOrder before sending to server.
     // handleTasksChange is called by gantt-lib's onTasksChange which fires for EVERY drag event
     // (including reorders). gantt-lib passes task objects through spread, so the original
