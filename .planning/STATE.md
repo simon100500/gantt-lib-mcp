@@ -65,6 +65,7 @@ packages/
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260330-m7o | Сделать возможность выбирать юзеру режим работы графика: рабочие дни или календарные дни, сохранить настройку в БД на уровне проекта и вынести в меню toolbar | 2026-03-30 | b339dcc | [260330-m7o-gantt-lib](./quick/260330-m7o-gantt-lib/) |
+| 260331-udj | Jira-like sidebar: hover overlay + click push dual-mode для переключения проектов | 2026-03-31 | eee8c8d | [260331-udj-sidebar-jira-hover-overlay-behavior](./quick/260331-udj-sidebar-jira-hover-overlay-behavior/) |
 
 ---
 
@@ -80,4 +81,4 @@ packages/
 
 ---
 
-*Last updated: 2026-03-31 — completed phase 35 plans 35-01 and 35-02, ready for 35-03*
+*Last updated: 2026-03-31 — completed quick task 260331-udj (sidebar hover overlay)*
