@@ -130,7 +130,7 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
-| 36. Unified Scheduling Core | Scheduling | 3/7 | In Progress|  |
+| 36. Unified Scheduling Core | Scheduling | 4/7 | In Progress|  |
 
 ---
 
@@ -172,13 +172,13 @@ Plans:
 **Goal:** Единая scheduling authority: все изменения через typed commands, один gantt-lib/core/scheduling, server как единственный источник истины, deterministic/explainable/versioned результаты
 **Requirements**: PRD-only (`.planning/reference/unified-scheduling-core-prd.md`)
 **Depends on:** Phase 35
-**Plans:** 3/7 plans executed
+**Plans:** 4/7 plans executed
 
 Plans:
 - [x] 36-01 — Fix gantt-lib core/scheduling subpath export (DTS + dependency)
 - [x] 36-02 — Define typed command model + Prisma schema (contracts)
 - [x] 36-03 — Replace local scheduler with gantt-lib adapter + regression tests
-- [ ] 36-04 — Command commit endpoint (CommandService + POST /api/commands/commit)
+- [x] 36-04 — Command commit endpoint (CommandService + POST /api/commands/commit)
 - [ ] 36-05 — Frontend three-layer state model + command commit flow
 - [ ] 36-06 — MCP/API channel parity (all mutations through command commit)
 - [ ] 36-07 — Parity + concurrency + patch reason tests (TDD)

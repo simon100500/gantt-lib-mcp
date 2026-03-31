@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-03-31T21:58:06.265Z"
+last_updated: "2026-03-31T22:07:30.625Z"
 last_activity: 2026-03-31
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
   percent: 50
 ---
 
@@ -26,14 +26,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 36 — Unified Scheduling Core (Plan 2 of 7 complete)
+**Current focus:** Phase 36 — Unified Scheduling Core (Plan 4 of 7 complete)
 
 ---
 
 ## Current Position
 
 Phase: 36 of 36 (Unified Scheduling Core)
-Plan: 3 of 7 complete
+Plan: 4 of 7 complete
 Status: Ready to execute
 Last activity: 2026-03-31
 
@@ -85,7 +85,8 @@ packages/
 - gantt-lib/core/scheduling subpath export fixed: DTS generation works, zero React/DOM dependencies
 - gantt-lib 0.62.0 linked to MCP package via file: protocol (dev-only, npm has 0.28.1)
 - Phase 36 Plan 02: ProjectCommand discriminated union (13 types), CommitProjectCommandRequest/Response, Patch model, ScheduleExecutionResult, ProjectEventRecord, Prisma ProjectEvent model with versioning
+- Phase 36 Plan 04: POST /api/commands/commit endpoint with CommandService handling all 13 command types via gantt-lib/core/scheduling, atomic Prisma $transaction with optimistic concurrency, event log persistence, patch reason attribution
 
 ---
 
-*Last updated: 2026-03-31 — completed 36-02 (command types and event schema)*
+*Last updated: 2026-03-31 — completed 36-04 (command commit endpoint)*
