@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, CreditCard, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
+import { ChevronDown, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -59,6 +59,27 @@ export function ProjectMenu({
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
+
+  const billingFooter = auth.isAuthenticated && subscription ? (
+    <div className="border-t border-slate-200 px-3 py-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-primary">
+          {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
+        </span>
+        <span className="text-xs text-slate-500">
+          {subscription.limits.projects === -1 ? '\u221e' : `${auth.projects.length}/${subscription.limits.projects}`} проектов
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowBillingPage(true)}
+        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+      >
+        <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+        Расширить
+      </button>
+    </div>
+  ) : null;
 
   // Hover overlay debounce
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,52 +238,14 @@ export function ProjectMenu({
             sidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0',
           )}
         >
-          <div className="flex-1 min-h-0 pt-3">
-            {auth.isAuthenticated && auth.project ? (
-              <ProjectSwitcher
-                currentProject={currentProject}
-                projects={auth.projects}
-                onSwitch={handleSwitchInSidebar}
-                onCreateNew={() => {
-                  void onCreateProject();
-                }}
-                onClose={() => setSidebarState('closed')}
-                isInline={true}
-              />
-            ) : (
-              <ProjectSwitcher
-                currentProject={currentProject}
-                projects={[]}
-                onSwitch={() => { }}
-                onCreateNew={() => {
-                  void onCreateProject();
-                }}
-                onClose={() => setSidebarState('closed')}
-                isInline={true}
-              />
-            )}
-          </div>
-
-          {auth.isAuthenticated && subscription && (
-            <div className="shrink-0 border-t border-slate-200 px-3 py-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-primary">
-                  {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
-                </span>
-                <span className="text-xs text-slate-500">
-                  {subscription.limits.projects === -1 ? '\u221e' : `${auth.projects.length}/${subscription.limits.projects}`} проектов
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowBillingPage(true)}
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-              >
-                <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
-                Расширить
-              </button>
-            </div>
-          )}
+          <ProjectSwitcher
+            currentProject={currentProject}
+            projects={auth.isAuthenticated && auth.project ? auth.projects : []}
+            onSwitch={handleSwitchInSidebar}
+            onCreateNew={() => { void onCreateProject(); }}
+            onClose={() => setSidebarState('closed')}
+            footer={billingFooter}
+          />
         </aside>
       )}
 
@@ -435,58 +418,19 @@ export function ProjectMenu({
         {!hasShareToken && !sidebarVisible && (
           <div
             className={cn(
-              'absolute top-[56px] left-0 z-50 w-60 flex flex-col bg-white border-r border-b border-slate-200 rounded-br-lg shadow-lg transition-transform duration-200 ease-in-out',
+              'absolute top-[56px] bottom-0 left-0 z-50 w-60 flex flex-col bg-white border-r border-slate-200 shadow-lg transition-transform duration-200 ease-in-out',
               overlayVisible ? 'translate-x-0' : '-translate-x-full pointer-events-none',
             )}
             onMouseEnter={handleOverlayMouseEnter}
             onMouseLeave={handleOverlayMouseLeave}
           >
-            <div className="min-w-[240px]">
-              {auth.isAuthenticated && auth.project ? (
-                <ProjectSwitcher
-                  currentProject={currentProject}
-                  projects={auth.projects}
-                  onSwitch={handleSwitchInOverlay}
-                  onCreateNew={() => {
-                    void onCreateProject();
-                  }}
-                  isInline={true}
-                  hideHeader={true}
-                />
-              ) : (
-                <ProjectSwitcher
-                  currentProject={currentProject}
-                  projects={[]}
-                  onSwitch={() => { }}
-                  onCreateNew={() => {
-                    void onCreateProject();
-                  }}
-                  isInline={true}
-                  hideHeader={true}
-                />
-              )}
-            </div>
-
-            {auth.isAuthenticated && subscription && (
-              <div className="shrink-0 border-t border-slate-200 px-3 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-primary">
-                    {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {subscription.limits.projects === -1 ? '\u221e' : `${auth.projects.length}/${subscription.limits.projects}`} проектов
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBillingPage(true)}
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                >
-                  <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
-                  Расширить
-                </button>
-              </div>
-            )}
+            <ProjectSwitcher
+              currentProject={currentProject}
+              projects={auth.isAuthenticated && auth.project ? auth.projects : []}
+              onSwitch={handleSwitchInOverlay}
+              onCreateNew={() => { void onCreateProject(); }}
+              footer={billingFooter}
+            />
           </div>
         )}
 
