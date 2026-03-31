@@ -24,10 +24,14 @@ export function ProjectSwitcher({
       {/* Logo + close — only in pinned sidebar mode */}
       {onClose && (
         <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-3">
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onCreateNew}
+            className="flex items-center gap-2"
+          >
             <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
             <span className="text-base font-semibold text-slate-900">ГетГант</span>
-          </div>
+          </button>
           <button
             type="button"
             onClick={onClose}

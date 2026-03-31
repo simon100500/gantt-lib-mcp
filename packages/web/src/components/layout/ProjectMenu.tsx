@@ -276,8 +276,9 @@ export function ProjectMenu({
           </button>
 
           {/* Logo */}
-          <a
-            href="https://getgantt.ru"
+          <button
+            type="button"
+            onClick={() => void onCreateProject()}
             className={cn(
               'flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight',
               hideToggleOnDesktop && 'sm:hidden'
@@ -290,7 +291,7 @@ export function ProjectMenu({
                 <span className="text-slate-300 hidden sm:inline">/</span>
               </>
             )}
-          </a>
+          </button>
 
           {showProjectContext && (
             <>
