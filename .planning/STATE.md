@@ -2,21 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-current_phase: 35
-status: executing
-last_updated: "2026-03-31T18:10:00.000Z"
+status: completed
+last_updated: "2026-03-31T19:24:00.000Z"
+last_activity: 2026-03-31
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-03-30
+**Last updated:** 2026-03-31
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Executing Phase 35
+**Status:** Phase 35 complete
 
 ---
 
@@ -25,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 35 — Scheduling Core Adoption
+**Current focus:** Awaiting next planning step
 
 ---
 
 ## Current Position
 
 Phase: 35 of 35 (Scheduling Core Adoption)
-Plan: 2 of 3 in current phase
-Status: Executing wave 2
-Last activity: 2026-03-31 — Completed phase 35 plans 35-01 and 35-02 (scheduling core + MCP integration)
+Plan: 3 of 3 complete
+Status: Verified passed
+Last activity: 2026-03-31 — Verified and completed phase 35 (authoritative scheduling adoption)
 
-Progress: [██████░░░░] 67%
+Progress: [██████████] 100%
 
 ---
 
@@ -51,6 +52,7 @@ packages/
 ```
 
 **Deployment:**
+
 - getgantt.ru → packages/site (Astro static, Nginx)
 - ai.getgantt.ru → packages/web + packages/server (React + Fastify)
 
@@ -78,7 +80,8 @@ packages/
 - Phase 35 added: Scheduling Core Adoption
 - MCP scheduler now uses a headless command core with authoritative changed-set responses
 - `TaskService` and MCP tools expose move/resize/recalculate schedule commands for linked edits
+- Agent verification and web persistence now treat server-returned changed tasks as authoritative for linked edits
 
 ---
 
-*Last updated: 2026-03-31 — completed quick task 260331-udj (sidebar hover overlay)*
+*Last updated: 2026-03-31 — phase 35 verified passed and marked complete*

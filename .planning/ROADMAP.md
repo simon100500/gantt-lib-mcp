@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-03-29
+**Last updated:** 2026-03-31
 
 ## Progress Summary
 
@@ -158,12 +158,12 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 **Goal:** Сервер выполняет schedule mutations теми же правилами, что и актуальный gantt-lib core, и возвращает authoritative changed-set для agent/web persistence
 **Requirements**: PRD-only (`.planning/reference/scheduling-core-adoption-prd.md`)
 **Depends on:** Phase 08, Phase 16, Phase 19, Phase 21, Phase 22
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 35-01 — Headless scheduling core + regression parity
 - [x] 35-02 — TaskService + MCP schedule command integration
-- [ ] 35-03 — Agent/web authoritative scheduling adoption
+- [x] 35-03 — Agent/web authoritative scheduling adoption — completed 2026-03-31, verified passed
 
 ---
-*Last updated: 2026-03-29 — v5.0 roadmap created*
+*Last updated: 2026-03-31 — phase 35 verified and marked complete*
