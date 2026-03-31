@@ -431,14 +431,17 @@ export function ProjectMenu({
           </div>
         </header>
 
-        {/* Overlay panel (hover mode) */}
-        {!hasShareToken && overlayVisible && (
+        {/* Overlay panel (hover mode) — always rendered for smooth transition */}
+        {!hasShareToken && (
           <div
-            className="absolute top-0 left-0 z-50 w-60 bg-white border-r border-b border-slate-200 rounded-br-lg shadow-lg"
+            className={cn(
+              'absolute top-[56px] left-0 z-50 flex flex-col overflow-hidden bg-white border-r border-b border-slate-200 rounded-br-lg shadow-lg transition-all duration-200 ease-in-out',
+              overlayVisible ? 'w-60 opacity-100' : 'w-0 opacity-0 pointer-events-none',
+            )}
             onMouseEnter={handleOverlayMouseEnter}
             onMouseLeave={handleOverlayMouseLeave}
           >
-            <div className="pt-3">
+            <div className="min-w-[240px]">
               {auth.isAuthenticated && auth.project ? (
                 <ProjectSwitcher
                   currentProject={currentProject}
@@ -447,8 +450,8 @@ export function ProjectMenu({
                   onCreateNew={() => {
                     void onCreateProject();
                   }}
-                  onClose={() => setSidebarState('closed')}
                   isInline={true}
+                  hideHeader={true}
                 />
               ) : (
                 <ProjectSwitcher
@@ -458,8 +461,8 @@ export function ProjectMenu({
                   onCreateNew={() => {
                     void onCreateProject();
                   }}
-                  onClose={() => setSidebarState('closed')}
                   isInline={true}
+                  hideHeader={true}
                 />
               )}
             </div>

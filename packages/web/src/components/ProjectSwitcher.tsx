@@ -11,30 +11,32 @@ interface ProjectSwitcherProps {
   isInline?: boolean;
 }
 
-export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onClose, isInline = false }: ProjectSwitcherProps) {
+export function ProjectSwitcher({ currentProject, projects, onSwitch, onCreateNew, onClose, isInline = false, hideHeader = false }: ProjectSwitcherProps & { hideHeader?: boolean }) {
   return (
     <div className="flex flex-col h-full">
       {/* Logo and close/collapse button - on all screens */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 px-3">
-        <div className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
-          <span className="text-base font-semibold text-slate-900">ГетГант</span>
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 px-3">
+          <div className="flex items-center gap-2">
+            <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
+            <span className="text-base font-semibold text-slate-900">ГетГант</span>
+          </div>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+              aria-label={isInline ? "Свернуть" : "Закрыть"}
+              title={isInline ? "Свернуть" : "Закрыть"}
+            >
+              <PanelRightOpen className="h-5 w-5" />
+            </button>
+          )}
         </div>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-            aria-label={isInline ? "Свернуть" : "Закрыть"}
-            title={isInline ? "Свернуть" : "Закрыть"}
-          >
-            <PanelRightOpen className="h-5 w-5" />
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Create new button - fixed at top */}
-      <div className="px-3 mb-3">
+      <div className={cn("px-3", hideHeader ? "pt-3 mb-3" : "mb-3")}>
         <Button
           onClick={onCreateNew}
           className="w-full shrink-0"
