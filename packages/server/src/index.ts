@@ -13,8 +13,9 @@
 
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
-import { taskService, messageService } from '@gantt/mcp/services';
-import type { CreateTaskInput, UpdateTaskInput } from '@gantt/mcp/types';
+import { taskService, messageService, commandService } from '@gantt/mcp/services';
+import type { CreateTaskInput, UpdateTaskInput, ProjectCommand } from '@gantt/mcp/types';
+import { randomUUID } from 'node:crypto';
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
@@ -31,6 +32,38 @@ await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
 await registerBillingRoutes(fastify);
 await registerCommandRoutes(fastify);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Get current project version for optimistic concurrency */
+async function getProjectVersionForReq(req: any): Promise<number> {
+  const { getPrisma } = await import('@gantt/mcp/prisma');
+  const prisma = getPrisma();
+  const project = await prisma.project.findUnique({
+    where: { id: req.user!.projectId },
+    select: { version: true },
+  });
+  return project?.version ?? 0;
+}
+
+/** Build a ProjectCommand from a PATCH update's changed fields */
+function buildCommandFromUpdate(taskId: string, updates: UpdateTaskInput): ProjectCommand | undefined {
+  const startChanged = updates.startDate !== undefined;
+  const endChanged = updates.endDate !== undefined;
+
+  if (startChanged && endChanged) {
+    return { type: 'move_task', taskId, startDate: updates.startDate! };
+  }
+  if (startChanged && !endChanged) {
+    return { type: 'resize_task', taskId, anchor: 'start', date: updates.startDate! };
+  }
+  if (endChanged && !startChanged) {
+    return { type: 'resize_task', taskId, anchor: 'end', date: updates.endDate! };
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // REST routes
@@ -100,6 +133,38 @@ fastify.patch('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, re
   }
 
   try {
+    // Check if this is a schedule-affecting change
+    const isScheduleChange = updates.startDate !== undefined || updates.endDate !== undefined;
+
+    if (isScheduleChange) {
+      const version = await getProjectVersionForReq(req);
+      const cmd = buildCommandFromUpdate(taskId, updates);
+      if (cmd) {
+        const response = await commandService.commitCommand({
+          projectId: req.user!.projectId,
+          clientRequestId: randomUUID(),
+          baseVersion: version,
+          command: cmd,
+        }, 'user', req.user!.userId);
+
+        if (response.accepted) {
+          const updatedTask = response.result.snapshot.tasks.find(t => t.id === taskId);
+          const changedTasks = response.result.changedTaskIds
+            .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+            .filter((t): t is NonNullable<typeof t> => t !== undefined);
+
+          console.log('%c[SERVER] Task updated via CommandService', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+          return reply.send({
+            task: updatedTask,
+            changedTasks,
+            changedIds: response.result.changedTaskIds,
+          });
+        }
+        return reply.status(409).send(response);
+      }
+    }
+
+    // Non-schedule changes: fall through to existing PATCH flow
     const result = await taskService.updateWithResult(taskId, updates, 'manual-save');
 
     if (!result?.task) {
@@ -133,8 +198,21 @@ fastify.post('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) 
   }
 
   try {
-    const task = await taskService.create(input, req.user!.projectId, 'manual-save');
-    return reply.status(201).send(task);
+    const version = await getProjectVersionForReq(req);
+    const response = await commandService.commitCommand({
+      projectId: req.user!.projectId,
+      clientRequestId: randomUUID(),
+      baseVersion: version,
+      command: { type: 'create_task', task: input },
+    }, 'user', req.user!.userId);
+
+    if (response.accepted) {
+      const createdTask = response.result.snapshot.tasks.find(t =>
+        t.name === input.name && t.startDate === input.startDate
+      ) || response.snapshot.tasks[response.snapshot.tasks.length - 1];
+      return reply.status(201).send(createdTask);
+    }
+    return reply.status(409).send(response);
   } catch (error) {
     fastify.log.error(error, 'Failed to create task');
     const message = error instanceof Error ? error.message : 'Failed to create task';
@@ -151,13 +229,21 @@ fastify.delete('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, r
   }
 
   try {
-    const deleted = await taskService.delete(taskId, 'manual-save');
+    const version = await getProjectVersionForReq(req);
+    const response = await commandService.commitCommand({
+      projectId: req.user!.projectId,
+      clientRequestId: randomUUID(),
+      baseVersion: version,
+      command: { type: 'delete_task', taskId },
+    }, 'user', req.user!.userId);
 
-    if (!deleted) {
-      return reply.status(404).send({ error: 'Task not found' });
+    if (response.accepted) {
+      return reply.send({
+        deleted: true,
+        changedIds: response.result.changedTaskIds,
+      });
     }
-
-    return reply.send({ deleted: true });
+    return reply.status(409).send(response);
   } catch (error) {
     fastify.log.error(error, 'Failed to delete task');
     return reply.status(500).send({ error: 'Failed to delete task' });
