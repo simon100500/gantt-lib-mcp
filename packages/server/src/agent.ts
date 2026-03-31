@@ -49,6 +49,8 @@ type VerificationResult = {
   actualChangedTaskIds: string[];
   runChangedTaskIds: string[];
   changedSetConsistent: boolean;
+  missingTaskIds: string[];
+  unexpectedTaskIds: string[];
   revisionAfter: number;
   runMutations: MutationEvent[];
   externalMutations: MutationEvent[];
@@ -198,12 +200,36 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
   return Array.from(ids).filter((id) => beforeMap.get(id) !== afterMap.get(id)).sort();
 }
 
+function compareChangedTaskSets(actualChangedTaskIds: string[], runChangedTaskIds: string[]) {
+  const actualSet = new Set(actualChangedTaskIds);
+  const runSet = new Set(runChangedTaskIds);
+
+  return {
+    missingTaskIds: actualChangedTaskIds.filter((taskId) => !runSet.has(taskId)),
+    unexpectedTaskIds: runChangedTaskIds.filter((taskId) => !actualSet.has(taskId)),
+  };
+}
+
 function buildNoMutationMessage(): string {
   return 'Изменение не применилось: модель ответила как будто задача изменена, но в базе не было ни одной реальной мутации.';
 }
 
 function buildStaleStateMessage(): string {
   return 'График изменился вручную во время ответа агента. Запрос нужно повторить на актуальном состоянии задач.';
+}
+
+function buildPartialMutationMessage(missingTaskIds: string[], unexpectedTaskIds: string[]): string {
+  const details: string[] = [];
+
+  if (missingTaskIds.length > 0) {
+    details.push(`не подтверждены сервером задачи: ${missingTaskIds.join(', ')}`);
+  }
+
+  if (unexpectedTaskIds.length > 0) {
+    details.push(`сервер сообщил лишние изменения: ${unexpectedTaskIds.join(', ')}`);
+  }
+
+  return `Изменение применилось частично или устарело: ${details.join('; ')}. Повторите запрос после обновления состояния задач.`;
 }
 
 function buildTimeoutRetryInstruction(): string {
@@ -504,8 +530,8 @@ async function verifyMutationAttempt(
   ).sort();
   const mutationsSinceStart = await taskService.getMutationEventsSince(runStartedAt, projectId);
   const externalMutations = mutationsSinceStart.filter((event: MutationEvent) => event.runId !== runId);
-  const changedSetConsistent = !mutationRequested
-    || JSON.stringify(actualChangedTaskIds) === JSON.stringify(runChangedTaskIds);
+  const { missingTaskIds, unexpectedTaskIds } = compareChangedTaskSets(actualChangedTaskIds, runChangedTaskIds);
+  const changedSetConsistent = !mutationRequested || (missingTaskIds.length === 0 && unexpectedTaskIds.length === 0);
 
   await writeServerDebugLog('mutation_verification', {
     runId,
@@ -519,6 +545,8 @@ async function verifyMutationAttempt(
     actualChangedTaskIds,
     runChangedTaskIds,
     changedSetConsistent,
+    missingTaskIds,
+    unexpectedTaskIds,
     runMutationCount: runMutations.length,
     runMutations,
     externalMutationCount: externalMutations.length,
@@ -534,6 +562,8 @@ async function verifyMutationAttempt(
     actualChangedTaskIds,
     runChangedTaskIds,
     changedSetConsistent,
+    missingTaskIds,
+    unexpectedTaskIds,
     revisionAfter,
     runMutations,
     externalMutations,
@@ -612,6 +642,8 @@ export async function runAgentWithHistory(
       actualChangedTaskIds: [],
       runChangedTaskIds: [],
       changedSetConsistent: true,
+      missingTaskIds: [],
+      unexpectedTaskIds: [],
       revisionAfter: revisionBefore,
       runMutations: [],
       externalMutations: [],
@@ -701,10 +733,17 @@ export async function runAgentWithHistory(
         break;
       }
 
+      if (!finalVerification.changedSetConsistent) {
+        assistantResponse = buildPartialMutationMessage(
+          finalVerification.missingTaskIds,
+          finalVerification.unexpectedTaskIds,
+        );
+        break;
+      }
+
       if (
         finalVerification.runMutations.length > 0
         && finalVerification.tasksChanged
-        && finalVerification.changedSetConsistent
       ) {
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
@@ -727,6 +766,7 @@ export async function runAgentWithHistory(
         'Reuse only real task IDs returned by tool results. Never invent a UUID for `dependencies.taskId`.',
         'If the predecessor ID is uncertain, omit the speculative dependency and use a safe fallback instead of retrying with a guessed ID.',
         'When moving or resizing dependency-linked tasks, prefer `move_task`, `resize_task`, or `recalculate_schedule` so the authoritative changed set is returned by the server.',
+        'Treat `changedTasks` / `changedIds` as the authoritative success footprint. If the tool reports a broader cascade, your final answer must reflect that.',
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',

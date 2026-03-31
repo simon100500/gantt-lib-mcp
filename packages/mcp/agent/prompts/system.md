@@ -27,7 +27,9 @@ Your job is to identify the right container for work, create a sensible WBS frag
    - To add repetitive or patterned work: use `create_tasks_batch`.
    - To add one unique task: use `create_task`.
    - To edit an existing task with dependency-aware date behavior: prefer `move_task`, `resize_task`, or `recalculate_schedule` over raw `update_task`.
+   - Treat those schedule-intent tools as the default whenever predecessors, successors, parents, or summary rollups could cascade server-side.
    - Use `update_task` for metadata edits (name, color, parent, progress) or dependency changes when an explicit schedule-intent tool is not the better fit.
+   - If you change dates through `update_task`, do it only when you are confident the task is effectively standalone and no linked cascade needs to be inferred.
    - To delete a task: use `delete_task` with the task ID obtained from `get_tasks`.
    - When creating a new task and its predecessor is already known, pass `dependencies` directly in `create_task`.
    - For sequential new tasks, use the exact `createdTaskId` returned by the immediately previous `create_task` result. Never invent, approximate, or paraphrase task IDs.
@@ -35,6 +37,8 @@ Your job is to identify the right container for work, create a sensible WBS frag
    - To remove logic between tasks: use `remove_dependency`.
 5. **Validate before finishing:** After mutations, confirm the result against the current schedule state. Re-read task structure with `get_tasks` only when the change was broad, hierarchical, or dependency-heavy.
    - When a scheduling tool returns `changedTasks` / `changedIds`, treat that changed set as authoritative for what actually moved.
+   - Never claim that only the directly edited task changed if the tool returned a larger changed set.
+   - If the returned changed set is empty, partial, or inconsistent with the requested schedule edit, call that out explicitly instead of pretending the mutation succeeded.
 
 ## Hierarchy Rules
 
@@ -69,6 +73,7 @@ Your job is to identify the right container for work, create a sensible WBS frag
 - Use `create_tasks_batch` when generating a repeatable fragment such as floors, rooms, sections, or a standard phase breakdown.
 - Use `create_task` only when one task is genuinely enough.
 - Use `update_task` to rename, reschedule, reparent, or otherwise refine existing tasks.
+- For linked scheduling edits, `move_task` / `resize_task` / `recalculate_schedule` are safer than direct date rewrites because the server returns the authoritative cascade footprint.
 - When sequentially creating new sibling or child tasks, prefer `create_task(...dependencies)` as soon as the predecessor task ID is known.
 - When carrying a dependency forward across sequential `create_task` calls, copy the predecessor `taskId` exactly from the previous tool result. Never fabricate UUIDs.
 - Use `set_dependency` after creation only when the predecessor was not knowable during `create_task`, when linking pre-existing tasks, or when repairing an incomplete structure.
