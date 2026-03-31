@@ -180,7 +180,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const sharedProject = useSharedProject();
   const workspace = useUIStore((state) => state.workspace);
   const setWorkspace = useUIStore((state) => state.setWorkspace);
-  const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
+  const setSidebarState = useUIStore((state) => state.setSidebarState);
   const showBillingPage = useUIStore((state) => state.showBillingPage);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
@@ -434,7 +434,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       : current);
 
     await auth.switchProject(newProject.id);
-    setProjectSidebarVisible(false);
+    setSidebarState('closed');
     if (createEmptyChart) {
       setTasks([createPlaceholderTask()]);
     } else {
@@ -443,7 +443,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: !createEmptyChart });
     activationInFlightRef.current = false;
     return true;
-  }, [auth, createPlaceholderTask, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setProjectSidebarVisible, setTasks, setWorkspace, workspace]);
+  }, [auth, createPlaceholderTask, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setSidebarState, setTasks, setWorkspace, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {

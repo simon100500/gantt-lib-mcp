@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type { DependencyError, Task } from '../types';
 
+export type SidebarMode = 'closed' | 'overlay' | 'sidebar';
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 export type ShareStatus = 'idle' | 'creating' | 'copied' | 'error';
 export type ViewMode = 'day' | 'week' | 'month';
@@ -22,7 +23,7 @@ interface UIState {
   showOtpModal: boolean;
   showEditProjectModal: boolean;
   showBillingPage: boolean;
-  projectSidebarVisible: boolean;
+  sidebarState: SidebarMode;
   viewMode: ViewMode;
   showTaskList: boolean;
   showChart: boolean;
@@ -48,7 +49,7 @@ interface UIState {
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
   setShowBillingPage: (visible: boolean) => void;
-  setProjectSidebarVisible: (visible: boolean) => void;
+  setSidebarState: (state: SidebarMode) => void;
   setViewMode: (viewMode: ViewMode) => void;
   setShowTaskList: (visible: boolean) => void;
   setShowChart: (visible: boolean) => void;
@@ -81,7 +82,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   showOtpModal: false,
   showEditProjectModal: false,
   showBillingPage: false,
-  projectSidebarVisible: false,
+  sidebarState: 'closed' as SidebarMode,
   viewMode: 'day',
   showTaskList: true,
   showChart: true,
@@ -109,7 +110,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
   setShowBillingPage: (showBillingPage) => set({ showBillingPage }),
-  setProjectSidebarVisible: (projectSidebarVisible) => set({ projectSidebarVisible }),
+  setSidebarState: (sidebarState) => set({ sidebarState }),
   setViewMode: (viewMode) => set({ viewMode }),
   setShowTaskList: (showTaskList) => set({ showTaskList }),
   setShowChart: (showChart) => set({ showChart }),
