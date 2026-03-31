@@ -323,3 +323,110 @@ export interface AuthToken {
   /** JWT refresh token */
   refreshToken: string;
 }
+
+// === Phase 36: Unified Scheduling Core types ===
+
+/** Snapshot of all tasks and dependencies in a project at a point in time */
+export type ProjectSnapshot = {
+  tasks: Task[];
+  dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number; }>;
+};
+
+/** Typed project command — discriminated union by `type` field.
+ *  Per D-04: command.payload: unknown is NOT allowed. Each variant has typed fields. */
+export type ProjectCommand =
+  | { type: 'move_task'; taskId: string; startDate: string; }
+  | { type: 'resize_task'; taskId: string; anchor: 'start' | 'end'; date: string; }
+  | { type: 'set_task_start'; taskId: string; startDate: string; }
+  | { type: 'set_task_end'; taskId: string; endDate: string; }
+  | { type: 'change_duration'; taskId: string; duration: number; anchor?: 'start' | 'end'; }
+  | { type: 'create_task'; task: CreateTaskInput; }
+  | { type: 'delete_task'; taskId: string; }
+  | { type: 'create_dependency'; taskId: string; dependency: TaskDependency; }
+  | { type: 'remove_dependency'; taskId: string; depTaskId: string; }
+  | { type: 'change_dependency_lag'; taskId: string; depTaskId: string; lag: number; }
+  | { type: 'recalculate_schedule'; taskId?: string; }
+  | { type: 'reparent_task'; taskId: string; newParentId: string | null; }
+  | { type: 'reorder_task'; taskId: string; sortOrder: number; };
+
+/** Conflict detected during command execution */
+export type Conflict = {
+  entityType: 'task' | 'dependency';
+  entityId: string;
+  reason: string;
+  detail?: string;
+};
+
+/** JSON-safe value type for patch before/after */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/** Patch describing a single entity change with attribution.
+ *  Per D-12: reason is one of 5 fixed values. */
+export type Patch = {
+  entityType: 'task' | 'dependency';
+  entityId: string;
+  before: JsonValue;
+  after: JsonValue;
+  reason: 'direct_command' | 'dependency_cascade' | 'calendar_snap' | 'parent_rollup' | 'constraint_adjustment';
+};
+
+/** Actor type for event attribution */
+export type ActorType = 'user' | 'agent' | 'system' | 'import';
+
+/** Full execution result from scheduling core. Per D-08. */
+export type ScheduleExecutionResult = {
+  snapshot: ProjectSnapshot;
+  changedTaskIds: string[];
+  changedDependencyIds: string[];
+  conflicts: Conflict[];
+  patches: Patch[];
+};
+
+/** Request to commit a project command. Per D-07. */
+export type CommitProjectCommandRequest = {
+  projectId: string;
+  clientRequestId: string;
+  baseVersion: number;
+  command: ProjectCommand;
+};
+
+/** Response from command commit — accepted or rejected. Per D-07. */
+export type CommitProjectCommandResponse =
+  | {
+      clientRequestId: string;
+      accepted: true;
+      baseVersion: number;
+      newVersion: number;
+      result: ScheduleExecutionResult;
+      snapshot: ProjectSnapshot;
+    }
+  | {
+      clientRequestId: string;
+      accepted: false;
+      reason: 'version_conflict' | 'validation_error' | 'conflict';
+      currentVersion: number;
+      snapshot?: ProjectSnapshot;
+      conflicts?: Conflict[];
+    };
+
+/** Persisted project event record — mirrors Prisma ProjectEvent model.
+ *  Named ProjectEventRecord to avoid collision with Prisma generated type. */
+export type ProjectEventRecord = {
+  id: string;
+  projectId: string;
+  baseVersion: number;
+  version: number;
+  applied: boolean;
+  actorType: ActorType;
+  actorId?: string;
+  coreVersion: string;
+  command: ProjectCommand;
+  result: {
+    changedTaskIds: string[];
+    changedDependencyIds: string[];
+    conflicts: Conflict[];
+  };
+  patches: Patch[];
+  executionTimeMs: number;
+  createdAt: string;
+};
