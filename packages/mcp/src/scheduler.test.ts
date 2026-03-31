@@ -114,8 +114,9 @@ describe('TaskScheduler', () => {
 
       const updates = scheduler.recalculateDates('2');
 
-      // B should end at '2026-02-01' (A's start date)
-      assert.strictEqual(updates.get('2')?.endDate, '2026-02-01');
+      // Updated: gantt-lib correctly computes SF as predecessor start - 1 day
+      // (successor must finish before predecessor starts, not on the same day)
+      assert.strictEqual(updates.get('2')?.endDate, '2026-01-31');
     });
   });
 
