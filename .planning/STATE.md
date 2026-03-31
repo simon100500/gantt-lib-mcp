@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: completed
-last_updated: "2026-03-31T19:24:00.000Z"
+status: executing
+last_updated: "2026-03-31T21:34:23Z"
 last_activity: 2026-03-31
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 10
+  completed_plans: 4
+  percent: 40
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-31
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Phase 35 complete
+**Status:** Executing Phase 36
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Awaiting next planning step
+**Current focus:** Phase 36 — Unified Scheduling Core (Plan 1 of 7 complete)
 
 ---
 
 ## Current Position
 
-Phase: 35 of 35 (Scheduling Core Adoption)
-Plan: 3 of 3 complete
-Status: Verified passed
-Last activity: 2026-03-31 — Verified and completed phase 35 (authoritative scheduling adoption)
+Phase: 36 of 36 (Unified Scheduling Core)
+Plan: 1 of 7 complete
+Status: 36-01 complete, continuing to 36-02
+Last activity: 2026-03-31 — Completed 36-01: Fix gantt-lib subpath export (DTS + dependency)
 
-Progress: [██████████] 100%
+Progress: [████░░░░░░] 40%
 
 ---
 
@@ -82,7 +82,9 @@ packages/
 - MCP scheduler now uses a headless command core with authoritative changed-set responses
 - `TaskService` and MCP tools expose move/resize/recalculate schedule commands for linked edits
 - Agent verification and web persistence now treat server-returned changed tasks as authoritative for linked edits
+- gantt-lib/core/scheduling subpath export fixed: DTS generation works, zero React/DOM dependencies
+- gantt-lib 0.62.0 linked to MCP package via file: protocol (dev-only, npm has 0.28.1)
 
 ---
 
-*Last updated: 2026-03-31 — phase 35 verified passed and marked complete*
+*Last updated: 2026-03-31 — completed 36-01 (gantt-lib subpath export fix)*
