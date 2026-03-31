@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-current_phase: 30
+current_phase: 35
 status: ready_to_plan
 last_updated: "2026-03-30T13:30:00.000Z"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -16,7 +16,7 @@ progress:
 
 **Last updated:** 2026-03-30
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to plan Phase 30
+**Status:** Ready to plan Phase 35
 
 ---
 
@@ -25,13 +25,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 30 — Constraint Engine
+**Current focus:** Phase 35 — Scheduling Core Adoption
 
 ---
 
 ## Current Position
 
-Phase: 30 of 34 (Constraint Engine)
+Phase: 35 of 35 (Scheduling Core Adoption)
 Plan: 0 of ? in current phase
 Status: Ready to plan
 Last activity: 2026-03-30 — Completed quick task 260330-m7o: project gantt day mode
@@ -74,6 +74,7 @@ packages/
 - Billing infrastructure exists (YooKassa, subscription management)
 - Plan definitions exist in code but no enforcement mechanism
 - LimitReachedModal component exists from v4.0 (basic feature gate modal)
+- Phase 35 added: Scheduling Core Adoption
 
 ---
 

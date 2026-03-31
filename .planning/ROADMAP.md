@@ -153,5 +153,17 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | GATE-02 | 34 | Pending |
 | GATE-03 | 34 | Pending |
 
+### Phase 35: Scheduling Core Adoption
+
+**Goal:** Сервер выполняет schedule mutations теми же правилами, что и актуальный gantt-lib core, и возвращает authoritative changed-set для agent/web persistence
+**Requirements**: PRD-only (`.planning/reference/scheduling-core-adoption-prd.md`)
+**Depends on:** Phase 08, Phase 16, Phase 19, Phase 21, Phase 22
+**Plans:** 3 plans
+
+Plans:
+- [ ] 35-01 — Headless scheduling core + regression parity
+- [ ] 35-02 — TaskService + MCP schedule command integration
+- [ ] 35-03 — Agent/web authoritative scheduling adoption
+
 ---
 *Last updated: 2026-03-29 — v5.0 roadmap created*
