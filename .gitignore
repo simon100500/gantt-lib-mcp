@@ -53,3 +53,5 @@ packages/server/gantt.db
 
 # Prisma
 .prisma/
+.venv
+packages/dashboard
