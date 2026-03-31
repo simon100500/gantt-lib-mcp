@@ -6,6 +6,7 @@ import type { Task, TaskDependency } from '../types.ts';
  *
  * useAutoSave sent ALL tasks on every change via PUT /api/tasks, which was inefficient.
  * gantt-lib's onTasksChange callback only sends changed tasks, not the full array.
+ * It also cannot apply authoritative server `changedTasks` cascades for linked schedule edits.
  *
  * useBatchTaskUpdate properly handles gantt-lib's partial onChange behavior:
  * - Individual task mutations via PATCH/POST/DELETE endpoints

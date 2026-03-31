@@ -31,6 +31,35 @@ export function useBatchTaskUpdate({
   const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const toDateString = useCallback((value: Task['startDate']) => (
+    typeof value === 'string' ? value : value.toISOString().split('T')[0]
+  ), []);
+
+  const mergeTasksById = useCallback((currentTasks: Task[], nextTasks: Task[]): Task[] => {
+    if (nextTasks.length === 0) {
+      return currentTasks;
+    }
+
+    const changedById = new Map(nextTasks.map((task) => [task.id, task]));
+    const merged = currentTasks.map((task) => changedById.get(task.id) ?? task);
+    const mergedIds = new Set(merged.map((task) => task.id));
+
+    for (const task of nextTasks) {
+      if (!mergedIds.has(task.id)) {
+        merged.push(task);
+      }
+    }
+
+    return merged;
+  }, []);
+
+  const getPersistedTaskChanges = useCallback((original: Task, next: Task) => ({
+    scheduleChanged:
+      toDateString(original.startDate) !== toDateString(next.startDate)
+      || toDateString(original.endDate) !== toDateString(next.endDate)
+      || JSON.stringify(original.dependencies ?? []) !== JSON.stringify(next.dependencies ?? []),
+  }), [toDateString]);
+
   const removeDependenciesBetweenTasks = useCallback((taskId1: string, taskId2: string, nextTasks: Task[]): Task[] => (
     nextTasks.map(task => {
       if (task.id !== taskId1 && task.id !== taskId2) {
@@ -77,22 +106,31 @@ export function useBatchTaskUpdate({
       return;
     }
 
-    setTasks((prev) => {
-      const changedById = new Map(result.changedTasks.map((task) => [task.id, task]));
-      const merged = prev.map((task) => changedById.get(task.id) ?? task);
-      const mergedIds = new Set(merged.map((task) => task.id));
-
-      for (const task of result.changedTasks) {
-        if (!mergedIds.has(task.id)) {
-          merged.push(task);
-        }
-      }
-
-      return merged;
-    });
+    setTasks((prev) => mergeTasksById(prev, result.changedTasks));
 
     onCascade?.(result.changedTasks);
-  }, [onCascade, setTasks]);
+  }, [mergeTasksById, onCascade, setTasks]);
+
+  const persistAuthoritativeCascade = useCallback(async (changedTasks: Task[]) => {
+    let workingTasks = tasks;
+    const pendingTaskIds = new Set(changedTasks.map((task) => task.id));
+
+    while (pendingTaskIds.size > 0) {
+      const nextTask = changedTasks.find((task) => pendingTaskIds.has(task.id));
+      if (!nextTask) {
+        break;
+      }
+
+      const currentTask = workingTasks.find((task) => task.id === nextTask.id) ?? nextTask;
+      const result = await mutateTask(currentTask);
+      workingTasks = mergeTasksById(workingTasks, result.changedTasks);
+      setTasks(workingTasks);
+      onCascade?.(result.changedTasks);
+
+      result.changedIds.forEach((taskId) => pendingTaskIds.delete(taskId));
+      pendingTaskIds.delete(currentTask.id);
+    }
+  }, [mergeTasksById, mutateTask, onCascade, setTasks, tasks]);
 
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
     console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
@@ -112,10 +150,10 @@ export function useBatchTaskUpdate({
       .every(t => {
         const original = tasks.find(orig => orig.id === t.id);
         if (!original) return false;
-        const startOrig = typeof original.startDate === 'string' ? original.startDate : (original.startDate as Date).toISOString().split('T')[0];
-        const startNew = typeof t.startDate === 'string' ? t.startDate : (t.startDate as Date).toISOString().split('T')[0];
-        const endOrig = typeof original.endDate === 'string' ? original.endDate : (original.endDate as Date).toISOString().split('T')[0];
-        const endNew = typeof t.endDate === 'string' ? t.endDate : (t.endDate as Date).toISOString().split('T')[0];
+        const startOrig = toDateString(original.startDate);
+        const startNew = toDateString(t.startDate);
+        const endOrig = toDateString(original.endDate);
+        const endNew = toDateString(t.endDate);
         return (
           original.name === t.name &&
           startOrig === startNew &&
@@ -153,10 +191,13 @@ export function useBatchTaskUpdate({
       return depsChanged && nothingElseChanged;
     });
 
-    const tasksWithDependencyChanges = changedTasks.filter(t => {
-      const original = tasks.find(orig => orig.id === t.id);
-      if (!original) return false;
-      return JSON.stringify(original.dependencies ?? []) !== JSON.stringify(t.dependencies ?? []);
+    const tasksWithScheduleChanges = changedTasks.filter((task) => {
+      const original = tasks.find((candidate) => candidate.id === task.id);
+      if (!original) {
+        return false;
+      }
+
+      return getPersistedTaskChanges(original, task).scheduleChanged;
     });
 
     // Check if this is a pure reorder — gantt-lib fires onTasksChange for every drag event,
@@ -166,10 +207,10 @@ export function useBatchTaskUpdate({
     const isPureReorder = changedTasks.length > 0 && changedTasks.every(t => {
       const original = tasks.find(orig => orig.id === t.id);
       if (!original) return false; // New task — not a pure reorder
-      const startOrig = typeof original.startDate === 'string' ? original.startDate : (original.startDate as Date).toISOString().split('T')[0];
-      const startNew = typeof t.startDate === 'string' ? t.startDate : (t.startDate as Date).toISOString().split('T')[0];
-      const endOrig = typeof original.endDate === 'string' ? original.endDate : (original.endDate as Date).toISOString().split('T')[0];
-      const endNew = typeof t.endDate === 'string' ? t.endDate : (t.endDate as Date).toISOString().split('T')[0];
+      const startOrig = toDateString(original.startDate);
+      const startNew = toDateString(t.startDate);
+      const endOrig = toDateString(original.endDate);
+      const endNew = toDateString(t.endDate);
       return (
         original.name === t.name &&
         startOrig === startNew &&
@@ -199,11 +240,7 @@ export function useBatchTaskUpdate({
       // Save the dependency updates to the server
       try {
         setSavingStateWithReset('saving');
-        if (changedTasks.length === 1) {
-          applyAuthoritativeTaskResult(await mutateTask(changedTasks[0]));
-        } else {
-          await batchImportTasks(changedTasks);
-        }
+        await persistAuthoritativeCascade(changedTasks);
         setSavingStateWithReset('saved');
         console.log('[useBatchTaskUpdate] Saved dependency updates from deletion');
       } catch (error) {
@@ -218,8 +255,8 @@ export function useBatchTaskUpdate({
       id: t.id,
       name: t.name,
       parentId: t.parentId,
-      startDate: typeof t.startDate === 'string' ? t.startDate : t.startDate.toISOString().split('T')[0],
-      endDate: typeof t.endDate === 'string' ? t.endDate : t.endDate.toISOString().split('T')[0],
+      startDate: toDateString(t.startDate),
+      endDate: toDateString(t.endDate),
     })));
 
     const filteredTasks = changedTasks;
@@ -247,24 +284,16 @@ export function useBatchTaskUpdate({
       console.log(`[useBatchTaskUpdate] Using BATCH API for ${tasksWithoutSortOrder.length} tasks`);
       try {
         setSavingStateWithReset('saving');
-        if (tasksWithDependencyChanges.length > 0) {
-          console.log('[useBatchTaskUpdate] Dependency mutation batch detected - using sequential PATCH saves');
-          const dependencyChangedIds = new Set(tasksWithDependencyChanges.map(t => t.id));
-          const orderedForSave = [
-            ...tasksWithoutSortOrder.filter(t => dependencyChangedIds.has(t.id)),
-            ...tasksWithoutSortOrder.filter(t => !dependencyChangedIds.has(t.id)),
-          ];
-
-          for (const task of orderedForSave) {
-            applyAuthoritativeTaskResult(await mutateTask(task));
-          }
-          console.log(`[useBatchTaskUpdate] Sequentially saved ${orderedForSave.length} tasks for dependency mutation batch`);
+        if (tasksWithScheduleChanges.length > 0) {
+          console.log('[useBatchTaskUpdate] Schedule-aware batch detected - using authoritative PATCH saves');
+          await persistAuthoritativeCascade(tasksWithoutSortOrder);
+          console.log(`[useBatchTaskUpdate] Applied authoritative cascade for ${tasksWithoutSortOrder.length} locally changed tasks`);
         } else {
           const saved = await batchImportTasks(tasksWithoutSortOrder);
           console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
-        }
-        if (accessToken && tasksWithDependencyChanges.length === 0) {
-          setTasks(await fetchTasksSnapshot());
+          if (accessToken) {
+            setTasks(await fetchTasksSnapshot());
+          }
         }
         setSavingStateWithReset('saved');
       } catch (error) {
@@ -286,7 +315,7 @@ export function useBatchTaskUpdate({
     }
 
     console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-  }, [accessToken, applyAuthoritativeTaskResult, batchImportTasks, fetchTasksSnapshot, mutateTask, setSavingStateWithReset, setTasks, tasks]);
+  }, [accessToken, applyAuthoritativeTaskResult, batchImportTasks, fetchTasksSnapshot, getPersistedTaskChanges, mutateTask, persistAuthoritativeCascade, setSavingStateWithReset, setTasks, tasks, toDateString]);
 
   const handleAdd = useCallback(async (task: Task) => {
     // Optimistic update
