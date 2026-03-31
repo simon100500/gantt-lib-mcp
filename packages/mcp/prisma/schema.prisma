@@ -57,6 +57,13 @@ enum GanttDayMode {
   calendar
 }
 
+enum ActorType {
+  user
+  agent
+  system
+  import_actor
+}
+
 // Users table
 model User {
   id        String   @id @default(uuid())
@@ -78,15 +85,17 @@ model Project {
   userId       String       @map("user_id")
   name         String
   ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
+  version      Int         @default(0)
   createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relations
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions     Session[]
-  tasks        Task[]
-  messages     Message[]
-  shareLinks   ShareLink[]
-  taskRevision TaskRevision?
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions      Session[]
+  tasks         Task[]
+  messages      Message[]
+  shareLinks    ShareLink[]
+  taskRevision  TaskRevision?
+  projectEvents ProjectEvent[]
 
   @@map("projects")
   @@index([userId])
@@ -256,4 +265,27 @@ model TaskMutation {
   @@index([projectId])
   @@index([runId])
   @@index([sessionId])
+}
+
+// Project events table (Phase 36: event log for command history)
+model ProjectEvent {
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  baseVersion     Int       @map("base_version")
+  version         Int
+  applied         Boolean   @default(true)
+  actorType       ActorType @map("actor_type")
+  actorId         String?   @map("actor_id")
+  coreVersion     String    @map("core_version")
+  command         Json
+  result          Json
+  patches         Json
+  executionTimeMs Int       @map("execution_time_ms")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_events")
+  @@index([projectId])
+  @@index([projectId, version])
 }
