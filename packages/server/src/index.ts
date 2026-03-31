@@ -5,6 +5,7 @@
  * - GET  /health      — liveness probe
  * - GET  /api/tasks   — return current tasks from PostgreSQL via Prisma
  * - POST /api/chat    — fire-and-forget agent run (streaming goes via WebSocket)
+ * - POST /api/commands/commit — commit typed ProjectCommand with optimistic concurrency
  * - GET  /ws          — WebSocket endpoint (streaming tokens + task snapshots)
  *
  * NOTE: This file is imported via bootstrap.ts which loads .env first.
@@ -21,6 +22,7 @@ import { subscriptionMiddleware, incrementAiUsage } from './middleware/subscript
 import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
+import { registerCommandRoutes } from './routes/command-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 
 const fastify = Fastify({ logger: true });
@@ -28,6 +30,7 @@ await fastify.register(websocket);
 await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
 await registerBillingRoutes(fastify);
+await registerCommandRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // REST routes
