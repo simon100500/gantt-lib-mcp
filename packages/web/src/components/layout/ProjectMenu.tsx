@@ -235,7 +235,7 @@ export function ProjectMenu({
           className={cn(
             'flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white',
             'fixed inset-y-0 left-0 z-50 sm:relative sm:inset-auto',
-            sidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0',
+            sidebarVisible ? 'w-full opacity-100 sm:w-60' : 'w-0 overflow-hidden opacity-0 border-r-0',
           )}
         >
           <ProjectSwitcher
