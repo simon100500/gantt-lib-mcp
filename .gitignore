@@ -53,3 +53,6 @@ packages/server/gantt.db
 
 # Prisma
 .prisma/
+
+.venv
+packages/dashboard/__pycache__

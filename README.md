@@ -56,3 +56,18 @@ packages/
 ├── server/   # Fastify backend
 └── mcp/      # MCP server implementation
 ```
+
+## Streamlit Admin
+
+Simple admin dashboard for users and their projects:
+
+```bash
+pip install -r packages/dashboard/requirements.txt
+streamlit run packages/dashboard/streamlit_admin.py
+```
+
+The dashboard reads `DATABASE_URL` from the root `.env` file and shows:
+- total users
+- total projects
+- users with project counts
+- projects grouped by user
