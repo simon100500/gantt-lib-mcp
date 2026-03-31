@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-03-31
+**Last updated:** 2026-04-01
 
 ## Progress Summary
 
@@ -129,6 +129,8 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | 32. Backend Enforcement | v5.0 | 0/? | Not started | - |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
+| 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
+| 36. Unified Scheduling Core | Scheduling | 0/7 | Planning | - |
 
 ---
 
@@ -165,15 +167,21 @@ Plans:
 - [x] 35-02 — TaskService + MCP schedule command integration
 - [x] 35-03 — Agent/web authoritative scheduling adoption — completed 2026-03-31, verified passed
 
-### Phase 36: unified-scheduling-core
+### Phase 36: Unified Scheduling Core
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Единая scheduling authority: все изменения через typed commands, один gantt-lib/core/scheduling, server как единственный источник истины, deterministic/explainable/versioned результаты
+**Requirements**: PRD-only (`.planning/reference/unified-scheduling-core-prd.md`)
 **Depends on:** Phase 35
-**Plans:** 0 plans
+**Plans:** 7 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 36 to break down)
+- [ ] 36-01 — Fix gantt-lib core/scheduling subpath export (DTS + dependency)
+- [ ] 36-02 — Define typed command model + Prisma schema (contracts)
+- [ ] 36-03 — Replace local scheduler with gantt-lib adapter + regression tests
+- [ ] 36-04 — Command commit endpoint (CommandService + POST /api/commands/commit)
+- [ ] 36-05 — Frontend three-layer state model + command commit flow
+- [ ] 36-06 — MCP/API channel parity (all mutations through command commit)
+- [ ] 36-07 — Parity + concurrency + patch reason tests (TDD)
 
 ---
-*Last updated: 2026-03-31 — phase 35 verified and marked complete*
+*Last updated: 2026-04-01 — phase 36 planned (7 plans in 5 waves)*
