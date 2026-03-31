@@ -267,7 +267,7 @@ export function ProjectMenu({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-5">
+        <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-2">
           {/* Toggle button: hover = overlay, click = push sidebar */}
           <button
             type="button"
