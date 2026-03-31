@@ -19,7 +19,15 @@ import { writeMcpDebugLog } from './debug-log.js';
 import { taskService } from './services/task.service.js';
 import { messageService } from './services/message.service.js';
 import { dependencyService } from './services/dependency.service.js';
-import type { CreateTaskInput, UpdateTaskInput, CreateTasksBatchInput, BatchCreateResult, TaskDependency, GetConversationHistoryInput, AddMessageInput } from './types.js';
+import type {
+  CreateTaskInput,
+  UpdateTaskInput,
+  CreateTasksBatchInput,
+  BatchCreateResult,
+  TaskDependency,
+  GetConversationHistoryInput,
+  AddMessageInput,
+} from './types.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -203,7 +211,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'update_task',
-      description: 'Update task by id. All fields optional except id. Returns updated task with cascade info if dates/dependencies changed. Pass parentId=null to remove from parent. Use get_task to fetch current state first.',
+      description: 'Update task by id. Linked date and dependency edits route through the server scheduling engine and return changedTasks/changedIds instead of a full snapshot. Pass parentId=null to remove from parent. Use get_task to fetch current state first.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -264,6 +272,74 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ['id'],
+      },
+    },
+    {
+      name: 'move_task',
+      description: 'Move a task to a new start date and let the server apply the authoritative dependency cascade. Returns task, changedTasks, and changedIds.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'Task ID to move',
+          },
+          startDate: {
+            type: 'string',
+            description: 'New start date in ISO format: YYYY-MM-DD',
+            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+          },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID. If omitted, uses the current session project (PROJECT_ID env var).',
+          },
+        },
+        required: ['taskId', 'startDate'],
+      },
+    },
+    {
+      name: 'resize_task',
+      description: 'Resize a task from the start or end anchor and let the server apply the authoritative dependency cascade. Returns task, changedTasks, and changedIds.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'Task ID to resize',
+          },
+          anchor: {
+            type: 'string',
+            enum: ['start', 'end'],
+            description: 'Which edge to move. start = keep end fixed, end = keep start fixed.',
+          },
+          date: {
+            type: 'string',
+            description: 'New anchor date in ISO format: YYYY-MM-DD',
+            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+          },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID. If omitted, uses the current session project (PROJECT_ID env var).',
+          },
+        },
+        required: ['taskId', 'anchor', 'date'],
+      },
+    },
+    {
+      name: 'recalculate_schedule',
+      description: 'Recalculate one task or the full project schedule on the server and return the authoritative changed set.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: {
+            type: 'string',
+            description: 'Optional task ID. Omit to recalculate the whole project.',
+          },
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID. If omitted, uses the current session project (PROJECT_ID env var).',
+          },
+        },
       },
     },
     {
@@ -658,8 +734,8 @@ Fix: Use valid dependency type.`);
     const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
     const hasDependencyChanges = input.dependencies !== undefined;
 
-    const updatedTask = await taskService.update(id, input, 'agent');
-    if (!updatedTask) {
+    const updateResult = await taskService.updateWithResult(id, input, 'agent');
+    if (!updateResult?.task) {
       throw new Error(`[Permanent] Task not found: ${id}.
 Reason: No task with this ID exists in the project.
 Fix: Call get_tasks to list available task IDs.`);
@@ -667,34 +743,20 @@ Fix: Call get_tasks to list available task IDs.`);
     await writeMcpDebugLog('update_task_completed', {
       id,
       input,
-      updatedTask,
+      updateResult,
       projectId: process.env.PROJECT_ID,
     });
 
-    // If dates or dependencies changed, show what was affected
     if (hasDateChanges || hasDependencyChanges) {
-      const allTasksResult = await taskService.list(process.env.PROJECT_ID);
-
-      // Find all tasks that were affected by the cascade
-      const affectedTasks = allTasksResult.tasks.filter(t => {
-        if (t.id === id) return false;
-        return t.dependencies?.some(d => {
-          const depTaskId = d.taskId;
-          return depTaskId === id ||
-            allTasksResult.tasks.find(x => x.id === depTaskId)?.dependencies?.some(dd => dd.taskId === id);
-        });
-      });
-
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
-              task: updatedTask,
+              task: updateResult.task,
               message: 'Task updated successfully',
-              affectedTasks: affectedTasks.length,
-              affectedTaskIds: affectedTasks.map(t => t.id),
-              allTasks: allTasksResult.tasks
+              changedTasks: updateResult.changedTasks,
+              changedIds: updateResult.changedIds,
             }, null, 2),
           },
         ],
@@ -702,14 +764,112 @@ Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
-      updatedTask,
+      updatedTask: updateResult.task,
     });
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(updatedTask, null, 2),
+          text: JSON.stringify(updateResult.task, null, 2),
+        },
+      ],
+    };
+  }
+
+  if (name === 'move_task') {
+    const { taskId, startDate, projectId: argProjectId } = args as {
+      taskId: string;
+      startDate: string;
+      projectId?: string;
+    };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task ID is required to identify which task to move.
+Fix: Provide the task ID as a string parameter.`);
+    }
+    if (!isValidDateFormat(startDate)) {
+      throw new Error(`[Permanent] Invalid startDate format: ${startDate}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
+    }
+
+    const result = await taskService.executeScheduleCommand(
+      resolvedProjectId,
+      { type: 'move_task', taskId, startDate },
+      'agent',
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  }
+
+  if (name === 'resize_task') {
+    const { taskId, anchor, date, projectId: argProjectId } = args as {
+      taskId: string;
+      anchor: 'start' | 'end';
+      date: string;
+      projectId?: string;
+    };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task ID is required to identify which task to resize.
+Fix: Provide the task ID as a string parameter.`);
+    }
+    if (anchor !== 'start' && anchor !== 'end') {
+      throw new Error(`[Permanent] Invalid anchor: ${String(anchor)}.
+Reason: Anchor must be either "start" or "end".
+Fix: Use anchor="start" or anchor="end".`);
+    }
+    if (!isValidDateFormat(date)) {
+      throw new Error(`[Permanent] Invalid date format: ${date}.
+Expected: YYYY-MM-DD (ISO date format).
+Fix: Use format like 2026-03-18.`);
+    }
+
+    const result = await taskService.executeScheduleCommand(
+      resolvedProjectId,
+      { type: 'resize_task', taskId, anchor, date },
+      'agent',
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  }
+
+  if (name === 'recalculate_schedule') {
+    const { taskId, projectId: argProjectId } = args as {
+      taskId?: string;
+      projectId?: string;
+    };
+    const resolvedProjectId = resolveProjectId(argProjectId);
+    const result = await taskService.executeScheduleCommand(
+      resolvedProjectId,
+      { type: 'recalculate_schedule', taskId },
+      'agent',
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };

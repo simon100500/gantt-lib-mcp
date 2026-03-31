@@ -8,7 +8,17 @@
 
 import { getPrisma } from '../prisma.js';
 import { TaskScheduler } from '../scheduler.js';
-import type { Task, CreateTaskInput, UpdateTaskInput, TaskDependency, TaskMutationSource, TaskMutationEvent } from '../types.js';
+import type {
+  Task,
+  CreateTaskInput,
+  UpdateTaskInput,
+  TaskDependency,
+  TaskMutationSource,
+  TaskMutationEvent,
+  ScheduleCommand,
+  ScheduleCommandOptions,
+  TaskMutationResult,
+} from '../types.js';
 import { dependencyService } from './dependency.service.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
@@ -207,21 +217,144 @@ export class TaskService {
     });
   }
 
-  // Helper: Run scheduler and update affected tasks
-  private async runScheduler(changedTaskId: string, skipStart = false, projectId?: string): Promise<void> {
+  private isWeekend(date: Date): boolean {
+    const day = date.getUTCDay();
+    return day === 0 || day === 6;
+  }
+
+  private async getScheduleOptions(projectId?: string): Promise<ScheduleCommandOptions> {
+    if (!projectId) {
+      return {
+        businessDays: false,
+        weekendPredicate: (date) => this.isWeekend(date),
+      };
+    }
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { ganttDayMode: true },
+    });
+
+    return {
+      businessDays: project?.ganttDayMode === 'business',
+      weekendPredicate: (date) => this.isWeekend(date),
+    };
+  }
+
+  private async runScheduler(
+    changedTaskId: string,
+    skipStart = false,
+    projectId?: string,
+    source?: TaskMutationSource,
+  ): Promise<TaskMutationResult> {
     const snapshot = await this.loadSnapshot(projectId);
-    const scheduler = new TaskScheduler(snapshot);
+    const options = await this.getScheduleOptions(projectId);
+    const scheduler = new TaskScheduler(snapshot, options);
     const updates = scheduler.recalculateDates(changedTaskId, skipStart);
 
-    for (const [, task] of updates) {
-      await this.prisma.task.update({
-        where: { id: task.id },
-        data: {
-          startDate: domainToDate(task.startDate),
-          endDate: domainToDate(task.endDate),
-        },
+    if (updates.size === 0) {
+      const task = await this.get(changedTaskId);
+      if (!task) {
+        return { changedTasks: [], changedIds: [] };
+      }
+
+      await this.recordMutation('update', projectId, changedTaskId, source);
+      return {
+        task,
+        changedTasks: [task],
+        changedIds: [changedTaskId],
+      };
+    }
+
+    return this.persistScheduleResult(
+      projectId,
+      {
+        task: snapshot.get(changedTaskId),
+        changedTasks: Array.from(updates.values()),
+        changedIds: Array.from(updates.keys()),
+      },
+      source,
+      changedTaskId,
+    );
+  }
+
+  private async persistScheduleResult(
+    projectId: string | undefined,
+    result: TaskMutationResult,
+    source: TaskMutationSource | undefined,
+    primaryTaskId?: string,
+  ): Promise<TaskMutationResult> {
+    if (result.changedTasks.length > 0) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const task of result.changedTasks) {
+          await tx.task.update({
+            where: { id: task.id },
+            data: {
+              name: task.name,
+              startDate: domainToDate(task.startDate),
+              endDate: domainToDate(task.endDate),
+              color: task.color ?? null,
+              parentId: task.parentId ?? null,
+              progress: task.progress ?? 0,
+              sortOrder: task.sortOrder,
+            },
+          });
+
+          await tx.dependency.deleteMany({
+            where: { taskId: task.id },
+          });
+
+          if ((task.dependencies ?? []).length > 0) {
+            await tx.dependency.createMany({
+              data: (task.dependencies ?? []).map((dependency) => ({
+                taskId: task.id,
+                depTaskId: dependency.taskId,
+                type: dependency.type,
+                lag: dependency.lag ?? 0,
+              })),
+            });
+          }
+        }
       });
     }
+
+    for (const taskId of result.changedIds) {
+      await this.recordMutation('update', projectId, taskId, source);
+    }
+
+    const refreshedSnapshot = await this.loadSnapshot(projectId);
+    const snapshotTasks = Array.from(refreshedSnapshot.values());
+    const changedTasks = result.changedIds
+      .map((id) => refreshedSnapshot.get(id))
+      .filter((task): task is Task => task !== undefined);
+
+    return {
+      task: primaryTaskId ? refreshedSnapshot.get(primaryTaskId) : result.task,
+      changedTasks,
+      changedIds: result.changedIds,
+      snapshot: result.snapshot ? snapshotTasks : undefined,
+    };
+  }
+
+  async executeScheduleCommand(
+    projectId: string | undefined,
+    command: ScheduleCommand,
+    source?: TaskMutationSource,
+  ): Promise<TaskMutationResult> {
+    const snapshot = await this.loadSnapshot(projectId);
+    const options = await this.getScheduleOptions(projectId);
+    const scheduler = new TaskScheduler(snapshot, options);
+    const result = scheduler.execute(command, { ...options, includeSnapshot: true });
+
+    return this.persistScheduleResult(
+      projectId,
+      {
+        ...result,
+        task: command.taskId ? snapshot.get(command.taskId) : undefined,
+      },
+      source,
+      command.taskId,
+    );
   }
 
   // Helper: Record mutation event
@@ -452,7 +585,11 @@ export class TaskService {
    * Update a task
    * Uses transaction for atomic task update + dependency replacement
    */
-  async update(id: string, input: UpdateTaskInput, source?: TaskMutationSource): Promise<Task | undefined> {
+  async updateWithResult(
+    id: string,
+    input: UpdateTaskInput,
+    source?: TaskMutationSource,
+  ): Promise<TaskMutationResult | undefined> {
     const existing = await this.prisma.task.findUnique({
       where: { id },
       select: { projectId: true, parentId: true },
@@ -526,19 +663,44 @@ export class TaskService {
       await this.removeHierarchyDependencies(existing.projectId || undefined);
     }
 
+    let result: TaskMutationResult;
+
     if (datesChanged || dependenciesUpdated) {
       const skipStart = datesChanged && !dependenciesUpdated;
-      await this.runScheduler(id, skipStart, existing.projectId || undefined);
-    }
+      result = await this.runScheduler(id, skipStart, existing.projectId || undefined, source);
+    } else {
+      const task = await this.get(id);
+      if (!task) {
+        return undefined;
+      }
 
-    // Record mutation
-    await this.recordMutation('update', existing.projectId || undefined, id, source);
+      await this.recordMutation('update', existing.projectId || undefined, id, source);
+      result = {
+        task,
+        changedTasks: [task],
+        changedIds: [id],
+      };
+    }
 
     if (hierarchyChanged || datesChanged || existing.parentId || input.parentId) {
       await this.syncParentDates(existing.projectId || undefined);
     }
 
-    return this.get(id);
+    const refreshedTask = await this.get(id);
+    if (!refreshedTask) {
+      return result;
+    }
+
+    return {
+      ...result,
+      task: refreshedTask,
+      changedTasks: result.changedTasks.map((task) => (task.id === refreshedTask.id ? refreshedTask : task)),
+    };
+  }
+
+  async update(id: string, input: UpdateTaskInput, source?: TaskMutationSource): Promise<Task | undefined> {
+    const result = await this.updateWithResult(id, input, source);
+    return result?.task;
   }
 
   /**
