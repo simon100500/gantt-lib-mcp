@@ -25,6 +25,10 @@ export { MessageService } from './message.service.js';
 export { dependencyService } from './dependency.service.js';
 export { DependencyService } from './dependency.service.js';
 
+// CommandService
+export { commandService } from './command.service.js';
+export { CommandService } from './command.service.js';
+
 /**
  * Service exports summary:
  *
@@ -33,7 +37,8 @@ export { DependencyService } from './dependency.service.js';
  * - authService: Auth operations (OTP, users, sessions, share links)
  * - messageService: Message CRUD operations (add, list, deleteAll)
  * - dependencyService: Dependency CRUD operations (createMany, deleteByTaskId, listByTaskId, validateDependencies)
+ * - commandService: Command commit with atomic versioned persistence and event logging
  *
  * Usage in packages/server:
- * import { taskService, projectService, authService, messageService } from '@gantt/mcp/services';
+ * import { taskService, projectService, authService, messageService, commandService } from '@gantt/mcp/services';
  */
