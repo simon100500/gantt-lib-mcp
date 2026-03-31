@@ -3,20 +3,20 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 current_phase: 35
-status: ready_to_plan
-last_updated: "2026-03-30T13:30:00.000Z"
+status: executing
+last_updated: "2026-03-31T18:10:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 2
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-03-30
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to plan Phase 35
+**Status:** Executing Phase 35
 
 ---
 
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 ## Current Position
 
 Phase: 35 of 35 (Scheduling Core Adoption)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-30 — Completed quick task 260330-m7o: project gantt day mode
+Plan: 2 of 3 in current phase
+Status: Executing wave 2
+Last activity: 2026-03-31 — Completed phase 35 plans 35-01 and 35-02 (scheduling core + MCP integration)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████░░░░] 67%
 
 ---
 
@@ -75,7 +75,9 @@ packages/
 - Plan definitions exist in code but no enforcement mechanism
 - LimitReachedModal component exists from v4.0 (basic feature gate modal)
 - Phase 35 added: Scheduling Core Adoption
+- MCP scheduler now uses a headless command core with authoritative changed-set responses
+- `TaskService` and MCP tools expose move/resize/recalculate schedule commands for linked edits
 
 ---
 
-*Last updated: 2026-03-30 — completed quick task 260330-m7o (project gantt day mode)*
+*Last updated: 2026-03-31 — completed phase 35 plans 35-01 and 35-02, ready for 35-03*

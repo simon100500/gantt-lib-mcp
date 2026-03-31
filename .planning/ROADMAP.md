@@ -161,8 +161,8 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 35-01 — Headless scheduling core + regression parity
-- [ ] 35-02 — TaskService + MCP schedule command integration
+- [x] 35-01 — Headless scheduling core + regression parity
+- [x] 35-02 — TaskService + MCP schedule command integration
 - [ ] 35-03 — Agent/web authoritative scheduling adoption
 
 ---
