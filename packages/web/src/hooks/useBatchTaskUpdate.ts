@@ -131,6 +131,12 @@ export function useBatchTaskUpdate({
       return depsChanged && nothingElseChanged;
     });
 
+    const tasksWithDependencyChanges = changedTasks.filter(t => {
+      const original = tasks.find(orig => orig.id === t.id);
+      if (!original) return false;
+      return JSON.stringify(original.dependencies ?? []) !== JSON.stringify(t.dependencies ?? []);
+    });
+
     // Check if this is a pure reorder — gantt-lib fires onTasksChange for every drag event,
     // including reorders where no actual task properties changed. In that case, handleReorder
     // is about to be called and is the sole owner of sortOrder persistence.
@@ -219,8 +225,22 @@ export function useBatchTaskUpdate({
       console.log(`[useBatchTaskUpdate] Using BATCH API for ${tasksWithoutSortOrder.length} tasks`);
       try {
         setSavingStateWithReset('saving');
-        const saved = await batchImportTasks(tasksWithoutSortOrder);
-        console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
+        if (tasksWithDependencyChanges.length > 0) {
+          console.log('[useBatchTaskUpdate] Dependency mutation batch detected - using sequential PATCH saves');
+          const dependencyChangedIds = new Set(tasksWithDependencyChanges.map(t => t.id));
+          const orderedForSave = [
+            ...tasksWithoutSortOrder.filter(t => dependencyChangedIds.has(t.id)),
+            ...tasksWithoutSortOrder.filter(t => !dependencyChangedIds.has(t.id)),
+          ];
+
+          for (const task of orderedForSave) {
+            await mutateTask(task);
+          }
+          console.log(`[useBatchTaskUpdate] Sequentially saved ${orderedForSave.length} tasks for dependency mutation batch`);
+        } else {
+          const saved = await batchImportTasks(tasksWithoutSortOrder);
+          console.log(`[useBatchTaskUpdate] BATCH saved ${saved} tasks`);
+        }
         if (accessToken) {
           setTasks(await fetchTasksSnapshot());
         }
