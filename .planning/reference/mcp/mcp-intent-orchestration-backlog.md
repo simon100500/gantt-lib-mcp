@@ -23,6 +23,7 @@ The MCP layer should evolve toward:
 - contextual reads, not full-graph loading by default
 - operation batches, not ad hoc CRUD sequences
 - preview and commit semantics, not blind immediate writes
+- one normalized public mutation surface, not legacy and normalized paths in parallel
 
 ## Backlog Themes
 
@@ -232,12 +233,13 @@ Desired outcome:
 
 ## Theme 8: Surface API Cleanup
 
-### B22. Deprecate raw low-level task patching as primary MCP path
+### B22. Remove raw low-level task patching from the MCP public surface
 
 Desired outcome:
 
-- `update_task(startDate/endDate/dependencies)` stops being the preferred tool for normal schedule edits
-- intent tools become the default contract
+- `update_task(startDate/endDate/dependencies)` is not exposed as a supported public MCP mutation path for normal schedule edits
+- direct date patching, dependency-array rewrites, and raw hierarchy patching are removed from the public MCP surface
+- intent tools become the only supported scheduling mutation contract
 
 ### B23. Remove direct graph rewrite concepts from MCP design
 
@@ -299,6 +301,7 @@ These items should be treated as near-term, because they directly block the inte
 3. mutation verification based on actual tool effects
 4. removal of low-level date arithmetic from normal agent flows
 5. contextual read tools so the agent stops scanning the whole graph by default
+6. removal of legacy low-level public mutation tools so the agent has one unambiguous contract
 
 ## Success Condition
 
@@ -307,3 +310,5 @@ This backlog is successful when simple schedule edits can be explained in one se
 > The agent resolved the target task, sent a semantic intent to the domain backend, and adopted the authoritative changed set returned by the server.
 
 If a simple edit still requires the agent to manually compute dates, infer lag mechanics, or mentally simulate neighboring task movement, the MCP layer is still too low-level.
+
+The backlog also fails if the public MCP surface keeps both normalized semantic mutations and legacy low-level mutation tools as parallel supported options.

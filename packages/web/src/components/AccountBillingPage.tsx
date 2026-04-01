@@ -196,7 +196,7 @@ export function AccountBillingPage() {
                 href="/purchase"
                 className="mt-auto inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
               >
-                Перейти
+                К тарифам
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
             </div>

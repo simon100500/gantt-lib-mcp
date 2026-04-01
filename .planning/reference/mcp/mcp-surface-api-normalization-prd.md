@@ -73,6 +73,7 @@ Success means:
 - no resource optimization engine in this phase
 - no direct DB access from MCP
 - no free-form project JSON rewriting tools
+- no backward-compatible public MCP layer for legacy low-level mutation tools
 
 ## Users and Use Cases
 
@@ -98,6 +99,8 @@ Success means:
 4. Every mutation has a typed success or rejection boundary.
 5. Context should be sliced to relevance, not dumped wholesale.
 6. Preview and commit should converge on the same domain operations.
+7. The public MCP surface is intent-first only.
+8. Legacy low-level mutation tools are removed, not preserved as parallel public paths.
 
 ## Required Functional Changes
 
@@ -224,7 +227,7 @@ Specifically:
 
 ## API Direction
 
-The target direction is to move away from low-level task patch tools as the default path.
+The target direction is to replace low-level task patch tools with one normalized intent-first public surface.
 
 Preferred surface:
 
@@ -234,11 +237,13 @@ Preferred surface:
 - contextual read tools
 - typed validation tools
 
-De-emphasized surface:
+Removed surface:
 
-- direct date patching as normal edit flow
+- direct date patching as a public mutation flow
 - whole dependency array rewrites for single-link edits
-- full project scans for every edit
+- raw `parentId` hierarchy patching as a public mutation flow
+- full project scans as the default read path for edits
+- legacy MCP wrappers that preserve the old public contract
 
 ## Proposed MVP Surface
 
@@ -259,9 +264,9 @@ The first normalized MCP slice should include:
 
 Notes:
 
-- existing tools may be reused internally
-- naming can stay backward-compatible through wrappers if needed
-- the product requirement is the semantic surface, not exact string names
+- exact tool names may vary, but the semantic contract is mandatory
+- implementation may reuse domain services internally
+- the public MCP contract must not preserve legacy low-level mutation semantics
 
 ## Technical Requirements
 
@@ -291,13 +296,16 @@ Required invariants:
 - no silent commit without a versioned result
 - no success answer without committed evidence
 
-## 4. Backward Compatibility Strategy
+## 4. Unified Public Contract
 
-Existing low-level tools may remain temporarily for compatibility, but:
+The normalized MCP surface must be the only supported public mutation contract for scheduling operations.
 
-- they should stop being the recommended primary path
-- they should wrap or delegate to normalized semantic behavior where possible
-- prompt guidance should shift the agent away from low-level usage for normal edits
+Required rules:
+
+- no dual-path public API where both semantic intent tools and legacy low-level mutation tools remain valid choices
+- no compatibility wrappers that preserve old low-level request shapes as first-class MCP tools
+- all normal scheduling mutations must route through the normalized typed intent contract
+- migration cost is accepted in order to remove architectural ambiguity now instead of carrying it forward
 
 ## Acceptance Criteria
 
@@ -310,6 +318,8 @@ This PRD is complete when all of the following are true:
 5. Rejected mutations produce typed, machine-readable failure output.
 6. The agent can fetch targeted project context without defaulting to a whole-project read for every non-trivial edit.
 7. The normalized surface can be explained as semantic intent wrappers over the authoritative domain backend.
+8. Public MCP scheduling mutations are available only through the normalized intent-first contract.
+9. Low-level public mutation tools for direct dates, dependency arrays, or raw hierarchy patching are not part of the supported MCP surface.
 
 ## Failure Condition
 
@@ -319,6 +329,8 @@ This PRD is not satisfied if normal agent operation still requires the model to 
 - infer or rewrite full dependency arrays for one logical dependency edit
 - reason about raw `parentId` mutation as the main hierarchy model
 - claim mutation success when no authoritative commit happened
+- choose between legacy low-level mutation tools and normalized semantic tools for the same operation
+- rely on backward-compatible public wrappers that preserve low-level request semantics
 
 ## Success Statement
 
