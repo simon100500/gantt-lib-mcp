@@ -19,7 +19,6 @@ import { writeMcpDebugLog } from './debug-log.js';
 import { taskService } from './services/task.service.js';
 import { commandService } from './services/command.service.js';
 import { messageService } from './services/message.service.js';
-import { dependencyService } from './services/dependency.service.js';
 import { getPrisma } from './prisma.js';
 import type {
   CreateTaskInput,
@@ -30,7 +29,6 @@ import type {
   GetConversationHistoryInput,
   AddMessageInput,
   ProjectCommand,
-  CommitProjectCommandRequest,
 } from './types.js';
 import { randomUUID } from 'node:crypto';
 
@@ -1286,7 +1284,22 @@ Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
       { taskId: dependsOnTaskId, type, lag }
     ];
 
-    const updatedTask = await taskService.update(taskId, { id: taskId, dependencies: updatedDependencies }, 'agent');
+    const response = await commitAgentCommand(resolveProjectId(undefined), {
+      type: 'create_dependency',
+      taskId,
+      dependency: {
+        taskId: dependsOnTaskId,
+        type,
+        lag,
+      },
+    });
+    if (!response.accepted) {
+      return {
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+      };
+    }
+
+    const updatedTask = response.result.snapshot.tasks.find((task) => task.id === taskId);
 
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
@@ -1353,7 +1366,18 @@ Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
 
     // Remove the dependency by updating the task without this dependency
     const updatedDependencies = (existingTask.dependencies || []).filter(d => d.taskId !== dependsOnTaskId);
-    const updatedTask = await taskService.update(taskId, { id: taskId, dependencies: updatedDependencies }, 'agent');
+    const response = await commitAgentCommand(resolveProjectId(undefined), {
+      type: 'remove_dependency',
+      taskId,
+      depTaskId: dependsOnTaskId,
+    });
+    if (!response.accepted) {
+      return {
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+      };
+    }
+
+    const updatedTask = response.result.snapshot.tasks.find((task) => task.id === taskId);
 
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,

@@ -5,7 +5,7 @@
  * All services use Prisma Client for type-safe database operations.
  */
 
-// TaskService and DependencyService
+// TaskService read paths
 export { taskService } from './task.service.js';
 export { TaskService } from './task.service.js';
 
@@ -45,7 +45,7 @@ export {
 /**
  * Service exports summary:
  *
- * - taskService: Task CRUD operations (create, update, delete, list, get, exportTasks, importTasks)
+ * - taskService: Task read operations (list, get)
  * - projectService: Project CRUD operations (create, findById, listByUser, update, delete)
  * - authService: Auth operations (OTP, users, sessions, share links)
  * - messageService: Message CRUD operations (add, list, deleteAll)
