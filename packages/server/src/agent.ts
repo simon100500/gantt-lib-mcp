@@ -9,12 +9,17 @@ import {
   isSDKPartialAssistantMessage,
   type ContentBlock,
 } from '@qwen-code/sdk';
+import {
+  parseDateOnly,
+  shiftBusinessDayOffset,
+} from 'gantt-lib/core/scheduling';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
+import type { CommitProjectCommandResponse, Task as MTask } from '@gantt/mcp/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,6 +52,12 @@ type VerificationResult = {
   rejectedMutationCalls: MutationToolCall[];
   acceptedChangedTaskIds: string[];
   acceptedChangedTaskIdMismatch: boolean;
+};
+
+type FastShiftIntent = {
+  taskName: string;
+  delta: number;
+  mode: 'working' | 'calendar' | 'project_default';
 };
 
 type NormalizedMutationToolName =
@@ -97,9 +108,11 @@ const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
 
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
+type PrismaModule = typeof import('@gantt/mcp/prisma');
 
 let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
+let prismaModulePromise: Promise<PrismaModule> | undefined;
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -240,6 +253,105 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+function normalizeName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeRussianAccusativeToken(token: string): string {
+  if (token.endsWith('ку')) {
+    return `${token.slice(0, -2)}ка`;
+  }
+  if (token.endsWith('гу')) {
+    return `${token.slice(0, -2)}га`;
+  }
+  if (token.endsWith('ху')) {
+    return `${token.slice(0, -2)}ха`;
+  }
+  if (token.endsWith('ю')) {
+    return `${token.slice(0, -1)}я`;
+  }
+  if (token.endsWith('у')) {
+    return `${token.slice(0, -1)}а`;
+  }
+  return token;
+}
+
+function buildNameVariants(value: string): string[] {
+  const normalized = normalizeName(value);
+  const tokens = normalized.split(' ');
+  const accusativeNormalized = tokens.map(normalizeRussianAccusativeToken).join(' ');
+  return [...new Set([normalized, accusativeNormalized])];
+}
+
+export function parseFastShiftIntent(message: string): FastShiftIntent | null {
+  const trimmed = message.trim();
+  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode'] }> = [
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+дн(?:я|ей)?$/i, mode: 'working' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+дн(?:я|ей)?$/i, mode: 'calendar' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+дн(?:я|ей)?$/i, mode: 'project_default' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+working\s+days?$/i, mode: 'working' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+calendar\s+days?$/i, mode: 'calendar' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+days?$/i, mode: 'project_default' },
+  ];
+
+  for (const { regex, mode } of patterns) {
+    const match = trimmed.match(regex);
+    if (!match) {
+      continue;
+    }
+    const taskName = match[1]?.trim();
+    const delta = Number.parseInt(match[2] ?? '', 10);
+    if (!taskName || Number.isNaN(delta) || delta === 0) {
+      return null;
+    }
+    return {
+      taskName,
+      delta,
+      mode: mode ?? 'project_default',
+    };
+  }
+
+  return null;
+}
+
+function findUniqueTaskByName(tasks: ComparableTask[], taskName: string): ComparableTask | null {
+  const targetVariants = buildNameVariants(taskName);
+
+  for (const variant of targetVariants) {
+    const exactMatches = tasks.filter((task) => normalizeName(task.name) === variant);
+    if (exactMatches.length === 1) {
+      return exactMatches[0]!;
+    }
+    if (exactMatches.length > 1) {
+      return null;
+    }
+  }
+
+  for (const variant of targetVariants) {
+    const partialMatches = tasks.filter((task) => normalizeName(task.name).includes(variant));
+    if (partialMatches.length === 1) {
+      return partialMatches[0]!;
+    }
+    if (partialMatches.length > 1) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function formatDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function buildFastShiftSuccessMessage(taskName: string, delta: number, mode: 'working' | 'calendar'): string {
+  const absDelta = Math.abs(delta);
+  const direction = delta >= 0 ? 'сдвинута' : 'сдвинута раньше';
+  const unit = mode === 'working' ? 'рабоч' : 'календарн';
+  const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
+  return `Задача «${taskName}» была ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
 }
 
 export function assessMutationOutcome(
@@ -545,6 +657,129 @@ async function getWsModule(): Promise<WsModule> {
   return wsModulePromise;
 }
 
+async function getPrismaModule(): Promise<PrismaModule> {
+  if (!prismaModulePromise) {
+    prismaModulePromise = import('@gantt/mcp/prisma');
+  }
+
+  return prismaModulePromise;
+}
+
+async function tryDirectShiftFastPath(
+  userMessage: string,
+  projectId: string,
+  sessionId: string,
+  runId: string,
+  tasksBefore: ComparableTask[],
+  services: Pick<TaskServiceModule, 'taskService' | 'messageService' | 'commandService' | 'getProjectScheduleOptionsForProject'>,
+  broadcastToSession: WsModule['broadcastToSession'],
+): Promise<boolean> {
+  const intent = parseFastShiftIntent(userMessage);
+  if (!intent) {
+    return false;
+  }
+
+  const task = findUniqueTaskByName(tasksBefore, intent.taskName);
+  if (!task) {
+    await writeServerDebugLog('fast_shift_skipped', {
+      runId,
+      projectId,
+      sessionId,
+      reason: 'task_not_uniquely_resolved',
+      taskName: intent.taskName,
+      taskCount: tasksBefore.length,
+    });
+    return false;
+  }
+
+  const { getPrisma } = await getPrismaModule();
+  const prisma = getPrisma();
+  const [project, scheduleOptions] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { version: true },
+    }),
+    services.getProjectScheduleOptionsForProject(prisma, projectId),
+  ]);
+
+  if (!project) {
+    return false;
+  }
+
+  const startDate = parseDateOnly(task.startDate);
+  const mode = intent.mode === 'project_default'
+    ? (scheduleOptions.businessDays ? 'working' : 'calendar')
+    : intent.mode;
+  const nextStart = mode === 'working' && scheduleOptions.weekendPredicate
+    ? shiftBusinessDayOffset(startDate, intent.delta, scheduleOptions.weekendPredicate)
+    : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + intent.delta));
+
+  const response = await services.commandService.commitCommand({
+    projectId,
+    clientRequestId: crypto.randomUUID(),
+    baseVersion: project.version,
+    command: {
+      type: 'move_task',
+      taskId: task.id,
+      startDate: formatDateOnly(nextStart),
+    },
+  }, 'agent');
+
+  await writeServerDebugLog('fast_shift_attempt', {
+    runId,
+    projectId,
+    sessionId,
+    taskId: task.id,
+    taskName: task.name,
+    delta: intent.delta,
+    mode,
+    accepted: response.accepted,
+    reason: response.accepted ? undefined : response.reason,
+  });
+
+  if (!response.accepted) {
+    return false;
+  }
+
+  const { tasks: tasksAfter } = await services.taskService.list(projectId);
+  const assistantResponse = buildFastShiftSuccessMessage(task.name, intent.delta, mode);
+
+  await services.messageService.add('assistant', assistantResponse, projectId);
+  await writeServerDebugLog('agent_response_saved', {
+    runId,
+    projectId,
+    sessionId,
+    assistantResponse,
+    streamedContent: true,
+    finalTasksChanged: true,
+    finalChangedTaskIds: response.result.changedTaskIds,
+    finalAcceptedChangedTaskIds: response.result.changedTaskIds,
+    finalAcceptedChangedTaskIdMismatch: false,
+    fastPath: 'direct_shift',
+  });
+
+  broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
+  broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter as MTask[] });
+  await writeServerDebugLog('tasks_broadcast', {
+    runId,
+    projectId,
+    sessionId,
+    taskCount: tasksAfter.length,
+    taskIds: tasksAfter.map((currentTask) => currentTask.id),
+    taskNames: tasksAfter.map((currentTask) => currentTask.name),
+    fastPath: 'direct_shift',
+  });
+  broadcastToSession(sessionId, { type: 'done' });
+  await writeServerDebugLog('agent_run_completed', {
+    runId,
+    projectId,
+    sessionId,
+    fastPath: 'direct_shift',
+  });
+
+  return true;
+}
+
 async function executeAgentAttempt(
   prompt: string,
   runId: string,
@@ -788,7 +1023,7 @@ export async function runAgentWithHistory(
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
-    const [{ taskService, messageService }, wsModule] = await Promise.all([
+    const [{ taskService, messageService, commandService, getProjectScheduleOptionsForProject }, wsModule] = await Promise.all([
       getServicesModule(),
       getWsModule(),
     ]);
@@ -811,6 +1046,19 @@ export async function runAgentWithHistory(
     });
 
     await messageService.add('user', userMessage, projectId);
+
+    if (await tryDirectShiftFastPath(
+      userMessage,
+      projectId,
+      sessionId,
+      runId,
+      tasksBefore,
+      { taskService, messageService, commandService, getProjectScheduleOptionsForProject },
+      broadcastToSession,
+    )) {
+      return;
+    }
+
     const messages = await messageService.list(projectId, 20);
 
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR

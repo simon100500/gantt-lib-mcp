@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest } from './agent.js';
+import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -74,6 +74,26 @@ describe('agent simple mutation heuristic', () => {
   it('treats broad planning requests as non-simple', () => {
     assert.equal(isSimpleMutationRequest('Создай график строительства с этапами и зависимостями'), false);
     assert.equal(isSimpleMutationRequest('add tasks for all floors with dependencies'), false);
+  });
+});
+
+describe('agent fast shift parsing', () => {
+  it('parses direct Russian shift commands for the cheap path', () => {
+    assert.deepEqual(parseFastShiftIntent('сдвинь штукатурку потолка на 2 дня'), {
+      taskName: 'штукатурку потолка',
+      delta: 2,
+      mode: 'project_default',
+    });
+    assert.deepEqual(parseFastShiftIntent('сдвинь "Штукатурка потолка" на 3 рабочих дня'), {
+      taskName: 'Штукатурка потолка',
+      delta: 3,
+      mode: 'working',
+    });
+  });
+
+  it('does not parse vague natural-language drift as a direct cheap-path shift', () => {
+    assert.equal(parseFastShiftIntent('опаздываем с штукатуркой на 2 дня'), null);
+    assert.equal(parseFastShiftIntent('надо бы штукатурку чуть подвинуть'), null);
   });
 });
 
