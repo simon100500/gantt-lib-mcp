@@ -10,6 +10,18 @@ import type { Project } from '../types.js';
 import { randomUUID } from 'node:crypto';
 import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
 
+export type ArchiveProjectResult =
+  | { ok: true; project: Project }
+  | { ok: false; reason: 'not_found' | 'already_archived' };
+
+export type RestoreProjectResult =
+  | { ok: true; project: Project }
+  | { ok: false; reason: 'not_found' | 'not_archived' };
+
+export type SoftDeleteProjectResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'not_archived' };
+
 export class ProjectService {
   private prisma = getPrisma();
 
@@ -23,9 +35,12 @@ export class ProjectService {
       id: project.id,
       userId: project.userId,
       name: project.name,
+      status: project.status,
       ganttDayMode: project.ganttDayMode,
       calendarId: project.calendarId ?? null,
       calendarDays,
+      archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
+      deletedAt: project.deletedAt ? project.deletedAt.toISOString() : null,
       createdAt: project.createdAt.toISOString(),
     };
   }
@@ -69,8 +84,11 @@ export class ProjectService {
    * @returns Project if found, null otherwise
    */
   async findById(projectId: string): Promise<Project | null> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id: projectId,
+        status: { not: 'deleted' },
+      },
     });
 
     if (!project) return null;
@@ -88,13 +106,19 @@ export class ProjectService {
    */
   async listByUser(userId: string): Promise<Array<Project & { taskCount: number }>> {
     const projects = await this.prisma.project.findMany({
-      where: { userId },
+      where: {
+        userId,
+        status: { not: 'deleted' },
+      },
       include: {
         _count: {
           select: { tasks: true },
         },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [
+        { status: 'asc' },
+        { createdAt: 'asc' },
+      ],
     });
 
     return Promise.all(projects.map(async (project) => ({
@@ -121,10 +145,10 @@ export class ProjectService {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { userId: true },
+      select: { userId: true, status: true },
     });
 
-    if (!existing || existing.userId !== userId) {
+    if (!existing || existing.userId !== userId || existing.status === 'deleted') {
       return null;
     }
 
@@ -158,32 +182,85 @@ export class ProjectService {
     return this.projectToDomain(updated);
   }
 
-  /**
-   * Delete a project
-   *
-   * Verifies project belongs to user before deleting.
-   * Cascade deletes tasks, sessions, messages via Prisma schema.
-   *
-   * @param projectId - Project ID to delete
-   * @param userId - User ID for ownership verification
-   * @returns true if deleted, false if not found or not owned
-   */
-  async delete(projectId: string, userId: string): Promise<boolean> {
-    // Verify ownership
+  async archive(projectId: string, userId: string): Promise<ArchiveProjectResult> {
     const existing = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { userId: true },
+      select: { userId: true, status: true },
     });
 
     if (!existing || existing.userId !== userId) {
-      return false;
+      return { ok: false, reason: 'not_found' };
     }
 
-    await this.prisma.project.delete({
+    if (existing.status === 'archived') {
+      return { ok: false, reason: 'already_archived' };
+    }
+
+    const archived = await this.prisma.project.update({
       where: { id: projectId },
+      data: {
+        status: 'archived',
+        archivedAt: new Date(),
+      },
     });
 
-    return true;
+    return {
+      ok: true,
+      project: await this.projectToDomain(archived),
+    };
+  }
+
+  async restore(projectId: string, userId: string): Promise<RestoreProjectResult> {
+    const existing = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true, status: true },
+    });
+
+    if (!existing || existing.userId !== userId) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    if (existing.status !== 'archived') {
+      return { ok: false, reason: 'not_archived' };
+    }
+
+    const restored = await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        status: 'active',
+        archivedAt: null,
+      },
+    });
+
+    return {
+      ok: true,
+      project: await this.projectToDomain(restored),
+    };
+  }
+
+  async softDelete(projectId: string, userId: string): Promise<SoftDeleteProjectResult> {
+    const existing = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true, status: true },
+    });
+
+    if (!existing || existing.userId !== userId) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    if (existing.status !== 'archived') {
+      return { ok: false, reason: 'not_archived' };
+    }
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        status: 'deleted',
+        deletedAt: new Date(),
+      },
+    });
+
+    return { ok: true };
   }
 }
 

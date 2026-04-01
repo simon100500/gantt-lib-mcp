@@ -42,6 +42,12 @@ enum GanttDayMode {
   calendar
 }
 
+enum ProjectStatus {
+  active
+  archived
+  deleted
+}
+
 enum CalendarScope {
   system
   project
@@ -86,8 +92,11 @@ model Project {
   id           String       @id @default(uuid())
   userId       String       @map("user_id")
   name         String
+  status       ProjectStatus @default(active)
   ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
   calendarId   String?      @map("calendar_id")
+  archivedAt   DateTime?    @map("archived_at")
+  deletedAt    DateTime?    @map("deleted_at")
   version      Int         @default(0)
   createdAt    DateTime     @default(now()) @map("created_at")
 
@@ -103,6 +112,7 @@ model Project {
 
   @@map("projects")
   @@index([userId])
+  @@index([userId, status])
   @@index([calendarId])
 }
 

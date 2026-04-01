@@ -100,9 +100,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         id: project.id,
         name: project.name,
+        status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
       },
     });
   });
@@ -252,9 +255,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         id: project.id,
         name: project.name,
+        status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
       },
     });
   });
@@ -280,9 +286,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         id: project.id,
         name: project.name,
+        status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
       },
     });
   });
@@ -372,5 +381,51 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     return reply.send({ project });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const result = await authService.archiveProject(projectId, req.user!.userId);
+
+    if (!result.ok) {
+      if (result.reason === 'already_archived') {
+        return reply.status(409).send({ error: 'Project already archived' });
+      }
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ project: result.project });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/restore', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const result = await authService.restoreProject(projectId, req.user!.userId);
+
+    if (!result.ok) {
+      if (result.reason === 'not_archived') {
+        return reply.status(409).send({ error: 'Project is not archived' });
+      }
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ project: result.project });
+  });
+
+  fastify.delete<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+
+    if (projectId === req.user!.projectId) {
+      return reply.status(409).send({ error: 'Switch away from this project before deleting it' });
+    }
+
+    const result = await authService.softDeleteProject(projectId, req.user!.userId);
+    if (!result.ok) {
+      if (result.reason === 'not_archived') {
+        return reply.status(409).send({ error: 'Only archived projects can be deleted' });
+      }
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ ok: true });
   });
 }

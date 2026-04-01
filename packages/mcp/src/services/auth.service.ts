@@ -8,7 +8,7 @@
 
 import { getPrisma } from '../prisma.js';
 import type { User, Project, Session, OtpEntry, ShareLink } from '../types.js';
-import { projectService } from './project.service.js';
+import { projectService, type ArchiveProjectResult, type RestoreProjectResult, type SoftDeleteProjectResult } from './project.service.js';
 import { randomUUID } from 'node:crypto';
 
 /**
@@ -221,6 +221,18 @@ export class AuthService {
     updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null },
   ): Promise<Project | null> {
     return projectService.update(projectId, userId, updates);
+  }
+
+  async archiveProject(projectId: string, userId: string): Promise<ArchiveProjectResult> {
+    return projectService.archive(projectId, userId);
+  }
+
+  async restoreProject(projectId: string, userId: string): Promise<RestoreProjectResult> {
+    return projectService.restore(projectId, userId);
+  }
+
+  async softDeleteProject(projectId: string, userId: string): Promise<SoftDeleteProjectResult> {
+    return projectService.softDelete(projectId, userId);
   }
 
   /**

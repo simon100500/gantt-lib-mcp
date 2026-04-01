@@ -196,6 +196,7 @@ export interface AddMessageInput {
 
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
 export type GanttDayMode = 'business' | 'calendar';
+export type ProjectStatus = 'active' | 'archived' | 'deleted';
 
 export type CalendarScope = 'system' | 'project';
 export type CalendarDayKind = 'working' | 'non_working' | 'shortened';
@@ -268,12 +269,18 @@ export interface Project {
   userId: string;
   /** Project name */
   name: string;
+  /** Availability status for the owner UI */
+  status: ProjectStatus;
   /** Day-counting mode for gantt duration calculations */
   ganttDayMode: GanttDayMode;
   /** Selected working calendar for business-day mode */
   calendarId: string | null;
   /** Effective calendar day overrides loaded from DB */
   calendarDays: EffectiveCalendarDay[];
+  /** ISO timestamp when project was archived */
+  archivedAt: string | null;
+  /** ISO timestamp when project was soft-deleted */
+  deletedAt: string | null;
   /** ISO timestamp of creation */
   createdAt: string;
 }

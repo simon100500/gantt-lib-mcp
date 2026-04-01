@@ -29,6 +29,9 @@ interface ProjectMenuProps {
   currentProjectLabel: string | undefined;
   onCreateProject: () => void | Promise<void>;
   onSwitchProject: (projectId: string) => void | Promise<void>;
+  onArchiveProject: (projectId: string) => void | Promise<void>;
+  onRestoreProject: (projectId: string) => void | Promise<void>;
+  onDeleteProject: (projectId: string) => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
@@ -42,6 +45,9 @@ export function ProjectMenu({
   currentProjectLabel,
   onCreateProject,
   onSwitchProject,
+  onArchiveProject,
+  onRestoreProject,
+  onDeleteProject,
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
@@ -58,6 +64,7 @@ export function ProjectMenu({
   const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [projectActionsMenuOpen, setProjectActionsMenuOpen] = useState(false);
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
 
   const billingFooter = auth.isAuthenticated && subscription ? (
@@ -103,9 +110,18 @@ export function ProjectMenu({
     };
   }, []);
 
+  useEffect(() => {
+    if (!projectActionsMenuOpen || hoverTimeoutRef.current === null) {
+      return;
+    }
+
+    clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = null;
+  }, [projectActionsMenuOpen]);
+
   const currentProject = useMemo(() => {
     if (workspace.kind === 'draft') {
-      return { id: 'draft', name: workspace.draftName, kind: 'draft' as const };
+      return { id: 'draft', name: workspace.draftName, status: 'active' as const, kind: 'draft' as const };
     }
 
     if (auth.isAuthenticated && auth.project) {
@@ -115,6 +131,7 @@ export function ProjectMenu({
     return {
       id: 'demo',
       name: localProjectName || 'Мой проект',
+      status: 'active' as const,
       kind: 'project' as const,
     };
   }, [auth.isAuthenticated, auth.project, localProjectName, workspace]);
@@ -143,7 +160,7 @@ export function ProjectMenu({
     }
     hoverTimeoutRef.current = setTimeout(() => {
       hoverTimeoutRef.current = null;
-      if (!isHoveringRef.current && useUIStore.getState().sidebarState === 'overlay') {
+      if (!isHoveringRef.current && !projectActionsMenuOpen && useUIStore.getState().sidebarState === 'overlay') {
         setSidebarState('closed');
       }
     }, 300);
@@ -243,6 +260,10 @@ export function ProjectMenu({
             projects={auth.isAuthenticated && auth.project ? auth.projects : []}
             onSwitch={handleSwitchInSidebar}
             onCreateNew={() => { void onCreateProject(); }}
+            onArchive={(projectId) => { void onArchiveProject(projectId); }}
+            onRestore={(projectId) => { void onRestoreProject(projectId); }}
+            onDelete={(projectId) => { void onDeleteProject(projectId); }}
+            onMenuOpenChange={setProjectActionsMenuOpen}
             onClose={() => setSidebarState('closed')}
             footer={billingFooter}
           />
@@ -430,6 +451,10 @@ export function ProjectMenu({
               projects={auth.isAuthenticated && auth.project ? auth.projects : []}
               onSwitch={handleSwitchInOverlay}
               onCreateNew={() => { void onCreateProject(); }}
+              onArchive={(projectId) => { void onArchiveProject(projectId); }}
+              onRestore={(projectId) => { void onRestoreProject(projectId); }}
+              onDelete={(projectId) => { void onDeleteProject(projectId); }}
+              onMenuOpenChange={setProjectActionsMenuOpen}
               footer={billingFooter}
             />
           </div>

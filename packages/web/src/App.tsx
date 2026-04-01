@@ -581,6 +581,28 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setWorkspace({ kind: 'guest' });
   }, [auth.isAuthenticated, resetWorkspacePresentation, setWorkspace]);
 
+  const handleArchiveProject = useCallback(async (projectId: string) => {
+    await auth.archiveProject(projectId);
+  }, [auth]);
+
+  const handleRestoreProject = useCallback(async (projectId: string) => {
+    await auth.restoreProject(projectId);
+  }, [auth]);
+
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    const project = auth.projects.find((item) => item.id === projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    const confirmed = window.confirm(`Удалить проект "${project.name}"? Он исчезнет из интерфейса без возможности восстановления.`);
+    if (!confirmed) {
+      return;
+    }
+
+    await auth.deleteProject(projectId);
+  }, [auth]);
+
   const handleSaveProjectName = useCallback(async (newName: string) => {
     if (!auth.isAuthenticated) {
       localTasks.setProjectName(newName);
@@ -851,6 +873,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       currentProjectLabel={currentProjectLabel}
       onCreateProject={handleCreateProject}
       onSwitchProject={handleSwitchProject}
+      onArchiveProject={handleArchiveProject}
+      onRestoreProject={handleRestoreProject}
+      onDeleteProject={handleDeleteProject}
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}

@@ -15,6 +15,7 @@ import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { messageService } from '@gantt/mcp/services';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
+import { authService } from '@gantt/mcp/services';
 import type {
   ProjectSnapshot,
   TaskDependency,
@@ -52,10 +53,18 @@ async function buildProjectLoadResponse(projectId: string): Promise<{
 }> {
   const { getPrisma } = await import('@gantt/mcp/prisma');
   const prisma = getPrisma();
+  const accessibleProject = await authService.findProjectById(projectId);
+
+  if (!accessibleProject) {
+    throw new Error('Project unavailable');
+  }
 
   const [project, tasks, dependencies, projectCalendar] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
+    prisma.project.findFirst({
+      where: {
+        id: projectId,
+        status: { not: 'deleted' },
+      },
       select: { version: true },
     }),
     prisma.task.findMany({
