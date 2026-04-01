@@ -182,6 +182,49 @@ async function syncTaskDependencies(prismaClient: any, taskId: string, dependenc
   });
 }
 
+async function bulkUpdateTaskSortOrders(
+  prismaClient: any,
+  projectId: string,
+  updates: Array<{ taskId: string; sortOrder: number }>,
+): Promise<void> {
+  if (updates.length === 0) {
+    return;
+  }
+
+  const valueRows = Prisma.join(
+    updates.map((update) => Prisma.sql`(${update.taskId}, ${update.sortOrder})`),
+  );
+
+  await prismaClient.$executeRaw(Prisma.sql`
+    UPDATE "tasks" AS t
+    SET "sort_order" = v.sort_order
+    FROM (VALUES ${valueRows}) AS v(id, sort_order)
+    WHERE t."id" = v.id
+      AND t."project_id" = ${projectId}
+  `);
+}
+
+async function bulkDeleteTasks(prismaClient: any, taskIds: string[]): Promise<void> {
+  if (taskIds.length === 0) {
+    return;
+  }
+
+  await prismaClient.dependency.deleteMany({
+    where: {
+      OR: [
+        { taskId: { in: taskIds } },
+        { depTaskId: { in: taskIds } },
+      ],
+    },
+  });
+
+  await prismaClient.task.deleteMany({
+    where: {
+      id: { in: taskIds },
+    },
+  });
+}
+
 export class CommandService {
   private _prisma: ReturnType<typeof getPrisma> | undefined;
 
@@ -281,43 +324,113 @@ export class CommandService {
         }
 
         // Step 6: Handle task creates/deletes
-        for (const taskChange of executeResult.taskChanges) {
-          if (taskChange.action === 'create' && taskChange.task) {
-            const maxSort = await tx.task.aggregate({
-              where: { projectId },
-              _max: { sortOrder: true },
-            });
-            let sortOrder = 'sortOrder' in taskChange.task ? taskChange.task.sortOrder : undefined;
-            if (sortOrder === undefined) {
-              sortOrder = (maxSort._max.sortOrder ?? -1) + 1;
-            } else {
-              await tx.task.updateMany({
-                where: {
-                  projectId,
-                  sortOrder: { gte: sortOrder },
-                },
+        const createdTasks = executeResult.taskChanges.filter((taskChange) => taskChange.action === 'create' && taskChange.task);
+        const createdTaskIds = new Set(
+          createdTasks
+            .map((taskChange) => taskChange.task?.id)
+            .filter((taskId): taskId is string => Boolean(taskId)),
+        );
+        const isBatchCreateCommand = command.type === 'create_tasks_batch';
+        const isBatchDeleteCommand = command.type === 'delete_tasks';
+
+        if (isBatchCreateCommand && createdTasks.length > 0) {
+          const maxSort = await tx.task.aggregate({
+            where: { projectId },
+            _max: { sortOrder: true },
+          });
+          const appendBaseSort = (maxSort._max.sortOrder ?? -1) + 1;
+
+          await tx.task.createMany({
+            data: createdTasks.map((taskChange, index) => ({
+              id: taskChange.task!.id,
+              projectId,
+              name: taskChange.task!.name,
+              startDate: domainToDate(taskChange.task!.startDate),
+              endDate: domainToDate(taskChange.task!.endDate),
+              color: taskChange.task!.color ?? null,
+              parentId: taskChange.task!.parentId && !createdTaskIds.has(taskChange.task!.parentId)
+                ? taskChange.task!.parentId
+                : null,
+              progress: taskChange.task!.progress ?? 0,
+              sortOrder: appendBaseSort + index,
+            })),
+          });
+
+          for (const taskChange of createdTasks) {
+            if (taskChange.task?.parentId && createdTaskIds.has(taskChange.task.parentId)) {
+              await tx.task.update({
+                where: { id: taskChange.task.id },
+                data: { parentId: taskChange.task.parentId },
+              });
+            }
+          }
+
+          const dependencyRows = createdTasks.flatMap((taskChange) => (
+            (taskChange.task?.dependencies ?? []).map((dep) => ({
+              id: randomUUID(),
+              taskId: taskChange.task!.id,
+              depTaskId: dep.taskId,
+              type: dep.type,
+              lag: dep.lag ?? 0,
+            }))
+          ));
+
+          if (dependencyRows.length > 0) {
+            await tx.dependency.createMany({ data: dependencyRows });
+          }
+        } else {
+          for (const taskChange of createdTasks) {
+            if (taskChange.action === 'create' && taskChange.task) {
+              const maxSort = await tx.task.aggregate({
+                where: { projectId },
+                _max: { sortOrder: true },
+              });
+              let sortOrder = 'sortOrder' in taskChange.task ? taskChange.task.sortOrder : undefined;
+              if (sortOrder === undefined) {
+                sortOrder = (maxSort._max.sortOrder ?? -1) + 1;
+              } else {
+                await tx.task.updateMany({
+                  where: {
+                    projectId,
+                    sortOrder: { gte: sortOrder },
+                  },
+                  data: {
+                    sortOrder: { increment: 1 },
+                  },
+                });
+              }
+              await tx.task.create({
                 data: {
-                  sortOrder: { increment: 1 },
+                  id: taskChange.task.id,
+                  projectId,
+                  name: taskChange.task.name,
+                  startDate: domainToDate(taskChange.task.startDate),
+                  endDate: domainToDate(taskChange.task.endDate),
+                  color: taskChange.task.color ?? null,
+                  parentId: taskChange.task.parentId && !createdTaskIds.has(taskChange.task.parentId)
+                    ? taskChange.task.parentId
+                    : null,
+                  progress: taskChange.task.progress ?? 0,
+                  sortOrder,
                 },
               });
             }
-            await tx.task.create({
-              data: {
-                id: taskChange.task.id,
-                projectId,
-                name: taskChange.task.name,
-                startDate: domainToDate(taskChange.task.startDate),
-                endDate: domainToDate(taskChange.task.endDate),
-                color: taskChange.task.color ?? null,
-                parentId: taskChange.task.parentId ?? null,
-                progress: taskChange.task.progress ?? 0,
-                sortOrder,
-              },
-            });
-            if (taskChange.task.dependencies?.length) {
+          }
+
+          for (const taskChange of createdTasks) {
+            if (taskChange.task?.parentId && createdTaskIds.has(taskChange.task.parentId)) {
+              await tx.task.update({
+                where: { id: taskChange.task.id },
+                data: { parentId: taskChange.task.parentId },
+              });
+            }
+          }
+
+          for (const taskChange of createdTasks) {
+            if (taskChange.task?.dependencies?.length) {
               const taskDef = taskChange.task;
               await tx.dependency.createMany({
-                data: taskDef.dependencies!.map(dep => ({
+                data: (taskDef.dependencies ?? []).map(dep => ({
                   id: randomUUID(),
                   taskId: taskDef.id,
                   depTaskId: dep.taskId,
@@ -326,32 +439,54 @@ export class CommandService {
                 })),
               });
             }
-          } else if (taskChange.action === 'delete') {
-            await tx.dependency.deleteMany({ where: { taskId: taskChange.taskId } });
-            await tx.dependency.deleteMany({ where: { depTaskId: taskChange.taskId } });
-            await tx.task.delete({ where: { id: taskChange.taskId } });
-          } else if (taskChange.action === 'update_parent') {
+          }
+        }
+
+        const deletedTaskIds = executeResult.taskChanges
+          .filter((taskChange) => taskChange.action === 'delete')
+          .map((taskChange) => taskChange.taskId)
+          .filter((taskId): taskId is string => Boolean(taskId));
+
+        if (deletedTaskIds.length > 0) {
+          await bulkDeleteTasks(tx, deletedTaskIds);
+        }
+
+        const sortUpdates = executeResult.taskChanges
+          .filter((taskChange) => taskChange.action === 'update_sort')
+          .map((taskChange) => ({
+            taskId: taskChange.taskId,
+            sortOrder: taskChange.sortOrder,
+          }))
+          .filter((update): update is { taskId: string; sortOrder: number } => (
+            Boolean(update.taskId) && update.sortOrder !== undefined
+          ));
+
+        if (sortUpdates.length > 0) {
+          await bulkUpdateTaskSortOrders(tx, projectId, sortUpdates);
+        }
+
+        for (const taskChange of executeResult.taskChanges) {
+          if (taskChange.action === 'update_parent') {
             await tx.task.update({
               where: { id: taskChange.taskId },
               data: { parentId: taskChange.newParentId ?? null },
-            });
-          } else if (taskChange.action === 'update_sort') {
-            await tx.task.update({
-              where: { id: taskChange.taskId },
-              data: { sortOrder: taskChange.sortOrder },
             });
           }
         }
 
         // Step 7: Persist full semantic state for every changed task that still exists.
-        const deletedTaskIds = new Set(
-          executeResult.taskChanges
-            .filter((taskChange) => taskChange.action === 'delete')
-            .map((taskChange) => taskChange.taskId),
-        );
+        const deletedTaskIdSet = new Set(deletedTaskIds);
 
         for (const task of executeResult.changedTasks) {
-          if (deletedTaskIds.has(task.id)) {
+          if (deletedTaskIdSet.has(task.id)) {
+            continue;
+          }
+
+          if (isBatchCreateCommand && createdTaskIds.has(task.id)) {
+            continue;
+          }
+
+          if (isBatchDeleteCommand) {
             continue;
           }
 
@@ -432,6 +567,25 @@ export class CommandService {
 
       return result;
     } catch (error: any) {
+      console.error('[CommandService.commitCommand] failed', {
+        clientRequestId,
+        projectId,
+        baseVersion,
+        commandType: command.type,
+        command: command.type === 'create_tasks_batch'
+          ? { ...command, taskCount: command.tasks.length, tasks: command.tasks }
+          : command.type === 'delete_tasks'
+            ? { ...command, taskCount: command.taskIds.length }
+            : command,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorCode: error?.code,
+        errorMeta: error?.meta,
+        stack: error instanceof Error ? error.stack : undefined,
+      }, {
+        maxWait: 10_000,
+        timeout: 60_000,
+      });
+
       if (isVersionBumpRace(error)) {
         const project = await this.prisma.project.findUnique({
           where: { id: projectId },
@@ -444,6 +598,7 @@ export class CommandService {
           reason: 'version_conflict' as const,
           currentVersion: project?.version ?? baseVersion,
           snapshot,
+          error: error instanceof Error ? error.message : String(error),
         };
       }
 
@@ -452,6 +607,7 @@ export class CommandService {
         accepted: false as const,
         reason: 'validation_error' as const,
         currentVersion: -1,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -468,11 +624,14 @@ export class CommandService {
       case 'update_task_fields':
       case 'reparent_task':
         return command.taskId;
+      case 'delete_tasks':
+        return command.taskIds[0];
       case 'reorder_tasks':
         return command.updates[0]?.taskId;
       case 'recalculate_schedule':
         return command.taskId;
       case 'create_task':
+      case 'create_tasks_batch':
         return undefined; // New task — no existing target
       case 'create_dependency':
       case 'remove_dependency':
@@ -696,6 +855,29 @@ export class CommandService {
         break;
       }
 
+      case 'create_tasks_batch': {
+        const newTasks: Task[] = command.tasks.map((task) => ({
+          id: task.id ?? randomUUID(),
+          name: task.name,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          color: task.color,
+          parentId: task.parentId,
+          progress: task.progress,
+          dependencies: task.dependencies,
+          sortOrder: task.sortOrder,
+        }));
+
+        for (const task of newTasks) {
+          taskChanges.push({ action: 'create', task });
+        }
+        coreResult = {
+          changedTasks: newTasks as CoreTask[],
+          changedIds: newTasks.map((task) => task.id),
+        };
+        break;
+      }
+
       case 'delete_task': {
         taskChanges.push({ action: 'delete', taskId: command.taskId });
 
@@ -715,6 +897,24 @@ export class CommandService {
         } else {
           coreResult = { changedTasks: [], changedIds: [] };
         }
+        break;
+      }
+
+      case 'delete_tasks': {
+        const deletedIds = new Set(command.taskIds);
+        for (const taskId of command.taskIds) {
+          taskChanges.push({ action: 'delete', taskId });
+        }
+
+        const remainingSnapshot = coreSnapshot.filter((task) => !deletedIds.has(task.id)).map((task) => ({
+          ...task,
+          dependencies: (task.dependencies ?? []).filter((dependency) => !deletedIds.has(dependency.taskId)),
+        }));
+        const recalcResult = recalculateProjectSchedule(remainingSnapshot, opts);
+        coreResult = {
+          changedTasks: recalcResult.changedTasks,
+          changedIds: recalcResult.changedIds,
+        };
         break;
       }
 

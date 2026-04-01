@@ -156,6 +156,27 @@ export function replayProjectCommand(
       return withTasks(toTaskArray(mergeChangedTasks(nextTasks.map(normalizeCoreTask), recalculated.changedTasks)));
     }
 
+    case 'create_tasks_batch': {
+      const nextTasks = [...toTaskArray(coreSnapshot)];
+
+      for (const taskDef of command.tasks) {
+        const taskId = taskDef.id ?? `pending:${requestId ?? crypto.randomUUID()}`;
+        nextTasks.push({
+          id: taskId,
+          name: taskDef.name,
+          startDate: taskDef.startDate,
+          endDate: taskDef.endDate,
+          color: taskDef.color,
+          parentId: taskDef.parentId,
+          progress: taskDef.progress,
+          dependencies: normalizeTaskDependencies(taskDef.dependencies),
+          sortOrder: taskDef.sortOrder,
+        });
+      }
+
+      return withTasks(nextTasks);
+    }
+
     case 'delete_task': {
       const withoutTask = toTaskArray(coreSnapshot)
         .filter((task) => task.id !== command.taskId)
@@ -165,6 +186,18 @@ export function replayProjectCommand(
         }));
       const recalculated = recalculateProjectSchedule(withoutTask.map(normalizeCoreTask), options);
       return withTasks(toTaskArray(mergeChangedTasks(withoutTask.map(normalizeCoreTask), recalculated.changedTasks)));
+    }
+
+    case 'delete_tasks': {
+      const deletedIds = new Set(command.taskIds);
+      const withoutTasks = toTaskArray(coreSnapshot)
+        .filter((task) => !deletedIds.has(task.id))
+        .map((task) => ({
+          ...task,
+          dependencies: normalizeTaskDependencies(task.dependencies).filter((dependency) => !deletedIds.has(dependency.taskId)),
+        }));
+      const recalculated = recalculateProjectSchedule(withoutTasks.map(normalizeCoreTask), options);
+      return withTasks(toTaskArray(mergeChangedTasks(withoutTasks.map(normalizeCoreTask), recalculated.changedTasks)));
     }
 
     case 'create_dependency': {

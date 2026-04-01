@@ -388,7 +388,9 @@ export type ProjectCommand =
       };
     }
   | { type: 'create_task'; task: CreateTaskInput; }
+  | { type: 'create_tasks_batch'; tasks: CreateTaskInput[]; }
   | { type: 'delete_task'; taskId: string; }
+  | { type: 'delete_tasks'; taskIds: string[]; }
   | { type: 'create_dependency'; taskId: string; dependency: TaskDependency; }
   | { type: 'remove_dependency'; taskId: string; depTaskId: string; }
   | { type: 'change_dependency_lag'; taskId: string; depTaskId: string; lag: number; }
@@ -454,6 +456,7 @@ export type CommitProjectCommandResponse =
       currentVersion: number;
       snapshot?: ProjectSnapshot;
       conflicts?: Conflict[];
+      error?: string;
     };
 
 /** Persisted project event record — mirrors Prisma ProjectEvent model.
