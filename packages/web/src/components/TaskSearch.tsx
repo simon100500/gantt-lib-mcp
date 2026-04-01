@@ -7,7 +7,7 @@ import { useUIStore } from '../stores/useUIStore';
 import { useTaskStore } from '../stores/useTaskStore';
 import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore.ts';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useTaskMutation } from '../hooks/useTaskMutation';
+import { useProjectCommands } from '../hooks/useProjectCommands';
 import { cn } from '@/lib/utils';
 import type { Task } from '../types';
 
@@ -40,7 +40,7 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
       ? deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions).tasks
       : taskStoreTasks
   ), [activeSource, confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions, taskStoreTasks]);
-  const { createTask } = useTaskMutation(accessToken);
+  const { createTask } = useProjectCommands(accessToken);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

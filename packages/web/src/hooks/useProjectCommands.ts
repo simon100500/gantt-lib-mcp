@@ -13,25 +13,14 @@ export interface CreateTaskInput {
   dependencies?: TaskDependency[];
 }
 
-export interface UpdateTaskInput {
-  name?: string;
-  startDate?: string;
-  endDate?: string;
-  color?: string;
-  parentId?: string;
-  progress?: number;
-  dependencies?: TaskDependency[];
-  sortOrder?: number;
-}
-
-export interface UseTaskMutationResult {
-  mutateTask: (task: Task, originalTask?: Task) => Promise<TaskMutationResponse>;
+export interface UseProjectCommandsResult {
+  applyTaskChanges: (task: Task, originalTask?: Task) => Promise<TaskCommandResult>;
   createTask: (input: CreateTaskInput) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
-  fetchTasksSnapshot: () => Promise<Task[]>;
+  fetchProjectSnapshot: () => Promise<Task[]>;
 }
 
-export interface TaskMutationResponse {
+export interface TaskCommandResult {
   task: Task;
   changedTasks: Task[];
   changedIds: string[];
@@ -98,10 +87,10 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   return commands;
 }
 
-export function useTaskMutation(accessToken: string | null): UseTaskMutationResult {
+export function useProjectCommands(accessToken: string | null): UseProjectCommandsResult {
   const { commitCommand } = useCommandCommit(accessToken);
 
-  const fetchTasksSnapshot = async (): Promise<Task[]> => {
+  const fetchProjectSnapshot = async (): Promise<Task[]> => {
     if (!accessToken) {
       return [];
     }
@@ -121,7 +110,7 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
     return normalizeTasks(data.snapshot.tasks);
   };
 
-  const mutateTask = async (task: Task, originalTask?: Task): Promise<TaskMutationResponse> => {
+  const applyTaskChanges = async (task: Task, originalTask?: Task): Promise<TaskCommandResult> => {
     if (!originalTask) {
       throw new Error('Original task is required for command-based mutation');
     }
@@ -189,5 +178,5 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
     return true;
   };
 
-  return { mutateTask, createTask, deleteTask, fetchTasksSnapshot };
+  return { applyTaskChanges, createTask, deleteTask, fetchProjectSnapshot };
 }
