@@ -11,6 +11,7 @@
     "build": "npm run build --workspaces",
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
+    "dump:db": "node scripts/dump-db.js",
     "dev:server": "npm run dev -w packages/server",
     "dev:web": "npm run dev -w packages/web",
     "dev:site": "npm run dev -w packages/site"
