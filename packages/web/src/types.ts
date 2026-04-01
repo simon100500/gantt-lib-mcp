@@ -24,6 +24,11 @@ export interface ValidationResult {
   errors: DependencyError[];
 }
 
+export interface CalendarDay {
+  date: string;
+  kind: 'working' | 'non_working' | 'shortened';
+}
+
 export interface Task {
   id: string;
   name: string;

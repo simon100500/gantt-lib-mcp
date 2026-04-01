@@ -29,6 +29,19 @@ export { DependencyService } from './dependency.service.js';
 export { commandService } from './command.service.js';
 export { CommandService } from './command.service.js';
 
+// Project schedule options / calendar payload helpers
+export {
+  SYSTEM_DEFAULT_CALENDAR_ID,
+  SYSTEM_DEFAULT_CALENDAR_CODE,
+  SYSTEM_DEFAULT_CALENDAR_NAME,
+  buildProjectScheduleOptions,
+  ensureSystemDefaultCalendar,
+  loadEffectiveCalendarDays,
+  loadCalendarCustomDays,
+  getProjectCalendarSettings,
+  getProjectScheduleOptionsForProject,
+} from './projectScheduleOptions.js';
+
 /**
  * Service exports summary:
  *

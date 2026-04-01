@@ -1,5 +1,5 @@
-import { useCallback, useRef } from 'react';
-import type { Task, FrontendProjectCommand } from '../types';
+import { useCallback, useMemo, useRef } from 'react';
+import type { CalendarDay, Task, FrontendProjectCommand } from '../types';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
 import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore';
 import { useUIStore, type SavingState } from '../stores/useUIStore';
@@ -7,11 +7,14 @@ import { useTaskMutation, type TaskMutationResponse, buildCommandsFromDiff } fro
 import { useCommandCommit } from './useCommandCommit';
 import { getProjectScheduleOptions } from '../lib/projectScheduleOptions';
 
+const EMPTY_CALENDAR_DAYS: CalendarDay[] = [];
+
 export interface UseBatchTaskUpdateOptions {
   tasks: Task[];
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   accessToken: string | null;
   ganttDayMode: 'business' | 'calendar';
+  calendarDays?: CalendarDay[];
   onCascade?: (tasks: Task[]) => void;
 }
 
@@ -31,6 +34,7 @@ export function useBatchTaskUpdate({
   setTasks,
   accessToken,
   ganttDayMode,
+  calendarDays = EMPTY_CALENDAR_DAYS,
   onCascade,
 }: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
   const { mutateTask, createTask, deleteTask, fetchTasksSnapshot } = useTaskMutation(accessToken);
@@ -38,7 +42,11 @@ export function useBatchTaskUpdate({
   const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAuthenticatedMode = Boolean(accessToken);
-  const scheduleOptions = getProjectScheduleOptions(ganttDayMode);
+  const effectiveCalendarDays = calendarDays.length > 0 ? calendarDays : EMPTY_CALENDAR_DAYS;
+  const scheduleOptions = useMemo(
+    () => getProjectScheduleOptions(ganttDayMode, effectiveCalendarDays),
+    [effectiveCalendarDays, ganttDayMode],
+  );
 
   const toDateString = useCallback((value: Task['startDate']) => (
     typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0]

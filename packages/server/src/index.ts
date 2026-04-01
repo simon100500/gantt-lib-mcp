@@ -14,6 +14,7 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { messageService } from '@gantt/mcp/services';
+import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import type {
   ProjectSnapshot,
   TaskDependency,
@@ -40,11 +41,19 @@ await registerCommandRoutes(fastify);
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function buildProjectLoadResponse(projectId: string): Promise<{ version: number; snapshot: ProjectSnapshot }> {
+async function buildProjectLoadResponse(projectId: string): Promise<{
+  version: number;
+  snapshot: ProjectSnapshot;
+  project: {
+    ganttDayMode: 'business' | 'calendar';
+    calendarId: string | null;
+    calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+  };
+}> {
   const { getPrisma } = await import('@gantt/mcp/prisma');
   const prisma = getPrisma();
 
-  const [project, tasks, dependencies] = await Promise.all([
+  const [project, tasks, dependencies, projectCalendar] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
       select: { version: true },
@@ -58,10 +67,12 @@ async function buildProjectLoadResponse(projectId: string): Promise<{ version: n
       where: { task: { projectId } },
       select: { id: true, taskId: true, depTaskId: true, type: true, lag: true },
     }),
+    getProjectCalendarSettings(prisma, projectId),
   ]);
 
   return {
     version: project?.version ?? 0,
+    project: projectCalendar,
     snapshot: {
       tasks: tasks.map((task: any) => ({
         id: task.id,

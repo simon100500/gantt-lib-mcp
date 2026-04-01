@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-01T06:52:48.559Z"
+last_updated: "2026-04-01T07:20:00.000Z"
 last_activity: 2026-04-01
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 2
   total_plans: 10
   completed_plans: 10
@@ -17,7 +17,7 @@ progress:
 
 **Last updated:** 2026-04-01
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to execute
+**Status:** Ready to plan next phase
 
 ---
 
@@ -26,15 +26,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 36 — Unified Scheduling Core (All 7 plans complete)
+**Current focus:** Phase 37 — Calendar source of truth cleanup (not planned yet)
 
 ---
 
 ## Current Position
 
-Phase: 36 of 36 (Unified Scheduling Core)
-Plan: 7 of 7 complete
-Status: Ready to execute
+Phase: 37 of 37 (Calendar source of truth cleanup)
+Plan: 0 of ? complete
+Status: Ready to plan
 Last activity: 2026-04-01
 
 Progress: [████████░░] 80%
@@ -89,7 +89,10 @@ packages/
 - Phase 36 Plan 05: Frontend three-layer Zustand store (confirmed/pending/dragPreview) with useCommandCommit hook routing schedule mutations through /api/commands/commit
 - Phase 36 Plan 06: MCP schedule tools and API mutations routed through CommandService.commitCommand
 - Phase 36 Plan 07: 19-test suite covering parity (P1-P3), concurrency (C1-C3), patch reasons (R1-R3), dependency regression (REG1-REG4). FS lag semantics: succStart = predEnd + lag + 1
+- Phase 37 added: Calendar source of truth cleanup
+- Remaining scheduling tech debt: holiday definitions are still hardcoded in `packages/mcp/src/services/projectScheduleOptions.ts` and `packages/web/src/lib/russianHolidays2026.ts`
+- Next phase must remove frontend/server holiday duplication and make DB + server payload the only source of truth for calendar days
 
 ---
 
-*Last updated: 2026-04-01 — completed 36-07 (test suite, Phase 36 complete)*
+*Last updated: 2026-04-01 — Phase 37 queued with calendar source-of-truth cleanup context*

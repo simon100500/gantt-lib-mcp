@@ -51,6 +51,7 @@ export function SharedWorkspace({
       onExpandAll={onExpandAll}
       onValidation={onValidation}
       ganttDayMode={ganttDayMode}
+      calendarDays={sharedProject?.calendarDays ?? []}
       readOnly
       showChat={false}
     />

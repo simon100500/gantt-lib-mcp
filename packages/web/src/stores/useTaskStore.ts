@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-import { normalizeTasks, type ProjectDependency, type Task } from '../types.ts';
+import { normalizeTasks, type CalendarDay, type ProjectDependency, type Task } from '../types.ts';
+import { useAuthStore } from './useAuthStore.ts';
 import { useProjectStore } from './useProjectStore.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
@@ -11,6 +12,8 @@ export interface SharedTaskProject {
   id: string;
   name: string;
   ganttDayMode: 'business' | 'calendar';
+  calendarId?: string | null;
+  calendarDays?: CalendarDay[];
 }
 
 export type TaskSource = 'local' | 'auth' | 'shared';
@@ -28,6 +31,7 @@ interface SharedResponse {
 
 interface LoadProjectResponse {
   version: number;
+  project: SharedTaskProject;
   snapshot: {
     tasks: Task[];
     dependencies: ProjectDependency[];
@@ -195,6 +199,19 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,
       });
+      const authState = useAuthStore.getState();
+      if (authState.project) {
+        const updatedProject = authState.project.id === project.project.id
+          ? { ...authState.project, ...project.project }
+          : authState.project;
+        const updatedProjects = authState.projects.map((item) => (
+          item.id === project.project.id ? { ...item, ...project.project } : item
+        ));
+        useAuthStore.setState({
+          project: updatedProject,
+          projects: updatedProjects,
+        });
+      }
 
       set({
         tasks: normalizedTasks,

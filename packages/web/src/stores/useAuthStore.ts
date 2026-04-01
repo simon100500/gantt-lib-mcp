@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CalendarDay } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -28,6 +29,8 @@ export interface AuthProject {
   id: string;
   name: string;
   ganttDayMode: GanttDayMode;
+  calendarId?: string | null;
+  calendarDays?: CalendarDay[];
   taskCount?: number;
 }
 
@@ -45,7 +48,7 @@ export interface UseAuthResult extends AuthState {
   logout(): void;
   switchProject(projectId: string): Promise<void>;
   createProject(name: string): Promise<AuthProject | null>;
-  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode }): Promise<AuthProject>;
+  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null }): Promise<AuthProject>;
   syncProjectTaskCount(projectId: string, taskCount: number): void;
   refreshAccessToken(): Promise<string | null>;
   refreshProjects(): Promise<void>;

@@ -1,4 +1,5 @@
 import { normalizeTasks, type FrontendProjectCommand, type Task, type TaskDependency } from '../types';
+import type { SharedTaskProject } from '../stores/useTaskStore';
 import { useCommandCommit } from './useCommandCommit';
 
 export interface CreateTaskInput {
@@ -38,6 +39,7 @@ export interface TaskMutationResponse {
 
 interface LoadProjectResponse {
   version: number;
+  project: SharedTaskProject;
   snapshot: {
     tasks: Task[];
     dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: string; lag: number }>;

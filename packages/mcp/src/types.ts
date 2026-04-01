@@ -193,6 +193,15 @@ export interface AddMessageInput {
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
 export type GanttDayMode = 'business' | 'calendar';
 
+export type CalendarScope = 'system' | 'project';
+export type CalendarDayKind = 'working' | 'non_working' | 'shortened';
+export type CalendarDaySource = 'system_seed' | 'manual' | 'import';
+
+export interface EffectiveCalendarDay {
+  date: string;
+  kind: CalendarDayKind;
+}
+
 export interface ScheduleCommandOptions {
   /** Account for business days during scheduling */
   businessDays?: boolean;
@@ -257,8 +266,35 @@ export interface Project {
   name: string;
   /** Day-counting mode for gantt duration calculations */
   ganttDayMode: GanttDayMode;
+  /** Selected working calendar for business-day mode */
+  calendarId: string | null;
+  /** Effective calendar day overrides loaded from DB */
+  calendarDays: EffectiveCalendarDay[];
   /** ISO timestamp of creation */
   createdAt: string;
+}
+
+export interface WorkCalendar {
+  id: string;
+  code?: string | null;
+  name: string;
+  scope: CalendarScope;
+  timezone?: string | null;
+  isDefault: boolean;
+  projectId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkCalendarDay {
+  id: string;
+  calendarId: string;
+  date: string;
+  kind: CalendarDayKind;
+  label?: string | null;
+  source: CalendarDaySource;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ShareLink {

@@ -8,6 +8,7 @@
 import { getPrisma } from '../prisma.js';
 import type { Project } from '../types.js';
 import { randomUUID } from 'node:crypto';
+import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
 
 export class ProjectService {
   private prisma = getPrisma();
@@ -16,12 +17,15 @@ export class ProjectService {
    * Convert Prisma Project to domain Project
    * Handles DateTime → string conversion for createdAt
    */
-  private projectToDomain(project: any): Project {
+  private async projectToDomain(project: any): Promise<Project> {
+    const calendarDays = await loadEffectiveCalendarDays(this.prisma, project.calendarId ?? null);
     return {
       id: project.id,
       userId: project.userId,
       name: project.name,
       ganttDayMode: project.ganttDayMode,
+      calendarId: project.calendarId ?? null,
+      calendarDays,
       createdAt: project.createdAt.toISOString(),
     };
   }
@@ -34,12 +38,14 @@ export class ProjectService {
    * @returns Newly created Project
    */
   async create(userId: string, name: string): Promise<Project> {
+    const calendarId = await ensureSystemDefaultCalendar(this.prisma);
     const project = await this.prisma.project.create({
       data: {
         id: randomUUID(),
         userId,
         name,
         ganttDayMode: 'business',
+        calendarId,
       },
     });
 
@@ -91,14 +97,10 @@ export class ProjectService {
       orderBy: { createdAt: 'asc' },
     });
 
-    return projects.map((project) => ({
-      id: project.id,
-      userId: project.userId,
-      name: project.name,
-      ganttDayMode: project.ganttDayMode,
-      createdAt: project.createdAt.toISOString(),
+    return Promise.all(projects.map(async (project) => ({
+      ...(await this.projectToDomain(project)),
       taskCount: project._count.tasks,
-    }));
+    })));
   }
 
   /**
@@ -114,7 +116,7 @@ export class ProjectService {
   async update(
     projectId: string,
     userId: string,
-    updates: { name?: string; ganttDayMode?: 'business' | 'calendar' },
+    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null },
   ): Promise<Project | null> {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
@@ -126,11 +128,30 @@ export class ProjectService {
       return null;
     }
 
+    let resolvedCalendarId = updates.calendarId;
+    if (updates.calendarId !== undefined && updates.calendarId !== null) {
+      const calendar = await this.prisma.workCalendar.findUnique({
+        where: { id: updates.calendarId },
+        select: { id: true, scope: true, projectId: true },
+      });
+
+      if (!calendar) {
+        return null;
+      }
+
+      if (calendar.scope === 'project' && calendar.projectId !== projectId) {
+        return null;
+      }
+
+      resolvedCalendarId = calendar.id;
+    }
+
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         ...(updates.name !== undefined ? { name: updates.name } : {}),
         ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
+        ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
       },
     });
 

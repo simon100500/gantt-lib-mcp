@@ -1,12 +1,12 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef } from 'react';
 import { Check } from 'lucide-react';
-import { createCustomDayPredicate, reflowTasksOnModeSwitch } from 'gantt-lib';
+import { reflowTasksOnModeSwitch } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
-import { russianHolidays2026 } from '../../lib/russianHolidays2026.ts';
+import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
@@ -15,7 +15,7 @@ import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '@/lib/utils';
-import type { Task, ValidationResult } from '../../types.ts';
+import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
 
 interface ProjectWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
@@ -42,6 +42,7 @@ interface ProjectWorkspaceProps {
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   ganttDayMode: 'business' | 'calendar';
+  calendarDays?: CalendarDay[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
 }
 
@@ -89,6 +90,7 @@ export function ProjectWorkspace({
   shareStatus = 'idle',
   onCreateShareLink,
   ganttDayMode,
+  calendarDays = [],
   onGanttDayModeChange,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
@@ -176,9 +178,10 @@ export function ProjectWorkspace({
     return ids;
   }, [searchResults, tempHighlightedTaskId]);
   const previousGanttDayModeRef = useRef(ganttDayMode);
+  const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
-    () => createCustomDayPredicate({ customDays: russianHolidays2026 }),
-    [],
+    () => getProjectWeekendPredicate(calendarDays) ?? (() => false),
+    [calendarDays],
   );
 
   useEffect(() => {
@@ -265,7 +268,7 @@ export function ProjectWorkspace({
                 onDelete={readOnly ? undefined : batchUpdate?.handleDelete}
                 onInsertAfter={readOnly ? undefined : batchUpdate?.handleInsertAfter}
                 onReorder={readOnly ? undefined : batchUpdate?.handleReorder}
-                customDays={russianHolidays2026}
+                customDays={customDays}
                 highlightedTaskIds={highlightedSearchTaskIds}
                 filterMode={filterMode}
                 businessDays={ganttDayMode !== 'calendar'}

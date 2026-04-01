@@ -131,6 +131,7 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
 | 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
+| 37. Calendar source of truth cleanup | Scheduling | 0/? | Not started | - |
 
 ---
 
@@ -183,5 +184,15 @@ Plans:
 - [x] 36-06 — MCP/API channel parity (all mutations through command commit)
 - [x] 36-07 — Parity + concurrency + patch reason tests (TDD)
 
+### Phase 37: Calendar source of truth cleanup
+
+**Goal:** БД и server становятся единственным source of truth для рабочих и нерабочих дней; frontend получает effective calendar days только из server payload без локального holiday hardcode
+**Requirements**: PRD-only (phase context)
+**Depends on:** Phase 36
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD
+
 ---
-*Last updated: 2026-04-01 — 36-07 complete (parity + concurrency + patch reason tests)*
+*Last updated: 2026-04-01 — Phase 37 queued for calendar source-of-truth cleanup*

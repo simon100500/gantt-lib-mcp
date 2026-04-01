@@ -27,9 +27,11 @@ import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
+const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
 
 interface LoadProjectResponse {
   version: number;
+  project: { id: string; name: string; ganttDayMode: 'business' | 'calendar'; calendarId?: string | null; calendarDays?: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> };
   snapshot: {
     tasks: Task[];
     dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: string; lag: number }>;
@@ -94,7 +96,13 @@ export default function App() {
     accessToken: string;
     refreshToken: string;
     user: { id: string; email: string };
-    project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
+    project: {
+      id: string;
+      name: string;
+      ganttDayMode: 'business' | 'calendar';
+      calendarId?: string | null;
+      calendarDays?: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    };
   }) => {
     auth.login(result, result.user, result.project);
     setShowOtpModal(false);
@@ -278,6 +286,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     hasShareToken ? null : auth.accessToken,
     auth.refreshAccessToken,
     auth.project?.ganttDayMode ?? 'business',
+    auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS,
   );
   const { tasks, setTasks, loading, error } = hasShareToken
     ? sharedProject
@@ -289,6 +298,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
     ganttDayMode: hasShareToken ? (sharedProject.project?.ganttDayMode ?? 'business') : (auth.project?.ganttDayMode ?? 'business'),
+    calendarDays: hasShareToken
+      ? (sharedProject.project?.calendarDays ?? EMPTY_CALENDAR_DAYS)
+      : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
   });
   const ganttRef = useRef<GanttChartRef>(null);
   const activationInFlightRef = useRef(false);
@@ -820,6 +832,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
             ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
+            calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             onGanttDayModeChange={(ganttDayMode) => {
               void handleGanttDayModeChange(ganttDayMode).catch((error) => {
                 console.error('Failed to update gantt day mode:', error);
