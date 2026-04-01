@@ -31,6 +31,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
         accepted: false,
         reason: 'validation_error',
         currentVersion: -1,
+        error: 'Missing command, clientRequestId, or baseVersion',
       });
     }
 
@@ -57,12 +58,20 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
       const statusCode = response.reason === 'version_conflict' ? 409 : 400;
       return reply.status(statusCode).send(response);
     } catch (error) {
-      fastify.log.error(error, 'Command commit failed');
+      fastify.log.error({
+        err: error,
+        clientRequestId: request.clientRequestId,
+        projectId: request.projectId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        command: request.command,
+      }, 'Command commit failed');
       return reply.status(500).send({
         clientRequestId: request.clientRequestId,
         accepted: false,
         reason: 'validation_error',
         currentVersion: -1,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   });

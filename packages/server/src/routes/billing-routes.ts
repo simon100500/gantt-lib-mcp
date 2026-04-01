@@ -18,13 +18,8 @@ const YOOKASSA_BASE_URL = 'https://api.yookassa.ru/v3';
 
 const VALID_BILLING_PLANS: PlanKey[] = ['start', 'team']; // D-02: no free or enterprise
 
-const PLAN_DISPLAY_NAMES: Record<string, string> = {
-  start: 'Start',
-  team: 'Team',
-};
-
 function getPeriodDisplay(period: string): string {
-  return period === 'monthly' ? '1 month' : '1 year';
+  return period === 'monthly' ? '1 месяц' : '1 год';
 }
 
 function getShopCredentials(): { shopId: string; secretKey: string } {
@@ -72,9 +67,9 @@ export async function registerBillingRoutes(fastify: FastifyInstance): Promise<v
       return reply.status(400).send({ error: 'Invalid price for plan' });
     }
 
-    const planDisplay = PLAN_DISPLAY_NAMES[plan] ?? plan;
     const periodDisplay = getPeriodDisplay(period);
-    const description = `GetGantt - ${planDisplay} (${periodDisplay})`;
+    const baseDescription = PLAN_CONFIG[plan]?.pricing.description ?? 'Сервис ГетГант';
+    const description = `${baseDescription}, ${periodDisplay}`;
     const priceStr = `${price}.00`;
     const idempotenceKey = crypto.randomUUID();
 

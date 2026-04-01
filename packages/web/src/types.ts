@@ -86,7 +86,9 @@ export type FrontendProjectCommand =
       };
     }
   | { type: 'create_task'; task: Omit<Task, 'id'> & { id?: string }; }
+  | { type: 'create_tasks_batch'; tasks: Array<Omit<Task, 'id'> & { id?: string }>; }
   | { type: 'delete_task'; taskId: string; }
+  | { type: 'delete_tasks'; taskIds: string[]; }
   | { type: 'create_dependency'; taskId: string; dependency: { taskId: string; type: string; lag?: number; }; }
   | { type: 'remove_dependency'; taskId: string; depTaskId: string; }
   | { type: 'change_dependency_lag'; taskId: string; depTaskId: string; lag: number; }

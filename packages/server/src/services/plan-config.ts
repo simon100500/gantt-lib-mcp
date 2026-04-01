@@ -47,7 +47,7 @@ export const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
     pricing: {
       monthly: envInt('PLAN_FREE_PRICE_MONTHLY', 0),
       yearly: envInt('PLAN_FREE_PRICE_YEARLY', 0),
-      description: 'GetGantt - Free',
+      description: 'Сервис ГетГант. Тариф Бесплатный',
     },
   },
   start: {
@@ -61,7 +61,7 @@ export const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
     pricing: {
       monthly: envInt('PLAN_START_PRICE_MONTHLY', 1490),
       yearly: envInt('PLAN_START_PRICE_YEARLY', 11900),
-      description: 'GetGantt - Start',
+      description: 'Сервис ГетГант. Тариф Старт',
     },
   },
   team: {
@@ -75,7 +75,7 @@ export const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
     pricing: {
       monthly: envInt('PLAN_TEAM_PRICE_MONTHLY', 4990),
       yearly: envInt('PLAN_TEAM_PRICE_YEARLY', 47900),
-      description: 'GetGantt - Team',
+      description: 'Сервис ГетГант. Тариф Команда',
     },
   },
   enterprise: {
@@ -89,7 +89,7 @@ export const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
     pricing: {
       monthly: envInt('PLAN_ENTERPRISE_PRICE_MONTHLY', 12900),
       yearly: envInt('PLAN_ENTERPRISE_PRICE_YEARLY', 129000),
-      description: 'GetGantt - Enterprise',
+      description: 'Сервис ГетГант. Тариф Корпоративный',
     },
   },
 };
