@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Task, ProjectState, ProjectSnapshot, FrontendProjectCommand, PendingCommand } from '../types';
+import { replayProjectCommand } from '../lib/projectCommandReplay';
 
 interface ProjectStoreState extends ProjectState {
   setConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
@@ -28,10 +29,12 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   getVisibleTasks: () => {
     const state = get();
     if (state.dragPreview) return state.dragPreview.snapshot.tasks;
-    // Pending replay: for now return confirmed tasks.
-    // Full replay with gantt-lib/core/scheduling in browser requires
-    // the subpath export to resolve in Vite (gantt-lib is already a
-    // web dependency so this should work — deferred to first integration test).
-    return state.confirmed.snapshot.tasks;
+
+    const visibleSnapshot = state.pending.reduce(
+      (snapshot, pending) => replayProjectCommand(snapshot, pending.command, { businessDays: false }, pending.requestId),
+      state.confirmed.snapshot,
+    );
+
+    return visibleSnapshot.tasks;
   },
 }));

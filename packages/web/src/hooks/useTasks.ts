@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Task } from '../types.ts';
 import { useTaskStore } from '../stores/useTaskStore.ts';
+import { useProjectStore } from '../stores/useProjectStore.ts';
 
 export interface UseTasksResult {
   tasks: Task[];
@@ -14,10 +15,12 @@ export function useTasks(
   refreshAccessToken: () => Promise<string | null>
 ): UseTasksResult {
   const shareToken = new URLSearchParams(window.location.search).get('share');
-  const tasks = useTaskStore((state) => state.tasks);
+  const taskStoreTasks = useTaskStore((state) => state.tasks);
   const setTasks = useTaskStore((state) => state.setTasks);
   const loading = useTaskStore((state) => state.loading);
   const error = useTaskStore((state) => state.error);
+  const visibleTasks = useProjectStore((state) => state.getVisibleTasks());
+  const activeSource = useTaskStore((state) => state.activeSource);
 
   useEffect(() => {
     void useTaskStore.getState().syncSource({
@@ -27,5 +30,18 @@ export function useTasks(
     });
   }, [accessToken, refreshAccessToken, shareToken]);
 
-  return { tasks, setTasks, loading, error };
+  useEffect(() => {
+    if (activeSource !== 'auth') {
+      return;
+    }
+
+    useTaskStore.getState().replaceFromSystem(visibleTasks);
+  }, [activeSource, visibleTasks]);
+
+  return {
+    tasks: activeSource === 'auth' ? visibleTasks : taskStoreTasks,
+    setTasks,
+    loading,
+    error,
+  };
 }

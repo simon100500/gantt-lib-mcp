@@ -99,6 +99,25 @@ async function getProjectVersion(projectId: string): Promise<number> {
   return project?.version ?? 0;
 }
 
+async function commitAgentCommand(
+  projectId: string | undefined,
+  command: ProjectCommand,
+): Promise<import('./types.js').CommitProjectCommandResponse> {
+  if (!projectId) {
+    throw new Error(`[Permanent] Project ID is required.
+Reason: All task mutations must go through the authoritative command pipeline.
+Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
+  }
+
+  const version = await getProjectVersion(projectId);
+  return commandService.commitCommand({
+    projectId,
+    clientRequestId: randomUUID(),
+    baseVersion: version,
+    command,
+  }, 'agent');
+}
+
 // Register list tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -586,64 +605,23 @@ Fix: Use valid dependency type.`);
       }
     }
 
-    // Route through CommandService for versioned event logging
-    if (resolvedProjectId) {
-      const version = await getProjectVersion(resolvedProjectId);
-      const response = await commandService.commitCommand({
-        projectId: resolvedProjectId,
-        clientRequestId: randomUUID(),
-        baseVersion: version,
-        command: { type: 'create_task', task: input },
-      }, 'agent');
-
-      if (!response.accepted) {
-        return {
-          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-        };
-      }
-
-      const createdTask = response.result.snapshot.tasks.find(t =>
-        !input.dependencies?.length || t.dependencies?.some(d =>
-          input.dependencies!.some(id => id.taskId === d.taskId)
-        )
-      ) || response.snapshot.tasks[response.snapshot.tasks.length - 1];
-
-      await writeMcpDebugLog('tool_call_completed', {
-        tool: name,
-        resolvedProjectId,
-        createdTaskId: createdTask?.id,
-        viaCommandService: true,
-        newVersion: response.newVersion,
-      });
-
+    const response = await commitAgentCommand(resolvedProjectId, { type: 'create_task', task: input });
+    if (!response.accepted) {
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            task: createdTask,
-            message: 'Task created successfully',
-            affectedTasks: response.result.changedTaskIds.length,
-          }, null, 2),
-        }],
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
       };
     }
 
-    // Fallback for no projectId — use legacy path
-    const task = await taskService.create(input, resolvedProjectId, 'agent');
+    const createdTask = response.result.snapshot.tasks.find(t =>
+      response.result.changedTaskIds.includes(t.id),
+    ) || response.snapshot.tasks[response.snapshot.tasks.length - 1];
 
-    // Return the task with cascade info (scoped to same project)
-    const allTasksResult = await taskService.list(resolvedProjectId);
-    const dependentTasks = allTasksResult.tasks.filter(t =>
-      t.dependencies?.some(d => d.taskId === task.id) ||
-      task.dependencies?.some(d => d.taskId === t.id)
-    );
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
       resolvedProjectId,
-      createdTaskId: task.id,
-      createdTaskName: task.name,
-      visibleTaskCount: allTasksResult.tasks.length,
-      affectedTasks: dependentTasks.map((t) => ({ id: t.id, name: t.name })),
+      createdTaskId: createdTask?.id,
+      viaCommandService: true,
+      newVersion: response.newVersion,
     });
 
     return {
@@ -651,9 +629,9 @@ Fix: Use valid dependency type.`);
         {
           type: 'text',
           text: JSON.stringify({
-            task,
+            task: createdTask,
             message: 'Task created successfully',
-            affectedTasks: dependentTasks.length
+            affectedTasks: response.result.changedTaskIds.length,
           }, null, 2),
         },
       ],
@@ -768,10 +746,10 @@ Fix: Use format like 2026-03-18.`);
     }
 
     // Validate date range if both dates are provided
-    const existingTask = await taskService.get(id);
-    if (existingTask) {
-      const startDate = input.startDate ?? existingTask.startDate;
-      const endDate = input.endDate ?? existingTask.endDate;
+    const currentTask = await taskService.get(id);
+    if (currentTask) {
+      const startDate = input.startDate ?? currentTask.startDate;
+      const endDate = input.endDate ?? currentTask.endDate;
       if (!isValidDateRange(startDate, endDate)) {
         throw new Error(`[Permanent] Invalid date range: startDate (${startDate}) must be ≤ endDate (${endDate}).
 Reason: End date cannot be before start date.
@@ -791,103 +769,72 @@ Fix: Use valid dependency type.`);
       }
     }
 
-    const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
-    const hasDependencyChanges = input.dependencies !== undefined;
-
-    // Route schedule-affecting updates through CommandService
     const resolvedProjectId = resolveProjectId(undefined);
-    if ((hasDateChanges || hasDependencyChanges) && resolvedProjectId) {
-      const version = await getProjectVersion(resolvedProjectId!);
-
-      // Build appropriate command based on what changed
-      let command: ProjectCommand | undefined;
-      if (hasDateChanges && input.startDate !== undefined && input.endDate !== undefined) {
-        command = { type: 'move_task', taskId: id, startDate: input.startDate };
-      } else if (input.startDate !== undefined && input.endDate === undefined) {
-        command = { type: 'resize_task', taskId: id, anchor: 'start', date: input.startDate };
-      } else if (input.endDate !== undefined && input.startDate === undefined) {
-        command = { type: 'resize_task', taskId: id, anchor: 'end', date: input.endDate };
-      }
-
-      if (command) {
-        const response = await commandService.commitCommand({
-          projectId: resolvedProjectId,
-          clientRequestId: randomUUID(),
-          baseVersion: version,
-          command,
-        }, 'agent');
-
-        if (!response.accepted) {
-          return {
-            content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-          };
-        }
-
-        const updatedTask = response.result.snapshot.tasks.find(t => t.id === id);
-        const changedTasks = response.result.changedTaskIds
-          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-          .filter((t): t is NonNullable<typeof t> => t !== undefined);
-
-        await writeMcpDebugLog('update_task_completed', {
-          id,
-          input,
-          viaCommandService: true,
-          newVersion: response.newVersion,
-        });
-
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              task: updatedTask,
-              message: 'Task updated successfully',
-              changedTasks,
-              changedIds: response.result.changedTaskIds,
-            }, null, 2),
-          }],
-        };
-      }
-    }
-
-    // Non-schedule changes or no projectId — use legacy path
-    const updateResult = await taskService.updateWithResult(id, input, 'agent');
-    if (!updateResult?.task) {
+    if (!currentTask) {
       throw new Error(`[Permanent] Task not found: ${id}.
 Reason: No task with this ID exists in the project.
 Fix: Call get_tasks to list available task IDs.`);
     }
+
+    let command: ProjectCommand;
+    const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
+
+    if (hasDateChanges) {
+      if (input.startDate !== undefined && input.endDate !== undefined) {
+        command = { type: 'move_task', taskId: id, startDate: input.startDate };
+      } else if (input.startDate !== undefined) {
+        command = { type: 'resize_task', taskId: id, anchor: 'start', date: input.startDate };
+      } else {
+        command = { type: 'resize_task', taskId: id, anchor: 'end', date: input.endDate! };
+      }
+    } else {
+      command = {
+        type: 'update_task_fields',
+        taskId: id,
+        fields: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.color !== undefined ? { color: input.color } : {}),
+          ...(input.parentId !== undefined ? { parentId: input.parentId ?? null } : {}),
+          ...(input.progress !== undefined ? { progress: input.progress } : {}),
+          ...(input.dependencies !== undefined ? { dependencies: input.dependencies } : {}),
+          ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        },
+      };
+    }
+
+    const response = await commitAgentCommand(resolvedProjectId, command);
+    if (!response.accepted) {
+      return {
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
+      };
+    }
+
+    const updateResult = {
+      task: response.result.snapshot.tasks.find(t => t.id === id),
+      changedTasks: response.result.changedTaskIds
+        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+        .filter((t): t is NonNullable<typeof t> => t !== undefined),
+      changedIds: response.result.changedTaskIds,
+    };
+
     await writeMcpDebugLog('update_task_completed', {
       id,
       input,
       updateResult,
-      projectId: process.env.PROJECT_ID,
-    });
-
-    if (hasDateChanges || hasDependencyChanges) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              task: updateResult.task,
-              message: 'Task updated successfully',
-              changedTasks: updateResult.changedTasks,
-              changedIds: updateResult.changedIds,
-            }, null, 2),
-          },
-        ],
-      };
-    }
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      updatedTask: updateResult.task,
+      viaCommandService: true,
+      newVersion: response.newVersion,
     });
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(updateResult.task, null, 2),
+          text: JSON.stringify({
+            task: updateResult.task,
+            message: 'Task updated successfully',
+            changedTasks: updateResult.changedTasks,
+            changedIds: updateResult.changedIds,
+          }, null, 2),
         },
       ],
     };
@@ -912,48 +859,23 @@ Expected: YYYY-MM-DD (ISO date format).
 Fix: Use format like 2026-03-18.`);
     }
 
-    if (resolvedProjectId) {
-      const version = await getProjectVersion(resolvedProjectId);
-      const response = await commandService.commitCommand({
-        projectId: resolvedProjectId,
-        clientRequestId: randomUUID(),
-        baseVersion: version,
-        command: { type: 'move_task', taskId, startDate },
-      }, 'agent');
-
-      if (!response.accepted) {
-        return {
-          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-        };
-      }
-
-      const result = {
-        task: response.result.snapshot.tasks.find(t => t.id === taskId),
-        changedTasks: response.result.changedTaskIds
-          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-          .filter((t): t is NonNullable<typeof t> => t !== undefined),
-        changedIds: response.result.changedTaskIds,
-      };
-
+    const response = await commitAgentCommand(resolvedProjectId, { type: 'move_task', taskId, startDate });
+    if (!response.accepted) {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
       };
     }
 
-    // Fallback: legacy path without command service
-    const result = await taskService.executeScheduleCommand(
-      resolvedProjectId,
-      { type: 'move_task', taskId, startDate },
-      'agent',
-    );
+    const result = {
+      task: response.result.snapshot.tasks.find(t => t.id === taskId),
+      changedTasks: response.result.changedTaskIds
+        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+        .filter((t): t is NonNullable<typeof t> => t !== undefined),
+      changedIds: response.result.changedTaskIds,
+    };
 
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   }
 
@@ -982,48 +904,23 @@ Expected: YYYY-MM-DD (ISO date format).
 Fix: Use format like 2026-03-18.`);
     }
 
-    if (resolvedProjectId) {
-      const version = await getProjectVersion(resolvedProjectId);
-      const response = await commandService.commitCommand({
-        projectId: resolvedProjectId,
-        clientRequestId: randomUUID(),
-        baseVersion: version,
-        command: { type: 'resize_task', taskId, anchor, date },
-      }, 'agent');
-
-      if (!response.accepted) {
-        return {
-          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-        };
-      }
-
-      const result = {
-        task: response.result.snapshot.tasks.find(t => t.id === taskId),
-        changedTasks: response.result.changedTaskIds
-          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-          .filter((t): t is NonNullable<typeof t> => t !== undefined),
-        changedIds: response.result.changedTaskIds,
-      };
-
+    const response = await commitAgentCommand(resolvedProjectId, { type: 'resize_task', taskId, anchor, date });
+    if (!response.accepted) {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
       };
     }
 
-    // Fallback: legacy path without command service
-    const result = await taskService.executeScheduleCommand(
-      resolvedProjectId,
-      { type: 'resize_task', taskId, anchor, date },
-      'agent',
-    );
+    const result = {
+      task: response.result.snapshot.tasks.find(t => t.id === taskId),
+      changedTasks: response.result.changedTaskIds
+        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+        .filter((t): t is NonNullable<typeof t> => t !== undefined),
+      changedIds: response.result.changedTaskIds,
+    };
 
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   }
 
@@ -1034,48 +931,23 @@ Fix: Use format like 2026-03-18.`);
     };
     const resolvedProjectId = resolveProjectId(argProjectId);
 
-    if (resolvedProjectId) {
-      const version = await getProjectVersion(resolvedProjectId);
-      const response = await commandService.commitCommand({
-        projectId: resolvedProjectId,
-        clientRequestId: randomUUID(),
-        baseVersion: version,
-        command: { type: 'recalculate_schedule', taskId },
-      }, 'agent');
-
-      if (!response.accepted) {
-        return {
-          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-        };
-      }
-
-      const result = {
-        task: taskId ? response.result.snapshot.tasks.find(t => t.id === taskId) : undefined,
-        changedTasks: response.result.changedTaskIds
-          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-          .filter((t): t is NonNullable<typeof t> => t !== undefined),
-        changedIds: response.result.changedTaskIds,
-      };
-
+    const response = await commitAgentCommand(resolvedProjectId, { type: 'recalculate_schedule', taskId });
+    if (!response.accepted) {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
       };
     }
 
-    // Fallback: legacy path without command service
-    const result = await taskService.executeScheduleCommand(
-      resolvedProjectId,
-      { type: 'recalculate_schedule', taskId },
-      'agent',
-    );
+    const result = {
+      task: taskId ? response.result.snapshot.tasks.find(t => t.id === taskId) : undefined,
+      changedTasks: response.result.changedTaskIds
+        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+        .filter((t): t is NonNullable<typeof t> => t !== undefined),
+      changedIds: response.result.changedTaskIds,
+    };
 
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   }
 
@@ -1088,62 +960,25 @@ Reason: Task ID is required to identify which task to delete.
 Fix: Provide the task ID as a string parameter.`);
     }
 
-    // Try routing through CommandService if projectId is available
     const resolvedProjectId = resolveProjectId(undefined);
-    if (resolvedProjectId) {
-      const version = await getProjectVersion(resolvedProjectId);
-      const response = await commandService.commitCommand({
-        projectId: resolvedProjectId,
-        clientRequestId: randomUUID(),
-        baseVersion: version,
-        command: { type: 'delete_task', taskId: id },
-      }, 'agent');
-
-      if (!response.accepted) {
-        return {
-          content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-        };
-      }
-
-      await writeMcpDebugLog('tool_call_completed', {
-        tool: name,
-        deletedTaskId: id,
-        viaCommandService: true,
-        changedIds: response.result.changedTaskIds,
-      });
-
+    const response = await commitAgentCommand(resolvedProjectId, { type: 'delete_task', taskId: id });
+    if (!response.accepted) {
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              success: true,
-              deleted: id,
-              changedIds: response.result.changedTaskIds,
-            }, null, 2),
-          },
-        ],
+        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
       };
-    }
-
-    // Fallback: legacy path without command service
-    const deleted = await taskService.delete(id, 'agent');
-    if (!deleted) {
-      throw new Error(`[Permanent] Task not found: ${id}.
-Reason: No task with this ID exists in the project.
-Fix: Call get_tasks to list available task IDs.`);
     }
     await writeMcpDebugLog('tool_call_completed', {
       tool: name,
       deletedTaskId: id,
-      projectId: process.env.PROJECT_ID,
+      viaCommandService: true,
+      changedIds: response.result.changedTaskIds,
     });
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ success: true, deleted: id }, null, 2),
+          text: JSON.stringify({ success: true, deleted: id, changedIds: response.result.changedTaskIds }, null, 2),
         },
       ],
     };
@@ -1243,16 +1078,30 @@ Fix: Provide repeatBy object with at least one array (e.g., { sections: [1, 2, 3
               });
             }
 
-            // Create the task
-            const task = await taskService.create({
-              name: taskName,
-              startDate,
-              endDate,
-              dependencies,
-            }, resolvedProjectId, 'agent');
+            const response = await commitAgentCommand(resolvedProjectId, {
+              type: 'create_task',
+              task: {
+                name: taskName,
+                startDate,
+                endDate,
+                dependencies,
+              },
+            });
 
-            createdTasks.push(task.id);
-            previousTaskIds[currentStream] = task.id;
+            if (!response.accepted) {
+              throw new Error(`Command rejected: ${response.reason}`);
+            }
+
+            const createdTask = response.result.snapshot.tasks.find((task) =>
+              response.result.changedTaskIds.includes(task.id),
+            );
+
+            if (!createdTask) {
+              throw new Error('Created task missing from authoritative snapshot');
+            }
+
+            createdTasks.push(createdTask.id);
+            previousTaskIds[currentStream] = createdTask.id;
 
           } catch (error) {
             failedTasks.push({
