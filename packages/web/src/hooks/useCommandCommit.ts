@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useProjectStore } from '../stores/useProjectStore';
 import type { FrontendProjectCommand } from '../types';
+import type { ProjectLoadResponse } from '../lib/apiTypes';
 
 function generateRequestId(): string {
   return crypto.randomUUID();
@@ -10,6 +11,26 @@ let commitQueue: Promise<void> = Promise.resolve();
 
 export function useCommandCommit(accessToken: string | null) {
   const { addPending, resolvePending, rejectPending, setConfirmed } = useProjectStore();
+
+  const syncConfirmedFromServer = useCallback(async () => {
+    if (!accessToken) {
+      return null;
+    }
+
+    const response = await fetch('/api/project', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to reload project after conflict: ${response.status}`);
+    }
+
+    const project = await response.json() as ProjectLoadResponse;
+    setConfirmed(project.version, project.snapshot);
+    return project;
+  }, [accessToken, setConfirmed]);
 
   const commitCommand = useCallback(async (command: FrontendProjectCommand) => {
     const runCommit = async () => {
@@ -45,14 +66,22 @@ export function useCommandCommit(accessToken: string | null) {
 
           rejectPending(requestId);
 
-          if (data.reason === 'version_conflict' && data.snapshot && attempt === 0) {
-            setConfirmed(data.currentVersion, data.snapshot);
+          if (data.reason === 'version_conflict' && attempt === 0) {
+            if (data.snapshot) {
+              setConfirmed(data.currentVersion, data.snapshot);
+            } else {
+              await syncConfirmedFromServer();
+            }
             attempt += 1;
             continue;
           }
 
-          if (data.reason === 'version_conflict' && data.snapshot) {
-            setConfirmed(data.currentVersion, data.snapshot);
+          if (data.reason === 'version_conflict') {
+            if (data.snapshot) {
+              setConfirmed(data.currentVersion, data.snapshot);
+            } else {
+              await syncConfirmedFromServer();
+            }
           }
           return data;
         } catch (error) {
@@ -67,7 +96,7 @@ export function useCommandCommit(accessToken: string | null) {
     const queuedCommit = commitQueue.then(runCommit);
     commitQueue = queuedCommit.then(() => undefined, () => undefined);
     return queuedCommit;
-  }, [accessToken, addPending, resolvePending, rejectPending, setConfirmed]);
+  }, [accessToken, addPending, resolvePending, rejectPending, setConfirmed, syncConfirmedFromServer]);
 
   return { commitCommand };
 }

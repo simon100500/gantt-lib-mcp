@@ -230,11 +230,13 @@ export class CommandService {
 
         // Step 2: Optimistic concurrency check
         if (project.version !== baseVersion) {
+          const snapshot = await buildProjectSnapshot(projectId, tx);
           return {
             clientRequestId,
             accepted: false as const,
             reason: 'version_conflict' as const,
             currentVersion: project.version,
+            snapshot,
           };
         }
 
