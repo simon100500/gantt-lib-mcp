@@ -15,7 +15,6 @@ import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
-import { useTaskMutation } from './hooks/useTaskMutation.ts';
 import { useTasks } from './hooks/useTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
@@ -27,6 +26,14 @@ import { useProjectUIStore } from './stores/useProjectUIStore.ts';
 import type { Task, ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
+
+interface LoadProjectResponse {
+  version: number;
+  snapshot: {
+    tasks: Task[];
+    dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: string; lag: number }>;
+  };
+}
 
 interface RouteState {
   pathname: string;
@@ -82,14 +89,55 @@ export default function App() {
     const hasLocalEdits = localTasks.tasks.length > 0;
     if (hasLocalEdits) {
       try {
-        await fetch('/api/tasks', {
-          method: 'PUT',
+        let currentVersionResponse = await fetch('/api/project', {
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${result.accessToken}`,
           },
-          body: JSON.stringify(localTasks.tasks),
         });
+
+        if (!currentVersionResponse.ok) {
+          throw new Error(`Failed to load project version: ${currentVersionResponse.status}`);
+        }
+
+        let currentVersion = (await currentVersionResponse.json() as LoadProjectResponse).version;
+
+        for (const task of localTasks.tasks) {
+          const commitResponse = await fetch('/api/commands/commit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${result.accessToken}`,
+            },
+            body: JSON.stringify({
+              clientRequestId: crypto.randomUUID(),
+              baseVersion: currentVersion,
+              command: {
+                type: 'create_task',
+                task: {
+                  name: task.name,
+                  startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
+                  endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+                  color: task.color,
+                  parentId: task.parentId,
+                  progress: task.progress,
+                  dependencies: task.dependencies,
+                },
+              },
+            }),
+          });
+
+          if (!commitResponse.ok) {
+            throw new Error(`Failed to import local task: ${commitResponse.status}`);
+          }
+
+          const commitResult = await commitResponse.json() as { accepted: boolean; newVersion?: number; reason?: string };
+          if (!commitResult.accepted || commitResult.newVersion === undefined) {
+            throw new Error(`Failed to import local task: ${commitResult.reason ?? 'unknown error'}`);
+          }
+
+          currentVersion = commitResult.newVersion;
+        }
+
         localStorage.removeItem('gantt_local_tasks');
         localStorage.removeItem('gantt_demo_mode');
       } catch (importError) {
@@ -224,7 +272,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
   });
-  useTaskMutation(hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null);
   const ganttRef = useRef<GanttChartRef>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);

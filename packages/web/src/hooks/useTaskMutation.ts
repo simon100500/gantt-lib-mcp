@@ -1,4 +1,5 @@
-import { normalizeTasks, type Task, type TaskDependency } from '../types';
+import { normalizeTasks, type FrontendProjectCommand, type Task, type TaskDependency } from '../types';
+import { useCommandCommit } from './useCommandCommit';
 
 export interface CreateTaskInput {
   name: string;
@@ -22,10 +23,9 @@ export interface UpdateTaskInput {
 }
 
 export interface UseTaskMutationResult {
-  mutateTask: (task: Task) => Promise<TaskMutationResponse>;
+  mutateTask: (task: Task, originalTask?: Task) => Promise<TaskMutationResponse>;
   createTask: (input: CreateTaskInput) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
-  batchImportTasks: (tasks: Task[]) => Promise<number>;
   fetchTasksSnapshot: () => Promise<Task[]>;
 }
 
@@ -35,157 +35,165 @@ export interface TaskMutationResponse {
   changedIds: string[];
 }
 
-type RawTaskMutationResponse = {
-  task?: Task;
-  changedTasks?: Task[];
-  changedIds?: string[];
-};
-
-function isTaskMutationPayload(payload: RawTaskMutationResponse | Task): payload is RawTaskMutationResponse {
-  return 'task' in payload || 'changedTasks' in payload || 'changedIds' in payload;
+interface LoadProjectResponse {
+  version: number;
+  snapshot: {
+    tasks: Task[];
+    dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: string; lag: number }>;
+  };
 }
 
-function normalizeMutationResponse(payload: RawTaskMutationResponse | Task): TaskMutationResponse {
-  if (isTaskMutationPayload(payload)) {
-    const task = payload.task ? normalizeTasks([payload.task])[0] : undefined;
-    const changedTasks = normalizeTasks(payload.changedTasks ?? []);
-    return {
-      task: task ?? changedTasks[0],
-      changedTasks,
-      changedIds: payload.changedIds ?? changedTasks.map((changedTask) => changedTask.id),
-    };
+function toDateString(value: Task['startDate']): string {
+  return typeof value === 'string' ? value : value.toISOString().split('T')[0];
+}
+
+function normalizeDependencies(dependencies: TaskDependency[] | undefined): TaskDependency[] {
+  return (dependencies ?? []).map((dependency) => ({
+    taskId: dependency.taskId,
+    type: dependency.type,
+    lag: dependency.lag ?? 0,
+  }));
+}
+
+function buildCommandsFromDiff(originalTask: Task, nextTask: Task): FrontendProjectCommand[] {
+  const commands: FrontendProjectCommand[] = [];
+  const nextStartDate = toDateString(nextTask.startDate);
+  const nextEndDate = toDateString(nextTask.endDate);
+  const originalStartDate = toDateString(originalTask.startDate);
+  const originalEndDate = toDateString(originalTask.endDate);
+
+  const startChanged = nextStartDate !== originalStartDate;
+  const endChanged = nextEndDate !== originalEndDate;
+
+  if (startChanged && endChanged) {
+    commands.push({ type: 'move_task', taskId: nextTask.id, startDate: nextStartDate });
+  } else if (startChanged) {
+    commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'start', date: nextStartDate });
+  } else if (endChanged) {
+    commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'end', date: nextEndDate });
   }
 
-  const task = normalizeTasks([payload])[0];
-  return {
-    task,
-    changedTasks: [task],
-    changedIds: [task.id],
-  };
+  const fieldUpdates: Extract<FrontendProjectCommand, { type: 'update_task_fields' }>['fields'] = {};
+
+  if (nextTask.name !== originalTask.name) {
+    fieldUpdates.name = nextTask.name;
+  }
+  if ((nextTask.color ?? null) !== (originalTask.color ?? null)) {
+    fieldUpdates.color = nextTask.color;
+  }
+  if ((nextTask.parentId ?? null) !== (originalTask.parentId ?? null)) {
+    fieldUpdates.parentId = nextTask.parentId ?? null;
+  }
+  if ((nextTask.progress ?? 0) !== (originalTask.progress ?? 0)) {
+    fieldUpdates.progress = nextTask.progress;
+  }
+  if ((nextTask.sortOrder ?? null) !== (originalTask.sortOrder ?? null)) {
+    fieldUpdates.sortOrder = nextTask.sortOrder;
+  }
+
+  const nextDependencies = normalizeDependencies(nextTask.dependencies);
+  const originalDependencies = normalizeDependencies(originalTask.dependencies);
+  if (JSON.stringify(nextDependencies) !== JSON.stringify(originalDependencies)) {
+    fieldUpdates.dependencies = nextDependencies;
+  }
+
+  if (Object.keys(fieldUpdates).length > 0) {
+    commands.push({ type: 'update_task_fields', taskId: nextTask.id, fields: fieldUpdates });
+  }
+
+  return commands;
 }
 
-/**
- * Hook for individual task mutations (create, update, delete).
- * Provides thin wrapper around fetch API for individual task operations.
- *
- * This hook does NOT manage state - callers are responsible for optimistic updates
- * and state management. This is intentional to keep the hook simple and flexible.
- *
- * @param accessToken - JWT access token for authentication
- * @returns Object with mutateTask, createTask, and deleteTask functions
- */
 export function useTaskMutation(accessToken: string | null): UseTaskMutationResult {
-  const getHeaders = () => ({
-    'Content-Type': 'application/json',
-    ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-  });
-
-  const mutateTask = async (task: Task): Promise<TaskMutationResponse> => {
-    const body = {
-      name: task.name,
-      startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
-      endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
-      color: task.color,
-      // Convert undefined to null for parentId - backend needs null to clear the parent
-      parentId: task.parentId ?? null,
-      progress: task.progress,
-      dependencies: task.dependencies,
-      sortOrder: (task as any).sortOrder,
-    };
-    console.log('%c[useTaskMutation] SENDING PATCH /api/tasks/' + task.id, 'background: #ff922b; color: white; padding: 2px 6px; border-radius: 3px;');
-    console.log('[useTaskMutation] Request body:', body);
-    console.log('[useTaskMutation] Full task being sent:', task);
-    const response = await fetch(`/api/tasks/${task.id}`, {
-      method: 'PATCH',
-      headers: getHeaders(),
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      console.error('[useTaskMutation] Response not OK:', response.status, response.statusText);
-      throw new Error(`Failed to update task: ${response.status} ${response.statusText}`);
-    }
-
-    const result = normalizeMutationResponse(await response.json() as RawTaskMutationResponse | Task);
-    console.log('%c[useTaskMutation] Response OK', 'background: #51cf66; color: white; padding: 2px 6px; border-radius: 3px;');
-    console.log('[useTaskMutation] Server returned:', {
-      id: result.task.id,
-      name: result.task.name,
-      parentId: result.task.parentId,
-      startDate: result.task.startDate,
-      endDate: result.task.endDate,
-      changedIds: result.changedIds,
-    });
-    console.log('[useTaskMutation] Full response:', result);
-    return result;
-  };
-
-  const createTask = async (input: CreateTaskInput): Promise<Task> => {
-    const response = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(input),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create task: ${response.status} ${response.statusText}`);
-    }
-
-    return response.json() as Promise<Task>;
-  };
-
-  const deleteTask = async (id: string): Promise<boolean> => {
-    console.log(`%c[useTaskMutation] DELETE /api/tasks/${id}`, 'background: #e64980; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    console.log('[useTaskMutation] accessToken present:', !!accessToken);
-    const response = await fetch(`/api/tasks/${id}`, {
-      method: 'DELETE',
-      headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
-    });
-
-    console.log(`[useTaskMutation] DELETE response: ${response.status} ${response.statusText}`);
-    if (!response.ok) {
-      let body = '';
-      try { body = await response.text(); } catch {}
-      console.error(`[useTaskMutation] DELETE failed body:`, body);
-      throw new Error(`Failed to delete task: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json() as { deleted: boolean };
-    return data.deleted;
-  };
-
-  const batchImportTasks = async (tasks: Task[]): Promise<number> => {
-    console.log(`%c[useTaskMutation] BATCH IMPORT - sending ${tasks.length} tasks via PUT /api/tasks`, 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    console.log('[useTaskMutation] Batch tasks:', tasks.map(t => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate })));
-
-    const response = await fetch('/api/tasks', {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(tasks),
-    });
-
-    if (!response.ok) {
-      console.error('[useTaskMutation] Batch import failed:', response.status, response.statusText);
-      throw new Error(`Failed to batch import tasks: ${response.status} ${response.statusText}`);
-    }
-
-    const result = await response.json() as { saved: number };
-    console.log(`%c[useTaskMutation] BATCH IMPORT SUCCESS - ${result.saved} tasks saved`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    return result.saved;
-  };
+  const { commitCommand } = useCommandCommit(accessToken);
 
   const fetchTasksSnapshot = async (): Promise<Task[]> => {
-    const response = await fetch('/api/tasks', {
+    if (!accessToken) {
+      return [];
+    }
+
+    const response = await fetch('/api/project', {
       method: 'GET',
-      headers: getHeaders(),
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
     });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch tasks: ${response.status} ${response.statusText}`);
     }
 
-    return normalizeTasks(await response.json() as Task[]);
+    const data = await response.json() as LoadProjectResponse;
+    return normalizeTasks(data.snapshot.tasks);
   };
 
-  return { mutateTask, createTask, deleteTask, batchImportTasks, fetchTasksSnapshot };
+  const mutateTask = async (task: Task, originalTask?: Task): Promise<TaskMutationResponse> => {
+    if (!originalTask) {
+      throw new Error('Original task is required for command-based mutation');
+    }
+
+    const commands = buildCommandsFromDiff(originalTask, task);
+    if (commands.length === 0) {
+      return {
+        task,
+        changedTasks: [task],
+        changedIds: [task.id],
+      };
+    }
+
+    let latestSnapshotTasks = normalizeTasks([task]);
+    const changedIds = new Set<string>();
+
+    for (const command of commands) {
+      const result = await commitCommand(command);
+      if (!result.accepted) {
+        throw new Error(`Command rejected: ${result.reason}`);
+      }
+
+      latestSnapshotTasks = normalizeTasks(result.snapshot.tasks);
+      result.result.changedTaskIds.forEach((id: string) => changedIds.add(id));
+    }
+
+    const changedTasks = latestSnapshotTasks.filter((candidate) => changedIds.has(candidate.id));
+    const resolvedTask = latestSnapshotTasks.find((candidate) => candidate.id === task.id) ?? changedTasks[0];
+
+    if (!resolvedTask) {
+      throw new Error(`Task ${task.id} not found in server snapshot after mutation`);
+    }
+
+    return {
+      task: resolvedTask,
+      changedTasks,
+      changedIds: Array.from(changedIds),
+    };
+  };
+
+  const createTask = async (input: CreateTaskInput): Promise<Task> => {
+    const result = await commitCommand({
+      type: 'create_task',
+      task: input,
+    });
+
+    if (!result.accepted) {
+      throw new Error(`Failed to create task: ${result.reason}`);
+    }
+
+    const normalizedTasks = normalizeTasks(result.snapshot.tasks);
+    const createdTask = normalizedTasks.find((task) => result.result.changedTaskIds.includes(task.id));
+    if (!createdTask) {
+      throw new Error('Created task missing from authoritative snapshot');
+    }
+
+    return createdTask;
+  };
+
+  const deleteTask = async (id: string): Promise<boolean> => {
+    const result = await commitCommand({ type: 'delete_task', taskId: id });
+    if (!result.accepted) {
+      throw new Error(`Failed to delete task: ${result.reason}`);
+    }
+    return true;
+  };
+
+  return { mutateTask, createTask, deleteTask, fetchTasksSnapshot };
 }
