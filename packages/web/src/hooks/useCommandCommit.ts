@@ -9,8 +9,25 @@ function generateRequestId(): string {
 
 let commitQueue: Promise<void> = Promise.resolve();
 
+async function readErrorMessage(response: Response): Promise<string> {
+  const fallback = `HTTP ${response.status}`;
+
+  try {
+    const data = await response.json() as { error?: string; message?: string; reason?: string };
+    return data.error || data.message || data.reason || fallback;
+  } catch {
+    try {
+      const text = await response.text();
+      const trimmed = text.trim();
+      return trimmed.length > 0 ? `${fallback}: ${trimmed.slice(0, 200)}` : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
 export function useCommandCommit(accessToken: string | null) {
-  const { addPending, resolvePending, rejectPending, setConfirmed } = useProjectStore();
+  const { addPending, resolvePending, rejectPending, setConfirmed, clearTransientState } = useProjectStore();
 
   const syncConfirmedFromServer = useCallback(async () => {
     if (!accessToken) {
@@ -56,6 +73,12 @@ export function useCommandCommit(accessToken: string | null) {
             body: JSON.stringify({ clientRequestId: requestId, baseVersion, command }),
           });
 
+          if (!response.ok && response.status !== 409) {
+            const errorMessage = await readErrorMessage(response);
+            clearTransientState();
+            throw new Error(errorMessage);
+          }
+
           const data = await response.json();
 
           if (data.accepted) {
@@ -85,7 +108,7 @@ export function useCommandCommit(accessToken: string | null) {
           }
           return data;
         } catch (error) {
-          rejectPending(requestId);
+          clearTransientState();
           throw error;
         }
       }
@@ -96,7 +119,7 @@ export function useCommandCommit(accessToken: string | null) {
     const queuedCommit = commitQueue.then(runCommit);
     commitQueue = queuedCommit.then(() => undefined, () => undefined);
     return queuedCommit;
-  }, [accessToken, addPending, resolvePending, rejectPending, setConfirmed, syncConfirmedFromServer]);
+  }, [accessToken, addPending, resolvePending, rejectPending, setConfirmed, clearTransientState, syncConfirmedFromServer]);
 
   return { commitCommand };
 }
