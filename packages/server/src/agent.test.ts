@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildHistoryContext, isMutationIntent, isSimpleMutationRequest } from './agent.js';
+import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -86,5 +86,42 @@ describe('agent history context', () => {
     assert.doesNotMatch(history, /message-0-/);
     assert.doesNotMatch(history, /message-3-/);
     assert.match(history, /message-4-/);
+  });
+});
+
+describe('agent mutation verification assessment', () => {
+  it('detects mismatch between accepted changedTaskIds and actual snapshot diff', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'tool-1',
+          toolName: 'shift_tasks',
+          status: 'accepted',
+          changedTaskIds: ['A'],
+        },
+      ],
+      ['A', 'B'],
+    );
+
+    assert.equal(result.mutationAttempted, true);
+    assert.equal(result.acceptedMutationCalls.length, 1);
+    assert.equal(result.acceptedChangedTaskIdMismatch, true);
+  });
+
+  it('accepts matching authoritative changedTaskIds', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'tool-1',
+          toolName: 'move_tasks',
+          status: 'accepted',
+          changedTaskIds: ['B', 'A'],
+        },
+      ],
+      ['A', 'B'],
+    );
+
+    assert.equal(result.acceptedChangedTaskIdMismatch, false);
+    assert.deepEqual(result.acceptedChangedTaskIds, ['A', 'B']);
   });
 });

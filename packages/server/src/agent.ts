@@ -44,6 +44,8 @@ type VerificationResult = {
   mutationAttempted: boolean;
   acceptedMutationCalls: MutationToolCall[];
   rejectedMutationCalls: MutationToolCall[];
+  acceptedChangedTaskIds: string[];
+  acceptedChangedTaskIdMismatch: boolean;
 };
 
 type NormalizedMutationToolName =
@@ -62,6 +64,14 @@ type MutationToolCall = {
   status?: 'accepted' | 'rejected';
   reason?: string;
   changedTaskIds?: string[];
+};
+
+export type MutationOutcomeAssessment = {
+  mutationAttempted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  rejectedMutationCalls: MutationToolCall[];
+  acceptedChangedTaskIds: string[];
+  acceptedChangedTaskIdMismatch: boolean;
 };
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
@@ -216,6 +226,35 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
   const ids = new Set<string>([...beforeMap.keys(), ...afterMap.keys()]);
 
   return Array.from(ids).filter((id) => beforeMap.get(id) !== afterMap.get(id)).sort();
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+export function assessMutationOutcome(
+  mutationToolCalls: MutationToolCall[],
+  actualChangedTaskIds: string[],
+): MutationOutcomeAssessment {
+  const acceptedMutationCalls = mutationToolCalls.filter((call) => call.status === 'accepted');
+  const rejectedMutationCalls = mutationToolCalls.filter((call) => call.status === 'rejected');
+  const acceptedChangedTaskIds = uniqueSorted(
+    acceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
+  );
+  const actualChangedSorted = uniqueSorted(actualChangedTaskIds);
+  const acceptedChangedTaskIdMismatch = acceptedMutationCalls.length > 0 && (
+    acceptedChangedTaskIds.length === 0
+    || acceptedChangedTaskIds.length !== actualChangedSorted.length
+    || acceptedChangedTaskIds.some((taskId, index) => taskId !== actualChangedSorted[index])
+  );
+
+  return {
+    mutationAttempted: mutationToolCalls.length > 0,
+    acceptedMutationCalls,
+    rejectedMutationCalls,
+    acceptedChangedTaskIds,
+    acceptedChangedTaskIdMismatch,
+  };
 }
 
 function buildNoMutationMessage(): string {
@@ -632,9 +671,7 @@ async function verifyMutationAttempt(
   const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
   const actualChangedTaskIds = mutationRequested ? getChangedTaskIds(tasksBefore, tasksAfter) : [];
-  const acceptedMutationCalls = mutationToolCalls.filter((call) => call.status === 'accepted');
-  const rejectedMutationCalls = mutationToolCalls.filter((call) => call.status === 'rejected');
-  const mutationAttempted = mutationToolCalls.length > 0;
+  const mutationOutcome = assessMutationOutcome(mutationToolCalls, actualChangedTaskIds);
 
   await writeServerDebugLog('mutation_verification', {
     runId,
@@ -642,10 +679,12 @@ async function verifyMutationAttempt(
     projectId,
     sessionId,
     mutationRequested,
-    mutationAttempted,
+    mutationAttempted: mutationOutcome.mutationAttempted,
     mutationToolCalls,
-    acceptedMutationCalls,
-    rejectedMutationCalls,
+    acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
+    rejectedMutationCalls: mutationOutcome.rejectedMutationCalls,
+    acceptedChangedTaskIds: mutationOutcome.acceptedChangedTaskIds,
+    acceptedChangedTaskIdMismatch: mutationOutcome.acceptedChangedTaskIdMismatch,
     tasksChanged,
     actualChangedTaskIds,
     tasksAfterCount: tasksAfter.length,
@@ -657,9 +696,11 @@ async function verifyMutationAttempt(
     tasksAfter,
     tasksChanged,
     actualChangedTaskIds,
-    mutationAttempted,
-    acceptedMutationCalls,
-    rejectedMutationCalls,
+    mutationAttempted: mutationOutcome.mutationAttempted,
+    acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
+    rejectedMutationCalls: mutationOutcome.rejectedMutationCalls,
+    acceptedChangedTaskIds: mutationOutcome.acceptedChangedTaskIds,
+    acceptedChangedTaskIdMismatch: mutationOutcome.acceptedChangedTaskIdMismatch,
   };
 }
 
@@ -734,6 +775,8 @@ export async function runAgentWithHistory(
       mutationAttempted: false,
       acceptedMutationCalls: [],
       rejectedMutationCalls: [],
+      acceptedChangedTaskIds: [],
+      acceptedChangedTaskIdMismatch: false,
     };
 
     const maxAttempts = mutationRequested ? 2 : 1;
@@ -818,6 +861,10 @@ export async function runAgentWithHistory(
       }
 
       if (finalVerification.tasksChanged && finalVerification.acceptedMutationCalls.length > 0) {
+        if (finalVerification.acceptedChangedTaskIdMismatch) {
+          assistantResponse = buildInconsistentMutationMessage();
+          break;
+        }
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
           assistantResponse.trim() || 'Изменения применены.',
@@ -825,7 +872,7 @@ export async function runAgentWithHistory(
         break;
       }
 
-      if (finalVerification.acceptedMutationCalls.length > 0 && !finalVerification.tasksChanged) {
+      if (finalVerification.acceptedMutationCalls.length > 0 && (!finalVerification.tasksChanged || finalVerification.acceptedChangedTaskIdMismatch)) {
         assistantResponse = buildInconsistentMutationMessage();
         break;
       }
@@ -879,6 +926,8 @@ export async function runAgentWithHistory(
       streamedContent,
       finalTasksChanged: finalVerification.tasksChanged,
       finalChangedTaskIds: finalVerification.actualChangedTaskIds,
+      finalAcceptedChangedTaskIds: finalVerification.acceptedChangedTaskIds,
+      finalAcceptedChangedTaskIdMismatch: finalVerification.acceptedChangedTaskIdMismatch,
     });
 
     broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter });
