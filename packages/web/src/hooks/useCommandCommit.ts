@@ -33,13 +33,13 @@ export function useCommandCommit(accessToken: string | null) {
 
       if (data.accepted) {
         // Step 3a: Server accepted — update confirmed, remove pending
-        resolvePending(requestId, data.newVersion, { tasks: data.snapshot.tasks });
+        resolvePending(requestId, data.newVersion, data.snapshot);
         return data;
       } else {
         // Step 3b: Server rejected — remove pending, re-sync on version conflict
         rejectPending(requestId);
         if (data.reason === 'version_conflict' && data.snapshot) {
-          setConfirmed(data.currentVersion, { tasks: data.snapshot.tasks });
+          setConfirmed(data.currentVersion, data.snapshot);
         }
         return data;
       }

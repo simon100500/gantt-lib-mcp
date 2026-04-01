@@ -11,7 +11,7 @@ interface ProjectStoreState extends ProjectState {
 }
 
 export const useProjectStore = create<ProjectStoreState>((set, get) => ({
-  confirmed: { version: 0, snapshot: { tasks: [] } },
+  confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
   pending: [],
   dragPreview: undefined,
 

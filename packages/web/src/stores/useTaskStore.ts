@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-import { normalizeTasks, type Task } from '../types.ts';
+import { normalizeTasks, type ProjectDependency, type Task } from '../types.ts';
+import { useProjectStore } from './useProjectStore.ts';
 
 const LOCAL_STORAGE_KEY = 'gantt_local_tasks';
 const PROJECT_NAME_KEY = 'gantt_project_name';
@@ -23,6 +24,14 @@ export interface UseTaskStoreSyncOptions {
 interface SharedResponse {
   project: SharedTaskProject;
   tasks: Task[];
+}
+
+interface LoadProjectResponse {
+  version: number;
+  snapshot: {
+    tasks: Task[];
+    dependencies: ProjectDependency[];
+  };
 }
 
 interface LocalSnapshot {
@@ -146,7 +155,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     });
 
     const runRequest = async (token: string) => {
-      const response = await fetch('/api/tasks', {
+      const response = await fetch('/api/project', {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -156,7 +165,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
           return null;
         }
 
-        const retryResponse = await fetch('/api/tasks', {
+        const retryResponse = await fetch('/api/project', {
           headers: { Authorization: `Bearer ${refreshedToken}` },
         });
 
@@ -165,24 +174,30 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
         }
 
         set({ authToken: refreshedToken });
-        return normalizeTasks(await retryResponse.json() as Task[]);
+        return await retryResponse.json() as LoadProjectResponse;
       }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      return normalizeTasks(await response.json() as Task[]);
+      return await response.json() as LoadProjectResponse;
     };
 
     try {
-      const tasks = await runRequest(accessToken);
-      if (get().currentRequestId !== requestId || !tasks) {
+      const project = await runRequest(accessToken);
+      if (get().currentRequestId !== requestId || !project) {
         return;
       }
 
+      const normalizedTasks = normalizeTasks(project.snapshot.tasks);
+      useProjectStore.getState().setConfirmed(project.version, {
+        tasks: normalizedTasks,
+        dependencies: project.snapshot.dependencies,
+      });
+
       set({
-        tasks,
+        tasks: normalizedTasks,
         loading: false,
         error: null,
       });
@@ -200,6 +215,10 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
   loadLocal: () => {
     const requestId = ++requestCounter;
     const snapshot = loadLocalSnapshot();
+    useProjectStore.getState().setConfirmed(0, {
+      tasks: snapshot.tasks,
+      dependencies: [],
+    });
 
     set({
       tasks: snapshot.tasks,
@@ -217,6 +236,10 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
   },
   loadShared: async (shareToken) => {
     const requestId = ++requestCounter;
+    useProjectStore.getState().setConfirmed(0, {
+      tasks: [],
+      dependencies: [],
+    });
     set({
       activeSource: 'shared',
       shareToken,

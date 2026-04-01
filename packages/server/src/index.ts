@@ -14,7 +14,14 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { taskService, messageService, commandService } from '@gantt/mcp/services';
-import type { CreateTaskInput, UpdateTaskInput, ProjectCommand } from '@gantt/mcp/types';
+import type {
+  CreateTaskInput,
+  UpdateTaskInput,
+  ProjectCommand,
+  ProjectSnapshot,
+  TaskDependency,
+  DependencyType,
+} from '@gantt/mcp/types';
 import { randomUUID } from 'node:crypto';
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
@@ -48,6 +55,55 @@ async function getProjectVersionForReq(req: any): Promise<number> {
   return project?.version ?? 0;
 }
 
+async function buildProjectLoadResponse(projectId: string): Promise<{ version: number; snapshot: ProjectSnapshot }> {
+  const { getPrisma } = await import('@gantt/mcp/prisma');
+  const prisma = getPrisma();
+
+  const [project, tasks, dependencies] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { version: true },
+    }),
+    prisma.task.findMany({
+      where: { projectId },
+      include: { dependencies: true },
+      orderBy: { sortOrder: 'asc' },
+    }),
+    prisma.dependency.findMany({
+      where: { task: { projectId } },
+      select: { id: true, taskId: true, depTaskId: true, type: true, lag: true },
+    }),
+  ]);
+
+  return {
+    version: project?.version ?? 0,
+    snapshot: {
+      tasks: tasks.map((task: any) => ({
+        id: task.id,
+        name: task.name,
+        startDate: task.startDate.toISOString().split('T')[0],
+        endDate: task.endDate.toISOString().split('T')[0],
+        color: task.color ?? undefined,
+        parentId: task.parentId ?? undefined,
+        progress: task.progress,
+        sortOrder: task.sortOrder,
+        dependencies: task.dependencies.map((dependency: any): TaskDependency => ({
+          taskId: dependency.depTaskId,
+          type: dependency.type as DependencyType,
+          lag: dependency.lag,
+        })),
+      })),
+      dependencies: dependencies.map((dependency: any) => ({
+        id: dependency.id,
+        taskId: dependency.taskId,
+        depTaskId: dependency.depTaskId,
+        type: dependency.type as DependencyType,
+        lag: dependency.lag,
+      })),
+    },
+  };
+}
+
 /** Build a ProjectCommand from a PATCH update's changed fields */
 function buildCommandFromUpdate(taskId: string, updates: UpdateTaskInput): ProjectCommand | undefined {
   const startChanged = updates.startDate !== undefined;
@@ -76,6 +132,11 @@ fastify.get('/api/tasks', { preHandler: [authMiddleware] }, async (req, reply) =
   const { tasks } = await taskService.list(req.user!.projectId);
   console.log('[TASKS DEBUG] Returning tasks:', tasks.length, 'tasks');
   return reply.send(tasks);
+});
+
+fastify.get('/api/project', { preHandler: [authMiddleware] }, async (req, reply) => {
+  const project = await buildProjectLoadResponse(req.user!.projectId);
+  return reply.send(project);
 });
 
 fastify.post('/api/chat', { preHandler: [authMiddleware, subscriptionMiddleware] }, async (req, reply) => {

@@ -4,6 +4,14 @@ export interface TaskDependency {
   lag: number;
 }
 
+export interface ProjectDependency {
+  id: string;
+  taskId: string;
+  depTaskId: string;
+  type: 'FS' | 'SS' | 'FF' | 'SF';
+  lag: number;
+}
+
 export interface DependencyError {
   type: 'cycle' | 'constraint' | 'missing-task';
   taskId: string;
@@ -72,6 +80,7 @@ export type FrontendProjectCommand =
 
 export interface ProjectSnapshot {
   tasks: Task[];
+  dependencies: ProjectDependency[];
 }
 
 export interface PendingCommand {
