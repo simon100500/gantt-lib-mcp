@@ -11,6 +11,8 @@
  */
 
 import {
+  buildTaskRangeFromEnd,
+  buildTaskRangeFromStart,
   moveTaskWithCascade,
   resizeTaskWithCascade,
   recalculateTaskFromDependencies,
@@ -20,7 +22,7 @@ import {
   type ScheduleCommandOptions as CoreOptions,
   type Task as CoreTask,
 } from 'gantt-lib/core/scheduling';
-import { getPrisma } from '../prisma.js';
+import { getPrisma, Prisma } from '../prisma.js';
 import type {
   ProjectCommand,
   CommitProjectCommandRequest,
@@ -38,6 +40,10 @@ import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
 
 const CORE_VERSION = '0.62.0';
+
+function isVersionBumpRace(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
+}
 
 /** Normalize MCP Task[] to gantt-lib-compatible Task[].
  *  Fills lag: 0 where undefined so gantt-lib strict types are satisfied. */
@@ -429,7 +435,21 @@ export class CommandService {
 
       return result;
     } catch (error: any) {
-      // Transaction failed — return error response
+      if (isVersionBumpRace(error)) {
+        const project = await this.prisma.project.findUnique({
+          where: { id: projectId },
+          select: { version: true },
+        });
+        const snapshot = await buildProjectSnapshot(projectId, this.prisma);
+        return {
+          clientRequestId,
+          accepted: false as const,
+          reason: 'version_conflict' as const,
+          currentVersion: project?.version ?? baseVersion,
+          snapshot,
+        };
+      }
+
       return {
         clientRequestId,
         accepted: false as const,
@@ -560,23 +580,29 @@ export class CommandService {
       }
 
       case 'change_duration': {
-        // Compute new end date from start + duration
+        // Compute new range preserving business/calendar semantics
         const task = coreSnapshot.find(t => t.id === command.taskId);
         if (!task) {
           return { changedTasks: [], changedDependencyIds: [], conflicts: [], dependencyChanges: [], taskChanges };
         }
         const anchor = command.anchor ?? 'end';
         if (anchor === 'end') {
-          // Keep start, change end
           const startDate = parseDateOnly(task.startDate as string);
-          const newEnd = new Date(startDate);
-          newEnd.setDate(newEnd.getDate() + command.duration - 1);
+          const { end: newEnd } = buildTaskRangeFromStart(
+            startDate,
+            command.duration,
+            opts.businessDays ?? false,
+            opts.weekendPredicate,
+          );
           coreResult = resizeTaskWithCascade(command.taskId, 'end', newEnd, coreSnapshot, opts);
         } else {
-          // Keep end, change start
           const endDate = parseDateOnly(task.endDate as string);
-          const newStart = new Date(endDate);
-          newStart.setDate(newStart.getDate() - command.duration + 1);
+          const { start: newStart } = buildTaskRangeFromEnd(
+            endDate,
+            command.duration,
+            opts.businessDays ?? false,
+            opts.weekendPredicate,
+          );
           coreResult = resizeTaskWithCascade(command.taskId, 'start', newStart, coreSnapshot, opts);
         }
         break;
