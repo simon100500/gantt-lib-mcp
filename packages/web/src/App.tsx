@@ -17,6 +17,7 @@ import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
 import { useTasks } from './hooks/useTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
 import { useBillingStore } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
@@ -28,15 +29,6 @@ import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
-
-interface LoadProjectResponse {
-  version: number;
-  project: { id: string; name: string; ganttDayMode: 'business' | 'calendar'; calendarId?: string | null; calendarDays?: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> };
-  snapshot: {
-    tasks: Task[];
-    dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: string; lag: number }>;
-  };
-}
 
 interface RouteState {
   pathname: string;
@@ -92,18 +84,7 @@ export default function App() {
     setShowOtpModal(true);
   }, [auth.isAuthenticated, route.search, setShowOtpModal]);
 
-  const handleOtpSuccess = useCallback(async (result: {
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string };
-    project: {
-      id: string;
-      name: string;
-      ganttDayMode: 'business' | 'calendar';
-      calendarId?: string | null;
-      calendarDays?: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
-    };
-  }) => {
+  const handleOtpSuccess = useCallback(async (result: AuthSuccessResponse) => {
     auth.login(result, result.user, result.project);
     setShowOtpModal(false);
 
@@ -120,7 +101,7 @@ export default function App() {
           throw new Error(`Failed to load project version: ${currentVersionResponse.status}`);
         }
 
-        let currentVersion = (await currentVersionResponse.json() as LoadProjectResponse).version;
+        let currentVersion = (await currentVersionResponse.json() as ProjectLoadResponse).version;
 
         for (const task of localTasks.tasks) {
           const commitResponse = await fetch('/api/commands/commit', {

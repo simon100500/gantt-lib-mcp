@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { normalizeTasks, type CalendarDay, type ProjectDependency, type Task } from '../types.ts';
+import type { ProjectLoadResponse } from '../lib/apiTypes.ts';
 import { useAuthStore } from './useAuthStore.ts';
 import { useProjectStore } from './useProjectStore.ts';
 
@@ -27,15 +28,6 @@ export interface UseTaskStoreSyncOptions {
 interface SharedResponse {
   project: SharedTaskProject;
   tasks: Task[];
-}
-
-interface LoadProjectResponse {
-  version: number;
-  project: SharedTaskProject;
-  snapshot: {
-    tasks: Task[];
-    dependencies: ProjectDependency[];
-  };
 }
 
 interface LocalSnapshot {
@@ -178,14 +170,14 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
         }
 
         set({ authToken: refreshedToken });
-        return await retryResponse.json() as LoadProjectResponse;
+        return await retryResponse.json() as ProjectLoadResponse;
       }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      return await response.json() as LoadProjectResponse;
+      return await response.json() as ProjectLoadResponse;
     };
 
     try {

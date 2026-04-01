@@ -1,5 +1,5 @@
 import { normalizeTasks, type FrontendProjectCommand, type Task, type TaskDependency } from '../types';
-import type { SharedTaskProject } from '../stores/useTaskStore';
+import type { ProjectLoadResponse } from '../lib/apiTypes';
 import { useCommandCommit } from './useCommandCommit';
 
 export interface CreateTaskInput {
@@ -35,15 +35,6 @@ export interface TaskMutationResponse {
   task: Task;
   changedTasks: Task[];
   changedIds: string[];
-}
-
-interface LoadProjectResponse {
-  version: number;
-  project: SharedTaskProject;
-  snapshot: {
-    tasks: Task[];
-    dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: string; lag: number }>;
-  };
 }
 
 function toDateString(value: Task['startDate']): string {
@@ -126,7 +117,7 @@ export function useTaskMutation(accessToken: string | null): UseTaskMutationResu
       throw new Error(`Failed to fetch tasks: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json() as LoadProjectResponse;
+    const data = await response.json() as ProjectLoadResponse;
     return normalizeTasks(data.snapshot.tasks);
   };
 
