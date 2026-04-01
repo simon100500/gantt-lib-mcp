@@ -194,6 +194,163 @@ export interface AddMessageInput {
   projectId?: string;
 }
 
+export type NormalizedMutationStatus = 'accepted' | 'rejected';
+export type NormalizedMutationReason =
+  | 'version_conflict'
+  | 'validation_error'
+  | 'conflict'
+  | 'not_found'
+  | 'invalid_request'
+  | 'unsupported_operation';
+
+export interface NormalizedMutationResult {
+  status: NormalizedMutationStatus;
+  baseVersion: number;
+  reason?: NormalizedMutationReason;
+  newVersion?: number;
+  changedTaskIds: string[];
+  changedTasks: Task[];
+  changedDependencyIds: string[];
+  conflicts: Conflict[];
+  snapshot?: ProjectSnapshot;
+}
+
+export interface GetProjectSummaryInput {
+  projectId?: string;
+}
+
+export interface ProjectSummary {
+  projectId: string;
+  version: number;
+  dayMode: GanttDayMode;
+  effectiveDateRange: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+  rootTaskCount: number;
+  totalTaskCount: number;
+  healthFlags: string[];
+}
+
+export interface GetTaskContextInput {
+  taskId: string;
+  projectId?: string;
+}
+
+export interface TaskContextResult {
+  version: number;
+  task: Task;
+  parents: Task[];
+  children: Task[];
+  siblings: Task[];
+  predecessors: Array<TaskDependency & { task?: Task }>;
+  successors: Array<{ taskId: string; type: DependencyType; lag: number; task?: Task }>;
+}
+
+export interface GetScheduleSliceInput {
+  projectId?: string;
+  taskIds?: string[];
+  branchRootId?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface ScheduleSliceResult {
+  version: number;
+  scope: {
+    mode: 'task_ids' | 'branch_root' | 'date_window';
+    taskIds?: string[];
+    branchRootId?: string;
+    startDate?: string;
+    endDate?: string;
+    returnedTaskCount: number;
+  };
+  tasks: Task[];
+}
+
+export interface CreateTasksInput {
+  projectId?: string;
+  tasks: CreateTaskInput[];
+  includeSnapshot?: boolean;
+}
+
+export interface UpdateTasksInput {
+  projectId?: string;
+  updates: Array<{
+    id: string;
+    name?: string;
+    color?: string;
+    progress?: number;
+  }>;
+  includeSnapshot?: boolean;
+}
+
+export interface MoveTasksInput {
+  projectId?: string;
+  moves: Array<{
+    taskId: string;
+    parentId?: string | null;
+    sortOrder?: number;
+  }>;
+  includeSnapshot?: boolean;
+}
+
+export interface DeleteTasksInput {
+  projectId?: string;
+  taskIds: string[];
+  includeSnapshot?: boolean;
+}
+
+export interface LinkTasksInput {
+  projectId?: string;
+  links: Array<{
+    predecessorTaskId: string;
+    successorTaskId: string;
+    type?: DependencyType;
+    lag?: number;
+  }>;
+  includeSnapshot?: boolean;
+}
+
+export interface UnlinkTasksInput {
+  projectId?: string;
+  links: Array<{
+    predecessorTaskId: string;
+    successorTaskId: string;
+  }>;
+  includeSnapshot?: boolean;
+}
+
+export interface ShiftTasksInput {
+  projectId?: string;
+  shifts: Array<{
+    taskId: string;
+    delta: number;
+    mode?: 'calendar' | 'working';
+  }>;
+  includeSnapshot?: boolean;
+}
+
+export interface RecalculateProjectInput {
+  projectId?: string;
+  includeSnapshot?: boolean;
+}
+
+export interface ValidateScheduleInput {
+  projectId?: string;
+}
+
+export interface ValidateScheduleResult {
+  version: number;
+  isValid: boolean;
+  errors: Array<{
+    type: 'cycle' | 'constraint' | 'missing-task';
+    taskId: string;
+    message: string;
+    relatedTaskIds?: string[];
+  }>;
+}
+
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
 export type GanttDayMode = 'business' | 'calendar';
 export type ProjectStatus = 'active' | 'archived' | 'deleted';
