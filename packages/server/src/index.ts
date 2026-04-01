@@ -104,20 +104,75 @@ async function buildProjectLoadResponse(projectId: string): Promise<{ version: n
   };
 }
 
-/** Build a ProjectCommand from a PATCH update's changed fields */
-function buildCommandFromUpdate(taskId: string, updates: UpdateTaskInput): ProjectCommand | undefined {
-  const startChanged = updates.startDate !== undefined;
-  const endChanged = updates.endDate !== undefined;
+function normalizeDependencies(dependencies: TaskDependency[] | undefined): TaskDependency[] {
+  return (dependencies ?? []).map((dependency) => ({
+    taskId: dependency.taskId,
+    type: dependency.type,
+    lag: dependency.lag ?? 0,
+  }));
+}
 
-  if (startChanged && endChanged) {
-    return { type: 'move_task', taskId, startDate: updates.startDate! };
+function toDateOnly(value: string | Date): string {
+  return typeof value === 'string' ? value : value.toISOString().split('T')[0];
+}
+
+/** Build a ProjectCommand from an actual task diff, rejecting mixed legacy PATCH semantics. */
+function buildCommandFromUpdate(taskId: string, existingTask: Awaited<ReturnType<typeof taskService.get>>, updates: UpdateTaskInput): ProjectCommand | undefined {
+  if (!existingTask) {
+    return undefined;
   }
-  if (startChanged && !endChanged) {
-    return { type: 'resize_task', taskId, anchor: 'start', date: updates.startDate! };
+
+  const nextStartDate = updates.startDate ?? toDateOnly(existingTask.startDate);
+  const nextEndDate = updates.endDate ?? toDateOnly(existingTask.endDate);
+
+  const startChanged = nextStartDate !== existingTask.startDate;
+  const endChanged = nextEndDate !== existingTask.endDate;
+  const dependenciesChanged = updates.dependencies !== undefined
+    && JSON.stringify(normalizeDependencies(updates.dependencies)) !== JSON.stringify(normalizeDependencies(existingTask.dependencies));
+
+  const fieldUpdates: NonNullable<Extract<ProjectCommand, { type: 'update_task_fields' }>['fields']> = {};
+
+  if (updates.name !== undefined && updates.name !== existingTask.name) {
+    fieldUpdates.name = updates.name;
   }
-  if (endChanged && !startChanged) {
-    return { type: 'resize_task', taskId, anchor: 'end', date: updates.endDate! };
+  if (updates.color !== undefined && updates.color !== existingTask.color) {
+    fieldUpdates.color = updates.color;
   }
+  if (updates.parentId !== undefined && updates.parentId !== (existingTask.parentId ?? null)) {
+    fieldUpdates.parentId = updates.parentId ?? null;
+  }
+  if (updates.progress !== undefined && updates.progress !== existingTask.progress) {
+    fieldUpdates.progress = updates.progress;
+  }
+  if (updates.sortOrder !== undefined && updates.sortOrder !== existingTask.sortOrder) {
+    fieldUpdates.sortOrder = updates.sortOrder;
+  }
+  if (dependenciesChanged) {
+    fieldUpdates.dependencies = normalizeDependencies(updates.dependencies);
+  }
+
+  const hasFieldUpdates = Object.keys(fieldUpdates).length > 0;
+
+  if (startChanged || endChanged) {
+    if (hasFieldUpdates) {
+      throw new Error('Mixed schedule and field PATCH updates are not supported on the legacy route');
+    }
+
+    if (startChanged && endChanged) {
+      return { type: 'move_task', taskId, startDate: nextStartDate };
+    }
+    if (startChanged) {
+      return { type: 'resize_task', taskId, anchor: 'start', date: nextStartDate };
+    }
+    if (endChanged) {
+      return { type: 'resize_task', taskId, anchor: 'end', date: nextEndDate };
+    }
+  }
+
+  if (hasFieldUpdates) {
+    return { type: 'update_task_fields', taskId, fields: fieldUpdates };
+  }
+
   return undefined;
 }
 
@@ -194,59 +249,49 @@ fastify.patch('/api/tasks/:id', { preHandler: [authMiddleware] }, async (req, re
   }
 
   try {
-    // Check if this is a schedule-affecting change
-    const isScheduleChange = updates.startDate !== undefined || updates.endDate !== undefined;
-
-    if (isScheduleChange) {
-      const version = await getProjectVersionForReq(req);
-      const cmd = buildCommandFromUpdate(taskId, updates);
-      if (cmd) {
-        const response = await commandService.commitCommand({
-          projectId: req.user!.projectId,
-          clientRequestId: randomUUID(),
-          baseVersion: version,
-          command: cmd,
-        }, 'user', req.user!.userId);
-
-        if (response.accepted) {
-          const updatedTask = response.result.snapshot.tasks.find(t => t.id === taskId);
-          const changedTasks = response.result.changedTaskIds
-            .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-            .filter((t): t is NonNullable<typeof t> => t !== undefined);
-
-          console.log('%c[SERVER] Task updated via CommandService', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-          return reply.send({
-            task: updatedTask,
-            changedTasks,
-            changedIds: response.result.changedTaskIds,
-          });
-        }
-        return reply.status(409).send(response);
-      }
-    }
-
-    // Non-schedule changes: fall through to existing PATCH flow
-    const result = await taskService.updateWithResult(taskId, updates, 'manual-save');
-
-    if (!result?.task) {
+    const existingTask = await taskService.get(taskId);
+    if (!existingTask) {
       console.log('[SERVER] Task not found:', taskId);
       return reply.status(404).send({ error: 'Task not found' });
     }
 
-    console.log('%c[SERVER] Task updated successfully', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    console.log('[SERVER] Updated task:', {
-      id: result.task.id,
-      name: result.task.name,
-      parentId: result.task.parentId,
-      startDate: result.task.startDate,
-      endDate: result.task.endDate,
-      changedIds: result.changedIds,
+    const cmd = buildCommandFromUpdate(taskId, existingTask, updates);
+    if (cmd) {
+      const version = await getProjectVersionForReq(req);
+      const response = await commandService.commitCommand({
+        projectId: req.user!.projectId,
+        clientRequestId: randomUUID(),
+        baseVersion: version,
+        command: cmd,
+      }, 'user', req.user!.userId);
+
+      if (response.accepted) {
+        const updatedTask = response.result.snapshot.tasks.find(t => t.id === taskId);
+        const changedTasks = response.result.changedTaskIds
+          .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
+          .filter((t): t is NonNullable<typeof t> => t !== undefined);
+
+        console.log('%c[SERVER] Task updated via CommandService', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+        return reply.send({
+          task: updatedTask ?? existingTask,
+          changedTasks,
+          changedIds: response.result.changedTaskIds,
+        });
+      }
+      return reply.status(response.reason === 'version_conflict' ? 409 : 400).send(response);
+    }
+
+    return reply.send({
+      task: existingTask,
+      changedTasks: [existingTask],
+      changedIds: [existingTask.id],
     });
-    return reply.send(result);
   } catch (error) {
     console.error('[SERVER] Failed to update task:', error);
     fastify.log.error(error, 'Failed to update task');
-    return reply.status(500).send({ error: 'Failed to update task' });
+    const message = error instanceof Error ? error.message : 'Failed to update task';
+    const statusCode = message.includes('Mixed schedule and field PATCH updates') ? 400 : 500;
+    return reply.status(statusCode).send({ error: message });
   }
 });
 

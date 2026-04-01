@@ -631,6 +631,51 @@ describe('CommandService command dispatch', () => {
     // Before reorder, same as after reorder for scheduling purposes
     assert.ok(result.changedIds.length >= 0, 'Reorder should not affect scheduling');
   });
+
+  it('update_task_fields returns the semantic field edit even without schedule changes', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot(createFSChainSnapshot());
+
+    const result = await service.executeCommand(
+      {
+        type: 'update_task_fields',
+        taskId: 'A',
+        fields: { name: 'Renamed task', color: '#ff0000', progress: 55 },
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(result.changedDependencyIds, []);
+    assert.deepStrictEqual(result.conflicts, []);
+    assert.strictEqual(result.changedTasks.length, 1);
+    assert.strictEqual(result.changedTasks[0]?.id, 'A');
+    assert.strictEqual(result.changedTasks[0]?.name, 'Renamed task');
+    assert.strictEqual(result.changedTasks[0]?.color, '#ff0000');
+    assert.strictEqual(result.changedTasks[0]?.progress, 55);
+  });
+
+  it('update_task_fields with parent change includes rollup-affected tasks', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot(createParentChildSnapshot());
+
+    const result = await service.executeCommand(
+      {
+        type: 'update_task_fields',
+        taskId: 'child2',
+        fields: { parentId: null },
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    assert.ok(result.changedTasks.some((task: Task) => task.id === 'child2'));
+    assert.ok(result.changedTasks.some((task: Task) => task.id === 'parent'));
+  });
 });
 
 // ============================================================

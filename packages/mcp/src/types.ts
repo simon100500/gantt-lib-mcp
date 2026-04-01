@@ -340,6 +340,18 @@ export type ProjectCommand =
   | { type: 'set_task_start'; taskId: string; startDate: string; }
   | { type: 'set_task_end'; taskId: string; endDate: string; }
   | { type: 'change_duration'; taskId: string; duration: number; anchor?: 'start' | 'end'; }
+  | {
+      type: 'update_task_fields';
+      taskId: string;
+      fields: {
+        name?: string;
+        color?: string;
+        parentId?: string | null;
+        progress?: number;
+        dependencies?: TaskDependency[];
+        sortOrder?: number;
+      };
+    }
   | { type: 'create_task'; task: CreateTaskInput; }
   | { type: 'delete_task'; taskId: string; }
   | { type: 'create_dependency'; taskId: string; dependency: TaskDependency; }
