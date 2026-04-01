@@ -426,7 +426,6 @@ function sanitizeAssistantResponse(userMessage: string, response: string): strin
 function buildPrompt(
   systemPrompt: string,
   projectId: string,
-  mutationRequested: boolean,
   simpleMutationRequested: boolean,
   historyContext: string,
   userMessage: string,
@@ -434,29 +433,30 @@ function buildPrompt(
 ): string {
   return [
     systemPrompt,
-    `\n\n## State metadata:\n- projectId: ${projectId}\n- mutationRequested: ${mutationRequested}`,
-    mutationRequested
-      ? [
-        '\n\n## Mutation execution protocol:',
-        '- Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
-        simpleMutationRequested
-          ? '- Prefer one compact targeted read. Do not expand to broader context unless the first read is insufficient.'
-          : '- Use targeted context first and avoid broad reads unless dependencies or hierarchy really require them.',
-        '- Make the smallest valid change that satisfies the request.',
-        '- If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
-        '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
-        '- Use `update_tasks` only for metadata and non-scheduling field edits.',
-        '- Use `move_tasks` for hierarchy and structural placement.',
-        '- Use `link_tasks` / `unlink_tasks` for dependency changes.',
-        '- Use `shift_tasks` for relative date changes instead of computing absolute dates manually.',
-        '- Never guess, synthesize, or paraphrase task IDs.',
-        simpleMutationRequested
-          ? '- For a small standalone block, keep the reasoning path minimal and create only the smallest coherent fragment.'
-          : '- For structured additions, prefer a small coherent fragment over one vague generic task.',
-        '- Do not spend extra turns on optional restructuring.',
-        '- Treat the mutation tool result as authoritative. If the tool rejects the request, say so.',
-      ].join('\n')
-      : '',
+    `\n\n## State metadata:\n- projectId: ${projectId}\n- executionMode: unified`,
+    [
+      '\n\n## Mutation execution protocol:',
+      '- First decide whether the latest user request is read-only or requires a project change.',
+      '- If the request is read-only, answer directly and do not call mutation tools.',
+      '- If the request changes project state, you must use one or more normalized mutation tools before giving a success answer.',
+      '- Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
+      simpleMutationRequested
+        ? '- Prefer one compact targeted read. Do not expand to broader context unless the first read is insufficient.'
+        : '- Use targeted context first and avoid broad reads unless dependencies or hierarchy really require them.',
+      '- Make the smallest valid change that satisfies the request.',
+      '- If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
+      '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
+      '- Use `update_tasks` only for metadata and non-scheduling field edits.',
+      '- Use `move_tasks` for hierarchy and structural placement.',
+      '- Use `link_tasks` / `unlink_tasks` for dependency changes.',
+      '- Use `shift_tasks` for relative date changes instead of computing absolute dates manually.',
+      '- Never guess, synthesize, or paraphrase task IDs.',
+      simpleMutationRequested
+        ? '- For a small standalone block, keep the reasoning path minimal and create only the smallest coherent fragment.'
+        : '- For structured additions, prefer a small coherent fragment over one vague generic task.',
+      '- Do not spend extra turns on optional restructuring.',
+      '- Treat the mutation tool result as authoritative. If the tool rejects the request, say so.',
+    ].join('\n'),
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
     `\n\nUser: ${userMessage}`,
@@ -551,7 +551,6 @@ async function executeAgentAttempt(
   projectId: string,
   sessionId: string,
   attempt: number,
-  mutationRequested: boolean,
   simpleMutationRequested: boolean,
   mcpServerPath: string,
   dbPath: string,
@@ -559,7 +558,7 @@ async function executeAgentAttempt(
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
-  const timeoutMs = mutationRequested ? MUTATION_ATTEMPT_TIMEOUT_MS : READONLY_ATTEMPT_TIMEOUT_MS;
+  const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
 
   const session = query({
     prompt,
@@ -569,9 +568,7 @@ async function executeAgentAttempt(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
-      maxSessionTurns: mutationRequested
-        ? (simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS)
-        : READONLY_MAX_SESSION_TURNS,
+      maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: {
@@ -643,10 +640,6 @@ async function executeAgentAttempt(
           ) {
             assistantResponse += event.event.delta.text;
             capturedPartialContent = true;
-            if (!mutationRequested) {
-              broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
-              streamedContent = true;
-            }
             await writeServerDebugLog('sdk_text_delta', {
               runId,
               attempt,
@@ -683,10 +676,6 @@ async function executeAgentAttempt(
           const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
           if (!capturedPartialContent && text) {
             assistantResponse += text;
-            if (!mutationRequested) {
-              broadcastToSession(sessionId, { type: 'token', content: text });
-              streamedContent = true;
-            }
           }
           await writeServerDebugLog('sdk_assistant_message', {
             runId,
@@ -702,10 +691,6 @@ async function executeAgentAttempt(
           const resultText = typeof event.result === 'string' ? event.result : '';
           if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
             assistantResponse = resultText;
-            if (!mutationRequested) {
-              broadcastToSession(sessionId, { type: 'token', content: resultText });
-              streamedContent = true;
-            }
           }
           await writeServerDebugLog('sdk_result_message', {
             runId,
@@ -737,7 +722,7 @@ async function executeAgentAttempt(
     }
   }
 
-  if (mutationRequested && mutationToolCalls.size === 0) {
+  if (mutationToolCalls.size === 0) {
     for (const toolCall of await collectMutationToolCallsFromMcpLog(runId, attempt)) {
       mutationToolCalls.set(toolCall.toolUseId, toolCall);
     }
@@ -755,15 +740,14 @@ async function verifyMutationAttempt(
   projectId: string,
   sessionId: string,
   attempt: number,
-  mutationRequested: boolean,
   tasksBefore: ComparableTask[],
   assistantResponse: string,
   mutationToolCalls: MutationToolCall[],
   taskService: TaskServiceModule['taskService'],
 ): Promise<VerificationResult> {
   const { tasks: tasksAfter } = await taskService.list(projectId);
-  const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
-  const actualChangedTaskIds = mutationRequested ? getChangedTaskIds(tasksBefore, tasksAfter) : [];
+  const tasksChanged = haveTasksChanged(tasksBefore, tasksAfter);
+  const actualChangedTaskIds = getChangedTaskIds(tasksBefore, tasksAfter);
   const mutationOutcome = assessMutationOutcome(mutationToolCalls, actualChangedTaskIds);
 
   await writeServerDebugLog('mutation_verification', {
@@ -771,7 +755,7 @@ async function verifyMutationAttempt(
     attempt,
     projectId,
     sessionId,
-    mutationRequested,
+    mutationRequested: mutationOutcome.mutationAttempted || tasksChanged,
     mutationAttempted: mutationOutcome.mutationAttempted,
     mutationToolCalls,
     acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
@@ -810,18 +794,17 @@ export async function runAgentWithHistory(
     ]);
     broadcastToSession = wsModule.broadcastToSession;
     const runId = crypto.randomUUID();
-    const mutationRequested = isMutationIntent(userMessage);
-    const simpleMutationRequested = mutationRequested && isSimpleMutationRequest(userMessage);
-    const { tasks: tasksBefore } = mutationRequested
-      ? await taskService.list(projectId)
-      : { tasks: [] };
+    const likelyMutationRequest = isMutationIntent(userMessage);
+    const simpleMutationRequested = isSimpleMutationRequest(userMessage);
+    const { tasks: tasksBefore } = await taskService.list(projectId);
 
     await writeServerDebugLog('agent_run_started', {
       runId,
       projectId,
       sessionId,
       userMessage,
-      mutationRequested,
+      mutationRequested: likelyMutationRequest,
+      likelyMutationRequest,
       simpleMutationRequested,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
@@ -837,7 +820,7 @@ export async function runAgentWithHistory(
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
 
-    const historyContext = buildHistoryContext(messages.slice(0, -1), mutationRequested);
+    const historyContext = buildHistoryContext(messages.slice(0, -1), false);
 
     const env = resolveEnv();
     if (!env.OPENAI_API_KEY) {
@@ -872,14 +855,13 @@ export async function runAgentWithHistory(
       acceptedChangedTaskIdMismatch: false,
     };
 
-    const maxAttempts = mutationRequested ? 2 : 1;
+    const maxAttempts = 2;
     let retryInstruction: string | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const attemptPrompt = buildPrompt(
         systemPrompt,
         projectId,
-        mutationRequested,
         simpleMutationRequested,
         historyContext,
         userMessage,
@@ -904,7 +886,6 @@ export async function runAgentWithHistory(
           projectId,
           sessionId,
           attempt,
-          mutationRequested,
           simpleMutationRequested,
           mcpServerPath,
           dbPath,
@@ -921,7 +902,7 @@ export async function runAgentWithHistory(
           error: errorMessage,
         });
 
-        if (mutationRequested && attempt < maxAttempts && /timed out/i.test(errorMessage)) {
+        if (attempt < maxAttempts && /timed out/i.test(errorMessage)) {
           retryInstruction = buildTimeoutRetryInstruction();
           continue;
         }
@@ -936,7 +917,6 @@ export async function runAgentWithHistory(
         projectId,
         sessionId,
         attempt,
-        mutationRequested,
         tasksBefore,
         assistantResponse,
         attemptResult.mutationToolCalls,
@@ -944,7 +924,9 @@ export async function runAgentWithHistory(
       );
       tasksAfter = finalVerification.tasksAfter as ComparableTask[];
 
-      if (!mutationRequested) {
+      const mutationObserved = finalVerification.mutationAttempted || finalVerification.tasksChanged;
+
+      if (!mutationObserved) {
         break;
       }
 
@@ -996,14 +978,14 @@ export async function runAgentWithHistory(
         attempt,
         projectId,
         sessionId,
-        reason: 'no_snapshot_change_detected',
+        reason: mutationObserved ? 'mutation_not_confirmed' : 'no_valid_mutation_observed',
         previousAssistantResponse: assistantResponse,
       });
     }
 
     assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
 
-    if (mutationRequested && assistantResponse) {
+      if (assistantResponse) {
       broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
       streamedContent = true;
     }
