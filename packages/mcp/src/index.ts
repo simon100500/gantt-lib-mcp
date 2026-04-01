@@ -191,15 +191,16 @@ function buildRejectedResult(
   baseVersion: number,
   reason: NormalizedMutationReason,
   snapshot?: import('./types.js').ProjectSnapshot,
+  partial?: Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'>,
 ): NormalizedMutationResult {
   return {
     status: 'rejected',
     reason,
     baseVersion,
-    changedTaskIds: [],
-    changedTasks: [],
-    changedDependencyIds: [],
-    conflicts: [],
+    changedTaskIds: partial?.changedTaskIds ?? [],
+    changedTasks: partial?.changedTasks ?? [],
+    changedDependencyIds: partial?.changedDependencyIds ?? [],
+    conflicts: partial?.conflicts ?? [],
     ...(snapshot ? { snapshot } : {}),
   };
 }
@@ -208,12 +209,14 @@ function buildMutationResult(
   baseVersion: number,
   response: import('./types.js').CommitProjectCommandResponse,
   includeSnapshot: boolean = false,
+  partial?: Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'>,
 ): NormalizedMutationResult {
   if (!response.accepted) {
     return buildRejectedResult(
       baseVersion,
       normalizeRejectionReason(response.reason),
       includeSnapshot ? response.snapshot : undefined,
+      partial,
     );
   }
 
@@ -232,6 +235,129 @@ function buildMutationResult(
     conflicts: response.result.conflicts,
     ...(includeSnapshot ? { snapshot: response.snapshot } : {}),
   };
+}
+
+type MutationAggregationState = {
+  initialBaseVersion?: number;
+  latestVersion?: number;
+  latestSnapshot?: import('./types.js').ProjectSnapshot;
+  changedTaskIds: Set<string>;
+  changedDependencyIds: Set<string>;
+  conflicts: import('./types.js').Conflict[];
+};
+
+function createMutationAggregationState(): MutationAggregationState {
+  return {
+    changedTaskIds: new Set<string>(),
+    changedDependencyIds: new Set<string>(),
+    conflicts: [],
+  };
+}
+
+function mergeConflicts(
+  existing: import('./types.js').Conflict[],
+  incoming: import('./types.js').Conflict[],
+): import('./types.js').Conflict[] {
+  const byKey = new Map<string, import('./types.js').Conflict>();
+  for (const conflict of [...existing, ...incoming]) {
+    byKey.set(`${conflict.entityType}:${conflict.entityId}:${conflict.reason}:${conflict.detail ?? ''}`, conflict);
+  }
+  return [...byKey.values()];
+}
+
+function addMutationResultToAggregation(
+  aggregation: MutationAggregationState,
+  baseVersion: number,
+  response: import('./types.js').CommitProjectCommandResponse,
+): void {
+  if (aggregation.initialBaseVersion === undefined) {
+    aggregation.initialBaseVersion = baseVersion;
+  }
+
+  if (!response.accepted) {
+    aggregation.latestSnapshot = response.snapshot ?? aggregation.latestSnapshot;
+    return;
+  }
+
+  aggregation.latestVersion = response.newVersion;
+  aggregation.latestSnapshot = response.snapshot;
+  for (const taskId of response.result.changedTaskIds) {
+    aggregation.changedTaskIds.add(taskId);
+  }
+  for (const dependencyId of response.result.changedDependencyIds) {
+    aggregation.changedDependencyIds.add(dependencyId);
+  }
+  aggregation.conflicts = mergeConflicts(aggregation.conflicts, response.result.conflicts);
+}
+
+function buildPartialMutationAggregate(
+  aggregation: MutationAggregationState,
+): Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'> {
+  const changedTaskIds = [...aggregation.changedTaskIds].sort();
+  const changedTasks = changedTaskIds
+    .map((taskId) => aggregation.latestSnapshot?.tasks.find((task) => task.id === taskId))
+    .filter((task): task is Task => Boolean(task));
+
+  return {
+    changedTaskIds,
+    changedTasks,
+    changedDependencyIds: [...aggregation.changedDependencyIds].sort(),
+    conflicts: aggregation.conflicts,
+  };
+}
+
+function finalizeAcceptedMutationAggregation(
+  aggregation: MutationAggregationState,
+  includeSnapshot: boolean = false,
+): NormalizedMutationResult {
+  const partial = buildPartialMutationAggregate(aggregation);
+  return {
+    status: 'accepted',
+    baseVersion: aggregation.initialBaseVersion ?? 0,
+    newVersion: aggregation.latestVersion,
+    ...partial,
+    ...(includeSnapshot && aggregation.latestSnapshot ? { snapshot: aggregation.latestSnapshot } : {}),
+  };
+}
+
+function finalizeRejectedMutationAggregation(
+  aggregation: MutationAggregationState,
+  baseVersion: number,
+  reason: NormalizedMutationReason,
+  snapshot?: import('./types.js').ProjectSnapshot,
+  includeSnapshot: boolean = false,
+): NormalizedMutationResult {
+  return buildRejectedResult(
+    aggregation.initialBaseVersion ?? baseVersion,
+    reason,
+    includeSnapshot ? (snapshot ?? aggregation.latestSnapshot) : undefined,
+    buildPartialMutationAggregate(aggregation),
+  );
+}
+
+async function executeNormalizedMutationBatch(
+  projectId: string | undefined,
+  commands: ProjectCommand[],
+  includeSnapshot: boolean = false,
+): Promise<NormalizedMutationResult> {
+  const aggregation = createMutationAggregationState();
+
+  for (const command of commands) {
+    const { baseVersion, response } = await commitNormalizedCommand(projectId, command);
+    addMutationResultToAggregation(aggregation, baseVersion, response);
+
+    if (!response.accepted) {
+      return finalizeRejectedMutationAggregation(
+        aggregation,
+        baseVersion,
+        normalizeRejectionReason(response.reason),
+        response.snapshot,
+        includeSnapshot,
+      );
+    }
+  }
+
+  return finalizeAcceptedMutationAggregation(aggregation, includeSnapshot);
 }
 
 async function listAllProjectTasks(projectId: string): Promise<Task[]> {
@@ -525,57 +651,62 @@ Fix: Provide projectId or set PROJECT_ID.`);
     const input = args as unknown as UpdateTasksInput;
     const resolvedProjectId = resolveProjectId(input.projectId);
 
-    if (!input.updates || input.updates.length !== 1) {
-      return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
-    }
-
-    const update = input.updates[0];
-    const hasMetadata = update.name !== undefined || update.color !== undefined || update.progress !== undefined;
-    if (!update.id || !hasMetadata) {
+    if (!input.updates || input.updates.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
-      type: 'update_task_fields',
-      taskId: update.id,
-      fields: {
-        ...(update.name !== undefined ? { name: update.name } : {}),
-        ...(update.color !== undefined ? { color: update.color } : {}),
-        ...(update.progress !== undefined ? { progress: update.progress } : {}),
-      },
-    });
+    const commands: ProjectCommand[] = [];
+    for (const update of input.updates) {
+      const hasMetadata = update.name !== undefined || update.color !== undefined || update.progress !== undefined;
+      if (!update.id || !hasMetadata) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
 
-    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+      commands.push({
+        type: 'update_task_fields',
+        taskId: update.id,
+        fields: {
+          ...(update.name !== undefined ? { name: update.name } : {}),
+          ...(update.color !== undefined ? { color: update.color } : {}),
+          ...(update.progress !== undefined ? { progress: update.progress } : {}),
+        },
+      });
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
   }
 
   if (name === 'move_tasks') {
     const input = args as unknown as MoveTasksInput;
     const resolvedProjectId = resolveProjectId(input.projectId);
 
-    if (!input.moves || input.moves.length !== 1) {
-      return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
-    }
-
-    const move = input.moves[0];
-    if (!move.taskId) {
-      return jsonResult(buildRejectedResult(0, 'invalid_request'));
-    }
-    if (move.parentId !== undefined && move.sortOrder !== undefined) {
-      return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
-    }
-
-    const command: ProjectCommand | null = move.parentId !== undefined
-      ? { type: 'reparent_task', taskId: move.taskId, newParentId: move.parentId ?? null }
-      : move.sortOrder !== undefined
-        ? { type: 'reorder_tasks', updates: [{ taskId: move.taskId, sortOrder: move.sortOrder }] }
-        : null;
-
-    if (!command) {
+    if (!input.moves || input.moves.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, command);
-    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+    const commands: ProjectCommand[] = [];
+    for (const move of input.moves) {
+      if (!move.taskId) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+      if (move.parentId !== undefined && move.sortOrder !== undefined) {
+        return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
+      }
+
+      const command: ProjectCommand | null = move.parentId !== undefined
+        ? { type: 'reparent_task', taskId: move.taskId, newParentId: move.parentId ?? null }
+        : move.sortOrder !== undefined
+          ? { type: 'reorder_tasks', updates: [{ taskId: move.taskId, sortOrder: move.sortOrder }] }
+          : null;
+
+      if (!command) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+
+      commands.push(command);
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
   }
 
   if (name === 'delete_tasks') {
@@ -600,51 +731,55 @@ Fix: Provide projectId or set PROJECT_ID.`);
     const input = args as unknown as LinkTasksInput;
     const resolvedProjectId = resolveProjectId(input.projectId);
 
-    if (!input.links || input.links.length !== 1) {
-      return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
-    }
-
-    const link = input.links[0];
-    if (!link.predecessorTaskId || !link.successorTaskId) {
-      return jsonResult(buildRejectedResult(0, 'invalid_request'));
-    }
-    if (link.type && !isValidDependencyType(link.type)) {
+    if (!input.links || input.links.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
-      type: 'create_dependency',
-      taskId: link.successorTaskId,
-      dependency: {
-        taskId: link.predecessorTaskId,
-        type: link.type ?? 'FS',
-        lag: link.lag ?? 0,
-      },
-    });
+    const commands: ProjectCommand[] = [];
+    for (const link of input.links) {
+      if (!link.predecessorTaskId || !link.successorTaskId) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+      if (link.type && !isValidDependencyType(link.type)) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
 
-    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+      commands.push({
+        type: 'create_dependency',
+        taskId: link.successorTaskId,
+        dependency: {
+          taskId: link.predecessorTaskId,
+          type: link.type ?? 'FS',
+          lag: link.lag ?? 0,
+        },
+      });
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
   }
 
   if (name === 'unlink_tasks') {
     const input = args as unknown as UnlinkTasksInput;
     const resolvedProjectId = resolveProjectId(input.projectId);
 
-    if (!input.links || input.links.length !== 1) {
-      return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
-    }
-
-    const link = input.links[0];
-    if (!link.predecessorTaskId || !link.successorTaskId) {
+    if (!input.links || input.links.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
-      type: 'remove_dependency',
-      taskId: link.successorTaskId,
-      depTaskId: link.predecessorTaskId,
-    });
+    const commands: ProjectCommand[] = [];
+    for (const link of input.links) {
+      if (!link.predecessorTaskId || !link.successorTaskId) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
 
-    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+      commands.push({
+        type: 'remove_dependency',
+        taskId: link.successorTaskId,
+        depTaskId: link.predecessorTaskId,
+      });
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
   }
 
   if (name === 'shift_tasks') {
@@ -656,32 +791,52 @@ Fix: Provide projectId or set PROJECT_ID.`);
 Reason: Shift operations are scoped to one project.
 Fix: Provide projectId or set PROJECT_ID.`);
     }
-    if (!input.shifts || input.shifts.length !== 1) {
-      return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
+    if (!input.shifts || input.shifts.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const shift = input.shifts[0];
-    const task = await taskService.get(shift.taskId);
-    if (!task) {
-      const summary = await getProjectSnapshotSummary(resolvedProjectId);
-      return jsonResult(buildRejectedResult(summary.version, 'not_found'));
+    const aggregation = createMutationAggregationState();
+
+    for (const shift of input.shifts) {
+      const task = await taskService.get(shift.taskId);
+      if (!task) {
+        const summary = await getProjectSnapshotSummary(resolvedProjectId);
+        return jsonResult(finalizeRejectedMutationAggregation(
+          aggregation,
+          summary.version,
+          'not_found',
+          undefined,
+          input.includeSnapshot,
+        ));
+      }
+
+      const prisma = getPrisma();
+      const opts = await getProjectScheduleOptionsForProject(prisma, resolvedProjectId);
+      const startDate = parseDateOnly(task.startDate);
+      const mode = shift.mode ?? (opts.businessDays ? 'working' : 'calendar');
+      const nextStart = mode === 'working' && opts.weekendPredicate
+        ? shiftBusinessDayOffset(startDate, shift.delta, opts.weekendPredicate)
+        : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + shift.delta));
+
+      const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
+        type: 'move_task',
+        taskId: shift.taskId,
+        startDate: formatDateOnly(nextStart),
+      });
+      addMutationResultToAggregation(aggregation, baseVersion, response);
+
+      if (!response.accepted) {
+        return jsonResult(finalizeRejectedMutationAggregation(
+          aggregation,
+          baseVersion,
+          normalizeRejectionReason(response.reason),
+          response.snapshot,
+          input.includeSnapshot,
+        ));
+      }
     }
 
-    const prisma = getPrisma();
-    const opts = await getProjectScheduleOptionsForProject(prisma, resolvedProjectId);
-    const startDate = parseDateOnly(task.startDate);
-    const mode = shift.mode ?? (opts.businessDays ? 'working' : 'calendar');
-    const nextStart = mode === 'working' && opts.weekendPredicate
-      ? shiftBusinessDayOffset(startDate, shift.delta, opts.weekendPredicate)
-      : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + shift.delta));
-
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
-      type: 'move_task',
-      taskId: shift.taskId,
-      startDate: formatDateOnly(nextStart),
-    });
-
-    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+    return jsonResult(finalizeAcceptedMutationAggregation(aggregation, input.includeSnapshot));
   }
 
   if (name === 'recalculate_project') {
