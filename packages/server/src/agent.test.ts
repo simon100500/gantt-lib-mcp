@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent } from './agent.js';
+import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, resolveTasksByName } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -89,11 +89,34 @@ describe('agent fast shift parsing', () => {
       delta: 3,
       mode: 'working',
     });
+    assert.deepEqual(parseFastShiftIntent('сдвинь штукатурку стен на неделю'), {
+      taskName: 'штукатурку стен',
+      delta: 7,
+      mode: 'project_default',
+    });
+    assert.deepEqual(parseFastShiftIntent('сдвинь штукатурку стен на 2 недели'), {
+      taskName: 'штукатурку стен',
+      delta: 14,
+      mode: 'project_default',
+    });
   });
 
   it('does not parse vague natural-language drift as a direct cheap-path shift', () => {
     assert.equal(parseFastShiftIntent('опаздываем с штукатуркой на 2 дня'), null);
     assert.equal(parseFastShiftIntent('надо бы штукатурку чуть подвинуть'), null);
+  });
+});
+
+describe('agent fast shift task resolution', () => {
+  it('resolves duplicate exact-name matches as a multi-task target', () => {
+    const result = resolveTasksByName([
+      { id: '1', name: 'Штукатурка стен', startDate: '2026-04-01', endDate: '2026-04-03' },
+      { id: '2', name: 'Штукатурка стен', startDate: '2026-04-05', endDate: '2026-04-07' },
+      { id: '3', name: 'Штукатурка потолка', startDate: '2026-04-02', endDate: '2026-04-04' },
+    ], 'штукатурку стен');
+
+    assert.equal(result.kind, 'exact');
+    assert.deepEqual(result.matches.map((task) => task.id), ['1', '2']);
   });
 });
 

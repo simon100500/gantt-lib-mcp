@@ -60,6 +60,11 @@ type FastShiftIntent = {
   mode: 'working' | 'calendar' | 'project_default';
 };
 
+type FastShiftTaskMatch =
+  | { kind: 'none'; matches: []; }
+  | { kind: 'exact'; matches: ComparableTask[]; }
+  | { kind: 'partial'; matches: ComparableTask[]; };
+
 type NormalizedMutationToolName =
   | 'create_tasks'
   | 'update_tasks'
@@ -285,14 +290,30 @@ function buildNameVariants(value: string): string[] {
   return [...new Set([normalized, accusativeNormalized])];
 }
 
+function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | undefined): number | null {
+  const amount = rawAmount ? Number.parseInt(rawAmount, 10) : 1;
+  if (Number.isNaN(amount) || amount === 0) {
+    return null;
+  }
+
+  const unit = (rawUnit ?? '').toLowerCase();
+  if (unit.startsWith('недел')) {
+    return amount * 7;
+  }
+
+  return amount;
+}
+
 export function parseFastShiftIntent(message: string): FastShiftIntent | null {
   const trimmed = message.trim();
   const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode'] }> = [
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+дн(?:я|ей)?$/i, mode: 'working' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+дн(?:я|ей)?$/i, mode: 'calendar' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+дн(?:я|ей)?$/i, mode: 'project_default' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'working' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'calendar' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'project_default' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+working\s+days?$/i, mode: 'working' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+calendar\s+days?$/i, mode: 'calendar' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+weeks?$/i, mode: 'project_default' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+days?$/i, mode: 'project_default' },
   ];
 
@@ -302,8 +323,8 @@ export function parseFastShiftIntent(message: string): FastShiftIntent | null {
       continue;
     }
     const taskName = match[1]?.trim();
-    const delta = Number.parseInt(match[2] ?? '', 10);
-    if (!taskName || Number.isNaN(delta) || delta === 0) {
+    const delta = parseFastShiftDelta(match[2], match[3]);
+    if (!taskName || delta === null) {
       return null;
     }
     return {
@@ -316,30 +337,24 @@ export function parseFastShiftIntent(message: string): FastShiftIntent | null {
   return null;
 }
 
-function findUniqueTaskByName(tasks: ComparableTask[], taskName: string): ComparableTask | null {
+export function resolveTasksByName(tasks: ComparableTask[], taskName: string): FastShiftTaskMatch {
   const targetVariants = buildNameVariants(taskName);
 
   for (const variant of targetVariants) {
     const exactMatches = tasks.filter((task) => normalizeName(task.name) === variant);
-    if (exactMatches.length === 1) {
-      return exactMatches[0]!;
-    }
-    if (exactMatches.length > 1) {
-      return null;
+    if (exactMatches.length > 0) {
+      return { kind: 'exact', matches: exactMatches };
     }
   }
 
   for (const variant of targetVariants) {
     const partialMatches = tasks.filter((task) => normalizeName(task.name).includes(variant));
-    if (partialMatches.length === 1) {
-      return partialMatches[0]!;
-    }
-    if (partialMatches.length > 1) {
-      return null;
+    if (partialMatches.length > 0) {
+      return { kind: 'partial', matches: partialMatches };
     }
   }
 
-  return null;
+  return { kind: 'none', matches: [] };
 }
 
 function formatDateOnly(date: Date): string {
@@ -352,6 +367,14 @@ function buildFastShiftSuccessMessage(taskName: string, delta: number, mode: 'wo
   const unit = mode === 'working' ? 'рабоч' : 'календарн';
   const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
   return `Задача «${taskName}» была ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
+}
+
+function buildFastShiftMultiSuccessMessage(taskName: string, matchCount: number, delta: number, mode: 'working' | 'calendar'): string {
+  const absDelta = Math.abs(delta);
+  const direction = delta >= 0 ? 'сдвинуты' : 'сдвинуты раньше';
+  const unit = mode === 'working' ? 'рабоч' : 'календарн';
+  const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
+  return `Все ${matchCount} задачи «${taskName}» были ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
 }
 
 export function assessMutationOutcome(
@@ -679,13 +702,13 @@ async function tryDirectShiftFastPath(
     return false;
   }
 
-  const task = findUniqueTaskByName(tasksBefore, intent.taskName);
-  if (!task) {
+  const taskMatch = resolveTasksByName(tasksBefore, intent.taskName);
+  if (taskMatch.kind === 'none') {
     await writeServerDebugLog('fast_shift_skipped', {
       runId,
       projectId,
       sessionId,
-      reason: 'task_not_uniquely_resolved',
+      reason: 'task_not_found',
       taskName: intent.taskName,
       taskCount: tasksBefore.length,
     });
@@ -706,43 +729,57 @@ async function tryDirectShiftFastPath(
     return false;
   }
 
-  const startDate = parseDateOnly(task.startDate);
   const mode = intent.mode === 'project_default'
     ? (scheduleOptions.businessDays ? 'working' : 'calendar')
     : intent.mode;
-  const nextStart = mode === 'working' && scheduleOptions.weekendPredicate
-    ? shiftBusinessDayOffset(startDate, intent.delta, scheduleOptions.weekendPredicate)
-    : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + intent.delta));
+  let baseVersion = project.version;
+  const allChangedTaskIds = new Set<string>();
 
-  const response = await services.commandService.commitCommand({
-    projectId,
-    clientRequestId: crypto.randomUUID(),
-    baseVersion: project.version,
-    command: {
-      type: 'move_task',
+  for (const task of taskMatch.matches) {
+    const startDate = parseDateOnly(task.startDate);
+    const nextStart = mode === 'working' && scheduleOptions.weekendPredicate
+      ? shiftBusinessDayOffset(startDate, intent.delta, scheduleOptions.weekendPredicate)
+      : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + intent.delta));
+    const response = await services.commandService.commitCommand({
+      projectId,
+      clientRequestId: crypto.randomUUID(),
+      baseVersion,
+      command: {
+        type: 'move_task',
+        taskId: task.id,
+        startDate: formatDateOnly(nextStart),
+      },
+    }, 'agent');
+
+    await writeServerDebugLog('fast_shift_attempt', {
+      runId,
+      projectId,
+      sessionId,
       taskId: task.id,
-      startDate: formatDateOnly(nextStart),
-    },
-  }, 'agent');
+      taskName: task.name,
+      taskMatchKind: taskMatch.kind,
+      matchedTaskCount: taskMatch.matches.length,
+      delta: intent.delta,
+      mode,
+      accepted: response.accepted,
+      reason: response.accepted ? undefined : response.reason,
+    });
 
-  await writeServerDebugLog('fast_shift_attempt', {
-    runId,
-    projectId,
-    sessionId,
-    taskId: task.id,
-    taskName: task.name,
-    delta: intent.delta,
-    mode,
-    accepted: response.accepted,
-    reason: response.accepted ? undefined : response.reason,
-  });
+    if (!response.accepted) {
+      return false;
+    }
 
-  if (!response.accepted) {
-    return false;
+    baseVersion = response.newVersion;
+    for (const taskId of response.result.changedTaskIds) {
+      allChangedTaskIds.add(taskId);
+    }
   }
 
   const { tasks: tasksAfter } = await services.taskService.list(projectId);
-  const assistantResponse = buildFastShiftSuccessMessage(task.name, intent.delta, mode);
+  const assistantResponse = taskMatch.matches.length === 1
+    ? buildFastShiftSuccessMessage(taskMatch.matches[0]!.name, intent.delta, mode)
+    : buildFastShiftMultiSuccessMessage(taskMatch.matches[0]!.name, taskMatch.matches.length, intent.delta, mode);
+  const changedTaskIds = [...allChangedTaskIds].sort();
 
   await services.messageService.add('assistant', assistantResponse, projectId);
   await writeServerDebugLog('agent_response_saved', {
@@ -752,8 +789,8 @@ async function tryDirectShiftFastPath(
     assistantResponse,
     streamedContent: true,
     finalTasksChanged: true,
-    finalChangedTaskIds: response.result.changedTaskIds,
-    finalAcceptedChangedTaskIds: response.result.changedTaskIds,
+    finalChangedTaskIds: changedTaskIds,
+    finalAcceptedChangedTaskIds: changedTaskIds,
     finalAcceptedChangedTaskIdMismatch: false,
     fastPath: 'direct_shift',
   });
