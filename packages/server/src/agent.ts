@@ -7,6 +7,7 @@ import {
   isSDKResultMessage,
   isSDKAssistantMessage,
   isSDKPartialAssistantMessage,
+  type ContentBlock,
 } from '@qwen-code/sdk';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -33,12 +34,34 @@ type ComparableTask = {
 type AgentAttemptResult = {
   assistantResponse: string;
   streamedContent: boolean;
+  mutationToolCalls: MutationToolCall[];
 };
 
 type VerificationResult = {
   tasksAfter: ComparableTask[];
   tasksChanged: boolean;
   actualChangedTaskIds: string[];
+  mutationAttempted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  rejectedMutationCalls: MutationToolCall[];
+};
+
+type NormalizedMutationToolName =
+  | 'create_tasks'
+  | 'update_tasks'
+  | 'move_tasks'
+  | 'delete_tasks'
+  | 'link_tasks'
+  | 'unlink_tasks'
+  | 'shift_tasks'
+  | 'recalculate_project';
+
+type MutationToolCall = {
+  toolUseId: string;
+  toolName: NormalizedMutationToolName;
+  status?: 'accepted' | 'rejected';
+  reason?: string;
+  changedTaskIds?: string[];
 };
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
@@ -50,6 +73,16 @@ const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
 const SIMPLE_MUTATION_MAX_SESSION_TURNS = 8;
 const DEFAULT_MUTATION_MAX_SESSION_TURNS = 16;
 const READONLY_MAX_SESSION_TURNS = 12;
+const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
+  'create_tasks',
+  'update_tasks',
+  'move_tasks',
+  'delete_tasks',
+  'link_tasks',
+  'unlink_tasks',
+  'shift_tasks',
+  'recalculate_project',
+]);
 
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
@@ -186,14 +219,25 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
 }
 
 function buildNoMutationMessage(): string {
-  return 'Изменение не применилось: модель ответила как будто задача изменена, но итоговый снимок проекта не изменился.';
+  return 'Изменение не применилось: модель не выполнила ни одного валидного mutation tool call, поэтому проект не изменился.';
+}
+
+function buildRejectedMutationMessage(rejectedCalls: MutationToolCall[]): string {
+  const first = rejectedCalls[0];
+  const reason = first?.reason ? ` (${first.reason})` : '';
+  return `Изменение не применилось: mutation tool вернул отклонение${reason}.`;
+}
+
+function buildInconsistentMutationMessage(): string {
+  return 'Изменение не подтверждено: mutation tool был принят, но итоговый изменённый набор задач не подтвердился в проекте.';
 }
 
 function buildTimeoutRetryInstruction(): string {
   return [
     'The previous attempt timed out before completing.',
-    'Call `get_tasks` once, then perform the smallest valid mutation that satisfies the user request.',
-    'If the container is ambiguous after that single read, choose the closest existing phase or the top level and proceed.',
+    'Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
+    'Then perform the smallest valid normalized mutation that satisfies the user request.',
+    'If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
     'Do not spend extra turns on optional restructuring or validation.',
   ].join('\n');
 }
@@ -268,26 +312,95 @@ function buildPrompt(
     mutationRequested
       ? [
         '\n\n## Mutation execution protocol:',
-        '- Start by calling `get_tasks`.',
+        '- Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
         simpleMutationRequested
-          ? '- Use compact `get_tasks` output first. Do not request full task data unless dependencies or deep hierarchy are required.'
-          : '- Use compact `get_tasks` first unless you explicitly need dependencies or detailed hierarchy.',
+          ? '- Prefer one compact targeted read. Do not expand to broader context unless the first read is insufficient.'
+          : '- Use targeted context first and avoid broad reads unless dependencies or hierarchy really require them.',
         '- Make the smallest valid change that satisfies the request.',
-        '- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.',
-        '- If you create a new task and already know its predecessor, pass that link in `create_task.dependencies` instead of planning a later `set_dependency` call.',
-        '- For sequential new tasks, dependency task IDs must come from actual tool results. Reuse the exact `createdTaskId` from the immediately previous `create_task` result.',
-        '- Never guess, synthesize, or paraphrase a dependency task ID. If the predecessor ID is uncertain, do not send a speculative dependency.',
-        '- Use `set_dependency` only as a fallback for links that cannot be known until after creation or for links between existing tasks.',
+        '- If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
+        '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
+        '- Use `update_tasks` only for metadata and non-scheduling field edits.',
+        '- Use `move_tasks` for hierarchy and structural placement.',
+        '- Use `link_tasks` / `unlink_tasks` for dependency changes.',
+        '- Use `shift_tasks` for relative date changes instead of computing absolute dates manually.',
+        '- Never guess, synthesize, or paraphrase task IDs.',
         simpleMutationRequested
-          ? '- For a new standalone block with 2-5 child tasks, keep the reasoning path minimal: create the parent, then create the children once each, carrying forward sequential dependencies inline.'
-          : '- For structured additions, prefer inline dependency creation during `create_task` whenever the predecessor is already known.',
+          ? '- For a small standalone block, keep the reasoning path minimal and create only the smallest coherent fragment.'
+          : '- For structured additions, prefer a small coherent fragment over one vague generic task.',
         '- Do not spend extra turns on optional restructuring.',
+        '- Treat the mutation tool result as authoritative. If the tool rejects the request, say so.',
       ].join('\n')
       : '',
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
     `\n\nUser: ${userMessage}`,
   ].join('');
+}
+
+function tryParseToolResultPayload(content?: string | ContentBlock[]): unknown {
+  if (typeof content === 'string') {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (Array.isArray(content)) {
+    const text = content
+      .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+    if (!text) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
+  const toolUseById = new Map<string, MutationToolCall>();
+
+  for (const block of blocks) {
+    if (block.type === 'tool_use' && NORMALIZED_MUTATION_TOOL_NAMES.has(block.name as NormalizedMutationToolName)) {
+      toolUseById.set(block.id, {
+        toolUseId: block.id,
+        toolName: block.name as NormalizedMutationToolName,
+      });
+    }
+  }
+
+  for (const block of blocks) {
+    if (block.type !== 'tool_result') {
+      continue;
+    }
+
+    const toolCall = toolUseById.get(block.tool_use_id);
+    if (!toolCall) {
+      continue;
+    }
+
+    const payload = tryParseToolResultPayload(block.content) as
+      | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
+      | undefined;
+
+    if (payload?.status) {
+      toolCall.status = payload.status;
+      toolCall.reason = payload.reason;
+      toolCall.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
+    } else if (block.is_error) {
+      toolCall.status = 'rejected';
+      toolCall.reason = 'tool_error';
+    }
+  }
+
+  return [...toolUseById.values()];
 }
 
 async function getServicesModule(): Promise<TaskServiceModule> {
@@ -360,11 +473,43 @@ async function executeAgentAttempt(
   let streamedContent = false;
   let capturedPartialContent = false;
   let timeoutHandle: NodeJS.Timeout | undefined;
+  const mutationToolCalls = new Map<string, MutationToolCall>();
 
   try {
     const sessionPromise = (async () => {
       for await (const event of session) {
         if (isSDKPartialAssistantMessage(event)) {
+          if (
+            event.event.type === 'content_block_start'
+            && event.event.content_block.type === 'tool_use'
+            && NORMALIZED_MUTATION_TOOL_NAMES.has(event.event.content_block.name as NormalizedMutationToolName)
+          ) {
+            mutationToolCalls.set(event.event.content_block.id, {
+              toolUseId: event.event.content_block.id,
+              toolName: event.event.content_block.name as NormalizedMutationToolName,
+            });
+          }
+
+          if (
+            event.event.type === 'content_block_start'
+            && event.event.content_block.type === 'tool_result'
+          ) {
+            const existing = mutationToolCalls.get(event.event.content_block.tool_use_id);
+            if (existing) {
+              const payload = tryParseToolResultPayload(event.event.content_block.content) as
+                | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
+                | undefined;
+              if (payload?.status) {
+                existing.status = payload.status;
+                existing.reason = payload.reason;
+                existing.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
+              } else if (event.event.content_block.is_error) {
+                existing.status = 'rejected';
+                existing.reason = 'tool_error';
+              }
+            }
+          }
+
           if (
             event.event.type === 'content_block_delta'
             && event.event.delta.type === 'text_delta'
@@ -401,6 +546,14 @@ async function executeAgentAttempt(
         }
 
         if (isSDKAssistantMessage(event)) {
+          for (const toolCall of collectMutationToolCalls(event.message.content)) {
+            const existing = mutationToolCalls.get(toolCall.toolUseId);
+            mutationToolCalls.set(toolCall.toolUseId, {
+              ...existing,
+              ...toolCall,
+            });
+          }
+
           const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
           if (!capturedPartialContent && text) {
             assistantResponse += text;
@@ -461,6 +614,7 @@ async function executeAgentAttempt(
   return {
     assistantResponse,
     streamedContent,
+    mutationToolCalls: [...mutationToolCalls.values()],
   };
 }
 
@@ -472,11 +626,15 @@ async function verifyMutationAttempt(
   mutationRequested: boolean,
   tasksBefore: ComparableTask[],
   assistantResponse: string,
+  mutationToolCalls: MutationToolCall[],
   taskService: TaskServiceModule['taskService'],
 ): Promise<VerificationResult> {
   const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
   const actualChangedTaskIds = mutationRequested ? getChangedTaskIds(tasksBefore, tasksAfter) : [];
+  const acceptedMutationCalls = mutationToolCalls.filter((call) => call.status === 'accepted');
+  const rejectedMutationCalls = mutationToolCalls.filter((call) => call.status === 'rejected');
+  const mutationAttempted = mutationToolCalls.length > 0;
 
   await writeServerDebugLog('mutation_verification', {
     runId,
@@ -484,6 +642,10 @@ async function verifyMutationAttempt(
     projectId,
     sessionId,
     mutationRequested,
+    mutationAttempted,
+    mutationToolCalls,
+    acceptedMutationCalls,
+    rejectedMutationCalls,
     tasksChanged,
     actualChangedTaskIds,
     tasksAfterCount: tasksAfter.length,
@@ -495,6 +657,9 @@ async function verifyMutationAttempt(
     tasksAfter,
     tasksChanged,
     actualChangedTaskIds,
+    mutationAttempted,
+    acceptedMutationCalls,
+    rejectedMutationCalls,
   };
 }
 
@@ -566,6 +731,9 @@ export async function runAgentWithHistory(
       tasksAfter: tasksBefore,
       tasksChanged: false,
       actualChangedTaskIds: [],
+      mutationAttempted: false,
+      acceptedMutationCalls: [],
+      rejectedMutationCalls: [],
     };
 
     const maxAttempts = mutationRequested ? 2 : 1;
@@ -635,6 +803,7 @@ export async function runAgentWithHistory(
         mutationRequested,
         tasksBefore,
         assistantResponse,
+        attemptResult.mutationToolCalls,
         taskService,
       );
       tasksAfter = finalVerification.tasksAfter as ComparableTask[];
@@ -643,11 +812,21 @@ export async function runAgentWithHistory(
         break;
       }
 
-      if (finalVerification.tasksChanged) {
+      if (finalVerification.rejectedMutationCalls.length > 0) {
+        assistantResponse = buildRejectedMutationMessage(finalVerification.rejectedMutationCalls);
+        break;
+      }
+
+      if (finalVerification.tasksChanged && finalVerification.acceptedMutationCalls.length > 0) {
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
           assistantResponse.trim() || 'Изменения применены.',
         );
+        break;
+      }
+
+      if (finalVerification.acceptedMutationCalls.length > 0 && !finalVerification.tasksChanged) {
+        assistantResponse = buildInconsistentMutationMessage();
         break;
       }
 
@@ -657,19 +836,17 @@ export async function runAgentWithHistory(
       }
 
       retryInstruction = [
-        'The previous attempt did not perform any real mutation tool call.',
-        'Call `get_tasks` again at the start of this retry.',
+        'The previous attempt did not perform a successful normalized mutation tool call.',
+        'Start this retry with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
         'Identify the correct parent/container before mutating.',
-        'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, `delete_task`, `set_dependency`, or `remove_dependency`.',
-        'If you create sequential new tasks and already know the predecessor, include that dependency inside `create_task` instead of scheduling a separate `set_dependency` step.',
-        'Reuse only real task IDs returned by tool results. Never invent a UUID for `dependencies.taskId`.',
-        'If the predecessor ID is uncertain, omit the speculative dependency and use a safe fallback instead of retrying with a guessed ID.',
-        'When moving or resizing dependency-linked tasks, prefer `move_task`, `resize_task`, or `recalculate_schedule` so the authoritative changed set is returned by the server.',
-        'Treat `changedTasks` / `changedIds` as the authoritative success footprint. If the tool reports a broader cascade, your final answer must reflect that.',
+        'Then call one or more normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, or `recalculate_project`.',
+        'Use `move_tasks` for structural placement, `link_tasks` / `unlink_tasks` for dependency edits, and `shift_tasks` for relative date changes.',
+        'Reuse only real task IDs returned by tool results or reads. Never invent an ID.',
+        'Treat `changedTaskIds` and `changedTasks` as the authoritative success footprint.',
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',
-        'A text-only success answer is invalid if the project snapshot did not actually change.',
+        'A text-only success answer is invalid if no accepted mutation tool changed the project.',
         'If the request cannot be completed with available tools, say that explicitly and do not claim success.',
         assistantResponse.trim().length > 0 ? `Previous invalid answer: ${assistantResponse.trim()}` : '',
       ].filter(Boolean).join('\n');

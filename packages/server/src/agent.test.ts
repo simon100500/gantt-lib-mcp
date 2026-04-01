@@ -26,14 +26,14 @@ describe('agent hierarchy mutation intent', () => {
 });
 
 describe('agent system prompt hierarchy guidance', () => {
-  it('documents parentId workflow for nesting', () => {
+  it('documents structural move workflow for nesting', () => {
     const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
     const prompt = readFileSync(promptPath, 'utf-8');
 
     assert.match(prompt, /Hierarchy Rules/);
-    assert.match(prompt, /parentId/);
+    assert.match(prompt, /move_tasks/);
     assert.match(prompt, /subtasks|child tasks|nested work/i);
-    assert.match(prompt, /empty string/i);
+    assert.doesNotMatch(prompt, /update_task|parentId/);
   });
 
   it('documents container-first planning and validation', () => {
@@ -46,15 +46,15 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /Avoid duplicates/i);
   });
 
-  it('documents inline dependency creation for new sequential tasks', () => {
+  it('documents normalized dependency and shift tools', () => {
     const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
     const prompt = readFileSync(promptPath, 'utf-8');
 
-    assert.match(prompt, /pass `dependencies` directly in `create_task`/i);
-    assert.match(prompt, /use `set_dependency`.*fallback/i);
-    assert.match(prompt, /2-5 sequential child tasks/i);
-    assert.match(prompt, /exact `createdTaskId`/i);
-    assert.match(prompt, /never invent|never fabricate/i);
+    assert.match(prompt, /link_tasks/i);
+    assert.match(prompt, /unlink_tasks/i);
+    assert.match(prompt, /shift_tasks/i);
+    assert.match(prompt, /never guess/i);
+    assert.doesNotMatch(prompt, /create_task|set_dependency|remove_dependency|move_task|resize_task|recalculate_schedule/);
   });
 });
 
