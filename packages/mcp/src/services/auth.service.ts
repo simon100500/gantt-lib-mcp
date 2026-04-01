@@ -218,7 +218,7 @@ export class AuthService {
   async updateProject(
     projectId: string,
     userId: string,
-    updates: { name?: string; ganttDayMode?: 'business' | 'calendar' },
+    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null },
   ): Promise<Project | null> {
     return projectService.update(projectId, userId, updates);
   }

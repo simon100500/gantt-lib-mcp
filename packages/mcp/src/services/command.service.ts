@@ -38,6 +38,7 @@ import type {
 } from '../types.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
+import { getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 
 const CORE_VERSION = '0.62.0';
 
@@ -59,20 +60,7 @@ function normalizeSnapshot(tasks: Task[]): CoreTask[] {
 
 /** Load project's ganttDayMode and build scheduling options */
 async function getScheduleOptions(projectId: string, prisma: any): Promise<CoreOptions> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { ganttDayMode: true },
-  });
-
-  const isWeekend = (date: Date): boolean => {
-    const day = date.getUTCDay();
-    return day === 0 || day === 6;
-  };
-
-  return {
-    businessDays: project?.ganttDayMode === 'business',
-    weekendPredicate: isWeekend,
-  };
+  return getProjectScheduleOptionsForProject(prisma, projectId);
 }
 
 /** Load all tasks + dependencies for a project, return as Task[] */
@@ -253,13 +241,7 @@ export class CommandService {
         // Step 3: Load current snapshot
         const beforeTasks = await loadTaskSnapshot(projectId, tx);
         const coreSnapshot = normalizeSnapshot(beforeTasks);
-        const opts: CoreOptions = {
-          businessDays: project.ganttDayMode === 'business',
-          weekendPredicate: (date: Date) => {
-            const day = date.getUTCDay();
-            return day === 0 || day === 6;
-          },
-        };
+          const opts: CoreOptions = await getScheduleOptions(projectId, tx);
 
         // Step 4: Execute command through gantt-lib
         const newVersion = baseVersion + 1;

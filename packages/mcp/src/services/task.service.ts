@@ -22,6 +22,7 @@ import { dependencyService } from './dependency.service.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
 import { sanitizeHierarchyDependencies } from './hierarchy-dependency-sanitizer.js';
+import { buildProjectScheduleOptions, getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 
 export class TaskService {
   private _prisma: ReturnType<typeof getPrisma> | undefined;
@@ -216,28 +217,12 @@ export class TaskService {
     });
   }
 
-  private isWeekend(date: Date): boolean {
-    const day = date.getUTCDay();
-    return day === 0 || day === 6;
-  }
-
   private async getScheduleOptions(projectId?: string): Promise<ScheduleCommandOptions> {
     if (!projectId) {
-      return {
-        businessDays: false,
-        weekendPredicate: (date) => this.isWeekend(date),
-      };
+      return buildProjectScheduleOptions('calendar');
     }
 
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      select: { ganttDayMode: true },
-    });
-
-    return {
-      businessDays: project?.ganttDayMode === 'business',
-      weekendPredicate: (date) => this.isWeekend(date),
-    };
+    return getProjectScheduleOptionsForProject(this.prisma, projectId);
   }
 
   private async runScheduler(
