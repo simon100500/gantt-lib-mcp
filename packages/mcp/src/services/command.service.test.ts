@@ -619,19 +619,6 @@ describe('Dependency Type Regression', () => {
 // ============================================================
 
 describe('CommandService command dispatch', () => {
-  it('reorder_task produces no scheduling changes', () => {
-    // reorder_task is purely visual — no scheduling change
-    // This tests the command dispatch logic, not the DB path
-    const snapshot = createFSChainSnapshot();
-
-    // A reorder should produce empty changed tasks
-    // (In CommandService this returns { changedTasks: [], changedIds: [] })
-    // We verify the scheduling core is NOT invoked for reorders
-    const result = recalculateProjectSchedule(toCoreSnapshot(snapshot), { businessDays: false });
-    // Before reorder, same as after reorder for scheduling purposes
-    assert.ok(result.changedIds.length >= 0, 'Reorder should not affect scheduling');
-  });
-
   it('reorder_tasks batches visual sort updates without scheduling changes', async () => {
     const service = new CommandService() as any;
     const snapshot = toCoreSnapshot(createFSChainSnapshot());

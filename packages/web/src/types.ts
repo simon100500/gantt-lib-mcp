@@ -83,7 +83,6 @@ export type FrontendProjectCommand =
         parentId?: string | null;
         progress?: number;
         dependencies?: TaskDependency[];
-        sortOrder?: number;
       };
     }
   | { type: 'create_task'; task: Omit<Task, 'id'> & { id?: string }; }
@@ -93,7 +92,6 @@ export type FrontendProjectCommand =
   | { type: 'change_dependency_lag'; taskId: string; depTaskId: string; lag: number; }
   | { type: 'recalculate_schedule'; taskId?: string; }
   | { type: 'reparent_task'; taskId: string; newParentId: string | null; }
-  | { type: 'reorder_task'; taskId: string; sortOrder: number; }
   | { type: 'reorder_tasks'; updates: Array<{ taskId: string; sortOrder: number; }>; };
 
 export interface ProjectSnapshot {

@@ -220,7 +220,6 @@ export function replayProjectCommand(
               ...(command.fields.color !== undefined ? { color: command.fields.color } : {}),
               ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
               ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
-              ...(command.fields.sortOrder !== undefined ? { sortOrder: command.fields.sortOrder } : {}),
               ...(command.fields.dependencies !== undefined ? { dependencies: normalizeTaskDependencies(command.fields.dependencies) } : {}),
             }
           : task
@@ -245,13 +244,6 @@ export function replayProjectCommand(
       const result = recalculateProjectSchedule(nextTasks.map(normalizeCoreTask), options);
       return withTasks(toTaskArray(mergeChangedTasks(nextTasks.map(normalizeCoreTask), result.changedTasks)));
     }
-
-    case 'reorder_task':
-      return withTasks(
-        toTaskArray(coreSnapshot).map((task) => (
-          task.id === command.taskId ? { ...task, sortOrder: command.sortOrder } : task
-        )),
-      );
 
     case 'reorder_tasks': {
       const sortById = new Map(command.updates.map((update) => [update.taskId, update.sortOrder]));

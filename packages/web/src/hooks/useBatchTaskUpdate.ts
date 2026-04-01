@@ -622,15 +622,11 @@ export function useBatchTaskUpdate({
           });
         }
 
-        for (const task of updated) {
-          const originalTask = tasks.find((candidate) => candidate.id === task.id);
-          if ((originalTask?.sortOrder ?? null) !== (task.sortOrder ?? null)) {
-            await commitOrThrow({
-              type: 'reorder_task',
-              taskId: task.id,
-              sortOrder: task.sortOrder ?? 0,
-            });
-          }
+        if (reorderUpdates.length > 0) {
+          await commitOrThrow({
+            type: 'reorder_tasks',
+            updates: reorderUpdates,
+          });
         }
         setTasks(await fetchProjectSnapshot());
         setSavingStateWithReset('saved');
@@ -642,15 +638,11 @@ export function useBatchTaskUpdate({
       setTasks(tasksWithOrder);
       try {
         setSavingStateWithReset('saving');
-        for (const task of tasksWithOrder) {
-          const originalTask = tasks.find((candidate) => candidate.id === task.id);
-          if ((originalTask?.sortOrder ?? null) !== (task.sortOrder ?? null)) {
-            await commitOrThrow({
-              type: 'reorder_task',
-              taskId: task.id,
-              sortOrder: task.sortOrder ?? 0,
-            });
-          }
+        if (reorderUpdates.length > 0) {
+          await commitOrThrow({
+            type: 'reorder_tasks',
+            updates: reorderUpdates,
+          });
         }
         setTasks(await fetchProjectSnapshot());
         setSavingStateWithReset('saved');

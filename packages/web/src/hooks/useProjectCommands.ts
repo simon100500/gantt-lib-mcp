@@ -70,10 +70,6 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   if ((nextTask.progress ?? 0) !== (originalTask.progress ?? 0)) {
     fieldUpdates.progress = nextTask.progress;
   }
-  if ((nextTask.sortOrder ?? null) !== (originalTask.sortOrder ?? null)) {
-    fieldUpdates.sortOrder = nextTask.sortOrder;
-  }
-
   const nextDependencies = normalizeDependencies(nextTask.dependencies);
   const originalDependencies = normalizeDependencies(originalTask.dependencies);
   if (JSON.stringify(nextDependencies) !== JSON.stringify(originalDependencies)) {

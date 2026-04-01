@@ -452,7 +452,6 @@ export class CommandService {
       case 'delete_task':
       case 'update_task_fields':
       case 'reparent_task':
-      case 'reorder_task':
         return command.taskId;
       case 'reorder_tasks':
         return command.updates[0]?.taskId;
@@ -604,7 +603,6 @@ export class CommandService {
           ...(command.fields.color !== undefined ? { color: command.fields.color } : {}),
           ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
           ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
-          ...(command.fields.sortOrder !== undefined ? { sortOrder: command.fields.sortOrder } : {}),
           ...(command.fields.dependencies !== undefined
             ? {
                 dependencies: command.fields.dependencies.map((dependency) => ({
@@ -800,18 +798,6 @@ export class CommandService {
           return t;
         });
         coreResult = recalculateProjectSchedule(updatedSnapshot, opts);
-        break;
-      }
-
-      case 'reorder_task': {
-        taskChanges.push({
-          action: 'update_sort',
-          taskId: command.taskId,
-          sortOrder: command.sortOrder,
-        });
-
-        // Reorder is purely visual — no scheduling change
-        coreResult = { changedTasks: [], changedIds: [] };
         break;
       }
 
