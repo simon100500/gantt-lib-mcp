@@ -306,7 +306,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
       if (!hasShareToken && auth.isAuthenticated) {
         const projectStore = useProjectStore.getState();
-        projectStore.hydrateConfirmed(projectStore.confirmed.version, {
+        projectStore.mergeConfirmedSnapshot({
           tasks: normalizedTasks,
           dependencies: buildDependencyRowsFromTasks(normalizedTasks),
         });

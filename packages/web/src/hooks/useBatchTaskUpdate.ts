@@ -5,6 +5,7 @@ import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStor
 import { useUIStore, type SavingState } from '../stores/useUIStore';
 import { useTaskMutation, type TaskMutationResponse, buildCommandsFromDiff } from './useTaskMutation';
 import { useCommandCommit } from './useCommandCommit';
+import { getProjectScheduleOptions } from '../lib/projectScheduleOptions';
 
 export interface UseBatchTaskUpdateOptions {
   tasks: Task[];
@@ -37,7 +38,7 @@ export function useBatchTaskUpdate({
   const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAuthenticatedMode = Boolean(accessToken);
-  const scheduleOptions = { businessDays: ganttDayMode !== 'calendar' } as const;
+  const scheduleOptions = getProjectScheduleOptions(ganttDayMode);
 
   const toDateString = useCallback((value: Task['startDate']) => (
     typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0]

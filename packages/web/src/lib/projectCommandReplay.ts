@@ -1,4 +1,6 @@
 import {
+  buildTaskRangeFromEnd,
+  buildTaskRangeFromStart,
   moveTaskWithCascade,
   resizeTaskWithCascade,
   recalculateProjectSchedule,
@@ -56,7 +58,7 @@ function toTaskArray(tasks: CoreTask[]): Task[] {
 export function replayProjectCommand(
   snapshot: ProjectSnapshot,
   command: FrontendProjectCommand,
-  options: ScheduleCommandOptions = { businessDays: false },
+  options: ScheduleCommandOptions = {},
   requestId?: string,
 ): ProjectSnapshot {
   const coreSnapshot = normalizeCoreSnapshot(snapshot);
@@ -88,15 +90,23 @@ export function replayProjectCommand(
       const start = parseDateOnly(task.startDate as string);
       const end = parseDateOnly(task.endDate as string);
       if ((command.anchor ?? 'end') === 'end') {
-        const nextEnd = new Date(start);
-        nextEnd.setUTCDate(nextEnd.getUTCDate() + command.duration - 1);
+        const { end: nextEnd } = buildTaskRangeFromStart(
+          start,
+          command.duration,
+          options.businessDays ?? false,
+          options.weekendPredicate,
+        );
         return withTasks(toTaskArray(
           mergeChangedTasks(coreSnapshot, resizeTaskWithCascade(command.taskId, 'end', nextEnd, coreSnapshot, options).changedTasks),
         ));
       }
 
-      const nextStart = new Date(end);
-      nextStart.setUTCDate(nextStart.getUTCDate() - command.duration + 1);
+      const { start: nextStart } = buildTaskRangeFromEnd(
+        end,
+        command.duration,
+        options.businessDays ?? false,
+        options.weekendPredicate,
+      );
       return withTasks(toTaskArray(
         mergeChangedTasks(coreSnapshot, resizeTaskWithCascade(command.taskId, 'start', nextStart, coreSnapshot, options).changedTasks),
       ));

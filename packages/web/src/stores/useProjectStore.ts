@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import type { Task, ProjectState, ProjectSnapshot, FrontendProjectCommand, PendingCommand } from '../types';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
+import { getDefaultProjectScheduleOptions } from '../lib/projectScheduleOptions';
+import type { ScheduleCommandOptions } from 'gantt-lib/core/scheduling';
 
-export interface ProjectScheduleOptions {
-  businessDays: boolean;
-}
+export type ProjectScheduleOptions = ScheduleCommandOptions;
 
 export function deriveVisibleSnapshot(
   confirmedSnapshot: ProjectSnapshot,
@@ -24,6 +24,7 @@ export function deriveVisibleSnapshot(
 
 interface ProjectStoreState extends ProjectState {
   setConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
+  mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
   hydrateConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
   addPending: (pending: PendingCommand) => void;
   resolvePending: (requestId: string, newVersion: number, snapshot: ProjectSnapshot) => void;
@@ -38,9 +39,23 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
   pending: [],
   dragPreview: undefined,
-  scheduleOptions: { businessDays: true },
+  scheduleOptions: getDefaultProjectScheduleOptions(),
 
-  setConfirmed: (version, snapshot) => set({ confirmed: { version, snapshot } }),
+  setConfirmed: (version, snapshot) => set((state) => (
+    version >= state.confirmed.version
+      ? { confirmed: { version, snapshot } }
+      : state
+  )),
+  mergeConfirmedSnapshot: (snapshot, version) => set((state) => {
+    const nextVersion = version ?? state.confirmed.version;
+    if (nextVersion < state.confirmed.version) {
+      return state;
+    }
+
+    return {
+      confirmed: { version: nextVersion, snapshot },
+    };
+  }),
   hydrateConfirmed: (version, snapshot) => set({
     confirmed: { version, snapshot },
     pending: [],
@@ -48,7 +63,9 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   }),
   addPending: (pending) => set((state) => ({ pending: [...state.pending, pending] })),
   resolvePending: (requestId, newVersion, snapshot) => set((state) => ({
-    confirmed: { version: newVersion, snapshot },
+    ...(newVersion >= state.confirmed.version
+      ? { confirmed: { version: newVersion, snapshot } }
+      : {}),
     pending: state.pending.filter((p) => p.requestId !== requestId),
     dragPreview: undefined,
   })),

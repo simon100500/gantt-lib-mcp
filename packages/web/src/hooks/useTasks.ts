@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import type { Task } from '../types.ts';
 import { useTaskStore } from '../stores/useTaskStore.ts';
 import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore.ts';
+import { getProjectScheduleOptions } from '../lib/projectScheduleOptions.ts';
 
 export interface UseTasksResult {
   tasks: Task[];
@@ -25,19 +26,20 @@ export function useTasks(
   const pendingCommands = useProjectStore((state) => state.pending);
   const dragPreview = useProjectStore((state) => state.dragPreview);
   const setScheduleOptions = useProjectStore((state) => state.setScheduleOptions);
+  const scheduleOptions = useMemo(() => getProjectScheduleOptions(ganttDayMode), [ganttDayMode]);
 
   useEffect(() => {
-    setScheduleOptions({ businessDays: ganttDayMode !== 'calendar' });
-  }, [ganttDayMode, setScheduleOptions]);
+    setScheduleOptions(scheduleOptions);
+  }, [scheduleOptions, setScheduleOptions]);
 
   const visibleTasks = useMemo(() => {
     return deriveVisibleSnapshot(
       confirmedSnapshot,
       pendingCommands,
       dragPreview,
-      { businessDays: ganttDayMode !== 'calendar' },
+      scheduleOptions,
     ).tasks;
-  }, [confirmedSnapshot, dragPreview, ganttDayMode, pendingCommands]);
+  }, [confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions]);
 
   useEffect(() => {
     void useTaskStore.getState().syncSource({
