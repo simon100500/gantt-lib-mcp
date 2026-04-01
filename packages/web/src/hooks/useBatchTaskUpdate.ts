@@ -184,7 +184,51 @@ export function useBatchTaskUpdate({
     parentId: task.parentId,
     progress: task.progress,
     dependencies: task.dependencies,
+    sortOrder: task.sortOrder,
   }), []);
+
+  const findInsertIndexAfterSubtree = useCallback((taskList: Task[], anchorTaskId: string): number => {
+    const anchorIndex = taskList.findIndex((task) => task.id === anchorTaskId);
+    if (anchorIndex === -1) {
+      return taskList.length - 1;
+    }
+
+    const taskById = new Map(taskList.map((task) => [task.id, task]));
+    let insertIndex = anchorIndex;
+
+    for (let index = anchorIndex + 1; index < taskList.length; index += 1) {
+      let currentParentId = taskList[index]?.parentId;
+      let isDescendant = false;
+
+      while (currentParentId) {
+        if (currentParentId === anchorTaskId) {
+          isDescendant = true;
+          break;
+        }
+        currentParentId = taskById.get(currentParentId)?.parentId;
+      }
+
+      if (!isDescendant) {
+        break;
+      }
+
+      insertIndex = index;
+    }
+
+    return insertIndex;
+  }, []);
+
+  const insertTaskAfterAnchor = useCallback((taskList: Task[], anchorTaskId: string, taskToInsert: Task): Task[] => {
+    const existingIndex = taskList.findIndex((task) => task.id === taskToInsert.id);
+    const workingTasks = existingIndex === -1
+      ? [...taskList]
+      : taskList.filter((task) => task.id !== taskToInsert.id);
+
+    const insertIndex = findInsertIndexAfterSubtree(workingTasks, anchorTaskId);
+    const nextTasks = [...workingTasks];
+    nextTasks.splice(insertIndex + 1, 0, taskToInsert);
+    return nextTasks;
+  }, [findInsertIndexAfterSubtree]);
 
   const persistAuthoritativeCascade = useCallback(async (changedTasks: Task[]) => {
     let workingTasks = tasks;
@@ -470,7 +514,16 @@ export function useBatchTaskUpdate({
     if (isAuthenticatedMode) {
       try {
         setSavingStateWithReset('saving');
-        await createTask(toCreateTaskInput(newTask));
+        const reorderedTasks = insertTaskAfterAnchor(tasks, taskId, newTask).map((task, index) => ({
+          ...task,
+          sortOrder: index,
+        }));
+        const insertedTask = reorderedTasks.find((task) => task.id === newTask.id);
+        if (!insertedTask) {
+          throw new Error(`Inserted task ${newTask.id} not found in reordered task list`);
+        }
+
+        await createTask(toCreateTaskInput(insertedTask));
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to insert task:', error);
@@ -480,13 +533,7 @@ export function useBatchTaskUpdate({
     }
 
     // Optimistic update
-    setTasks(prev => {
-      const index = prev.findIndex(t => t.id === taskId);
-      if (index === -1) return prev;
-      const newTasks = [...prev];
-      newTasks.splice(index + 1, 0, newTask);
-      return newTasks;
-    });
+    setTasks((prev) => insertTaskAfterAnchor(prev, taskId, newTask));
 
     // Server update
     try {
@@ -502,7 +549,7 @@ export function useBatchTaskUpdate({
       });
 
       // Replace optimistic task with server response
-      setTasks(prev => prev.map(t => t.id === newTask.id ? created : t));
+      setTasks((prev) => prev.map((task) => task.id === newTask.id ? created : task));
       setSavingStateWithReset('saved');
     } catch (error) {
       console.error('[useBatchTaskUpdate] Failed to insert task:', error);
@@ -510,7 +557,7 @@ export function useBatchTaskUpdate({
       // Revert optimistic update on error
       setTasks(prev => prev.filter(t => t.id !== newTask.id));
     }
-  }, [createTask, isAuthenticatedMode, setSavingStateWithReset, setTasks, toCreateTaskInput]);
+  }, [createTask, insertTaskAfterAnchor, isAuthenticatedMode, setSavingStateWithReset, tasks, toCreateTaskInput]);
 
   const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
     // Add sortOrder to all tasks based on their position in the array

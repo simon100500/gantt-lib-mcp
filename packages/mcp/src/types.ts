@@ -62,6 +62,8 @@ export interface Task {
  * Input type for creating a new task
  */
 export interface CreateTaskInput {
+  /** Optional client-generated task ID for optimistic/linked creation flows */
+  id?: string;
   /** Task name */
   name: string;
   /** Start date in ISO format: 'YYYY-MM-DD' */
@@ -76,6 +78,8 @@ export interface CreateTaskInput {
   progress?: number;
   /** Optional task dependencies */
   dependencies?: TaskDependency[];
+  /** Optional sort order for display position */
+  sortOrder?: number;
   /** Optional project ID to associate the task with */
   projectId?: string;
 }

@@ -129,6 +129,7 @@ export function replayProjectCommand(
 
     case 'create_task': {
       const taskId = command.task.id ?? `pending:${requestId ?? crypto.randomUUID()}`;
+      const createdSortOrder = command.task.sortOrder;
       const createdTask: Task = {
         id: taskId,
         name: command.task.name,
@@ -138,9 +139,15 @@ export function replayProjectCommand(
         parentId: command.task.parentId,
         progress: command.task.progress,
         dependencies: normalizeTaskDependencies(command.task.dependencies),
+        sortOrder: createdSortOrder,
       };
 
-      const nextTasks = [...toTaskArray(coreSnapshot), createdTask];
+      const nextTasks = toTaskArray(coreSnapshot).map((task) => (
+        createdSortOrder !== undefined && (task.sortOrder ?? Number.MAX_SAFE_INTEGER) >= createdSortOrder
+          ? { ...task, sortOrder: (task.sortOrder ?? createdSortOrder) + 1 }
+          : task
+      ));
+      nextTasks.push(createdTask);
       if ((createdTask.dependencies?.length ?? 0) === 0) {
         return withTasks(nextTasks);
       }

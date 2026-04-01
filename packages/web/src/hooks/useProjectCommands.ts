@@ -11,6 +11,7 @@ export interface CreateTaskInput {
   parentId?: string;
   progress?: number;
   dependencies?: TaskDependency[];
+  sortOrder?: number;
 }
 
 export interface UseProjectCommandsResult {

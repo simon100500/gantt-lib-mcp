@@ -287,7 +287,20 @@ export class CommandService {
               where: { projectId },
               _max: { sortOrder: true },
             });
-            const sortOrder = (maxSort._max.sortOrder ?? -1) + 1;
+            let sortOrder = 'sortOrder' in taskChange.task ? taskChange.task.sortOrder : undefined;
+            if (sortOrder === undefined) {
+              sortOrder = (maxSort._max.sortOrder ?? -1) + 1;
+            } else {
+              await tx.task.updateMany({
+                where: {
+                  projectId,
+                  sortOrder: { gte: sortOrder },
+                },
+                data: {
+                  sortOrder: { increment: 1 },
+                },
+              });
+            }
             await tx.task.create({
               data: {
                 id: taskChange.task.id,
@@ -653,7 +666,7 @@ export class CommandService {
       }
 
       case 'create_task': {
-        const taskId = randomUUID();
+        const taskId = command.task.id ?? randomUUID();
         const newTask: Task = {
           id: taskId,
           name: command.task.name,
@@ -663,6 +676,7 @@ export class CommandService {
           parentId: command.task.parentId,
           progress: command.task.progress,
           dependencies: command.task.dependencies,
+          sortOrder: command.task.sortOrder,
         };
         taskChanges.push({ action: 'create', task: { ...newTask, id: taskId } });
 
