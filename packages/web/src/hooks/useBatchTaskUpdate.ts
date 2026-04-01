@@ -34,7 +34,7 @@ export function useBatchTaskUpdate({
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toDateString = useCallback((value: Task['startDate']) => (
-    typeof value === 'string' ? value : value.toISOString().split('T')[0]
+    typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0]
   ), []);
 
   const mergeTasksById = useCallback((currentTasks: Task[], nextTasks: Task[]): Task[] => {
@@ -124,7 +124,7 @@ export function useBatchTaskUpdate({
         break;
       }
 
-      const currentTask = workingTasks.find((task) => task.id === nextTask.id) ?? nextTask;
+      const currentTask = nextTask;
       const originalTask = tasks.find((task) => task.id === currentTask.id) ?? currentTask;
       const result = await mutateTask(currentTask, originalTask);
       workingTasks = mergeTasksById(workingTasks, result.changedTasks);
@@ -187,11 +187,11 @@ export function useBatchTaskUpdate({
       const depsChanged = JSON.stringify(original.dependencies) !== JSON.stringify(t.dependencies);
       const nothingElseChanged =
         original.name === t.name &&
-        original.startDate === t.startDate &&
-        original.endDate === t.endDate &&
-        original.parentId === t.parentId &&
-        original.color === t.color &&
-        original.progress === t.progress;
+        toDateString(original.startDate) === toDateString(t.startDate) &&
+        toDateString(original.endDate) === toDateString(t.endDate) &&
+        (original.parentId ?? null) === (t.parentId ?? null) &&
+        (original.color ?? null) === (t.color ?? null) &&
+        (original.progress ?? 0) === (t.progress ?? 0);
       return depsChanged && nothingElseChanged;
     });
 

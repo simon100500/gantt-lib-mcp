@@ -44,7 +44,7 @@ interface LoadProjectResponse {
 }
 
 function toDateString(value: Task['startDate']): string {
-  return typeof value === 'string' ? value : value.toISOString().split('T')[0];
+  return typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0];
 }
 
 function normalizeDependencies(dependencies: TaskDependency[] | undefined): TaskDependency[] {
