@@ -19,6 +19,7 @@ import { writeServerDebugLog } from './debug-log.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
+const MCP_DEBUG_LOG_PATH = join(PROJECT_ROOT, '.planning/debug/mcp-agent.log');
 
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
 
@@ -117,6 +118,9 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
 
 export function isMutationIntent(message: string): boolean {
   const normalized = message.toLowerCase();
+  if (/(?:сдвин\w*|передвин\w*|смест\w*|перенеси?\s+.+\s+на\s+\d+\s+дн\w*)/.test(normalized)) {
+    return true;
+  }
   const russianMutationMarkers = [
     '\u0434\u043e\u0431\u0430\u0432',
     '\u0432\u043d\u0435\u0441',
@@ -135,6 +139,12 @@ export function isMutationIntent(message: string): boolean {
     '\u0434\u043e\u0447\u0435\u0440\u043d',
     '\u0432\u043d\u0443\u0442\u0440\u044c',
     '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u0432',
+    '\u0441\u0434\u0432\u0438\u043d',
+    '\u0441\u0434\u0432\u0438\u043d\u044c',
+    '\u043f\u0435\u0440\u0435\u0434\u0432\u0438\u043d',
+    '\u0441\u043c\u0435\u0441\u0442\u0438',
+    '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u043d\u0430',
+    '\u0441\u0434\u0432\u0438\u0433 \u043d\u0430',
     '\u0441\u0434\u0435\u043b\u0430\u0439 \u0438\u0435\u0440\u0430\u0440\u0445',
   ];
 
@@ -142,7 +152,7 @@ export function isMutationIntent(message: string): boolean {
     return true;
   }
 
-  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b)/i.test(message);
+  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b|\bshift\b|\bmove\b.+\bby\b|\bpush\b.+\bdays?\b)/i.test(message);
 }
 
 export function isSimpleMutationRequest(message: string): boolean {
@@ -236,13 +246,24 @@ export function assessMutationOutcome(
   mutationToolCalls: MutationToolCall[],
   actualChangedTaskIds: string[],
 ): MutationOutcomeAssessment {
+  const actualChangedSorted = uniqueSorted(actualChangedTaskIds);
   const acceptedMutationCalls = mutationToolCalls.filter((call) => call.status === 'accepted');
   const rejectedMutationCalls = mutationToolCalls.filter((call) => call.status === 'rejected');
+  const pendingMutationCalls = mutationToolCalls.filter((call) => call.status === undefined);
+  const inferredAcceptedMutationCalls = acceptedMutationCalls.length === 0
+    && rejectedMutationCalls.length === 0
+    && pendingMutationCalls.length > 0
+    && actualChangedSorted.length > 0
+      ? pendingMutationCalls.map((call) => ({
+        ...call,
+        status: 'accepted' as const,
+        changedTaskIds: actualChangedSorted,
+      }))
+      : acceptedMutationCalls;
   const acceptedChangedTaskIds = uniqueSorted(
-    acceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
+    inferredAcceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
   );
-  const actualChangedSorted = uniqueSorted(actualChangedTaskIds);
-  const acceptedChangedTaskIdMismatch = acceptedMutationCalls.length > 0 && (
+  const acceptedChangedTaskIdMismatch = inferredAcceptedMutationCalls.length > 0 && (
     acceptedChangedTaskIds.length === 0
     || acceptedChangedTaskIds.length !== actualChangedSorted.length
     || acceptedChangedTaskIds.some((taskId, index) => taskId !== actualChangedSorted[index])
@@ -250,11 +271,77 @@ export function assessMutationOutcome(
 
   return {
     mutationAttempted: mutationToolCalls.length > 0,
-    acceptedMutationCalls,
+    acceptedMutationCalls: inferredAcceptedMutationCalls,
     rejectedMutationCalls,
     acceptedChangedTaskIds,
     acceptedChangedTaskIdMismatch,
   };
+}
+
+async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number): Promise<MutationToolCall[]> {
+  if (!existsSync(MCP_DEBUG_LOG_PATH)) {
+    return [];
+  }
+
+  const content = await readFile(MCP_DEBUG_LOG_PATH, 'utf-8');
+  const lines = content.trim().split('\n').slice(-2000);
+  const toolCalls = new Map<string, MutationToolCall>();
+  let syntheticIndex = 0;
+
+  for (const line of lines) {
+    let parsed: { event?: string; payload?: Record<string, unknown> } | undefined;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const payload = parsed?.payload;
+    if (!payload) {
+      continue;
+    }
+
+    if (payload.aiRunId !== runId || String(payload.aiAttempt ?? '') !== String(attempt)) {
+      continue;
+    }
+
+    const toolName = payload.tool;
+    if (typeof toolName !== 'string' || !NORMALIZED_MUTATION_TOOL_NAMES.has(toolName as NormalizedMutationToolName)) {
+      continue;
+    }
+
+    const toolUseId = typeof payload.toolUseId === 'string'
+      ? payload.toolUseId
+      : `${toolName}:${syntheticIndex++}`;
+
+    const existing = toolCalls.get(toolUseId) ?? {
+      toolUseId,
+      toolName: toolName as NormalizedMutationToolName,
+    };
+
+    if (parsed?.event === 'tool_call_failed') {
+      existing.status = 'rejected';
+      existing.reason = typeof payload.error === 'string' ? payload.error : 'tool_error';
+    }
+
+    const result = payload.result;
+    if (result && typeof result === 'object') {
+      const status = (result as { status?: unknown }).status;
+      const reason = (result as { reason?: unknown }).reason;
+      const changedTaskIds = (result as { changedTaskIds?: unknown }).changedTaskIds;
+      if (status === 'accepted' || status === 'rejected') {
+        existing.status = status;
+        existing.reason = typeof reason === 'string' ? reason : undefined;
+        existing.changedTaskIds = Array.isArray(changedTaskIds)
+          ? changedTaskIds.filter((value): value is string => typeof value === 'string')
+          : [];
+      }
+    }
+
+    toolCalls.set(toolUseId, existing);
+  }
+
+  return [...toolCalls.values()];
 }
 
 function buildNoMutationMessage(): string {
@@ -647,6 +734,12 @@ async function executeAgentAttempt(
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
+    }
+  }
+
+  if (mutationRequested && mutationToolCalls.size === 0) {
+    for (const toolCall of await collectMutationToolCallsFromMcpLog(runId, attempt)) {
+      mutationToolCalls.set(toolCall.toolUseId, toolCall);
     }
   }
 

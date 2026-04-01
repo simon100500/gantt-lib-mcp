@@ -23,6 +23,11 @@ describe('agent hierarchy mutation intent', () => {
     assert.equal(isMutationIntent('Nest Plumbing under Floor 2'), true);
     assert.equal(isMutationIntent('Move Finishing under Phase B as a child task'), true);
   });
+
+  it('treats Russian relative shift requests as mutations', () => {
+    assert.equal(isMutationIntent('сдвинь штукатурку на 2 дня'), true);
+    assert.equal(isMutationIntent('перенеси штукатурку на 2 дня вперед'), true);
+  });
 });
 
 describe('agent system prompt hierarchy guidance', () => {
@@ -32,8 +37,8 @@ describe('agent system prompt hierarchy guidance', () => {
 
     assert.match(prompt, /Hierarchy Rules/);
     assert.match(prompt, /move_tasks/);
-    assert.match(prompt, /subtasks|child tasks|nested work/i);
-    assert.doesNotMatch(prompt, /update_task|parentId/);
+    assert.match(prompt, /real nesting|child work structurally|under a parent/i);
+    assert.doesNotMatch(prompt, /\bparentId\b/);
   });
 
   it('documents container-first planning and validation', () => {
@@ -41,8 +46,8 @@ describe('agent system prompt hierarchy guidance', () => {
     const prompt = readFileSync(promptPath, 'utf-8');
 
     assert.match(prompt, /Find the container/i);
-    assert.match(prompt, /WBS fragment/i);
-    assert.match(prompt, /Validate before finishing/i);
+    assert.match(prompt, /small intentional fragment|small meaningful fragment/i);
+    assert.match(prompt, /Validate the authoritative result before answering/i);
     assert.match(prompt, /Avoid duplicates/i);
   });
 
@@ -53,8 +58,8 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /link_tasks/i);
     assert.match(prompt, /unlink_tasks/i);
     assert.match(prompt, /shift_tasks/i);
-    assert.match(prompt, /never guess/i);
-    assert.doesNotMatch(prompt, /create_task|set_dependency|remove_dependency|move_task|resize_task|recalculate_schedule/);
+    assert.match(prompt, /Do not invent task IDs/i);
+    assert.doesNotMatch(prompt, /`set_dependency`|`remove_dependency`|`resize_task`|`recalculate_schedule`/);
   });
 });
 
@@ -123,5 +128,23 @@ describe('agent mutation verification assessment', () => {
 
     assert.equal(result.acceptedChangedTaskIdMismatch, false);
     assert.deepEqual(result.acceptedChangedTaskIds, ['A', 'B']);
+  });
+
+  it('infers accepted mutation when tool call is observed and snapshot changed', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'tool-1',
+          toolName: 'create_tasks',
+        },
+      ],
+      ['A'],
+    );
+
+    assert.equal(result.mutationAttempted, true);
+    assert.equal(result.acceptedMutationCalls.length, 1);
+    assert.equal(result.acceptedMutationCalls[0]?.status, 'accepted');
+    assert.deepEqual(result.acceptedChangedTaskIds, ['A']);
+    assert.equal(result.acceptedChangedTaskIdMismatch, false);
   });
 });

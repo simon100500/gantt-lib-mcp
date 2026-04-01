@@ -31,7 +31,13 @@ export async function writeMcpDebugLog(event: string, payload: Record<string, un
     ts: new Date().toISOString(),
     source: 'mcp',
     event,
-    payload: sanitize(payload),
+    payload: sanitize({
+      aiRunId: process.env.AI_RUN_ID,
+      aiSessionId: process.env.AI_SESSION_ID,
+      aiAttempt: process.env.AI_ATTEMPT,
+      aiMutationSource: process.env.AI_MUTATION_SOURCE,
+      ...payload,
+    }),
   });
 
   try {
