@@ -2,7 +2,22 @@
 
 ## Status
 
-Draft
+In progress
+
+## Progress Snapshot
+
+- Phase 01: implemented
+- Phase 02: implemented
+- Phase 03: implemented on the normalized MCP surface
+- Phase 04: implemented for prompt and retry orchestration
+- Phase 05: implemented for mutation-attempt and changed-set verification hardening
+- Phase 06: in progress
+
+Current cleanup target:
+
+- remove remaining legacy runtime handler branches from `packages/mcp/src/index.ts`
+- keep only normalized public scheduling paths plus non-scheduling conversation tools
+- add regression coverage that locks the cleanup
 
 ## Purpose
 

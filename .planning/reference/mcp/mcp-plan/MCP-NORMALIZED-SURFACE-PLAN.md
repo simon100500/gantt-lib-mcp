@@ -2,7 +2,24 @@
 
 ## Status
 
-Draft
+In progress
+
+## Implementation Progress
+
+Completed so far:
+
+- normalized public MCP tool catalog shipped
+- normalized mutation result and rejection contract shipped
+- targeted read tools shipped
+- normalized semantic mutation tools shipped
+- MCP prompt rewritten to normalized surface only
+- server retry and verification rewritten to normalized surface only
+- mutation verification hardened around actual typed mutation execution and changed-set consistency
+
+Current focus:
+
+- remove remaining legacy runtime branches from `packages/mcp/src/index.ts`
+- finish regression locking so the public MCP experience has no hidden dual-path behavior
 
 ## Purpose
 
