@@ -454,6 +454,8 @@ export class CommandService {
       case 'reparent_task':
       case 'reorder_task':
         return command.taskId;
+      case 'reorder_tasks':
+        return command.updates[0]?.taskId;
       case 'recalculate_schedule':
         return command.taskId;
       case 'create_task':
@@ -809,6 +811,19 @@ export class CommandService {
         });
 
         // Reorder is purely visual — no scheduling change
+        coreResult = { changedTasks: [], changedIds: [] };
+        break;
+      }
+
+      case 'reorder_tasks': {
+        for (const update of command.updates) {
+          taskChanges.push({
+            action: 'update_sort',
+            taskId: update.taskId,
+            sortOrder: update.sortOrder,
+          });
+        }
+
         coreResult = { changedTasks: [], changedIds: [] };
         break;
       }

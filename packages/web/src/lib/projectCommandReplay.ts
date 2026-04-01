@@ -41,10 +41,25 @@ function buildDependencyRows(tasks: Task[]): ProjectSnapshot['dependencies'] {
   );
 }
 
+function sortTasksForDisplay(tasks: Task[]): Task[] {
+  return tasks
+    .map((task, index) => ({ task, index }))
+    .sort((a, b) => {
+      const sortA = a.task.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const sortB = b.task.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      if (sortA !== sortB) {
+        return sortA - sortB;
+      }
+      return a.index - b.index;
+    })
+    .map(({ task }) => task);
+}
+
 function withTasks(tasks: Task[]): ProjectSnapshot {
+  const orderedTasks = sortTasksForDisplay(tasks);
   return {
-    tasks,
-    dependencies: buildDependencyRows(tasks),
+    tasks: orderedTasks,
+    dependencies: buildDependencyRows(orderedTasks),
   };
 }
 
@@ -237,6 +252,15 @@ export function replayProjectCommand(
           task.id === command.taskId ? { ...task, sortOrder: command.sortOrder } : task
         )),
       );
+
+    case 'reorder_tasks': {
+      const sortById = new Map(command.updates.map((update) => [update.taskId, update.sortOrder]));
+      return withTasks(
+        toTaskArray(coreSnapshot).map((task) => (
+          sortById.has(task.id) ? { ...task, sortOrder: sortById.get(task.id)! } : task
+        )),
+      );
+    }
   }
 }
 

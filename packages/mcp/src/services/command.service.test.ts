@@ -632,6 +632,42 @@ describe('CommandService command dispatch', () => {
     assert.ok(result.changedIds.length >= 0, 'Reorder should not affect scheduling');
   });
 
+  it('reorder_tasks batches visual sort updates without scheduling changes', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot(createFSChainSnapshot());
+
+    const result = await service.executeCommand(
+      {
+        type: 'reorder_tasks',
+        updates: [
+          { taskId: 'C', sortOrder: 0 },
+          { taskId: 'A', sortOrder: 1 },
+          { taskId: 'B', sortOrder: 2 },
+        ],
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(result.changedTasks, []);
+    assert.deepStrictEqual(result.changedDependencyIds, []);
+    assert.deepStrictEqual(result.conflicts, []);
+    assert.deepStrictEqual(
+      result.taskChanges.map((change: { action: string; taskId?: string; sortOrder?: number }) => ({
+        action: change.action,
+        taskId: change.taskId,
+        sortOrder: change.sortOrder,
+      })),
+      [
+        { action: 'update_sort', taskId: 'C', sortOrder: 0 },
+        { action: 'update_sort', taskId: 'A', sortOrder: 1 },
+        { action: 'update_sort', taskId: 'B', sortOrder: 2 },
+      ],
+    );
+  });
+
   it('update_task_fields returns the semantic field edit even without schedule changes', async () => {
     const service = new CommandService() as any;
     const snapshot = toCoreSnapshot(createFSChainSnapshot());

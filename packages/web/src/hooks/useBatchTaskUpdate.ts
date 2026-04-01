@@ -550,6 +550,15 @@ export function useBatchTaskUpdate({
       ...task,
       sortOrder: index,
     }));
+    const reorderUpdates = tasksWithOrder
+      .filter((task) => {
+        const originalTask = tasks.find((candidate) => candidate.id === task.id);
+        return (originalTask?.sortOrder ?? null) !== (task.sortOrder ?? null);
+      })
+      .map((task) => ({
+        taskId: task.id,
+        sortOrder: task.sortOrder ?? 0,
+      }));
 
     if (isAuthenticatedMode) {
       const commands: FrontendProjectCommand[] = [];
@@ -565,15 +574,11 @@ export function useBatchTaskUpdate({
         }
       }
 
-      for (const task of tasksWithOrder) {
-        const originalTask = tasks.find((candidate) => candidate.id === task.id);
-        if ((originalTask?.sortOrder ?? null) !== (task.sortOrder ?? null)) {
-          commands.push({
-            type: 'reorder_task',
-            taskId: task.id,
-            sortOrder: task.sortOrder ?? 0,
-          });
-        }
+      if (reorderUpdates.length > 0) {
+        commands.push({
+          type: 'reorder_tasks',
+          updates: reorderUpdates,
+        });
       }
 
       if (commands.length === 0) {
