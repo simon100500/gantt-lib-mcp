@@ -110,7 +110,9 @@ export interface ProjectState {
     version: number;
     snapshot: ProjectSnapshot;
   };
+  // Optimistic commands already sent to the server and awaiting authoritative ack.
   pending: PendingCommand[];
+  // Pointer-time preview shown during an active interaction before commit.
   dragPreview?: {
     commands: FrontendProjectCommand[];
     snapshot: ProjectSnapshot;

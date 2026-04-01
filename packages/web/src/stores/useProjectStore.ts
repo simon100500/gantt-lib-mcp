@@ -6,6 +6,17 @@ import type { ScheduleCommandOptions } from 'gantt-lib/core/scheduling';
 
 export type ProjectScheduleOptions = ScheduleCommandOptions;
 
+export function deriveOptimisticSnapshot(
+  confirmedSnapshot: ProjectSnapshot,
+  pending: PendingCommand[],
+  options: ProjectScheduleOptions,
+): ProjectSnapshot {
+  return pending.reduce(
+    (snapshot, pendingCommand) => replayProjectCommand(snapshot, pendingCommand.command, options, pendingCommand.requestId),
+    confirmedSnapshot,
+  );
+}
+
 export function deriveVisibleSnapshot(
   confirmedSnapshot: ProjectSnapshot,
   pending: PendingCommand[],
@@ -16,10 +27,7 @@ export function deriveVisibleSnapshot(
     return dragPreview.snapshot;
   }
 
-  return pending.reduce(
-    (snapshot, pendingCommand) => replayProjectCommand(snapshot, pendingCommand.command, options, pendingCommand.requestId),
-    confirmedSnapshot,
-  );
+  return deriveOptimisticSnapshot(confirmedSnapshot, pending, options);
 }
 
 interface ProjectStoreState extends ProjectState {
