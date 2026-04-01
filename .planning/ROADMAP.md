@@ -130,7 +130,7 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
-| 36. Unified Scheduling Core | Scheduling | 5/7 | In Progress|  |
+| 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
 
 ---
 
@@ -172,7 +172,7 @@ Plans:
 **Goal:** Единая scheduling authority: все изменения через typed commands, один gantt-lib/core/scheduling, server как единственный источник истины, deterministic/explainable/versioned результаты
 **Requirements**: PRD-only (`.planning/reference/unified-scheduling-core-prd.md`)
 **Depends on:** Phase 35
-**Plans:** 5/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 - [x] 36-01 — Fix gantt-lib core/scheduling subpath export (DTS + dependency)
@@ -180,8 +180,8 @@ Plans:
 - [x] 36-03 — Replace local scheduler with gantt-lib adapter + regression tests
 - [x] 36-04 — Command commit endpoint (CommandService + POST /api/commands/commit)
 - [x] 36-05 — Frontend three-layer state model + command commit flow
-- [ ] 36-06 — MCP/API channel parity (all mutations through command commit)
-- [ ] 36-07 — Parity + concurrency + patch reason tests (TDD)
+- [x] 36-06 — MCP/API channel parity (all mutations through command commit)
+- [x] 36-07 — Parity + concurrency + patch reason tests (TDD)
 
 ---
-*Last updated: 2026-03-31 — 36-01 complete (gantt-lib subpath export fix)*
+*Last updated: 2026-04-01 — 36-07 complete (parity + concurrency + patch reason tests)*

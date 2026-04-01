@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-03-31T22:12:53.051Z"
-last_activity: 2026-03-31
+last_updated: "2026-04-01T06:52:48.559Z"
+last_activity: 2026-04-01
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
-  completed_plans: 8
-  percent: 50
+  completed_plans: 10
+  percent: 80
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-03-31
+**Last updated:** 2026-04-01
 **Current milestone:** v5.0 Plan Constraints
 **Status:** Ready to execute
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 36 — Unified Scheduling Core (Plan 5 of 7 complete)
+**Current focus:** Phase 36 — Unified Scheduling Core (All 7 plans complete)
 
 ---
 
 ## Current Position
 
 Phase: 36 of 36 (Unified Scheduling Core)
-Plan: 5 of 7 complete
+Plan: 7 of 7 complete
 Status: Ready to execute
-Last activity: 2026-03-31
+Last activity: 2026-04-01
 
 Progress: [████████░░] 80%
 
@@ -87,7 +87,9 @@ packages/
 - Phase 36 Plan 02: ProjectCommand discriminated union (13 types), CommitProjectCommandRequest/Response, Patch model, ScheduleExecutionResult, ProjectEventRecord, Prisma ProjectEvent model with versioning
 - Phase 36 Plan 04: POST /api/commands/commit endpoint with CommandService handling all 13 command types via gantt-lib/core/scheduling, atomic Prisma $transaction with optimistic concurrency, event log persistence, patch reason attribution
 - Phase 36 Plan 05: Frontend three-layer Zustand store (confirmed/pending/dragPreview) with useCommandCommit hook routing schedule mutations through /api/commands/commit
+- Phase 36 Plan 06: MCP schedule tools and API mutations routed through CommandService.commitCommand
+- Phase 36 Plan 07: 19-test suite covering parity (P1-P3), concurrency (C1-C3), patch reasons (R1-R3), dependency regression (REG1-REG4). FS lag semantics: succStart = predEnd + lag + 1
 
 ---
 
-*Last updated: 2026-03-31 — completed 36-05 (frontend state model)*
+*Last updated: 2026-04-01 — completed 36-07 (test suite, Phase 36 complete)*
