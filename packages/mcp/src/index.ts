@@ -315,11 +315,12 @@ async function executeNormalizedMutationBatch(
   projectId: string | undefined,
   commands: ProjectCommand[],
   includeSnapshot: boolean = false,
+  commitCommandImpl: typeof commitNormalizedCommand = commitNormalizedCommand,
 ): Promise<NormalizedMutationResult> {
   const aggregation = createMutationAggregationState();
 
   for (const command of commands) {
-    const { baseVersion, response } = await commitNormalizedCommand(projectId, command);
+    const { baseVersion, response } = await commitCommandImpl(projectId, command);
     addMutationResultToAggregation(aggregation, baseVersion, response);
 
     if (!response.accepted) {
@@ -424,15 +425,40 @@ function formatDateOnly(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-// Register list tools handler
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: PUBLIC_MCP_TOOLS,
-}));
+type MpcHandlerDeps = {
+  writeMcpDebugLog: typeof writeMcpDebugLog;
+  commitNormalizedCommand: typeof commitNormalizedCommand;
+  getProjectSnapshotSummary: typeof getProjectSnapshotSummary;
+  listAllProjectTasks: typeof listAllProjectTasks;
+  resolveProjectId: typeof resolveProjectId;
+  taskService: Pick<typeof taskService, 'get'>;
+  getPrisma: typeof getPrisma;
+  getProjectScheduleOptionsForProject: typeof getProjectScheduleOptionsForProject;
+};
 
-// Register call tool handler
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+const defaultMcpHandlerDeps: MpcHandlerDeps = {
+  writeMcpDebugLog,
+  commitNormalizedCommand,
+  getProjectSnapshotSummary,
+  listAllProjectTasks,
+  resolveProjectId,
+  taskService,
+  getPrisma,
+  getProjectScheduleOptionsForProject,
+};
+
+export async function handleListToolsRequest() {
+  return {
+    tools: PUBLIC_MCP_TOOLS,
+  };
+}
+
+export async function handleCallToolRequest(
+  request: { params: { name: string; arguments?: unknown } },
+  deps: MpcHandlerDeps = defaultMcpHandlerDeps,
+) {
   const { name, arguments: args } = request.params;
-  await writeMcpDebugLog('tool_call_received', {
+  await deps.writeMcpDebugLog('tool_call_received', {
     tool: name,
     args,
     envProjectId: process.env.PROJECT_ID,
@@ -441,7 +467,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // Ping tool for connectivity testing
   if (name === 'ping') {
-    await writeMcpDebugLog('tool_call_completed', {
+    await deps.writeMcpDebugLog('tool_call_completed', {
       tool: name,
       result: 'pong',
     });
@@ -461,7 +487,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'get_project_summary') {
     const { projectId: argProjectId } = args as GetProjectSummaryInput;
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -469,12 +495,12 @@ Reason: Project summary is scoped to one project.
 Fix: Provide projectId or set PROJECT_ID.`);
     }
 
-    return jsonResult(await getProjectSnapshotSummary(resolvedProjectId));
+    return jsonResult(await deps.getProjectSnapshotSummary(resolvedProjectId));
   }
 
   if (name === 'get_task_context') {
     const { taskId, projectId: argProjectId } = args as unknown as GetTaskContextInput;
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -487,8 +513,8 @@ Reason: Task context requires an exact task ID.
 Fix: Provide taskId.`);
     }
 
-    const summary = await getProjectSnapshotSummary(resolvedProjectId);
-    const allTasks = await listAllProjectTasks(resolvedProjectId);
+    const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+    const allTasks = await deps.listAllProjectTasks(resolvedProjectId);
     const task = allTasks.find((candidate) => candidate.id === taskId);
 
     if (!task) {
@@ -539,7 +565,7 @@ Fix: Provide taskId.`);
 
   if (name === 'get_schedule_slice') {
     const input = args as GetScheduleSliceInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -547,8 +573,8 @@ Reason: Schedule slices are scoped to one project.
 Fix: Provide projectId or set PROJECT_ID.`);
     }
 
-    const summary = await getProjectSnapshotSummary(resolvedProjectId);
-    const allTasks = await listAllProjectTasks(resolvedProjectId);
+    const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+    const allTasks = await deps.listAllProjectTasks(resolvedProjectId);
     let tasks: Task[] = [];
     let scope: import('./types.js').ScheduleSliceResult['scope'];
 
@@ -601,7 +627,7 @@ Fix: Provide projectId or set PROJECT_ID.`);
 
   if (name === 'create_tasks') {
     const input = args as unknown as CreateTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!input.tasks || input.tasks.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
@@ -613,7 +639,7 @@ Fix: Provide projectId or set PROJECT_ID.`);
       }
     }
 
-    const { baseVersion, response } = await commitNormalizedCommand(
+    const { baseVersion, response } = await deps.commitNormalizedCommand(
       resolvedProjectId,
       input.tasks.length === 1
         ? { type: 'create_task', task: input.tasks[0] }
@@ -625,7 +651,7 @@ Fix: Provide projectId or set PROJECT_ID.`);
 
   if (name === 'update_tasks') {
     const input = args as unknown as UpdateTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!input.updates || input.updates.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
@@ -649,12 +675,12 @@ Fix: Provide projectId or set PROJECT_ID.`);
       });
     }
 
-    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
   }
 
   if (name === 'move_tasks') {
     const input = args as unknown as MoveTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!input.moves || input.moves.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
@@ -682,18 +708,18 @@ Fix: Provide projectId or set PROJECT_ID.`);
       commands.push(command);
     }
 
-    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
   }
 
   if (name === 'delete_tasks') {
     const input = args as unknown as DeleteTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!input.taskIds || input.taskIds.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
+    const { baseVersion, response } = await deps.commitNormalizedCommand(resolvedProjectId, {
       type: input.taskIds.length === 1 ? 'delete_task' : 'delete_tasks',
       ...(input.taskIds.length === 1
         ? { taskId: input.taskIds[0] }
@@ -705,7 +731,7 @@ Fix: Provide projectId or set PROJECT_ID.`);
 
   if (name === 'link_tasks') {
     const input = args as unknown as LinkTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!input.links || input.links.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
@@ -731,12 +757,12 @@ Fix: Provide projectId or set PROJECT_ID.`);
       });
     }
 
-    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
   }
 
   if (name === 'unlink_tasks') {
     const input = args as unknown as UnlinkTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!input.links || input.links.length === 0) {
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
@@ -755,12 +781,12 @@ Fix: Provide projectId or set PROJECT_ID.`);
       });
     }
 
-    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot));
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
   }
 
   if (name === 'shift_tasks') {
     const input = args as unknown as ShiftTasksInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -774,9 +800,9 @@ Fix: Provide projectId or set PROJECT_ID.`);
     const aggregation = createMutationAggregationState();
 
     for (const shift of input.shifts) {
-      const task = await taskService.get(shift.taskId);
+      const task = await deps.taskService.get(shift.taskId);
       if (!task) {
-        const summary = await getProjectSnapshotSummary(resolvedProjectId);
+        const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
         return jsonResult(finalizeRejectedMutationAggregation(
           aggregation,
           summary.version,
@@ -786,15 +812,15 @@ Fix: Provide projectId or set PROJECT_ID.`);
         ));
       }
 
-      const prisma = getPrisma();
-      const opts = await getProjectScheduleOptionsForProject(prisma, resolvedProjectId);
+      const prisma = deps.getPrisma();
+      const opts = await deps.getProjectScheduleOptionsForProject(prisma, resolvedProjectId);
       const startDate = parseDateOnly(task.startDate);
       const mode = shift.mode ?? (opts.businessDays ? 'working' : 'calendar');
       const nextStart = mode === 'working' && opts.weekendPredicate
         ? shiftBusinessDayOffset(startDate, shift.delta, opts.weekendPredicate)
         : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + shift.delta));
 
-      const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, {
+      const { baseVersion, response } = await deps.commitNormalizedCommand(resolvedProjectId, {
         type: 'move_task',
         taskId: shift.taskId,
         startDate: formatDateOnly(nextStart),
@@ -817,14 +843,14 @@ Fix: Provide projectId or set PROJECT_ID.`);
 
   if (name === 'recalculate_project') {
     const input = args as RecalculateProjectInput;
-    const resolvedProjectId = resolveProjectId(input.projectId);
-    const { baseVersion, response } = await commitNormalizedCommand(resolvedProjectId, { type: 'recalculate_schedule' });
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+    const { baseVersion, response } = await deps.commitNormalizedCommand(resolvedProjectId, { type: 'recalculate_schedule' });
     return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
   }
 
   if (name === 'validate_schedule') {
     const { projectId: argProjectId } = args as ValidateScheduleInput;
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -832,8 +858,8 @@ Reason: Validation is scoped to one project.
 Fix: Provide projectId or set PROJECT_ID.`);
     }
 
-    const summary = await getProjectSnapshotSummary(resolvedProjectId);
-    const allTasks = await listAllProjectTasks(resolvedProjectId);
+    const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+    const allTasks = await deps.listAllProjectTasks(resolvedProjectId);
     const validation = validateDependencies(allTasks.map((task) => ({
       ...task,
       dependencies: (task.dependencies ?? []).map((dependency) => ({
@@ -853,7 +879,7 @@ Fix: Provide projectId or set PROJECT_ID.`);
 
   if (name === 'get_conversation_history') {
     const { projectId: argProjectId, limit } = args as GetConversationHistoryInput & { limit?: number };
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -867,7 +893,7 @@ Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
     const allMessages = await messageService.list(resolvedProjectId);
     const recentMessages = allMessages.slice(-messageLimit).reverse();
 
-    await writeMcpDebugLog('tool_call_completed', {
+    await deps.writeMcpDebugLog('tool_call_completed', {
       tool: name,
       resolvedProjectId,
       totalMessages: allMessages.length,
@@ -886,7 +912,7 @@ Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
   if (name === 'add_message') {
     const input = args as unknown as AddMessageInput;
     const { projectId: argProjectId } = args as { projectId?: string };
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
@@ -902,7 +928,7 @@ Fix: Provide a non-empty content string with your response.`);
 
     const message = await messageService.add('assistant', input.content.trim(), resolvedProjectId);
 
-    await writeMcpDebugLog('tool_call_completed', {
+    await deps.writeMcpDebugLog('tool_call_completed', {
       tool: name,
       resolvedProjectId,
       messageId: message.id,
@@ -915,14 +941,20 @@ Fix: Provide a non-empty content string with your response.`);
     });
   }
 
-  await writeMcpDebugLog('tool_call_failed', {
+  await deps.writeMcpDebugLog('tool_call_failed', {
     tool: name,
     error: `Unknown tool: ${name}`,
   });
   throw new Error(`[Permanent] Unknown tool: ${name}.
 Reason: Tool name not found in MCP server registry.
 Fix: Check available tools via tools/list request and use only the published normalized surface.`);
-});
+}
+
+// Register list tools handler
+server.setRequestHandler(ListToolsRequestSchema, handleListToolsRequest);
+
+// Register call tool handler
+server.setRequestHandler(CallToolRequestSchema, (request) => handleCallToolRequest(request, defaultMcpHandlerDeps));
 
 // Start server with stdio transport
 async function main() {
@@ -932,7 +964,9 @@ async function main() {
   // Process will stay alive as long as stdio is open
 }
 
-main().catch((error) => {
-  console.error('Server error:', error);
-  process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error('Server error:', error);
+    process.exit(1);
+  });
+}

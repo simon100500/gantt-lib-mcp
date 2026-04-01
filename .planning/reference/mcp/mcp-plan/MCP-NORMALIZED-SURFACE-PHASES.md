@@ -15,9 +15,8 @@ In progress
 
 Current cleanup target:
 
-- remove remaining legacy runtime handler branches from `packages/mcp/src/index.ts`
 - keep only normalized public scheduling paths plus non-scheduling conversation tools
-- add regression coverage that locks the cleanup
+- lock the cleanup with runtime regression coverage for `move_tasks`, `link_tasks`, `shift_tasks`, and legacy scheduling-tool rejection
 
 ## Purpose
 
@@ -282,6 +281,13 @@ Lock the cutover and remove remaining legacy references.
 - add prompt regression tests
 - add verification regressions
 - clean remaining legacy scheduling references from docs or helper strings tied to runtime behavior
+
+### Phase 06 progress
+
+- runtime MCP handler cleanup in `packages/mcp/src/index.ts` is complete
+- runtime regression coverage added for `tools/list` and `callTool` handler paths
+- legacy scheduling tool names are locked to `unsupported_operation` on the runtime-visible path
+- normalized accepted/rejected result shape is locked for `move_tasks`, `link_tasks`, and `shift_tasks`
 
 ## Primary files
 

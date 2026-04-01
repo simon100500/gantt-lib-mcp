@@ -18,8 +18,8 @@ Completed so far:
 
 Current focus:
 
-- remove remaining legacy runtime branches from `packages/mcp/src/index.ts`
-- finish regression locking so the public MCP experience has no hidden dual-path behavior
+- finish Phase 06 regression locking so the public MCP experience has no hidden dual-path behavior
+- extend MCP runtime regression coverage across normalized mutation success and rejection paths
 
 ## Purpose
 
@@ -363,6 +363,16 @@ Likely files:
 - `packages/mcp/src/*.test.ts`
 - `packages/server/src/agent.test.ts`
 - new MCP surface-specific tests if needed
+
+Current Phase 06 additions:
+
+- `packages/mcp/src/index.ts`
+  - handler logic exported behind the same runtime behavior so MCP call/list paths can be tested directly
+  - stdio server startup now runs only when the module is the entrypoint, preventing test imports from opening transports
+- `packages/mcp/src/index.test.ts`
+  - locks runtime `tools/list` output to normalized-only scheduling tools
+  - locks legacy scheduling tool calls to normalized `unsupported_operation` rejection
+  - locks normalized accepted/rejected result shape for `move_tasks`, `link_tasks`, and `shift_tasks`
 
 ## Legacy Removal Checklist
 
