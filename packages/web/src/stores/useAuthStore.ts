@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CalendarDay } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -23,12 +24,18 @@ export interface AuthUser {
 }
 
 export type GanttDayMode = 'business' | 'calendar';
+export type ProjectStatus = 'active' | 'archived';
 
 export interface AuthProject {
   id: string;
   name: string;
+  status: ProjectStatus;
   ganttDayMode: GanttDayMode;
+  calendarId?: string | null;
+  calendarDays?: CalendarDay[];
   taskCount?: number;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
 }
 
 export interface AuthState {
@@ -45,7 +52,10 @@ export interface UseAuthResult extends AuthState {
   logout(): void;
   switchProject(projectId: string): Promise<void>;
   createProject(name: string): Promise<AuthProject | null>;
-  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode }): Promise<AuthProject>;
+  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null }): Promise<AuthProject>;
+  archiveProject(projectId: string): Promise<AuthProject>;
+  restoreProject(projectId: string): Promise<AuthProject>;
+  deleteProject(projectId: string): Promise<void>;
   syncProjectTaskCount(projectId: string, taskCount: number): void;
   refreshAccessToken(): Promise<string | null>;
   refreshProjects(): Promise<void>;
@@ -135,8 +145,16 @@ function readStoredAuth(): StoredAuthState | null {
 
   try {
     const user = JSON.parse(userStr) as AuthUser;
-    const project = JSON.parse(projectStr) as AuthProject;
-    const projects = projectsStr ? JSON.parse(projectsStr) as AuthProject[] : [project];
+    const normalizeProject = (value: AuthProject): AuthProject => ({
+      ...value,
+      status: value.status ?? 'active',
+      archivedAt: value.archivedAt ?? null,
+      deletedAt: value.deletedAt ?? null,
+    });
+    const project = normalizeProject(JSON.parse(projectStr) as AuthProject);
+    const projects = projectsStr
+      ? (JSON.parse(projectsStr) as AuthProject[]).map(normalizeProject)
+      : [project];
 
     return {
       accessToken,
@@ -299,6 +317,14 @@ function persistAuthSnapshot(state: {
     project: state.project,
     projects: state.projects,
   });
+}
+
+function mergeCurrentProject(projects: AuthProject[], currentProject: AuthProject | null): AuthProject | null {
+  if (!currentProject) {
+    return null;
+  }
+
+  return projects.find((project) => project.id === currentProject.id) ?? currentProject;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -569,6 +595,110 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     return data.project;
   },
 
+  async archiveProject(projectId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response, token } = await fetchWithAuthRetry(`/api/projects/${projectId}/archive`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to archive project');
+    }
+
+    const data = await response.json() as { project: AuthProject };
+    const nextState = get();
+    const projects = nextState.projects.map((project) => (
+      project.id === data.project.id ? { ...project, ...data.project } : project
+    ));
+    const project = nextState.project?.id === data.project.id
+      ? { ...nextState.project, ...data.project }
+      : nextState.project;
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: state.user,
+      project,
+      projects,
+    });
+
+    set({ accessToken, project, projects });
+    return data.project;
+  },
+
+  async restoreProject(projectId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response, token } = await fetchWithAuthRetry(`/api/projects/${projectId}/restore`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to restore project');
+    }
+
+    const data = await response.json() as { project: AuthProject };
+    const nextState = get();
+    const projects = nextState.projects.map((project) => (
+      project.id === data.project.id ? { ...project, ...data.project } : project
+    ));
+    const project = nextState.project?.id === data.project.id
+      ? { ...nextState.project, ...data.project }
+      : nextState.project;
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: state.user,
+      project,
+      projects,
+    });
+
+    set({ accessToken, project, projects });
+    return data.project;
+  },
+
+  async deleteProject(projectId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response, token } = await fetchWithAuthRetry(`/api/projects/${projectId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to delete project');
+    }
+
+    const nextProjects = get().projects.filter((project) => project.id !== projectId);
+    const nextProject = mergeCurrentProject(nextProjects, get().project);
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: state.user,
+      project: nextProject,
+      projects: nextProjects,
+    });
+
+    set({ accessToken, project: nextProject, projects: nextProjects });
+  },
+
   async refreshProjects() {
     const token = get().accessToken;
     if (!token) {
@@ -579,16 +709,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const projects = await fetchProjects(token);
       const state = get();
       const nextProjects = projects.length > 0 ? projects : state.projects;
+      const nextProject = mergeCurrentProject(nextProjects, state.project);
 
       persistStoredAuth({
         accessToken: state.accessToken,
         refreshToken: getRefreshToken(),
         user: state.user,
-        project: state.project,
+        project: nextProject,
         projects: nextProjects,
       });
 
-      set({ projects: nextProjects });
+      set({ project: nextProject, projects: nextProjects });
     } catch (error) {
       console.error('Failed to refresh projects:', error);
     }

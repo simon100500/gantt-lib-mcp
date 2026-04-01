@@ -177,6 +177,75 @@ Required automated cases:
 - Some `gantt-lib` behavior is currently entangled with UI flows; the server port must isolate only domain logic.
 - If UI continues committing locally calculated results without reconciling with server output, divergence will persist.
 
+## Known Upstream Gaps in `gantt-lib`
+
+The current `gantt-lib` scheduling core is the migration reference, but it is not fully clean. The following defects were found in Phase 28 (`scheduling-core-hardening`) and must be treated as explicit upstream gaps during adoption.
+
+### 1. `resizeTaskWithCascade('end', ...)` has inverted anchor semantics
+
+Observed implementation in `gantt-lib`:
+
+- `anchor='end'` rebuilds the range from the new end date while preserving duration
+- this moves `startDate` backward instead of keeping the original start fixed
+
+Why this matters:
+
+- the Phase 28 plan describes `anchor='end'` as "new end date with fixed start"
+- server-side `resize_task` must not silently inherit this behavior as if it were intentional API semantics
+
+Required migration rule:
+
+- treat this as an upstream bug, not as authoritative business behavior
+- when porting command-level resize semantics, define and test `anchor='end'` as fixed-start resize and `anchor='start'` as fixed-end resize
+- add a parity note so future sync work can distinguish "library bug compatibility" from intended command contract
+
+### 2. `recalculateProjectSchedule()` is incorrect for multiple roots or multiple predecessors
+
+Observed implementation in `gantt-lib`:
+
+- it runs `universalCascade()` independently for each root task
+- each cascade uses the original snapshot instead of the progressively updated state
+- later root passes overwrite earlier results in the merged result map
+
+Why this matters:
+
+- a successor constrained by multiple predecessors can end up using the last processed root instead of the strongest/latest constraint
+- this breaks the required scenario "multiple predecessors on one successor"
+- a server port must not use this algorithm as the authoritative recomputation model
+
+Required migration rule:
+
+- do not mirror `recalculateProjectSchedule()` blindly
+- implement project-wide recomputation against a continuously updated working snapshot or a deterministic topological/constraint-based pass
+- add a regression test where one successor depends on two roots with different finish dates
+
+### 3. `ScheduleCommandResult` contract is violated by `recalculateProjectSchedule()`
+
+Observed implementation in `gantt-lib`:
+
+- `ScheduleCommandResult` documents `changedTasks` and `changedIds` as changed entities only
+- `recalculateProjectSchedule()` appends unchanged snapshot tasks into `changedTasks`
+- `changedIds` therefore becomes the full project task set, not the actual diff
+
+Why this matters:
+
+- downstream persistence and verification logic in `gantt-lib-mcp` needs a true changed-set
+- returning the whole project as changed makes transactional patching, auditing, and agent verification less reliable
+
+Required migration rule:
+
+- server scheduling commands must return true changed tasks only
+- if a full normalized snapshot is needed, return it separately from patch metadata
+- tests must assert that `changedIds` is a real diff, not a full snapshot alias
+
+### Adoption Guardrail
+
+During migration:
+
+- preserve current `gantt-lib` behavior where it is clearly intentional and user-visible
+- do not preserve Phase 28 command API defects just because they currently exist in the extracted core
+- document every place where the server intentionally diverges from upstream due to a confirmed library bug
+
 ## Open Implementation Rules
 
 - Preserve current `gantt-lib` scheduling semantics unless there is a documented bugfix.

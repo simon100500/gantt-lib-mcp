@@ -4,11 +4,13 @@ import type { GanttChartRef } from '../GanttChart.tsx';
 import { StartScreen } from '../StartScreen.tsx';
 import { ProjectWorkspace } from './ProjectWorkspace.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
-import { useTaskStore } from '../../stores/useTaskStore.ts';
 import type { Task, ValidationResult } from '../../types.ts';
 
 interface GuestWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
+  tasks: Task[];
+  setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
+  loading: boolean;
   isAuthenticated: boolean;
   batchUpdate: UseBatchTaskUpdateResult;
   onSend: (text: string) => void | Promise<void>;
@@ -25,10 +27,7 @@ interface GuestWorkspaceProps {
 }
 
 export function GuestWorkspace(props: GuestWorkspaceProps) {
-  const tasks = useTaskStore((state) => state.tasks);
-  const loading = useTaskStore((state) => state.loading);
-
-  if (tasks.length === 0 && !loading) {
+  if (props.tasks.length === 0 && !props.loading) {
     return (
       <StartScreen
         onSend={(text) => { void props.onSend(text); }}
@@ -42,6 +41,11 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
   return (
     <ProjectWorkspace
       ganttRef={props.ganttRef}
+      tasks={props.tasks}
+      setTasks={props.setTasks}
+      loading={props.loading}
+      sharedProject={null}
+      shareToken={null}
       hasShareToken={false}
       displayConnected={true}
       isAuthenticated={props.isAuthenticated}
@@ -53,6 +57,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       onValidation={props.onValidation}
       onCascade={props.onCascade}
       ganttDayMode={props.ganttDayMode}
+      calendarDays={[]}
       showChat={false}
       shareStatus={props.shareStatus}
       onCreateShareLink={props.onCreateShareLink}

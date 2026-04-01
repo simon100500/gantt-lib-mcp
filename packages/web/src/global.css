@@ -3,9 +3,13 @@
   --gantt-container-border-radius: 0px !important;
   --gantt-progress-completed: #17c964 !important;
   --gantt-progress-accepted: #00670a !important;
+  /* --gantt-grid-line-color: #f2f2f2 !important; */
 }
 
 .gantt-container {
   border: 0;
 }
 
+.gantt-tl-row {
+  border-bottom: 1px solid #f1f1f1 !important;
+}

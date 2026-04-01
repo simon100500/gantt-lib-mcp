@@ -50,12 +50,20 @@ export interface Task {
   sortOrder?: number;
   /** Optional child tasks for hierarchical loading */
   children?: Task[];
+  /** Optional flag to prevent drag/resize interactions */
+  locked?: boolean;
+  /** Optional accepted flag used by the web client */
+  accepted?: boolean;
+  /** Optional divider hint used by the web client */
+  divider?: 'top' | 'bottom';
 }
 
 /**
  * Input type for creating a new task
  */
 export interface CreateTaskInput {
+  /** Optional client-generated task ID for optimistic/linked creation flows */
+  id?: string;
   /** Task name */
   name: string;
   /** Start date in ISO format: 'YYYY-MM-DD' */
@@ -70,6 +78,8 @@ export interface CreateTaskInput {
   progress?: number;
   /** Optional task dependencies */
   dependencies?: TaskDependency[];
+  /** Optional sort order for display position */
+  sortOrder?: number;
   /** Optional project ID to associate the task with */
   projectId?: string;
 }
@@ -186,16 +196,55 @@ export interface AddMessageInput {
 
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
 export type GanttDayMode = 'business' | 'calendar';
+export type ProjectStatus = 'active' | 'archived' | 'deleted';
 
-export interface TaskMutationEvent {
-  id: string;
-  projectId?: string;
-  runId?: string;
-  sessionId?: string;
-  source: TaskMutationSource;
-  mutationType: 'create' | 'update' | 'delete' | 'delete_all' | 'import';
-  taskId?: string;
-  createdAt: string;
+export type CalendarScope = 'system' | 'project';
+export type CalendarDayKind = 'working' | 'non_working' | 'shortened';
+export type CalendarDaySource = 'system_seed' | 'manual' | 'import';
+
+export interface EffectiveCalendarDay {
+  date: string;
+  kind: CalendarDayKind;
+}
+
+export interface ScheduleCommandOptions {
+  /** Account for business days during scheduling */
+  businessDays?: boolean;
+  /** Weekend predicate for business-day mode */
+  weekendPredicate?: (date: Date) => boolean;
+  /** Include the normalized final snapshot in the response */
+  includeSnapshot?: boolean;
+}
+
+export type ScheduleCommand =
+  | {
+      type: 'move_task';
+      taskId: string;
+      startDate: string;
+    }
+  | {
+      type: 'resize_task';
+      taskId: string;
+      anchor: 'start' | 'end';
+      date: string;
+    }
+  | {
+      type: 'recalculate_schedule';
+      taskId?: string;
+    };
+
+export interface ScheduleCommandResult {
+  /** Tasks whose normalized persisted state changed */
+  changedTasks: Task[];
+  /** IDs of changed tasks */
+  changedIds: string[];
+  /** Optional full normalized snapshot after command execution */
+  snapshot?: Task[];
+}
+
+export interface TaskMutationResult extends ScheduleCommandResult {
+  /** Primary task addressed by the mutation when applicable */
+  task?: Task;
 }
 
 /**
@@ -220,10 +269,43 @@ export interface Project {
   userId: string;
   /** Project name */
   name: string;
+  /** Availability status for the owner UI */
+  status: ProjectStatus;
   /** Day-counting mode for gantt duration calculations */
   ganttDayMode: GanttDayMode;
+  /** Selected working calendar for business-day mode */
+  calendarId: string | null;
+  /** Effective calendar day overrides loaded from DB */
+  calendarDays: EffectiveCalendarDay[];
+  /** ISO timestamp when project was archived */
+  archivedAt: string | null;
+  /** ISO timestamp when project was soft-deleted */
+  deletedAt: string | null;
   /** ISO timestamp of creation */
   createdAt: string;
+}
+
+export interface WorkCalendar {
+  id: string;
+  code?: string | null;
+  name: string;
+  scope: CalendarScope;
+  timezone?: string | null;
+  isDefault: boolean;
+  projectId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkCalendarDay {
+  id: string;
+  calendarId: string;
+  date: string;
+  kind: CalendarDayKind;
+  label?: string | null;
+  source: CalendarDaySource;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ShareLink {
@@ -277,3 +359,121 @@ export interface AuthToken {
   /** JWT refresh token */
   refreshToken: string;
 }
+
+// === Phase 36: Unified Scheduling Core types ===
+
+/** Snapshot of all tasks and dependencies in a project at a point in time */
+export type ProjectSnapshot = {
+  tasks: Task[];
+  dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number; }>;
+};
+
+/** Typed project command — discriminated union by `type` field.
+ *  Per D-04: command.payload: unknown is NOT allowed. Each variant has typed fields. */
+export type ProjectCommand =
+  | { type: 'move_task'; taskId: string; startDate: string; }
+  | { type: 'resize_task'; taskId: string; anchor: 'start' | 'end'; date: string; }
+  | { type: 'set_task_start'; taskId: string; startDate: string; }
+  | { type: 'set_task_end'; taskId: string; endDate: string; }
+  | { type: 'change_duration'; taskId: string; duration: number; anchor?: 'start' | 'end'; }
+  | {
+      type: 'update_task_fields';
+      taskId: string;
+      fields: {
+        name?: string;
+        color?: string;
+        parentId?: string | null;
+        progress?: number;
+        dependencies?: TaskDependency[];
+      };
+    }
+  | { type: 'create_task'; task: CreateTaskInput; }
+  | { type: 'delete_task'; taskId: string; }
+  | { type: 'create_dependency'; taskId: string; dependency: TaskDependency; }
+  | { type: 'remove_dependency'; taskId: string; depTaskId: string; }
+  | { type: 'change_dependency_lag'; taskId: string; depTaskId: string; lag: number; }
+  | { type: 'recalculate_schedule'; taskId?: string; }
+  | { type: 'reparent_task'; taskId: string; newParentId: string | null; }
+  | { type: 'reorder_tasks'; updates: Array<{ taskId: string; sortOrder: number; }>; };
+
+/** Conflict detected during command execution */
+export type Conflict = {
+  entityType: 'task' | 'dependency';
+  entityId: string;
+  reason: string;
+  detail?: string;
+};
+
+/** JSON-safe value type for patch before/after */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/** Patch describing a single entity change with attribution.
+ *  Per D-12: reason is one of 5 fixed values. */
+export type Patch = {
+  entityType: 'task' | 'dependency';
+  entityId: string;
+  before: JsonValue;
+  after: JsonValue;
+  reason: 'direct_command' | 'dependency_cascade' | 'calendar_snap' | 'parent_rollup' | 'constraint_adjustment';
+};
+
+/** Actor type for event attribution */
+export type ActorType = 'user' | 'agent' | 'system' | 'import';
+
+/** Full execution result from scheduling core. Per D-08. */
+export type ScheduleExecutionResult = {
+  snapshot: ProjectSnapshot;
+  changedTaskIds: string[];
+  changedDependencyIds: string[];
+  conflicts: Conflict[];
+  patches: Patch[];
+};
+
+/** Request to commit a project command. Per D-07. */
+export type CommitProjectCommandRequest = {
+  projectId: string;
+  clientRequestId: string;
+  baseVersion: number;
+  command: ProjectCommand;
+};
+
+/** Response from command commit — accepted or rejected. Per D-07. */
+export type CommitProjectCommandResponse =
+  | {
+      clientRequestId: string;
+      accepted: true;
+      baseVersion: number;
+      newVersion: number;
+      result: ScheduleExecutionResult;
+      snapshot: ProjectSnapshot;
+    }
+  | {
+      clientRequestId: string;
+      accepted: false;
+      reason: 'version_conflict' | 'validation_error' | 'conflict';
+      currentVersion: number;
+      snapshot?: ProjectSnapshot;
+      conflicts?: Conflict[];
+    };
+
+/** Persisted project event record — mirrors Prisma ProjectEvent model.
+ *  Named ProjectEventRecord to avoid collision with Prisma generated type. */
+export type ProjectEventRecord = {
+  id: string;
+  projectId: string;
+  baseVersion: number;
+  version: number;
+  applied: boolean;
+  actorType: ActorType;
+  actorId?: string;
+  coreVersion: string;
+  command: ProjectCommand;
+  result: {
+    changedTaskIds: string[];
+    changedDependencyIds: string[];
+    conflicts: Conflict[];
+  };
+  patches: Patch[];
+  executionTimeMs: number;
+  createdAt: string;
+};

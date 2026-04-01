@@ -55,3 +55,4 @@ packages/server/gantt.db
 .prisma/
 .venv
 packages/dashboard
+*.dump

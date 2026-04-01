@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-03-29
+**Last updated:** 2026-04-01
 
 ## Progress Summary
 
@@ -129,6 +129,9 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | 32. Backend Enforcement | v5.0 | 0/? | Not started | - |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
+| 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
+| 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
+| 37. Calendar source of truth cleanup | Scheduling | 0/? | Not started | - |
 
 ---
 
@@ -153,5 +156,43 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 | GATE-02 | 34 | Pending |
 | GATE-03 | 34 | Pending |
 
+### Phase 35: Scheduling Core Adoption
+
+**Goal:** Сервер выполняет schedule mutations теми же правилами, что и актуальный gantt-lib core, и возвращает authoritative changed-set для agent/web persistence
+**Requirements**: PRD-only (`.planning/reference/scheduling-core-adoption-prd.md`)
+**Depends on:** Phase 08, Phase 16, Phase 19, Phase 21, Phase 22
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 35-01 — Headless scheduling core + regression parity
+- [x] 35-02 — TaskService + MCP schedule command integration
+- [x] 35-03 — Agent/web authoritative scheduling adoption — completed 2026-03-31, verified passed
+
+### Phase 36: Unified Scheduling Core
+
+**Goal:** Единая scheduling authority: все изменения через typed commands, один gantt-lib/core/scheduling, server как единственный источник истины, deterministic/explainable/versioned результаты
+**Requirements**: PRD-only (`.planning/reference/unified-scheduling-core-prd.md`)
+**Depends on:** Phase 35
+**Plans:** 7/7 plans complete
+
+Plans:
+- [x] 36-01 — Fix gantt-lib core/scheduling subpath export (DTS + dependency)
+- [x] 36-02 — Define typed command model + Prisma schema (contracts)
+- [x] 36-03 — Replace local scheduler with gantt-lib adapter + regression tests
+- [x] 36-04 — Command commit endpoint (CommandService + POST /api/commands/commit)
+- [x] 36-05 — Frontend three-layer state model + command commit flow
+- [x] 36-06 — MCP/API channel parity (all mutations through command commit)
+- [x] 36-07 — Parity + concurrency + patch reason tests (TDD)
+
+### Phase 37: Calendar source of truth cleanup
+
+**Goal:** БД и server становятся единственным source of truth для рабочих и нерабочих дней; frontend получает effective calendar days только из server payload без локального holiday hardcode
+**Requirements**: PRD-only (phase context)
+**Depends on:** Phase 36
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD
+
 ---
-*Last updated: 2026-03-29 — v5.0 roadmap created*
+*Last updated: 2026-04-01 — Phase 37 queued for calendar source-of-truth cleanup*

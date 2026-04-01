@@ -234,3 +234,40 @@ TODO: MCP и надёжность AI-мутаций
 - Сохранить retry-механику для mutation-запросов без реального tool call и сделать её наблюдаемой через логи по попыткам.
 - Проверить, какие составные пользовательские команды чаще всего проваливаются на низкоуровневых `create_task/update_task`, и вынести их в отдельные MCP tools.
 - Добавить тесты на кейсы: "добавь блок после X", "добавь в конец", "разбей задачу", "ручное изменение между AI-ходами", "ложный успех без tool call".
+
+TODO: cleanup после command pipeline cutover
+
+- Проверить, нужен ли вообще `packages/web/src/hooks/useTaskMutation.ts` после перехода на `commitCommand` как основной mutation path.
+- Если хук все еще нужен, переименовать его во что-то архитектурно честное (`useProjectCommands` / `useProjectSnapshotApi`), потому что текущее имя больше не соответствует роли.
+- Если хук больше не нужен как отдельный adapter layer, удалить его и перевести вызовы на прямой command-oriented API без legacy naming.
+
+
+
+
+ В gantt-lib уже внесено изменение для reorder-callback: при reorder GanttChart теперь вызывает только onReorder(...), а onTasksChange(...) используется только как fallback, если
+  onReorder не передан. Это сделано в D:\Projects\gantt-lib\packages\gantt-lib\src\components\GanttChart\GanttChart.tsx.
+
+  В gantt-lib-mcp уже подготовлена сторона приложения:
+
+  - исправлен optimistic reorder/render
+  - reorder переведен на единственную bulk-команду reorder_tasks
+  - legacy reorder_task удален
+  - коммиты в gantt-lib-mcp:
+      - a704931 fix(web): make task reorder render and persist atomically
+      - 9946f1b refactor(commands): remove legacy single-task reorder path
+
+  Что осталось сделать после установки пакетов:
+
+  1. Переустановить зависимости в D:\Projects\gantt-lib-mcp из корня workspace.
+  2. Убедиться, что packages/web реально использует обновленный gantt-lib, а не старую registry-версию.
+  3. Собрать:
+      - npm run build -w packages/mcp
+      - npm run build -w packages/web
+  4. Прогнать ручную проверку reorder:
+      - обычная задача
+      - перенос между группами
+      - перенос родителя с детьми
+  5. Проверить, что при reorder больше нет двойного потока handleTasksChange -> handleReorder в логах, а остается только handleReorder.
+
+  Отдельно: предыдущая попытка npm install падала не из-за кода, а из-за сломанного/полуочищенного node_modules в workspace и заблокированного файла node_modules\\@rollup\\rollup-
+  win32-x64-msvc\\rollup.win32-x64-msvc.node. После нормальной переустановки зависимостей это нужно перепроверить.

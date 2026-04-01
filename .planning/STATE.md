@@ -2,21 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-current_phase: 30
-status: ready_to_plan
-last_updated: "2026-03-30T13:30:00.000Z"
+status: executing
+last_updated: "2026-04-01T07:20:00.000Z"
+last_activity: 2026-04-01
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 8
+  completed_phases: 2
+  total_plans: 10
+  completed_plans: 10
+  percent: 80
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-03-30
+**Last updated:** 2026-04-01
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to plan Phase 30
+**Status:** Ready to plan next phase
 
 ---
 
@@ -25,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 30 — Constraint Engine
+**Current focus:** Phase 37 — Calendar source of truth cleanup (not planned yet)
 
 ---
 
 ## Current Position
 
-Phase: 30 of 34 (Constraint Engine)
-Plan: 0 of ? in current phase
+Phase: 37 of 37 (Calendar source of truth cleanup)
+Plan: 0 of ? complete
 Status: Ready to plan
-Last activity: 2026-03-30 — Completed quick task 260330-m7o: project gantt day mode
+Last activity: 2026-04-01
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████████░░] 80%
 
 ---
 
@@ -51,6 +52,7 @@ packages/
 ```
 
 **Deployment:**
+
 - getgantt.ru → packages/site (Astro static, Nginx)
 - ai.getgantt.ru → packages/web + packages/server (React + Fastify)
 
@@ -65,6 +67,7 @@ packages/
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260330-m7o | Сделать возможность выбирать юзеру режим работы графика: рабочие дни или календарные дни, сохранить настройку в БД на уровне проекта и вынести в меню toolbar | 2026-03-30 | b339dcc | [260330-m7o-gantt-lib](./quick/260330-m7o-gantt-lib/) |
+| 260331-udj | Jira-like sidebar: hover overlay + click push dual-mode для переключения проектов | 2026-03-31 | eee8c8d | [260331-udj-sidebar-jira-hover-overlay-behavior](./quick/260331-udj-sidebar-jira-hover-overlay-behavior/) |
 
 ---
 
@@ -74,7 +77,22 @@ packages/
 - Billing infrastructure exists (YooKassa, subscription management)
 - Plan definitions exist in code but no enforcement mechanism
 - LimitReachedModal component exists from v4.0 (basic feature gate modal)
+- Phase 35 added: Scheduling Core Adoption
+- Phase 36 added: unified-scheduling-core
+- MCP scheduler now uses a headless command core with authoritative changed-set responses
+- `TaskService` and MCP tools expose move/resize/recalculate schedule commands for linked edits
+- Agent verification and web persistence now treat server-returned changed tasks as authoritative for linked edits
+- gantt-lib/core/scheduling subpath export fixed: DTS generation works, zero React/DOM dependencies
+- gantt-lib 0.62.0 linked to MCP package via file: protocol (dev-only, npm has 0.28.1)
+- Phase 36 Plan 02: ProjectCommand discriminated union (13 types), CommitProjectCommandRequest/Response, Patch model, ScheduleExecutionResult, ProjectEventRecord, Prisma ProjectEvent model with versioning
+- Phase 36 Plan 04: POST /api/commands/commit endpoint with CommandService handling all 13 command types via gantt-lib/core/scheduling, atomic Prisma $transaction with optimistic concurrency, event log persistence, patch reason attribution
+- Phase 36 Plan 05: Frontend three-layer Zustand store (confirmed/pending/dragPreview) with useCommandCommit hook routing schedule mutations through /api/commands/commit
+- Phase 36 Plan 06: MCP schedule tools and API mutations routed through CommandService.commitCommand
+- Phase 36 Plan 07: 19-test suite covering parity (P1-P3), concurrency (C1-C3), patch reasons (R1-R3), dependency regression (REG1-REG4). FS lag semantics: succStart = predEnd + lag + 1
+- Phase 37 added: Calendar source of truth cleanup
+- Remaining scheduling tech debt: holiday definitions are still hardcoded in `packages/mcp/src/services/projectScheduleOptions.ts` and `packages/web/src/lib/russianHolidays2026.ts`
+- Next phase must remove frontend/server holiday duplication and make DB + server payload the only source of truth for calendar days
 
 ---
 
-*Last updated: 2026-03-30 — completed quick task 260330-m7o (project gantt day mode)*
+*Last updated: 2026-04-01 — Phase 37 queued with calendar source-of-truth cleanup context*

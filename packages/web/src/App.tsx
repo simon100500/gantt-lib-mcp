@@ -15,22 +15,36 @@ import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
-import { useTaskMutation } from './hooks/useTaskMutation.ts';
 import { useTasks } from './hooks/useTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
+import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
 import { useBillingStore } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
 import { useProjectUIStore } from './stores/useProjectUIStore.ts';
-import type { Task, ValidationResult } from './types.ts';
+import { useProjectStore } from './stores/useProjectStore.ts';
+import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
+const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
 
 interface RouteState {
   pathname: string;
   search: string;
+}
+
+function buildDependencyRowsFromTasks(tasks: Task[]) {
+  return tasks.flatMap((task) =>
+    (task.dependencies ?? []).map((dependency, index) => ({
+      id: `${task.id}:${dependency.taskId}:${dependency.type}:${index}`,
+      taskId: task.id,
+      depTaskId: dependency.taskId,
+      type: dependency.type,
+      lag: dependency.lag ?? 0,
+    })),
+  );
 }
 
 export default function App() {
@@ -70,26 +84,62 @@ export default function App() {
     setShowOtpModal(true);
   }, [auth.isAuthenticated, route.search, setShowOtpModal]);
 
-  const handleOtpSuccess = useCallback(async (result: {
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string };
-    project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
-  }) => {
+  const handleOtpSuccess = useCallback(async (result: AuthSuccessResponse) => {
     auth.login(result, result.user, result.project);
     setShowOtpModal(false);
 
     const hasLocalEdits = localTasks.tasks.length > 0;
     if (hasLocalEdits) {
       try {
-        await fetch('/api/tasks', {
-          method: 'PUT',
+        let currentVersionResponse = await fetch('/api/project', {
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${result.accessToken}`,
           },
-          body: JSON.stringify(localTasks.tasks),
         });
+
+        if (!currentVersionResponse.ok) {
+          throw new Error(`Failed to load project version: ${currentVersionResponse.status}`);
+        }
+
+        let currentVersion = (await currentVersionResponse.json() as ProjectLoadResponse).version;
+
+        for (const task of localTasks.tasks) {
+          const commitResponse = await fetch('/api/commands/commit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${result.accessToken}`,
+            },
+            body: JSON.stringify({
+              clientRequestId: crypto.randomUUID(),
+              baseVersion: currentVersion,
+              command: {
+                type: 'create_task',
+                task: {
+                  name: task.name,
+                  startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
+                  endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+                  color: task.color,
+                  parentId: task.parentId,
+                  progress: task.progress,
+                  dependencies: task.dependencies,
+                },
+              },
+            }),
+          });
+
+          if (!commitResponse.ok) {
+            throw new Error(`Failed to import local task: ${commitResponse.status}`);
+          }
+
+          const commitResult = await commitResponse.json() as { accepted: boolean; newVersion?: number; reason?: string };
+          if (!commitResult.accepted || commitResult.newVersion === undefined) {
+            throw new Error(`Failed to import local task: ${commitResult.reason ?? 'unknown error'}`);
+          }
+
+          currentVersion = commitResult.newVersion;
+        }
+
         localStorage.removeItem('gantt_local_tasks');
         localStorage.removeItem('gantt_demo_mode');
       } catch (importError) {
@@ -180,7 +230,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const sharedProject = useSharedProject();
   const workspace = useUIStore((state) => state.workspace);
   const setWorkspace = useUIStore((state) => state.setWorkspace);
-  const setProjectSidebarVisible = useUIStore((state) => state.setProjectSidebarVisible);
+  const setSidebarState = useUIStore((state) => state.setSidebarState);
   const showBillingPage = useUIStore((state) => state.showBillingPage);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
@@ -213,7 +263,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     void refreshProjects();
   }, [auth.accessToken, auth.isAuthenticated, hasShareToken, refreshProjects]);
 
-  const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
+  const authenticatedTasks = useTasks(
+    hasShareToken ? null : auth.accessToken,
+    auth.refreshAccessToken,
+    auth.project?.ganttDayMode ?? 'business',
+    auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS,
+  );
   const { tasks, setTasks, loading, error } = hasShareToken
     ? sharedProject
     : auth.isAuthenticated
@@ -223,8 +278,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     tasks,
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
+    ganttDayMode: hasShareToken ? (sharedProject.project?.ganttDayMode ?? 'business') : (auth.project?.ganttDayMode ?? 'business'),
+    calendarDays: hasShareToken
+      ? (sharedProject.project?.calendarDays ?? EMPTY_CALENDAR_DAYS)
+      : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
   });
-  useTaskMutation(hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null);
   const ganttRef = useRef<GanttChartRef>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
@@ -236,7 +294,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
-      useTaskStore.getState().replaceFromSystem(msg.tasks as Task[]);
+      const normalizedTasks = normalizeTasks(msg.tasks as Task[]);
+      useTaskStore.getState().replaceFromSystem(normalizedTasks);
+
+      if (!hasShareToken && auth.isAuthenticated) {
+        const projectStore = useProjectStore.getState();
+        projectStore.mergeConfirmedSnapshot({
+          tasks: normalizedTasks,
+          dependencies: buildDependencyRowsFromTasks(normalizedTasks),
+        });
+      }
       return;
     }
     if (msg.type === 'token') {
@@ -250,7 +317,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (msg.type === 'error') {
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, []);
+  }, [auth.isAuthenticated, hasShareToken]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -305,6 +372,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const resetWorkspacePresentation = useCallback(() => {
     replaceTasksFromSystem([]);
+    useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
   }, [replaceTasksFromSystem]);
 
@@ -434,7 +502,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       : current);
 
     await auth.switchProject(newProject.id);
-    setProjectSidebarVisible(false);
+    setSidebarState('closed');
     if (createEmptyChart) {
       setTasks([createPlaceholderTask()]);
     } else {
@@ -443,7 +511,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: !createEmptyChart });
     activationInFlightRef.current = false;
     return true;
-  }, [auth, createPlaceholderTask, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setProjectSidebarVisible, setTasks, setWorkspace, workspace]);
+  }, [auth, createPlaceholderTask, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setSidebarState, setTasks, setWorkspace, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
@@ -513,6 +581,28 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setWorkspace({ kind: 'guest' });
   }, [auth.isAuthenticated, resetWorkspacePresentation, setWorkspace]);
 
+  const handleArchiveProject = useCallback(async (projectId: string) => {
+    await auth.archiveProject(projectId);
+  }, [auth]);
+
+  const handleRestoreProject = useCallback(async (projectId: string) => {
+    await auth.restoreProject(projectId);
+  }, [auth]);
+
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    const project = auth.projects.find((item) => item.id === projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    const confirmed = window.confirm(`Удалить проект "${project.name}"? Он исчезнет из интерфейса без возможности восстановления.`);
+    if (!confirmed) {
+      return;
+    }
+
+    await auth.deleteProject(projectId);
+  }, [auth]);
+
   const handleSaveProjectName = useCallback(async (newName: string) => {
     if (!auth.isAuthenticated) {
       localTasks.setProjectName(newName);
@@ -574,8 +664,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!auth.isAuthenticated || hasShareToken) {
       return;
     }
-    replaceTasksFromSystem([]);
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken, replaceTasksFromSystem]);
+    useProjectStore.getState().clearTransientState();
+  }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
@@ -698,6 +788,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     ? (
       <SharedWorkspace
         ganttRef={ganttRef}
+        tasks={tasks}
+        setTasks={setTasks}
+        loading={loading}
+        sharedProject={sharedProject.project}
+        shareToken={sharedProject.shareToken}
         displayConnected={displayConnected}
         onScrollToToday={handleScrollToToday}
         onCollapseAll={handleCollapseAll}
@@ -719,6 +814,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ? (
           <ProjectWorkspace
             ganttRef={ganttRef}
+            tasks={tasks}
+            setTasks={setTasks}
+            loading={loading}
+            sharedProject={sharedProject.project}
+            shareToken={sharedProject.shareToken}
             hasShareToken={hasShareToken}
             displayConnected={displayConnected}
             isAuthenticated={auth.isAuthenticated}
@@ -735,6 +835,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
             ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
+            calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             onGanttDayModeChange={(ganttDayMode) => {
               void handleGanttDayModeChange(ganttDayMode).catch((error) => {
                 console.error('Failed to update gantt day mode:', error);
@@ -745,6 +846,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         : (
           <GuestWorkspace
             ganttRef={ganttRef}
+            tasks={tasks}
+            setTasks={setTasks}
+            loading={loading}
             isAuthenticated={auth.isAuthenticated}
             batchUpdate={batchUpdate}
             onSend={handleStartScreenSend}
@@ -769,6 +873,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       currentProjectLabel={currentProjectLabel}
       onCreateProject={handleCreateProject}
       onSwitchProject={handleSwitchProject}
+      onArchiveProject={handleArchiveProject}
+      onRestoreProject={handleRestoreProject}
+      onDeleteProject={handleDeleteProject}
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}

@@ -79,6 +79,12 @@ export async function authMiddleware(
     return;
   }
 
+  const project = await authService.findProjectById(session.projectId);
+  if (!project) {
+    reply.status(403).send({ error: 'Project unavailable' });
+    return;
+  }
+
   // 6. Attach decoded payload to req.user
   request.user = {
     userId: payload.sub,

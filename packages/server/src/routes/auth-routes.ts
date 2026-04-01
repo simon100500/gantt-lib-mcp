@@ -97,7 +97,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       accessToken,
       refreshToken,
       user: { id: user.id, email: user.email },
-      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
+      project: {
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        ganttDayMode: project.ganttDayMode,
+        calendarId: project.calendarId,
+        calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
+      },
     });
   });
 
@@ -243,7 +252,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({
       accessToken: newAccessToken,
       refreshToken: currentSession.refreshToken, // Return the same refresh token (no rotation)
-      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
+      project: {
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        ganttDayMode: project.ganttDayMode,
+        calendarId: project.calendarId,
+        calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
+      },
     });
   });
 
@@ -265,7 +283,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({
       token: shareLink.id,
       url,
-      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
+      project: {
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        ganttDayMode: project.ganttDayMode,
+        calendarId: project.calendarId,
+        calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
+      },
     });
   });
 
@@ -287,7 +314,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     const { tasks } = await taskService.list(project.id);
     return reply.send({
-      project: { id: project.id, name: project.name, ganttDayMode: project.ganttDayMode },
+      project: {
+        id: project.id,
+        name: project.name,
+        ganttDayMode: project.ganttDayMode,
+        calendarId: project.calendarId,
+        calendarDays: project.calendarDays,
+      },
       tasks,
     });
   });
@@ -320,12 +353,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   fastify.patch<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const body = req.body as { name?: string; ganttDayMode?: 'business' | 'calendar' };
+    const body = req.body as { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null };
     const name = body.name?.trim();
     const hasName = body.name !== undefined;
     const hasGanttDayMode = body.ganttDayMode === 'business' || body.ganttDayMode === 'calendar';
 
-    if (!hasName && body.ganttDayMode === undefined) {
+    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined) {
       return reply.status(400).send({ error: 'No project fields provided' });
     }
 
@@ -340,6 +373,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const project = await authService.updateProject(projectId, req.user!.userId, {
       ...(hasName ? { name } : {}),
       ...(hasGanttDayMode ? { ganttDayMode: body.ganttDayMode } : {}),
+      ...(body.calendarId !== undefined ? { calendarId: body.calendarId } : {}),
     });
 
     if (!project) {
@@ -347,5 +381,51 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     return reply.send({ project });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const result = await authService.archiveProject(projectId, req.user!.userId);
+
+    if (!result.ok) {
+      if (result.reason === 'already_archived') {
+        return reply.status(409).send({ error: 'Project already archived' });
+      }
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ project: result.project });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/restore', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const result = await authService.restoreProject(projectId, req.user!.userId);
+
+    if (!result.ok) {
+      if (result.reason === 'not_archived') {
+        return reply.status(409).send({ error: 'Project is not archived' });
+      }
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ project: result.project });
+  });
+
+  fastify.delete<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+
+    if (projectId === req.user!.projectId) {
+      return reply.status(409).send({ error: 'Switch away from this project before deleting it' });
+    }
+
+    const result = await authService.softDeleteProject(projectId, req.user!.userId);
+    if (!result.ok) {
+      if (result.reason === 'not_archived') {
+        return reply.status(409).send({ error: 'Only archived projects can be deleted' });
+      }
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    return reply.send({ ok: true });
   });
 }

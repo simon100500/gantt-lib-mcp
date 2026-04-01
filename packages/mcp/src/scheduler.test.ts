@@ -114,8 +114,9 @@ describe('TaskScheduler', () => {
 
       const updates = scheduler.recalculateDates('2');
 
-      // B should end at '2026-02-01' (A's start date)
-      assert.strictEqual(updates.get('2')?.endDate, '2026-02-01');
+      // Updated: gantt-lib correctly computes SF as predecessor start - 1 day
+      // (successor must finish before predecessor starts, not on the same day)
+      assert.strictEqual(updates.get('2')?.endDate, '2026-01-31');
     });
   });
 
@@ -389,6 +390,130 @@ describe('TaskScheduler', () => {
 
       // B should be moved back to A's end date + 1
       assert.strictEqual(updates.get('2')?.startDate, '2026-02-06');
+    });
+  });
+
+  describe('Command-level scheduling core', () => {
+    it('returns a true changed set for strongest-constraint project recalc', () => {
+      const taskA: Task = {
+        id: '1',
+        name: 'A',
+        startDate: '2026-02-01',
+        endDate: '2026-02-05'
+      };
+      const taskB: Task = {
+        id: '2',
+        name: 'B',
+        startDate: '2026-02-01',
+        endDate: '2026-02-10'
+      };
+      const taskC: Task = {
+        id: '3',
+        name: 'C',
+        startDate: '2026-02-06',
+        endDate: '2026-02-08',
+        dependencies: [
+          { taskId: '1', type: 'FS' },
+          { taskId: '2', type: 'FS' }
+        ]
+      };
+
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB, taskC]));
+      const result = scheduler.execute({ type: 'recalculate_schedule' });
+
+      assert.deepStrictEqual(result.changedIds, ['3']);
+      assert.strictEqual(result.changedTasks[0]?.startDate, '2026-02-11');
+      assert.strictEqual(result.changedTasks[0]?.endDate, '2026-02-13');
+    });
+
+    it('preserves the opposite edge for resize_task guardrails', () => {
+      const task: Task = {
+        id: '1',
+        name: 'Resizable',
+        startDate: '2026-02-10',
+        endDate: '2026-02-15'
+      };
+
+      const scheduler = new TaskScheduler(createTaskMap([task]));
+      const resizeEnd = scheduler.execute({
+        type: 'resize_task',
+        taskId: '1',
+        anchor: 'end',
+        date: '2026-02-20',
+      });
+      const resizeStart = scheduler.execute({
+        type: 'resize_task',
+        taskId: '1',
+        anchor: 'start',
+        date: '2026-02-05',
+      });
+
+      assert.strictEqual(resizeEnd.changedTasks[0]?.startDate, '2026-02-10');
+      assert.strictEqual(resizeEnd.changedTasks[0]?.endDate, '2026-02-20');
+      assert.strictEqual(resizeStart.changedTasks[0]?.startDate, '2026-02-05');
+      assert.strictEqual(resizeStart.changedTasks[0]?.endDate, '2026-02-15');
+    });
+
+    it('supports negative lag and business-day mode', () => {
+      const taskA: Task = {
+        id: '1',
+        name: 'A',
+        startDate: '2026-02-06',
+        endDate: '2026-02-06'
+      };
+      const taskB: Task = {
+        id: '2',
+        name: 'B',
+        startDate: '2026-02-09',
+        endDate: '2026-02-09',
+        dependencies: [{ taskId: '1', type: 'FS', lag: -1 }]
+      };
+
+      const scheduler = new TaskScheduler(createTaskMap([taskA, taskB]), {
+        businessDays: true,
+        weekendPredicate: (date) => {
+          const iso = date.toISOString().split('T')[0];
+          return iso === '2026-02-07' || iso === '2026-02-08';
+        },
+      });
+
+      const result = scheduler.execute({ type: 'recalculate_schedule', taskId: '2' });
+      assert.strictEqual(result.changedTasks[0]?.startDate, '2026-02-06');
+      assert.strictEqual(result.changedTasks[0]?.endDate, '2026-02-06');
+    });
+
+    it('recomputes parent summary ranges after child movement', () => {
+      const parent: Task = {
+        id: 'P',
+        name: 'Parent',
+        startDate: '2026-02-01',
+        endDate: '2026-02-06'
+      };
+      const childA: Task = {
+        id: 'A',
+        name: 'Child A',
+        startDate: '2026-02-01',
+        endDate: '2026-02-03',
+        parentId: 'P'
+      };
+      const childB: Task = {
+        id: 'B',
+        name: 'Child B',
+        startDate: '2026-02-04',
+        endDate: '2026-02-06',
+        parentId: 'P'
+      };
+
+      const scheduler = new TaskScheduler(createTaskMap([parent, childA, childB]));
+      const result = scheduler.execute({ type: 'move_task', taskId: 'B', startDate: '2026-02-10' });
+
+      const movedChild = result.changedTasks.find((task) => task.id === 'B');
+      const movedParent = result.changedTasks.find((task) => task.id === 'P');
+
+      assert.strictEqual(movedChild?.startDate, '2026-02-10');
+      assert.strictEqual(movedChild?.endDate, '2026-02-12');
+      assert.strictEqual(movedParent?.startDate, '2026-02-01');
+      assert.strictEqual(movedParent?.endDate, '2026-02-12');
     });
   });
 });

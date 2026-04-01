@@ -1,225 +1,211 @@
 /**
- * Auto-schedule engine for Gantt chart task dependencies
+ * TaskScheduler — thin adapter over gantt-lib/core/scheduling
  *
- * Implements cascading date recalculation with support for all four
- * gantt-lib dependency types: FS, SS, FF, SF with circular dependency
- * detection and missing task validation.
+ * All scheduling logic (date math, cascade, hierarchy, dependency resolution)
+ * is delegated to gantt-lib. This module only translates between MCP's
+ * Map-based API and gantt-lib's array-based API.
+ *
+ * Type bridging: MCP's Task has optional `lag` in TaskDependency; gantt-lib's
+ * TaskDependency requires `lag: number`. We normalize at the boundary via
+ * `normalizeSnapshot`.
  */
 
-import { Task, TaskDependency, DependencyType } from './types.js';
+import {
+  moveTaskWithCascade,
+  resizeTaskWithCascade,
+  recalculateTaskFromDependencies,
+  recalculateProjectSchedule,
+  universalCascade,
+  parseDateOnly,
+  detectCycles,
+  validateDependencies as coreValidateDependencies,
+  type ScheduleCommandResult as CoreResult,
+  type ScheduleCommandOptions as CoreOptions,
+  type Task as CoreTask,
+} from 'gantt-lib/core/scheduling';
+import type {
+  Task,
+  ScheduleCommand,
+  ScheduleCommandOptions,
+  ScheduleCommandResult,
+} from './types.js';
 
 /**
- * Result of applying a single dependency
+ * Normalize MCP Task[] to gantt-lib-compatible Task[].
+ * Fills `lag: 0` where undefined so gantt-lib's strict types are satisfied.
  */
-interface DateCalculation {
-  startDate?: string;
-  endDate?: string;
+function normalizeSnapshot(tasks: Task[]): CoreTask[] {
+  return tasks.map(t => ({
+    ...t,
+    dependencies: t.dependencies?.map(d => ({
+      ...d,
+      lag: d.lag ?? 0,
+    })),
+  }));
 }
 
-/**
- * TaskScheduler provides automatic date recalculation based on task dependencies.
- *
- * Accepts a Map<string, Task> snapshot for all operations — no async store access needed.
- *
- * Supports all four gantt-lib dependency types:
- * - FS (Finish-Start): dependent starts when predecessor finishes
- * - SS (Start-Start): dependent starts when predecessor starts
- * - FF (Finish-Finish): dependent finishes when predecessor finishes
- * - SF (Start-Finish): dependent finishes when predecessor starts
- */
 export class TaskScheduler {
-  /**
-   * @param taskMap - Snapshot of all tasks (Map<id, Task>)
-   */
-  constructor(private taskMap: Map<string, Task>) {}
+  private snapshot: Task[];
+  private defaultOptions: ScheduleCommandOptions;
 
-  /**
-   * Replace the internal task snapshot (used after DB reloads)
-   */
-  setTaskMap(taskMap: Map<string, Task>): void {
-    this.taskMap = taskMap;
+  constructor(taskMap: Map<string, Task>, defaultOptions?: ScheduleCommandOptions) {
+    this.snapshot = Array.from(taskMap.values());
+    this.defaultOptions = defaultOptions ?? {};
   }
 
-  /**
-   * Validate all dependency references exist
-   * @throws Error if any dependency references a non-existent task
-   */
+  setTaskMap(taskMap: Map<string, Task>): void {
+    this.snapshot = Array.from(taskMap.values());
+  }
+
+  getSnapshot(): Task[] {
+    return this.snapshot.map(t => ({ ...t }));
+  }
+
   validateDependencies(task: Task): void {
-    if (!task.dependencies) return;
-    for (const dep of task.dependencies) {
-      if (!this.taskMap.get(dep.taskId)) {
+    for (const dep of task.dependencies ?? []) {
+      if (!this.snapshot.find(t => t.id === dep.taskId)) {
         throw new Error(`Dependency references non-existent task: ${dep.taskId}`);
       }
     }
   }
 
-  /**
-   * Detect circular dependencies using DFS traversal
-   * @param taskId - Task ID to start detection from
-   * @param visited - Set of visited task IDs (for external use)
-   * @param recStack - Recursion stack for cycle detection (internal)
-   * @param path - Current path for error message (internal)
-   * @returns true if circular dependency detected
-   * @throws Error if circular dependency is detected
-   */
   detectCycle(
-    taskId: string,
-    visited = new Set<string>(),
-    recStack = new Set<string>(),
-    path: string[] = []
+    _taskId: string,
+    _visited?: Set<string>,
+    _recStack?: Set<string>,
+    _path?: string[],
   ): boolean {
-    visited.add(taskId);
-    recStack.add(taskId);
-    path.push(taskId);
-
-    const task = this.taskMap.get(taskId);
-    if (task?.dependencies) {
-      for (const dep of task.dependencies) {
-        if (!visited.has(dep.taskId)) {
-          if (this.detectCycle(dep.taskId, visited, recStack, [...path])) return true;
-        } else if (recStack.has(dep.taskId)) {
-          // Cycle detected - throw error
-          const cyclePath = [...path, dep.taskId].join(' -> ');
-          throw new Error(`Circular dependency detected: ${cyclePath}`);
-        }
-      }
+    const { hasCycle, cyclePath } = detectCycles(normalizeSnapshot(this.snapshot));
+    if (hasCycle && cyclePath) {
+      throw new Error(`Circular dependency detected: ${cyclePath.join(' -> ')}`);
     }
-
-    recStack.delete(taskId);
     return false;
   }
 
-  /**
-   * Recalculate dates for a task and all dependent tasks (cascade)
-   *
-   * @param startTaskId - ID of task to start recalculation from
-   * @param skipStartTask - If true, don't recalculate the start task itself (default: false)
-   * @returns Map of task IDs to their updated task objects
-   */
-  recalculateDates(startTaskId: string, skipStartTask = false): Map<string, Task> {
-    const updates = new Map<string, Task>();
+  private toCoreOptions(options?: ScheduleCommandOptions): CoreOptions {
+    const source = options ?? this.defaultOptions;
+    return {
+      businessDays: source.businessDays,
+      weekendPredicate: source.weekendPredicate,
+    };
+  }
+
+  execute(command: ScheduleCommand, options?: ScheduleCommandOptions): ScheduleCommandResult {
+    const opts = this.toCoreOptions(options);
+    const includeSnapshot = options?.includeSnapshot ?? this.defaultOptions.includeSnapshot;
+    const coreSnapshot = normalizeSnapshot(this.snapshot);
+    let coreResult: CoreResult;
+
+    switch (command.type) {
+      case 'move_task':
+        coreResult = moveTaskWithCascade(
+          command.taskId,
+          parseDateOnly(command.startDate),
+          coreSnapshot,
+          opts,
+        );
+        break;
+      case 'resize_task':
+        coreResult = resizeTaskWithCascade(
+          command.taskId,
+          command.anchor,
+          parseDateOnly(command.date),
+          coreSnapshot,
+          opts,
+        );
+        break;
+      case 'recalculate_schedule':
+        if (command.taskId) {
+          coreResult = recalculateTaskFromDependencies(command.taskId, coreSnapshot, opts);
+        } else {
+          coreResult = recalculateProjectSchedule(coreSnapshot, opts);
+        }
+        break;
+    }
+
+    const result: ScheduleCommandResult = {
+      changedTasks: coreResult.changedTasks as Task[],
+      changedIds: coreResult.changedIds,
+    };
+
+    if (includeSnapshot) {
+      const map = new Map(coreSnapshot.map(t => [t.id, t as Task]));
+      for (const changed of coreResult.changedTasks) {
+        map.set(changed.id, changed as Task);
+      }
+      result.snapshot = Array.from(map.values());
+    }
+
+    return result;
+  }
+
+  moveTask(taskId: string, startDate: string, options?: ScheduleCommandOptions): ScheduleCommandResult {
+    return this.execute({ type: 'move_task', taskId, startDate }, options);
+  }
+
+  resizeTask(
+    taskId: string,
+    anchor: 'start' | 'end',
+    date: string,
+    options?: ScheduleCommandOptions,
+  ): ScheduleCommandResult {
+    return this.execute({ type: 'resize_task', taskId, anchor, date }, options);
+  }
+
+  recalculateDates(changedTaskId: string, skipStartTask = false): Map<string, Task> {
+    const opts = this.toCoreOptions();
+    const coreSnapshot = normalizeSnapshot(this.snapshot);
+
+    if (skipStartTask) {
+      const task = coreSnapshot.find(t => t.id === changedTaskId);
+      if (!task) {
+        return new Map();
+      }
+
+      const cascaded = universalCascade(
+        task,
+        parseDateOnly(task.startDate),
+        parseDateOnly(task.endDate),
+        coreSnapshot,
+        opts.businessDays ?? false,
+        opts.weekendPredicate,
+      );
+      const changedTasks = [
+        { ...task } as Task,
+        ...cascaded.filter(t => t.id !== task.id).map(t => t as Task),
+      ];
+      return new Map(changedTasks.map(t => [t.id, t]));
+    }
+
+    const startTask = this.snapshot.find(t => t.id === changedTaskId);
+    if (!startTask || !startTask.dependencies?.length) {
+      return new Map();
+    }
+
+    const coreResult = recalculateTaskFromDependencies(changedTaskId, coreSnapshot, opts);
+    const changedMap = new Map(coreResult.changedTasks.map(t => [t.id, t as Task]));
+
+    // Collect transitive successors for backward compat
+    const allChanged = new Map<string, Task>();
     const visited = new Set<string>();
 
-    // Helper to get task (prefer updates over original snapshot)
-    const getTask = (id: string): Task | undefined => {
-      return updates.get(id) || this.taskMap.get(id);
-    };
-
-    // Helper to apply dependency with access to updates map
-    const applyDependencyWithUpdates = (task: Task, dep: TaskDependency): DateCalculation => {
-      const predecessor = getTask(dep.taskId);
-      if (!predecessor) throw new Error(`Task not found: ${dep.taskId}`);
-
-      const lag = dep.lag || 0;
-
-      switch (dep.type) {
-        case 'FS': // Finish-Start: dependent starts the day after predecessor finishes
-          return { startDate: this.addDays(predecessor.endDate, (lag || 0) + 1) };
-        case 'SS': // Start-Start: dependent starts when predecessor starts
-          return { startDate: this.addDays(predecessor.startDate, lag) };
-        case 'FF': // Finish-Finish: dependent ends when predecessor finishes
-          return { endDate: this.addDays(predecessor.endDate, lag) };
-        case 'SF': // Start-Finish: dependent ends when predecessor starts
-          return { endDate: this.addDays(predecessor.startDate, lag) };
-        default:
-          // Validate dependency type at compile time
-          const _exhaustiveCheck: never = dep.type as never;
-          throw new Error(`Unknown dependency type: ${_exhaustiveCheck}`);
-      }
-    };
-
-    const processTask = (taskId: string): void => {
+    const collect = (taskId: string): void => {
       if (visited.has(taskId)) return;
       visited.add(taskId);
 
-      const task = this.taskMap.get(taskId);
-      if (!task) return;
-
-      // Skip processing the start task itself if requested
-      // (its dates have been explicitly set by the user)
-      if (skipStartTask && taskId === startTaskId) {
-        // Just mark as visited and add to updates, then cascade to downstream tasks
-        updates.set(taskId, task);
-
-        // Find and process all tasks that depend on this one
-        for (const [, t] of this.taskMap) {
-          if (t.dependencies?.some(d => d.taskId === taskId)) {
-            processTask(t.id);
-          }
-        }
-        return;
+      const changed = changedMap.get(taskId) ?? this.snapshot.find(t => t.id === taskId);
+      if (changed) {
+        allChanged.set(taskId, changed);
       }
 
-      if (!task.dependencies || task.dependencies.length === 0) return;
-
-      // Apply all dependencies, using latest dates
-      let newStartDate: string | undefined;
-      let newEndDate: string | undefined;
-
-      for (const dep of task.dependencies) {
-        const result = applyDependencyWithUpdates(task, dep);
-        if (result.startDate) {
-          newStartDate = newStartDate
-            ? (result.startDate > newStartDate ? result.startDate : newStartDate)
-            : result.startDate;
-        }
-        if (result.endDate) {
-          newEndDate = newEndDate
-            ? (result.endDate > newEndDate ? result.endDate : newEndDate)
-            : result.endDate;
-        }
-      }
-
-      // Calculate duration to preserve if only start/end changes
-      const originalDuration = this.dayDiff(task.startDate, task.endDate);
-      let updatedTask: Task = { ...task };
-
-      if (newStartDate && newStartDate !== task.startDate) {
-        updatedTask.startDate = newStartDate;
-        if (!newEndDate) {
-          // Preserve duration
-          updatedTask.endDate = this.addDays(newStartDate, originalDuration);
-        }
-      }
-      if (newEndDate) {
-        updatedTask.endDate = newEndDate;
-      }
-
-      updates.set(taskId, updatedTask);
-
-      // Find and process all tasks that depend on this one
-      for (const [, t] of this.taskMap) {
-        if (t.dependencies?.some(d => d.taskId === taskId)) {
-          processTask(t.id);
+      for (const candidate of this.snapshot) {
+        if (candidate.dependencies?.some(d => d.taskId === taskId)) {
+          collect(candidate.id);
         }
       }
     };
 
-    processTask(startTaskId);
-    return updates;
-  }
-
-  /**
-   * Calculate the difference in days between two dates
-   * @param start - Start date string
-   * @param end - End date string
-   * @returns Number of days (inclusive)
-   */
-  private dayDiff(start: string, end: string): number {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    return Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
-  /**
-   * Add days to a date string
-   * @param date - Date string in YYYY-MM-DD format
-   * @param days - Number of days to add (can be negative)
-   * @returns New date string in YYYY-MM-DD format
-   */
-  private addDays(date: string, days: number): string {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().split('T')[0];
+    collect(changedTaskId);
+    return allChanged;
   }
 }

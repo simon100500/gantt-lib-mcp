@@ -4,14 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import type { AuthSuccessResponse } from '../lib/apiTypes.ts';
 
 interface OtpModalProps {
-  onSuccess: (result: {
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; email: string };
-    project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
-  }) => void;
+  onSuccess: (result: AuthSuccessResponse) => void;
   onClose: () => void;
 }
 
@@ -101,12 +97,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
         throw new Error(await readErrorMessage(res, 'Invalid code'));
       }
 
-      const result = await res.json() as {
-        accessToken: string;
-        refreshToken: string;
-        user: { id: string; email: string };
-        project: { id: string; name: string; ganttDayMode: 'business' | 'calendar' };
-      };
+      const result = await res.json() as AuthSuccessResponse;
 
       onSuccess(result);
     } catch (err) {

@@ -1,12 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronUp, X, Search, CornerDownLeft } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { useUIStore } from '../stores/useUIStore';
 import { useTaskStore } from '../stores/useTaskStore';
+import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore.ts';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useTaskMutation } from '../hooks/useTaskMutation';
+import { useProjectCommands } from '../hooks/useProjectCommands';
 import { cn } from '@/lib/utils';
 import type { Task } from '../types';
 
@@ -27,9 +28,19 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
   const setTempHighlightedTaskId = useUIStore((state) => state.setTempHighlightedTaskId);
 
   const accessToken = useAuthStore((state) => state.accessToken);
+  const activeSource = useTaskStore((state) => state.activeSource);
   const setTasks = useTaskStore((state) => state.setTasks);
-  const tasks = useTaskStore((state) => state.tasks);
-  const { createTask } = useTaskMutation(accessToken);
+  const taskStoreTasks = useTaskStore((state) => state.tasks);
+  const confirmedSnapshot = useProjectStore((state) => state.confirmed.snapshot);
+  const pendingCommands = useProjectStore((state) => state.pending);
+  const dragPreview = useProjectStore((state) => state.dragPreview);
+  const scheduleOptions = useProjectStore((state) => state.scheduleOptions);
+  const tasks = useMemo(() => (
+    activeSource === 'auth'
+      ? deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions).tasks
+      : taskStoreTasks
+  ), [activeSource, confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions, taskStoreTasks]);
+  const { createTask } = useProjectCommands(accessToken);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -97,8 +108,9 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
       endDate: today,
     };
 
-    // Optimistic update
-    setTasks(prev => [...prev, newTask]);
+    if (activeSource !== 'auth') {
+      setTasks(prev => [...prev, newTask]);
+    }
 
     // Clear search input
     clearSearch();
@@ -120,12 +132,14 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
     if (accessToken) {
       try {
         const created = await createTask({
+          id: tempId,
           name: taskName,
           startDate: today,
           endDate: today,
         });
-        // Replace with server response
-        setTasks(prev => prev.map(t => t.id === tempId ? created : t));
+        if (activeSource !== 'auth') {
+          setTasks(prev => prev.map(t => t.id === tempId ? created : t));
+        }
         // Update highlight with real ID
         if (created.id !== tempId) {
           setTempHighlightedTaskId(created.id);
@@ -142,7 +156,9 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
       } catch (error) {
         console.error('Failed to create task:', error);
         // Revert on error
-        setTasks(prev => prev.filter(t => t.id !== tempId));
+        if (activeSource !== 'auth') {
+          setTasks(prev => prev.filter(t => t.id !== tempId));
+        }
         setTempHighlightedTaskId(null);
       }
     }

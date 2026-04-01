@@ -37,24 +37,39 @@ enum MessageRole {
   assistant
 }
 
-enum MutationSource {
-  agent
-  manual_save
-  api
-  system
-}
-
-enum MutationType {
-  create
-  update
-  delete
-  delete_all
-  import
-}
-
 enum GanttDayMode {
   business
   calendar
+}
+
+enum ProjectStatus {
+  active
+  archived
+  deleted
+}
+
+enum CalendarScope {
+  system
+  project
+}
+
+enum CalendarDayKind {
+  working
+  non_working
+  shortened
+}
+
+enum CalendarDaySource {
+  system_seed
+  manual
+  import
+}
+
+enum ActorType {
+  user
+  agent
+  system
+  import_actor
 }
 
 // Users table
@@ -77,19 +92,65 @@ model Project {
   id           String       @id @default(uuid())
   userId       String       @map("user_id")
   name         String
+  status       ProjectStatus @default(active)
   ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
+  calendarId   String?      @map("calendar_id")
+  archivedAt   DateTime?    @map("archived_at")
+  deletedAt    DateTime?    @map("deleted_at")
+  version      Int         @default(0)
   createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relations
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions     Session[]
-  tasks        Task[]
-  messages     Message[]
-  shareLinks   ShareLink[]
-  taskRevision TaskRevision?
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendar      WorkCalendar?   @relation("ProjectSelectedCalendar", fields: [calendarId], references: [id], onDelete: SetNull)
+  ownedCalendars WorkCalendar[] @relation("ProjectOwnedCalendars")
+  sessions      Session[]
+  tasks         Task[]
+  messages      Message[]
+  shareLinks    ShareLink[]
+  projectEvents ProjectEvent[]
 
   @@map("projects")
   @@index([userId])
+  @@index([userId, status])
+  @@index([calendarId])
+}
+
+model WorkCalendar {
+  id         String        @id @default(uuid())
+  code       String?       @unique
+  name       String
+  scope      CalendarScope @default(system)
+  timezone   String?
+  isDefault  Boolean       @default(false) @map("is_default")
+  projectId  String?       @map("project_id")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  project            Project?      @relation("ProjectOwnedCalendars", fields: [projectId], references: [id], onDelete: Cascade)
+  selectedByProjects Project[]     @relation("ProjectSelectedCalendar")
+  days               CalendarDay[]
+
+  @@map("work_calendars")
+  @@index([scope])
+  @@index([projectId])
+}
+
+model CalendarDay {
+  id         String            @id @default(uuid())
+  calendarId String            @map("calendar_id")
+  date       DateTime
+  kind       CalendarDayKind
+  label      String?
+  source     CalendarDaySource @default(manual)
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  calendar WorkCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@map("calendar_days")
+  @@unique([calendarId, date])
+  @@index([date])
 }
 
 // Sessions table
@@ -192,18 +253,6 @@ model ShareLink {
   @@index([projectId])
 }
 
-// Task revisions table
-model TaskRevision {
-  projectId String   @id @map("project_id")
-  revision  Int      @default(0)
-  updatedAt DateTime @default(now()) @map("updated_at")
-
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("task_revisions")
-}
-
 // Subscriptions table
 model Subscription {
   id          String   @id @default(uuid())
@@ -241,19 +290,25 @@ model Payment {
   @@index([userId])
 }
 
-// Task mutations table
-model TaskMutation {
-  id           String       @id @default(uuid())
-  projectId    String?      @map("project_id")
-  runId        String?      @map("run_id")
-  sessionId    String?      @map("session_id")
-  source       MutationSource
-  mutationType MutationType @map("mutation_type")
-  taskId       String?      @map("task_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
+// Project events table (Phase 36: event log for command history)
+model ProjectEvent {
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  baseVersion     Int       @map("base_version")
+  version         Int
+  applied         Boolean   @default(true)
+  actorType       ActorType @map("actor_type")
+  actorId         String?   @map("actor_id")
+  coreVersion     String    @map("core_version")
+  command         Json
+  result          Json
+  patches         Json
+  executionTimeMs Int       @map("execution_time_ms")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
-  @@map("task_mutations")
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_events")
   @@index([projectId])
-  @@index([runId])
-  @@index([sessionId])
+  @@index([projectId, version])
 }
