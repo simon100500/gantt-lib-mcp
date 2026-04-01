@@ -247,8 +247,8 @@ describe('Concurrency Tests: optimistic version handling', () => {
 
   it('C2: stale baseVersion rejected with version_conflict', () => {
     // Simulate: project is at version 7, client sends baseVersion=6 (stale)
-    const currentVersion = 7;
-    const baseVersion = 6;
+    const currentVersion: number = 7;
+    const baseVersion: number = 6;
 
     const versionMatches = currentVersion === baseVersion;
     assert.ok(!versionMatches, 'Stale baseVersion should not match');
