@@ -2,10 +2,16 @@ import type { RefObject } from 'react';
 
 import type { GanttChartRef } from '../GanttChart.tsx';
 import { ProjectWorkspace } from './ProjectWorkspace.tsx';
-import type { ValidationResult } from '../../types.ts';
+import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
+import type { Task, ValidationResult } from '../../types.ts';
 
 interface SharedWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
+  tasks: Task[];
+  setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
+  loading: boolean;
+  sharedProject: SharedTaskProject | null;
+  shareToken: string | null;
   displayConnected: boolean;
   onScrollToToday: () => void;
   onCollapseAll: () => void;
@@ -16,6 +22,11 @@ interface SharedWorkspaceProps {
 
 export function SharedWorkspace({
   ganttRef,
+  tasks,
+  setTasks,
+  loading,
+  sharedProject,
+  shareToken,
   displayConnected,
   onScrollToToday,
   onCollapseAll,
@@ -26,6 +37,11 @@ export function SharedWorkspace({
   return (
     <ProjectWorkspace
       ganttRef={ganttRef}
+      tasks={tasks}
+      setTasks={setTasks}
+      loading={loading}
+      sharedProject={sharedProject}
+      shareToken={shareToken}
       hasShareToken={true}
       displayConnected={displayConnected}
       isAuthenticated={false}

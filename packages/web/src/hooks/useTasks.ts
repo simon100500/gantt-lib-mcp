@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import type { Task } from '../types.ts';
 import { useTaskStore } from '../stores/useTaskStore.ts';
-import { useProjectStore } from '../stores/useProjectStore.ts';
-import { replayProjectCommand } from '../lib/projectCommandReplay.ts';
+import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore.ts';
 
 export interface UseTasksResult {
   tasks: Task[];
@@ -13,7 +12,8 @@ export interface UseTasksResult {
 
 export function useTasks(
   accessToken: string | null,
-  refreshAccessToken: () => Promise<string | null>
+  refreshAccessToken: () => Promise<string | null>,
+  ganttDayMode: 'business' | 'calendar',
 ): UseTasksResult {
   const shareToken = new URLSearchParams(window.location.search).get('share');
   const taskStoreTasks = useTaskStore((state) => state.tasks);
@@ -24,17 +24,20 @@ export function useTasks(
   const confirmedSnapshot = useProjectStore((state) => state.confirmed.snapshot);
   const pendingCommands = useProjectStore((state) => state.pending);
   const dragPreview = useProjectStore((state) => state.dragPreview);
+  const setScheduleOptions = useProjectStore((state) => state.setScheduleOptions);
+
+  useEffect(() => {
+    setScheduleOptions({ businessDays: ganttDayMode !== 'calendar' });
+  }, [ganttDayMode, setScheduleOptions]);
 
   const visibleTasks = useMemo(() => {
-    if (dragPreview) {
-      return dragPreview.snapshot.tasks;
-    }
-
-    return pendingCommands.reduce(
-      (snapshot, pending) => replayProjectCommand(snapshot, pending.command, { businessDays: false }, pending.requestId),
+    return deriveVisibleSnapshot(
       confirmedSnapshot,
+      pendingCommands,
+      dragPreview,
+      { businessDays: ganttDayMode !== 'calendar' },
     ).tasks;
-  }, [confirmedSnapshot, dragPreview, pendingCommands]);
+  }, [confirmedSnapshot, dragPreview, ganttDayMode, pendingCommands]);
 
   useEffect(() => {
     void useTaskStore.getState().syncSource({
@@ -43,14 +46,6 @@ export function useTasks(
       shareToken,
     });
   }, [accessToken, refreshAccessToken, shareToken]);
-
-  useEffect(() => {
-    if (activeSource !== 'auth') {
-      return;
-    }
-
-    useTaskStore.getState().replaceFromSystem(visibleTasks);
-  }, [activeSource, visibleTasks]);
 
   return {
     tasks: activeSource === 'auth' ? visibleTasks : taskStoreTasks,

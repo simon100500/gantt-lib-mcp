@@ -1,13 +1,16 @@
 import { useCallback, useRef } from 'react';
 import type { Task, FrontendProjectCommand } from '../types';
+import { replayProjectCommand } from '../lib/projectCommandReplay';
+import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore';
 import { useUIStore, type SavingState } from '../stores/useUIStore';
-import { useTaskMutation, type TaskMutationResponse } from './useTaskMutation';
+import { useTaskMutation, type TaskMutationResponse, buildCommandsFromDiff } from './useTaskMutation';
 import { useCommandCommit } from './useCommandCommit';
 
 export interface UseBatchTaskUpdateOptions {
   tasks: Task[];
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   accessToken: string | null;
+  ganttDayMode: 'business' | 'calendar';
   onCascade?: (tasks: Task[]) => void;
 }
 
@@ -26,12 +29,15 @@ export function useBatchTaskUpdate({
   tasks,
   setTasks,
   accessToken,
+  ganttDayMode,
   onCascade,
 }: UseBatchTaskUpdateOptions): UseBatchTaskUpdateResult {
   const { mutateTask, createTask, deleteTask, fetchTasksSnapshot } = useTaskMutation(accessToken);
   const { commitCommand } = useCommandCommit(accessToken);
   const savingState = useUIStore((state) => state.savingState);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAuthenticatedMode = Boolean(accessToken);
+  const scheduleOptions = { businessDays: ganttDayMode !== 'calendar' } as const;
 
   const toDateString = useCallback((value: Task['startDate']) => (
     typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0]
@@ -113,6 +119,40 @@ export function useBatchTaskUpdate({
     }
     return result;
   }, [commitCommand]);
+
+  const commitCommandsOrThrow = useCallback(async (commands: FrontendProjectCommand[]) => {
+    for (const command of commands) {
+      await commitOrThrow(command);
+    }
+  }, [commitOrThrow]);
+
+  const setProtocolPreview = useCallback((commands: FrontendProjectCommand[]) => {
+    if (!isAuthenticatedMode || commands.length === 0) {
+      return () => {};
+    }
+
+    const projectState = useProjectStore.getState();
+    const baseSnapshot = deriveVisibleSnapshot(
+      projectState.confirmed.snapshot,
+      projectState.pending,
+      undefined,
+      scheduleOptions,
+    );
+    const previewSnapshot = commands.reduce(
+      (snapshot, command, index) => replayProjectCommand(snapshot, command, scheduleOptions, `preview:${index}`),
+      baseSnapshot,
+    );
+
+    projectState.setDragPreview({ commands, snapshot: previewSnapshot });
+    return () => {
+      useProjectStore.getState().setDragPreview(undefined);
+    };
+  }, [isAuthenticatedMode, scheduleOptions]);
+
+  const hasScheduleDiff = useCallback((originalTask: Task, nextTask: Task) => (
+    toDateString(originalTask.startDate) !== toDateString(nextTask.startDate)
+    || toDateString(originalTask.endDate) !== toDateString(nextTask.endDate)
+  ), [toDateString]);
 
   const persistAuthoritativeCascade = useCallback(async (changedTasks: Task[]) => {
     let workingTasks = tasks;
@@ -223,6 +263,56 @@ export function useBatchTaskUpdate({
       return;
     }
 
+    if (isAuthenticatedMode) {
+      if (isDeletionRelated && changedTasks.length > 0) {
+        console.log('%c[useBatchTaskUpdate] handleTasksChange: deletion preflight detected — skipping, delete_task owns persistence', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+        return;
+      }
+
+      try {
+        setSavingStateWithReset('saving');
+
+        const primaryTask = changedTasks[0];
+        if (!primaryTask) {
+          setSavingStateWithReset('saved');
+          return;
+        }
+
+        const primaryOriginal = tasks.find((task) => task.id === primaryTask.id);
+        const primaryIsScheduleEdit = primaryOriginal ? hasScheduleDiff(primaryOriginal, primaryTask) : false;
+
+        const commands = primaryIsScheduleEdit && primaryOriginal
+          ? buildCommandsFromDiff(primaryOriginal, primaryTask)
+          : changedTasks.flatMap((task) => {
+              const originalTask = tasks.find((candidate) => candidate.id === task.id);
+              if (!originalTask) {
+                return [];
+              }
+              return buildCommandsFromDiff(originalTask, task);
+            });
+
+        if (commands.length === 0) {
+          setSavingStateWithReset('saved');
+          return;
+        }
+
+        const clearPreview = setProtocolPreview(commands);
+        try {
+          await commitCommandsOrThrow(commands);
+        } finally {
+          clearPreview();
+        }
+
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Command save failed:', error);
+        setSavingStateWithReset('error');
+      }
+
+      console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+      return;
+    }
+
     if (isDeletionRelated && changedTasks.length > 0) {
       console.log('%c[useBatchTaskUpdate] DELETION-RELATED: Updating only dependencies in state', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
       // Update only the dependencies field — preserve task order
@@ -282,6 +372,27 @@ export function useBatchTaskUpdate({
   }, [applyAuthoritativeTaskResult, mutateTask, persistAuthoritativeCascade, setSavingStateWithReset, setTasks, tasks, toDateString]);
 
   const handleAdd = useCallback(async (task: Task) => {
+    if (isAuthenticatedMode) {
+      try {
+        setSavingStateWithReset('saving');
+        await createTask({
+          id: task.id,
+          name: task.name,
+          startDate: typeof task.startDate === 'string' ? task.startDate.split('T')[0] : task.startDate.toISOString().split('T')[0],
+          endDate: typeof task.endDate === 'string' ? task.endDate.split('T')[0] : task.endDate.toISOString().split('T')[0],
+          color: task.color,
+          parentId: task.parentId,
+          progress: task.progress,
+          dependencies: task.dependencies,
+        });
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to create task:', error);
+        setSavingStateWithReset('error');
+      }
+      return;
+    }
+
     // Optimistic update
     setTasks(prev => [...prev, task]);
 
@@ -307,12 +418,25 @@ export function useBatchTaskUpdate({
       // Revert optimistic update on error
       setTasks(prev => prev.filter(t => t.id !== task.id));
     }
-  }, [setTasks, createTask, setSavingStateWithReset]);
+  }, [createTask, isAuthenticatedMode, setSavingStateWithReset, setTasks]);
 
   const handleDelete = useCallback(async (taskId: string) => {
     console.log('%c[useBatchTaskUpdate] handleDelete called', 'background: #fa5252; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
     console.log('[useBatchTaskUpdate] taskId to delete:', taskId);
     console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
+
+    if (isAuthenticatedMode) {
+      try {
+        setSavingStateWithReset('saving');
+        const result = await deleteTask(taskId);
+        console.log('%c[useBatchTaskUpdate] deleteTask SUCCESS:', 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;', result);
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] deleteTask FAILED:', error);
+        setSavingStateWithReset('error');
+      }
+      return;
+    }
 
     // Capture the original index for correct revert position
     const originalIndex = tasks.findIndex(t => t.id === taskId);
@@ -349,9 +473,30 @@ export function useBatchTaskUpdate({
         });
       }
     }
-  }, [tasks, setTasks, deleteTask, setSavingStateWithReset, accessToken]);
+  }, [tasks, setTasks, deleteTask, setSavingStateWithReset, accessToken, isAuthenticatedMode]);
 
   const handleInsertAfter = useCallback(async (taskId: string, newTask: Task) => {
+    if (isAuthenticatedMode) {
+      try {
+        setSavingStateWithReset('saving');
+        await createTask({
+          id: newTask.id,
+          name: newTask.name,
+          startDate: typeof newTask.startDate === 'string' ? newTask.startDate.split('T')[0] : newTask.startDate.toISOString().split('T')[0],
+          endDate: typeof newTask.endDate === 'string' ? newTask.endDate.split('T')[0] : newTask.endDate.toISOString().split('T')[0],
+          color: newTask.color,
+          parentId: newTask.parentId,
+          progress: newTask.progress,
+          dependencies: newTask.dependencies,
+        });
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to insert task:', error);
+        setSavingStateWithReset('error');
+      }
+      return;
+    }
+
     // Optimistic update
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === taskId);
@@ -383,7 +528,7 @@ export function useBatchTaskUpdate({
       // Revert optimistic update on error
       setTasks(prev => prev.filter(t => t.id !== newTask.id));
     }
-  }, [setTasks, createTask, setSavingStateWithReset]);
+  }, [createTask, isAuthenticatedMode, setSavingStateWithReset, setTasks]);
 
   const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
     console.log('%c[useBatchTaskUpdate] handleReorder called', 'background: #ff00ff; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
@@ -396,6 +541,49 @@ export function useBatchTaskUpdate({
       ...task,
       sortOrder: index,
     }));
+
+    if (isAuthenticatedMode) {
+      const commands: FrontendProjectCommand[] = [];
+
+      if (movedTaskId && inferredParentId !== undefined) {
+        const movedTask = tasks.find((task) => task.id === movedTaskId);
+        if (movedTask && (movedTask.parentId ?? null) !== (inferredParentId || null)) {
+          commands.push({
+            type: 'update_task_fields',
+            taskId: movedTaskId,
+            fields: { parentId: inferredParentId || null },
+          });
+        }
+      }
+
+      for (const task of tasksWithOrder) {
+        const originalTask = tasks.find((candidate) => candidate.id === task.id);
+        if ((originalTask?.sortOrder ?? null) !== (task.sortOrder ?? null)) {
+          commands.push({
+            type: 'reorder_task',
+            taskId: task.id,
+            sortOrder: task.sortOrder ?? 0,
+          });
+        }
+      }
+
+      if (commands.length === 0) {
+        return;
+      }
+
+      const clearPreview = setProtocolPreview(commands);
+      try {
+        setSavingStateWithReset('saving');
+        await commitCommandsOrThrow(commands);
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to persist reordered task list:', error);
+        setSavingStateWithReset('error');
+      } finally {
+        clearPreview();
+      }
+      return;
+    }
 
     // Update parentId if provided
     if (movedTaskId && inferredParentId !== undefined) {
@@ -458,7 +646,7 @@ export function useBatchTaskUpdate({
         setSavingStateWithReset('error');
       }
     }
-  }, [commitOrThrow, fetchTasksSnapshot, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
+  }, [commitCommandsOrThrow, commitOrThrow, fetchTasksSnapshot, isAuthenticatedMode, removeDependenciesBetweenTasks, setProtocolPreview, setSavingStateWithReset, setTasks, tasks]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
     console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);

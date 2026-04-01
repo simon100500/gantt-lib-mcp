@@ -37,21 +37,6 @@ enum MessageRole {
   assistant
 }
 
-enum MutationSource {
-  agent
-  manual_save
-  api
-  system
-}
-
-enum MutationType {
-  create
-  update
-  delete
-  delete_all
-  import
-}
-
 enum GanttDayMode {
   business
   calendar
@@ -94,7 +79,6 @@ model Project {
   tasks         Task[]
   messages      Message[]
   shareLinks    ShareLink[]
-  taskRevision  TaskRevision?
   projectEvents ProjectEvent[]
 
   @@map("projects")
@@ -201,18 +185,6 @@ model ShareLink {
   @@index([projectId])
 }
 
-// Task revisions table
-model TaskRevision {
-  projectId String   @id @map("project_id")
-  revision  Int      @default(0)
-  updatedAt DateTime @default(now()) @map("updated_at")
-
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@map("task_revisions")
-}
-
 // Subscriptions table
 model Subscription {
   id          String   @id @default(uuid())
@@ -248,23 +220,6 @@ model Payment {
 
   @@map("payments")
   @@index([userId])
-}
-
-// Task mutations table
-model TaskMutation {
-  id           String       @id @default(uuid())
-  projectId    String?      @map("project_id")
-  runId        String?      @map("run_id")
-  sessionId    String?      @map("session_id")
-  source       MutationSource
-  mutationType MutationType @map("mutation_type")
-  taskId       String?      @map("task_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
-
-  @@map("task_mutations")
-  @@index([projectId])
-  @@index([runId])
-  @@index([sessionId])
 }
 
 // Project events table (Phase 36: event log for command history)

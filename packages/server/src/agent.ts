@@ -30,14 +30,6 @@ type ComparableTask = {
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
 };
 
-type MutationEvent = {
-  runId?: string;
-  source: string;
-  mutationType: string;
-  taskId?: string;
-  createdAt: string;
-};
-
 type AgentAttemptResult = {
   assistantResponse: string;
   streamedContent: boolean;
@@ -47,13 +39,6 @@ type VerificationResult = {
   tasksAfter: ComparableTask[];
   tasksChanged: boolean;
   actualChangedTaskIds: string[];
-  runChangedTaskIds: string[];
-  changedSetConsistent: boolean;
-  missingTaskIds: string[];
-  unexpectedTaskIds: string[];
-  revisionAfter: number;
-  runMutations: MutationEvent[];
-  externalMutations: MutationEvent[];
 };
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
@@ -200,36 +185,8 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
   return Array.from(ids).filter((id) => beforeMap.get(id) !== afterMap.get(id)).sort();
 }
 
-function compareChangedTaskSets(actualChangedTaskIds: string[], runChangedTaskIds: string[]) {
-  const actualSet = new Set(actualChangedTaskIds);
-  const runSet = new Set(runChangedTaskIds);
-
-  return {
-    missingTaskIds: actualChangedTaskIds.filter((taskId) => !runSet.has(taskId)),
-    unexpectedTaskIds: runChangedTaskIds.filter((taskId) => !actualSet.has(taskId)),
-  };
-}
-
 function buildNoMutationMessage(): string {
-  return 'Изменение не применилось: модель ответила как будто задача изменена, но в базе не было ни одной реальной мутации.';
-}
-
-function buildStaleStateMessage(): string {
-  return 'График изменился вручную во время ответа агента. Запрос нужно повторить на актуальном состоянии задач.';
-}
-
-function buildPartialMutationMessage(missingTaskIds: string[], unexpectedTaskIds: string[]): string {
-  const details: string[] = [];
-
-  if (missingTaskIds.length > 0) {
-    details.push(`не подтверждены сервером задачи: ${missingTaskIds.join(', ')}`);
-  }
-
-  if (unexpectedTaskIds.length > 0) {
-    details.push(`сервер сообщил лишние изменения: ${unexpectedTaskIds.join(', ')}`);
-  }
-
-  return `Изменение применилось частично или устарело: ${details.join('; ')}. Повторите запрос после обновления состояния задач.`;
+  return 'Изменение не применилось: модель ответила как будто задача изменена, но итоговый снимок проекта не изменился.';
 }
 
 function buildTimeoutRetryInstruction(): string {
@@ -299,7 +256,6 @@ function sanitizeAssistantResponse(userMessage: string, response: string): strin
 function buildPrompt(
   systemPrompt: string,
   projectId: string,
-  revision: number,
   mutationRequested: boolean,
   simpleMutationRequested: boolean,
   historyContext: string,
@@ -308,7 +264,7 @@ function buildPrompt(
 ): string {
   return [
     systemPrompt,
-    `\n\n## State metadata:\n- projectId: ${projectId}\n- taskRevision: ${revision}\n- mutationRequested: ${mutationRequested}`,
+    `\n\n## State metadata:\n- projectId: ${projectId}\n- mutationRequested: ${mutationRequested}`,
     mutationRequested
       ? [
         '\n\n## Mutation execution protocol:',
@@ -513,25 +469,14 @@ async function verifyMutationAttempt(
   projectId: string,
   sessionId: string,
   attempt: number,
-  runStartedAt: string,
   mutationRequested: boolean,
   tasksBefore: ComparableTask[],
-  revisionBefore: number,
   assistantResponse: string,
   taskService: TaskServiceModule['taskService'],
 ): Promise<VerificationResult> {
   const { tasks: tasksAfter } = await taskService.list(projectId);
   const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
   const actualChangedTaskIds = mutationRequested ? getChangedTaskIds(tasksBefore, tasksAfter) : [];
-  const revisionAfter = await taskService.getTaskRevision(projectId);
-  const runMutations = await taskService.getMutationEventsByRun(runId, projectId);
-  const runChangedTaskIds = Array.from(
-    new Set(runMutations.map((event) => event.taskId).filter((taskId): taskId is string => Boolean(taskId))),
-  ).sort();
-  const mutationsSinceStart = await taskService.getMutationEventsSince(runStartedAt, projectId);
-  const externalMutations = mutationsSinceStart.filter((event: MutationEvent) => event.runId !== runId);
-  const { missingTaskIds, unexpectedTaskIds } = compareChangedTaskSets(actualChangedTaskIds, runChangedTaskIds);
-  const changedSetConsistent = !mutationRequested || (missingTaskIds.length === 0 && unexpectedTaskIds.length === 0);
 
   await writeServerDebugLog('mutation_verification', {
     runId,
@@ -539,18 +484,8 @@ async function verifyMutationAttempt(
     projectId,
     sessionId,
     mutationRequested,
-    revisionBefore,
-    revisionAfter,
     tasksChanged,
     actualChangedTaskIds,
-    runChangedTaskIds,
-    changedSetConsistent,
-    missingTaskIds,
-    unexpectedTaskIds,
-    runMutationCount: runMutations.length,
-    runMutations,
-    externalMutationCount: externalMutations.length,
-    externalMutations,
     tasksAfterCount: tasksAfter.length,
     tasksAfterNames: tasksAfter.map((task) => task.name),
     assistantResponse,
@@ -560,13 +495,6 @@ async function verifyMutationAttempt(
     tasksAfter,
     tasksChanged,
     actualChangedTaskIds,
-    runChangedTaskIds,
-    changedSetConsistent,
-    missingTaskIds,
-    unexpectedTaskIds,
-    revisionAfter,
-    runMutations,
-    externalMutations,
   };
 }
 
@@ -588,7 +516,6 @@ export async function runAgentWithHistory(
     const { tasks: tasksBefore } = mutationRequested
       ? await taskService.list(projectId)
       : { tasks: [] };
-    const revisionBefore = await taskService.getTaskRevision(projectId);
 
     await writeServerDebugLog('agent_run_started', {
       runId,
@@ -597,7 +524,6 @@ export async function runAgentWithHistory(
       userMessage,
       mutationRequested,
       simpleMutationRequested,
-      revisionBefore,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
     });
@@ -640,13 +566,6 @@ export async function runAgentWithHistory(
       tasksAfter: tasksBefore,
       tasksChanged: false,
       actualChangedTaskIds: [],
-      runChangedTaskIds: [],
-      changedSetConsistent: true,
-      missingTaskIds: [],
-      unexpectedTaskIds: [],
-      revisionAfter: revisionBefore,
-      runMutations: [],
-      externalMutations: [],
     };
 
     const maxAttempts = mutationRequested ? 2 : 1;
@@ -656,7 +575,6 @@ export async function runAgentWithHistory(
       const attemptPrompt = buildPrompt(
         systemPrompt,
         projectId,
-        revisionBefore,
         mutationRequested,
         simpleMutationRequested,
         historyContext,
@@ -674,7 +592,6 @@ export async function runAgentWithHistory(
         prompt: attemptPrompt,
       });
 
-      const attemptStartedAt = new Date().toISOString();
       let attemptResult: AgentAttemptResult;
       try {
         attemptResult = await executeAgentAttempt(
@@ -715,10 +632,8 @@ export async function runAgentWithHistory(
         projectId,
         sessionId,
         attempt,
-        attemptStartedAt,
         mutationRequested,
         tasksBefore,
-        revisionBefore,
         assistantResponse,
         taskService,
       );
@@ -728,23 +643,7 @@ export async function runAgentWithHistory(
         break;
       }
 
-      if (finalVerification.externalMutations.length > 0) {
-        assistantResponse = buildStaleStateMessage();
-        break;
-      }
-
-      if (!finalVerification.changedSetConsistent) {
-        assistantResponse = buildPartialMutationMessage(
-          finalVerification.missingTaskIds,
-          finalVerification.unexpectedTaskIds,
-        );
-        break;
-      }
-
-      if (
-        finalVerification.runMutations.length > 0
-        && finalVerification.tasksChanged
-      ) {
+      if (finalVerification.tasksChanged) {
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
           assistantResponse.trim() || 'Изменения применены.',
@@ -770,7 +669,7 @@ export async function runAgentWithHistory(
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',
-        'A text-only success answer is invalid and will be rejected if no mutation event is recorded.',
+        'A text-only success answer is invalid if the project snapshot did not actually change.',
         'If the request cannot be completed with available tools, say that explicitly and do not claim success.',
         assistantResponse.trim().length > 0 ? `Previous invalid answer: ${assistantResponse.trim()}` : '',
       ].filter(Boolean).join('\n');
@@ -780,7 +679,7 @@ export async function runAgentWithHistory(
         attempt,
         projectId,
         sessionId,
-        reason: 'no_mutation_recorded',
+        reason: 'no_snapshot_change_detected',
         previousAssistantResponse: assistantResponse,
       });
     }
@@ -801,9 +700,8 @@ export async function runAgentWithHistory(
       sessionId,
       assistantResponse,
       streamedContent,
-      finalRevisionAfter: finalVerification.revisionAfter,
-      finalRunMutationCount: finalVerification.runMutations.length,
-      finalExternalMutationCount: finalVerification.externalMutations.length,
+      finalTasksChanged: finalVerification.tasksChanged,
+      finalChangedTaskIds: finalVerification.actualChangedTaskIds,
     });
 
     broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter });

@@ -23,7 +23,8 @@ import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
 import { useProjectUIStore } from './stores/useProjectUIStore.ts';
-import type { Task, ValidationResult } from './types.ts';
+import { useProjectStore } from './stores/useProjectStore.ts';
+import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 
@@ -38,6 +39,18 @@ interface LoadProjectResponse {
 interface RouteState {
   pathname: string;
   search: string;
+}
+
+function buildDependencyRowsFromTasks(tasks: Task[]) {
+  return tasks.flatMap((task) =>
+    (task.dependencies ?? []).map((dependency, index) => ({
+      id: `${task.id}:${dependency.taskId}:${dependency.type}:${index}`,
+      taskId: task.id,
+      depTaskId: dependency.taskId,
+      type: dependency.type,
+      lag: dependency.lag ?? 0,
+    })),
+  );
 }
 
 export default function App() {
@@ -261,7 +274,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     void refreshProjects();
   }, [auth.accessToken, auth.isAuthenticated, hasShareToken, refreshProjects]);
 
-  const authenticatedTasks = useTasks(hasShareToken ? null : auth.accessToken, auth.refreshAccessToken);
+  const authenticatedTasks = useTasks(
+    hasShareToken ? null : auth.accessToken,
+    auth.refreshAccessToken,
+    auth.project?.ganttDayMode ?? 'business',
+  );
   const { tasks, setTasks, loading, error } = hasShareToken
     ? sharedProject
     : auth.isAuthenticated
@@ -271,6 +288,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     tasks,
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
+    ganttDayMode: hasShareToken ? (sharedProject.project?.ganttDayMode ?? 'business') : (auth.project?.ganttDayMode ?? 'business'),
   });
   const ganttRef = useRef<GanttChartRef>(null);
   const activationInFlightRef = useRef(false);
@@ -283,7 +301,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'tasks') {
-      useTaskStore.getState().replaceFromSystem(msg.tasks as Task[]);
+      const normalizedTasks = normalizeTasks(msg.tasks as Task[]);
+      useTaskStore.getState().replaceFromSystem(normalizedTasks);
+
+      if (!hasShareToken && auth.isAuthenticated) {
+        const projectStore = useProjectStore.getState();
+        projectStore.hydrateConfirmed(projectStore.confirmed.version, {
+          tasks: normalizedTasks,
+          dependencies: buildDependencyRowsFromTasks(normalizedTasks),
+        });
+      }
       return;
     }
     if (msg.type === 'token') {
@@ -297,7 +324,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (msg.type === 'error') {
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, []);
+  }, [auth.isAuthenticated, hasShareToken]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -352,6 +379,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const resetWorkspacePresentation = useCallback(() => {
     replaceTasksFromSystem([]);
+    useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
   }, [replaceTasksFromSystem]);
 
@@ -621,8 +649,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!auth.isAuthenticated || hasShareToken) {
       return;
     }
-    replaceTasksFromSystem([]);
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken, replaceTasksFromSystem]);
+    useProjectStore.getState().clearTransientState();
+  }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
@@ -745,6 +773,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     ? (
       <SharedWorkspace
         ganttRef={ganttRef}
+        tasks={tasks}
+        setTasks={setTasks}
+        loading={loading}
+        sharedProject={sharedProject.project}
+        shareToken={sharedProject.shareToken}
         displayConnected={displayConnected}
         onScrollToToday={handleScrollToToday}
         onCollapseAll={handleCollapseAll}
@@ -766,6 +799,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ? (
           <ProjectWorkspace
             ganttRef={ganttRef}
+            tasks={tasks}
+            setTasks={setTasks}
+            loading={loading}
+            sharedProject={sharedProject.project}
+            shareToken={sharedProject.shareToken}
             hasShareToken={hasShareToken}
             displayConnected={displayConnected}
             isAuthenticated={auth.isAuthenticated}
@@ -792,6 +830,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         : (
           <GuestWorkspace
             ganttRef={ganttRef}
+            tasks={tasks}
+            setTasks={setTasks}
+            loading={loading}
             isAuthenticated={auth.isAuthenticated}
             batchUpdate={batchUpdate}
             onSend={handleStartScreenSend}

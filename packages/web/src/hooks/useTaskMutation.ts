@@ -2,6 +2,7 @@ import { normalizeTasks, type FrontendProjectCommand, type Task, type TaskDepend
 import { useCommandCommit } from './useCommandCommit';
 
 export interface CreateTaskInput {
+  id?: string;
   name: string;
   startDate: string;
   endDate: string;
@@ -55,7 +56,7 @@ function normalizeDependencies(dependencies: TaskDependency[] | undefined): Task
   }));
 }
 
-function buildCommandsFromDiff(originalTask: Task, nextTask: Task): FrontendProjectCommand[] {
+export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): FrontendProjectCommand[] {
   const commands: FrontendProjectCommand[] = [];
   const nextStartDate = toDateString(nextTask.startDate);
   const nextEndDate = toDateString(nextTask.endDate);

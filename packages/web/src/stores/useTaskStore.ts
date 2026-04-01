@@ -191,7 +191,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       }
 
       const normalizedTasks = normalizeTasks(project.snapshot.tasks);
-      useProjectStore.getState().setConfirmed(project.version, {
+      useProjectStore.getState().hydrateConfirmed(project.version, {
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,
       });
@@ -215,7 +215,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
   loadLocal: () => {
     const requestId = ++requestCounter;
     const snapshot = loadLocalSnapshot();
-    useProjectStore.getState().setConfirmed(0, {
+    useProjectStore.getState().hydrateConfirmed(0, {
       tasks: snapshot.tasks,
       dependencies: [],
     });
@@ -236,7 +236,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
   },
   loadShared: async (shareToken) => {
     const requestId = ++requestCounter;
-    useProjectStore.getState().setConfirmed(0, {
+    useProjectStore.getState().hydrateConfirmed(0, {
       tasks: [],
       dependencies: [],
     });

@@ -108,7 +108,7 @@ export interface ProjectState {
   };
   pending: PendingCommand[];
   dragPreview?: {
-    command: FrontendProjectCommand;
+    commands: FrontendProjectCommand[];
     snapshot: ProjectSnapshot;
   };
 }

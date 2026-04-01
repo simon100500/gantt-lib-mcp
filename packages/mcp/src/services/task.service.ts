@@ -14,7 +14,6 @@ import type {
   UpdateTaskInput,
   TaskDependency,
   TaskMutationSource,
-  TaskMutationEvent,
   ScheduleCommand,
   ScheduleCommandOptions,
   TaskMutationResult,
@@ -257,8 +256,6 @@ export class TaskService {
       if (!task) {
         return { changedTasks: [], changedIds: [] };
       }
-
-      await this.recordMutation('update', projectId, changedTaskId, source);
       return {
         task,
         changedTasks: [task],
@@ -318,10 +315,6 @@ export class TaskService {
       });
     }
 
-    for (const taskId of result.changedIds) {
-      await this.recordMutation('update', projectId, taskId, source);
-    }
-
     const refreshedSnapshot = await this.loadSnapshot(projectId);
     const snapshotTasks = Array.from(refreshedSnapshot.values());
     const changedTasks = result.changedIds
@@ -356,34 +349,6 @@ export class TaskService {
       source,
       command.taskId,
     );
-  }
-
-  // Helper: Record mutation event
-  private async recordMutation(
-    mutationType: 'create' | 'update' | 'delete' | 'delete_all' | 'import',
-    projectId: string | undefined,
-    taskId: string | undefined,
-    source?: TaskMutationSource
-  ): Promise<void> {
-    // Convert domain TaskMutationSource to Prisma MutationSource enum
-    const sourceMapping: Record<TaskMutationSource, 'agent' | 'manual_save' | 'api' | 'system'> = {
-      'agent': 'agent',
-      'manual-save': 'manual_save',
-      'api': 'api',
-      'system': 'system',
-    };
-    const mutationSource = source ? sourceMapping[source] : 'system';
-
-    await this.prisma.taskMutation.create({
-      data: {
-        projectId,
-        taskId,
-        source: mutationSource,
-        mutationType,
-        runId: process.env.AI_RUN_ID || null,
-        sessionId: process.env.AI_SESSION_ID || null,
-      },
-    });
   }
 
   /**
@@ -467,9 +432,6 @@ export class TaskService {
     if (input.dependencies && input.dependencies.length > 0) {
       await this.runScheduler(id, false, projectId);
     }
-
-    // Record mutation
-    await this.recordMutation('create', projectId, id, source);
 
     // Return fresh task with dependencies
     const result = await this.get(id);
@@ -675,7 +637,6 @@ export class TaskService {
         return undefined;
       }
 
-      await this.recordMutation('update', existing.projectId || undefined, id, source);
       result = {
         task,
         changedTasks: [task],
@@ -726,8 +687,6 @@ export class TaskService {
 
     await this.syncParentDates(task.projectId || undefined);
 
-    await this.recordMutation('delete', task.projectId || undefined, id, source);
-
     return true;
   }
 
@@ -739,73 +698,7 @@ export class TaskService {
       where: projectId ? { projectId } : {},
     });
 
-    if (result.count > 0) {
-      await this.recordMutation('delete_all', projectId, undefined, source);
-    }
-
     return result.count;
-  }
-
-  /**
-   * Get the current task revision number for a project
-   */
-  async getTaskRevision(projectId?: string): Promise<number> {
-    const scopeId = projectId ?? '__global__';
-    const revision = await this.prisma.taskRevision.findUnique({
-      where: { projectId: scopeId },
-      select: { revision: true },
-    });
-    return revision?.revision ?? 0;
-  }
-
-  /**
-   * Get mutation events for a specific agent run
-   */
-  async getMutationEventsByRun(runId: string, projectId?: string): Promise<TaskMutationEvent[]> {
-    const mutations = await this.prisma.taskMutation.findMany({
-      where: {
-        runId,
-        ...(projectId ? { projectId } : {}),
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    return mutations.map(m => this.mutationToDomain(m));
-  }
-
-  /**
-   * Get mutation events since a given ISO timestamp
-   */
-  async getMutationEventsSince(since: string, projectId?: string): Promise<TaskMutationEvent[]> {
-    const mutations = await this.prisma.taskMutation.findMany({
-      where: {
-        createdAt: { gte: new Date(since) },
-        ...(projectId ? { projectId } : {}),
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    return mutations.map(m => this.mutationToDomain(m));
-  }
-
-  /**
-   * Convert Prisma TaskMutation to domain TaskMutationEvent
-   */
-  private mutationToDomain(m: any): TaskMutationEvent {
-    const sourceReverseMap: Record<string, TaskMutationSource> = {
-      agent: 'agent',
-      manual_save: 'manual-save',
-      api: 'api',
-      system: 'system',
-    };
-    return {
-      id: m.id,
-      projectId: m.projectId ?? undefined,
-      runId: m.runId ?? undefined,
-      sessionId: m.sessionId ?? undefined,
-      source: sourceReverseMap[m.source] ?? 'system',
-      mutationType: m.mutationType as TaskMutationEvent['mutationType'],
-      taskId: m.taskId ?? undefined,
-      createdAt: m.createdAt.toISOString(),
-    };
   }
 
   /**
@@ -942,11 +835,6 @@ export class TaskService {
     await this.removeHierarchyDependencies(projectId);
     await this.syncParentDates(projectId);
 
-    // Record mutation for each task
-    for (const task of tasks) {
-      await this.recordMutation('update', projectId, task.id, source);
-    }
-
     return tasks.length;
   }
 
@@ -1036,8 +924,6 @@ export class TaskService {
 
     await this.removeHierarchyDependencies(projectId);
     await this.syncParentDates(projectId);
-
-    await this.recordMutation('import', projectId, undefined, source);
 
     return tasks.length;
   }
