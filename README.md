@@ -44,9 +44,35 @@ Create `.env` file:
 OPENAI_API_KEY=your-key
 OPENAI_BASE_URL=https://api.z.ai/api/paas/v4/
 OPENAI_MODEL=glm-4.7
-DB_PATH=/data/gantt.db
+DATABASE_URL=postgresql://user:password@host:5432/dbname
 PORT=3000
 ```
+
+### Database Backup And Migrations
+
+For a Prisma-managed PostgreSQL database, make a backup before applying server migrations.
+
+Create a dump from the root of the repo:
+
+```bash
+npm run dump:db
+```
+
+The dump script uses Docker by default and writes a custom-format backup file like `backup-YYYYMMDD-HHMMSS.dump` to the repo root.
+
+Apply pending Prisma migrations:
+
+```bash
+npx prisma migrate deploy --schema packages/mcp/prisma/schema.prisma
+```
+
+Recommended production order:
+
+1. Deploy the new application code.
+2. Verify `DATABASE_URL` points to the target server database.
+3. Run `npm run dump:db`.
+4. Run `npx prisma migrate deploy --schema packages/mcp/prisma/schema.prisma`.
+5. Restart the server if your deployment process does not already do that.
 
 ## Project Structure
 
