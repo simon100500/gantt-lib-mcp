@@ -186,16 +186,9 @@ export function useBatchTaskUpdate({
   }, [applyTaskChanges, mergeTasksById, onCascade, setTasks, tasks]);
 
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
-    console.log('%c[useBatchTaskUpdate] handleTasksChange START', 'background: #4c6ef5; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    console.log('[useBatchTaskUpdate] changedTasks count:', changedTasks.length);
-    console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
-    console.log('[useBatchTaskUpdate] FULL STACK:', new Error().stack);
-
-    // Duplicate/reorder path from gantt-lib:
-    // GanttChart.handleReorder emits onTasksChange(full list) and then onReorder(full list).
-    // For duplicate, onTasksChange contains brand-new ids, but existing tasks are otherwise unchanged.
-    // If we save here, this request can finish before handleReorder's save and briefly overwrite
-    // optimistic state with an older snapshot where the clone is still missing.
+    // gantt-lib now prefers onReorder for reorder flows and uses onTasksChange only as a
+    // fallback when onReorder is not provided. Keep these guards because duplicate/delete
+    // flows can still route through onTasksChange with full task arrays.
     const existingTaskIds = new Set(tasks.map(t => t.id));
     const newTasksInBatch = changedTasks.filter(t => !existingTaskIds.has(t.id));
     const existingTasksUnchanged = changedTasks
@@ -221,8 +214,6 @@ export function useBatchTaskUpdate({
     const isDuplicateFlow = newTasksInBatch.length > 0 && existingTasksUnchanged;
 
     if (isDuplicateFlow) {
-      console.log('%c[useBatchTaskUpdate] handleTasksChange: duplicate flow detected — skipping, handleReorder will save', 'background: #845ef7; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-      console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE (duplicate flow, skipped)`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
       return;
     }
 
@@ -244,10 +235,8 @@ export function useBatchTaskUpdate({
       return depsChanged && nothingElseChanged;
     });
 
-    // Check if this is a pure reorder — gantt-lib fires onTasksChange for every drag event,
-    // including reorders where no actual task properties changed. In that case, handleReorder
-    // is about to be called and is the sole owner of sortOrder persistence.
-    // We skip the server save entirely so there's only ONE save in flight.
+    // Defensive fallback: if a pure reorder ever reaches onTasksChange, do not persist it here.
+    // handleReorder owns sortOrder persistence.
     const isPureReorder = changedTasks.length > 0 && changedTasks.every(t => {
       const original = tasks.find(orig => orig.id === t.id);
       if (!original) return false; // New task — not a pure reorder
@@ -267,8 +256,6 @@ export function useBatchTaskUpdate({
     });
 
     if (isPureReorder) {
-      console.log('%c[useBatchTaskUpdate] handleTasksChange: pure reorder detected — skipping, handleReorder will save', 'background: #f59f00; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-      console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE (pure reorder, skipped)`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
       return;
     }
 
@@ -318,7 +305,6 @@ export function useBatchTaskUpdate({
         setSavingStateWithReset('error');
       }
 
-      console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
       return;
     }
 
@@ -344,18 +330,8 @@ export function useBatchTaskUpdate({
       return;
     }
 
-    console.log('[useBatchTaskUpdate] Full changedTasks data:');
-    console.table(changedTasks.map(t => ({
-      id: t.id,
-      name: t.name,
-      parentId: t.parentId,
-      startDate: toDateString(t.startDate),
-      endDate: toDateString(t.endDate),
-    })));
-
     const changedMap = new Map(changedTasks.map(t => [t.id, t]));
     setTasks(prev => prev.map(t => changedMap.get(t.id) ?? t));
-    console.log('[useBatchTaskUpdate] Optimistic state updated');
 
     try {
       setSavingStateWithReset('saving');
@@ -376,8 +352,6 @@ export function useBatchTaskUpdate({
       console.error('[useBatchTaskUpdate] Command save failed:', error);
       setSavingStateWithReset('error');
     }
-
-    console.log(`%c[useBatchTaskUpdate] handleTasksChange DONE`, 'background: #51cf66; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
   }, [applyAuthoritativeTaskResult, applyTaskChanges, persistAuthoritativeCascade, setSavingStateWithReset, setTasks, tasks, toDateString]);
 
   const handleAdd = useCallback(async (task: Task) => {
@@ -540,11 +514,6 @@ export function useBatchTaskUpdate({
   }, [createTask, isAuthenticatedMode, setSavingStateWithReset, setTasks]);
 
   const handleReorder = useCallback(async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
-    console.log('%c[useBatchTaskUpdate] handleReorder called', 'background: #ff00ff; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-    console.log('[useBatchTaskUpdate] movedTaskId:', movedTaskId, 'inferredParentId:', inferredParentId);
-    console.log('[useBatchTaskUpdate] CALLER:', new Error().stack?.split('\n')[2]?.trim());
-    console.log('[useBatchTaskUpdate] FULL STACK:', new Error().stack);
-
     // Add sortOrder to all tasks based on their position in the array
     const tasksWithOrder = reorderedTasks.map((task, index) => ({
       ...task,
