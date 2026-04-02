@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
+    "./constraints": "./dist/constraints/index.js",
     "./types": "./dist/types.js",
     "./prisma": "./dist/prisma.js",
     "./services": "./dist/services/index.js"
