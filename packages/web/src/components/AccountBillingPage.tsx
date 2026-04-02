@@ -73,9 +73,11 @@ export function AccountBillingPage() {
     void fetchPayments();
   }, [fetchPayments, fetchSubscription]);
 
-  const aiUnlimited = subscription?.aiLimit === -1;
-  const aiUsagePercent = !aiUnlimited && subscription
-    ? Math.min(100, Math.round((subscription.aiUsed / subscription.aiLimit) * 100))
+  const aiUsage = subscription?.usage.ai_queries;
+  const aiRemaining = subscription?.remaining.ai_queries;
+  const aiUnlimited = aiRemaining?.remainingState === 'unlimited';
+  const aiUsagePercent = subscription && aiUsage?.usageState === 'tracked' && typeof aiUsage.limit === 'number' && aiRemaining?.remainingState === 'tracked'
+    ? Math.min(100, Math.round((aiUsage.used / aiUsage.limit) * 100))
     : 0;
 
   const currentPlan = subscription?.plan as PlanId | undefined;
@@ -142,7 +144,11 @@ export function AccountBillingPage() {
                   <div className="mb-1 flex justify-between text-sm">
                     <span className="text-slate-600">AI-запросы</span>
                     <span className="font-medium tabular-nums text-slate-900">
-                      {aiUnlimited ? 'Безлимит' : `${subscription.aiUsed} / ${subscription.aiLimit}`}
+                      {aiUnlimited
+                        ? 'Безлимит'
+                        : aiUsage?.usageState === 'tracked'
+                          ? `${aiUsage.used} / ${aiUsage.limit}`
+                          : '—'}
                     </span>
                   </div>
                   {!aiUnlimited && (

@@ -8,9 +8,10 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { BillingService } from '../services/billing-service.js';
-import { isPlanActive } from '../services/plan-config.js';
+import { ConstraintService } from '../services/constraint-service.js';
 
 const billingService = new BillingService();
+const constraintService = new ConstraintService();
 
 export async function subscriptionMiddleware(
   request: FastifyRequest,
@@ -38,13 +39,18 @@ export async function subscriptionMiddleware(
     return;
   }
 
-  // Check AI generation limits (D-06: only on AI requests, D-07: 1 message = 1 generation)
-  if (status.aiLimit !== -1 && status.aiUsed >= status.aiLimit) {
+  const aiCheck = await constraintService.checkLimit(userId, 'ai_queries');
+  if (!aiCheck.allowed) {
+    const aiUsed = aiCheck.usage.usageState === 'tracked' ? aiCheck.usage.used : 0;
+    const aiLimit = aiCheck.usage.usageState === 'tracked' ? aiCheck.usage.limit : 0;
+
     reply.status(403).send({
-      error: `Лимит AI-генераций исчерпан (${status.aiUsed}/${status.aiLimit}). Повысьте тариф для продолжения.`,
+      error: `Лимит AI-генераций исчерпан (${aiUsed}/${aiLimit}). Повысьте тариф для продолжения.`,
       code: 'AI_LIMIT_REACHED',
-      aiUsed: status.aiUsed,
-      aiLimit: status.aiLimit,
+      aiUsed,
+      aiLimit,
+      reasonCode: aiCheck.reasonCode,
+      plan: aiCheck.planId,
     });
     return;
   }

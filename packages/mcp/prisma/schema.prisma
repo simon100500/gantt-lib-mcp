@@ -83,6 +83,7 @@ model User {
   sessions      Session[]
   subscriptions Subscription[]
   payments      Payment[]
+  usageCounters UsageCounter[]
 
   @@map("users")
 }
@@ -269,6 +270,22 @@ model Subscription {
 
   @@map("subscriptions")
   @@index([userId])
+}
+
+model UsageCounter {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  limitKey     String   @map("limit_key")
+  periodBucket String   @map("period_bucket")
+  usage        Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("usage_counters")
+  @@unique([userId, limitKey, periodBucket])
+  @@index([userId, limitKey])
 }
 
 // Payments table

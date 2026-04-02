@@ -74,7 +74,11 @@ export function ProjectMenu({
           {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
         </span>
         <span className="text-xs text-slate-500">
-          {subscription.limits.projects === -1 ? '\u221e' : `${auth.projects.length}/${subscription.limits.projects}`} проектов
+          {subscription.remaining.projects?.remainingState === 'unlimited'
+            ? '\u221e'
+            : subscription.usage.projects?.usageState === 'tracked' && subscription.remaining.projects?.remainingState === 'tracked'
+              ? `${subscription.usage.projects.used}/${subscription.usage.projects.limit}`
+              : `${auth.projects.length}`} проектов
         </span>
       </div>
       <button

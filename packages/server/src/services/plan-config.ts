@@ -1,96 +1,103 @@
-/**
- * Plan configuration with env-driven prices and quotas
- *
- * Tariffs v5:
- * - free: 1 project, 20 AI requests (total), unlimited refinements, unlimited resources, 1 team
- * - start: 3 projects, 25 AI requests/day, unlimited refinements, unlimited resources, 1 team
- * - team: 7 projects, 50 AI requests/day, unlimited refinements, unlimited resources, 5 team
- * - enterprise: unlimited projects, 100 AI requests/day, unlimited refinements, unlimited resources, 20 team
- */
+import {
+  PLAN_CATALOG,
+  getPlanLimit as getCatalogPlanLimit,
+  type BillingPeriod,
+  type ExportAccessLevel,
+  type PlanId,
+  type Unlimited,
+} from '@gantt/mcp/constraints';
 
-export type PlanKey = 'free' | 'start' | 'team' | 'enterprise';
+export type PlanKey = PlanId;
+export type LegacyUnlimited = -1;
+export type LegacyNumericLimit = number | LegacyUnlimited;
 
 export interface PlanLimits {
-  projects: number;       // -1 = unlimited
-  aiGenerations: number;  // -1 = unlimited
-  aiRefinements: number;  // per project, -1 = unlimited
-  resources: number;      // -1 = unlimited
-  teamMembers: number;    // -1 = unlimited
+  projects: LegacyNumericLimit;
+  aiGenerations: number;
+  aiRefinements: LegacyUnlimited;
+  resources: LegacyUnlimited;
+  teamMembers: number;
+  archive: boolean;
+  resource_pool: boolean;
+  export: ExportAccessLevel;
 }
 
 export interface PlanPricing {
-  monthly: number;   // price in rubles
-  yearly: number;    // price in rubles
+  monthly: number;
+  yearly: number;
   description: string;
 }
 
 export interface PlanConfig {
+  label: string;
   limits: PlanLimits;
   pricing: PlanPricing;
 }
 
-function envInt(key: string, fallback: number): number {
-  const val = process.env[key];
-  if (val === undefined || val === '') return fallback;
-  return parseInt(val, 10);
+function toLegacyUnlimited(value: number | Unlimited): LegacyNumericLimit {
+  return value === 'unlimited' ? -1 : value;
+}
+
+function getDescription(plan: PlanKey): string {
+  return `Сервис ГетГант. Тариф ${PLAN_CATALOG[plan].label}`;
 }
 
 export const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
   free: {
+    label: PLAN_CATALOG.free.label,
     limits: {
-      projects: envInt('PLAN_FREE_PROJECTS', 1),
-      aiGenerations: envInt('PLAN_FREE_AI_GENERATIONS', 20),
-      aiRefinements: envInt('PLAN_FREE_AI_REFINEMENTS', -1),
-      resources: envInt('PLAN_FREE_RESOURCES', -1),
-      teamMembers: envInt('PLAN_FREE_TEAM_MEMBERS', 1),
+      projects: toLegacyUnlimited(PLAN_CATALOG.free.limits.projects),
+      aiGenerations: PLAN_CATALOG.free.limits.ai_queries.value,
+      aiRefinements: -1,
+      resources: -1,
+      teamMembers: 1,
+      archive: PLAN_CATALOG.free.limits.archive,
+      resource_pool: PLAN_CATALOG.free.limits.resource_pool,
+      export: PLAN_CATALOG.free.limits.export,
     },
-    pricing: {
-      monthly: envInt('PLAN_FREE_PRICE_MONTHLY', 0),
-      yearly: envInt('PLAN_FREE_PRICE_YEARLY', 0),
-      description: 'Сервис ГетГант. Тариф Бесплатный',
-    },
+    pricing: { ...PLAN_CATALOG.free.pricing, description: getDescription('free') },
   },
   start: {
+    label: PLAN_CATALOG.start.label,
     limits: {
-      projects: envInt('PLAN_START_PROJECTS', 3),
-      aiGenerations: envInt('PLAN_START_AI_GENERATIONS', 25),
-      aiRefinements: envInt('PLAN_START_AI_REFINEMENTS', -1),
-      resources: envInt('PLAN_START_RESOURCES', -1),
-      teamMembers: envInt('PLAN_START_TEAM_MEMBERS', 1),
+      projects: toLegacyUnlimited(PLAN_CATALOG.start.limits.projects),
+      aiGenerations: PLAN_CATALOG.start.limits.ai_queries.value,
+      aiRefinements: -1,
+      resources: -1,
+      teamMembers: 1,
+      archive: PLAN_CATALOG.start.limits.archive,
+      resource_pool: PLAN_CATALOG.start.limits.resource_pool,
+      export: PLAN_CATALOG.start.limits.export,
     },
-    pricing: {
-      monthly: envInt('PLAN_START_PRICE_MONTHLY', 1490),
-      yearly: envInt('PLAN_START_PRICE_YEARLY', 11900),
-      description: 'Сервис ГетГант. Тариф Старт',
-    },
+    pricing: { ...PLAN_CATALOG.start.pricing, description: getDescription('start') },
   },
   team: {
+    label: PLAN_CATALOG.team.label,
     limits: {
-      projects: envInt('PLAN_TEAM_PROJECTS', 7),
-      aiGenerations: envInt('PLAN_TEAM_AI_GENERATIONS', 50),
-      aiRefinements: envInt('PLAN_TEAM_AI_REFINEMENTS', -1),
-      resources: envInt('PLAN_TEAM_RESOURCES', -1),
-      teamMembers: envInt('PLAN_TEAM_TEAM_MEMBERS', 5),
+      projects: toLegacyUnlimited(PLAN_CATALOG.team.limits.projects),
+      aiGenerations: PLAN_CATALOG.team.limits.ai_queries.value,
+      aiRefinements: -1,
+      resources: -1,
+      teamMembers: 5,
+      archive: PLAN_CATALOG.team.limits.archive,
+      resource_pool: PLAN_CATALOG.team.limits.resource_pool,
+      export: PLAN_CATALOG.team.limits.export,
     },
-    pricing: {
-      monthly: envInt('PLAN_TEAM_PRICE_MONTHLY', 4990),
-      yearly: envInt('PLAN_TEAM_PRICE_YEARLY', 47900),
-      description: 'Сервис ГетГант. Тариф Команда',
-    },
+    pricing: { ...PLAN_CATALOG.team.pricing, description: getDescription('team') },
   },
   enterprise: {
+    label: PLAN_CATALOG.enterprise.label,
     limits: {
-      projects: envInt('PLAN_ENTERPRISE_PROJECTS', -1),
-      aiGenerations: envInt('PLAN_ENTERPRISE_AI_GENERATIONS', 100),
-      aiRefinements: envInt('PLAN_ENTERPRISE_AI_REFINEMENTS', -1),
-      resources: envInt('PLAN_ENTERPRISE_RESOURCES', -1),
-      teamMembers: envInt('PLAN_ENTERPRISE_TEAM_MEMBERS', 20),
+      projects: toLegacyUnlimited(PLAN_CATALOG.enterprise.limits.projects),
+      aiGenerations: PLAN_CATALOG.enterprise.limits.ai_queries.value,
+      aiRefinements: -1,
+      resources: -1,
+      teamMembers: 20,
+      archive: PLAN_CATALOG.enterprise.limits.archive,
+      resource_pool: PLAN_CATALOG.enterprise.limits.resource_pool,
+      export: PLAN_CATALOG.enterprise.limits.export,
     },
-    pricing: {
-      monthly: envInt('PLAN_ENTERPRISE_PRICE_MONTHLY', 12900),
-      yearly: envInt('PLAN_ENTERPRISE_PRICE_YEARLY', 129000),
-      description: 'Сервис ГетГант. Тариф Корпоративный',
-    },
+    pricing: { ...PLAN_CATALOG.enterprise.pricing, description: getDescription('enterprise') },
   },
 };
 
@@ -98,8 +105,15 @@ export function getPlanLimits(plan: PlanKey): PlanLimits {
   return PLAN_CONFIG[plan]?.limits ?? PLAN_CONFIG.free.limits;
 }
 
-export function getPlanPricing(plan: PlanKey, period: 'monthly' | 'yearly'): number {
+export function getPlanPricing(plan: PlanKey, period: BillingPeriod): number {
   return PLAN_CONFIG[plan]?.pricing[period] ?? 0;
+}
+
+export function getCanonicalPlanLimit(
+  plan: PlanKey,
+  limitKey: 'projects' | 'ai_queries' | 'archive' | 'resource_pool' | 'export',
+) {
+  return getCatalogPlanLimit(plan, limitKey);
 }
 
 export function isPlanActive(periodEnd: string | null): boolean {

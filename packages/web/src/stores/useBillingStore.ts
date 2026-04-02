@@ -7,13 +7,49 @@
 import { create } from 'zustand';
 import { useAuthStore } from './useAuthStore';
 
-export interface PlanLimits {
-  projects: number;
-  aiGenerations: number;
-  aiRefinements: number;
-  resources: number;
-  teamMembers: number;
+export type UsageState = 'tracked' | 'not_applicable';
+export type RemainingState = 'tracked' | 'unlimited' | 'not_applicable';
+
+export interface TrackedUsageEntry {
+  usageState: 'tracked';
+  limit: number | 'unlimited';
+  used: number;
+  period: 'daily' | 'lifetime' | 'current';
+  periodBucket: string;
 }
+
+export interface NotApplicableUsageEntry {
+  usageState: 'not_applicable';
+  limit: boolean | string;
+  used: null;
+  period: null;
+  periodBucket: null;
+}
+
+export type UsageEntry = TrackedUsageEntry | NotApplicableUsageEntry;
+
+export interface TrackedRemainingEntry {
+  remainingState: 'tracked';
+  limit: number;
+  remaining: number;
+}
+
+export interface UnlimitedRemainingEntry {
+  remainingState: 'unlimited';
+  limit: 'unlimited';
+  remaining: 'unlimited';
+}
+
+export interface NotApplicableRemainingEntry {
+  remainingState: 'not_applicable';
+  limit: boolean | string;
+  remaining: null;
+}
+
+export type RemainingEntry =
+  | TrackedRemainingEntry
+  | UnlimitedRemainingEntry
+  | NotApplicableRemainingEntry;
 
 export interface SubscriptionStatus {
   plan: string;
@@ -21,7 +57,27 @@ export interface SubscriptionStatus {
   aiUsed: number;
   aiLimit: number;
   isActive: boolean;
-  limits: PlanLimits;
+  planMeta: {
+    id: string;
+    label: string;
+    pricing: {
+      monthly: number;
+      yearly: number;
+    };
+  };
+  limits: Record<string, unknown>;
+  usage: Record<string, UsageEntry>;
+  remaining: Record<string, RemainingEntry>;
+  legacyLimits?: {
+    projects: number;
+    aiGenerations: number;
+    aiRefinements: number;
+    resources: number;
+    teamMembers: number;
+    archive: boolean;
+    resource_pool: boolean;
+    export: string;
+  };
 }
 
 export interface PaymentRecord {

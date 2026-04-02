@@ -5,6 +5,8 @@
  */
 
 import { getPrisma } from '@gantt/mcp/prisma';
+import { PLAN_CATALOG, type LimitKey, type PlanId } from '@gantt/mcp/constraints';
+import { ConstraintService, type ConstraintUsageSnapshot } from './constraint-service.js';
 import { getPlanLimits, isPlanActive, type PlanKey } from './plan-config.js';
 
 export interface PaymentRow {
@@ -16,6 +18,24 @@ export interface PaymentRow {
   yookassa_payment_id: string;
   status: string;
   created_at: string;
+}
+
+export interface BillingSubscriptionStatus {
+  plan: PlanId;
+  periodEnd: string | null;
+  aiUsed: number;
+  aiLimit: number;
+  isActive: boolean;
+  planMeta: {
+    id: PlanId;
+    label: string;
+    pricing: {
+      monthly: number;
+      yearly: number;
+    };
+  };
+  limits: Record<LimitKey, unknown>;
+  usage: Record<LimitKey, ConstraintUsageSnapshot>;
 }
 
 export function computeNextPeriodEnd(
@@ -32,6 +52,7 @@ export function computeNextPeriodEnd(
 }
 
 export class BillingService {
+  private readonly constraintService = new ConstraintService();
   /**
    * Get or create a subscription for the user.
    * If no subscription exists, creates one with plan='free'.
@@ -53,23 +74,41 @@ export class BillingService {
   /**
    * Get subscription status with computed fields.
    */
-  async getSubscriptionStatus(userId: string): Promise<{
-    plan: PlanKey;
-    periodEnd: string | null;
-    aiUsed: number;
-    aiLimit: number;
-    isActive: boolean;
-  }> {
+  async getSubscriptionStatus(userId: string): Promise<BillingSubscriptionStatus> {
     const sub = await this.getOrCreateSubscription(userId);
-    const limits = getPlanLimits(sub.plan as PlanKey);
+    const plan = sub.plan as PlanId;
     const active = isPlanActive(sub.periodEnd?.toISOString() ?? null);
+    const projectsUsage = await this.constraintService.getUsage(userId, 'projects');
+    const aiUsage = await this.constraintService.getUsage(userId, 'ai_queries');
+    const archiveUsage = await this.constraintService.getUsage(userId, 'archive');
+    const resourcePoolUsage = await this.constraintService.getUsage(userId, 'resource_pool');
+    const exportUsage = await this.constraintService.getUsage(userId, 'export');
 
     return {
-      plan: sub.plan as PlanKey,
+      plan,
       periodEnd: sub.periodEnd?.toISOString() ?? null,
-      aiUsed: sub.aiUsed,
-      aiLimit: limits.aiGenerations,
+      aiUsed: aiUsage.usageState === 'tracked' ? aiUsage.used : 0,
+      aiLimit: aiUsage.usageState === 'tracked' && typeof aiUsage.limit === 'number' ? aiUsage.limit : 0,
       isActive: active,
+      planMeta: {
+        id: plan,
+        label: PLAN_CATALOG[plan].label,
+        pricing: PLAN_CATALOG[plan].pricing,
+      },
+      limits: {
+        projects: PLAN_CATALOG[plan].limits.projects,
+        ai_queries: PLAN_CATALOG[plan].limits.ai_queries,
+        archive: PLAN_CATALOG[plan].limits.archive,
+        resource_pool: PLAN_CATALOG[plan].limits.resource_pool,
+        export: PLAN_CATALOG[plan].limits.export,
+      },
+      usage: {
+        projects: projectsUsage,
+        ai_queries: aiUsage,
+        archive: archiveUsage,
+        resource_pool: resourcePoolUsage,
+        export: exportUsage,
+      },
     };
   }
 
@@ -99,15 +138,11 @@ export class BillingService {
    * Increment AI usage counter. Returns current used/limit.
    */
   async incrementAiUsage(userId: string): Promise<{ used: number; limit: number }> {
-    const prisma = getPrisma();
-
-    const sub = await prisma.subscription.update({
-      where: { userId },
-      data: { aiUsed: { increment: 1 } },
-    });
-
-    const plan = sub.plan as PlanKey;
-    return { used: sub.aiUsed, limit: getPlanLimits(plan).aiGenerations };
+    const usage = await this.constraintService.incrementUsage(userId, 'ai_queries');
+    return {
+      used: usage.usageState === 'tracked' ? usage.used : 0,
+      limit: usage.usageState === 'tracked' && typeof usage.limit === 'number' ? usage.limit : 0,
+    };
   }
 
   /**
