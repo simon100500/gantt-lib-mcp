@@ -9,10 +9,10 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### Constraint Engine
 
-- [ ] **ENG-01**: Plan config определяет лимиты для каждого тарифа в едином source of truth (4 тарифа: Бесплатный, Старт, Команда, Корпоративный)
-- [ ] **ENG-02**: ConstraintService предоставляет checkLimit(), getRemaining(), getUsage() для любого лимита
-- [ ] **ENG-03**: Система поддерживает типы лимитов: count (проекты), daily (AI запросы paid), lifetime (AI запросы free), boolean (feature gates)
-- [ ] **ENG-04**: Usage counters хранятся в PostgreSQL с Prisma schema для persistence и atomic increments
+- [x] **ENG-01**: Plan config определяет лимиты для каждого тарифа в едином source of truth (4 тарифа: Бесплатный, Старт, Команда, Корпоративный)
+- [x] **ENG-02**: ConstraintService предоставляет checkLimit(), getRemaining(), getUsage() для любого лимита
+- [x] **ENG-03**: Система поддерживает типы лимитов: count (проекты), daily (AI запросы paid), lifetime (AI запросы free), boolean (feature gates)
+- [x] **ENG-04**: Usage counters хранятся в PostgreSQL с Prisma schema для persistence и atomic increments
 
 ### Backend Enforcement
 
@@ -61,10 +61,10 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 30 | Pending |
-| ENG-02 | Phase 30 | Pending |
-| ENG-03 | Phase 30 | Pending |
-| ENG-04 | Phase 30 | Pending |
+| ENG-01 | Phase 30 | Complete |
+| ENG-02 | Phase 30 | Complete |
+| ENG-03 | Phase 30 | Complete |
+| ENG-04 | Phase 30 | Complete |
 | TRK-01 | Phase 31 | Pending |
 | TRK-02 | Phase 31 | Pending |
 | TRK-03 | Phase 31 | Pending |
@@ -85,4 +85,4 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-03-29 after roadmap creation*
+*Last updated: 2026-04-03 after Phase 30 completion*

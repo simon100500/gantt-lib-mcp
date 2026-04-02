@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-01
+**Last updated:** 2026-04-03
 
 ## Progress Summary
 
@@ -34,7 +34,7 @@
 
 **Milestone Goal:** Enforceable tariff limits — backend guards + frontend UX + upsell flow
 
-- [ ] **Phase 30: Constraint Engine** — Config-driven limit system with Prisma persistence
+- [x] **Phase 30: Constraint Engine** — Config-driven limit system with Prisma persistence — completed 2026-04-03
 - [ ] **Phase 31: Usage Tracking** — AI query + project count counters with usage API
 - [ ] **Phase 32: Backend Enforcement** — API middleware + MCP tool guards with structured error responses
 - [ ] **Phase 33: Frontend Constraints UX** — Usage indicators, limit modals, proactive UI guards
@@ -74,7 +74,12 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
   2. ConstraintService.checkLimit() возвращает allow/deny для любого лимита по userId + limitKey
   3. ConstraintService.getRemaining() и getUsage() возвращают корректные значения для типов count, daily, lifetime, boolean
   4. Usage counters хранятся в PostgreSQL через Prisma schema с atomic increment операциями
-**Plans**: TBD
+**Plans**: 3/3 plans complete
+
+Plans:
+- [x] 30-01-PLAN.md — Shared plan catalog and limit-key source of truth
+- [x] 30-02-PLAN.md — Prisma usage persistence and ConstraintService core
+- [x] 30-03-PLAN.md — Billing/middleware/web migration onto normalized constraints
 
 ### Phase 31: Usage Tracking
 **Goal**: Система считает AI запросы и проекты, frontend может получить текущий usage через API
@@ -124,7 +129,7 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 30. Constraint Engine | v5.0 | 0/? | Not started | - |
+| 30. Constraint Engine | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 31. Usage Tracking | v5.0 | 0/? | Not started | - |
 | 32. Backend Enforcement | v5.0 | 0/? | Not started | - |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
@@ -139,10 +144,10 @@ See `.planning/milestones/v3.0-ROADMAP.md` for archived roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | 30 | Pending |
-| ENG-02 | 30 | Pending |
-| ENG-03 | 30 | Pending |
-| ENG-04 | 30 | Pending |
+| ENG-01 | 30 | Complete |
+| ENG-02 | 30 | Complete |
+| ENG-03 | 30 | Complete |
+| ENG-04 | 30 | Complete |
 | TRK-01 | 31 | Pending |
 | TRK-02 | 31 | Pending |
 | TRK-03 | 31 | Pending |
@@ -195,4 +200,4 @@ Plans:
 - [ ] TBD
 
 ---
-*Last updated: 2026-04-01 — Phase 37 queued for calendar source-of-truth cleanup*
+*Last updated: 2026-04-03 — Phase 30 completed and verified passed*
