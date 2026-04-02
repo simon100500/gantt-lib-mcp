@@ -61,34 +61,47 @@ export function ProjectMenu({
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const subscription = useBillingStore((state) => state.subscription);
+  const billingLoading = useBillingStore((state) => state.loading);
   const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [projectActionsMenuOpen, setProjectActionsMenuOpen] = useState(false);
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
 
-  const billingFooter = auth.isAuthenticated && subscription ? (
+  const billingFooter = auth.isAuthenticated ? (
     <div className="border-t border-slate-200 px-3 py-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-primary">
-          {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
-        </span>
-        <span className="text-xs text-slate-500">
-          {subscription.remaining.projects?.remainingState === 'unlimited'
-            ? '\u221e'
-            : subscription.usage.projects?.usageState === 'tracked' && subscription.remaining.projects?.remainingState === 'tracked'
-              ? `${subscription.usage.projects.used}/${subscription.usage.projects.limit}`
-              : `${auth.projects.length}`} проектов
-        </span>
-      </div>
-      <button
-        type="button"
-        onClick={() => setShowBillingPage(true)}
-        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-      >
-        <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
-        Расширить
-      </button>
+      {billingLoading && !subscription ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-24 rounded bg-slate-200 animate-shimmer" />
+            <div className="h-3 w-16 rounded bg-slate-200 animate-shimmer" />
+          </div>
+          <div className="h-8 w-full rounded-lg bg-slate-200 animate-shimmer" />
+        </div>
+      ) : subscription ? (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-primary">
+              {PLAN_LABELS[(subscription.plan as keyof typeof PLAN_LABELS)] || subscription.plan}
+            </span>
+            <span className="text-xs text-slate-500">
+              {subscription.remaining.projects?.remainingState === 'unlimited'
+                ? '\u221e'
+                : subscription.usage.projects?.usageState === 'tracked' && subscription.remaining.projects?.remainingState === 'tracked'
+                  ? `${subscription.usage.projects.used}/${subscription.usage.projects.limit}`
+                  : `${auth.projects.length}`} проектов
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowBillingPage(true)}
+            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+          >
+            <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+            Расширить
+          </button>
+        </>
+      ) : null}
     </div>
   ) : null;
 
