@@ -7,17 +7,24 @@ import {
   isSDKResultMessage,
   isSDKAssistantMessage,
   isSDKPartialAssistantMessage,
+  type ContentBlock,
 } from '@qwen-code/sdk';
+import {
+  parseDateOnly,
+  shiftBusinessDayOffset,
+} from 'gantt-lib/core/scheduling';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
+import type { CommitProjectCommandResponse, Task as MTask } from '@gantt/mcp/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
+const MCP_DEBUG_LOG_PATH = join(PROJECT_ROOT, '.planning/debug/mcp-agent.log');
 
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
 
@@ -33,12 +40,55 @@ type ComparableTask = {
 type AgentAttemptResult = {
   assistantResponse: string;
   streamedContent: boolean;
+  mutationToolCalls: MutationToolCall[];
 };
 
 type VerificationResult = {
   tasksAfter: ComparableTask[];
   tasksChanged: boolean;
   actualChangedTaskIds: string[];
+  mutationAttempted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  rejectedMutationCalls: MutationToolCall[];
+  acceptedChangedTaskIds: string[];
+  acceptedChangedTaskIdMismatch: boolean;
+};
+
+type FastShiftIntent = {
+  taskName: string;
+  delta: number;
+  mode: 'working' | 'calendar' | 'project_default';
+};
+
+type FastShiftTaskMatch =
+  | { kind: 'none'; matches: []; }
+  | { kind: 'exact'; matches: ComparableTask[]; }
+  | { kind: 'partial'; matches: ComparableTask[]; };
+
+type NormalizedMutationToolName =
+  | 'create_tasks'
+  | 'update_tasks'
+  | 'move_tasks'
+  | 'delete_tasks'
+  | 'link_tasks'
+  | 'unlink_tasks'
+  | 'shift_tasks'
+  | 'recalculate_project';
+
+type MutationToolCall = {
+  toolUseId: string;
+  toolName: NormalizedMutationToolName;
+  status?: 'accepted' | 'rejected';
+  reason?: string;
+  changedTaskIds?: string[];
+};
+
+export type MutationOutcomeAssessment = {
+  mutationAttempted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  rejectedMutationCalls: MutationToolCall[];
+  acceptedChangedTaskIds: string[];
+  acceptedChangedTaskIdMismatch: boolean;
 };
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
@@ -50,12 +100,24 @@ const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
 const SIMPLE_MUTATION_MAX_SESSION_TURNS = 8;
 const DEFAULT_MUTATION_MAX_SESSION_TURNS = 16;
 const READONLY_MAX_SESSION_TURNS = 12;
+const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
+  'create_tasks',
+  'update_tasks',
+  'move_tasks',
+  'delete_tasks',
+  'link_tasks',
+  'unlink_tasks',
+  'shift_tasks',
+  'recalculate_project',
+]);
 
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
+type PrismaModule = typeof import('@gantt/mcp/prisma');
 
 let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
+let prismaModulePromise: Promise<PrismaModule> | undefined;
 
 function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
   return {
@@ -74,6 +136,9 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
 
 export function isMutationIntent(message: string): boolean {
   const normalized = message.toLowerCase();
+  if (/(?:сдвин\w*|передвин\w*|смест\w*|перенеси?\s+.+\s+на\s+\d+\s+дн\w*)/.test(normalized)) {
+    return true;
+  }
   const russianMutationMarkers = [
     '\u0434\u043e\u0431\u0430\u0432',
     '\u0432\u043d\u0435\u0441',
@@ -92,6 +157,12 @@ export function isMutationIntent(message: string): boolean {
     '\u0434\u043e\u0447\u0435\u0440\u043d',
     '\u0432\u043d\u0443\u0442\u0440\u044c',
     '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u0432',
+    '\u0441\u0434\u0432\u0438\u043d',
+    '\u0441\u0434\u0432\u0438\u043d\u044c',
+    '\u043f\u0435\u0440\u0435\u0434\u0432\u0438\u043d',
+    '\u0441\u043c\u0435\u0441\u0442\u0438',
+    '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u043d\u0430',
+    '\u0441\u0434\u0432\u0438\u0433 \u043d\u0430',
     '\u0441\u0434\u0435\u043b\u0430\u0439 \u0438\u0435\u0440\u0430\u0440\u0445',
   ];
 
@@ -99,7 +170,7 @@ export function isMutationIntent(message: string): boolean {
     return true;
   }
 
-  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b)/i.test(message);
+  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b|\bshift\b|\bmove\b.+\bby\b|\bpush\b.+\bdays?\b)/i.test(message);
 }
 
 export function isSimpleMutationRequest(message: string): boolean {
@@ -185,15 +256,249 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
   return Array.from(ids).filter((id) => beforeMap.get(id) !== afterMap.get(id)).sort();
 }
 
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function normalizeName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeRussianAccusativeToken(token: string): string {
+  if (token.endsWith('ку')) {
+    return `${token.slice(0, -2)}ка`;
+  }
+  if (token.endsWith('гу')) {
+    return `${token.slice(0, -2)}га`;
+  }
+  if (token.endsWith('ху')) {
+    return `${token.slice(0, -2)}ха`;
+  }
+  if (token.endsWith('ю')) {
+    return `${token.slice(0, -1)}я`;
+  }
+  if (token.endsWith('у')) {
+    return `${token.slice(0, -1)}а`;
+  }
+  return token;
+}
+
+function buildNameVariants(value: string): string[] {
+  const normalized = normalizeName(value);
+  const tokens = normalized.split(' ');
+  const accusativeNormalized = tokens.map(normalizeRussianAccusativeToken).join(' ');
+  return [...new Set([normalized, accusativeNormalized])];
+}
+
+function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | undefined): number | null {
+  const amount = rawAmount ? Number.parseInt(rawAmount, 10) : 1;
+  if (Number.isNaN(amount) || amount === 0) {
+    return null;
+  }
+
+  const unit = (rawUnit ?? '').toLowerCase();
+  if (unit.startsWith('недел')) {
+    return amount * 7;
+  }
+
+  return amount;
+}
+
+export function parseFastShiftIntent(message: string): FastShiftIntent | null {
+  const trimmed = message.trim();
+  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode'] }> = [
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'working' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'calendar' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'project_default' },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+working\s+days?$/i, mode: 'working' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+calendar\s+days?$/i, mode: 'calendar' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+weeks?$/i, mode: 'project_default' },
+    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+days?$/i, mode: 'project_default' },
+  ];
+
+  for (const { regex, mode } of patterns) {
+    const match = trimmed.match(regex);
+    if (!match) {
+      continue;
+    }
+    const taskName = match[1]?.trim();
+    const delta = parseFastShiftDelta(match[2], match[3]);
+    if (!taskName || delta === null) {
+      return null;
+    }
+    return {
+      taskName,
+      delta,
+      mode: mode ?? 'project_default',
+    };
+  }
+
+  return null;
+}
+
+export function resolveTasksByName(tasks: ComparableTask[], taskName: string): FastShiftTaskMatch {
+  const targetVariants = buildNameVariants(taskName);
+
+  for (const variant of targetVariants) {
+    const exactMatches = tasks.filter((task) => normalizeName(task.name) === variant);
+    if (exactMatches.length > 0) {
+      return { kind: 'exact', matches: exactMatches };
+    }
+  }
+
+  for (const variant of targetVariants) {
+    const partialMatches = tasks.filter((task) => normalizeName(task.name).includes(variant));
+    if (partialMatches.length > 0) {
+      return { kind: 'partial', matches: partialMatches };
+    }
+  }
+
+  return { kind: 'none', matches: [] };
+}
+
+function formatDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function buildFastShiftSuccessMessage(taskName: string, delta: number, mode: 'working' | 'calendar'): string {
+  const absDelta = Math.abs(delta);
+  const direction = delta >= 0 ? 'сдвинута' : 'сдвинута раньше';
+  const unit = mode === 'working' ? 'рабоч' : 'календарн';
+  const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
+  return `Задача «${taskName}» была ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
+}
+
+function buildFastShiftMultiSuccessMessage(taskName: string, matchCount: number, delta: number, mode: 'working' | 'calendar'): string {
+  const absDelta = Math.abs(delta);
+  const direction = delta >= 0 ? 'сдвинуты' : 'сдвинуты раньше';
+  const unit = mode === 'working' ? 'рабоч' : 'календарн';
+  const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
+  return `Все ${matchCount} задачи «${taskName}» были ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
+}
+
+export function assessMutationOutcome(
+  mutationToolCalls: MutationToolCall[],
+  actualChangedTaskIds: string[],
+): MutationOutcomeAssessment {
+  const actualChangedSorted = uniqueSorted(actualChangedTaskIds);
+  const acceptedMutationCalls = mutationToolCalls.filter((call) => call.status === 'accepted');
+  const rejectedMutationCalls = mutationToolCalls.filter((call) => call.status === 'rejected');
+  const pendingMutationCalls = mutationToolCalls.filter((call) => call.status === undefined);
+  const inferredAcceptedMutationCalls = acceptedMutationCalls.length === 0
+    && rejectedMutationCalls.length === 0
+    && pendingMutationCalls.length > 0
+    && actualChangedSorted.length > 0
+      ? pendingMutationCalls.map((call) => ({
+        ...call,
+        status: 'accepted' as const,
+        changedTaskIds: actualChangedSorted,
+      }))
+      : acceptedMutationCalls;
+  const acceptedChangedTaskIds = uniqueSorted(
+    inferredAcceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
+  );
+  const acceptedChangedTaskIdMismatch = inferredAcceptedMutationCalls.length > 0 && (
+    acceptedChangedTaskIds.length === 0
+    || acceptedChangedTaskIds.length !== actualChangedSorted.length
+    || acceptedChangedTaskIds.some((taskId, index) => taskId !== actualChangedSorted[index])
+  );
+
+  return {
+    mutationAttempted: mutationToolCalls.length > 0,
+    acceptedMutationCalls: inferredAcceptedMutationCalls,
+    rejectedMutationCalls,
+    acceptedChangedTaskIds,
+    acceptedChangedTaskIdMismatch,
+  };
+}
+
+async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number): Promise<MutationToolCall[]> {
+  if (!existsSync(MCP_DEBUG_LOG_PATH)) {
+    return [];
+  }
+
+  const content = await readFile(MCP_DEBUG_LOG_PATH, 'utf-8');
+  const lines = content.trim().split('\n').slice(-2000);
+  const toolCalls = new Map<string, MutationToolCall>();
+  let syntheticIndex = 0;
+
+  for (const line of lines) {
+    let parsed: { event?: string; payload?: Record<string, unknown> } | undefined;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const payload = parsed?.payload;
+    if (!payload) {
+      continue;
+    }
+
+    if (payload.aiRunId !== runId || String(payload.aiAttempt ?? '') !== String(attempt)) {
+      continue;
+    }
+
+    const toolName = payload.tool;
+    if (typeof toolName !== 'string' || !NORMALIZED_MUTATION_TOOL_NAMES.has(toolName as NormalizedMutationToolName)) {
+      continue;
+    }
+
+    const toolUseId = typeof payload.toolUseId === 'string'
+      ? payload.toolUseId
+      : `${toolName}:${syntheticIndex++}`;
+
+    const existing = toolCalls.get(toolUseId) ?? {
+      toolUseId,
+      toolName: toolName as NormalizedMutationToolName,
+    };
+
+    if (parsed?.event === 'tool_call_failed') {
+      existing.status = 'rejected';
+      existing.reason = typeof payload.error === 'string' ? payload.error : 'tool_error';
+    }
+
+    const result = payload.result;
+    if (result && typeof result === 'object') {
+      const status = (result as { status?: unknown }).status;
+      const reason = (result as { reason?: unknown }).reason;
+      const changedTaskIds = (result as { changedTaskIds?: unknown }).changedTaskIds;
+      if (status === 'accepted' || status === 'rejected') {
+        existing.status = status;
+        existing.reason = typeof reason === 'string' ? reason : undefined;
+        existing.changedTaskIds = Array.isArray(changedTaskIds)
+          ? changedTaskIds.filter((value): value is string => typeof value === 'string')
+          : [];
+      }
+    }
+
+    toolCalls.set(toolUseId, existing);
+  }
+
+  return [...toolCalls.values()];
+}
+
 function buildNoMutationMessage(): string {
-  return 'Изменение не применилось: модель ответила как будто задача изменена, но итоговый снимок проекта не изменился.';
+  return 'Изменение не применилось: модель не выполнила ни одного валидного mutation tool call, поэтому проект не изменился.';
+}
+
+function buildRejectedMutationMessage(rejectedCalls: MutationToolCall[]): string {
+  const first = rejectedCalls[0];
+  const reason = first?.reason ? ` (${first.reason})` : '';
+  return `Изменение не применилось: mutation tool вернул отклонение${reason}.`;
+}
+
+function buildInconsistentMutationMessage(): string {
+  return 'Изменение не подтверждено: mutation tool был принят, но итоговый изменённый набор задач не подтвердился в проекте.';
 }
 
 function buildTimeoutRetryInstruction(): string {
   return [
     'The previous attempt timed out before completing.',
-    'Call `get_tasks` once, then perform the smallest valid mutation that satisfies the user request.',
-    'If the container is ambiguous after that single read, choose the closest existing phase or the top level and proceed.',
+    'Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
+    'Then perform the smallest valid normalized mutation that satisfies the user request.',
+    'If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
     'Do not spend extra turns on optional restructuring or validation.',
   ].join('\n');
 }
@@ -256,7 +561,6 @@ function sanitizeAssistantResponse(userMessage: string, response: string): strin
 function buildPrompt(
   systemPrompt: string,
   projectId: string,
-  mutationRequested: boolean,
   simpleMutationRequested: boolean,
   historyContext: string,
   userMessage: string,
@@ -264,30 +568,100 @@ function buildPrompt(
 ): string {
   return [
     systemPrompt,
-    `\n\n## State metadata:\n- projectId: ${projectId}\n- mutationRequested: ${mutationRequested}`,
-    mutationRequested
-      ? [
-        '\n\n## Mutation execution protocol:',
-        '- Start by calling `get_tasks`.',
-        simpleMutationRequested
-          ? '- Use compact `get_tasks` output first. Do not request full task data unless dependencies or deep hierarchy are required.'
-          : '- Use compact `get_tasks` first unless you explicitly need dependencies or detailed hierarchy.',
-        '- Make the smallest valid change that satisfies the request.',
-        '- If the container is still ambiguous after one read, choose the closest existing phase or the top level and proceed.',
-        '- If you create a new task and already know its predecessor, pass that link in `create_task.dependencies` instead of planning a later `set_dependency` call.',
-        '- For sequential new tasks, dependency task IDs must come from actual tool results. Reuse the exact `createdTaskId` from the immediately previous `create_task` result.',
-        '- Never guess, synthesize, or paraphrase a dependency task ID. If the predecessor ID is uncertain, do not send a speculative dependency.',
-        '- Use `set_dependency` only as a fallback for links that cannot be known until after creation or for links between existing tasks.',
-        simpleMutationRequested
-          ? '- For a new standalone block with 2-5 child tasks, keep the reasoning path minimal: create the parent, then create the children once each, carrying forward sequential dependencies inline.'
-          : '- For structured additions, prefer inline dependency creation during `create_task` whenever the predecessor is already known.',
-        '- Do not spend extra turns on optional restructuring.',
-      ].join('\n')
-      : '',
+    `\n\n## State metadata:\n- projectId: ${projectId}\n- executionMode: unified`,
+    [
+      '\n\n## Mutation execution protocol:',
+      '- First decide whether the latest user request is read-only or requires a project change.',
+      '- If the request is read-only, answer directly and do not call mutation tools.',
+      '- If the request changes project state, you must use one or more normalized mutation tools before giving a success answer.',
+      '- Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
+      simpleMutationRequested
+        ? '- Prefer one compact targeted read. Do not expand to broader context unless the first read is insufficient.'
+        : '- Use targeted context first and avoid broad reads unless dependencies or hierarchy really require them.',
+      '- Make the smallest valid change that satisfies the request.',
+      '- If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
+      '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
+      '- Use `update_tasks` only for metadata and non-scheduling field edits.',
+      '- Use `move_tasks` for hierarchy and structural placement.',
+      '- Use `link_tasks` / `unlink_tasks` for dependency changes.',
+      '- Use `shift_tasks` for relative date changes instead of computing absolute dates manually.',
+      '- Never guess, synthesize, or paraphrase task IDs.',
+      simpleMutationRequested
+        ? '- For a small standalone block, keep the reasoning path minimal and create only the smallest coherent fragment.'
+        : '- For structured additions, prefer a small coherent fragment over one vague generic task.',
+      '- Do not spend extra turns on optional restructuring.',
+      '- Treat the mutation tool result as authoritative. If the tool rejects the request, say so.',
+    ].join('\n'),
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
     retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
     `\n\nUser: ${userMessage}`,
   ].join('');
+}
+
+function tryParseToolResultPayload(content?: string | ContentBlock[]): unknown {
+  if (typeof content === 'string') {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (Array.isArray(content)) {
+    const text = content
+      .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+    if (!text) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
+  const toolUseById = new Map<string, MutationToolCall>();
+
+  for (const block of blocks) {
+    if (block.type === 'tool_use' && NORMALIZED_MUTATION_TOOL_NAMES.has(block.name as NormalizedMutationToolName)) {
+      toolUseById.set(block.id, {
+        toolUseId: block.id,
+        toolName: block.name as NormalizedMutationToolName,
+      });
+    }
+  }
+
+  for (const block of blocks) {
+    if (block.type !== 'tool_result') {
+      continue;
+    }
+
+    const toolCall = toolUseById.get(block.tool_use_id);
+    if (!toolCall) {
+      continue;
+    }
+
+    const payload = tryParseToolResultPayload(block.content) as
+      | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
+      | undefined;
+
+    if (payload?.status) {
+      toolCall.status = payload.status;
+      toolCall.reason = payload.reason;
+      toolCall.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
+    } else if (block.is_error) {
+      toolCall.status = 'rejected';
+      toolCall.reason = 'tool_error';
+    }
+  }
+
+  return [...toolUseById.values()];
 }
 
 async function getServicesModule(): Promise<TaskServiceModule> {
@@ -306,13 +680,149 @@ async function getWsModule(): Promise<WsModule> {
   return wsModulePromise;
 }
 
+async function getPrismaModule(): Promise<PrismaModule> {
+  if (!prismaModulePromise) {
+    prismaModulePromise = import('@gantt/mcp/prisma');
+  }
+
+  return prismaModulePromise;
+}
+
+async function tryDirectShiftFastPath(
+  userMessage: string,
+  projectId: string,
+  sessionId: string,
+  runId: string,
+  tasksBefore: ComparableTask[],
+  services: Pick<TaskServiceModule, 'taskService' | 'messageService' | 'commandService' | 'getProjectScheduleOptionsForProject'>,
+  broadcastToSession: WsModule['broadcastToSession'],
+): Promise<boolean> {
+  const intent = parseFastShiftIntent(userMessage);
+  if (!intent) {
+    return false;
+  }
+
+  const taskMatch = resolveTasksByName(tasksBefore, intent.taskName);
+  if (taskMatch.kind === 'none') {
+    await writeServerDebugLog('fast_shift_skipped', {
+      runId,
+      projectId,
+      sessionId,
+      reason: 'task_not_found',
+      taskName: intent.taskName,
+      taskCount: tasksBefore.length,
+    });
+    return false;
+  }
+
+  const { getPrisma } = await getPrismaModule();
+  const prisma = getPrisma();
+  const [project, scheduleOptions] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { version: true },
+    }),
+    services.getProjectScheduleOptionsForProject(prisma, projectId),
+  ]);
+
+  if (!project) {
+    return false;
+  }
+
+  const mode = intent.mode === 'project_default'
+    ? (scheduleOptions.businessDays ? 'working' : 'calendar')
+    : intent.mode;
+  let baseVersion = project.version;
+  const allChangedTaskIds = new Set<string>();
+
+  for (const task of taskMatch.matches) {
+    const startDate = parseDateOnly(task.startDate);
+    const nextStart = mode === 'working' && scheduleOptions.weekendPredicate
+      ? shiftBusinessDayOffset(startDate, intent.delta, scheduleOptions.weekendPredicate)
+      : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + intent.delta));
+    const response = await services.commandService.commitCommand({
+      projectId,
+      clientRequestId: crypto.randomUUID(),
+      baseVersion,
+      command: {
+        type: 'move_task',
+        taskId: task.id,
+        startDate: formatDateOnly(nextStart),
+      },
+    }, 'agent');
+
+    await writeServerDebugLog('fast_shift_attempt', {
+      runId,
+      projectId,
+      sessionId,
+      taskId: task.id,
+      taskName: task.name,
+      taskMatchKind: taskMatch.kind,
+      matchedTaskCount: taskMatch.matches.length,
+      delta: intent.delta,
+      mode,
+      accepted: response.accepted,
+      reason: response.accepted ? undefined : response.reason,
+    });
+
+    if (!response.accepted) {
+      return false;
+    }
+
+    baseVersion = response.newVersion;
+    for (const taskId of response.result.changedTaskIds) {
+      allChangedTaskIds.add(taskId);
+    }
+  }
+
+  const { tasks: tasksAfter } = await services.taskService.list(projectId);
+  const assistantResponse = taskMatch.matches.length === 1
+    ? buildFastShiftSuccessMessage(taskMatch.matches[0]!.name, intent.delta, mode)
+    : buildFastShiftMultiSuccessMessage(taskMatch.matches[0]!.name, taskMatch.matches.length, intent.delta, mode);
+  const changedTaskIds = [...allChangedTaskIds].sort();
+
+  await services.messageService.add('assistant', assistantResponse, projectId);
+  await writeServerDebugLog('agent_response_saved', {
+    runId,
+    projectId,
+    sessionId,
+    assistantResponse,
+    streamedContent: true,
+    finalTasksChanged: true,
+    finalChangedTaskIds: changedTaskIds,
+    finalAcceptedChangedTaskIds: changedTaskIds,
+    finalAcceptedChangedTaskIdMismatch: false,
+    fastPath: 'direct_shift',
+  });
+
+  broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
+  broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter as MTask[] });
+  await writeServerDebugLog('tasks_broadcast', {
+    runId,
+    projectId,
+    sessionId,
+    taskCount: tasksAfter.length,
+    taskIds: tasksAfter.map((currentTask) => currentTask.id),
+    taskNames: tasksAfter.map((currentTask) => currentTask.name),
+    fastPath: 'direct_shift',
+  });
+  broadcastToSession(sessionId, { type: 'done' });
+  await writeServerDebugLog('agent_run_completed', {
+    runId,
+    projectId,
+    sessionId,
+    fastPath: 'direct_shift',
+  });
+
+  return true;
+}
+
 async function executeAgentAttempt(
   prompt: string,
   runId: string,
   projectId: string,
   sessionId: string,
   attempt: number,
-  mutationRequested: boolean,
   simpleMutationRequested: boolean,
   mcpServerPath: string,
   dbPath: string,
@@ -320,7 +830,7 @@ async function executeAgentAttempt(
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
-  const timeoutMs = mutationRequested ? MUTATION_ATTEMPT_TIMEOUT_MS : READONLY_ATTEMPT_TIMEOUT_MS;
+  const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
 
   const session = query({
     prompt,
@@ -330,9 +840,7 @@ async function executeAgentAttempt(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
-      maxSessionTurns: mutationRequested
-        ? (simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS)
-        : READONLY_MAX_SESSION_TURNS,
+      maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: {
@@ -360,11 +868,43 @@ async function executeAgentAttempt(
   let streamedContent = false;
   let capturedPartialContent = false;
   let timeoutHandle: NodeJS.Timeout | undefined;
+  const mutationToolCalls = new Map<string, MutationToolCall>();
 
   try {
     const sessionPromise = (async () => {
       for await (const event of session) {
         if (isSDKPartialAssistantMessage(event)) {
+          if (
+            event.event.type === 'content_block_start'
+            && event.event.content_block.type === 'tool_use'
+            && NORMALIZED_MUTATION_TOOL_NAMES.has(event.event.content_block.name as NormalizedMutationToolName)
+          ) {
+            mutationToolCalls.set(event.event.content_block.id, {
+              toolUseId: event.event.content_block.id,
+              toolName: event.event.content_block.name as NormalizedMutationToolName,
+            });
+          }
+
+          if (
+            event.event.type === 'content_block_start'
+            && event.event.content_block.type === 'tool_result'
+          ) {
+            const existing = mutationToolCalls.get(event.event.content_block.tool_use_id);
+            if (existing) {
+              const payload = tryParseToolResultPayload(event.event.content_block.content) as
+                | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
+                | undefined;
+              if (payload?.status) {
+                existing.status = payload.status;
+                existing.reason = payload.reason;
+                existing.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
+              } else if (event.event.content_block.is_error) {
+                existing.status = 'rejected';
+                existing.reason = 'tool_error';
+              }
+            }
+          }
+
           if (
             event.event.type === 'content_block_delta'
             && event.event.delta.type === 'text_delta'
@@ -372,10 +912,6 @@ async function executeAgentAttempt(
           ) {
             assistantResponse += event.event.delta.text;
             capturedPartialContent = true;
-            if (!mutationRequested) {
-              broadcastToSession(sessionId, { type: 'token', content: event.event.delta.text });
-              streamedContent = true;
-            }
             await writeServerDebugLog('sdk_text_delta', {
               runId,
               attempt,
@@ -401,13 +937,17 @@ async function executeAgentAttempt(
         }
 
         if (isSDKAssistantMessage(event)) {
+          for (const toolCall of collectMutationToolCalls(event.message.content)) {
+            const existing = mutationToolCalls.get(toolCall.toolUseId);
+            mutationToolCalls.set(toolCall.toolUseId, {
+              ...existing,
+              ...toolCall,
+            });
+          }
+
           const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
           if (!capturedPartialContent && text) {
             assistantResponse += text;
-            if (!mutationRequested) {
-              broadcastToSession(sessionId, { type: 'token', content: text });
-              streamedContent = true;
-            }
           }
           await writeServerDebugLog('sdk_assistant_message', {
             runId,
@@ -423,10 +963,6 @@ async function executeAgentAttempt(
           const resultText = typeof event.result === 'string' ? event.result : '';
           if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
             assistantResponse = resultText;
-            if (!mutationRequested) {
-              broadcastToSession(sessionId, { type: 'token', content: resultText });
-              streamedContent = true;
-            }
           }
           await writeServerDebugLog('sdk_result_message', {
             runId,
@@ -458,9 +994,16 @@ async function executeAgentAttempt(
     }
   }
 
+  if (mutationToolCalls.size === 0) {
+    for (const toolCall of await collectMutationToolCallsFromMcpLog(runId, attempt)) {
+      mutationToolCalls.set(toolCall.toolUseId, toolCall);
+    }
+  }
+
   return {
     assistantResponse,
     streamedContent,
+    mutationToolCalls: [...mutationToolCalls.values()],
   };
 }
 
@@ -469,21 +1012,28 @@ async function verifyMutationAttempt(
   projectId: string,
   sessionId: string,
   attempt: number,
-  mutationRequested: boolean,
   tasksBefore: ComparableTask[],
   assistantResponse: string,
+  mutationToolCalls: MutationToolCall[],
   taskService: TaskServiceModule['taskService'],
 ): Promise<VerificationResult> {
   const { tasks: tasksAfter } = await taskService.list(projectId);
-  const tasksChanged = mutationRequested ? haveTasksChanged(tasksBefore, tasksAfter) : false;
-  const actualChangedTaskIds = mutationRequested ? getChangedTaskIds(tasksBefore, tasksAfter) : [];
+  const tasksChanged = haveTasksChanged(tasksBefore, tasksAfter);
+  const actualChangedTaskIds = getChangedTaskIds(tasksBefore, tasksAfter);
+  const mutationOutcome = assessMutationOutcome(mutationToolCalls, actualChangedTaskIds);
 
   await writeServerDebugLog('mutation_verification', {
     runId,
     attempt,
     projectId,
     sessionId,
-    mutationRequested,
+    mutationRequested: mutationOutcome.mutationAttempted || tasksChanged,
+    mutationAttempted: mutationOutcome.mutationAttempted,
+    mutationToolCalls,
+    acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
+    rejectedMutationCalls: mutationOutcome.rejectedMutationCalls,
+    acceptedChangedTaskIds: mutationOutcome.acceptedChangedTaskIds,
+    acceptedChangedTaskIdMismatch: mutationOutcome.acceptedChangedTaskIdMismatch,
     tasksChanged,
     actualChangedTaskIds,
     tasksAfterCount: tasksAfter.length,
@@ -495,6 +1045,11 @@ async function verifyMutationAttempt(
     tasksAfter,
     tasksChanged,
     actualChangedTaskIds,
+    mutationAttempted: mutationOutcome.mutationAttempted,
+    acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
+    rejectedMutationCalls: mutationOutcome.rejectedMutationCalls,
+    acceptedChangedTaskIds: mutationOutcome.acceptedChangedTaskIds,
+    acceptedChangedTaskIdMismatch: mutationOutcome.acceptedChangedTaskIdMismatch,
   };
 }
 
@@ -505,30 +1060,42 @@ export async function runAgentWithHistory(
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
-    const [{ taskService, messageService }, wsModule] = await Promise.all([
+    const [{ taskService, messageService, commandService, getProjectScheduleOptionsForProject }, wsModule] = await Promise.all([
       getServicesModule(),
       getWsModule(),
     ]);
     broadcastToSession = wsModule.broadcastToSession;
     const runId = crypto.randomUUID();
-    const mutationRequested = isMutationIntent(userMessage);
-    const simpleMutationRequested = mutationRequested && isSimpleMutationRequest(userMessage);
-    const { tasks: tasksBefore } = mutationRequested
-      ? await taskService.list(projectId)
-      : { tasks: [] };
+    const likelyMutationRequest = isMutationIntent(userMessage);
+    const simpleMutationRequested = isSimpleMutationRequest(userMessage);
+    const { tasks: tasksBefore } = await taskService.list(projectId);
 
     await writeServerDebugLog('agent_run_started', {
       runId,
       projectId,
       sessionId,
       userMessage,
-      mutationRequested,
+      mutationRequested: likelyMutationRequest,
+      likelyMutationRequest,
       simpleMutationRequested,
       tasksBeforeCount: tasksBefore.length,
       tasksBeforeNames: tasksBefore.map((task) => task.name),
     });
 
     await messageService.add('user', userMessage, projectId);
+
+    if (await tryDirectShiftFastPath(
+      userMessage,
+      projectId,
+      sessionId,
+      runId,
+      tasksBefore,
+      { taskService, messageService, commandService, getProjectScheduleOptionsForProject },
+      broadcastToSession,
+    )) {
+      return;
+    }
+
     const messages = await messageService.list(projectId, 20);
 
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
@@ -538,7 +1105,7 @@ export async function runAgentWithHistory(
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
 
-    const historyContext = buildHistoryContext(messages.slice(0, -1), mutationRequested);
+    const historyContext = buildHistoryContext(messages.slice(0, -1), false);
 
     const env = resolveEnv();
     if (!env.OPENAI_API_KEY) {
@@ -566,16 +1133,20 @@ export async function runAgentWithHistory(
       tasksAfter: tasksBefore,
       tasksChanged: false,
       actualChangedTaskIds: [],
+      mutationAttempted: false,
+      acceptedMutationCalls: [],
+      rejectedMutationCalls: [],
+      acceptedChangedTaskIds: [],
+      acceptedChangedTaskIdMismatch: false,
     };
 
-    const maxAttempts = mutationRequested ? 2 : 1;
+    const maxAttempts = 2;
     let retryInstruction: string | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const attemptPrompt = buildPrompt(
         systemPrompt,
         projectId,
-        mutationRequested,
         simpleMutationRequested,
         historyContext,
         userMessage,
@@ -600,7 +1171,6 @@ export async function runAgentWithHistory(
           projectId,
           sessionId,
           attempt,
-          mutationRequested,
           simpleMutationRequested,
           mcpServerPath,
           dbPath,
@@ -617,7 +1187,7 @@ export async function runAgentWithHistory(
           error: errorMessage,
         });
 
-        if (mutationRequested && attempt < maxAttempts && /timed out/i.test(errorMessage)) {
+        if (attempt < maxAttempts && /timed out/i.test(errorMessage)) {
           retryInstruction = buildTimeoutRetryInstruction();
           continue;
         }
@@ -632,22 +1202,38 @@ export async function runAgentWithHistory(
         projectId,
         sessionId,
         attempt,
-        mutationRequested,
         tasksBefore,
         assistantResponse,
+        attemptResult.mutationToolCalls,
         taskService,
       );
       tasksAfter = finalVerification.tasksAfter as ComparableTask[];
 
-      if (!mutationRequested) {
+      const mutationObserved = finalVerification.mutationAttempted || finalVerification.tasksChanged;
+
+      if (!mutationObserved) {
         break;
       }
 
-      if (finalVerification.tasksChanged) {
+      if (finalVerification.rejectedMutationCalls.length > 0) {
+        assistantResponse = buildRejectedMutationMessage(finalVerification.rejectedMutationCalls);
+        break;
+      }
+
+      if (finalVerification.tasksChanged && finalVerification.acceptedMutationCalls.length > 0) {
+        if (finalVerification.acceptedChangedTaskIdMismatch) {
+          assistantResponse = buildInconsistentMutationMessage();
+          break;
+        }
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
           assistantResponse.trim() || 'Изменения применены.',
         );
+        break;
+      }
+
+      if (finalVerification.acceptedMutationCalls.length > 0 && (!finalVerification.tasksChanged || finalVerification.acceptedChangedTaskIdMismatch)) {
+        assistantResponse = buildInconsistentMutationMessage();
         break;
       }
 
@@ -657,19 +1243,17 @@ export async function runAgentWithHistory(
       }
 
       retryInstruction = [
-        'The previous attempt did not perform any real mutation tool call.',
-        'Call `get_tasks` again at the start of this retry.',
+        'The previous attempt did not perform a successful normalized mutation tool call.',
+        'Start this retry with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
         'Identify the correct parent/container before mutating.',
-        'Then call one or more mutation tools: `create_task`, `create_tasks_batch`, `update_task`, `delete_task`, `set_dependency`, or `remove_dependency`.',
-        'If you create sequential new tasks and already know the predecessor, include that dependency inside `create_task` instead of scheduling a separate `set_dependency` step.',
-        'Reuse only real task IDs returned by tool results. Never invent a UUID for `dependencies.taskId`.',
-        'If the predecessor ID is uncertain, omit the speculative dependency and use a safe fallback instead of retrying with a guessed ID.',
-        'When moving or resizing dependency-linked tasks, prefer `move_task`, `resize_task`, or `recalculate_schedule` so the authoritative changed set is returned by the server.',
-        'Treat `changedTasks` / `changedIds` as the authoritative success footprint. If the tool reports a broader cascade, your final answer must reflect that.',
+        'Then call one or more normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, or `recalculate_project`.',
+        'Use `move_tasks` for structural placement, `link_tasks` / `unlink_tasks` for dependency edits, and `shift_tasks` for relative date changes.',
+        'Reuse only real task IDs returned by tool results or reads. Never invent an ID.',
+        'Treat `changedTaskIds` and `changedTasks` as the authoritative success footprint.',
         'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
         'The final user-visible answer must contain only the completed result, without analysis or narration.',
         'Do not output English text if the user wrote in Russian.',
-        'A text-only success answer is invalid if the project snapshot did not actually change.',
+        'A text-only success answer is invalid if no accepted mutation tool changed the project.',
         'If the request cannot be completed with available tools, say that explicitly and do not claim success.',
         assistantResponse.trim().length > 0 ? `Previous invalid answer: ${assistantResponse.trim()}` : '',
       ].filter(Boolean).join('\n');
@@ -679,14 +1263,14 @@ export async function runAgentWithHistory(
         attempt,
         projectId,
         sessionId,
-        reason: 'no_snapshot_change_detected',
+        reason: mutationObserved ? 'mutation_not_confirmed' : 'no_valid_mutation_observed',
         previousAssistantResponse: assistantResponse,
       });
     }
 
     assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
 
-    if (mutationRequested && assistantResponse) {
+      if (assistantResponse) {
       broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
       streamedContent = true;
     }
@@ -702,6 +1286,8 @@ export async function runAgentWithHistory(
       streamedContent,
       finalTasksChanged: finalVerification.tasksChanged,
       finalChangedTaskIds: finalVerification.actualChangedTaskIds,
+      finalAcceptedChangedTaskIds: finalVerification.acceptedChangedTaskIds,
+      finalAcceptedChangedTaskIdMismatch: finalVerification.acceptedChangedTaskIdMismatch,
     });
 
     broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter });

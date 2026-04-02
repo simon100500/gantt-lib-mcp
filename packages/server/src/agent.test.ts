@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildHistoryContext, isMutationIntent, isSimpleMutationRequest } from './agent.js';
+import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, resolveTasksByName } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -23,17 +23,22 @@ describe('agent hierarchy mutation intent', () => {
     assert.equal(isMutationIntent('Nest Plumbing under Floor 2'), true);
     assert.equal(isMutationIntent('Move Finishing under Phase B as a child task'), true);
   });
+
+  it('treats Russian relative shift requests as mutations', () => {
+    assert.equal(isMutationIntent('сдвинь штукатурку на 2 дня'), true);
+    assert.equal(isMutationIntent('перенеси штукатурку на 2 дня вперед'), true);
+  });
 });
 
 describe('agent system prompt hierarchy guidance', () => {
-  it('documents parentId workflow for nesting', () => {
+  it('documents structural move workflow for nesting', () => {
     const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
     const prompt = readFileSync(promptPath, 'utf-8');
 
     assert.match(prompt, /Hierarchy Rules/);
-    assert.match(prompt, /parentId/);
-    assert.match(prompt, /subtasks|child tasks|nested work/i);
-    assert.match(prompt, /empty string/i);
+    assert.match(prompt, /move_tasks/);
+    assert.match(prompt, /real nesting|child work structurally|under a parent/i);
+    assert.doesNotMatch(prompt, /\bparentId\b/);
   });
 
   it('documents container-first planning and validation', () => {
@@ -41,20 +46,20 @@ describe('agent system prompt hierarchy guidance', () => {
     const prompt = readFileSync(promptPath, 'utf-8');
 
     assert.match(prompt, /Find the container/i);
-    assert.match(prompt, /WBS fragment/i);
-    assert.match(prompt, /Validate before finishing/i);
+    assert.match(prompt, /small intentional fragment|small meaningful fragment/i);
+    assert.match(prompt, /Validate the authoritative result before answering/i);
     assert.match(prompt, /Avoid duplicates/i);
   });
 
-  it('documents inline dependency creation for new sequential tasks', () => {
+  it('documents normalized dependency and shift tools', () => {
     const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
     const prompt = readFileSync(promptPath, 'utf-8');
 
-    assert.match(prompt, /pass `dependencies` directly in `create_task`/i);
-    assert.match(prompt, /use `set_dependency`.*fallback/i);
-    assert.match(prompt, /2-5 sequential child tasks/i);
-    assert.match(prompt, /exact `createdTaskId`/i);
-    assert.match(prompt, /never invent|never fabricate/i);
+    assert.match(prompt, /link_tasks/i);
+    assert.match(prompt, /unlink_tasks/i);
+    assert.match(prompt, /shift_tasks/i);
+    assert.match(prompt, /Do not invent task IDs/i);
+    assert.doesNotMatch(prompt, /`set_dependency`|`remove_dependency`|`resize_task`|`recalculate_schedule`/);
   });
 });
 
@@ -72,6 +77,49 @@ describe('agent simple mutation heuristic', () => {
   });
 });
 
+describe('agent fast shift parsing', () => {
+  it('parses direct Russian shift commands for the cheap path', () => {
+    assert.deepEqual(parseFastShiftIntent('сдвинь штукатурку потолка на 2 дня'), {
+      taskName: 'штукатурку потолка',
+      delta: 2,
+      mode: 'project_default',
+    });
+    assert.deepEqual(parseFastShiftIntent('сдвинь "Штукатурка потолка" на 3 рабочих дня'), {
+      taskName: 'Штукатурка потолка',
+      delta: 3,
+      mode: 'working',
+    });
+    assert.deepEqual(parseFastShiftIntent('сдвинь штукатурку стен на неделю'), {
+      taskName: 'штукатурку стен',
+      delta: 7,
+      mode: 'project_default',
+    });
+    assert.deepEqual(parseFastShiftIntent('сдвинь штукатурку стен на 2 недели'), {
+      taskName: 'штукатурку стен',
+      delta: 14,
+      mode: 'project_default',
+    });
+  });
+
+  it('does not parse vague natural-language drift as a direct cheap-path shift', () => {
+    assert.equal(parseFastShiftIntent('опаздываем с штукатуркой на 2 дня'), null);
+    assert.equal(parseFastShiftIntent('надо бы штукатурку чуть подвинуть'), null);
+  });
+});
+
+describe('agent fast shift task resolution', () => {
+  it('resolves duplicate exact-name matches as a multi-task target', () => {
+    const result = resolveTasksByName([
+      { id: '1', name: 'Штукатурка стен', startDate: '2026-04-01', endDate: '2026-04-03' },
+      { id: '2', name: 'Штукатурка стен', startDate: '2026-04-05', endDate: '2026-04-07' },
+      { id: '3', name: 'Штукатурка потолка', startDate: '2026-04-02', endDate: '2026-04-04' },
+    ], 'штукатурку стен');
+
+    assert.equal(result.kind, 'exact');
+    assert.deepEqual(result.matches.map((task) => task.id), ['1', '2']);
+  });
+});
+
 describe('agent history context', () => {
   it('trims mutation history aggressively', () => {
     const history = buildHistoryContext(
@@ -86,5 +134,60 @@ describe('agent history context', () => {
     assert.doesNotMatch(history, /message-0-/);
     assert.doesNotMatch(history, /message-3-/);
     assert.match(history, /message-4-/);
+  });
+});
+
+describe('agent mutation verification assessment', () => {
+  it('detects mismatch between accepted changedTaskIds and actual snapshot diff', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'tool-1',
+          toolName: 'shift_tasks',
+          status: 'accepted',
+          changedTaskIds: ['A'],
+        },
+      ],
+      ['A', 'B'],
+    );
+
+    assert.equal(result.mutationAttempted, true);
+    assert.equal(result.acceptedMutationCalls.length, 1);
+    assert.equal(result.acceptedChangedTaskIdMismatch, true);
+  });
+
+  it('accepts matching authoritative changedTaskIds', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'tool-1',
+          toolName: 'move_tasks',
+          status: 'accepted',
+          changedTaskIds: ['B', 'A'],
+        },
+      ],
+      ['A', 'B'],
+    );
+
+    assert.equal(result.acceptedChangedTaskIdMismatch, false);
+    assert.deepEqual(result.acceptedChangedTaskIds, ['A', 'B']);
+  });
+
+  it('infers accepted mutation when tool call is observed and snapshot changed', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'tool-1',
+          toolName: 'create_tasks',
+        },
+      ],
+      ['A'],
+    );
+
+    assert.equal(result.mutationAttempted, true);
+    assert.equal(result.acceptedMutationCalls.length, 1);
+    assert.equal(result.acceptedMutationCalls[0]?.status, 'accepted');
+    assert.deepEqual(result.acceptedChangedTaskIds, ['A']);
+    assert.equal(result.acceptedChangedTaskIdMismatch, false);
   });
 });

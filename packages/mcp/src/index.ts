@@ -13,24 +13,44 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import {
+  parseDateOnly,
+  shiftBusinessDayOffset,
+  validateDependencies,
+} from 'gantt-lib/core/scheduling';
 import { writeMcpDebugLog } from './debug-log.js';
 
 // Import services AFTER dotenv is configured
 import { taskService } from './services/task.service.js';
 import { commandService } from './services/command.service.js';
 import { messageService } from './services/message.service.js';
+import { getProjectScheduleOptionsForProject } from './services/projectScheduleOptions.js';
 import { getPrisma } from './prisma.js';
 import type {
-  CreateTaskInput,
-  UpdateTaskInput,
-  CreateTasksBatchInput,
-  BatchCreateResult,
-  TaskDependency,
-  GetConversationHistoryInput,
   AddMessageInput,
+  CreateTasksInput,
+  DeleteTasksInput,
+  GetConversationHistoryInput,
+  GetProjectSummaryInput,
+  GetScheduleSliceInput,
+  GetTaskContextInput,
+  LinkTasksInput,
+  MoveTasksInput,
+  NormalizedMutationReason,
+  NormalizedMutationResult,
   ProjectCommand,
+  ProjectSummary,
+  RecalculateProjectInput,
+  ShiftTasksInput,
+  Task,
+  TaskContextResult,
+  UnlinkTasksInput,
+  UpdateTasksInput,
+  ValidateScheduleInput,
+  ValidateScheduleResult,
 } from './types.js';
 import { randomUUID } from 'node:crypto';
+import { LEGACY_SCHEDULING_TOOL_NAMES, PUBLIC_MCP_TOOLS } from './public-tools.js';
 
 // Create MCP server instance
 const server = new Server(
@@ -97,444 +117,348 @@ async function getProjectVersion(projectId: string): Promise<number> {
   return project?.version ?? 0;
 }
 
-async function commitAgentCommand(
+async function commitNormalizedCommand(
   projectId: string | undefined,
   command: ProjectCommand,
-): Promise<import('./types.js').CommitProjectCommandResponse> {
+): Promise<{ baseVersion: number; response: import('./types.js').CommitProjectCommandResponse }> {
   if (!projectId) {
     throw new Error(`[Permanent] Project ID is required.
 Reason: All task mutations must go through the authoritative command pipeline.
 Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
   }
 
-  const version = await getProjectVersion(projectId);
-  return commandService.commitCommand({
+  const baseVersion = await getProjectVersion(projectId);
+  const response = await commandService.commitCommand({
     projectId,
     clientRequestId: randomUUID(),
-    baseVersion: version,
+    baseVersion,
     command,
   }, 'agent');
+
+  return { baseVersion, response };
 }
 
-// Register list tools handler
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: 'ping',
-      description: 'Test MCP server connectivity. Returns "pong". Use for debugging connection issues.',
-      inputSchema: {
-        type: 'object',
-        properties: {},
+function jsonResult(payload: unknown) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(payload, null, 2),
       },
-    },
-    {
-      name: 'create_task',
-      description: 'Create a Gantt task with name, dates, dependencies. Returns created task with cascade info. Supports parentId for hierarchy. Use get_tasks to list existing tasks before creating.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Task name',
-          },
-          startDate: {
-            type: 'string',
-            description: 'Start date in ISO format: YYYY-MM-DD',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          endDate: {
-            type: 'string',
-            description: 'End date in ISO format: YYYY-MM-DD',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          color: {
-            type: 'string',
-            description: 'Optional display color (e.g., #ff0000)',
-          },
-          parentId: {
-            type: 'string',
-            description: 'Optional parent task ID for hierarchy nesting',
-          },
-          progress: {
-            type: 'number',
-            description: 'Optional progress percentage (0-100)',
-            minimum: 0,
-            maximum: 100,
-          },
-          dependencies: {
-            type: 'array',
-            description: 'Optional task dependencies',
-            items: {
-              type: 'object',
-              properties: {
-                taskId: {
-                  type: 'string',
-                  description: 'ID of the dependent task',
-                },
-                type: {
-                  type: 'string',
-                  description: 'Dependency type: FS, SS, FF, or SF',
-                  enum: ['FS', 'SS', 'FF', 'SF'],
-                },
-                lag: {
-                  type: 'number',
-                  description: 'Optional lag in days (default: 0)',
-                },
-              },
-              required: ['taskId', 'type'],
-            },
-          },
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID to associate the task with. If not provided, task will be global (visible to all projects)',
-          },
-        },
-        required: ['name', 'startDate', 'endDate'],
-      },
-    },
-    {
-      name: 'get_tasks',
-      description: 'List tasks in compact mode by default (id, name, dates, parentId, progress — no dependencies). Use full=true to include dependencies and sortOrder. Supports pagination (limit/offset) and parentId filtering. For a single task use get_task.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID to filter tasks by. If not provided, uses the current session project (PROJECT_ID env var). Pass null to get all tasks across all projects.',
-          },
-          parentId: {
-            type: 'string',
-            description: 'Optional filter by parent task ID. null = root tasks only (tasks without a parent), string = direct children of that parent task. Omit to get all tasks (default behavior).',
-          },
-          limit: {
-            type: 'number',
-            description: 'Maximum number of tasks to return (default: 100, max: 1000). Use pagination for large projects.',
-            default: 100,
-          },
-          offset: {
-            type: 'number',
-            description: 'Number of tasks to skip for pagination (default: 0). Increment by limit to fetch next page.',
-            default: 0,
-          },
-          full: {
-            type: 'boolean',
-            description: 'Return full task data including dependencies and sortOrder (default: false). Compact mode omits these fields to save tokens.',
-            default: false,
-          },
-        },
-      },
-    },
-    {
-      name: 'get_task',
-      description: 'Get single task by id with optional child loading. includeChildren: false (default), "shallow" (direct children), "deep" (all descendants). Use get_tasks for listing multiple tasks.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'Task ID',
-          },
-          includeChildren: {
-            type: 'string',
-            enum: ['false', 'shallow', 'deep'],
-            description: 'Include child tasks in response: false (no children, default), shallow (direct children only), deep (all descendants recursively).',
-          },
-        },
-        required: ['id'],
-      },
-    },
-    {
-      name: 'update_task',
-      description: 'Update task by id. Linked date and dependency edits route through the server scheduling engine and return changedTasks/changedIds instead of a full snapshot. Pass parentId=null to remove from parent. Use get_task to fetch current state first.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'Task ID',
-          },
-          name: {
-            type: 'string',
-            description: 'Task name',
-          },
-          startDate: {
-            type: 'string',
-            description: 'Start date in ISO format: YYYY-MM-DD',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          endDate: {
-            type: 'string',
-            description: 'End date in ISO format: YYYY-MM-DD',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          color: {
-            type: 'string',
-            description: 'Optional display color (e.g., #ff0000)',
-          },
-          parentId: {
-            type: 'string',
-            description: 'Optional parent task ID for hierarchy nesting. Pass empty string to remove nesting.',
-          },
-          progress: {
-            type: 'number',
-            description: 'Optional progress percentage (0-100)',
-            minimum: 0,
-            maximum: 100,
-          },
-          dependencies: {
-            type: 'array',
-            description: 'Optional task dependencies',
-            items: {
-              type: 'object',
-              properties: {
-                taskId: {
-                  type: 'string',
-                  description: 'ID of the dependent task',
-                },
-                type: {
-                  type: 'string',
-                  description: 'Dependency type: FS, SS, FF, or SF',
-                  enum: ['FS', 'SS', 'FF', 'SF'],
-                },
-                lag: {
-                  type: 'number',
-                  description: 'Optional lag in days (default: 0)',
-                },
-              },
-              required: ['taskId', 'type'],
-            },
-          },
-        },
-        required: ['id'],
-      },
-    },
-    {
-      name: 'move_task',
-      description: 'Move a task to a new start date and let the server apply the authoritative dependency cascade. Returns task, changedTasks, and changedIds.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          taskId: {
-            type: 'string',
-            description: 'Task ID to move',
-          },
-          startDate: {
-            type: 'string',
-            description: 'New start date in ISO format: YYYY-MM-DD',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID. If omitted, uses the current session project (PROJECT_ID env var).',
-          },
-        },
-        required: ['taskId', 'startDate'],
-      },
-    },
-    {
-      name: 'resize_task',
-      description: 'Resize a task from the start or end anchor and let the server apply the authoritative dependency cascade. Returns task, changedTasks, and changedIds.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          taskId: {
-            type: 'string',
-            description: 'Task ID to resize',
-          },
-          anchor: {
-            type: 'string',
-            enum: ['start', 'end'],
-            description: 'Which edge to move. start = keep end fixed, end = keep start fixed.',
-          },
-          date: {
-            type: 'string',
-            description: 'New anchor date in ISO format: YYYY-MM-DD',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID. If omitted, uses the current session project (PROJECT_ID env var).',
-          },
-        },
-        required: ['taskId', 'anchor', 'date'],
-      },
-    },
-    {
-      name: 'recalculate_schedule',
-      description: 'Recalculate one task or the full project schedule on the server and return the authoritative changed set.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          taskId: {
-            type: 'string',
-            description: 'Optional task ID. Omit to recalculate the whole project.',
-          },
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID. If omitted, uses the current session project (PROJECT_ID env var).',
-          },
-        },
-      },
-    },
-    {
-      name: 'delete_task',
-      description: 'Delete task by id. Returns success confirmation. Task removal triggers cascade recalculation of dependent tasks. Use get_tasks to verify deletion.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'Task ID',
-          },
-        },
-        required: ['id'],
-      },
-    },
-    {
-      name: 'create_tasks_batch',
-      description: 'Create multiple tasks from template with repeat parameters (sections, floors). Auto-generates names, dates, sequential FS dependencies within streams. Returns created tasks array. Alternative: use create_task for single tasks.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          baseStartDate: {
-            type: 'string',
-            description: 'Base start date for the first task in each stream (YYYY-MM-DD)',
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-          },
-          workTypes: {
-            type: 'array',
-            description: 'Array of work types with their durations',
-            items: {
-              type: 'object',
-              properties: {
-                name: { type: 'string', description: 'Name of the work type' },
-                duration: { type: 'number', description: 'Duration in days' },
-              },
-              required: ['name', 'duration'],
-            },
-          },
-          repeatBy: {
-            type: 'object',
-            description: 'Parameters for repeating tasks (sections, floors, etc.)',
-            properties: {
-              sections: {
-                type: 'array',
-                items: { type: 'number' },
-                description: 'Array of section numbers',
-              },
-              floors: {
-                type: 'array',
-                items: { type: 'number' },
-                description: 'Array of floor numbers',
-              },
-            },
-          },
-          streams: {
-            type: 'number',
-            description: 'Number of parallel streams (default: 1)',
-            minimum: 1,
-          },
-          nameTemplate: {
-            type: 'string',
-            description: 'Optional name template with placeholders: {workType}, {section}, {floor}',
-          },
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID to associate the tasks with. If not provided, tasks will be global (visible to all projects)',
-          },
-        },
-        required: ['baseStartDate', 'workTypes', 'repeatBy'],
-      },
-    },
-    {
-      name: 'get_conversation_history',
-      description: 'Get recent messages for context awareness. Call before responding to understand previous dialogue. Limit: default 20, max 50. Use add_message to record your response.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID to filter messages by. If not provided, uses the current session project (PROJECT_ID env var)',
-          },
-          limit: {
-            type: 'number',
-            description: 'Number of recent messages to return (default: 20, max: 50)',
-            minimum: 1,
-            maximum: 50,
-          },
-        },
-      },
-    },
-    {
-      name: 'add_message',
-      description: 'Record assistant message to conversation history. Use after responding to user for future context. Call get_conversation_history to read previous messages.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          content: {
-            type: 'string',
-            description: 'Message content to add to the conversation history',
-          },
-          projectId: {
-            type: 'string',
-            description: 'Optional project ID to associate the message with. If not provided, uses the current session project (PROJECT_ID env var)',
-          },
-        },
-        required: ['content'],
-      },
-    },
-    {
-      name: 'set_dependency',
-      description: 'Create a dependency (link) between two tasks. The successor task depends on the predecessor task. For example, to make task B start after task A finishes, set taskId=B (successor) and dependsOnTaskId=A (predecessor) with type=FS. Returns created dependency.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          taskId: {
-            type: 'string',
-            description: 'ID of the successor task (the task that depends on the other)',
-          },
-          dependsOnTaskId: {
-            type: 'string',
-            description: 'ID of the predecessor task (the task that the successor depends on)',
-          },
-          type: {
-            type: 'string',
-            description: 'Dependency type: FS (Finish-to-Start, default), SS (Start-to-Start), FF (Finish-to-Finish), SF (Start-to-Finish)',
-            enum: ['FS', 'SS', 'FF', 'SF'],
-          },
-          lag: {
-            type: 'number',
-            description: 'Optional lag in days (default: 0). Positive values delay the successor, negative values allow overlap.',
-          },
-        },
-        required: ['taskId', 'dependsOnTaskId'],
-      },
-    },
-    {
-      name: 'remove_dependency',
-      description: 'Remove a dependency between two tasks. Requires both task IDs to identify the specific dependency link. Returns success confirmation.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          taskId: {
-            type: 'string',
-            description: 'ID of the successor task (the task that has the dependency)',
-          },
-          dependsOnTaskId: {
-            type: 'string',
-            description: 'ID of the predecessor task (the task that the successor depends on)',
-          },
-        },
-        required: ['taskId', 'dependsOnTaskId'],
-      },
-    },
-  ],
-}));
+    ],
+  };
+}
 
-// Register call tool handler
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+function normalizeRejectionReason(reason: string | undefined): NormalizedMutationReason {
+  switch (reason) {
+    case 'version_conflict':
+    case 'validation_error':
+    case 'conflict':
+    case 'not_found':
+    case 'invalid_request':
+    case 'unsupported_operation':
+      return reason;
+    default:
+      return 'validation_error';
+  }
+}
+
+function buildRejectedResult(
+  baseVersion: number,
+  reason: NormalizedMutationReason,
+  snapshot?: import('./types.js').ProjectSnapshot,
+  partial?: Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'>,
+): NormalizedMutationResult {
+  return {
+    status: 'rejected',
+    reason,
+    baseVersion,
+    changedTaskIds: partial?.changedTaskIds ?? [],
+    changedTasks: partial?.changedTasks ?? [],
+    changedDependencyIds: partial?.changedDependencyIds ?? [],
+    conflicts: partial?.conflicts ?? [],
+    ...(snapshot ? { snapshot } : {}),
+  };
+}
+
+function buildMutationResult(
+  baseVersion: number,
+  response: import('./types.js').CommitProjectCommandResponse,
+  includeSnapshot: boolean = false,
+  partial?: Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'>,
+): NormalizedMutationResult {
+  if (!response.accepted) {
+    return buildRejectedResult(
+      baseVersion,
+      normalizeRejectionReason(response.reason),
+      includeSnapshot ? response.snapshot : undefined,
+      partial,
+    );
+  }
+
+  const changedTaskIds = response.result.changedTaskIds;
+  const changedTasks = changedTaskIds
+    .map((taskId) => response.snapshot.tasks.find((task) => task.id === taskId))
+    .filter((task): task is Task => Boolean(task));
+
+  return {
+    status: 'accepted',
+    baseVersion,
+    newVersion: response.newVersion,
+    changedTaskIds,
+    changedTasks,
+    changedDependencyIds: response.result.changedDependencyIds,
+    conflicts: response.result.conflicts,
+    ...(includeSnapshot ? { snapshot: response.snapshot } : {}),
+  };
+}
+
+type MutationAggregationState = {
+  initialBaseVersion?: number;
+  latestVersion?: number;
+  latestSnapshot?: import('./types.js').ProjectSnapshot;
+  changedTaskIds: Set<string>;
+  changedDependencyIds: Set<string>;
+  conflicts: import('./types.js').Conflict[];
+};
+
+function createMutationAggregationState(): MutationAggregationState {
+  return {
+    changedTaskIds: new Set<string>(),
+    changedDependencyIds: new Set<string>(),
+    conflicts: [],
+  };
+}
+
+function mergeConflicts(
+  existing: import('./types.js').Conflict[],
+  incoming: import('./types.js').Conflict[],
+): import('./types.js').Conflict[] {
+  const byKey = new Map<string, import('./types.js').Conflict>();
+  for (const conflict of [...existing, ...incoming]) {
+    byKey.set(`${conflict.entityType}:${conflict.entityId}:${conflict.reason}:${conflict.detail ?? ''}`, conflict);
+  }
+  return [...byKey.values()];
+}
+
+function addMutationResultToAggregation(
+  aggregation: MutationAggregationState,
+  baseVersion: number,
+  response: import('./types.js').CommitProjectCommandResponse,
+): void {
+  if (aggregation.initialBaseVersion === undefined) {
+    aggregation.initialBaseVersion = baseVersion;
+  }
+
+  if (!response.accepted) {
+    aggregation.latestSnapshot = response.snapshot ?? aggregation.latestSnapshot;
+    return;
+  }
+
+  aggregation.latestVersion = response.newVersion;
+  aggregation.latestSnapshot = response.snapshot;
+  for (const taskId of response.result.changedTaskIds) {
+    aggregation.changedTaskIds.add(taskId);
+  }
+  for (const dependencyId of response.result.changedDependencyIds) {
+    aggregation.changedDependencyIds.add(dependencyId);
+  }
+  aggregation.conflicts = mergeConflicts(aggregation.conflicts, response.result.conflicts);
+}
+
+function buildPartialMutationAggregate(
+  aggregation: MutationAggregationState,
+): Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'> {
+  const changedTaskIds = [...aggregation.changedTaskIds].sort();
+  const changedTasks = changedTaskIds
+    .map((taskId) => aggregation.latestSnapshot?.tasks.find((task) => task.id === taskId))
+    .filter((task): task is Task => Boolean(task));
+
+  return {
+    changedTaskIds,
+    changedTasks,
+    changedDependencyIds: [...aggregation.changedDependencyIds].sort(),
+    conflicts: aggregation.conflicts,
+  };
+}
+
+function finalizeAcceptedMutationAggregation(
+  aggregation: MutationAggregationState,
+  includeSnapshot: boolean = false,
+): NormalizedMutationResult {
+  const partial = buildPartialMutationAggregate(aggregation);
+  return {
+    status: 'accepted',
+    baseVersion: aggregation.initialBaseVersion ?? 0,
+    newVersion: aggregation.latestVersion,
+    ...partial,
+    ...(includeSnapshot && aggregation.latestSnapshot ? { snapshot: aggregation.latestSnapshot } : {}),
+  };
+}
+
+function finalizeRejectedMutationAggregation(
+  aggregation: MutationAggregationState,
+  baseVersion: number,
+  reason: NormalizedMutationReason,
+  snapshot?: import('./types.js').ProjectSnapshot,
+  includeSnapshot: boolean = false,
+): NormalizedMutationResult {
+  return buildRejectedResult(
+    aggregation.initialBaseVersion ?? baseVersion,
+    reason,
+    includeSnapshot ? (snapshot ?? aggregation.latestSnapshot) : undefined,
+    buildPartialMutationAggregate(aggregation),
+  );
+}
+
+async function executeNormalizedMutationBatch(
+  projectId: string | undefined,
+  commands: ProjectCommand[],
+  includeSnapshot: boolean = false,
+  commitCommandImpl: typeof commitNormalizedCommand = commitNormalizedCommand,
+): Promise<NormalizedMutationResult> {
+  const aggregation = createMutationAggregationState();
+
+  for (const command of commands) {
+    const { baseVersion, response } = await commitCommandImpl(projectId, command);
+    addMutationResultToAggregation(aggregation, baseVersion, response);
+
+    if (!response.accepted) {
+      return finalizeRejectedMutationAggregation(
+        aggregation,
+        baseVersion,
+        normalizeRejectionReason(response.reason),
+        response.snapshot,
+        includeSnapshot,
+      );
+    }
+  }
+
+  return finalizeAcceptedMutationAggregation(aggregation, includeSnapshot);
+}
+
+async function listAllProjectTasks(projectId: string): Promise<Task[]> {
+  const allTasks: Task[] = [];
+  let offset = 0;
+  const pageSize = 500;
+
+  while (true) {
+    const page = await taskService.list(projectId, undefined, pageSize, offset);
+    allTasks.push(...page.tasks);
+    if (!page.hasMore) {
+      break;
+    }
+    offset += pageSize;
+  }
+
+  return allTasks;
+}
+
+async function getProjectSnapshotSummary(projectId: string): Promise<ProjectSummary> {
+  const prisma = getPrisma();
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      version: true,
+      ganttDayMode: true,
+      tasks: {
+        select: {
+          id: true,
+          parentId: true,
+          startDate: true,
+          endDate: true,
+          dependencies: true,
+        },
+      },
+    },
+  });
+
+  if (!project) {
+    throw new Error(`[Permanent] Project not found: ${projectId}.
+Reason: The requested project does not exist.
+Fix: Provide an existing projectId or set PROJECT_ID correctly.`);
+  }
+
+  const tasks = project.tasks.map((task: any) => ({
+    id: task.id,
+    name: '',
+    startDate: String(task.startDate).split('T')[0],
+    endDate: String(task.endDate).split('T')[0],
+    parentId: task.parentId ?? undefined,
+    dependencies: (task.dependencies ?? []).map((dependency: any) => ({
+      taskId: dependency.depTaskId,
+      type: dependency.type,
+      lag: dependency.lag,
+    })),
+  }));
+  const validation = validateDependencies(tasks);
+  const sortedByStart = [...tasks].sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+  const sortedByEnd = [...tasks].sort((a, b) => String(a.endDate).localeCompare(String(b.endDate)));
+  const healthFlags: string[] = [];
+
+  if (!validation.isValid) {
+    healthFlags.push('dependency_errors');
+  }
+  if (tasks.some((task) => task.parentId && !tasks.find((candidate) => candidate.id === task.parentId))) {
+    healthFlags.push('orphaned_hierarchy_refs');
+  }
+  if (tasks.length === 0) {
+    healthFlags.push('empty_project');
+  }
+
+  return {
+    projectId: project.id,
+    version: project.version,
+    dayMode: project.ganttDayMode,
+    effectiveDateRange: {
+      startDate: sortedByStart[0]?.startDate ?? null,
+      endDate: sortedByEnd[sortedByEnd.length - 1]?.endDate ?? null,
+    },
+    rootTaskCount: tasks.filter((task) => !task.parentId).length,
+    totalTaskCount: tasks.length,
+    healthFlags,
+  };
+}
+
+function formatDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+type MpcHandlerDeps = {
+  writeMcpDebugLog: typeof writeMcpDebugLog;
+  commitNormalizedCommand: typeof commitNormalizedCommand;
+  getProjectSnapshotSummary: typeof getProjectSnapshotSummary;
+  listAllProjectTasks: typeof listAllProjectTasks;
+  resolveProjectId: typeof resolveProjectId;
+  taskService: Pick<typeof taskService, 'get'>;
+  getPrisma: typeof getPrisma;
+  getProjectScheduleOptionsForProject: typeof getProjectScheduleOptionsForProject;
+};
+
+const defaultMcpHandlerDeps: MpcHandlerDeps = {
+  writeMcpDebugLog,
+  commitNormalizedCommand,
+  getProjectSnapshotSummary,
+  listAllProjectTasks,
+  resolveProjectId,
+  taskService,
+  getPrisma,
+  getProjectScheduleOptionsForProject,
+};
+
+export async function handleListToolsRequest() {
+  return {
+    tools: PUBLIC_MCP_TOOLS,
+  };
+}
+
+export async function handleCallToolRequest(
+  request: { params: { name: string; arguments?: unknown } },
+  deps: MpcHandlerDeps = defaultMcpHandlerDeps,
+) {
   const { name, arguments: args } = request.params;
-  await writeMcpDebugLog('tool_call_received', {
+  await deps.writeMcpDebugLog('tool_call_received', {
     tool: name,
     args,
     envProjectId: process.env.PROJECT_ID,
@@ -543,7 +467,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // Ping tool for connectivity testing
   if (name === 'ping') {
-    await writeMcpDebugLog('tool_call_completed', {
+    await deps.writeMcpDebugLog('tool_call_completed', {
       tool: name,
       result: 'pong',
     });
@@ -557,608 +481,419 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  // create_task tool
-  if (name === 'create_task') {
-    const input = args as unknown as CreateTaskInput;
-    const { projectId: argProjectId } = args as { projectId?: string };
-    const resolvedProjectId = resolveProjectId(argProjectId);
-
-    // DEBUG: Log projectId resolution
-    console.error('[CREATE_TASK DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
-    await writeMcpDebugLog('create_task_resolved_project', {
-      argProjectId,
-      envProjectId: process.env.PROJECT_ID,
-      resolvedProjectId,
-      input,
-    });
-
-    // Validate date format
-    if (!isValidDateFormat(input.startDate)) {
-      throw new Error(`[Permanent] Invalid startDate format: ${input.startDate}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-    if (!isValidDateFormat(input.endDate)) {
-      throw new Error(`[Permanent] Invalid endDate format: ${input.endDate}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-
-    // Validate date range
-    if (!isValidDateRange(input.startDate, input.endDate)) {
-      throw new Error(`[Permanent] Invalid date range: startDate (${input.startDate}) must be ≤ endDate (${input.endDate}).
-Reason: End date cannot be before start date.
-Fix: Adjust dates so startDate ≤ endDate.`);
-    }
-
-    // Validate dependencies
-    if (input.dependencies) {
-      for (let i = 0; i < input.dependencies.length; i++) {
-        const dep = input.dependencies[i];
-        if (!isValidDependencyType(dep.type)) {
-          throw new Error(`[Permanent] Invalid dependency type at index ${i}: ${dep.type}.
-Must be one of: FS, SS, FF, SF.
-Fix: Use valid dependency type.`);
-        }
-      }
-    }
-
-    const response = await commitAgentCommand(resolvedProjectId, { type: 'create_task', task: input });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const createdTask = response.result.snapshot.tasks.find(t =>
-      response.result.changedTaskIds.includes(t.id),
-    ) || response.snapshot.tasks[response.snapshot.tasks.length - 1];
-
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      resolvedProjectId,
-      createdTaskId: createdTask?.id,
-      viaCommandService: true,
-      newVersion: response.newVersion,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            task: createdTask,
-            message: 'Task created successfully',
-            affectedTasks: response.result.changedTaskIds.length,
-          }, null, 2),
-        },
-      ],
-    };
+  if (LEGACY_SCHEDULING_TOOL_NAMES.has(name)) {
+    return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
   }
 
-  // get_tasks tool
-  if (name === 'get_tasks') {
-    const { projectId: argProjectId, parentId, limit = 100, offset = 0, full = false } = args as any;
-    // If caller explicitly passes null, return all tasks; otherwise default to PROJECT_ID env
-    const resolvedProjectId = argProjectId === null
-      ? undefined
-      : resolveProjectId(argProjectId);
-    const result = await taskService.list(resolvedProjectId, parentId, limit, offset);
+  if (name === 'get_project_summary') {
+    const { projectId: argProjectId } = args as GetProjectSummaryInput;
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
-    // Compact mode: strip dependencies and sortOrder to save tokens
-    const tasks = full
-      ? result.tasks
-      : result.tasks.map(({ dependencies: _deps, sortOrder: _sort, ...compact }) => compact);
-
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      resolvedProjectId,
-      parentId,
-      limit,
-      offset,
-      full,
-      taskCount: result.tasks.length,
-      hasMore: result.hasMore,
-      total: result.total,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ tasks, hasMore: result.hasMore, total: result.total }, null, 2),
-        },
-      ],
-    };
-  }
-
-  // get_task tool
-  if (name === 'get_task') {
-    const { id, includeChildren = false } = args as any;
-    if (!id) {
-      throw new Error(`[Permanent] Missing required parameter: id.
-Reason: Task ID is required to identify which task to retrieve.
-Fix: Provide the task ID as a string parameter.`);
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Project summary is scoped to one project.
+Fix: Provide projectId or set PROJECT_ID.`);
     }
 
-    const task = await taskService.get(id, includeChildren);
+    return jsonResult(await deps.getProjectSnapshotSummary(resolvedProjectId));
+  }
+
+  if (name === 'get_task_context') {
+    const { taskId, projectId: argProjectId } = args as unknown as GetTaskContextInput;
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
+
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Task context is scoped to one project.
+Fix: Provide projectId or set PROJECT_ID.`);
+    }
+    if (!taskId) {
+      throw new Error(`[Permanent] Missing required parameter: taskId.
+Reason: Task context requires an exact task ID.
+Fix: Provide taskId.`);
+    }
+
+    const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+    const allTasks = await deps.listAllProjectTasks(resolvedProjectId);
+    const task = allTasks.find((candidate) => candidate.id === taskId);
+
     if (!task) {
-      throw new Error(`[Permanent] Task not found: ${id}.
-Reason: No task with this ID exists in the project.
-Fix: Call get_tasks to list available task IDs.`);
+      return jsonResult(buildRejectedResult(summary.version, 'not_found'));
     }
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      taskId: id,
-      includeChildren,
+
+    const byId = new Map(allTasks.map((candidate) => [candidate.id, candidate]));
+    const parents: Task[] = [];
+    let currentParentId = task.parentId;
+    while (currentParentId) {
+      const parent = byId.get(currentParentId);
+      if (!parent) {
+        break;
+      }
+      parents.unshift(parent);
+      currentParentId = parent.parentId;
+    }
+
+    const result: TaskContextResult = {
+      version: summary.version,
       task,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(task, null, 2),
-        },
-      ],
+      parents,
+      children: allTasks.filter((candidate) => candidate.parentId === taskId),
+      siblings: allTasks.filter((candidate) => candidate.parentId === task.parentId && candidate.id !== task.id),
+      predecessors: (task.dependencies ?? []).map((dependency) => ({
+        ...dependency,
+        lag: dependency.lag ?? 0,
+        task: byId.get(dependency.taskId),
+      })),
+      successors: allTasks
+        .flatMap((candidate) => (candidate.dependencies ?? []).map((dependency) => ({
+          taskId: candidate.id,
+          type: dependency.type,
+          lag: dependency.lag ?? 0,
+          predecessorTaskId: dependency.taskId,
+        })))
+        .filter((dependency) => dependency.predecessorTaskId === taskId)
+        .map((dependency) => ({
+          taskId: dependency.taskId,
+          type: dependency.type,
+          lag: dependency.lag,
+          task: byId.get(dependency.taskId),
+        })),
     };
+
+    return jsonResult(result);
   }
 
-  // update_task tool
-  if (name === 'update_task') {
-    const input = args as unknown as UpdateTaskInput;
-    const { id } = input;
+  if (name === 'get_schedule_slice') {
+    const input = args as GetScheduleSliceInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
 
-    if (!id) {
-      throw new Error(`[Permanent] Missing required parameter: id.
-Reason: Task ID is required to identify which task to update.
-Fix: Provide the task ID as a string parameter.`);
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Schedule slices are scoped to one project.
+Fix: Provide projectId or set PROJECT_ID.`);
     }
 
-    // Check if at least one optional field is provided
-    const hasUpdates =
-      input.name !== undefined ||
-      input.startDate !== undefined ||
-      input.endDate !== undefined ||
-      input.color !== undefined ||
-      input.parentId !== undefined ||
-      input.progress !== undefined ||
-      input.dependencies !== undefined;
+    const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+    const allTasks = await deps.listAllProjectTasks(resolvedProjectId);
+    let tasks: Task[] = [];
+    let scope: import('./types.js').ScheduleSliceResult['scope'];
 
-    if (!hasUpdates) {
-      throw new Error(`[Permanent] No update fields provided.
-Reason: At least one field (name, startDate, endDate, color, parentId, progress, dependencies) must be provided.
-Fix: Include at least one field to update.`);
-    }
-
-    // Validate date format if dates are provided
-    if (input.startDate && !isValidDateFormat(input.startDate)) {
-      throw new Error(`[Permanent] Invalid startDate format: ${input.startDate}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-    if (input.endDate && !isValidDateFormat(input.endDate)) {
-      throw new Error(`[Permanent] Invalid endDate format: ${input.endDate}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-
-    // Validate date range if both dates are provided
-    const currentTask = await taskService.get(id);
-    if (currentTask) {
-      const startDate = input.startDate ?? currentTask.startDate;
-      const endDate = input.endDate ?? currentTask.endDate;
-      if (!isValidDateRange(startDate, endDate)) {
-        throw new Error(`[Permanent] Invalid date range: startDate (${startDate}) must be ≤ endDate (${endDate}).
-Reason: End date cannot be before start date.
-Fix: Adjust dates so startDate ≤ endDate.`);
-      }
-    }
-
-    // Validate dependencies if provided
-    if (input.dependencies) {
-      for (let i = 0; i < input.dependencies.length; i++) {
-        const dep = input.dependencies[i];
-        if (!isValidDependencyType(dep.type)) {
-          throw new Error(`[Permanent] Invalid dependency type at index ${i}: ${dep.type}.
-Must be one of: FS, SS, FF, SF.
-Fix: Use valid dependency type.`);
-        }
-      }
-    }
-
-    const resolvedProjectId = resolveProjectId(undefined);
-    if (!currentTask) {
-      throw new Error(`[Permanent] Task not found: ${id}.
-Reason: No task with this ID exists in the project.
-Fix: Call get_tasks to list available task IDs.`);
-    }
-
-    let command: ProjectCommand;
-    const hasDateChanges = input.startDate !== undefined || input.endDate !== undefined;
-
-    if (hasDateChanges) {
-      if (input.startDate !== undefined && input.endDate !== undefined) {
-        command = { type: 'move_task', taskId: id, startDate: input.startDate };
-      } else if (input.startDate !== undefined) {
-        command = { type: 'resize_task', taskId: id, anchor: 'start', date: input.startDate };
-      } else {
-        command = { type: 'resize_task', taskId: id, anchor: 'end', date: input.endDate! };
-      }
-    } else {
-      command = {
-        type: 'update_task_fields',
-        taskId: id,
-        fields: {
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.color !== undefined ? { color: input.color } : {}),
-          ...(input.parentId !== undefined ? { parentId: input.parentId ?? null } : {}),
-          ...(input.progress !== undefined ? { progress: input.progress } : {}),
-          ...(input.dependencies !== undefined ? { dependencies: input.dependencies } : {}),
-          ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
-        },
+    if (input.taskIds && input.taskIds.length > 0) {
+      const taskIdSet = new Set(input.taskIds);
+      tasks = allTasks.filter((task) => taskIdSet.has(task.id));
+      scope = {
+        mode: 'task_ids',
+        taskIds: input.taskIds,
+        returnedTaskCount: tasks.length,
       };
-    }
-
-    const response = await commitAgentCommand(resolvedProjectId, command);
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const updateResult = {
-      task: response.result.snapshot.tasks.find(t => t.id === id),
-      changedTasks: response.result.changedTaskIds
-        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-        .filter((t): t is NonNullable<typeof t> => t !== undefined),
-      changedIds: response.result.changedTaskIds,
-    };
-
-    await writeMcpDebugLog('update_task_completed', {
-      id,
-      input,
-      updateResult,
-      viaCommandService: true,
-      newVersion: response.newVersion,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            task: updateResult.task,
-            message: 'Task updated successfully',
-            changedTasks: updateResult.changedTasks,
-            changedIds: updateResult.changedIds,
-          }, null, 2),
-        },
-      ],
-    };
-  }
-
-  if (name === 'move_task') {
-    const { taskId, startDate, projectId: argProjectId } = args as {
-      taskId: string;
-      startDate: string;
-      projectId?: string;
-    };
-    const resolvedProjectId = resolveProjectId(argProjectId);
-
-    if (!taskId) {
-      throw new Error(`[Permanent] Missing required parameter: taskId.
-Reason: Task ID is required to identify which task to move.
-Fix: Provide the task ID as a string parameter.`);
-    }
-    if (!isValidDateFormat(startDate)) {
-      throw new Error(`[Permanent] Invalid startDate format: ${startDate}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-
-    const response = await commitAgentCommand(resolvedProjectId, { type: 'move_task', taskId, startDate });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const result = {
-      task: response.result.snapshot.tasks.find(t => t.id === taskId),
-      changedTasks: response.result.changedTaskIds
-        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-        .filter((t): t is NonNullable<typeof t> => t !== undefined),
-      changedIds: response.result.changedTaskIds,
-    };
-
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  }
-
-  if (name === 'resize_task') {
-    const { taskId, anchor, date, projectId: argProjectId } = args as {
-      taskId: string;
-      anchor: 'start' | 'end';
-      date: string;
-      projectId?: string;
-    };
-    const resolvedProjectId = resolveProjectId(argProjectId);
-
-    if (!taskId) {
-      throw new Error(`[Permanent] Missing required parameter: taskId.
-Reason: Task ID is required to identify which task to resize.
-Fix: Provide the task ID as a string parameter.`);
-    }
-    if (anchor !== 'start' && anchor !== 'end') {
-      throw new Error(`[Permanent] Invalid anchor: ${String(anchor)}.
-Reason: Anchor must be either "start" or "end".
-Fix: Use anchor="start" or anchor="end".`);
-    }
-    if (!isValidDateFormat(date)) {
-      throw new Error(`[Permanent] Invalid date format: ${date}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-
-    const response = await commitAgentCommand(resolvedProjectId, { type: 'resize_task', taskId, anchor, date });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const result = {
-      task: response.result.snapshot.tasks.find(t => t.id === taskId),
-      changedTasks: response.result.changedTaskIds
-        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-        .filter((t): t is NonNullable<typeof t> => t !== undefined),
-      changedIds: response.result.changedTaskIds,
-    };
-
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  }
-
-  if (name === 'recalculate_schedule') {
-    const { taskId, projectId: argProjectId } = args as {
-      taskId?: string;
-      projectId?: string;
-    };
-    const resolvedProjectId = resolveProjectId(argProjectId);
-
-    const response = await commitAgentCommand(resolvedProjectId, { type: 'recalculate_schedule', taskId });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const result = {
-      task: taskId ? response.result.snapshot.tasks.find(t => t.id === taskId) : undefined,
-      changedTasks: response.result.changedTaskIds
-        .map(cid => response.result.snapshot.tasks.find(t => t.id === cid))
-        .filter((t): t is NonNullable<typeof t> => t !== undefined),
-      changedIds: response.result.changedTaskIds,
-    };
-
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  }
-
-  // delete_task tool
-  if (name === 'delete_task') {
-    const { id } = args as { id: string };
-    if (!id) {
-      throw new Error(`[Permanent] Missing required parameter: id.
-Reason: Task ID is required to identify which task to delete.
-Fix: Provide the task ID as a string parameter.`);
-    }
-
-    const resolvedProjectId = resolveProjectId(undefined);
-    const response = await commitAgentCommand(resolvedProjectId, { type: 'delete_task', taskId: id });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      deletedTaskId: id,
-      viaCommandService: true,
-      changedIds: response.result.changedTaskIds,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ success: true, deleted: id, changedIds: response.result.changedTaskIds }, null, 2),
-        },
-      ],
-    };
-  }
-
-  // create_tasks_batch tool
-  if (name === 'create_tasks_batch') {
-    const input = args as unknown as CreateTasksBatchInput;
-    const { projectId: argProjectId } = args as { projectId?: string };
-    const resolvedProjectId = resolveProjectId(argProjectId);
-
-    console.error('[CREATE_TASKS_BATCH DEBUG] argProjectId:', argProjectId, 'env.PROJECT_ID:', process.env.PROJECT_ID, 'resolvedProjectId:', resolvedProjectId);
-    await writeMcpDebugLog('create_tasks_batch_resolved_project', {
-      argProjectId,
-      envProjectId: process.env.PROJECT_ID,
-      resolvedProjectId,
-      input,
-    });
-
-    // Validate baseStartDate format
-    if (!isValidDateFormat(input.baseStartDate)) {
-      throw new Error(`[Permanent] Invalid baseStartDate format: ${input.baseStartDate}.
-Expected: YYYY-MM-DD (ISO date format).
-Fix: Use format like 2026-03-18.`);
-    }
-
-    // Validate workTypes
-    if (!input.workTypes || input.workTypes.length === 0) {
-      throw new Error(`[Permanent] workTypes must be a non-empty array.
-Reason: At least one work type is required to create tasks.
-Fix: Provide workTypes array with at least one item (e.g., [{ name: "Foundation", duration: 5 }]).`);
-    }
-
-    // Validate repeatBy has at least one repeat parameter
-    const repeatKeys = Object.keys(input.repeatBy);
-    if (repeatKeys.length === 0) {
-      throw new Error(`[Permanent] repeatBy must contain at least one repeat parameter.
-Reason: Need at least one dimension to repeat tasks across (sections, floors, etc.).
-Fix: Provide repeatBy object with at least one array (e.g., { sections: [1, 2, 3] }).`);
-    }
-
-    const streams = input.streams || 1;
-    const nameTemplate = input.nameTemplate || '{workType} {section} секция {floor} этаж';
-
-    // Calculate total combinations for stream distribution
-    const sections = input.repeatBy.sections || [1];
-    const floors = input.repeatBy.floors || [1];
-    const totalCombinations = sections.length * floors.length * input.workTypes.length;
-    const combinationsPerStream = Math.ceil(totalCombinations / streams);
-
-    const createdTasks: string[] = [];
-    const failedTasks: Array<{ index: number; error: string }> = [];
-    let combinationIndex = 0;
-    const previousTaskIds: (string | null)[] = new Array(streams).fill(null);
-
-    // Generate all task combinations
-    for (const section of sections) {
-      for (const floor of floors) {
-        for (const workType of input.workTypes) {
-          const streamIndex = Math.floor(combinationIndex / combinationsPerStream);
-          const currentStream = Math.min(streamIndex, streams - 1);
-
-          try {
-            // Calculate task dates
-            let startDate: string;
-            if (combinationIndex === 0 || previousTaskIds[currentStream] === null) {
-              startDate = input.baseStartDate;
-            } else {
-              const prevTask = await taskService.get(previousTaskIds[currentStream]!);
-              if (!prevTask) {
-                startDate = input.baseStartDate;
-              } else {
-                const prevEnd = new Date(prevTask.endDate);
-                prevEnd.setDate(prevEnd.getDate() + 1);
-                startDate = prevEnd.toISOString().split('T')[0];
-              }
-            }
-
-            // Calculate end date from duration
-            const start = new Date(startDate);
-            const end = new Date(start);
-            end.setDate(start.getDate() + workType.duration - 1);
-            const endDate = end.toISOString().split('T')[0];
-
-            // Generate task name from template
-            const taskName = nameTemplate
-              .replace('{workType}', workType.name)
-              .replace('{section}', String(section))
-              .replace('{floor}', String(floor));
-
-            // Create dependencies (FS link to previous task in same stream)
-            const dependencies: TaskDependency[] = [];
-            if (previousTaskIds[currentStream]) {
-              dependencies.push({
-                taskId: previousTaskIds[currentStream]!,
-                type: 'FS',
-              });
-            }
-
-            const response = await commitAgentCommand(resolvedProjectId, {
-              type: 'create_task',
-              task: {
-                name: taskName,
-                startDate,
-                endDate,
-                dependencies,
-              },
-            });
-
-            if (!response.accepted) {
-              throw new Error(`Command rejected: ${response.reason}`);
-            }
-
-            const createdTask = response.result.snapshot.tasks.find((task) =>
-              response.result.changedTaskIds.includes(task.id),
-            );
-
-            if (!createdTask) {
-              throw new Error('Created task missing from authoritative snapshot');
-            }
-
-            createdTasks.push(createdTask.id);
-            previousTaskIds[currentStream] = createdTask.id;
-
-          } catch (error) {
-            failedTasks.push({
-              index: combinationIndex,
-              error: error instanceof Error ? error.message : String(error),
-            });
+    } else if (input.branchRootId) {
+      const descendants = new Set<string>([input.branchRootId]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const task of allTasks) {
+          if (task.parentId && descendants.has(task.parentId) && !descendants.has(task.id)) {
+            descendants.add(task.id);
+            changed = true;
           }
-
-          combinationIndex++;
         }
+      }
+      tasks = allTasks.filter((task) => descendants.has(task.id));
+      scope = {
+        mode: 'branch_root',
+        branchRootId: input.branchRootId,
+        returnedTaskCount: tasks.length,
+      };
+    } else if (input.startDate || input.endDate) {
+      const startDate = input.startDate ?? '0000-01-01';
+      const endDate = input.endDate ?? '9999-12-31';
+      tasks = allTasks.filter((task) => task.startDate <= endDate && task.endDate >= startDate);
+      scope = {
+        mode: 'date_window',
+        startDate: input.startDate,
+        endDate: input.endDate,
+        returnedTaskCount: tasks.length,
+      };
+    } else {
+      return jsonResult(buildRejectedResult(summary.version, 'invalid_request'));
+    }
+
+    return jsonResult({
+      version: summary.version,
+      scope,
+      tasks,
+    });
+  }
+
+  if (name === 'create_tasks') {
+    const input = args as unknown as CreateTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!input.tasks || input.tasks.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    for (const task of input.tasks) {
+      if (!isValidDateFormat(task.startDate) || !isValidDateFormat(task.endDate) || !isValidDateRange(task.startDate, task.endDate)) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
       }
     }
 
-    const result: BatchCreateResult = {
-      created: createdTasks.length,
-      taskIds: createdTasks,
-    };
+    const { baseVersion, response } = await deps.commitNormalizedCommand(
+      resolvedProjectId,
+      input.tasks.length === 1
+        ? { type: 'create_task', task: input.tasks[0] }
+        : { type: 'create_tasks_batch', tasks: input.tasks },
+    );
 
-    if (failedTasks.length > 0) {
-      result.failed = failedTasks;
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            ...result,
-            message: `Batch creation complete: ${createdTasks.length} tasks created${failedTasks.length > 0 ? `, ${failedTasks.length} failed` : ''}`,
-          }, null, 2),
-        },
-      ],
-    };
+    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
   }
 
-  // get_conversation_history tool
+  if (name === 'update_tasks') {
+    const input = args as unknown as UpdateTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!input.updates || input.updates.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    const commands: ProjectCommand[] = [];
+    for (const update of input.updates) {
+      const hasMetadata = update.name !== undefined || update.color !== undefined || update.progress !== undefined;
+      if (!update.id || !hasMetadata) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+
+      commands.push({
+        type: 'update_task_fields',
+        taskId: update.id,
+        fields: {
+          ...(update.name !== undefined ? { name: update.name } : {}),
+          ...(update.color !== undefined ? { color: update.color } : {}),
+          ...(update.progress !== undefined ? { progress: update.progress } : {}),
+        },
+      });
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
+  }
+
+  if (name === 'move_tasks') {
+    const input = args as unknown as MoveTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!input.moves || input.moves.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    const commands: ProjectCommand[] = [];
+    for (const move of input.moves) {
+      if (!move.taskId) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+      if (move.parentId !== undefined && move.sortOrder !== undefined) {
+        return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
+      }
+
+      const command: ProjectCommand | null = move.parentId !== undefined
+        ? { type: 'reparent_task', taskId: move.taskId, newParentId: move.parentId ?? null }
+        : move.sortOrder !== undefined
+          ? { type: 'reorder_tasks', updates: [{ taskId: move.taskId, sortOrder: move.sortOrder }] }
+          : null;
+
+      if (!command) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+
+      commands.push(command);
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
+  }
+
+  if (name === 'delete_tasks') {
+    const input = args as unknown as DeleteTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!input.taskIds || input.taskIds.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    const { baseVersion, response } = await deps.commitNormalizedCommand(resolvedProjectId, {
+      type: input.taskIds.length === 1 ? 'delete_task' : 'delete_tasks',
+      ...(input.taskIds.length === 1
+        ? { taskId: input.taskIds[0] }
+        : { taskIds: input.taskIds }),
+    } as ProjectCommand);
+
+    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+  }
+
+  if (name === 'link_tasks') {
+    const input = args as unknown as LinkTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!input.links || input.links.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    const commands: ProjectCommand[] = [];
+    for (const link of input.links) {
+      if (!link.predecessorTaskId || !link.successorTaskId) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+      if (link.type && !isValidDependencyType(link.type)) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+
+      commands.push({
+        type: 'create_dependency',
+        taskId: link.successorTaskId,
+        dependency: {
+          taskId: link.predecessorTaskId,
+          type: link.type ?? 'FS',
+          lag: link.lag ?? 0,
+        },
+      });
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
+  }
+
+  if (name === 'unlink_tasks') {
+    const input = args as unknown as UnlinkTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!input.links || input.links.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    const commands: ProjectCommand[] = [];
+    for (const link of input.links) {
+      if (!link.predecessorTaskId || !link.successorTaskId) {
+        return jsonResult(buildRejectedResult(0, 'invalid_request'));
+      }
+
+      commands.push({
+        type: 'remove_dependency',
+        taskId: link.successorTaskId,
+        depTaskId: link.predecessorTaskId,
+      });
+    }
+
+    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
+  }
+
+  if (name === 'shift_tasks') {
+    const input = args as unknown as ShiftTasksInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Shift operations are scoped to one project.
+Fix: Provide projectId or set PROJECT_ID.`);
+    }
+    if (!input.shifts || input.shifts.length === 0) {
+      return jsonResult(buildRejectedResult(0, 'invalid_request'));
+    }
+
+    const aggregation = createMutationAggregationState();
+
+    for (const shift of input.shifts) {
+      const task = await deps.taskService.get(shift.taskId);
+      if (!task) {
+        const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+        return jsonResult(finalizeRejectedMutationAggregation(
+          aggregation,
+          summary.version,
+          'not_found',
+          undefined,
+          input.includeSnapshot,
+        ));
+      }
+
+      const prisma = deps.getPrisma();
+      const opts = await deps.getProjectScheduleOptionsForProject(prisma, resolvedProjectId);
+      const startDate = parseDateOnly(task.startDate);
+      const mode = shift.mode ?? (opts.businessDays ? 'working' : 'calendar');
+      const nextStart = mode === 'working' && opts.weekendPredicate
+        ? shiftBusinessDayOffset(startDate, shift.delta, opts.weekendPredicate)
+        : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + shift.delta));
+
+      const { baseVersion, response } = await deps.commitNormalizedCommand(resolvedProjectId, {
+        type: 'move_task',
+        taskId: shift.taskId,
+        startDate: formatDateOnly(nextStart),
+      });
+      addMutationResultToAggregation(aggregation, baseVersion, response);
+
+      if (!response.accepted) {
+        return jsonResult(finalizeRejectedMutationAggregation(
+          aggregation,
+          baseVersion,
+          normalizeRejectionReason(response.reason),
+          response.snapshot,
+          input.includeSnapshot,
+        ));
+      }
+    }
+
+    return jsonResult(finalizeAcceptedMutationAggregation(aggregation, input.includeSnapshot));
+  }
+
+  if (name === 'recalculate_project') {
+    const input = args as RecalculateProjectInput;
+    const resolvedProjectId = deps.resolveProjectId(input.projectId);
+    const { baseVersion, response } = await deps.commitNormalizedCommand(resolvedProjectId, { type: 'recalculate_schedule' });
+    return jsonResult(buildMutationResult(baseVersion, response, input.includeSnapshot));
+  }
+
+  if (name === 'validate_schedule') {
+    const { projectId: argProjectId } = args as ValidateScheduleInput;
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
+
+    if (!resolvedProjectId) {
+      throw new Error(`[Permanent] Project ID is required.
+Reason: Validation is scoped to one project.
+Fix: Provide projectId or set PROJECT_ID.`);
+    }
+
+    const summary = await deps.getProjectSnapshotSummary(resolvedProjectId);
+    const allTasks = await deps.listAllProjectTasks(resolvedProjectId);
+    const validation = validateDependencies(allTasks.map((task) => ({
+      ...task,
+      dependencies: (task.dependencies ?? []).map((dependency) => ({
+        ...dependency,
+        lag: dependency.lag ?? 0,
+      })),
+    })));
+
+    const result: ValidateScheduleResult = {
+      version: summary.version,
+      isValid: validation.isValid,
+      errors: validation.errors,
+    };
+
+    return jsonResult(result);
+  }
+
   if (name === 'get_conversation_history') {
     const { projectId: argProjectId, limit } = args as GetConversationHistoryInput & { limit?: number };
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
-    // Validate projectId is available
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
 Reason: Conversation history is scoped to a project.
 Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
     }
 
-    // Validate and clamp limit parameter
     const defaultLimit = 20;
     const maxLimit = 50;
     const messageLimit = Math.min(Math.max(limit ?? defaultLimit, 1), maxLimit);
-
-    // Fetch all messages for the project
     const allMessages = await messageService.list(resolvedProjectId);
-
-    // Return the last N messages (most recent first)
     const recentMessages = allMessages.slice(-messageLimit).reverse();
 
-    await writeMcpDebugLog('tool_call_completed', {
+    await deps.writeMcpDebugLog('tool_call_completed', {
       tool: name,
       resolvedProjectId,
       totalMessages: allMessages.length,
@@ -1166,251 +901,60 @@ Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
       limit: messageLimit,
     });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            messages: recentMessages,
-            total: allMessages.length,
-            returned: recentMessages.length,
-            limit: messageLimit,
-          }, null, 2),
-        },
-      ],
-    };
+    return jsonResult({
+      messages: recentMessages,
+      total: allMessages.length,
+      returned: recentMessages.length,
+      limit: messageLimit,
+    });
   }
 
-  // add_message tool
   if (name === 'add_message') {
     const input = args as unknown as AddMessageInput;
     const { projectId: argProjectId } = args as { projectId?: string };
-    const resolvedProjectId = resolveProjectId(argProjectId);
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
 
-    // Validate projectId is available
     if (!resolvedProjectId) {
       throw new Error(`[Permanent] Project ID is required.
 Reason: Conversation history is scoped to a project.
 Fix: Provide projectId parameter or set PROJECT_ID environment variable.`);
     }
 
-    // Validate content
     if (!input.content || input.content.trim().length === 0) {
       throw new Error(`[Permanent] content is required and must be non-empty.
 Reason: Empty messages cannot be recorded to conversation history.
 Fix: Provide a non-empty content string with your response.`);
     }
 
-    // Add the message (always as 'assistant' role)
     const message = await messageService.add('assistant', input.content.trim(), resolvedProjectId);
 
-    await writeMcpDebugLog('tool_call_completed', {
+    await deps.writeMcpDebugLog('tool_call_completed', {
       tool: name,
       resolvedProjectId,
       messageId: message.id,
       contentLength: message.content.length,
     });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            message,
-            success: true,
-          }, null, 2),
-        },
-      ],
-    };
+    return jsonResult({
+      message,
+      success: true,
+    });
   }
 
-  // set_dependency tool
-  if (name === 'set_dependency') {
-    const { taskId, dependsOnTaskId, type = 'FS', lag = 0 } = args as {
-      taskId: string;
-      dependsOnTaskId: string;
-      type?: 'FS' | 'SS' | 'FF' | 'SF';
-      lag?: number;
-    };
-
-    if (!taskId) {
-      throw new Error(`[Permanent] Missing required parameter: taskId.
-Reason: Task ID is required to identify which task should have the dependency.
-Fix: Provide the successor task ID as a string parameter.`);
-    }
-
-    if (!dependsOnTaskId) {
-      throw new Error(`[Permanent] Missing required parameter: dependsOnTaskId.
-Reason: Dependency task ID is required to identify which task this one depends on.
-Fix: Provide the predecessor task ID as a string parameter.`);
-    }
-
-    if (!isValidDependencyType(type)) {
-      throw new Error(`[Permanent] Invalid dependency type: ${type}.
-Must be one of: FS, SS, FF, SF.
-Fix: Use valid dependency type.`);
-    }
-
-    // Verify both tasks exist
-    const tasks = await taskService.list(undefined, undefined, 1000, 0);
-    const taskExists = tasks.tasks.find(t => t.id === taskId);
-    const depTaskExists = tasks.tasks.find(t => t.id === dependsOnTaskId);
-
-    if (!taskExists) {
-      throw new Error(`[Permanent] Task not found: ${taskId}.
-Reason: The successor task does not exist.
-Fix: Call get_tasks to list available task IDs.`);
-    }
-
-    if (!depTaskExists) {
-      throw new Error(`[Permanent] Dependency task not found: ${dependsOnTaskId}.
-Reason: The predecessor task does not exist.
-Fix: Call get_tasks to list available task IDs.`);
-    }
-
-    // Validate dependency doesn't already exist (get with full=true to load existing dependencies)
-    const existingTask = await taskService.get(taskId, true);
-    const existingDep = existingTask?.dependencies?.find(d => d.taskId === dependsOnTaskId);
-    if (existingDep) {
-      throw new Error(`[Permanent] Dependency already exists: task ${taskId} already depends on ${dependsOnTaskId}.
-Reason: Duplicate dependencies are not allowed.
-Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
-    }
-
-    // Create the dependency by updating the task with new dependencies array
-    const currentDependencies = existingTask?.dependencies || [];
-    const updatedDependencies = [
-      ...currentDependencies.filter(d => d.taskId !== dependsOnTaskId),
-      { taskId: dependsOnTaskId, type, lag }
-    ];
-
-    const response = await commitAgentCommand(resolveProjectId(undefined), {
-      type: 'create_dependency',
-      taskId,
-      dependency: {
-        taskId: dependsOnTaskId,
-        type,
-        lag,
-      },
-    });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const updatedTask = response.result.snapshot.tasks.find((task) => task.id === taskId);
-
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      taskId,
-      dependsOnTaskId,
-      type,
-      lag,
-      updatedTask,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            success: true,
-            dependency: {
-              taskId,
-              dependsOnTaskId,
-              type,
-              lag,
-            },
-            message: `Dependency created: task ${taskId} now depends on ${dependsOnTaskId} (${type}${lag !== 0 ? ` with ${lag}d lag` : ''})`,
-          }, null, 2),
-        },
-      ],
-    };
-  }
-
-  // remove_dependency tool
-  if (name === 'remove_dependency') {
-    const { taskId, dependsOnTaskId } = args as {
-      taskId: string;
-      dependsOnTaskId: string;
-    };
-
-    if (!taskId) {
-      throw new Error(`[Permanent] Missing required parameter: taskId.
-Reason: Task ID is required to identify which task has the dependency.
-Fix: Provide the task ID as a string parameter.`);
-    }
-
-    if (!dependsOnTaskId) {
-      throw new Error(`[Permanent] Missing required parameter: dependsOnTaskId.
-Reason: Dependency task ID is required to identify which dependency to remove.
-Fix: Provide the dependency task ID as a string parameter.`);
-    }
-
-    // Get current task with full dependencies
-    const existingTask = await taskService.get(taskId, true);
-    if (!existingTask) {
-      throw new Error(`[Permanent] Task not found: ${taskId}.
-Reason: The task does not exist.
-Fix: Call get_tasks to list available task IDs.`);
-    }
-
-    // Check if dependency exists
-    const existingDep = existingTask?.dependencies?.find(d => d.taskId === dependsOnTaskId);
-    if (!existingDep) {
-      throw new Error(`[Permanent] Dependency not found: task ${taskId} does not depend on ${dependsOnTaskId}.
-Reason: The dependency to remove does not exist.
-Fix: Check existing dependencies with get_task(id="${taskId}", full=true).`);
-    }
-
-    // Remove the dependency by updating the task without this dependency
-    const updatedDependencies = (existingTask.dependencies || []).filter(d => d.taskId !== dependsOnTaskId);
-    const response = await commitAgentCommand(resolveProjectId(undefined), {
-      type: 'remove_dependency',
-      taskId,
-      depTaskId: dependsOnTaskId,
-    });
-    if (!response.accepted) {
-      return {
-        content: [{ type: 'text', text: `Command rejected: ${response.reason}` }],
-      };
-    }
-
-    const updatedTask = response.result.snapshot.tasks.find((task) => task.id === taskId);
-
-    await writeMcpDebugLog('tool_call_completed', {
-      tool: name,
-      taskId,
-      dependsOnTaskId,
-      updatedTask,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            success: true,
-            removed: {
-              taskId,
-              dependsOnTaskId,
-            },
-            message: `Dependency removed: task ${taskId} no longer depends on ${dependsOnTaskId}`,
-          }, null, 2),
-        },
-      ],
-    };
-  }
-
-  await writeMcpDebugLog('tool_call_failed', {
+  await deps.writeMcpDebugLog('tool_call_failed', {
     tool: name,
     error: `Unknown tool: ${name}`,
   });
   throw new Error(`[Permanent] Unknown tool: ${name}.
 Reason: Tool name not found in MCP server registry.
-Fix: Check available tools via tools/list request. Valid tools: ping, create_task, get_tasks, get_task, update_task, delete_task, create_tasks_batch, get_conversation_history, add_message, set_dependency, remove_dependency.`);
-});
+Fix: Check available tools via tools/list request and use only the published normalized surface.`);
+}
+
+// Register list tools handler
+server.setRequestHandler(ListToolsRequestSchema, handleListToolsRequest);
+
+// Register call tool handler
+server.setRequestHandler(CallToolRequestSchema, (request) => handleCallToolRequest(request, defaultMcpHandlerDeps));
 
 // Start server with stdio transport
 async function main() {
@@ -1420,7 +964,9 @@ async function main() {
   // Process will stay alive as long as stdio is open
 }
 
-main().catch((error) => {
-  console.error('Server error:', error);
-  process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error('Server error:', error);
+    process.exit(1);
+  });
+}

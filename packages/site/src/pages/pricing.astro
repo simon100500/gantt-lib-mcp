@@ -13,12 +13,10 @@ const plans = [
     ctaLabel: "Войти и начать",
     ctaHref: "https://ai.getgantt.ru/?auth=otp",
     features: [
-      "2 графика",
-      "3 AI-генерации графика",
-      "5 AI-уточнений на каждый график",
-      "Публичная ссылка на 12 часов",
-      "1 ресурс",
+      "1 проект",
+      "20 AI-генераций (разово)",
       "Экспорт в PDF",
+      "Гостевые ссылки",
     ],
   },
   {
@@ -33,14 +31,13 @@ const plans = [
     ctaLabel: "Выбрать Старт",
     ctaHref: "https://ai.getgantt.ru/purchase?plan=start",
     features: [
-      "5 проектов",
-      "10 AI-генераций графика",
-      "20 AI-уточнений на каждый проект",
-      "Бессрочная гостевая ссылка",
-      "Экспорт в PDF и Excel",
-      "До 20 ресурсов",
-      "Пул проектов",
-      "Встраивание через iframe",
+      "3 проекта",
+      "25 AI-генераций в день",
+      "до 5 участников команды",
+      "Архив проектов",
+      "Пул ресурсов",
+      "Экспорт в PDF",
+      "Гостевые ссылки",
     ],
   },
   {
@@ -54,15 +51,13 @@ const plans = [
     ctaLabel: "Выбрать Команду",
     ctaHref: "https://ai.getgantt.ru/purchase?plan=team",
     features: [
-      "20 проектов",
-      "Безлимит AI-генераций и уточнений",
-      "Бессрочная гостевая ссылка",
-      "Экспорт в PDF и Excel",
-      "Безлимит ресурсов",
-      "Пул проектов",
-      "До 5 пользователей в команде",
-      "API",
-      "Встраивание через iframe",
+      "7 проектов",
+      "50 AI-генераций в день",
+      "до 20 участников команды",
+      "Архив проектов",
+      "Пул ресурсов",
+      "Экспорт PDF + Excel",
+      "Гостевые ссылки",
     ],
   },
   {
@@ -76,10 +71,11 @@ const plans = [
     ctaLabel: "Напишите нам",
     ctaHref: "mailto:ai@getgantt.ru?subject=GetGantt%20Enterprise",
     features: [
-      "Всё из Команды",
       "Безлимит проектов",
-      "Безлимит AI-генераций",
-      "До 20 пользователей в команде",
+      "100 AI-генераций в день",
+      "20 участников команды",
+      "Экспорт в PDF, Excel и API",
+      "Приоритетная поддержка",
     ],
   },
 ];
@@ -92,36 +88,37 @@ const compareRows = [
     values: ["0 ₽", "1 490 ₽/мес", "4 990 ₽/мес", "По запросу"],
   },
   {
-    label: "Количество проектов",
-    values: ["2 графика", "5 проектов", "20 проектов", "Безлимит"],
+    label: "Проекты",
+    values: ["1 проект", "3 проекта", "7 проектов", "Безлимит"],
   },
   {
     label: "AI-генерации",
-    values: ["3", "10", "Безлимит", "Безлимит"],
+    values: ["20 (всего)", "25 в день", "50 в день", "100 в день"],
   },
   {
     label: "AI-уточнения",
-    values: ["5 на график", "20 на проект", "Безлимит", "Безлимит"],
-  },
-  {
-    label: "Ссылка для гостей",
-    values: ["12 часов", "Без срока", "Без срока", "Без срока"],
+    values: ["Безлимит", "Безлимит", "Безлимит", "Безлимит"],
   },
   {
     label: "Экспорт",
-    values: ["PDF", "PDF, Excel", "PDF, Excel", "PDF, Excel"],
+    values: ["PDF", "PDF", "PDF, Excel", "PDF, Excel, API"],
   },
   {
     label: "Ресурсы",
-    values: ["1", "20", "Безлимит", "Безлимит"],
+    values: ["Безлимит", "Безлимит", "Безлимит", "Безлимит"],
   },
   {
     label: "Команда",
-    values: ["1 пользователь", "1 пользователь", "До 5", "От 6 и более"],
+    values: [
+      "1 пользователь",
+      "1 пользователь",
+      "5 участников",
+      "20 участников",
+    ],
   },
   {
-    label: "API / iframe",
-    values: ["-", "iframe", "API, iframe", "API, iframe"],
+    label: "Гостевые ссылки",
+    values: ["—", "Да", "Да", "Да"],
   },
 ];
 ---
@@ -234,15 +231,22 @@ const compareRows = [
         }
       </div>
 
-      <div class="mt-8 rounded-[28px] border border-border bg-slate-50 p-6 shadow-sm">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        class="mt-8 rounded-[28px] border border-border bg-slate-50 p-6 shadow-sm"
+      >
+        <div
+          class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div>
             <h2 class="text-xl font-semibold text-foreground">
               Корпоративный от 12 900 ₽
-              <span class="ml-1 text-sm font-normal text-muted-foreground">/ в мес</span>
+              <span class="ml-1 text-sm font-normal text-muted-foreground"
+                >/ в мес</span
+              >
             </h2>
             <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Безлимит проектов, расширенная команда и приоритетная поддержка для постоянного портфеля.
+              Безлимит проектов, расширенная команда и приоритетная поддержка
+              для постоянного портфеля.
             </p>
           </div>
           <a
@@ -253,7 +257,6 @@ const compareRows = [
           </a>
         </div>
       </div>
-
     </div>
   </section>
 
@@ -350,7 +353,6 @@ const compareRows = [
           Посмотреть FAQ
         </a>
       </div>
-
     </div>
   </section>
 
