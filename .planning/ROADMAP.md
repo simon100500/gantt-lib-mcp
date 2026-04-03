@@ -141,7 +141,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 30. Constraint Engine | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
-| 32. Backend Enforcement | v5.0 | 2/2 | Complete   | 2026-04-03 |
+| 32. Backend Enforcement | v5.0 | 2/2 | Complete    | 2026-04-03 |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |

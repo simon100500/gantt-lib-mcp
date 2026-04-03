@@ -23,9 +23,9 @@ AI может программно управлять диаграммами Г�
 
 ---
 
-## Current State (Phase 31 Complete)
+## Current State (Phase 32 Complete)
 
-**Status:** ✅ Phase 31 Usage Tracking verified passed (2026-04-03)
+**Status:** ✅ Phase 32 Backend Enforcement verified passed (2026-04-03)
 
 **Tech Stack:**
 - Monorepo (npm workspaces): packages/mcp, packages/server, packages/web, packages/site
@@ -95,6 +95,12 @@ AI может программно управлять диаграммами Г�
 - ✅ Authenticated `GET /api/usage` exposes normalized usage for frontend consumers
 - ✅ Zustand billing store has typed normalized usage state and a dedicated `fetchUsage()` action
 
+**Features Shipped (Phase 32 Backend Enforcement):**
+- ✅ Shared HTTP constraint guards deny before mutation logic on chat, project create/restore, and command commit routes
+- ✅ Structured denial payloads expose `remaining`, `plan`, `planLabel`, and `upgradeHint` across HTTP and MCP surfaces
+- ✅ MCP mutation tools now enforce expired-plan write blocking before command dispatch
+- ✅ Read-only MCP tools remain available while write tools are denied under enforcement
+
 **Known Gaps:**
 - Phase 9 Plan 6: Auth UI (OTP modal, project switcher) — backend complete, UI pending
 
@@ -103,7 +109,7 @@ AI может программно управлять диаграммами Г�
 ## Next Milestone Goals
 
 **v5.0 Plan Constraints** — в разработке
-Phase 31 is complete: canonical usage tracking semantics are now authoritative and the frontend can read normalized usage through `/api/usage`. Next up is Phase 32 (Backend Enforcement) to block protected API and MCP actions when limits are exceeded.
+Phase 32 is complete: backend and MCP mutation surfaces now enforce tariff limits before mutation execution and return a shared structured denial contract. Next up is Phase 35 (Scheduling Core Adoption) in the current roadmap ordering.
 
 ---
 
@@ -149,6 +155,7 @@ Phase 31 is complete: canonical usage tracking semantics are now authoritative a
 
 - ✓ ENG-01 through ENG-04 — Constraint Engine — v5.0
 - ✓ TRK-01 through TRK-03 — Usage Tracking — validated in Phase 31
+- ✓ ENF-01 through ENF-03 — Backend Enforcement — validated in Phase 32
 
 ### Out of Scope
 
@@ -221,4 +228,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 — phase 31 completed and PROJECT state evolved*
+*Last updated: 2026-04-03 — phase 32 completed and PROJECT state evolved*
