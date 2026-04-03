@@ -28,6 +28,9 @@ interface ProjectMenuProps {
   hasShareToken: boolean;
   currentProjectLabel: string | undefined;
   onCreateProject: () => void | Promise<void>;
+  createProjectDisabled?: boolean;
+  createProjectTitle?: string;
+  projectUsageLabel?: string | null;
   onSwitchProject: (projectId: string) => void | Promise<void>;
   onArchiveProject: (projectId: string) => void | Promise<void>;
   onRestoreProject: (projectId: string) => void | Promise<void>;
@@ -44,6 +47,9 @@ export function ProjectMenu({
   hasShareToken,
   currentProjectLabel,
   onCreateProject,
+  createProjectDisabled = false,
+  createProjectTitle,
+  projectUsageLabel,
   onSwitchProject,
   onArchiveProject,
   onRestoreProject,
@@ -326,6 +332,9 @@ export function ProjectMenu({
             projects={auth.isAuthenticated && auth.project ? auth.projects : []}
             onSwitch={handleSwitchInSidebar}
             onCreateNew={() => { void onCreateProject(); }}
+            createDisabled={createProjectDisabled}
+            createTitle={createProjectTitle}
+            projectsUsageLabel={projectUsageLabel}
             onArchive={(projectId) => { void onArchiveProject(projectId); }}
             onRestore={(projectId) => { void onRestoreProject(projectId); }}
             onDelete={(projectId) => { void onDeleteProject(projectId); }}
@@ -433,15 +442,24 @@ export function ProjectMenu({
                   </>
                 )}
                 {!hasShareToken && auth.isAuthenticated && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => void onCreateProject()}
-                    className="hidden h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 sm:flex"
-                    aria-label="Новый проект"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="hidden items-center gap-2 sm:flex">
+                    {projectUsageLabel && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                        {projectUsageLabel}
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => void onCreateProject()}
+                      disabled={createProjectDisabled}
+                      title={createProjectTitle ?? 'Новый проект'}
+                      className="h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-300"
+                      aria-label="Новый проект"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -523,6 +541,9 @@ export function ProjectMenu({
               projects={auth.isAuthenticated && auth.project ? auth.projects : []}
               onSwitch={handleSwitchInOverlay}
               onCreateNew={() => { void onCreateProject(); }}
+              createDisabled={createProjectDisabled}
+              createTitle={createProjectTitle}
+              projectsUsageLabel={projectUsageLabel}
               onArchive={(projectId) => { void onArchiveProject(projectId); }}
               onRestore={(projectId) => { void onRestoreProject(projectId); }}
               onDelete={(projectId) => { void onDeleteProject(projectId); }}

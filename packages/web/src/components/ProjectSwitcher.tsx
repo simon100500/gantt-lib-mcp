@@ -14,6 +14,9 @@ interface ProjectSwitcherProps {
   projects: AuthProject[];
   onSwitch: (projectId: string) => void;
   onCreateNew: () => void;
+  createDisabled?: boolean;
+  createTitle?: string;
+  projectsUsageLabel?: string | null;
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
@@ -140,10 +143,23 @@ interface ProjectSectionProps {
   open: boolean;
   onToggle: () => void;
   onCreateNew?: () => void;
+  createDisabled?: boolean;
+  createTitle?: string;
+  usageLabel?: string | null;
   children: ReactNode;
 }
 
-function ProjectSection({ title, icon, open, onToggle, onCreateNew, children }: ProjectSectionProps) {
+function ProjectSection({
+  title,
+  icon,
+  open,
+  onToggle,
+  onCreateNew,
+  createDisabled = false,
+  createTitle,
+  usageLabel,
+  children,
+}: ProjectSectionProps) {
   return (
     <div className="flex flex-col gap-0.5">
       <button
@@ -158,29 +174,36 @@ function ProjectSection({ title, icon, open, onToggle, onCreateNew, children }: 
             </span>
             <ChevronDown className={cn('absolute inset-0 h-4 w-4 transition-all opacity-0 group-hover:opacity-100', open && 'rotate-180')} />
           </span>
-          <span className="text-xs font-medium">{title}</span>
+          <span className="flex items-center gap-2">
+            <span className="text-xs font-medium">{title}</span>
+            {usageLabel && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                {usageLabel}
+              </span>
+            )}
+          </span>
         </span>
         {onCreateNew ? (
-          <span
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
+            disabled={createDisabled}
             onClick={(event) => {
               event.stopPropagation();
-              onCreateNew();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                event.stopPropagation();
+              if (!createDisabled) {
                 onCreateNew();
               }
             }}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white hover:text-slate-700"
+            className={cn(
+              'flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors',
+              createDisabled
+                ? 'cursor-not-allowed bg-slate-100 text-slate-300'
+                : 'hover:bg-white hover:text-slate-700',
+            )}
             aria-label="Новый проект"
-            title="Новый проект"
+            title={createTitle ?? 'Новый проект'}
           >
             <Plus className="h-3.5 w-3.5" />
-          </span>
+          </button>
         ) : (
           <span className="h-6 w-6 shrink-0" />
         )}
@@ -195,6 +218,9 @@ export function ProjectSwitcher({
   projects,
   onSwitch,
   onCreateNew,
+  createDisabled = false,
+  createTitle,
+  projectsUsageLabel,
   onArchive,
   onRestore,
   onDelete,
@@ -235,6 +261,9 @@ export function ProjectSwitcher({
             open={activeOpen}
             onToggle={() => setActiveOpen((value) => !value)}
             onCreateNew={onCreateNew}
+            createDisabled={createDisabled}
+            createTitle={createTitle}
+            usageLabel={projectsUsageLabel}
           >
             {activeProjects.length > 0 ? (
               activeProjects.map((project) => (

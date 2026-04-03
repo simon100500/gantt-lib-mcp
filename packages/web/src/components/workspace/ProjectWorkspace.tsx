@@ -11,6 +11,7 @@ import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
 import { useChatStore } from '../../stores/useChatStore.ts';
+import type { SubscriptionStatus, UsageStatus } from '../../stores/useBillingStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
@@ -27,6 +28,9 @@ interface ProjectWorkspaceProps {
   hasShareToken: boolean;
   displayConnected: boolean;
   isAuthenticated: boolean;
+  chatUsage?: UsageStatus | SubscriptionStatus | null;
+  chatDisabled?: boolean;
+  chatDisabledReason?: string | null;
   batchUpdate?: UseBatchTaskUpdateResult;
   onSend?: (text: string) => void;
   onLoginRequired: () => void;
@@ -75,6 +79,9 @@ export function ProjectWorkspace({
   hasShareToken,
   displayConnected,
   isAuthenticated,
+  chatUsage = null,
+  chatDisabled = false,
+  chatDisabledReason = null,
   batchUpdate,
   onSend,
   onLoginRequired,
@@ -336,8 +343,10 @@ export function ProjectWorkspace({
               messages={messages}
               streaming={streaming}
               onSend={onSend}
-              disabled={aiThinking}
+              disabled={aiThinking || chatDisabled}
               connected={displayConnected}
+              usage={chatUsage}
+              disabledReason={aiThinking ? null : chatDisabledReason}
               loading={aiThinking}
               onClose={onCloseChat}
               isAuthenticated={isAuthenticated}

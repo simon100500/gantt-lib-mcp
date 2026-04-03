@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
+import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
 
 export interface ChatMessage {
   id: string;
@@ -15,6 +16,8 @@ interface ChatSidebarProps {
   onSend: (text: string) => void;
   disabled: boolean;
   connected: boolean;
+  usage?: UsageStatus | SubscriptionStatus | null;
+  disabledReason?: string | null;
   loading?: boolean;
   onClose?: () => void;
   isAuthenticated?: boolean;
@@ -34,6 +37,8 @@ export function ChatSidebar({
   onSend,
   disabled,
   connected,
+  usage,
+  disabledReason,
   loading,
   onClose,
   isAuthenticated = true,
@@ -45,6 +50,14 @@ export function ChatSidebar({
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
+  const aiUsage = usage?.usage.ai_queries;
+  const aiRemaining = usage?.remaining.ai_queries;
+  const aiUsageLabel = aiUsage?.usageState === "tracked"
+    ? `${aiUsage.used}/${aiUsage.limit === "unlimited" ? "∞" : aiUsage.limit} AI`
+    : aiRemaining?.remainingState === "unlimited"
+      ? "AI без лимита"
+      : null;
+  const resolvedDisabledReason = disabledReason ?? (disabled ? "Assistant думает…" : null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "auto" });
@@ -111,6 +124,11 @@ export function ChatSidebar({
         <span className="text-[12px] font-medium tracking-tight text-slate-600">
           AI ассистент
         </span>
+        {aiUsageLabel && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+            {aiUsageLabel}
+          </span>
+        )}
         <span className="flex-1" />
         {onClose && (
           <button
@@ -214,8 +232,13 @@ export function ChatSidebar({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-3 pr-3 py-2"
+        className="relative flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-3 pr-3 py-2"
       >
+        {resolvedDisabledReason && !loading && (
+          <p className="absolute bottom-16 left-3 right-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            {resolvedDisabledReason}
+          </p>
+        )}
         <textarea
           ref={inputRef}
           name="message"
@@ -224,8 +247,9 @@ export function ChatSidebar({
           onChange={(e) => setInputValue(e.target.value)}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={disabled ? "Assistant думает…" : "Что хотите сделать?"}
+          placeholder={resolvedDisabledReason ?? "Что хотите сделать?"}
           disabled={disabled}
+          title={resolvedDisabledReason ?? undefined}
           autoComplete="off"
           spellCheck={false}
           style={{ maxHeight: "7.5rem" }}
@@ -238,12 +262,15 @@ export function ChatSidebar({
         />
         <button
           type="submit"
+          disabled={disabled || !inputValue.trim()}
+          title={resolvedDisabledReason ?? undefined}
           aria-disabled={disabled || !inputValue.trim()}
           aria-label="Send message"
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground",
             "transition-colors hover:bg-primary/90",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            "disabled:cursor-not-allowed disabled:bg-primary/50",
           )}
         >
           <ArrowUp className="h-4 w-4" />
