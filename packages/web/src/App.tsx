@@ -85,18 +85,6 @@ function buildProactiveConstraintDenial(
   };
 }
 
-function formatProjectUsageLabel(status: BillingConstraintStatus, fallbackProjects: number): string | null {
-  const usage = status?.usage.projects;
-  const remaining = status?.remaining.projects;
-  if (usage?.usageState === 'tracked' && remaining?.remainingState === 'tracked') {
-    return `${usage.used}/${usage.limit} проектов`;
-  }
-  if (remaining?.remainingState === 'unlimited') {
-    return 'Проекты без лимита';
-  }
-  return fallbackProjects > 0 ? `${fallbackProjects} проектов` : null;
-}
-
 function normalizePathname(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith('/')) {
     return pathname.slice(0, -1);
@@ -327,14 +315,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
   const fetchUsage = useBillingStore((state) => state.fetchUsage);
   const billingStatus = usage ?? subscription;
-  const projectUsageLabel = formatProjectUsageLabel(billingStatus, auth.projects.length);
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
-  const createProjectTitle = proactiveProjectDenial
-    ? proactiveProjectDenial.code === 'SUBSCRIPTION_EXPIRED'
-      ? 'Продлите тариф, чтобы снова создавать проекты'
-      : 'Лимит проектов достигнут. Освободите слот или обновите тариф'
-    : 'Новый проект';
   const chatDisabledReason = proactiveChatDenial
     ? proactiveChatDenial.code === 'SUBSCRIPTION_EXPIRED'
       ? 'Подписка истекла. Продлите тариф, чтобы снова отправлять запросы.'
@@ -1007,9 +989,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       hasShareToken={hasShareToken}
       currentProjectLabel={currentProjectLabel}
       onCreateProject={handleCreateProject}
-      createProjectDisabled={Boolean(auth.isAuthenticated && proactiveProjectDenial)}
-      createProjectTitle={createProjectTitle}
-      projectUsageLabel={projectUsageLabel}
       onSwitchProject={handleSwitchProject}
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
