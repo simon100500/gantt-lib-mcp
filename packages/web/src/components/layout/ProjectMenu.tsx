@@ -66,6 +66,7 @@ export function ProjectMenu({
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [projectActionsMenuOpen, setProjectActionsMenuOpen] = useState(false);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
 
   const billingFooter = auth.isAuthenticated ? (
@@ -117,6 +118,54 @@ export function ProjectMenu({
       void fetchSubscription();
     }
   }, [auth.isAuthenticated, fetchSubscription]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accessToken) {
+      setHasAdminAccess(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAdminAccess = async () => {
+      const doFetch = async (token: string) => fetch('/api/admin/access', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let response = await doFetch(auth.accessToken!);
+
+      if (response.status === 401) {
+        const refreshedToken = await useAuthStore.getState().refreshAccessToken();
+        if (!refreshedToken) {
+          if (!cancelled) {
+            setHasAdminAccess(false);
+          }
+          return;
+        }
+        response = await doFetch(refreshedToken);
+      }
+
+      if (!response.ok) {
+        if (!cancelled) {
+          setHasAdminAccess(false);
+        }
+        return;
+      }
+
+      const data = await response.json() as { isAdmin?: boolean };
+      if (!cancelled) {
+        setHasAdminAccess(Boolean(data.isAdmin));
+      }
+    };
+
+    void loadAdminAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.accessToken, auth.isAuthenticated]);
 
   // Cleanup hover timeout on unmount
   useEffect(() => {
@@ -438,6 +487,12 @@ export function ProjectMenu({
                     <User className="mr-2 h-4 w-4" />
                     <span>Аккаунт</span>
                   </DropdownMenuItem>
+                  {hasAdminAccess && (
+                    <DropdownMenuItem onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }} className="text-slate-700 focus:text-slate-900">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Админка</span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => window.location.href = '/purchase'} className="text-slate-700 focus:text-slate-900">
                     <img src="/premium.svg" alt="" className="mr-2 h-4 w-4 inline align-[-3px]" />
                     <span>Тарифы</span>

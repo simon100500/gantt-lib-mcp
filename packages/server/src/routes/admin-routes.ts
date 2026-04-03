@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { getPrisma } from '@gantt/mcp/prisma';
 import { PLAN_CATALOG, type BillingPeriod, type PlanId } from '@gantt/mcp/constraints';
+import { authService } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireAdminAccess } from '../middleware/admin-middleware.js';
 import { BillingService } from '../services/billing-service.js';
@@ -84,6 +85,11 @@ async function buildAdminUserDetails(userId: string) {
         status: true,
         createdAt: true,
         archivedAt: true,
+        _count: {
+          select: {
+            messages: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 20,
@@ -108,12 +114,27 @@ async function buildAdminUserDetails(userId: string) {
       status: project.status,
       createdAt: project.createdAt.toISOString(),
       archivedAt: project.archivedAt?.toISOString() ?? null,
+      messageCount: project._count.messages,
     })),
   };
 }
 
 export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<void> {
   const billingService = new BillingService();
+
+  fastify.get('/api/admin/access', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { email: true },
+    });
+
+    const { isAdminEmail } = await import('../middleware/admin-middleware.js');
+
+    return reply.send({
+      isAdmin: isAdminEmail(user?.email),
+    });
+  });
 
   fastify.get('/api/admin/users', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
     const query = (req.query as { query?: string }).query?.trim();
@@ -270,5 +291,78 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
 
     const details = await buildAdminUserDetails(userId);
     return reply.send(details);
+  });
+
+  fastify.post('/api/admin/projects/:id/share', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const projectId = (req.params as { id: string }).id;
+    const prisma = getPrisma();
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        status: { not: 'deleted' },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const shareLink = await authService.createShareLink(projectId);
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
+    const host = req.headers.host ?? 'localhost:3000';
+    const origin = req.headers.origin ?? `${proto}://${host}`;
+    const url = `${origin}/?share=${encodeURIComponent(shareLink.id)}`;
+
+    return reply.send({
+      token: shareLink.id,
+      url,
+    });
+  });
+
+  fastify.get('/api/admin/projects/:id/messages', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const projectId = (req.params as { id: string }).id;
+    const prisma = getPrisma();
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        status: { not: 'deleted' },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const messages = await prisma.message.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        createdAt: true,
+      },
+    });
+
+    return reply.send({
+      project: {
+        id: project.id,
+        name: project.name,
+      },
+      messages: messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt.toISOString(),
+      })),
+    });
   });
 }

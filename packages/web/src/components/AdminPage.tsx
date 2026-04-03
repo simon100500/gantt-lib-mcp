@@ -76,7 +76,22 @@ interface AdminUserDetails {
     status: string;
     createdAt: string;
     archivedAt: string | null;
+    messageCount: number;
   }>;
+}
+
+interface AdminProjectMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 async function fetchAdminWithRetry(input: string, init: RequestInit = {}): Promise<Response> {
@@ -176,6 +191,11 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
+  const [chatProjectId, setChatProjectId] = useState<string | null>(null);
+  const [chatProjectName, setChatProjectName] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<AdminProjectMessage[]>([]);
+  const [loadingChat, setLoadingChat] = useState(false);
 
   const loadUsers = useCallback(async (nextQuery: string) => {
     setLoading(true);
@@ -229,6 +249,9 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       const data = await response.json() as AdminUserDetails;
       setForbidden(false);
       setSelectedUser(data);
+      setChatProjectId(null);
+      setChatProjectName(null);
+      setChatMessages([]);
       const trackedUsage = data.subscription.usage.ai_queries.usageState === 'tracked'
         ? data.subscription.usage.ai_queries.used ?? 0
         : 0;
@@ -296,6 +319,63 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     }
   }, [loadUsers, query, selectedUserId]);
 
+  const openProjectView = useCallback(async (projectId: string) => {
+    setOpeningProjectId(projectId);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/projects/${projectId}/share`, {
+        method: 'POST',
+      });
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as { url: string };
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : 'Failed to open project');
+    } finally {
+      setOpeningProjectId(null);
+    }
+  }, []);
+
+  const openProjectChat = useCallback(async (projectId: string, projectName: string) => {
+    setLoadingChat(true);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/projects/${projectId}/messages`);
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        project: { id: string; name: string };
+        messages: AdminProjectMessage[];
+      };
+      setChatProjectId(data.project.id);
+      setChatProjectName(data.project.name || projectName);
+      setChatMessages(data.messages);
+    } catch (chatError) {
+      setError(chatError instanceof Error ? chatError.message : 'Failed to load project chat');
+    } finally {
+      setLoadingChat(false);
+    }
+  }, []);
+
   if (!isAuthenticated) {
     return <GuardState isAuthenticated={false} onLoginRequired={onLoginRequired} />;
   }
@@ -311,11 +391,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       </PageHeader>
 
       <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <a href="/" className="inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-800">
-            ← Назад к приложению
-          </a>
-
+        <div className="mx-auto max-w-[1600px] space-y-6">
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
               {error}
@@ -499,7 +575,21 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                     </p>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm font-medium text-slate-900">Последние платежи</div>
+                    <div className="mt-3 space-y-2">
+                      {selectedUser.payments.length === 0 ? (
+                        <div className="text-sm text-slate-400">Платежей нет.</div>
+                      ) : selectedUser.payments.slice(0, 10).map((payment) => (
+                        <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                          <div className="font-medium text-slate-900">{PLAN_LABELS[payment.plan as PlanId] ?? payment.plan}</div>
+                          <div className="mt-1 text-slate-500">{payment.period} • {payment.status} • {formatDate(payment.created_at)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
                     <div className="rounded-2xl border border-slate-200 p-4">
                       <div className="text-sm font-medium text-slate-900">Последние проекты</div>
                       <div className="mt-3 space-y-2">
@@ -507,22 +597,93 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                           <div className="text-sm text-slate-400">Проектов нет.</div>
                         ) : selectedUser.projects.map((project) => (
                           <div key={project.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
-                            <div className="font-medium text-slate-900">{project.name}</div>
-                            <div className="mt-1 text-slate-500">{project.status} • {formatDate(project.createdAt)}</div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-900">{project.name}</div>
+                                <div className="mt-1 text-slate-500">{project.status} • {formatDate(project.createdAt)}</div>
+                              </div>
+                              <div className="flex shrink-0 gap-2">
+                                <button
+                                  type="button"
+                                  disabled={loadingChat && chatProjectId === project.id}
+                                  onClick={() => void openProjectChat(project.id, project.name)}
+                                  className={`rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                    chatProjectId === project.id
+                                      ? 'border-primary bg-primary/[0.08] text-primary'
+                                      : 'border-slate-200 text-slate-700 hover:bg-white'
+                                  }`}
+                                >
+                                  {loadingChat && chatProjectId === project.id ? 'Загрузка…' : `Чат (${project.messageCount ?? 0})`}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={openingProjectId === project.id}
+                                  onClick={() => void openProjectView(project.id)}
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {openingProjectId === project.id ? 'Открытие…' : 'Открыть'}
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 p-4">
-                      <div className="text-sm font-medium text-slate-900">Последние платежи</div>
-                      <div className="mt-3 space-y-2">
-                        {selectedUser.payments.length === 0 ? (
-                          <div className="text-sm text-slate-400">Платежей нет.</div>
-                        ) : selectedUser.payments.slice(0, 10).map((payment) => (
-                          <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
-                            <div className="font-medium text-slate-900">{PLAN_LABELS[payment.plan as PlanId] ?? payment.plan}</div>
-                            <div className="mt-1 text-slate-500">{payment.period} • {payment.status} • {formatDate(payment.created_at)}</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-slate-900">
+                          {chatProjectName ? `Чат проекта: ${chatProjectName}` : 'Чат проекта'}
+                        </div>
+                        {chatProjectName && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChatProjectId(null);
+                              setChatProjectName(null);
+                              setChatMessages([]);
+                            }}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            Очистить
+                          </button>
+                        )}
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {!chatProjectId ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
+                            Выберите проект и нажмите «Чат».
+                          </div>
+                        ) : loadingChat ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
+                            Загрузка чата…
+                          </div>
+                        ) : chatMessages.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
+                            В этом проекте пока нет сообщений.
+                          </div>
+                        ) : chatMessages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                                message.role === 'user'
+                                  ? 'border border-primary/15 bg-primary/[0.08] text-slate-900'
+                                  : 'border border-slate-200 bg-slate-50 text-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="font-medium text-slate-900">
+                                  {message.role === 'user' ? 'Пользователь' : 'Ассистент'}
+                                </span>
+                                <span className="text-xs text-slate-500">{formatTime(message.createdAt)}</span>
+                              </div>
+                              <div className="mt-2 whitespace-pre-wrap break-words leading-6">
+                                {message.content}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
