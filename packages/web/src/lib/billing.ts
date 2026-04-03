@@ -1,16 +1,18 @@
-import { PLAN_CATALOG, type BillingPeriod, type PlanId } from '@gantt/mcp/constraints';
-
-export type { BillingPeriod, PlanId } from '@gantt/mcp/constraints';
+export type BillingPeriod = 'monthly' | 'yearly';
+export type PlanId = 'free' | 'start' | 'team' | 'enterprise';
 export type PaidPlanId = 'start' | 'team';
 
-export const PLAN_LABELS: Record<PlanId, string> = Object.fromEntries(
-  Object.entries(PLAN_CATALOG).map(([planId, plan]) => [planId, plan.label]),
-) as Record<PlanId, string>;
+export const PLAN_LABELS: Record<PlanId, string> = {
+  free: 'Бесплатный',
+  start: 'Старт',
+  team: 'Команда',
+  enterprise: 'Корпоративный',
+};
 
 export const PLAN_PRICES: Record<'start' | 'team' | 'enterprise', Record<BillingPeriod, number>> = {
-  start: PLAN_CATALOG.start.pricing,
-  team: PLAN_CATALOG.team.pricing,
-  enterprise: PLAN_CATALOG.enterprise.pricing,
+  start: { monthly: 1490, yearly: 11900 },
+  team: { monthly: 4990, yearly: 47900 },
+  enterprise: { monthly: 12900, yearly: 129000 },
 };
 
 export const PLAN_FEATURES: Record<'start' | 'team' | 'enterprise', string[]> = {
