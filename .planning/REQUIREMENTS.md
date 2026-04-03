@@ -46,6 +46,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 - **GUEST-01**: Guest link management — безлимит для всех, без enforcement нужен
 - **DASH-01**: Usage dashboard page — детальный обзор использования в settings
 - **TRIAL-01**: Trial period для paid планов — 14 дней trial
+- **OVR-01**: Система поддерживает per-user override для любого `limitKey`, а не только для отдельных спецкейсов вроде `projects`
+- **OVR-02**: `ConstraintService` вычисляет effective limit как `user override -> plan default`, сохраняя единое поведение для API, MCP и frontend consumers
+- **OVR-03**: Админка позволяет выставлять, сбрасывать и просматривать overrides, включая `null = follow plan` и effective limit preview
 
 ## Out of Scope
 
@@ -77,10 +80,13 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | GATE-01 | Phase 34 | Pending |
 | GATE-02 | Phase 34 | Pending |
 | GATE-03 | Phase 34 | Pending |
+| OVR-01 | Phase 38 | Pending |
+| OVR-02 | Phase 38 | Pending |
+| OVR-03 | Phase 38 | Pending |
 
 **Coverage:**
-- v5.0 requirements: 16 total
-- Mapped to phases: 16
+- v5.0 requirements: 19 total
+- Mapped to phases: 19
 - Unmapped: 0
 
 ---
