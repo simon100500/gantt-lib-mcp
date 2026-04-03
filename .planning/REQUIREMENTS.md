@@ -28,9 +28,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### Frontend Constraints UX
 
-- [ ] **FUX-01**: Usage indicators показывают remaining/used рядом с ключевыми действиями (projects, AI chat)
-- [ ] **FUX-02**: LimitReachedModal обновлён с контекстной информацией — какой лимит, текущий тариф, сколько стоит апгрейд
-- [ ] **FUX-03**: Proactive UI guards — кнопки создания/disabled при достижении лимита, tooltip объясняет почему
+- [x] **FUX-01**: Usage indicators показывают remaining/used рядом с ключевыми действиями (projects, AI chat)
+- [x] **FUX-02**: LimitReachedModal обновлён с контекстной информацией — какой лимит, текущий тариф, сколько стоит апгрейд
+- [x] **FUX-03**: Proactive UI guards — кнопки создания/disabled при достижении лимита, tooltip объясняет почему
 
 ### Feature Gates
 
@@ -74,9 +74,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | ENF-01 | Phase 32 | Complete |
 | ENF-02 | Phase 32 | Complete |
 | ENF-03 | Phase 32 | Complete |
-| FUX-01 | Phase 33 | Pending |
-| FUX-02 | Phase 33 | Pending |
-| FUX-03 | Phase 33 | Pending |
+| FUX-01 | Phase 33 | Complete |
+| FUX-02 | Phase 33 | Complete |
+| FUX-03 | Phase 33 | Complete |
 | GATE-01 | Phase 34 | Pending |
 | GATE-02 | Phase 34 | Pending |
 | GATE-03 | Phase 34 | Pending |
@@ -91,4 +91,4 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-04-03 after Phase 32 completion*
+*Last updated: 2026-04-04 after Phase 33 completion*

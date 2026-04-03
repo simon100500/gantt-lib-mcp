@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-03
+**Last updated:** 2026-04-04
 
 ## Progress Summary
 
@@ -37,7 +37,7 @@
 - [x] **Phase 30: Constraint Engine** — Config-driven limit system with Prisma persistence — completed 2026-04-03
 - [x] **Phase 31: Usage Tracking** — AI query + project count counters with usage API — completed 2026-04-03
 - [x] **Phase 32: Backend Enforcement** — API middleware + MCP tool guards with structured error responses — completed 2026-04-03
-- [ ] **Phase 33: Frontend Constraints UX** — Usage indicators, limit modals, proactive UI guards
+- [x] **Phase 33: Frontend Constraints UX** — Usage indicators, limit modals, proactive UI guards — completed 2026-04-04
 - [ ] **Phase 34: Feature Gates** — Boolean gates for archive, resource pool, export tiers
 
 <details>
@@ -119,8 +119,12 @@ Plans:
   1. Usage indicators показывают remaining/used рядом с ключевыми действиями (projects list, AI chat)
   2. LimitReachedModal показывает контекстную информацию — какой лимит достигнут, текущий тариф, сколько стоит апгрейд
   3. Кнопки создания/disabled при достижении лимита с tooltip объясняющим причину
-**Plans**: TBD
+**Plans**: 2 plans
 **UI hint**: yes
+
+Plans:
+- [x] 33-01-PLAN.md — Shared frontend constraint contract and contextual limit modal
+- [x] 33-02-PLAN.md — Project and AI usage indicators with proactive disabled guards
 
 ### Phase 34: Feature Gates
 **Goal**: Фичи архив, resource pool и export разделены по тарифам — бесплатный видит upsell, платные получают доступ
@@ -142,7 +146,7 @@ Plans:
 | 30. Constraint Engine | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 32. Backend Enforcement | v5.0 | 2/2 | Complete    | 2026-04-03 |
-| 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
+| 33. Frontend Constraints UX | v5.0 | 2/2 | Complete | 2026-04-04 |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
 | 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
@@ -165,9 +169,9 @@ Plans:
 | ENF-01 | 32 | Complete |
 | ENF-02 | 32 | Complete |
 | ENF-03 | 32 | Complete |
-| FUX-01 | 33 | Pending |
-| FUX-02 | 33 | Pending |
-| FUX-03 | 33 | Pending |
+| FUX-01 | 33 | Complete |
+| FUX-02 | 33 | Complete |
+| FUX-03 | 33 | Complete |
 | GATE-01 | 34 | Pending |
 | GATE-02 | 34 | Pending |
 | GATE-03 | 34 | Pending |
@@ -229,4 +233,4 @@ Plans:
 - [ ] TBD
 
 ---
-*Last updated: 2026-04-03 — Phase 32 completed and ready for verification*
+*Last updated: 2026-04-04 — Phase 33 completed and verified passed*
