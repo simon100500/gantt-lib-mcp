@@ -246,7 +246,7 @@ export function ProjectMenu({
   return (
     <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
       {error && (
-        <div className="absolute left-0 right-0 top-0 z-50 flex items-center justify-center p-2">
+        <div className="pointer-events-none absolute left-0 right-0 top-0 z-50 flex items-center justify-center p-2">
           <div className="max-w-md rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-1.5 text-center text-xs text-destructive shadow-sm">
             {hasShareToken
               ? `Не удалось открыть ссылку: ${error}`
