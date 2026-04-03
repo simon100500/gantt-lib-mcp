@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { AccountPage } from './components/AccountPage.tsx';
 import { AdminPage } from './components/AdminPage.tsx';
+import { DeleteProjectModal } from './components/DeleteProjectModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
@@ -224,6 +225,7 @@ export default function App() {
           onClose={() => setShowEditProjectModal(false)}
         />
       )}
+
     </>
   );
 }
@@ -243,6 +245,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
+  const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
   const [limitModalScenario, setLimitModalScenario] = useState<'free-ai' | 'paid-ai' | 'project-limit' | null>(null);
@@ -602,13 +605,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!project) {
       throw new Error('Project not found');
     }
-
-    const confirmed = window.confirm(`Удалить проект "${project.name}"? Он исчезнет из интерфейса без возможности восстановления.`);
-    if (!confirmed) {
-      return;
-    }
-
-    await auth.deleteProject(projectId);
+    setDeleteProjectDraft({
+      id: projectId,
+      name: project.name,
+    });
   }, [auth]);
 
   const handleSaveProjectName = useCallback(async (newName: string) => {
@@ -900,6 +900,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       <LimitReachedModal
         scenario={limitModalScenario}
         onClose={() => setLimitModalScenario(null)}
+      />
+    )}
+
+    {deleteProjectDraft && (
+      <DeleteProjectModal
+        projectName={deleteProjectDraft.name}
+        onDelete={async () => {
+          await auth.deleteProject(deleteProjectDraft.id);
+          setDeleteProjectDraft(null);
+        }}
+        onClose={() => setDeleteProjectDraft(null)}
       />
     )}
     </>

@@ -6,6 +6,30 @@ export type SidebarMode = 'closed' | 'overlay' | 'sidebar';
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 export type ShareStatus = 'idle' | 'creating' | 'copied' | 'error';
 export type ViewMode = 'day' | 'week' | 'month';
+const SIDEBAR_STATE_KEY = 'gantt_sidebar_state';
+
+function canUseDOM(): boolean {
+  return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+}
+
+function readSidebarState(): SidebarMode {
+  if (!canUseDOM()) {
+    return 'closed';
+  }
+
+  const stored = window.localStorage.getItem(SIDEBAR_STATE_KEY);
+  return stored === 'overlay' || stored === 'sidebar' || stored === 'closed'
+    ? stored
+    : 'closed';
+}
+
+function persistSidebarState(sidebarState: SidebarMode): void {
+  if (!canUseDOM()) {
+    return;
+  }
+
+  window.localStorage.setItem(SIDEBAR_STATE_KEY, sidebarState);
+}
 
 export type WorkspaceMode =
   | { kind: 'guest' }
@@ -82,7 +106,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   showOtpModal: false,
   showEditProjectModal: false,
   showBillingPage: false,
-  sidebarState: 'closed' as SidebarMode,
+  sidebarState: readSidebarState(),
   viewMode: 'day',
   showTaskList: true,
   showChart: true,
@@ -110,7 +134,10 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
   setShowBillingPage: (showBillingPage) => set({ showBillingPage }),
-  setSidebarState: (sidebarState) => set({ sidebarState }),
+  setSidebarState: (sidebarState) => {
+    persistSidebarState(sidebarState);
+    set({ sidebarState });
+  },
   setViewMode: (viewMode) => set({ viewMode }),
   setShowTaskList: (showTaskList) => set({ showTaskList }),
   setShowChart: (showChart) => set({ showChart }),

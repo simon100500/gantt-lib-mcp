@@ -434,14 +434,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   fastify.delete<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
 
-    if (projectId === req.user!.projectId) {
-      return reply.status(409).send({ error: 'Switch away from this project before deleting it' });
-    }
-
     const result = await authService.softDeleteProject(projectId, req.user!.userId);
     if (!result.ok) {
-      if (result.reason === 'not_archived') {
-        return reply.status(409).send({ error: 'Only archived projects can be deleted' });
+      if (result.reason === 'last_project') {
+        return reply.status(409).send({ error: 'Нельзя удалить последний проект' });
       }
       return reply.status(404).send({ error: 'Project not found' });
     }
