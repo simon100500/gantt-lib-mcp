@@ -71,6 +71,9 @@ function createDeps(overrides: Partial<Parameters<typeof handleCallToolRequest>[
       businessDays: false,
       weekendPredicate: undefined,
     }),
+    enforcementService: {
+      evaluateMutationAccess: async () => ({ allowed: true as const }),
+    },
     ...overrides,
   };
 }
@@ -316,5 +319,93 @@ describe('MCP normalized runtime surface', () => {
       changedDependencyIds: [],
       conflicts: [],
     });
+  });
+
+  it('rejects mutating tools with structured limit metadata before command commit', async () => {
+    let commitCalls = 0;
+
+    const payload = parseJsonContent(await handleCallToolRequest(
+      {
+        params: {
+          name: 'create_tasks',
+          arguments: {
+            projectId: 'project-1',
+            tasks: [{ name: 'Blocked', startDate: '2026-04-01', endDate: '2026-04-02' }],
+          },
+        },
+      },
+      createDeps({
+        commitNormalizedCommand: async () => {
+          commitCalls += 1;
+          throw new Error('commitNormalizedCommand should not run when enforcement denies');
+        },
+        enforcementService: {
+          evaluateMutationAccess: async () => ({
+            allowed: false,
+            enforcement: {
+              code: 'SUBSCRIPTION_EXPIRED',
+              limitKey: null,
+              remaining: null,
+              plan: 'team',
+              planLabel: 'Team',
+              upgradeHint: 'Renew to resume mutations.',
+            },
+          }),
+        },
+      }),
+    ));
+
+    assert.equal(commitCalls, 0);
+    assert.equal(payload.status, 'rejected');
+    assert.equal(payload.reason, 'limit_reached');
+    assert.deepEqual(payload.changedTaskIds, []);
+    assert.deepEqual(payload.changedTasks, []);
+    assert.deepEqual(payload.changedDependencyIds, []);
+    assert.deepEqual(payload.conflicts, []);
+    assert.deepEqual(payload.enforcement, {
+      code: 'SUBSCRIPTION_EXPIRED',
+      limitKey: null,
+      remaining: null,
+      plan: 'team',
+      planLabel: 'Team',
+      upgradeHint: 'Renew to resume mutations.',
+    });
+  });
+
+  it('keeps read tools available when mutation enforcement is configured', async () => {
+    let enforcementCalls = 0;
+
+    const payload = parseJsonContent(await handleCallToolRequest(
+      {
+        params: {
+          name: 'get_project_summary',
+          arguments: {
+            projectId: 'project-1',
+          },
+        },
+      },
+      createDeps({
+        enforcementService: {
+          evaluateMutationAccess: async () => {
+            enforcementCalls += 1;
+            return {
+              allowed: false,
+              enforcement: {
+                code: 'SUBSCRIPTION_EXPIRED',
+                limitKey: null,
+                remaining: null,
+                plan: 'team',
+                planLabel: 'Team',
+                upgradeHint: 'Renew to resume mutations.',
+              },
+            };
+          },
+        },
+      }),
+    ));
+
+    assert.equal(enforcementCalls, 0);
+    assert.equal(payload.projectId, 'project-1');
+    assert.equal(payload.version, 11);
   });
 });
