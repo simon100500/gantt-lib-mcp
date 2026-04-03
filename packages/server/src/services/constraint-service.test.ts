@@ -123,6 +123,23 @@ describe('ConstraintService', () => {
     assert.equal(result.remaining.remaining, 0);
   });
 
+  it('reads projects usage from the active project count query', async () => {
+    const stub = createPrismaStub({ 'team-user': 'team' });
+    stub.projectCounts.set('team-user', 5);
+    const service = new ConstraintService({
+      prisma: stub.prisma as never,
+      now: () => new Date('2026-04-02T12:00:00.000Z'),
+    });
+
+    const usage = await service.getUsage('team-user', 'projects');
+
+    assert.equal(usage.usageState, 'tracked');
+    assert.equal(usage.period, 'current');
+    assert.equal(usage.periodBucket, 'active_projects');
+    assert.equal(usage.limit, 7);
+    assert.equal(usage.used, 5);
+  });
+
   it('reports unlimited remaining projects for enterprise users', async () => {
     const stub = createPrismaStub({ 'enterprise-user': 'enterprise' });
     stub.projectCounts.set('enterprise-user', 11);
