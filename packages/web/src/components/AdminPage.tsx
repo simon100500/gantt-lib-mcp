@@ -196,6 +196,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [chatProjectName, setChatProjectName] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AdminProjectMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [activeTab, setActiveTab] = useState<'billing' | 'projects'>('billing');
 
   const loadUsers = useCallback(async (nextQuery: string) => {
     setLoading(true);
@@ -249,6 +250,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       const data = await response.json() as AdminUserDetails;
       setForbidden(false);
       setSelectedUser(data);
+      setActiveTab('billing');
       setChatProjectId(null);
       setChatProjectName(null);
       setChatMessages([]);
@@ -478,117 +480,145 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-sm text-slate-500">Текущий план</div>
-                      <div className="mt-2 text-lg font-semibold text-slate-900">{PLAN_LABELS[selectedUser.subscription.plan]}</div>
-                      <div className="mt-1 text-sm text-slate-500">До {formatDate(selectedUser.subscription.periodEnd)}</div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-sm text-slate-500">AI usage</div>
-                      <div className="mt-2 text-lg font-semibold text-slate-900">
-                        {selectedUser.subscription.usage.ai_queries.usageState === 'tracked'
-                          ? `${selectedUser.subscription.usage.ai_queries.used} / ${selectedUser.subscription.usage.ai_queries.limit}`
-                          : '—'}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.ai_queries.remaining ?? '—')}</div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-sm text-slate-500">Projects</div>
-                      <div className="mt-2 text-lg font-semibold text-slate-900">
-                        {selectedSummary ? `${selectedSummary.projects.active} active / ${selectedSummary.projects.archived} archived` : '—'}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.projects.remaining ?? '—')}</div>
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('billing')}
+                      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                        activeTab === 'billing'
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Биллинг
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('projects')}
+                      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                        activeTab === 'projects'
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Проекты ({selectedUser.projects.length})
+                    </button>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-medium text-slate-900">План и срок</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(['free', 'start', 'team', 'enterprise'] as PlanId[]).map((plan) => (
-                        <button
-                          key={plan}
-                          type="button"
-                          disabled={saving}
-                          onClick={() => void mutateSubscription({ plan, period: plan === 'free' ? undefined : 'monthly' })}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {PLAN_LABELS[plan]}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(['monthly', 'yearly'] as BillingPeriod[]).map((period) => (
-                        <button
-                          key={period}
-                          type="button"
-                          disabled={saving}
-                          onClick={() => void mutateSubscription({ plan: selectedUser.subscription.plan, period })}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Продлить как {period === 'monthly' ? 'monthly' : 'yearly'}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => void mutateSubscription({ extendDays: 30 })}
-                        className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        +30 дней
-                      </button>
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => void mutateSubscription({ expireNow: true })}
-                        className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Expire now
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-medium text-slate-900">AI usage</div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <input
-                        type="number"
-                        min={0}
-                        value={aiUsedDraft}
-                        onChange={(event) => setAiUsedDraft(event.target.value)}
-                        className="w-40 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
-                      />
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => void mutateSubscription({ aiQueriesUsed: Number(aiUsedDraft) })}
-                        className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Применить usage
-                      </button>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Меняет текущий AI usage bucket. Project count проверяй через реальные create/archive/restore.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-medium text-slate-900">Последние платежи</div>
-                    <div className="mt-3 space-y-2">
-                      {selectedUser.payments.length === 0 ? (
-                        <div className="text-sm text-slate-400">Платежей нет.</div>
-                      ) : selectedUser.payments.slice(0, 10).map((payment) => (
-                        <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
-                          <div className="font-medium text-slate-900">{PLAN_LABELS[payment.plan as PlanId] ?? payment.plan}</div>
-                          <div className="mt-1 text-slate-500">{payment.period} • {payment.status} • {formatDate(payment.created_at)}</div>
+                  {activeTab === 'billing' ? (
+                    <div className="space-y-6">
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-sm text-slate-500">Текущий план</div>
+                          <div className="mt-2 text-lg font-semibold text-slate-900">{PLAN_LABELS[selectedUser.subscription.plan]}</div>
+                          <div className="mt-1 text-sm text-slate-500">До {formatDate(selectedUser.subscription.periodEnd)}</div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
 
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-sm text-slate-500">AI usage</div>
+                          <div className="mt-2 text-lg font-semibold text-slate-900">
+                            {selectedUser.subscription.usage.ai_queries.usageState === 'tracked'
+                              ? `${selectedUser.subscription.usage.ai_queries.used} / ${selectedUser.subscription.usage.ai_queries.limit}`
+                              : '—'}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.ai_queries.remaining ?? '—')}</div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-sm text-slate-500">Projects</div>
+                          <div className="mt-2 text-lg font-semibold text-slate-900">
+                            {selectedSummary ? `${selectedSummary.projects.active} active / ${selectedSummary.projects.archived} archived` : '—'}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.projects.remaining ?? '—')}</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 p-4">
+                        <div className="text-sm font-medium text-slate-900">План и срок</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(['free', 'start', 'team', 'enterprise'] as PlanId[]).map((plan) => (
+                            <button
+                              key={plan}
+                              type="button"
+                              disabled={saving}
+                              onClick={() => void mutateSubscription({ plan, period: plan === 'free' ? undefined : 'monthly' })}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {PLAN_LABELS[plan]}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(['monthly', 'yearly'] as BillingPeriod[]).map((period) => (
+                            <button
+                              key={period}
+                              type="button"
+                              disabled={saving}
+                              onClick={() => void mutateSubscription({ plan: selectedUser.subscription.plan, period })}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Продлить как {period === 'monthly' ? 'monthly' : 'yearly'}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void mutateSubscription({ extendDays: 30 })}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            +30 дней
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void mutateSubscription({ expireNow: true })}
+                            className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Expire now
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 p-4">
+                        <div className="text-sm font-medium text-slate-900">AI usage</div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <input
+                            type="number"
+                            min={0}
+                            value={aiUsedDraft}
+                            onChange={(event) => setAiUsedDraft(event.target.value)}
+                            className="w-40 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                          />
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void mutateSubscription({ aiQueriesUsed: Number(aiUsedDraft) })}
+                            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Применить usage
+                          </button>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          Меняет текущий AI usage bucket. Project count проверяй через реальные create/archive/restore.
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 p-4">
+                        <div className="text-sm font-medium text-slate-900">Последние платежи</div>
+                        <div className="mt-3 space-y-2">
+                          {selectedUser.payments.length === 0 ? (
+                            <div className="text-sm text-slate-400">Платежей нет.</div>
+                          ) : selectedUser.payments.slice(0, 10).map((payment) => (
+                            <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                              <div className="font-medium text-slate-900">{PLAN_LABELS[payment.plan as PlanId] ?? payment.plan}</div>
+                              <div className="mt-1 text-slate-500">{payment.period} • {payment.status} • {formatDate(payment.created_at)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
                     <div className="rounded-2xl border border-slate-200 p-4">
                       <div className="text-sm font-medium text-slate-900">Последние проекты</div>
@@ -689,6 +719,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Выбери пользователя слева.</div>
