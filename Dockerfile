@@ -7,6 +7,7 @@ COPY package.json package-lock.json ./
 COPY packages/web/package.json ./packages/web/
 COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/server/package.json ./packages/server/
+COPY packages/site/package.json ./packages/site/
 
 # Install all workspace deps (needed for dhtmlx-gantt, vite, etc.)
 RUN npm ci --ignore-scripts
@@ -29,6 +30,7 @@ COPY package.json package-lock.json ./
 COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
+COPY packages/site/package.json ./packages/site/
 
 RUN npm ci --ignore-scripts
 
