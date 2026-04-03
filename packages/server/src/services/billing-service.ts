@@ -38,6 +38,18 @@ export interface BillingSubscriptionStatus {
   usage: Record<LimitKey, ConstraintUsageSnapshot>;
 }
 
+export interface BillingUsageStatus {
+  plan: PlanId;
+  planMeta: BillingSubscriptionStatus['planMeta'];
+  limits: BillingSubscriptionStatus['limits'];
+  usage: BillingSubscriptionStatus['usage'];
+  remaining: Record<LimitKey, Awaited<ReturnType<ConstraintService['getRemaining']>>>;
+}
+
+interface BillingServiceDeps {
+  constraintService?: Pick<ConstraintService, 'getUsage' | 'getRemaining' | 'incrementUsage'>;
+}
+
 export function computeNextPeriodEnd(
   currentPeriodEnd: Date | null | undefined,
   now: Date,
@@ -52,7 +64,11 @@ export function computeNextPeriodEnd(
 }
 
 export class BillingService {
-  private readonly constraintService = new ConstraintService();
+  private readonly constraintService: Pick<ConstraintService, 'getUsage' | 'getRemaining' | 'incrementUsage'>;
+
+  constructor(deps: BillingServiceDeps = {}) {
+    this.constraintService = deps.constraintService ?? new ConstraintService();
+  }
   /**
    * Get or create a subscription for the user.
    * If no subscription exists, creates one with plan='free'.
@@ -78,11 +94,8 @@ export class BillingService {
     const sub = await this.getOrCreateSubscription(userId);
     const plan = sub.plan as PlanId;
     const active = isPlanActive(sub.periodEnd?.toISOString() ?? null);
-    const projectsUsage = await this.constraintService.getUsage(userId, 'projects');
-    const aiUsage = await this.constraintService.getUsage(userId, 'ai_queries');
-    const archiveUsage = await this.constraintService.getUsage(userId, 'archive');
-    const resourcePoolUsage = await this.constraintService.getUsage(userId, 'resource_pool');
-    const exportUsage = await this.constraintService.getUsage(userId, 'export');
+    const usageStatus = await this.getUsageStatus(userId, plan);
+    const aiUsage = usageStatus.usage.ai_queries;
 
     return {
       plan,
@@ -90,6 +103,24 @@ export class BillingService {
       aiUsed: aiUsage.usageState === 'tracked' ? aiUsage.used : 0,
       aiLimit: aiUsage.usageState === 'tracked' && typeof aiUsage.limit === 'number' ? aiUsage.limit : 0,
       isActive: active,
+      planMeta: usageStatus.planMeta,
+      limits: usageStatus.limits,
+      usage: usageStatus.usage,
+    };
+  }
+
+  async getUsageStatus(userId: string, planOverride?: PlanId): Promise<BillingUsageStatus> {
+    const plan = planOverride ?? ((await this.getOrCreateSubscription(userId)).plan as PlanId);
+    const limitKeys: LimitKey[] = ['projects', 'ai_queries', 'archive', 'resource_pool', 'export'];
+    const usageEntries = await Promise.all(limitKeys.map(async (limitKey) => (
+      [limitKey, await this.constraintService.getUsage(userId, limitKey)] as const
+    )));
+    const remainingEntries = await Promise.all(limitKeys.map(async (limitKey) => (
+      [limitKey, await this.constraintService.getRemaining(userId, limitKey)] as const
+    )));
+
+    return {
+      plan,
       planMeta: {
         id: plan,
         label: PLAN_CATALOG[plan].label,
@@ -102,13 +133,8 @@ export class BillingService {
         resource_pool: PLAN_CATALOG[plan].limits.resource_pool,
         export: PLAN_CATALOG[plan].limits.export,
       },
-      usage: {
-        projects: projectsUsage,
-        ai_queries: aiUsage,
-        archive: archiveUsage,
-        resource_pool: resourcePoolUsage,
-        export: exportUsage,
-      },
+      usage: Object.fromEntries(usageEntries) as BillingSubscriptionStatus['usage'],
+      remaining: Object.fromEntries(remainingEntries) as BillingUsageStatus['remaining'],
     };
   }
 
@@ -129,6 +155,7 @@ export class BillingService {
         plan,
         periodStart: now,
         periodEnd,
+        // Legacy compatibility field; canonical AI usage comes from ConstraintService.
         aiUsed: 0,
       },
     });
