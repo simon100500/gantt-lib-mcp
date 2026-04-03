@@ -22,9 +22,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### Usage Tracking
 
-- [ ] **TRK-01**: AI query counter — daily reset для paid планов (25/50/100), lifetime counter для free (20 навсегда)
-- [ ] **TRK-02**: Active project count tracking per user (1/3/7/unlimited по тарифу)
-- [ ] **TRK-03**: GET /api/usage возвращает текущий usage для всех лимитов — frontend может показать remaining
+- [x] **TRK-01**: AI query counter — daily reset для paid планов (25/50/100), lifetime counter для free (20 навсегда)
+- [x] **TRK-02**: Active project count tracking per user (1/3/7/unlimited по тарифу)
+- [x] **TRK-03**: GET /api/usage возвращает текущий usage для всех лимитов — frontend может показать remaining
 
 ### Frontend Constraints UX
 
@@ -65,9 +65,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | ENG-02 | Phase 30 | Complete |
 | ENG-03 | Phase 30 | Complete |
 | ENG-04 | Phase 30 | Complete |
-| TRK-01 | Phase 31 | Pending |
-| TRK-02 | Phase 31 | Pending |
-| TRK-03 | Phase 31 | Pending |
+| TRK-01 | Phase 31 | Complete |
+| TRK-02 | Phase 31 | Complete |
+| TRK-03 | Phase 31 | Complete |
 | ENF-01 | Phase 32 | Pending |
 | ENF-02 | Phase 32 | Pending |
 | ENF-03 | Phase 32 | Pending |
@@ -85,4 +85,4 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-04-03 after Phase 30 completion*
+*Last updated: 2026-04-03 after Phase 31 completion*
