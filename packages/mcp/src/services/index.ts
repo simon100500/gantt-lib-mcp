@@ -29,6 +29,13 @@ export { DependencyService } from './dependency.service.js';
 export { commandService } from './command.service.js';
 export { CommandService } from './command.service.js';
 
+// MCP mutation enforcement
+export {
+  enforcementService,
+  createEnforcementService,
+  createLimitReachedRejection,
+} from './enforcement.service.js';
+
 // Project schedule options / calendar payload helpers
 export {
   SYSTEM_DEFAULT_CALENDAR_ID,

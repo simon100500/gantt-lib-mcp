@@ -201,7 +201,17 @@ export type NormalizedMutationReason =
   | 'conflict'
   | 'not_found'
   | 'invalid_request'
-  | 'unsupported_operation';
+  | 'unsupported_operation'
+  | 'limit_reached';
+
+export interface MutationEnforcementPayload {
+  code: string;
+  limitKey: import('@gantt/mcp/constraints').LimitKey | null;
+  remaining: number | 'unlimited' | null;
+  plan: import('@gantt/mcp/constraints').PlanId;
+  planLabel: string;
+  upgradeHint: string;
+}
 
 export interface NormalizedMutationResult {
   status: NormalizedMutationStatus;
@@ -213,6 +223,7 @@ export interface NormalizedMutationResult {
   changedDependencyIds: string[];
   conflicts: Conflict[];
   snapshot?: ProjectSnapshot;
+  enforcement?: MutationEnforcementPayload;
 }
 
 export interface GetProjectSummaryInput {
