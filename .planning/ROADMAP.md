@@ -36,7 +36,7 @@
 
 - [x] **Phase 30: Constraint Engine** — Config-driven limit system with Prisma persistence — completed 2026-04-03
 - [x] **Phase 31: Usage Tracking** — AI query + project count counters with usage API — completed 2026-04-03
-- [ ] **Phase 32: Backend Enforcement** — API middleware + MCP tool guards with structured error responses
+- [x] **Phase 32: Backend Enforcement** — API middleware + MCP tool guards with structured error responses — completed 2026-04-03
 - [ ] **Phase 33: Frontend Constraints UX** — Usage indicators, limit modals, proactive UI guards
 - [ ] **Phase 34: Feature Gates** — Boolean gates for archive, resource pool, export tiers
 
@@ -109,7 +109,7 @@ Plans:
 
 Plans:
 - [x] 32-01-PLAN.md — HTTP enforcement helpers plus guarded project/chat/command mutation routes
-- [ ] 32-02-PLAN.md — MCP mutation guard with structured limit denials and read-tool pass-through
+- [x] 32-02-PLAN.md — MCP mutation guard with structured limit denials and read-tool pass-through
 
 ### Phase 33: Frontend Constraints UX
 **Goal**: Пользователь видит свои лимиты в интерфейсе и получает понятную обратную связь при их достижении
@@ -141,7 +141,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 30. Constraint Engine | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
-| 32. Backend Enforcement | v5.0 | 1/2 | In Progress|  |
+| 32. Backend Enforcement | v5.0 | 2/2 | Complete   | 2026-04-03 |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
@@ -161,9 +161,9 @@ Plans:
 | TRK-01 | 31 | Complete |
 | TRK-02 | 31 | Complete |
 | TRK-03 | 31 | Complete |
-| ENF-01 | 32 | Pending |
-| ENF-02 | 32 | Pending |
-| ENF-03 | 32 | Pending |
+| ENF-01 | 32 | Complete |
+| ENF-02 | 32 | Complete |
+| ENF-03 | 32 | Complete |
 | FUX-01 | 33 | Pending |
 | FUX-02 | 33 | Pending |
 | FUX-03 | 33 | Pending |
@@ -176,7 +176,7 @@ Plans:
 **Goal:** Сервер выполняет schedule mutations теми же правилами, что и актуальный gantt-lib core, и возвращает authoritative changed-set для agent/web persistence
 **Requirements**: PRD-only (`.planning/reference/scheduling-core-adoption-prd.md`)
 **Depends on:** Phase 08, Phase 16, Phase 19, Phase 21, Phase 22
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 35-01 — Headless scheduling core + regression parity
@@ -210,4 +210,4 @@ Plans:
 - [ ] TBD
 
 ---
-*Last updated: 2026-04-03 — Phase 31 completed and verified passed*
+*Last updated: 2026-04-03 — Phase 32 completed and ready for verification*

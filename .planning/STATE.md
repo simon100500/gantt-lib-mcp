@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: executing
-last_updated: "2026-04-03T08:01:04.608Z"
-last_activity: 2026-04-03 -- Completed Phase 32 Plan 01 and advanced to Plan 02
+status: verifying
+last_updated: "2026-04-03T08:11:16.919Z"
+last_activity: 2026-04-03
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-03
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Executing Phase 32
+**Status:** Phase complete — ready for verification
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 32 — backend-enforcement
+**Current focus:** Phase 32 complete — backend-enforcement ready for verification
 
 ---
 
 ## Current Position
 
-Phase: 32 (backend-enforcement) — EXECUTING
+Phase: 32 (backend-enforcement) — COMPLETE
 Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-04-03 -- Completed 32-01 and advanced to 32-02
+Status: Phase complete — ready for verification
+Last activity: 2026-04-03 -- Completed Phase 32 Plan 02 and finished backend enforcement
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ---
 
@@ -94,23 +94,28 @@ packages/
 - Next phase must remove frontend/server holiday duplication and make DB + server payload the only source of truth for calendar days
 - Phase 32 Plan 01 centralized HTTP constraint guards and structured denial payloads for Fastify mutation routes
 - `/api/projects`, `/api/projects/:id/restore`, `/api/chat`, and `/api/commands/commit` now reject over-limit or expired-plan writes before business logic runs
+- Phase 32 Plan 02 added a Prisma-backed MCP enforcement service that resolves `projectId` ownership before denying expired paid-plan mutation tools
+- Public MCP mutation tools now return normalized `limit_reached` payloads while read-only MCP tools remain available for project inspection and conversation history
 
 ## Decisions
 
 - Phase 32 Plan 01 centralized HTTP tariff denials in shared Fastify constraint middleware so every guarded mutation returns the same limit metadata contract.
 - Phase 32 Plan 01 used route contract tests to lock preHandler placement and post-check mutation ordering without adding a dedicated Fastify integration harness.
+- Phase 32 Plan 02 resolved MCP mutation enforcement from projectId to owning userId through Prisma so denials match server-side ownership semantics.
+- Phase 32 Plan 02 scoped MCP enforcement to the eight public task-mutation tools and left read-only tools plus `add_message` available.
 
 ## Performance Metrics
 
 | Phase | Plan | Duration | Tasks | Files | Date |
 |-------|------|----------|-------|-------|------|
 | 32 | 01 | 11 min | 3 | 8 | 2026-04-03 |
+| 32 | 02 | 4 min | 2 | 6 | 2026-04-03 |
 
 ## Session
 
-- Last session: 2026-04-03T07:59:18Z
-- Stopped at: Completed 32-01-PLAN.md
+- Last session: 2026-04-03T08:11:16Z
+- Stopped at: Completed 32-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-03 — Phase 32 Plan 01 completed; Phase 32 Plan 02 is next*
+*Last updated: 2026-04-03 — Phase 32 completed and ready for verification*
