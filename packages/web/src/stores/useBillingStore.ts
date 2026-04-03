@@ -88,6 +88,52 @@ export interface UsageStatus {
   remaining: SubscriptionStatus['remaining'];
 }
 
+export type FrontendTrackedLimitKey = 'projects' | 'ai_queries';
+
+export function getUsageEntry(status: UsageStatus | SubscriptionStatus | null, key: string): UsageEntry | null {
+  return status?.usage[key] ?? null;
+}
+
+export function getRemainingEntry(status: UsageStatus | SubscriptionStatus | null, key: string): RemainingEntry | null {
+  return status?.remaining[key] ?? null;
+}
+
+export function getTrackedUsageEntry(
+  status: UsageStatus | SubscriptionStatus | null,
+  key: FrontendTrackedLimitKey,
+): TrackedUsageEntry | null {
+  const entry = getUsageEntry(status, key);
+  return entry?.usageState === 'tracked' ? entry : null;
+}
+
+export function getTrackedRemainingEntry(
+  status: UsageStatus | SubscriptionStatus | null,
+  key: FrontendTrackedLimitKey,
+): TrackedRemainingEntry | UnlimitedRemainingEntry | null {
+  const entry = getRemainingEntry(status, key);
+  return entry && (entry.remainingState === 'tracked' || entry.remainingState === 'unlimited') ? entry : null;
+}
+
+export function getProjectsUsage(status: UsageStatus | SubscriptionStatus | null): TrackedUsageEntry | null {
+  return getTrackedUsageEntry(status, 'projects');
+}
+
+export function getProjectsRemaining(
+  status: UsageStatus | SubscriptionStatus | null,
+): TrackedRemainingEntry | UnlimitedRemainingEntry | null {
+  return getTrackedRemainingEntry(status, 'projects');
+}
+
+export function getAiQueriesUsage(status: UsageStatus | SubscriptionStatus | null): TrackedUsageEntry | null {
+  return getTrackedUsageEntry(status, 'ai_queries');
+}
+
+export function getAiQueriesRemaining(
+  status: UsageStatus | SubscriptionStatus | null,
+): TrackedRemainingEntry | UnlimitedRemainingEntry | null {
+  return getTrackedRemainingEntry(status, 'ai_queries');
+}
+
 export interface PaymentRecord {
   id: string;
   plan: string;
