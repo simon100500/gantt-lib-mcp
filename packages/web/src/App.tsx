@@ -37,6 +37,14 @@ interface RouteState {
   search: string;
 }
 
+function normalizePathname(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    return pathname.slice(0, -1);
+  }
+
+  return pathname;
+}
+
 function buildDependencyRowsFromTasks(tasks: Task[]) {
   return tasks.flatMap((task) =>
     (task.dependencies ?? []).map((dependency, index) => ({
@@ -167,9 +175,10 @@ export default function App() {
     }
   }, [auth, localTasks, setShowOtpModal]);
 
-  const isPurchaseRoute = route.pathname === '/purchase';
-  const isAccountRoute = route.pathname === '/account';
-  const isAdminRoute = route.pathname === '/admin';
+  const normalizedPathname = normalizePathname(route.pathname);
+  const isPurchaseRoute = normalizedPathname === '/purchase';
+  const isAccountRoute = normalizedPathname === '/account';
+  const isAdminRoute = normalizedPathname === '/admin';
   const initialPurchasePlan = new URLSearchParams(route.search).get('plan');
 
   return (
