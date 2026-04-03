@@ -24,7 +24,8 @@ import type {
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
-import { subscriptionMiddleware, incrementAiUsage } from './middleware/subscription-middleware.js';
+import { requireActiveSubscriptionForMutation, requireTrackedLimit } from './middleware/constraint-middleware.js';
+import { incrementAiUsage } from './middleware/subscription-middleware.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
@@ -32,6 +33,10 @@ import { registerCommandRoutes } from './routes/command-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 
 const fastify = Fastify({ logger: true });
+const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
+  code: 'AI_LIMIT_REACHED',
+  upgradeHint: 'Upgrade your plan to continue AI-assisted changes.',
+});
 await fastify.register(websocket);
 await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
@@ -120,7 +125,7 @@ fastify.get('/api/project', { preHandler: [authMiddleware] }, async (req, reply)
   return reply.send(project);
 });
 
-fastify.post('/api/chat', { preHandler: [authMiddleware, subscriptionMiddleware] }, async (req, reply) => {
+fastify.post('/api/chat', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
   const body = req.body as { message?: string };
   const message = body?.message;
   if (!message) {

@@ -19,9 +19,10 @@ import type { FastifyInstance } from 'fastify';
 import { commandService } from '@gantt/mcp/services';
 import type { CommitProjectCommandRequest, ActorType } from '@gantt/mcp/types';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
 
 export async function registerCommandRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.post('/api/commands/commit', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/commands/commit', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const body = req.body as Partial<CommitProjectCommandRequest>;
 
     // Validate required fields
