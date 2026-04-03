@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ConstraintDenialPayload } from '../lib/constraintUi';
 import type { CalendarDay } from '../types';
 
 function getTokenExpMs(token: string): number | null {
@@ -44,7 +45,7 @@ export interface AuthState {
   project: AuthProject | null;
   accessToken: string | null;
   projects: AuthProject[];
-  projectLimitReached: boolean;
+  projectLimitDenial: Partial<ConstraintDenialPayload> | null;
 }
 
 export interface UseAuthResult extends AuthState {
@@ -77,7 +78,7 @@ const INITIAL_AUTH_STATE: AuthState = {
   project: null,
   accessToken: null,
   projects: [],
-  projectLimitReached: false,
+  projectLimitDenial: null,
 };
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -180,7 +181,7 @@ function toAuthState(storedState: StoredAuthState | null): AuthState {
     project: storedState.project,
     accessToken: storedState.accessToken,
     projects: storedState.projects.length > 0 ? storedState.projects : [storedState.project],
-    projectLimitReached: false,
+    projectLimitDenial: null,
   };
 }
 
@@ -502,7 +503,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       });
 
       if (response.status === 403) {
-        set({ projectLimitReached: true });
+        const denial = await response.json().catch(() => null) as Partial<ConstraintDenialPayload> | null;
+        set({ projectLimitDenial: denial });
         return null;
       }
 

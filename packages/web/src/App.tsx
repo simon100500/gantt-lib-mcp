@@ -20,8 +20,10 @@ import { useSharedProject } from './hooks/useSharedProject.ts';
 import { useTasks } from './hooks/useTasks.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
+import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
+import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
-import { useBillingStore } from './stores/useBillingStore.ts';
+import { useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
@@ -35,6 +37,64 @@ const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working'
 interface RouteState {
   pathname: string;
   search: string;
+}
+
+type BillingConstraintStatus = UsageStatus | SubscriptionStatus | null;
+
+function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
+  return code === 'PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED';
+}
+
+function buildProactiveConstraintDenial(
+  limitKey: ConstraintLimitKey,
+  status: BillingConstraintStatus,
+): Partial<ConstraintDenialPayload> | null {
+  const plan = ((status?.plan as PlanId | undefined) ?? 'free');
+  const planLabel = status?.planMeta.label ?? PLAN_LABELS[plan];
+
+  if (status && 'isActive' in status && !status.isActive && plan !== 'free') {
+    return {
+      code: 'SUBSCRIPTION_EXPIRED',
+      limitKey: null,
+      reasonCode: 'subscription_expired',
+      remaining: null,
+      plan,
+      planLabel,
+      upgradeHint: 'Продлите тариф, чтобы снова создавать проекты и пользоваться AI.',
+    };
+  }
+
+  const usageEntry = limitKey === 'projects' ? status?.usage.projects : status?.usage.ai_queries;
+  const remainingEntry = limitKey === 'projects' ? status?.remaining.projects : status?.remaining.ai_queries;
+  if (remainingEntry?.remainingState !== 'tracked' || remainingEntry.remaining > 0) {
+    return null;
+  }
+
+  return {
+    code: limitKey === 'projects' ? 'PROJECT_LIMIT_REACHED' : 'AI_LIMIT_REACHED',
+    limitKey,
+    reasonCode: 'limit_reached',
+    remaining: remainingEntry.remaining,
+    plan,
+    planLabel,
+    upgradeHint: limitKey === 'projects'
+      ? 'Лимит активных проектов исчерпан. Освободите слот или обновите тариф.'
+      : 'Лимит AI-запросов исчерпан. Обновите тариф, чтобы продолжить работу с ассистентом.',
+    used: usageEntry?.usageState === 'tracked' ? usageEntry.used : undefined,
+    limit: remainingEntry.limit,
+  };
+}
+
+function formatProjectUsageLabel(status: BillingConstraintStatus, fallbackProjects: number): string | null {
+  const usage = status?.usage.projects;
+  const remaining = status?.remaining.projects;
+  if (usage?.usageState === 'tracked' && remaining?.remainingState === 'tracked') {
+    return `${usage.used}/${usage.limit} проектов`;
+  }
+  if (remaining?.remainingState === 'unlimited') {
+    return 'Проекты без лимита';
+  }
+  return fallbackProjects > 0 ? `${fallbackProjects} проектов` : null;
 }
 
 function normalizePathname(pathname: string): string {
@@ -257,23 +317,66 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
-  const [limitModalScenario, setLimitModalScenario] = useState<'free-ai' | 'paid-ai' | 'project-limit' | null>(null);
-  const projectLimitReached = useAuthStore((s) => s.projectLimitReached);
+  const [limitModal, setLimitModal] = useState<{
+    denial: ConstraintDenialPayload;
+    usage: BillingConstraintStatus;
+  } | null>(null);
+  const projectLimitDenial = useAuthStore((s) => s.projectLimitDenial);
+  const subscription = useBillingStore((state) => state.subscription);
+  const usage = useBillingStore((state) => state.usage);
+  const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
+  const fetchUsage = useBillingStore((state) => state.fetchUsage);
+  const billingStatus = usage ?? subscription;
+  const projectUsageLabel = formatProjectUsageLabel(billingStatus, auth.projects.length);
+  const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
+  const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
+  const createProjectTitle = proactiveProjectDenial
+    ? proactiveProjectDenial.code === 'SUBSCRIPTION_EXPIRED'
+      ? 'Продлите тариф, чтобы снова создавать проекты'
+      : 'Лимит проектов достигнут. Освободите слот или обновите тариф'
+    : 'Новый проект';
+  const chatDisabledReason = proactiveChatDenial
+    ? proactiveChatDenial.code === 'SUBSCRIPTION_EXPIRED'
+      ? 'Подписка истекла. Продлите тариф, чтобы снова отправлять запросы.'
+      : 'Лимит AI-запросов исчерпан. Обновите тариф, чтобы продолжить.'
+    : null;
 
-  // Fetch billing subscription on auth to know current plan for modal scenario
-  useEffect(() => {
-    if (auth.isAuthenticated) {
-      void useBillingStore.getState().fetchSubscription();
+  const openLimitModal = useCallback(async (denial: Partial<ConstraintDenialPayload> | null | undefined) => {
+    if (!denial?.code) {
+      return;
     }
-  }, [auth.isAuthenticated]);
 
-  // Watch projectLimitReached from auth store -> show modal
-  useEffect(() => {
-    if (projectLimitReached) {
-      setLimitModalScenario('project-limit');
-      useAuthStore.setState({ projectLimitReached: false });
+    if (auth.isAuthenticated && !hasShareToken) {
+      await fetchUsage();
     }
-  }, [projectLimitReached]);
+
+    const nextBillingStatus = useBillingStore.getState().usage ?? useBillingStore.getState().subscription;
+    const normalizedDenial = normalizeConstraintDenialPayload(denial, nextBillingStatus);
+    if (!normalizedDenial) {
+      return;
+    }
+
+    setLimitModal({
+      denial: normalizedDenial,
+      usage: nextBillingStatus,
+    });
+  }, [auth.isAuthenticated, fetchUsage, hasShareToken]);
+
+  useEffect(() => {
+    if (auth.isAuthenticated && !hasShareToken) {
+      void Promise.all([fetchSubscription(), fetchUsage()]);
+    }
+  }, [auth.isAuthenticated, fetchSubscription, fetchUsage, hasShareToken]);
+
+  useEffect(() => {
+    if (!projectLimitDenial) {
+      return;
+    }
+
+    void openLimitModal(projectLimitDenial).finally(() => {
+      useAuthStore.setState({ projectLimitDenial: null });
+    });
+  }, [openLimitModal, projectLimitDenial]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
@@ -407,6 +510,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, []);
 
   const submitChatMessage = useCallback(async (message: string) => {
+    if (proactiveChatDenial) {
+      await openLimitModal(proactiveChatDenial);
+      return false;
+    }
+
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
     let token = getLatestAccessToken();
     if (!token) {
@@ -440,10 +548,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
     if (response.status === 403) {
       try {
-        const body = await response.json() as { code?: string };
-        if (body.code === 'AI_LIMIT_REACHED') {
-          const plan = useBillingStore.getState().subscription?.plan ?? 'free';
-          setLimitModalScenario(plan === 'free' ? 'free-ai' : 'paid-ai');
+        const body = await response.json() as Partial<ConstraintDenialPayload>;
+        if (isConstraintCode(body.code)) {
+          await openLimitModal(body);
           return false;
         }
       } catch {
@@ -456,7 +563,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       throw new Error(`HTTP ${response.status}`);
     }
     return true;
-  }, [auth]);
+  }, [auth, openLimitModal, proactiveChatDenial]);
 
   const handleSend = useCallback((text: string) => {
     if (hasShareToken) {
@@ -466,12 +573,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onLoginRequired();
       return;
     }
+    if (proactiveChatDenial) {
+      void openLimitModal(proactiveChatDenial);
+      return;
+    }
     useChatStore.getState().addMessage({ role: 'user', content: text });
     openProjectChat();
     void submitChatMessage(text).catch((submitError) => {
       useChatStore.getState().setError(String(submitError));
     });
-  }, [auth.isAuthenticated, hasShareToken, onLoginRequired, openProjectChat, submitChatMessage]);
+  }, [auth.isAuthenticated, hasShareToken, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
 
   const activateDraftWorkspace = useCallback(async ({
     firstPrompt,
@@ -585,6 +696,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
+      if (proactiveProjectDenial) {
+        await openLimitModal(proactiveProjectDenial);
+        return;
+      }
       createEmptyChartAfterActivationRef.current = false;
       queuedPromptRef.current = null;
       resetWorkspacePresentation();
@@ -599,7 +714,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     setWorkspace({ kind: 'guest' });
-  }, [auth.isAuthenticated, resetWorkspacePresentation, setWorkspace]);
+  }, [auth.isAuthenticated, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     await auth.archiveProject(projectId);
@@ -839,6 +954,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             hasShareToken={hasShareToken}
             displayConnected={displayConnected}
             isAuthenticated={auth.isAuthenticated}
+            chatUsage={billingStatus}
+            chatDisabled={Boolean(proactiveChatDenial)}
+            chatDisabledReason={chatDisabledReason}
             batchUpdate={batchUpdate}
             onSend={handleSend}
             onLoginRequired={onLoginRequired}
@@ -889,6 +1007,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       hasShareToken={hasShareToken}
       currentProjectLabel={currentProjectLabel}
       onCreateProject={handleCreateProject}
+      createProjectDisabled={Boolean(auth.isAuthenticated && proactiveProjectDenial)}
+      createProjectTitle={createProjectTitle}
+      projectUsageLabel={projectUsageLabel}
       onSwitchProject={handleSwitchProject}
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
@@ -905,10 +1026,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       )}
     </ProjectMenu>
 
-    {limitModalScenario && (
+    {limitModal && (
       <LimitReachedModal
-        scenario={limitModalScenario}
-        onClose={() => setLimitModalScenario(null)}
+        denial={limitModal.denial}
+        usage={limitModal.usage}
+        onClose={() => setLimitModal(null)}
       />
     )}
 
