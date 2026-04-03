@@ -105,7 +105,11 @@ Plans:
   1. API middleware блокирует protected endpoints (create project, AI query) при превышении лимита — запрос не обрабатывается
   2. MCP tools блокируют действия сверх лимита — AI не может создать задачу в лимитированном проекте или выполнить AI chat при исчерпанных запросах
   3. Error response содержит структурированную информацию: remaining, plan name, upgrade hint
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 32-01-PLAN.md — HTTP enforcement helpers plus guarded project/chat/command mutation routes
+- [ ] 32-02-PLAN.md — MCP mutation guard with structured limit denials and read-tool pass-through
 
 ### Phase 33: Frontend Constraints UX
 **Goal**: Пользователь видит свои лимиты в интерфейсе и получает понятную обратную связь при их достижении
@@ -137,7 +141,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 30. Constraint Engine | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
-| 32. Backend Enforcement | v5.0 | 0/? | Not started | - |
+| 32. Backend Enforcement | v5.0 | 0/2 | Not started | - |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
