@@ -21,6 +21,7 @@ import type { FastifyInstance } from 'fastify';
 import { verifyToken } from './auth.js';
 import type { JwtPayload } from './auth.js';
 import { writeServerDebugLog } from './debug-log.js';
+import { authService } from '@gantt/mcp/services';
 
 // ---------------------------------------------------------------------------
 // Message types (shared protocol between server and web client)
@@ -125,11 +126,33 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
         // Auth handshake: first message must be auth
         if (!isAuthenticated) {
           if (data.type === 'auth' && data.token) {
-            try {
+            void (async () => {
+              try {
               const payload: JwtPayload = verifyToken(data.token);
+              const session = await authService.findSessionByAccessToken(data.token);
+              if (!session) {
+                throw new Error('Session not found');
+              }
+
+              let resolvedProjectId = session.projectId;
+              const project = await authService.findProjectById(session.projectId);
+              if (!project) {
+                const availableProjects = await authService.listProjects(session.userId);
+                const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
+                if (!fallbackProject) {
+                  throw new Error('Project unavailable');
+                }
+
+                await authService.updateSessionProject(session.id, fallbackProject.id);
+                resolvedProjectId = fallbackProject.id;
+              }
+
               isAuthenticated = true;
               currentSessionId = payload.sessionId;
-              authUser = payload;
+              authUser = {
+                ...payload,
+                projectId: resolvedProjectId,
+              };
 
               // Add socket to session registry
               if (!sessionConnections.has(currentSessionId)) {
@@ -141,15 +164,16 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
               void writeServerDebugLog('ws_authenticated', {
                 sessionId: currentSessionId,
                 userId: payload.sub,
-                projectId: payload.projectId,
+                projectId: resolvedProjectId,
               });
-            } catch (err) {
+              } catch (err) {
               socket.send(JSON.stringify({
                 type: 'error',
                 message: 'Unauthorized',
               }));
               socket.close();
-            }
+              }
+            })();
           } else {
             socket.send(JSON.stringify({
               type: 'error',

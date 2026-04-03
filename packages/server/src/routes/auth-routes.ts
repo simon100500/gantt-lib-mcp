@@ -140,13 +140,27 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(401).send({ error: 'Invalid refresh token' });
     }
 
+    let resolvedProjectId = session.projectId;
+    const sessionProject = await authService.findProjectById(session.projectId);
+    if (!sessionProject) {
+      const projects = await authService.listProjects(session.userId);
+      const fallbackProject = projects.find((item) => item.status === 'active') ?? projects[0];
+
+      if (!fallbackProject) {
+        return reply.status(403).send({ error: 'Project unavailable' });
+      }
+
+      await authService.updateSessionProject(session.id, fallbackProject.id);
+      resolvedProjectId = fallbackProject.id;
+    }
+
     // Generate new ACCESS token only (refresh token stays the same - no rotation!)
     // This prevents race condition where concurrent refresh requests invalidate each other
     const sessionUser = await authService.findUserById(session.userId);
     const tokenPayload = {
       sub: session.userId,
       email: sessionUser?.email ?? '',
-      projectId: session.projectId,
+      projectId: resolvedProjectId,
       sessionId: session.id,
     };
 
