@@ -80,6 +80,14 @@ export interface SubscriptionStatus {
   };
 }
 
+export interface UsageStatus {
+  plan: string;
+  planMeta: SubscriptionStatus['planMeta'];
+  limits: SubscriptionStatus['limits'];
+  usage: SubscriptionStatus['usage'];
+  remaining: SubscriptionStatus['remaining'];
+}
+
 export interface PaymentRecord {
   id: string;
   plan: string;
@@ -91,6 +99,7 @@ export interface PaymentRecord {
 
 export interface BillingState {
   subscription: SubscriptionStatus | null;
+  usage: UsageStatus | null;
   payments: PaymentRecord[];
   loading: boolean;
   error: string | null;
@@ -104,6 +113,7 @@ export interface BillingState {
 
 export interface BillingActions {
   fetchSubscription(): Promise<void>;
+  fetchUsage(): Promise<void>;
   fetchPayments(): Promise<void>;
   createPayment(plan: string, period: 'monthly' | 'yearly'): Promise<{ paymentId: string; confirmationToken: string } | null>;
   pollPaymentStatus(paymentId: string): Promise<boolean>;
@@ -151,6 +161,7 @@ async function fetchWithAuthRetry(
 
 export const useBillingStore = create<BillingStore>((set, get) => ({
   subscription: null,
+  usage: null,
   payments: [],
   loading: false,
   error: null,
@@ -168,9 +179,34 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
         throw new Error(`HTTP ${response.status}`);
       }
       const data = await response.json() as SubscriptionStatus;
-      set({ subscription: data, loading: false });
+      set({
+        subscription: data,
+        usage: {
+          plan: data.plan,
+          planMeta: data.planMeta,
+          limits: data.limits,
+          usage: data.usage,
+          remaining: data.remaining,
+        },
+        loading: false,
+      });
     } catch (err) {
       console.error('[useBillingStore] fetchSubscription failed:', err);
+      set({ error: String(err), loading: false });
+    }
+  },
+
+  async fetchUsage() {
+    set({ loading: true, error: null });
+    try {
+      const { response } = await fetchWithAuthRetry('/api/usage');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json() as UsageStatus;
+      set({ usage: data, loading: false });
+    } catch (err) {
+      console.error('[useBillingStore] fetchUsage failed:', err);
       set({ error: String(err), loading: false });
     }
   },
