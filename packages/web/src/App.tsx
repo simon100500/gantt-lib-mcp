@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { AccountPage } from './components/AccountPage.tsx';
+import { AdminPage } from './components/AdminPage.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
@@ -167,6 +168,7 @@ export default function App() {
 
   const isPurchaseRoute = route.pathname === '/purchase';
   const isAccountRoute = route.pathname === '/account';
+  const isAdminRoute = route.pathname === '/admin';
   const initialPurchasePlan = new URLSearchParams(route.search).get('plan');
 
   return (
@@ -180,6 +182,12 @@ export default function App() {
         />
       ) : isAccountRoute ? (
         <AccountPage
+          isAuthenticated={auth.isAuthenticated}
+          userEmail={auth.user?.email ?? null}
+          onLoginRequired={() => setShowOtpModal(true)}
+        />
+      ) : isAdminRoute ? (
+        <AdminPage
           isAuthenticated={auth.isAuthenticated}
           userEmail={auth.user?.email ?? null}
           onLoginRequired={() => setShowOtpModal(true)}
@@ -199,7 +207,7 @@ export default function App() {
         />
       )}
 
-      {!isPurchaseRoute && !isAccountRoute && showEditProjectModal && (
+      {!isPurchaseRoute && !isAccountRoute && !isAdminRoute && showEditProjectModal && (
         <EditProjectModal
           projectName={auth.isAuthenticated && auth.project ? auth.project.name : localTasks.projectName}
           onSave={async (name) => {

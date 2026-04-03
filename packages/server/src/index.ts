@@ -27,6 +27,7 @@ import { authMiddleware } from './middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation, requireTrackedLimit } from './middleware/constraint-middleware.js';
 import { incrementAiUsage } from './middleware/subscription-middleware.js';
 import { registerAdminRoutes } from './admin.js';
+import { registerAdminApiRoutes } from './routes/admin-routes.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
@@ -40,6 +41,7 @@ const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
 await fastify.register(websocket);
 await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
+await registerAdminApiRoutes(fastify);
 await registerBillingRoutes(fastify);
 await registerCommandRoutes(fastify);
 

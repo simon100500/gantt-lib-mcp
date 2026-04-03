@@ -1,0 +1,541 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LoginButton } from './LoginButton';
+import { PLAN_LABELS, formatDate, type BillingPeriod, type PlanId } from '../lib/billing';
+import { useAuthStore } from '../stores/useAuthStore';
+
+interface AdminPageProps {
+  isAuthenticated: boolean;
+  userEmail?: string | null;
+  onLoginRequired: () => void;
+}
+
+interface AdminUserSummary {
+  id: string;
+  email: string;
+  createdAt: string;
+  subscription: {
+    plan: PlanId;
+    planLabel: string;
+    isActive: boolean;
+    periodEnd: string | null;
+  };
+  projects: {
+    active: number;
+    archived: number;
+  };
+  usage: {
+    aiQueriesUsed: number;
+    aiQueriesLimit: number | string | null;
+  };
+}
+
+interface AdminUserDetails {
+  user: {
+    id: string;
+    email: string;
+    createdAt: string;
+  };
+  subscription: {
+    plan: PlanId;
+    periodEnd: string | null;
+    isActive: boolean;
+    usage: {
+      ai_queries: {
+        usageState: 'tracked' | 'not_applicable';
+        used: number | null;
+        limit: number | string;
+      };
+      projects: {
+        usageState: 'tracked' | 'not_applicable';
+        used: number | null;
+        limit: number | string;
+      };
+    };
+    remaining: {
+      ai_queries: {
+        remainingState: 'tracked' | 'unlimited' | 'not_applicable';
+        remaining: number | string | null;
+      };
+      projects: {
+        remainingState: 'tracked' | 'unlimited' | 'not_applicable';
+        remaining: number | string | null;
+      };
+    };
+  };
+  payments: Array<{
+    id: string;
+    created_at: string;
+    plan: string;
+    period: string;
+    amount: number;
+    status: string;
+  }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    status: string;
+    createdAt: string;
+    archivedAt: string | null;
+  }>;
+}
+
+async function fetchAdminWithRetry(input: string, init: RequestInit = {}): Promise<Response> {
+  let token = useAuthStore.getState().accessToken;
+
+  const doFetch = (accessToken: string) => fetch(input, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!token) {
+    return new Response(null, { status: 401 });
+  }
+
+  let response = await doFetch(token);
+  if (response.status !== 401) {
+    return response;
+  }
+
+  token = await useAuthStore.getState().refreshAccessToken();
+  if (!token) {
+    return response;
+  }
+
+  return doFetch(token);
+}
+
+function PageHeader({ children }: { children?: React.ReactNode }) {
+  return (
+    <header className="border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
+        <a href="/" className="flex items-center gap-3 text-slate-900">
+          <img src="/favicon.svg" alt="" width="18" height="18" className="h-[18px] w-[18px]" aria-hidden="true" />
+          <div className="text-sm font-semibold tracking-tight">ГетГант</div>
+        </a>
+        <span className="text-sm text-slate-400" aria-hidden="true">/</span>
+        <span className="text-sm font-medium text-slate-900">Админка</span>
+        {children}
+      </div>
+    </header>
+  );
+}
+
+function GuardState({
+  isAuthenticated,
+  onLoginRequired,
+  userEmail,
+  forbidden,
+}: {
+  isAuthenticated: boolean;
+  onLoginRequired: () => void;
+  userEmail?: string | null;
+  forbidden?: boolean;
+}) {
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
+      <PageHeader>
+        {isAuthenticated ? (
+          <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
+        ) : (
+          <div className="ml-auto">
+            <LoginButton onClick={onLoginRequired} />
+          </div>
+        )}
+      </PageHeader>
+
+      <main className="flex-1 overflow-y-auto px-4 py-12 sm:px-6">
+        <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-semibold text-slate-900">Админка подписок</h1>
+          <p className="mt-3 text-sm text-slate-600">
+            {forbidden
+              ? 'Доступ запрещён. Добавь свой email в ADMIN_EMAILS или ADMIN_EMAIL на сервере.'
+              : 'Войди в систему, чтобы открыть админку подписок.'}
+          </p>
+          {!isAuthenticated && (
+            <div className="mt-6 flex justify-center">
+              <LoginButton onClick={onLoginRequired} />
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: AdminPageProps) {
+  const [query, setQuery] = useState('');
+  const [users, setUsers] = useState<AdminUserSummary[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
+  const [aiUsedDraft, setAiUsedDraft] = useState('0');
+  const [loading, setLoading] = useState(false);
+  const [loadingUser, setLoadingUser] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+
+  const loadUsers = useCallback(async (nextQuery: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const search = new URLSearchParams();
+      if (nextQuery.trim()) {
+        search.set('query', nextQuery.trim());
+      }
+
+      const suffix = search.toString();
+      const response = await fetchAdminWithRetry(suffix ? `/api/admin/users?${suffix}` : '/api/admin/users');
+      if (response.status === 403) {
+        setForbidden(true);
+        setUsers([]);
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as { users: AdminUserSummary[] };
+      setForbidden(false);
+      setUsers(data.users);
+      if (data.users.length > 0) {
+        setSelectedUserId((current) => current ?? data.users[0].id);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadUserDetails = useCallback(async (userId: string) => {
+    setLoadingUser(true);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/users/${userId}/subscription`);
+      if (response.status === 403) {
+        setForbidden(true);
+        setSelectedUser(null);
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as AdminUserDetails;
+      setForbidden(false);
+      setSelectedUser(data);
+      const trackedUsage = data.subscription.usage.ai_queries.usageState === 'tracked'
+        ? data.subscription.usage.ai_queries.used ?? 0
+        : 0;
+      setAiUsedDraft(String(trackedUsage));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load user details');
+    } finally {
+      setLoadingUser(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+    void loadUsers('');
+  }, [isAuthenticated, loadUsers]);
+
+  useEffect(() => {
+    if (!selectedUserId || !isAuthenticated || forbidden) {
+      return;
+    }
+    void loadUserDetails(selectedUserId);
+  }, [forbidden, isAuthenticated, loadUserDetails, selectedUserId]);
+
+  const selectedSummary = useMemo(
+    () => users.find((user) => user.id === selectedUserId) ?? null,
+    [selectedUserId, users],
+  );
+
+  const mutateSubscription = useCallback(async (payload: Record<string, unknown>) => {
+    if (!selectedUserId) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/users/${selectedUserId}/subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as AdminUserDetails;
+      setForbidden(false);
+      setSelectedUser(data);
+      await loadUsers(query);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to update subscription');
+    } finally {
+      setSaving(false);
+    }
+  }, [loadUsers, query, selectedUserId]);
+
+  if (!isAuthenticated) {
+    return <GuardState isAuthenticated={false} onLoginRequired={onLoginRequired} />;
+  }
+
+  if (forbidden) {
+    return <GuardState isAuthenticated onLoginRequired={onLoginRequired} userEmail={userEmail} forbidden />;
+  }
+
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
+      <PageHeader>
+        <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
+      </PageHeader>
+
+      <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <a href="/" className="inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-800">
+            ← Назад к приложению
+          </a>
+
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+              {error}
+            </div>
+          )}
+
+          <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h1 className="text-lg font-semibold text-slate-900">Пользователи</h1>
+                <button
+                  type="button"
+                  onClick={() => void loadUsers(query)}
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  Обновить
+                </button>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      void loadUsers(query);
+                    }
+                  }}
+                  placeholder="Поиск по email"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => void loadUsers(query)}
+                  className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                >
+                  Найти
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {loading ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">Загрузка…</div>
+                ) : users.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">Пользователи не найдены.</div>
+                ) : (
+                  users.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => setSelectedUserId(user.id)}
+                      className={`w-full rounded-2xl border p-4 text-left transition-colors ${
+                        selectedUserId === user.id ? 'border-primary bg-primary/[0.04]' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-slate-900">{user.email}</div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span>{user.subscription.planLabel}</span>
+                        <span>{user.subscription.isActive ? 'active' : 'expired'}</span>
+                        <span>{user.projects.active} active projects</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              {!selectedUserId ? (
+                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Выбери пользователя слева.</div>
+              ) : loadingUser && !selectedUser ? (
+                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Загрузка пользователя…</div>
+              ) : selectedUser ? (
+                <div className="space-y-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-900">{selectedUser.user.email}</h2>
+                      <div className="mt-2 text-sm text-slate-500">Registered: {formatDate(selectedUser.user.createdAt)}</div>
+                    </div>
+                    <div className={`rounded-full px-3 py-1 text-sm ${
+                      selectedUser.subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {selectedUser.subscription.isActive ? 'Подписка активна' : 'Подписка истекла'}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm text-slate-500">Текущий план</div>
+                      <div className="mt-2 text-lg font-semibold text-slate-900">{PLAN_LABELS[selectedUser.subscription.plan]}</div>
+                      <div className="mt-1 text-sm text-slate-500">До {formatDate(selectedUser.subscription.periodEnd)}</div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm text-slate-500">AI usage</div>
+                      <div className="mt-2 text-lg font-semibold text-slate-900">
+                        {selectedUser.subscription.usage.ai_queries.usageState === 'tracked'
+                          ? `${selectedUser.subscription.usage.ai_queries.used} / ${selectedUser.subscription.usage.ai_queries.limit}`
+                          : '—'}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.ai_queries.remaining ?? '—')}</div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm text-slate-500">Projects</div>
+                      <div className="mt-2 text-lg font-semibold text-slate-900">
+                        {selectedSummary ? `${selectedSummary.projects.active} active / ${selectedSummary.projects.archived} archived` : '—'}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.projects.remaining ?? '—')}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm font-medium text-slate-900">План и срок</div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(['free', 'start', 'team', 'enterprise'] as PlanId[]).map((plan) => (
+                        <button
+                          key={plan}
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void mutateSubscription({ plan, period: plan === 'free' ? undefined : 'monthly' })}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {PLAN_LABELS[plan]}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(['monthly', 'yearly'] as BillingPeriod[]).map((period) => (
+                        <button
+                          key={period}
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void mutateSubscription({ plan: selectedUser.subscription.plan, period })}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Продлить как {period === 'monthly' ? 'monthly' : 'yearly'}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void mutateSubscription({ extendDays: 30 })}
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        +30 дней
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void mutateSubscription({ expireNow: true })}
+                        className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Expire now
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="text-sm font-medium text-slate-900">AI usage</div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <input
+                        type="number"
+                        min={0}
+                        value={aiUsedDraft}
+                        onChange={(event) => setAiUsedDraft(event.target.value)}
+                        className="w-40 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void mutateSubscription({ aiQueriesUsed: Number(aiUsedDraft) })}
+                        className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Применить usage
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Меняет текущий AI usage bucket. Project count проверяй через реальные create/archive/restore.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 p-4">
+                      <div className="text-sm font-medium text-slate-900">Последние проекты</div>
+                      <div className="mt-3 space-y-2">
+                        {selectedUser.projects.length === 0 ? (
+                          <div className="text-sm text-slate-400">Проектов нет.</div>
+                        ) : selectedUser.projects.map((project) => (
+                          <div key={project.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                            <div className="font-medium text-slate-900">{project.name}</div>
+                            <div className="mt-1 text-slate-500">{project.status} • {formatDate(project.createdAt)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 p-4">
+                      <div className="text-sm font-medium text-slate-900">Последние платежи</div>
+                      <div className="mt-3 space-y-2">
+                        {selectedUser.payments.length === 0 ? (
+                          <div className="text-sm text-slate-400">Платежей нет.</div>
+                        ) : selectedUser.payments.slice(0, 10).map((payment) => (
+                          <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                            <div className="font-medium text-slate-900">{PLAN_LABELS[payment.plan as PlanId] ?? payment.plan}</div>
+                            <div className="mt-1 text-slate-500">{payment.period} • {payment.status} • {formatDate(payment.created_at)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Выбери пользователя слева.</div>
+              )}
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
