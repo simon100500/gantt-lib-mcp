@@ -25,6 +25,7 @@ import { taskService } from './services/task.service.js';
 import { commandService } from './services/command.service.js';
 import { messageService } from './services/message.service.js';
 import { getProjectScheduleOptionsForProject } from './services/projectScheduleOptions.js';
+import { createLimitReachedRejection, enforcementService } from './services/enforcement.service.js';
 import { getPrisma } from './prisma.js';
 import type {
   AddMessageInput,
@@ -83,6 +84,17 @@ function normalizeProjectId(value: unknown): string | undefined {
 function resolveProjectId(argProjectId: unknown): string | undefined {
   return normalizeProjectId(argProjectId) ?? normalizeProjectId(process.env.PROJECT_ID);
 }
+
+const MUTATING_PUBLIC_TOOL_NAMES = new Set([
+  'create_tasks',
+  'update_tasks',
+  'move_tasks',
+  'delete_tasks',
+  'link_tasks',
+  'unlink_tasks',
+  'shift_tasks',
+  'recalculate_project',
+]);
 
 /**
  * Validate date format (YYYY-MM-DD)
@@ -157,6 +169,7 @@ function normalizeRejectionReason(reason: string | undefined): NormalizedMutatio
     case 'not_found':
     case 'invalid_request':
     case 'unsupported_operation':
+    case 'limit_reached':
       return reason;
     default:
       return 'validation_error';
@@ -434,6 +447,7 @@ type MpcHandlerDeps = {
   taskService: Pick<typeof taskService, 'get'>;
   getPrisma: typeof getPrisma;
   getProjectScheduleOptionsForProject: typeof getProjectScheduleOptionsForProject;
+  enforcementService: Pick<typeof enforcementService, 'evaluateMutationAccess'>;
 };
 
 const defaultMcpHandlerDeps: MpcHandlerDeps = {
@@ -445,6 +459,7 @@ const defaultMcpHandlerDeps: MpcHandlerDeps = {
   taskService,
   getPrisma,
   getProjectScheduleOptionsForProject,
+  enforcementService,
 };
 
 export async function handleListToolsRequest() {
@@ -483,6 +498,24 @@ export async function handleCallToolRequest(
 
   if (LEGACY_SCHEDULING_TOOL_NAMES.has(name)) {
     return jsonResult(buildRejectedResult(0, 'unsupported_operation'));
+  }
+
+  if (MUTATING_PUBLIC_TOOL_NAMES.has(name)) {
+    const argProjectId = typeof args === 'object' && args !== null && 'projectId' in args
+      ? (args as { projectId?: unknown }).projectId
+      : undefined;
+    const resolvedProjectId = deps.resolveProjectId(argProjectId);
+    const enforcementDecision = await deps.enforcementService.evaluateMutationAccess({
+      toolName: name,
+      projectId: resolvedProjectId,
+    });
+
+    if (!enforcementDecision.allowed) {
+      return jsonResult(createLimitReachedRejection(
+        buildRejectedResult(0, 'limit_reached'),
+        enforcementDecision.enforcement,
+      ));
+    }
   }
 
   if (name === 'get_project_summary') {
