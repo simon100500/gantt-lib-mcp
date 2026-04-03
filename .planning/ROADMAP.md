@@ -108,7 +108,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 32-01-PLAN.md — HTTP enforcement helpers plus guarded project/chat/command mutation routes
+- [x] 32-01-PLAN.md — HTTP enforcement helpers plus guarded project/chat/command mutation routes
 - [ ] 32-02-PLAN.md — MCP mutation guard with structured limit denials and read-tool pass-through
 
 ### Phase 33: Frontend Constraints UX
@@ -141,7 +141,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 30. Constraint Engine | v5.0 | 3/3 | Complete | 2026-04-03 |
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
-| 32. Backend Enforcement | v5.0 | 0/2 | Not started | - |
+| 32. Backend Enforcement | v5.0 | 1/2 | In Progress|  |
 | 33. Frontend Constraints UX | v5.0 | 0/? | Not started | - |
 | 34. Feature Gates | v5.0 | 0/? | Not started | - |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
@@ -176,7 +176,7 @@ Plans:
 **Goal:** Сервер выполняет schedule mutations теми же правилами, что и актуальный gantt-lib core, и возвращает authoritative changed-set для agent/web persistence
 **Requirements**: PRD-only (`.planning/reference/scheduling-core-adoption-prd.md`)
 **Depends on:** Phase 08, Phase 16, Phase 19, Phase 21, Phase 22
-**Plans:** 2/2 plans complete
+**Plans:** 1/2 plans executed
 
 Plans:
 - [x] 35-01 — Headless scheduling core + regression parity

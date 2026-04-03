@@ -16,9 +16,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### Backend Enforcement
 
-- [ ] **ENF-01**: API middleware проверяет лимиты перед обработкой protected endpoints (create project, AI query)
+- [x] **ENF-01**: API middleware проверяет лимиты перед обработкой protected endpoints (create project, AI query)
 - [ ] **ENF-02**: MCP tools проверяют лимиты — AI не может превысить лимит через tool call (create_task внутри лимитированного проекта, AI chat при исчерпанных запросах)
-- [ ] **ENF-03**: Error response содержит limit info (remaining, plan name, upgrade hint) в структурированном формате
+- [x] **ENF-03**: Error response содержит limit info (remaining, plan name, upgrade hint) в структурированном формате
 
 ### Usage Tracking
 
@@ -68,9 +68,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | TRK-01 | Phase 31 | Complete |
 | TRK-02 | Phase 31 | Complete |
 | TRK-03 | Phase 31 | Complete |
-| ENF-01 | Phase 32 | Pending |
+| ENF-01 | Phase 32 | Complete |
 | ENF-02 | Phase 32 | Pending |
-| ENF-03 | Phase 32 | Pending |
+| ENF-03 | Phase 32 | Complete |
 | FUX-01 | Phase 33 | Pending |
 | FUX-02 | Phase 33 | Pending |
 | FUX-03 | Phase 33 | Pending |

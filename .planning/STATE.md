@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: ready
-last_updated: "2026-04-03T07:29:46.486Z"
-last_activity: 2026-04-03
+status: executing
+last_updated: "2026-04-03T08:01:04.608Z"
+last_activity: 2026-04-03 -- Completed Phase 32 Plan 01 and advanced to Plan 02
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_plans: 17
+  completed_plans: 16
+  percent: 94
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-03
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to plan next phase
+**Status:** Executing Phase 32
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 32 — Backend Enforcement
+**Current focus:** Phase 32 — backend-enforcement
 
 ---
 
 ## Current Position
 
-Phase: 32 of 37 (Backend Enforcement)
-Plan: 0 of ? complete
-Status: Ready to plan
-Last activity: 2026-04-03
+Phase: 32 (backend-enforcement) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-03 -- Completed 32-01 and advanced to 32-02
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ---
 
@@ -92,7 +92,25 @@ packages/
 - Phase 37 added: Calendar source of truth cleanup
 - Remaining scheduling tech debt: holiday definitions are still hardcoded in `packages/mcp/src/services/projectScheduleOptions.ts` and `packages/web/src/lib/russianHolidays2026.ts`
 - Next phase must remove frontend/server holiday duplication and make DB + server payload the only source of truth for calendar days
+- Phase 32 Plan 01 centralized HTTP constraint guards and structured denial payloads for Fastify mutation routes
+- `/api/projects`, `/api/projects/:id/restore`, `/api/chat`, and `/api/commands/commit` now reject over-limit or expired-plan writes before business logic runs
+
+## Decisions
+
+- Phase 32 Plan 01 centralized HTTP tariff denials in shared Fastify constraint middleware so every guarded mutation returns the same limit metadata contract.
+- Phase 32 Plan 01 used route contract tests to lock preHandler placement and post-check mutation ordering without adding a dedicated Fastify integration harness.
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Tasks | Files | Date |
+|-------|------|----------|-------|-------|------|
+| 32 | 01 | 11 min | 3 | 8 | 2026-04-03 |
+
+## Session
+
+- Last session: 2026-04-03T07:59:18Z
+- Stopped at: Completed 32-01-PLAN.md
 
 ---
 
-*Last updated: 2026-04-03 — Phase 31 completed; Phase 32 is next*
+*Last updated: 2026-04-03 — Phase 32 Plan 01 completed; Phase 32 Plan 02 is next*
