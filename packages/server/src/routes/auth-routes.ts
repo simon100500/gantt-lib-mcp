@@ -18,6 +18,12 @@ import {
   verifyToken,
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
+
+const requireProjectLimit = requireTrackedLimit('projects', {
+  code: 'PROJECT_LIMIT_REACHED',
+  upgradeHint: 'Upgrade your plan to create or restore more active projects.',
+});
 
 /**
  * Register all authentication routes with Fastify
@@ -336,7 +342,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   // POST /api/projects
   // ---------------------------------------------------------------------------
-  fastify.post('/api/projects', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/projects', { preHandler: [authMiddleware, requireProjectLimit] }, async (req, reply) => {
     const body = req.body as { name?: string };
     const { name } = body;
 
@@ -397,7 +403,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({ project: result.project });
   });
 
-  fastify.post<{ Params: { id: string } }>('/api/projects/:id/restore', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/restore', { preHandler: [authMiddleware, requireProjectLimit] }, async (req, reply) => {
     const { id: projectId } = req.params;
     const result = await authService.restoreProject(projectId, req.user!.userId);
 
