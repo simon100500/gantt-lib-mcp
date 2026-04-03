@@ -103,10 +103,16 @@ function ProjectRow({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
                 {!isArchived ? (
-                  <DropdownMenuItem onClick={() => void onArchive(project.id)}>
-                    <Archive className="h-4 w-4" />
-                    <span>В архив</span>
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem onClick={() => void onArchive(project.id)}>
+                      <Archive className="h-4 w-4" />
+                      <span>В архив</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
+                      <Trash2 className="h-4 w-4" />
+                      <span>Удалить</span>
+                    </DropdownMenuItem>
+                  </>
                 ) : (
                   <>
                     <DropdownMenuItem onClick={() => void onRestore(project.id)}>

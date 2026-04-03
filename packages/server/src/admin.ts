@@ -6,16 +6,18 @@
  */
 
 import { getPrisma } from './db.js';
+import { authMiddleware } from './middleware/auth-middleware.js';
+import { requireAdminAccess } from './middleware/admin-middleware.js';
 
 export async function registerAdminRoutes(fastify: any) {
   // Serve HTML viewer
-  fastify.get('/admin/db', async (_req: any, reply: any) => {
+  fastify.get('/admin/db', { preHandler: [authMiddleware, requireAdminAccess] }, async (_req: any, reply: any) => {
     reply.type('text/html');
     return ADMIN_HTML;
   });
 
   // List all tables
-  fastify.get('/admin/api/tables', async () => {
+  fastify.get('/admin/api/tables', { preHandler: [authMiddleware, requireAdminAccess] }, async () => {
     const prisma = getPrisma();
     const tables: any[] = await prisma.$queryRawUnsafe(`
       SELECT table_name FROM information_schema.tables
@@ -27,7 +29,7 @@ export async function registerAdminRoutes(fastify: any) {
   });
 
   // Get table structure and data
-  fastify.get('/admin/api/table/:name', async (req: any) => {
+  fastify.get('/admin/api/table/:name', { preHandler: [authMiddleware, requireAdminAccess] }, async (req: any) => {
     const tableName = req.params.name;
     const prisma = getPrisma();
 
@@ -75,7 +77,7 @@ export async function registerAdminRoutes(fastify: any) {
   });
 
   // Execute custom query (read-only)
-  fastify.post('/admin/api/query', async (req: any) => {
+  fastify.post('/admin/api/query', { preHandler: [authMiddleware, requireAdminAccess] }, async (req: any) => {
     const { sql } = req.body as { sql?: string };
     if (!sql) return { error: 'sql required' };
 

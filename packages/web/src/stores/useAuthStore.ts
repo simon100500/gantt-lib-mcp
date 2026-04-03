@@ -320,11 +320,17 @@ function persistAuthSnapshot(state: {
 }
 
 function mergeCurrentProject(projects: AuthProject[], currentProject: AuthProject | null): AuthProject | null {
-  if (!currentProject) {
+  if (projects.length === 0) {
     return null;
   }
 
-  return projects.find((project) => project.id === currentProject.id) ?? currentProject;
+  if (!currentProject) {
+    return projects.find((project) => project.status === 'active') ?? projects[0];
+  }
+
+  return projects.find((project) => project.id === currentProject.id)
+    ?? projects.find((project) => project.status === 'active')
+    ?? projects[0];
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({

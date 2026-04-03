@@ -147,6 +147,7 @@ Plans:
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
 | 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
 | 37. Calendar source of truth cleanup | Scheduling | 0/? | Not started | - |
+| 38. Constraint Overrides | Future | 0/? | Not started | - |
 
 ---
 
@@ -170,6 +171,9 @@ Plans:
 | GATE-01 | 34 | Pending |
 | GATE-02 | 34 | Pending |
 | GATE-03 | 34 | Pending |
+| OVR-01 | 38 | Pending |
+| OVR-02 | 38 | Pending |
+| OVR-03 | 38 | Pending |
 
 ### Phase 35: Scheduling Core Adoption
 
@@ -205,6 +209,21 @@ Plans:
 **Requirements**: PRD-only (phase context)
 **Depends on:** Phase 36
 **Plans:** 0 plans
+
+Plans:
+- [ ] TBD
+
+### Phase 38: Constraint Overrides
+
+**Goal:** Админка и backend поддерживают per-user overrides для всех тарифных лимитов поверх plan defaults без форков бизнес-логики по каждому лимиту
+**Requirements**: OVR-01, OVR-02, OVR-03
+**Depends on:** Phase 30, Phase 31, Phase 32, admin tooling
+**Plans:** 0 plans
+
+**Success Criteria** (what must be TRUE):
+  1. Для любого лимита (`projects`, `ai_queries`, `archive`, `resource_pool`, `export` и следующих новых ключей) можно задать per-user override без изменения plan catalog
+  2. `ConstraintService` учитывает override как верхний слой над тарифом, а API/MCP/frontend enforcement автоматически получают это поведение без route-specific исключений
+  3. Админка позволяет выставить `null = follow plan` или конкретное override-значение и показывает effective limit отдельно от plan default
 
 Plans:
 - [ ] TBD

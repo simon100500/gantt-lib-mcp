@@ -79,17 +79,26 @@ export async function authMiddleware(
     return;
   }
 
+  let resolvedProjectId = session.projectId;
   const project = await authService.findProjectById(session.projectId);
   if (!project) {
-    reply.status(403).send({ error: 'Project unavailable' });
-    return;
+    const availableProjects = await authService.listProjects(session.userId);
+    const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
+
+    if (!fallbackProject) {
+      reply.status(403).send({ error: 'Project unavailable' });
+      return;
+    }
+
+    await authService.updateSessionProject(session.id, fallbackProject.id);
+    resolvedProjectId = fallbackProject.id;
   }
 
   // 6. Attach decoded payload to req.user
   request.user = {
     userId: payload.sub,
     email: payload.email,
-    projectId: payload.projectId,
+    projectId: resolvedProjectId,
     sessionId: payload.sessionId,
   };
 }
