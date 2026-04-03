@@ -12,7 +12,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { BillingService } from '../services/billing-service.js';
-import { ConstraintService } from '../services/constraint-service.js';
 import { PLAN_CONFIG, getPlanPricing, type PlanKey } from '../services/plan-config.js';
 
 const YOOKASSA_BASE_URL = 'https://api.yookassa.ru/v3';
@@ -39,7 +38,6 @@ function yookassaHeaders(shopId: string, secretKey: string, idempotenceKey: stri
 
 export async function registerBillingRoutes(fastify: FastifyInstance): Promise<void> {
   const billingService = new BillingService();
-  const constraintService = new ConstraintService();
 
   // ---------------------------------------------------------------------------
   // POST /api/billing/create — create YooKassa embedded payment (D-03, D-04)
@@ -273,11 +271,7 @@ export async function registerBillingRoutes(fastify: FastifyInstance): Promise<v
   // ---------------------------------------------------------------------------
   fastify.get('/api/billing/subscription', { preHandler: [authMiddleware] }, async (req, reply) => {
     const status = await billingService.getSubscriptionStatus(req.user!.userId);
-    const projectsRemaining = await constraintService.getRemaining(req.user!.userId, 'projects');
-    const aiRemaining = await constraintService.getRemaining(req.user!.userId, 'ai_queries');
-    const archiveRemaining = await constraintService.getRemaining(req.user!.userId, 'archive');
-    const resourcePoolRemaining = await constraintService.getRemaining(req.user!.userId, 'resource_pool');
-    const exportRemaining = await constraintService.getRemaining(req.user!.userId, 'export');
+    const usageStatus = await billingService.getUsageStatus(req.user!.userId, status.plan);
 
     return reply.send({
       plan: status.plan,
@@ -288,14 +282,22 @@ export async function registerBillingRoutes(fastify: FastifyInstance): Promise<v
       planMeta: status.planMeta,
       limits: status.limits,
       usage: status.usage,
-      remaining: {
-        projects: projectsRemaining,
-        ai_queries: aiRemaining,
-        archive: archiveRemaining,
-        resource_pool: resourcePoolRemaining,
-        export: exportRemaining,
-      },
+      remaining: usageStatus.remaining,
       legacyLimits: PLAN_CONFIG[status.plan]?.limits,
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/usage — normalized authenticated usage snapshot
+  // ---------------------------------------------------------------------------
+  fastify.get('/api/usage', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const usageStatus = await billingService.getUsageStatus(req.user!.userId);
+    return reply.send({
+      plan: usageStatus.plan,
+      planMeta: usageStatus.planMeta,
+      limits: usageStatus.limits,
+      usage: usageStatus.usage,
+      remaining: usageStatus.remaining,
     });
   });
 
