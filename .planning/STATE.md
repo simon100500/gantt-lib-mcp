@@ -7,10 +7,10 @@ last_updated: "2026-04-04T11:46:10.235Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 23
   completed_plans: 23
-  percent: 87
+  percent: 89
 ---
 
 # Project State: gantt-lib MCP Server
@@ -26,7 +26,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 34 — feature-gates ready for discussion/planning
+**Current focus:** Phase 34 — feature-gates plans 03/04 remaining
 
 ---
 
@@ -37,7 +37,7 @@ Plan: Not started
 Status: Phase 34 complete — all feature gates implemented
 Last activity: 2026-04-04
 
-Progress: [█████████░] 87%
+Progress: [████████░░] 89%
 
 ---
 
@@ -89,9 +89,9 @@ packages/
 - Phase 36 Plan 05: Frontend three-layer Zustand store (confirmed/pending/dragPreview) with useCommandCommit hook routing schedule mutations through /api/commands/commit
 - Phase 36 Plan 06: MCP schedule tools and API mutations routed through CommandService.commitCommand
 - Phase 36 Plan 07: 19-test suite covering parity (P1-P3), concurrency (C1-C3), patch reasons (R1-R3), dependency regression (REG1-REG4). FS lag semantics: succStart = predEnd + lag + 1
-- Phase 37 added: Calendar source of truth cleanup
-- Remaining scheduling tech debt: holiday definitions are still hardcoded in `packages/mcp/src/services/projectScheduleOptions.ts` and `packages/web/src/lib/russianHolidays2026.ts`
-- Next phase must remove frontend/server holiday duplication and make DB + server payload the only source of truth for calendar days
+- Phase 37 completed: hardcoded holidays removed, DB-first calendar flow in place
+- `russianHolidays2026.ts` deleted, `systemDefaultCalendarDays` removed from server
+- Frontend builds weekendPredicate only from server-provided calendarDays payload
 - Phase 32 Plan 01 centralized HTTP constraint guards and structured denial payloads for Fastify mutation routes
 - `/api/projects`, `/api/projects/:id/restore`, `/api/chat`, and `/api/commands/commit` now reject over-limit or expired-plan writes before business logic runs
 - Phase 32 Plan 02 added a Prisma-backed MCP enforcement service that resolves `projectId` ownership before denying expired paid-plan mutation tools
@@ -137,4 +137,4 @@ packages/
 
 ---
 
-*Last updated: 2026-04-04 — Phase 34 Plan 02 completed*
+*Last updated: 2026-04-04 — Phase 37 formally closed, Phase 34 in progress*
