@@ -18,11 +18,16 @@ import {
   verifyToken,
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
-import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
+import { requireTrackedLimit, requireFeatureGate } from '../middleware/constraint-middleware.js';
 
 const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
   upgradeHint: 'Upgrade your plan to create or restore more active projects.',
+});
+
+const requireArchiveAccess = requireFeatureGate('archive', {
+  code: 'ARCHIVE_FEATURE_LOCKED',
+  upgradeHint: 'Архив проектов доступен на тарифе Старт и выше.',
 });
 
 /**
@@ -403,7 +408,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({ project });
   });
 
-  fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware, requireArchiveAccess] }, async (req, reply) => {
     const { id: projectId } = req.params;
     const result = await authService.archiveProject(projectId, req.user!.userId);
 

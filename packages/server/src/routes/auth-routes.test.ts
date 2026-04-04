@@ -31,3 +31,30 @@ describe('auth project route enforcement', () => {
     );
   });
 });
+
+describe('archive route feature gate enforcement', () => {
+  it('composes authMiddleware then requireArchiveAccess before archiveProject', () => {
+    assert.match(
+      authRoutesSource,
+      /fastify\.post<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id\/archive',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireArchiveAccess\]\s*\},\s*async \(req, reply\) => \{[\s\S]*authService\.archiveProject\(projectId, req\.user!\.userId\)/,
+    );
+  });
+
+  it('defines requireArchiveAccess using requireFeatureGate with archive limit key', () => {
+    assert.match(
+      authRoutesSource,
+      /const requireArchiveAccess\s*=\s*requireFeatureGate\('archive'/,
+    );
+  });
+
+  it('does not guard delete route with requireArchiveAccess or requireProjectLimit', () => {
+    assert.doesNotMatch(
+      authRoutesSource,
+      /fastify\.delete<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireArchiveAccess\]/,
+    );
+    assert.doesNotMatch(
+      authRoutesSource,
+      /fastify\.delete<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireProjectLimit\]/,
+    );
+  });
+});
