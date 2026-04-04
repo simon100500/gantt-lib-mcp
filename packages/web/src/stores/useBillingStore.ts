@@ -54,6 +54,10 @@ export type RemainingEntry =
 export interface SubscriptionStatus {
   plan: string;
   periodEnd: string | null;
+  billingState: 'free' | 'trial_active' | 'trial_expired' | 'paid_active' | 'paid_expired';
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  trialSource: string | null;
   aiUsed: number;
   aiLimit: number;
   isActive: boolean;
@@ -160,6 +164,21 @@ export function getExportAccessLevel(
   }
 
   return 'none';
+}
+
+// --- Trial state selectors ---
+
+export function isTrialActive(status: SubscriptionStatus | null): boolean {
+  return status?.billingState === 'trial_active';
+}
+
+export function isTrialExpired(status: SubscriptionStatus | null): boolean {
+  return status?.billingState === 'trial_expired';
+}
+
+export function getTrialDaysRemaining(status: SubscriptionStatus | null): number {
+  if (!status?.trialEndsAt) return 0;
+  return Math.max(0, Math.ceil((new Date(status.trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
 }
 
 export interface PaymentRecord {

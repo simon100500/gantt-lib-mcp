@@ -215,6 +215,11 @@ export function normalizeConstraintDenialPayload(
   };
 }
 
+function isPostTrialFeatureGate(denial: ConstraintDenialPayload): boolean {
+  return denial.reasonCode === 'post_trial_feature_gate'
+    || (typeof denial.upgradeHint === 'string' && denial.upgradeHint.includes('trial'));
+}
+
 export function buildConstraintModalContent(
   denial: ConstraintDenialPayload,
   usage?: BillingUsageSource,
@@ -231,6 +236,9 @@ export function buildConstraintModalContent(
   if (denial.code === 'SUBSCRIPTION_EXPIRED') {
     title = 'Подписка требует продления';
     description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
+  } else if (isPostTrialFeatureGate(denial)) {
+    title = `${limitLabel} — пробный период закончился`;
+    description = 'Вы использовали расширенные возможности тарифа Старт. Перейдите на платный тариф, чтобы сохранить доступ.';
   } else if (isFeatureGate) {
     if (denial.limitKey === 'archive') {
       title = 'Не теряйте доступ к проектам';
