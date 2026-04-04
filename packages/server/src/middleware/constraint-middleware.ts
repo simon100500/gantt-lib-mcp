@@ -13,6 +13,11 @@ type TrackedLimitOptions = {
   upgradeHint: string;
 };
 
+type FeatureGateOptions = {
+  code: string;
+  upgradeHint: string;
+};
+
 type DenialPayload = {
   code: string;
   limitKey: LimitKey | null;
@@ -122,10 +127,45 @@ export function createConstraintMiddleware(deps: ConstraintMiddlewareDeps = {}) 
     };
   }
 
+  function requireFeatureGate(limitKey: LimitKey, options: FeatureGateOptions) {
+    return async function featureGateGuard(
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ): Promise<void> {
+      const userId = request.user?.userId;
+      if (!userId) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+
+      const [status, result] = await Promise.all([
+        billingService.getSubscriptionStatus(userId),
+        constraintService.checkLimit(userId, limitKey),
+      ]);
+
+      if (result.allowed) {
+        return;
+      }
+
+      const payload: DenialPayload = {
+        code: options.code,
+        limitKey: result.limitKey,
+        reasonCode: result.reasonCode,
+        remaining: result.remaining.remaining,
+        plan: status.plan,
+        planLabel: status.planMeta.label,
+        upgradeHint: options.upgradeHint,
+      };
+
+      sendDenial(reply, payload);
+    };
+  }
+
   return {
     requireActiveSubscriptionForMutation,
     requireTrackedLimit,
+    requireFeatureGate,
   };
 }
 
-export const { requireActiveSubscriptionForMutation, requireTrackedLimit } = createConstraintMiddleware();
+export const { requireActiveSubscriptionForMutation, requireTrackedLimit, requireFeatureGate } = createConstraintMiddleware();

@@ -151,6 +151,139 @@ describe('constraint middleware helpers', () => {
   });
 });
 
+describe('requireFeatureGate (non-tracked boolean feature)', () => {
+  it('returns 403 with ARCHIVE_FEATURE_LOCKED and feature_disabled when archive is denied', async () => {
+    const reply = createReplyStub();
+    const { requireFeatureGate } = createConstraintMiddleware({
+      constraintService: {
+        async checkLimit() {
+          return {
+            allowed: false,
+            reasonCode: 'feature_disabled' as const,
+            planId: 'free' as const,
+            limitKey: 'archive' as const,
+            limit: false,
+            usage: {
+              planId: 'free' as const,
+              limitKey: 'archive' as const,
+              limit: false,
+              usageState: 'not_applicable' as const,
+              period: null,
+              periodBucket: null,
+              used: null,
+            },
+            remaining: {
+              planId: 'free' as const,
+              limitKey: 'archive' as const,
+              limit: false,
+              remainingState: 'not_applicable' as const,
+              remaining: null,
+            },
+          };
+        },
+      },
+      billingService: {
+        async getSubscriptionStatus() {
+          return {
+            plan: 'free' as const,
+            periodEnd: null,
+            aiUsed: 0,
+            aiLimit: 20,
+            isActive: true,
+            planMeta: {
+              id: 'free' as const,
+              label: 'Бесплатный',
+              pricing: { monthly: 0, yearly: 0 },
+            },
+            limits: {} as never,
+            usage: {} as never,
+          };
+        },
+      },
+    });
+
+    const requireArchiveAccess = requireFeatureGate('archive', {
+      code: 'ARCHIVE_FEATURE_LOCKED',
+      upgradeHint: 'Архив проектов доступен на тарифе Старт и выше.',
+    });
+
+    await requireArchiveAccess(createRequest('user-archive'), reply);
+
+    assert.equal(reply.statusCode, 403);
+    const payload = reply.payload as Record<string, unknown>;
+    assert.equal(payload.code, 'ARCHIVE_FEATURE_LOCKED');
+    assert.equal(payload.limitKey, 'archive');
+    assert.equal(payload.reasonCode, 'feature_disabled');
+    assert.equal(payload.remaining, null);
+    assert.equal(payload.plan, 'free');
+    assert.equal(payload.planLabel, 'Бесплатный');
+    assert.equal(payload.upgradeHint, 'Архив проектов доступен на тарифе Старт и выше.');
+    // Feature-gate denials for non-tracked limits do not populate used or limit
+    assert.equal(payload.used, undefined);
+    assert.equal(payload.limit, undefined);
+  });
+
+  it('passes through when the feature is allowed', async () => {
+    const reply = createReplyStub();
+    const { requireFeatureGate } = createConstraintMiddleware({
+      constraintService: {
+        async checkLimit() {
+          return {
+            allowed: true,
+            reasonCode: 'allowed' as const,
+            planId: 'start' as const,
+            limitKey: 'archive' as const,
+            limit: true,
+            usage: {
+              planId: 'start' as const,
+              limitKey: 'archive' as const,
+              limit: true,
+              usageState: 'not_applicable' as const,
+              period: null,
+              periodBucket: null,
+              used: null,
+            },
+            remaining: {
+              planId: 'start' as const,
+              limitKey: 'archive' as const,
+              limit: true,
+              remainingState: 'not_applicable' as const,
+              remaining: null,
+            },
+          };
+        },
+      },
+      billingService: {
+        async getSubscriptionStatus() {
+          return {
+            plan: 'start' as const,
+            periodEnd: '2026-04-30T00:00:00.000Z',
+            aiUsed: 0,
+            aiLimit: 25,
+            isActive: true,
+            planMeta: {
+              id: 'start' as const,
+              label: 'Start',
+              pricing: { monthly: 1490, yearly: 12000 },
+            },
+            limits: {} as never,
+            usage: {} as never,
+          };
+        },
+      },
+    });
+
+    const requireArchiveAccess = requireFeatureGate('archive', {
+      code: 'ARCHIVE_FEATURE_LOCKED',
+      upgradeHint: 'Архив проектов доступен на тарифе Старт и выше.',
+    });
+
+    await requireArchiveAccess(createRequest('user-start'), reply);
+
+    assert.equal(reply.sent, false);
+  });
+});
+
 describe('subscriptionMiddleware', () => {
   it('blocks exhausted ai_queries before chat-side usage increment would run', async () => {
     const reply = createReplyStub();
