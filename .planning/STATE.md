@@ -4,13 +4,13 @@ milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
 last_updated: "2026-04-04T14:20:00+03:00"
-last_activity: 2026-04-04 -- Phase 34 Wave 2 complete (plan 03)
+last_activity: 2026-04-04 -- Phase 34 Wave 3+4 merged (plans 01-04 complete)
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 23
   completed_plans: 20
-  percent: 87
+  percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 34
-Plan: 02 complete (of 4)
-Status: Plan 02 completed — feature gate frontend contract
-Last activity: 2026-04-04 -- Phase 34 Plan 02 completed
+Plan: 04/04 complete
+Status: Phase 34 complete — all feature gates implemented
+Last activity: 2026-04-04 -- Phase 34 Plans 01-04 merged and complete
 
 Progress: [█████████░] 87%
 
@@ -114,6 +114,8 @@ packages/
 - [Phase 34]: Frontend constraint contract expanded to cover archive, resource_pool, export with typed selectors, expanded ConstraintLimitKey, FEATURE_GATE_CODES, plan-aware descriptions.
 - [Phase 34]: Renamed projectLimitDenial to constraintDenial as generic denial bridge for all 403 constraint responses.
 - [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits.
+- [Phase 34]: Export tier comparison uses ordered array index for clear level ordering
+- [Phase 34]: Locked export tiers are clickable buttons triggering upsell modal instead of dead/hidden UI
 
 ## Performance Metrics
 
@@ -126,6 +128,7 @@ packages/
 | 34 | 01 | 4 min | 2 | 4 | 2026-04-04 |
 | 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
 | 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
+| 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
 
 ## Session
 
