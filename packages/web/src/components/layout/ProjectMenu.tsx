@@ -38,6 +38,7 @@ interface ProjectMenuProps {
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
+  onRequestExportLevel: (level: 'none' | 'pdf' | 'pdf_excel' | 'pdf_excel_api') => void;
   ganttRef: React.RefObject<GanttChartRef>;
 }
 
@@ -57,6 +58,7 @@ export function ProjectMenu({
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
+  onRequestExportLevel,
   ganttRef,
 }: ProjectMenuProps) {
   const auth = useAuthStore();

@@ -18,7 +18,7 @@ import {
   type UsageStatus,
 } from '../stores/useBillingStore';
 
-export type ConstraintLimitKey = 'projects' | 'ai_queries';
+export type ConstraintLimitKey = 'projects' | 'ai_queries' | 'archive' | 'resource_pool' | 'export';
 export type ConstraintReasonCode = 'subscription_expired' | 'limit_reached' | 'read_only_mode';
 
 export interface ConstraintDenialPayload {
@@ -73,10 +73,13 @@ const NEXT_PLAN_BY_PLAN: Record<PlanId, Exclude<PlanId, 'free'> | null> = {
 const LIMIT_LABELS: Record<ConstraintLimitKey, string> = {
   projects: 'лимит проектов',
   ai_queries: 'лимит AI-запросов',
+  archive: 'архив проектов',
+  resource_pool: 'пул ресурсов',
+  export: 'экспорт',
 };
 
 function isConstraintLimitKey(value: string | null | undefined): value is ConstraintLimitKey {
-  return value === 'projects' || value === 'ai_queries';
+  return value === 'projects' || value === 'ai_queries' || value === 'archive' || value === 'resource_pool' || value === 'export';
 }
 
 function readTrackedValue(entry: RemainingEntry | null): number | 'unlimited' | null {

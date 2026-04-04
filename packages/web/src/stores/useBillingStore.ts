@@ -88,6 +88,7 @@ export interface UsageStatus {
   remaining: SubscriptionStatus['remaining'];
 }
 
+export type ExportAccessLevel = 'none' | 'pdf' | 'pdf_excel' | 'pdf_excel_api';
 export type FrontendTrackedLimitKey = 'projects' | 'ai_queries';
 
 export function getUsageEntry(status: UsageStatus | SubscriptionStatus | null, key: string): UsageEntry | null {
@@ -132,6 +133,21 @@ export function getAiQueriesRemaining(
   status: UsageStatus | SubscriptionStatus | null,
 ): TrackedRemainingEntry | UnlimitedRemainingEntry | null {
   return getTrackedRemainingEntry(status, 'ai_queries');
+}
+
+export function getExportAccessLevel(
+  status: UsageStatus | SubscriptionStatus | null,
+): ExportAccessLevel {
+  if (!status) {
+    return 'none';
+  }
+
+  const raw = status.limits?.export;
+  if (raw === 'none' || raw === 'pdf' || raw === 'pdf_excel' || raw === 'pdf_excel_api') {
+    return raw;
+  }
+
+  return 'none';
 }
 
 export interface PaymentRecord {
