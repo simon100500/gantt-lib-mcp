@@ -11,6 +11,7 @@ interface AdminUpdateSubscriptionBody {
   period?: BillingPeriod;
   expireNow?: boolean;
   extendDays?: number;
+  periodEnd?: string;
   aiQueriesUsed?: number;
 }
 
@@ -198,6 +199,13 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
       return reply.status(400).send({ error: 'extendDays must be a non-zero number' });
     }
 
+    if (body.periodEnd !== undefined) {
+      const parsed = new Date(body.periodEnd);
+      if (Number.isNaN(parsed.getTime())) {
+        return reply.status(400).send({ error: 'periodEnd must be a valid ISO date string' });
+      }
+    }
+
     if (body.aiQueriesUsed !== undefined && (!Number.isFinite(body.aiQueriesUsed) || body.aiQueriesUsed < 0)) {
       return reply.status(400).send({ error: 'aiQueriesUsed must be a non-negative number' });
     }
@@ -251,6 +259,18 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
         where: { userId },
         data: {
           periodEnd: nextPeriodEnd,
+          periodStart: current.periodStart ?? new Date(),
+        },
+      });
+    }
+
+    if (body.periodEnd !== undefined) {
+      const targetDate = new Date(body.periodEnd);
+      const current = await billingService.getOrCreateSubscription(userId);
+      await prisma.subscription.update({
+        where: { userId },
+        data: {
+          periodEnd: targetDate,
           periodStart: current.periodStart ?? new Date(),
         },
       });

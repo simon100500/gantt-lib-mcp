@@ -186,6 +186,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
   const [aiUsedDraft, setAiUsedDraft] = useState('0');
+  const [periodEndDraft, setPeriodEndDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingUser, setLoadingUser] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -258,6 +259,8 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
         ? data.subscription.usage.ai_queries.used ?? 0
         : 0;
       setAiUsedDraft(String(trackedUsage));
+      const pe = data.subscription.periodEnd;
+      setPeriodEndDraft(pe ? new Date(pe).toISOString().slice(0, 10) : '');
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load user details');
     } finally {
@@ -549,25 +552,20 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                           ))}
                         </div>
 
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {(['monthly', 'yearly'] as BillingPeriod[]).map((period) => (
-                            <button
-                              key={period}
-                              type="button"
-                              disabled={saving}
-                              onClick={() => void mutateSubscription({ plan: selectedUser.subscription.plan, period })}
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Продлить как {period === 'monthly' ? 'monthly' : 'yearly'}
-                            </button>
-                          ))}
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <input
+                            type="date"
+                            value={periodEndDraft}
+                            onChange={(event) => setPeriodEndDraft(event.target.value)}
+                            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                          />
                           <button
                             type="button"
-                            disabled={saving}
-                            onClick={() => void mutateSubscription({ extendDays: 30 })}
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={saving || !periodEndDraft}
+                            onClick={() => void mutateSubscription({ periodEnd: new Date(periodEndDraft).toISOString() })}
+                            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            +30 дней
+                            Сохранить дату
                           </button>
                           <button
                             type="button"
