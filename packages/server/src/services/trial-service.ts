@@ -1,0 +1,335 @@
+/**
+ * TrialService — manages trial billing lifecycle with full audit trail.
+ *
+ * Operations: startTrial, endTrialNow, rollbackTrialToFree, extendTrial,
+ * convertTrialToPaid, checkTrialEligibility.
+ */
+
+import { computeNextPeriodEnd } from './billing-service.js';
+
+/** Mirrors the Prisma BillingState enum values. Keep in sync with schema.prisma. */
+export type BillingState = 'free' | 'trial_active' | 'trial_expired' | 'paid_active' | 'paid_expired';
+
+export interface TrialStartOptions {
+  trialPlan?: 'start';  // Always start for v1
+  durationDays?: number; // Default 14
+  source: 'self_serve' | 'admin' | 'promo';
+  actorId?: string;
+  reason?: string;
+}
+
+export interface TrialActionOptions {
+  actorId?: string;
+  reason?: string;
+}
+
+export interface TrialConvertOptions {
+  paidPlan: 'start' | 'team' | 'enterprise';
+  period: 'monthly' | 'yearly';
+  actorId?: string;
+  reason?: string;
+}
+
+export interface TrialEligibility {
+  eligible: boolean;
+  reason?: string;
+}
+
+export interface RollbackResult {
+  overLimitProjects: number;
+  billingState: BillingState;
+}
+
+// Free plan project limit (from catalog: free plan = 1 project)
+const FREE_PROJECT_LIMIT = 1;
+
+interface SubscriptionRow {
+  id: string;
+  userId: string;
+  plan: string;
+  periodStart: Date | null;
+  periodEnd: Date | null;
+  aiUsed: number;
+  createdAt: Date;
+  billingState: BillingState;
+  trialPlan: string | null;
+  trialStartedAt: Date | null;
+  trialEndsAt: Date | null;
+  trialEndedAt: Date | null;
+  trialSource: 'self_serve' | 'admin' | 'promo' | null;
+  trialConvertedAt: Date | null;
+  rolledBackAt: Date | null;
+}
+
+interface TrialServicePrisma {
+  subscription: {
+    findUnique(args: { where: { userId: string } }): Promise<SubscriptionRow | null>;
+    update(args: { where: { userId: string }; data: Partial<SubscriptionRow> }): Promise<SubscriptionRow>;
+  };
+  billingEvent: {
+    create(args: { data: BillingEventData }): Promise<void>;
+  };
+  project: {
+    count(args: { where: { userId: string; status: string } }): Promise<number>;
+  };
+}
+
+interface BillingEventData {
+  userId: string;
+  actorType: string;
+  actorId?: string;
+  previousState: string | null;
+  newState: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface TrialServiceDeps {
+  prisma?: TrialServicePrisma;
+  now?: () => Date;
+}
+
+export class TrialService {
+  private readonly prisma: TrialServicePrisma;
+  private readonly now: () => Date;
+
+  constructor(deps: TrialServiceDeps = {}) {
+    this.prisma = deps.prisma ?? getDefaultPrisma();
+    this.now = deps.now ?? (() => new Date());
+  }
+
+  async startTrial(
+    userId: string,
+    opts: TrialStartOptions,
+  ): Promise<{ billingState: BillingState; trialEndsAt: Date }> {
+    const sub = await this.getSubscription(userId);
+    const now = this.now();
+
+    if (sub.billingState !== 'free') {
+      throw new Error(`Cannot start trial: user is not in free state (current: ${sub.billingState})`);
+    }
+    if (sub.trialStartedAt !== null) {
+      throw new Error('Cannot start trial: user already had a trial');
+    }
+
+    const previousState = sub.billingState;
+    const durationDays = opts.durationDays ?? 14;
+    const trialEndsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    const trialPlan = opts.trialPlan ?? 'start';
+
+    await this.prisma.subscription.update({
+      where: { userId },
+      data: {
+        plan: trialPlan,
+        billingState: 'trial_active',
+        trialPlan,
+        trialStartedAt: now,
+        trialEndsAt,
+        trialSource: opts.source,
+      } as Partial<SubscriptionRow>,
+    });
+
+    await this.recordBillingEvent({
+      userId,
+      actorType: opts.source,
+      actorId: opts.actorId,
+      previousState,
+      newState: 'trial_active',
+      reason: opts.reason,
+      metadata: { trialPlan, durationDays },
+    });
+
+    return { billingState: 'trial_active', trialEndsAt };
+  }
+
+  async endTrialNow(
+    userId: string,
+    opts: TrialActionOptions = {},
+  ): Promise<{ billingState: BillingState }> {
+    const sub = await this.getSubscription(userId);
+    const now = this.now();
+
+    if (sub.billingState !== 'trial_active') {
+      throw new Error(`Cannot end trial: user is not in trial_active state (current: ${sub.billingState})`);
+    }
+
+    const previousState = sub.billingState;
+
+    await this.prisma.subscription.update({
+      where: { userId },
+      data: {
+        billingState: 'trial_expired',
+        trialEndedAt: now,
+      } as Partial<SubscriptionRow>,
+    });
+
+    await this.recordBillingEvent({
+      userId,
+      actorType: 'admin',
+      actorId: opts.actorId,
+      previousState,
+      newState: 'trial_expired',
+      reason: opts.reason,
+    });
+
+    return { billingState: 'trial_expired' };
+  }
+
+  async rollbackTrialToFree(
+    userId: string,
+    opts: TrialActionOptions = {},
+  ): Promise<RollbackResult> {
+    const sub = await this.getSubscription(userId);
+    const now = this.now();
+
+    if (sub.billingState !== 'trial_active' && sub.billingState !== 'trial_expired') {
+      throw new Error(
+        `Cannot rollback: user is not in trial state (current: ${sub.billingState})`,
+      );
+    }
+
+    const previousState = sub.billingState;
+    const newState: BillingState = previousState === 'trial_active' ? 'trial_expired' : 'free';
+
+    // Count active projects to determine over-limit count
+    const activeProjects = await this.prisma.project.count({
+      where: { userId, status: 'active' },
+    });
+    const overLimitProjects = Math.max(0, activeProjects - FREE_PROJECT_LIMIT);
+
+    await this.prisma.subscription.update({
+      where: { userId },
+      data: {
+        plan: 'free',
+        billingState: newState,
+        rolledBackAt: now,
+        periodStart: null,
+        periodEnd: null,
+      } as Partial<SubscriptionRow>,
+    });
+
+    await this.recordBillingEvent({
+      userId,
+      actorType: 'system',
+      actorId: opts.actorId,
+      previousState,
+      newState,
+      reason: opts.reason ?? 'Trial rollback to free',
+      metadata: { activeProjects, overLimitProjects },
+    });
+
+    return { overLimitProjects, billingState: newState };
+  }
+
+  async extendTrial(
+    userId: string,
+    days: number,
+    opts: TrialActionOptions = {},
+  ): Promise<{ trialEndsAt: Date }> {
+    const sub = await this.getSubscription(userId);
+
+    if (sub.billingState !== 'trial_active') {
+      throw new Error(`Cannot extend trial: user is not in trial_active state (current: ${sub.billingState})`);
+    }
+
+    const currentEnd = sub.trialEndsAt ?? this.now();
+    const newTrialEndsAt = new Date(currentEnd.getTime() + days * 24 * 60 * 60 * 1000);
+
+    await this.prisma.subscription.update({
+      where: { userId },
+      data: {
+        trialEndsAt: newTrialEndsAt,
+      } as Partial<SubscriptionRow>,
+    });
+
+    await this.recordBillingEvent({
+      userId,
+      actorType: 'admin',
+      actorId: opts.actorId,
+      previousState: 'trial_active',
+      newState: 'trial_active',
+      reason: opts.reason ?? `Trial extended by ${days} days`,
+      metadata: { extensionDays: days, newTrialEndsAt: newTrialEndsAt.toISOString() },
+    });
+
+    return { trialEndsAt: newTrialEndsAt };
+  }
+
+  async convertTrialToPaid(
+    userId: string,
+    opts: TrialConvertOptions,
+  ): Promise<{ billingState: BillingState }> {
+    const sub = await this.getSubscription(userId);
+    const now = this.now();
+
+    if (sub.billingState !== 'trial_active' && sub.billingState !== 'trial_expired') {
+      throw new Error(
+        `Cannot convert to paid: user is not in trial state (current: ${sub.billingState})`,
+      );
+    }
+
+    const previousState = sub.billingState;
+    const periodEnd = computeNextPeriodEnd(sub.periodEnd, now, opts.period);
+
+    await this.prisma.subscription.update({
+      where: { userId },
+      data: {
+        plan: opts.paidPlan,
+        billingState: 'paid_active',
+        periodStart: now,
+        periodEnd,
+        trialConvertedAt: now,
+        aiUsed: 0,
+      } as Partial<SubscriptionRow>,
+    });
+
+    await this.recordBillingEvent({
+      userId,
+      actorType: 'user',
+      actorId: opts.actorId,
+      previousState,
+      newState: 'paid_active',
+      reason: opts.reason ?? `Converted to ${opts.paidPlan} (${opts.period})`,
+      metadata: { paidPlan: opts.paidPlan, period: opts.period },
+    });
+
+    return { billingState: 'paid_active' };
+  }
+
+  async checkTrialEligibility(userId: string): Promise<TrialEligibility> {
+    const sub = await this.prisma.subscription.findUnique({ where: { userId } });
+
+    if (!sub) {
+      return { eligible: true };
+    }
+
+    if (sub.billingState !== 'free') {
+      return { eligible: false, reason: `User is in ${sub.billingState} state, not free` };
+    }
+
+    if (sub.trialStartedAt !== null) {
+      return { eligible: false, reason: 'User already used a trial' };
+    }
+
+    return { eligible: true };
+  }
+
+  private async getSubscription(userId: string): Promise<SubscriptionRow> {
+    const sub = await this.prisma.subscription.findUnique({ where: { userId } });
+    if (!sub) {
+      throw new Error(`Subscription not found for user ${userId}`);
+    }
+    return sub;
+  }
+
+  private async recordBillingEvent(params: BillingEventData): Promise<void> {
+    await this.prisma.billingEvent.create({ data: params });
+  }
+}
+
+function getDefaultPrisma(): TrialServicePrisma {
+  // Lazy import to avoid circular dependency at module load time
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getPrisma } = require('@gantt/mcp/prisma') as { getPrisma: () => TrialServicePrisma };
+  return getPrisma();
+}
