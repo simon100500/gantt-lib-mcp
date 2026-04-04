@@ -77,7 +77,7 @@ export function LimitReachedModal({
   const resolvedPrimaryLabel = primaryButtonLabel
     ?? (content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ'
       : content.limitKey === 'archive' ? 'Расширить тариф'
-      : 'Перейти на тарифы');
+        : 'Расширить тариф');
   const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.EXPORT_FEATURE_LOCKED;
