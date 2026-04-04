@@ -134,8 +134,14 @@ Plans:
   1. Archive доступен на Старт и выше — бесплатный тариф видит upsell modal вместо функционала
   2. Resource pool доступен на Старт и выше — бесплатный тариф видит upsell modal
   3. Export formats разделены по тарифам — PDF на Старт, PDF+Excel на Команда, PDF+Excel+API на Корпоративный
-**Plans**: TBD
+**Plans**: 4 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 34-01-PLAN.md — Server archive feature-gate enforcement and denial payload contract
+- [ ] 34-02-PLAN.md — Shared frontend gate contract for archive, resource pool, and export tiers
+- [ ] 34-03-PLAN.md — Project-shell archive gating and resource-pool upsell entrypoint
+- [ ] 34-04-PLAN.md — Shell export tier surface with PDF, Excel, and API upsell routing
 
 ---
 
