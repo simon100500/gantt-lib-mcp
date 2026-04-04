@@ -157,7 +157,7 @@ Plans:
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
 | 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
 | 37. Calendar source of truth cleanup | Scheduling | 0/? | Not started | - |
-| 38. Constraint Overrides | Future | 0/? | Not started | - |
+| 38. Paywall Trial Transition | v5.0 | 1/6 | In progress | - |
 
 ---
 
@@ -184,6 +184,12 @@ Plans:
 | OVR-01 | 38 | Pending |
 | OVR-02 | 38 | Pending |
 | OVR-03 | 38 | Pending |
+| FR-1 | 38 | Complete |
+| FR-2 | 38 | Complete |
+| FR-3 | 38 | Complete |
+| FR-5 | 38 | Complete |
+| FR-6 | 38 | Complete |
+| FR-8 | 38 | Complete |
 
 ### Phase 35: Scheduling Core Adoption
 
@@ -223,20 +229,28 @@ Plans:
 Plans:
 - [ ] TBD
 
-### Phase 38: Constraint Overrides
+### Phase 38: Paywall Trial Transition
 
-**Goal:** Админка и backend поддерживают per-user overrides для всех тарифных лимитов поверх plan defaults без форков бизнес-логики по каждому лимиту
-**Requirements**: OVR-01, OVR-02, OVR-03
-**Depends on:** Phase 30, Phase 31, Phase 32, admin tooling
-**Plans:** 0 plans
+**Goal:** Triggered 14-day Start trial with auto-rollback to free — data model, lifecycle service, trial enforcement, admin controls, and UX
+**Requirements**: FR-1, FR-2, FR-3, FR-5, FR-6, FR-8
+**Depends on:** Phase 30, Phase 31, Phase 32, Phase 33, Phase 34
+**Plans:** 1/6 plans complete
 
 **Success Criteria** (what must be TRUE):
-  1. Для любого лимита (`projects`, `ai_queries`, `archive`, `resource_pool`, `export` и следующих новых ключей) можно задать per-user override без изменения plan catalog
-  2. `ConstraintService` учитывает override как верхний слой над тарифом, а API/MCP/frontend enforcement автоматически получают это поведение без route-specific исключений
-  3. Админка позволяет выставить `null = follow plan` или конкретное override-значение и показывает effective limit отдельно от plan default
+  1. BillingState enum distinguishes plan entitlement from lifecycle state (free, trial_active, trial_expired, paid_active, paid_expired)
+  2. TrialService manages full trial lifecycle with audit trail (start, end, rollback, extend, convert, eligibility)
+  3. Constraint system treats trial users as Start plan during trial period
+  4. Auto-rollback to free at trial end with data preservation and over-limit project tracking
+  5. Admin API and UI for trial management with billing-state badges and action timeline
+  6. Trial offer modal, in-app reminders, and post-trial upsell UX
 
 Plans:
-- [ ] TBD
+- [x] 38-01-PLAN.md — Trial data model (BillingState enum, trial fields, BillingEvent audit) and TrialService lifecycle
+- [ ] 38-02-PLAN.md — Trial expiry detection and cron scheduler
+- [ ] 38-03-PLAN.md — Trial-aware constraint enforcement
+- [ ] 38-04-PLAN.md — Admin trial management API and UI
+- [ ] 38-05-PLAN.md — Trial offer modal and self-serve activation
+- [ ] 38-06-PLAN.md — Trial reminders, expiry screen, and post-trial upsell
 
 ---
-*Last updated: 2026-04-04 — Phase 33 completed and verified passed*
+*Last updated: 2026-04-05 — Phase 38 Plan 01 completed*
