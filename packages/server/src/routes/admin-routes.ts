@@ -5,6 +5,7 @@ import { authService } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireAdminAccess } from '../middleware/admin-middleware.js';
 import { BillingService } from '../services/billing-service.js';
+import { TrialService } from '../services/trial-service.js';
 
 interface AdminUpdateSubscriptionBody {
   plan?: PlanId;
@@ -41,6 +42,13 @@ async function buildAdminUserSummary(user: { id: string; email: string; createdA
     prisma.project.count({ where: { userId: user.id, status: 'archived' } }),
   ]);
 
+  // Fetch trial fields — use any cast because worktree Prisma types may lag behind schema
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subscription = await (prisma.subscription.findUnique as any)({
+    where: { userId: user.id },
+    select: { billingState: true, trialEndsAt: true },
+  });
+
   return {
     id: user.id,
     email: user.email,
@@ -51,6 +59,8 @@ async function buildAdminUserSummary(user: { id: string; email: string; createdA
       isActive: status.isActive,
       periodEnd: status.periodEnd,
     },
+    billingState: subscription?.billingState ?? 'free',
+    trialEndsAt: subscription?.trialEndsAt?.toISOString() ?? null,
     projects: {
       active: activeProjects,
       archived: archivedProjects,
@@ -74,7 +84,7 @@ async function buildAdminUserDetails(userId: string) {
     return null;
   }
 
-  const [subscription, usageStatus, payments, projects] = await Promise.all([
+  const [subscription, usageStatus, payments, projects, subscriptionRecord, billingEvents] = await Promise.all([
     billingService.getSubscriptionStatus(user.id),
     billingService.getUsageStatus(user.id),
     billingService.getPaymentHistory(user.id),
@@ -95,6 +105,26 @@ async function buildAdminUserDetails(userId: string) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     }),
+    // Fetch trial fields — any cast for worktree Prisma type lag
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma.subscription.findUnique as any)({
+      where: { userId },
+      select: {
+        billingState: true,
+        trialStartedAt: true,
+        trialEndsAt: true,
+        trialEndedAt: true,
+        trialSource: true,
+        trialConvertedAt: true,
+        rolledBackAt: true,
+      },
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma as any).billingEvent.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
   ]);
 
   return {
@@ -105,9 +135,28 @@ async function buildAdminUserDetails(userId: string) {
     },
     subscription: {
       ...subscription,
+      billingState: subscriptionRecord?.billingState ?? 'free',
+      trial: {
+        startedAt: subscriptionRecord?.trialStartedAt?.toISOString() ?? null,
+        endsAt: subscriptionRecord?.trialEndsAt?.toISOString() ?? null,
+        endedAt: subscriptionRecord?.trialEndedAt?.toISOString() ?? null,
+        source: subscriptionRecord?.trialSource ?? null,
+        convertedAt: subscriptionRecord?.trialConvertedAt?.toISOString() ?? null,
+        rolledBackAt: subscriptionRecord?.rolledBackAt?.toISOString() ?? null,
+      },
       usage: usageStatus.usage,
       remaining: usageStatus.remaining,
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    billingEvents: (billingEvents as any[]).map((event: any) => ({
+      id: event.id,
+      actorType: event.actorType,
+      actorId: event.actorId,
+      previousState: event.previousState,
+      newState: event.newState,
+      reason: event.reason,
+      createdAt: event.createdAt.toISOString(),
+    })),
     payments,
     projects: projects.map((project) => ({
       id: project.id,
@@ -307,6 +356,120 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
           aiUsed: usageValue,
         },
       });
+    }
+
+    const details = await buildAdminUserDetails(userId);
+    return reply.send(details);
+  });
+
+  // Trial management routes
+  const trialService = new TrialService();
+
+  fastify.post('/api/admin/users/:id/trial/start', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const body = (req.body ?? {}) as { durationDays?: number; reason?: string };
+    const adminUserId = req.user!.userId;
+
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    try {
+      await trialService.startTrial(userId, {
+        source: 'admin',
+        durationDays: body.durationDays ?? 14,
+        actorId: adminUserId,
+        reason: body.reason,
+      });
+    } catch (err) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'Trial start failed' });
+    }
+
+    const details = await buildAdminUserDetails(userId);
+    return reply.send(details);
+  });
+
+  fastify.post('/api/admin/users/:id/trial/extend', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const body = (req.body ?? {}) as { days: number; reason?: string };
+    const adminUserId = req.user!.userId;
+
+    if (!Number.isFinite(body.days) || body.days <= 0) {
+      return reply.status(400).send({ error: 'days must be a positive number' });
+    }
+
+    try {
+      await trialService.extendTrial(userId, body.days, {
+        actorId: adminUserId,
+        reason: body.reason,
+      });
+    } catch (err) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'Trial extend failed' });
+    }
+
+    const details = await buildAdminUserDetails(userId);
+    return reply.send(details);
+  });
+
+  fastify.post('/api/admin/users/:id/trial/end', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const body = (req.body ?? {}) as { reason?: string };
+    const adminUserId = req.user!.userId;
+
+    try {
+      await trialService.endTrialNow(userId, {
+        actorId: adminUserId,
+        reason: body.reason,
+      });
+    } catch (err) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'Trial end failed' });
+    }
+
+    const details = await buildAdminUserDetails(userId);
+    return reply.send(details);
+  });
+
+  fastify.post('/api/admin/users/:id/trial/rollback', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const body = (req.body ?? {}) as { reason?: string };
+    const adminUserId = req.user!.userId;
+
+    try {
+      const result = await trialService.rollbackTrialToFree(userId, {
+        actorId: adminUserId,
+        reason: body.reason,
+      });
+      return reply.send({ overLimitProjects: result.overLimitProjects });
+    } catch (err) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'Trial rollback failed' });
+    }
+  });
+
+  fastify.post('/api/admin/users/:id/trial/convert', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const body = (req.body ?? {}) as { paidPlan: string; period: string; reason?: string };
+    const adminUserId = req.user!.userId;
+
+    const validPlans = ['start', 'team', 'enterprise'];
+    if (!validPlans.includes(body.paidPlan)) {
+      return reply.status(400).send({ error: 'paidPlan must be one of: start, team, enterprise' });
+    }
+
+    if (body.period !== 'monthly' && body.period !== 'yearly') {
+      return reply.status(400).send({ error: 'period must be monthly or yearly' });
+    }
+
+    try {
+      await trialService.convertTrialToPaid(userId, {
+        paidPlan: body.paidPlan as 'start' | 'team' | 'enterprise',
+        period: body.period as 'monthly' | 'yearly',
+        actorId: adminUserId,
+        reason: body.reason,
+      });
+    } catch (err) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'Trial conversion failed' });
     }
 
     const details = await buildAdminUserDetails(userId);
