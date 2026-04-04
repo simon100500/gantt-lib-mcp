@@ -17,7 +17,7 @@ import {
 import { PLAN_LABELS } from '../../lib/billing';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
-import { useBillingStore, getExportAccessLevel, type ExportAccessLevel } from '../../stores/useBillingStore.ts';
+import { useBillingStore } from '../../stores/useBillingStore.ts';
 import { useTaskStore } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import type { SidebarMode } from '../../stores/useUIStore.ts';
@@ -39,56 +39,7 @@ interface ProjectMenuProps {
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
-  onRequestExportLevel: (level: 'none' | 'pdf' | 'pdf_excel' | 'pdf_excel_api') => void;
   ganttRef: React.RefObject<GanttChartRef>;
-}
-
-const EXPORT_TIERS: { level: ExportAccessLevel; label: string; requiredLevel: ExportAccessLevel }[] = [
-  { level: 'pdf', label: 'PDF', requiredLevel: 'pdf' },
-  { level: 'pdf_excel', label: 'Excel', requiredLevel: 'pdf_excel' },
-  { level: 'pdf_excel_api', label: 'API', requiredLevel: 'pdf_excel_api' },
-];
-
-const EXPORT_LEVEL_ORDER: ExportAccessLevel[] = ['none', 'pdf', 'pdf_excel', 'pdf_excel_api'];
-
-function ExportAccessCard({
-  currentLevel,
-  onRequestLevel,
-}: {
-  currentLevel: ExportAccessLevel;
-  onRequestLevel: (level: ExportAccessLevel) => void;
-}) {
-  const currentIndex = EXPORT_LEVEL_ORDER.indexOf(currentLevel);
-
-  return (
-    <div className="mt-2 flex items-center gap-1.5">
-      {EXPORT_TIERS.map((tier) => {
-        const tierIndex = EXPORT_LEVEL_ORDER.indexOf(tier.requiredLevel);
-        const available = tierIndex <= currentIndex;
-
-        return (
-          <button
-            key={tier.level}
-            type="button"
-            onClick={() => {
-              if (!available) {
-                onRequestLevel(tier.level);
-              }
-            }}
-            className={cn(
-              'rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors',
-              available
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-pointer hover:bg-slate-100 hover:text-slate-500',
-            )}
-            title={available ? `${tier.label}: доступно` : `${tier.label}: требуется обновление тарифа`}
-          >
-            {tier.label}
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 export function ProjectMenu({
@@ -108,7 +59,6 @@ export function ProjectMenu({
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
-  onRequestExportLevel,
   ganttRef,
 }: ProjectMenuProps) {
   const auth = useAuthStore();
@@ -151,10 +101,6 @@ export function ProjectMenu({
                   : `${auth.projects.length}`} проектов
             </span>
           </div>
-          <ExportAccessCard
-            currentLevel={getExportAccessLevel(subscription)}
-            onRequestLevel={onRequestExportLevel}
-          />
           <button
             type="button"
             onClick={() => setShowBillingPage(true)}

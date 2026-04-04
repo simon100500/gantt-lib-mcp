@@ -75,7 +75,9 @@ export function LimitReachedModal({
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
     : null;
   const resolvedPrimaryLabel = primaryButtonLabel
-    ?? (content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ' : 'Перейти на тарифы');
+    ?? (content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ'
+      : content.limitKey === 'archive' ? 'Расширить тариф'
+      : 'Перейти на тарифы');
   const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.EXPORT_FEATURE_LOCKED;

@@ -23,7 +23,7 @@ import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
-import { useBillingStore, type SubscriptionStatus, type UsageStatus, getExportAccessLevel, type ExportAccessLevel } from './stores/useBillingStore.ts';
+import { useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
@@ -72,11 +72,11 @@ function buildProactiveConstraintDenial(
     }
     const gateCode = limitKey === 'archive' ? 'ARCHIVE_FEATURE_LOCKED' : 'RESOURCE_POOL_FEATURE_LOCKED';
     const hint = limitKey === 'archive'
-      ? 'Архив проектов доступен на тарифе Старт и выше.'
+      ? 'Не теряйте доступ к проектам — расширьте тариф и используйте архив.'
       : 'Пул ресурсов доступен на тарифе Старт и выше.';
     return {
       code: gateCode,
-      limitKey: null,
+      limitKey,
       reasonCode: 'feature_disabled',
       remaining: null,
       plan,
@@ -365,39 +365,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       usage: nextBillingStatus,
     });
   }, [auth.isAuthenticated, fetchUsage, hasShareToken]);
-
-  const EXPORT_LEVEL_ORDER: ExportAccessLevel[] = ['none', 'pdf', 'pdf_excel', 'pdf_excel_api'];
-
-  const EXPORT_LEVEL_LABELS: Record<ExportAccessLevel, string> = {
-    none: 'PDF',
-    pdf: 'PDF',
-    pdf_excel: 'Excel',
-    pdf_excel_api: 'API',
-  };
-
-  const handleRequestExportLevel = useCallback((requestedLevel: ExportAccessLevel) => {
-    const currentLevel = getExportAccessLevel(billingStatus);
-    const currentIndex = EXPORT_LEVEL_ORDER.indexOf(currentLevel);
-    const requestedIndex = EXPORT_LEVEL_ORDER.indexOf(requestedLevel);
-
-    if (requestedIndex <= currentIndex) {
-      return;
-    }
-
-    const plan = ((billingStatus?.plan as PlanId | undefined) ?? 'free');
-    const planLabel = billingStatus?.planMeta.label ?? PLAN_LABELS[plan];
-    const levelLabel = EXPORT_LEVEL_LABELS[requestedLevel];
-
-    void openLimitModal({
-      code: 'EXPORT_FEATURE_LOCKED',
-      limitKey: 'export',
-      reasonCode: 'feature_disabled',
-      remaining: null,
-      plan,
-      planLabel,
-      upgradeHint: `Экспорт в ${levelLabel} доступен на более высоком тарифе. Обновите план, чтобы получить доступ.`,
-    });
-  }, [billingStatus, openLimitModal]);
 
   useEffect(() => {
     if (auth.isAuthenticated && !hasShareToken) {
@@ -1065,7 +1032,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
-      onRequestExportLevel={handleRequestExportLevel}
       ganttRef={ganttRef}
     >
       {showBillingPage && auth.isAuthenticated ? (

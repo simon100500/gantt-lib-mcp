@@ -232,8 +232,13 @@ export function buildConstraintModalContent(
     title = 'Подписка требует продления';
     description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
   } else if (isFeatureGate) {
-    title = `${limitLabel} недоступен`;
-    description = buildFeatureGateDescription(denial, planLabel);
+    if (denial.limitKey === 'archive') {
+      title = 'Не теряйте доступ к проектам';
+      description = 'Архивируйте завершённые проекты и возвращайтесь к ним в любой момент. Расширьте тариф, чтобы продолжить.';
+    } else {
+      title = `${limitLabel} недоступен`;
+      description = buildFeatureGateDescription(denial, planLabel);
+    }
   } else {
     title = `${capitalize(limitLabel)} достигнут`;
     description = `${planLabel}: ${denial.upgradeHint}`;
@@ -300,7 +305,7 @@ function defaultUpgradeHint(limitKey: ConstraintLimitKey | null): string {
   }
 
   if (limitKey === 'archive') {
-    return 'Архив проектов доступен на тарифе Старт и выше.';
+    return 'Не теряйте доступ к проектам — расширьте тариф и используйте архив.';
   }
 
   if (limitKey === 'resource_pool') {
