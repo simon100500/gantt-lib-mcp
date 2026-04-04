@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoginButton } from './LoginButton';
-import { PLAN_LABELS, formatDate, type BillingPeriod, type PlanId } from '../lib/billing';
+import { PLAN_CATALOG, PLAN_LABELS, formatDate, type BillingPeriod, type PlanId } from '../lib/billing';
 import { useAuthStore } from '../stores/useAuthStore';
 
 interface AdminPageProps {
@@ -455,8 +455,8 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                       <div className="text-sm font-medium text-slate-900">{user.email}</div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                         <span>{user.subscription.planLabel}</span>
-                        <span>{user.subscription.isActive ? 'active' : 'expired'}</span>
-                        <span>{user.projects.active} active projects</span>
+                        <span>{user.subscription.isActive ? 'активна' : 'истекла'}</span>
+                        <span>{user.projects.active} активных проектов</span>
                       </div>
                     </button>
                   ))
@@ -474,7 +474,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <h2 className="text-xl font-semibold text-slate-900">{selectedUser.user.email}</h2>
-                      <div className="mt-2 text-sm text-slate-500">Registered: {formatDate(selectedUser.user.createdAt)}</div>
+                      <div className="mt-2 text-sm text-slate-500">Регистрация: {formatDate(selectedUser.user.createdAt)}</div>
                     </div>
                     <div className={`rounded-full px-3 py-1 text-sm ${
                       selectedUser.subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -518,38 +518,56 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <div className="text-sm text-slate-500">AI usage</div>
+                          <div className="text-sm text-slate-500">AI-запросы</div>
                           <div className="mt-2 text-lg font-semibold text-slate-900">
                             {selectedUser.subscription.usage.ai_queries.usageState === 'tracked'
                               ? `${selectedUser.subscription.usage.ai_queries.used} / ${selectedUser.subscription.usage.ai_queries.limit}`
                               : '—'}
                           </div>
-                          <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.ai_queries.remaining ?? '—')}</div>
+                          <div className="mt-1 text-sm text-slate-500">Осталось: {String(selectedUser.subscription.remaining.ai_queries.remaining ?? '—')}</div>
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <div className="text-sm text-slate-500">Projects</div>
+                          <div className="text-sm text-slate-500">Проекты</div>
                           <div className="mt-2 text-lg font-semibold text-slate-900">
-                            {selectedSummary ? `${selectedSummary.projects.active} active / ${selectedSummary.projects.archived} archived` : '—'}
+                            {selectedSummary ? `${selectedSummary.projects.active} активных / ${selectedSummary.projects.archived} в архиве` : '—'}
                           </div>
-                          <div className="mt-1 text-sm text-slate-500">Remaining: {String(selectedUser.subscription.remaining.projects.remaining ?? '—')}</div>
+                          <div className="mt-1 text-sm text-slate-500">Осталось: {String(selectedUser.subscription.remaining.projects.remaining ?? '—')}</div>
                         </div>
                       </div>
 
                       <div className="rounded-2xl border border-slate-200 p-4">
                         <div className="text-sm font-medium text-slate-900">План и срок</div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {(['free', 'start', 'team', 'enterprise'] as PlanId[]).map((plan) => (
-                            <button
-                              key={plan}
-                              type="button"
-                              disabled={saving}
-                              onClick={() => void mutateSubscription({ plan, period: plan === 'free' ? undefined : 'monthly' })}
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {PLAN_LABELS[plan]}
-                            </button>
-                          ))}
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {(['free', 'start', 'team', 'enterprise'] as PlanId[]).map((plan) => {
+                            const def = PLAN_CATALOG[plan];
+                            const isActive = selectedUser.subscription.plan === plan;
+                            return (
+                              <button
+                                key={plan}
+                                type="button"
+                                disabled={saving}
+                                onClick={() => void mutateSubscription({ plan, period: plan === 'free' ? undefined : 'monthly' })}
+                                className={`rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  isActive
+                                    ? 'border-primary bg-primary/[0.04] ring-1 ring-primary/30'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold text-slate-900">{def.label}</span>
+                                  {isActive && (
+                                    <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-white">Текущий</span>
+                                  )}
+                                </div>
+                                <div className="mt-2 space-y-1 text-xs text-slate-500">
+                                  <div>{def.limits.projects === 'unlimited' ? 'Безлимит' : def.limits.projects} проектов</div>
+                                  <div>{def.limits.ai_queries.value} AI{def.limits.ai_queries.period === 'daily' ? '/день' : ''}</div>
+                                  <div>{def.pricing.monthly === 0 ? 'Бесплатно' : `${def.pricing.monthly.toLocaleString('ru-RU')} ₽/мес`}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
 
                         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -573,13 +591,13 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                             onClick={() => void mutateSubscription({ expireNow: true })}
                             className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Expire now
+                            Истечь сейчас
                           </button>
                         </div>
                       </div>
 
                       <div className="rounded-2xl border border-slate-200 p-4">
-                        <div className="text-sm font-medium text-slate-900">AI usage</div>
+                        <div className="text-sm font-medium text-slate-900">AI-запросы</div>
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <input
                             type="number"
@@ -598,7 +616,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                           </button>
                         </div>
                         <p className="mt-2 text-xs text-slate-500">
-                          Меняет текущий AI usage bucket. Project count проверяй через реальные create/archive/restore.
+                          Меняет текущий AI usage bucket. Счётчик проектов — через реальные create/archive/restore.
                         </p>
                       </div>
 

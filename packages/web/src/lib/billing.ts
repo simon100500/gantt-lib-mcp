@@ -9,6 +9,48 @@ export const PLAN_LABELS: Record<PlanId, string> = {
   enterprise: 'Корпоративный',
 };
 
+export const PLAN_CATALOG: Record<PlanId, {
+  label: string;
+  pricing: { monthly: number; yearly: number };
+  limits: {
+    projects: number | 'unlimited';
+    ai_queries: { period: 'daily' | 'lifetime'; value: number };
+  };
+}> = {
+  free: {
+    label: 'Бесплатный',
+    pricing: { monthly: 0, yearly: 0 },
+    limits: {
+      projects: 1,
+      ai_queries: { period: 'lifetime', value: 20 },
+    },
+  },
+  start: {
+    label: 'Старт',
+    pricing: { monthly: 1490, yearly: 11900 },
+    limits: {
+      projects: 3,
+      ai_queries: { period: 'daily', value: 25 },
+    },
+  },
+  team: {
+    label: 'Команда',
+    pricing: { monthly: 4990, yearly: 47900 },
+    limits: {
+      projects: 7,
+      ai_queries: { period: 'daily', value: 50 },
+    },
+  },
+  enterprise: {
+    label: 'Корпоративный',
+    pricing: { monthly: 12900, yearly: 129000 },
+    limits: {
+      projects: 'unlimited',
+      ai_queries: { period: 'daily', value: 100 },
+    },
+  },
+};
+
 export const PLAN_PRICES: Record<'start' | 'team' | 'enterprise', Record<BillingPeriod, number>> = {
   start: { monthly: 1490, yearly: 11900 },
   team: { monthly: 4990, yearly: 47900 },
