@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-04
+**Last updated:** 2026-04-05
 
 ## Progress Summary
 
@@ -12,7 +12,7 @@
 | v2.0 PostgreSQL | 15-16 | Shipped | 2026-03-17 |
 | v3.0 Hardening | 17-23 | Shipped | 2026-03-22 |
 | v4.0 Astro Landing | 24-29 | Shipped | 2026-03-29 |
-| v5.0 Plan Constraints | 30-34 | In progress | - |
+| v5.0 Plan Constraints | 30-38 | In progress | - |
 
 ---
 
@@ -38,7 +38,11 @@
 - [x] **Phase 31: Usage Tracking** — AI query + project count counters with usage API — completed 2026-04-03
 - [x] **Phase 32: Backend Enforcement** — API middleware + MCP tool guards with structured error responses — completed 2026-04-03
 - [x] **Phase 33: Frontend Constraints UX** — Usage indicators, limit modals, proactive UI guards — completed 2026-04-04
-- [ ] **Phase 34: Feature Gates** — Boolean gates for archive, resource pool, export tiers
+- [x] **Phase 34: Feature Gates** — Boolean gates for archive, resource pool, export tiers — completed 2026-04-04
+- [x] **Phase 35: Scheduling Core Adoption** — Server-side scheduling with gantt-lib core — completed 2026-03-31
+- [x] **Phase 36: Unified Scheduling Core** — Typed commands, single scheduling authority — completed 2026-04-01
+- [x] **Phase 37: Calendar Source of Truth Cleanup** — DB-first calendar flow — completed 2026-04-04
+- [ ] **Phase 38: Paywall Trial Transition** — 14-day Start trial with auto-rollback to free
 
 <details>
 <summary>v1.0 MVP (Phases 1-14) — SHIPPED 2026-03-13</summary>
@@ -140,8 +144,8 @@ Plans:
 Plans:
 - [x] 34-01-PLAN.md — Server archive feature-gate enforcement and denial payload contract
 - [x] 34-02-PLAN.md — Shared frontend gate contract for archive, resource pool, and export tiers
-- [ ] 34-03-PLAN.md — Project-shell archive gating and resource-pool upsell entrypoint
-- [ ] 34-04-PLAN.md — Shell export tier surface with PDF, Excel, and API upsell routing
+- [x] 34-03-PLAN.md — Project-shell archive gating and resource-pool upsell entrypoint
+- [x] 34-04-PLAN.md — Shell export tier surface with PDF, Excel, and API upsell routing
 
 ---
 
@@ -153,11 +157,12 @@ Plans:
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 32. Backend Enforcement | v5.0 | 2/2 | Complete    | 2026-04-03 |
 | 33. Frontend Constraints UX | v5.0 | 2/2 | Complete | 2026-04-04 |
-| 34. Feature Gates | v5.0 | 1/4 | Complete    | 2026-04-04 |
-| 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
-| 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
-| 37. Calendar Source of Truth Cleanup | Scheduling | — | Complete | 2026-04-04 |
-| 38. Constraint Overrides | Future | 0/? | Not started | - |
+| 34. Feature Gates | v5.0 | 4/4 | Complete | 2026-04-04 |
+| 35. Scheduling Core Adoption | v5.0 | 3/3 | Complete | 2026-03-31 |
+| 36. Unified Scheduling Core | v5.0 | 7/7 | Complete | 2026-04-01 |
+| 37. Calendar Source of Truth Cleanup | v5.0 | — | Complete | 2026-04-04 |
+| 38. Paywall Trial Transition | v5.0 | 0/6 | Not started | - |
+| 39. Constraint Overrides | Future | 0/? | Not started | - |
 
 ---
 
@@ -178,12 +183,12 @@ Plans:
 | FUX-01 | 33 | Complete |
 | FUX-02 | 33 | Complete |
 | FUX-03 | 33 | Complete |
-| GATE-01 | 34 | Pending |
-| GATE-02 | 34 | Pending |
-| GATE-03 | 34 | Pending |
-| OVR-01 | 38 | Pending |
-| OVR-02 | 38 | Pending |
-| OVR-03 | 38 | Pending |
+| GATE-01 | 34 | Complete |
+| GATE-02 | 34 | Complete |
+| GATE-03 | 34 | Complete |
+| OVR-01 | 39 | Pending |
+| OVR-02 | 39 | Pending |
+| OVR-03 | 39 | Pending |
 
 ### Phase 35: Scheduling Core Adoption
 
@@ -219,13 +224,35 @@ Plans:
 **Requirements**: PRD-only (phase context)
 **Depends on:** Phase 36
 **Plans:** Completed as part of Phases 35/36 — hardcoded holidays removed, DB-first calendar flow verified
-**Status:** ✅ Complete (2026-04-04)
+**Status:** Complete (2026-04-04)
 
-### Phase 38: Constraint Overrides
+### Phase 38: Paywall Trial Transition
+
+**Goal:** Free -> Triggered 14-day Start trial -> Paid Start/Team -> Auto-rollback to Free. Trial state model, admin controls, self-serve triggers, safe rollback, post-trial upsell.
+**Requirements**: PRD-only (`.planning/paywall-trial-transition-prd.md`)
+**Depends on:** Phase 30, Phase 31, Phase 32, Phase 33, Phase 34
+**Plans:** 6 plans
+
+**Success Criteria** (what must be TRUE):
+  1. User can activate a 14-day Start trial after a value trigger — no payment required
+  2. During trial, Start plan limits and features apply; constraint system treats trial as Start
+  3. At trial end, user auto-rolls back to free with all data preserved; over-limit projects become read-only
+  4. Admin can start, extend, end, and rollback trials with full audit trail
+  5. In-app reminders at 7, 3, 1 days before expiry; post-trial upsell references experienced value
+
+Plans:
+- [ ] 38-01-PLAN.md — Trial data model + TrialService lifecycle operations
+- [ ] 38-02-PLAN.md — Trial-aware ConstraintService + trial expiry checker
+- [ ] 38-03-PLAN.md — Admin trial management API routes
+- [ ] 38-04-PLAN.md — Admin UI trial controls + billing events timeline
+- [ ] 38-05-PLAN.md — Frontend trial UX (offer modal, reminders, expiry screen)
+- [ ] 38-06-PLAN.md — Self-serve trial trigger + activation API + frontend hook
+
+### Phase 39: Constraint Overrides
 
 **Goal:** Админка и backend поддерживают per-user overrides для всех тарифных лимитов поверх plan defaults без форков бизнес-логики по каждому лимиту
 **Requirements**: OVR-01, OVR-02, OVR-03
-**Depends on:** Phase 30, Phase 31, Phase 32, admin tooling
+**Depends on:** Phase 30, Phase 31, Phase 32, Phase 38
 **Plans:** 0 plans
 
 **Success Criteria** (what must be TRUE):
@@ -237,4 +264,4 @@ Plans:
 - [ ] TBD
 
 ---
-*Last updated: 2026-04-04 — Phase 33 completed and verified passed*
+*Last updated: 2026-04-05 — Phase 38 planned (6 plans across 4 waves)*
