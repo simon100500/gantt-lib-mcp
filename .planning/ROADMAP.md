@@ -138,7 +138,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 34-01-PLAN.md — Server archive feature-gate enforcement and denial payload contract
+- [x] 34-01-PLAN.md — Server archive feature-gate enforcement and denial payload contract
 - [ ] 34-02-PLAN.md — Shared frontend gate contract for archive, resource pool, and export tiers
 - [ ] 34-03-PLAN.md — Project-shell archive gating and resource-pool upsell entrypoint
 - [ ] 34-04-PLAN.md — Shell export tier surface with PDF, Excel, and API upsell routing
@@ -153,7 +153,7 @@ Plans:
 | 31. Usage Tracking | v5.0 | 2/2 | Complete | 2026-04-03 |
 | 32. Backend Enforcement | v5.0 | 2/2 | Complete    | 2026-04-03 |
 | 33. Frontend Constraints UX | v5.0 | 2/2 | Complete | 2026-04-04 |
-| 34. Feature Gates | v5.0 | 0/? | Not started | - |
+| 34. Feature Gates | v5.0 | 1/4 | In Progress|  |
 | 35. Scheduling Core Adoption | Scheduling | 3/3 | Complete | 2026-03-31 |
 | 36. Unified Scheduling Core | Scheduling | 7/7 | Complete   | 2026-04-01 |
 | 37. Calendar source of truth cleanup | Scheduling | 0/? | Not started | - |
@@ -190,7 +190,7 @@ Plans:
 **Goal:** Сервер выполняет schedule mutations теми же правилами, что и актуальный gantt-lib core, и возвращает authoritative changed-set для agent/web persistence
 **Requirements**: PRD-only (`.planning/reference/scheduling-core-adoption-prd.md`)
 **Depends on:** Phase 08, Phase 16, Phase 19, Phase 21, Phase 22
-**Plans:** 2/2 plans complete
+**Plans:** 1/4 plans executed
 
 Plans:
 - [x] 35-01 — Headless scheduling core + regression parity
