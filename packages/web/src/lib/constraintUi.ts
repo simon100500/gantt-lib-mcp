@@ -18,8 +18,8 @@ import {
   type UsageStatus,
 } from '../stores/useBillingStore';
 
-export type ConstraintLimitKey = 'projects' | 'ai_queries';
-export type ConstraintReasonCode = 'subscription_expired' | 'limit_reached' | 'read_only_mode';
+export type ConstraintLimitKey = 'projects' | 'ai_queries' | 'archive' | 'resource_pool' | 'export';
+export type ConstraintReasonCode = 'subscription_expired' | 'limit_reached' | 'read_only_mode' | 'feature_disabled';
 
 export interface ConstraintDenialPayload {
   code: string;
@@ -73,10 +73,13 @@ const NEXT_PLAN_BY_PLAN: Record<PlanId, Exclude<PlanId, 'free'> | null> = {
 const LIMIT_LABELS: Record<ConstraintLimitKey, string> = {
   projects: 'лимит проектов',
   ai_queries: 'лимит AI-запросов',
+  archive: 'Архив проектов',
+  resource_pool: 'Пул ресурсов',
+  export: 'Экспорт',
 };
 
 function isConstraintLimitKey(value: string | null | undefined): value is ConstraintLimitKey {
-  return value === 'projects' || value === 'ai_queries';
+  return value === 'projects' || value === 'ai_queries' || value === 'archive' || value === 'resource_pool' || value === 'export';
 }
 
 function readTrackedValue(entry: RemainingEntry | null): number | 'unlimited' | null {
@@ -119,10 +122,26 @@ function formatRemainingLabel(remaining: TrackedRemainingEntry | UnlimitedRemain
   return `Осталось ${remaining.remaining}`;
 }
 
+/**
+ * Feature-gate denial codes recognized by the constraint UI.
+ * Backend sends these when a boolean or access-level feature is locked by the user's plan.
+ */
+export const FEATURE_GATE_CODES = {
+  ARCHIVE_FEATURE_LOCKED: 'ARCHIVE_FEATURE_LOCKED',
+  RESOURCE_POOL_FEATURE_LOCKED: 'RESOURCE_POOL_FEATURE_LOCKED',
+  EXPORT_FEATURE_LOCKED: 'EXPORT_FEATURE_LOCKED',
+} as const;
+
+const TRACKED_LIMIT_KEYS: Set<ConstraintLimitKey> = new Set(['projects', 'ai_queries']);
+
 export function getConstraintUsageSnapshot(
   usage: BillingUsageSource,
   limitKey: ConstraintLimitKey,
 ): ConstraintUsageSnapshot {
+  if (!TRACKED_LIMIT_KEYS.has(limitKey)) {
+    return { limitKey, usage: null, remaining: null };
+  }
+
   const trackedUsage = limitKey === 'projects' ? getProjectsUsage(usage) : getAiQueriesUsage(usage);
   const trackedRemaining = limitKey === 'projects' ? getProjectsRemaining(usage) : getAiQueriesRemaining(usage);
 
@@ -200,16 +219,25 @@ export function buildConstraintModalContent(
   denial: ConstraintDenialPayload,
   usage?: BillingUsageSource,
 ): ConstraintModalContent {
-  const usageSnapshot = denial.limitKey && usage ? getConstraintUsageSnapshot(usage, denial.limitKey) : null;
+  const isFeatureGate = denial.limitKey === 'archive' || denial.limitKey === 'resource_pool' || denial.limitKey === 'export';
+  const usageSnapshot = !isFeatureGate && denial.limitKey && usage ? getConstraintUsageSnapshot(usage, denial.limitKey) : null;
   const limitLabel = denial.limitKey ? LIMIT_LABELS[denial.limitKey] : 'доступ к редактированию';
   const upgradeOffer = getUpgradeOffer(denial.plan);
   const planLabel = denial.planLabel || getConstraintPlanLabel(denial.plan);
-  const title = denial.code === 'SUBSCRIPTION_EXPIRED'
-    ? 'Подписка требует продления'
-    : `${capitalize(limitLabel)} достигнут`;
-  const description = denial.code === 'SUBSCRIPTION_EXPIRED'
-    ? `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`
-    : `${planLabel}: ${denial.upgradeHint}`;
+
+  let title: string;
+  let description: string;
+
+  if (denial.code === 'SUBSCRIPTION_EXPIRED') {
+    title = 'Подписка требует продления';
+    description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
+  } else if (isFeatureGate) {
+    title = `${limitLabel} недоступен`;
+    description = buildFeatureGateDescription(denial, planLabel);
+  } else {
+    title = `${capitalize(limitLabel)} достигнут`;
+    description = `${planLabel}: ${denial.upgradeHint}`;
+  }
 
   return {
     code: denial.code,
@@ -220,10 +248,46 @@ export function buildConstraintModalContent(
     plan: denial.plan,
     planLabel,
     upgradeHint: denial.upgradeHint,
-    remainingLabel: formatRemainingLabel(usageSnapshot?.remaining ?? null),
-    usageLabel: formatUsageLabel(usageSnapshot?.usage ?? null, usageSnapshot?.remaining ?? null),
+    remainingLabel: !isFeatureGate ? formatRemainingLabel(usageSnapshot?.remaining ?? null) : null,
+    usageLabel: !isFeatureGate ? formatUsageLabel(usageSnapshot?.usage ?? null, usageSnapshot?.remaining ?? null) : null,
     upgradeOffer,
   };
+}
+
+const EXPORT_ACCESS_DESCRIPTIONS: Record<string, string> = {
+  none: 'Экспорт недоступен на вашем тарифе.',
+  pdf: 'Экспорт в PDF (pdf) доступен на вашем тарифе.',
+  pdf_excel: 'Экспорт PDF + Excel (pdf_excel) доступен на вашем тарифе.',
+  pdf_excel_api: 'Экспорт PDF + Excel + API (pdf_excel_api) доступен на вашем тарифе.',
+};
+
+const EXPORT_UPGRADE_TIERS: Record<string, string> = {
+  none: 'pdf',
+  pdf: 'pdf_excel',
+  pdf_excel: 'pdf_excel_api',
+};
+
+function buildFeatureGateDescription(denial: ConstraintDenialPayload, planLabel: string): string {
+  if (denial.limitKey === 'export') {
+    const currentLevel = getExportTierFromPlan(denial.plan);
+    const nextLevel = EXPORT_UPGRADE_TIERS[currentLevel];
+    const description = nextLevel
+      ? `${planLabel}: ${denial.upgradeHint} Следующий уровень: ${nextLevel}.`
+      : `${planLabel}: ${denial.upgradeHint}`;
+    return description;
+  }
+
+  return `${planLabel}: ${denial.upgradeHint}`;
+}
+
+function getExportTierFromPlan(plan: PlanId): string {
+  const tiers: Record<PlanId, string> = {
+    free: 'none',
+    start: 'pdf',
+    team: 'pdf_excel',
+    enterprise: 'pdf_excel_api',
+  };
+  return tiers[plan] ?? 'none';
 }
 
 function defaultUpgradeHint(limitKey: ConstraintLimitKey | null): string {
@@ -233,6 +297,18 @@ function defaultUpgradeHint(limitKey: ConstraintLimitKey | null): string {
 
   if (limitKey === 'ai_queries') {
     return 'Перейдите на более высокий тариф, чтобы получить больше AI-запросов.';
+  }
+
+  if (limitKey === 'archive') {
+    return 'Архив проектов доступен на тарифе Старт и выше.';
+  }
+
+  if (limitKey === 'resource_pool') {
+    return 'Пул ресурсов доступен на тарифе Старт и выше.';
+  }
+
+  if (limitKey === 'export') {
+    return 'Экспорт доступен на платных тарифах.';
   }
 
   return 'Обновите тариф, чтобы продолжить работу без ограничений.';

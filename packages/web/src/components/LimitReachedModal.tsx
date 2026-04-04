@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { formatPrice } from '../lib/billing.ts';
 import {
   buildConstraintModalContent,
+  FEATURE_GATE_CODES,
   normalizeConstraintDenialPayload,
   type ConstraintDenialPayload,
 } from '../lib/constraintUi.ts';
@@ -75,8 +76,11 @@ export function LimitReachedModal({
     : null;
   const resolvedPrimaryLabel = primaryButtonLabel
     ?? (content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ' : 'Перейти на тарифы');
+  const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
+    || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
+    || content.code === FEATURE_GATE_CODES.EXPORT_FEATURE_LOCKED;
   const resolvedSecondaryLabel = secondaryButtonLabel
-    ?? (content.limitKey === 'ai_queries' ? 'Понятно' : 'Закрыть');
+    ?? (content.limitKey === 'ai_queries' ? 'Понятно' : isFeatureGate ? 'Закрыть' : 'Закрыть');
 
   useEffect(() => {
     dialogRef.current?.focus();
