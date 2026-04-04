@@ -35,6 +35,7 @@ interface ProjectMenuProps {
   onArchiveProject: (projectId: string) => void | Promise<void>;
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
+  onOpenResourcePool?: () => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
@@ -54,6 +55,7 @@ export function ProjectMenu({
   onArchiveProject,
   onRestoreProject,
   onDeleteProject,
+  onOpenResourcePool,
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
@@ -338,6 +340,7 @@ export function ProjectMenu({
             onArchive={(projectId) => { void onArchiveProject(projectId); }}
             onRestore={(projectId) => { void onRestoreProject(projectId); }}
             onDelete={(projectId) => { void onDeleteProject(projectId); }}
+            onOpenResourcePool={onOpenResourcePool}
             onMenuOpenChange={setProjectActionsMenuOpen}
             onClose={() => setSidebarState('closed')}
             footer={billingFooter}
@@ -547,6 +550,7 @@ export function ProjectMenu({
               onArchive={(projectId) => { void onArchiveProject(projectId); }}
               onRestore={(projectId) => { void onRestoreProject(projectId); }}
               onDelete={(projectId) => { void onDeleteProject(projectId); }}
+              onOpenResourcePool={onOpenResourcePool}
               onMenuOpenChange={setProjectActionsMenuOpen}
               footer={billingFooter}
             />

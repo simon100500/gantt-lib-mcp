@@ -732,6 +732,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     await auth.restoreProject(projectId);
   }, [auth]);
 
+  const handleOpenResourcePool = useCallback(async () => {
+    const proactiveResourcePoolDenial = buildProactiveConstraintDenial('resource_pool', billingStatus);
+    if (proactiveResourcePoolDenial) {
+      await openLimitModal(proactiveResourcePoolDenial);
+      return;
+    }
+    // Resource pool feature for paid tiers — no-op until full implementation
+  }, [billingStatus, openLimitModal]);
+
   const handleDeleteProject = useCallback(async (projectId: string) => {
     const project = auth.projects.find((item) => item.id === projectId);
     if (!project) {
@@ -1019,6 +1028,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}
+      onOpenResourcePool={handleOpenResourcePool}
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
