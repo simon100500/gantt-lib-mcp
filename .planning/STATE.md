@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: planning
-last_updated: "2026-04-04T11:06:35.495Z"
-last_activity: 2026-04-04 -- Phase 33 verified and completed
+status: executing
+last_updated: "2026-04-04T14:08:00+03:00"
+last_activity: 2026-04-04 -- Phase 34 Wave 1 complete (plans 01+02)
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 23
   completed_plans: 20
-  percent: 100
+  percent: 87
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-04
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to plan
+**Status:** Executing Phase 34
 
 ---
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 34
-Plan: Not started
-Status: Phase 33 complete — ready to plan
-Last activity: 2026-04-04 -- Phase 33 verified and completed
+Plan: 02 complete (of 4)
+Status: Plan 02 completed — feature gate frontend contract
+Last activity: 2026-04-04 -- Phase 34 Plan 02 completed
 
-Progress: [██████████] 100%
+Progress: [█████████░] 87%
 
 ---
 
@@ -109,6 +109,9 @@ packages/
 - Phase 33 centralized project/AI usage selectors in the billing store so future feature gates can reuse the same normalized tariff state.
 - [Phase 34]: requireFeatureGate omits tracked usage fields (used/limit) from denial payload since non-tracked limits have no counters.
 - [Phase 34]: Archive route preHandler composes authMiddleware then requireArchiveAccess, matching the established pattern from Phase 32.
+- [Phase 34]: Feature gates skip usage snapshots in modal content since archive/resource_pool/export are boolean/access-level, not tracked counters.
+- [Phase 34]: Plan-to-tier map for export upgrade targets so modal shows next concrete access level (free->start/pdf, start->team/pdf_excel, team->enterprise/pdf_excel_api).
+- [Phase 34]: Frontend constraint contract expanded to cover archive, resource_pool, export with typed selectors, expanded ConstraintLimitKey, FEATURE_GATE_CODES, plan-aware descriptions.
 
 ## Performance Metrics
 
@@ -118,13 +121,14 @@ packages/
 | 32 | 02 | 4 min | 2 | 6 | 2026-04-03 |
 | 33 | 01 | 20 min | 2 | 3 | 2026-04-04 |
 | 33 | 02 | 15 min | 2 | 6 | 2026-04-04 |
-| Phase 34 P01 | 4min | 2 tasks | 4 files |
+| 34 | 01 | 4 min | 2 | 4 | 2026-04-04 |
+| 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
 
 ## Session
 
-- Last session: 2026-04-04T00:44:00+03:00
-- Stopped at: Completed 33 verification and phase closure
+- Last session: 2026-04-04T14:08:00+03:00
+- Stopped at: Completed 34-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-04 — Phase 33 completed and Phase 34 is next*
+*Last updated: 2026-04-04 — Phase 34 Plan 02 completed*

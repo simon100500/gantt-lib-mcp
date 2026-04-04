@@ -134,6 +134,28 @@ export function getAiQueriesRemaining(
   return getTrackedRemainingEntry(status, 'ai_queries');
 }
 
+// --- Feature gate selectors (archive, resource_pool, export) ---
+
+export type ExportAccessLevel = 'none' | 'pdf' | 'pdf_excel' | 'pdf_excel_api';
+
+export function getArchiveAccess(status: UsageStatus | SubscriptionStatus | null): boolean {
+  const value = status?.limits?.archive;
+  return value === true;
+}
+
+export function getResourcePoolAccess(status: UsageStatus | SubscriptionStatus | null): boolean {
+  const value = status?.limits?.resource_pool;
+  return value === true;
+}
+
+export function getExportAccessLevel(status: UsageStatus | SubscriptionStatus | null): ExportAccessLevel {
+  const value = status?.limits?.export;
+  if (value === 'none' || value === 'pdf' || value === 'pdf_excel' || value === 'pdf_excel_api') {
+    return value;
+  }
+  return 'none';
+}
+
 export interface PaymentRecord {
   id: string;
   plan: string;

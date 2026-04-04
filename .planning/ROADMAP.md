@@ -139,7 +139,7 @@ Plans:
 
 Plans:
 - [x] 34-01-PLAN.md — Server archive feature-gate enforcement and denial payload contract
-- [ ] 34-02-PLAN.md — Shared frontend gate contract for archive, resource pool, and export tiers
+- [x] 34-02-PLAN.md — Shared frontend gate contract for archive, resource pool, and export tiers
 - [ ] 34-03-PLAN.md — Project-shell archive gating and resource-pool upsell entrypoint
 - [ ] 34-04-PLAN.md — Shell export tier surface with PDF, Excel, and API upsell routing
 
