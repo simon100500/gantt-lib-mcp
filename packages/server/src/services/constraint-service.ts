@@ -25,8 +25,8 @@ interface ConstraintServicePrisma {
   subscription: {
     findUnique(args: {
       where: { userId: string };
-      select?: { plan?: true };
-    }): Promise<{ plan: string } | null>;
+      select?: { plan?: true; billingState?: true; trialPlan?: true };
+    }): Promise<{ plan: string; billingState?: string; trialPlan?: string | null } | null>;
   };
   project: {
     count(args: {
@@ -351,9 +351,15 @@ export class ConstraintService {
 
     const subscription = await this.prisma.subscription.findUnique({
       where: { userId },
-      select: { plan: true },
+      select: { plan: true, billingState: true, trialPlan: true },
     });
-    const planId = (subscription?.plan ?? 'free') as PlanId;
+    let planId = (subscription?.plan ?? 'free') as PlanId;
+
+    // Trial users get their trial plan limits regardless of stored plan field
+    if (subscription?.billingState === 'trial_active') {
+      planId = (subscription.trialPlan || 'start') as PlanId;
+    }
+
     getPlanDefinition(planId);
 
     return {

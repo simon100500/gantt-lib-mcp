@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: executing
-last_updated: "2026-04-05T22:09:12Z"
-last_activity: 2026-04-05
+status: planning
+last_updated: "2026-04-04T22:25:53.074Z"
+last_activity: 2026-04-04
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 29
   completed_plans: 24
-  percent: 83
+  percent: 89
 ---
 
 # Project State: gantt-lib MCP Server
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 38 — paywall trial transition in progress
+**Current focus:** Phase 34 — feature-gates plans 03/04 remaining
 
 ---
 
 ## Current Position
 
-Phase: 38
-Plan: 01 complete
-Status: Phase 38 Plan 01 — trial data model and lifecycle service complete
-Last activity: 2026-04-05
+Phase: 35
+Plan: Not started
+Status: Phase 34 complete — all feature gates implemented
+Last activity: 2026-04-04
 
-Progress: [██████████] 100%
+Progress: [████████░░] 89%
 
 ---
 
@@ -89,9 +89,9 @@ packages/
 - Phase 36 Plan 05: Frontend three-layer Zustand store (confirmed/pending/dragPreview) with useCommandCommit hook routing schedule mutations through /api/commands/commit
 - Phase 36 Plan 06: MCP schedule tools and API mutations routed through CommandService.commitCommand
 - Phase 36 Plan 07: 19-test suite covering parity (P1-P3), concurrency (C1-C3), patch reasons (R1-R3), dependency regression (REG1-REG4). FS lag semantics: succStart = predEnd + lag + 1
-- Phase 37 added: Calendar source of truth cleanup
-- Remaining scheduling tech debt: holiday definitions are still hardcoded in `packages/mcp/src/services/projectScheduleOptions.ts` and `packages/web/src/lib/russianHolidays2026.ts`
-- Next phase must remove frontend/server holiday duplication and make DB + server payload the only source of truth for calendar days
+- Phase 37 completed: hardcoded holidays removed, DB-first calendar flow in place
+- `russianHolidays2026.ts` deleted, `systemDefaultCalendarDays` removed from server
+- Frontend builds weekendPredicate only from server-provided calendarDays payload
 - Phase 32 Plan 01 centralized HTTP constraint guards and structured denial payloads for Fastify mutation routes
 - `/api/projects`, `/api/projects/:id/restore`, `/api/chat`, and `/api/commands/commit` now reject over-limit or expired-plan writes before business logic runs
 - Phase 32 Plan 02 added a Prisma-backed MCP enforcement service that resolves `projectId` ownership before denying expired paid-plan mutation tools
@@ -116,9 +116,10 @@ packages/
 - [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits.
 - [Phase 34]: Export tier comparison uses ordered array index for clear level ordering
 - [Phase 34]: Locked export tiers are clickable buttons triggering upsell modal instead of dead/hidden UI
-- [Phase 38 Plan 01]: BillingState type defined locally in TrialService to avoid MCP package compilation dependency at server typecheck time
-- [Phase 38 Plan 01]: BillingEvent linked to User (not Subscription) to allow audit trail independent of subscription lifecycle
-- [Phase 38 Plan 01]: FREE_PROJECT_LIMIT hardcoded as constant in TrialService for rollback over-limit calculation
+- [Phase 38]: ConstraintService reads billingState and trialPlan from Subscription to resolve effective plan for trial users
+- [Phase 38]: Trial plan defaults to start when trialPlan is null during trial_active state
+- [Phase 38]: BillingService uses Record<string,unknown> cast for billingState/trial fields for forward compatibility with Prisma schema from 38-01
+- [Phase 38]: checkAndRollExpiredTrials is a standalone exported function for flexible scheduling, not a BillingService method
 
 ## Performance Metrics
 
@@ -132,13 +133,13 @@ packages/
 | 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
 | 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
 | 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
-| 38 | 01 | 6 min | 2 | 3 | 2026-04-05 |
+| Phase 38 P02 | 5min | 2 tasks | 4 files |
 
 ## Session
 
-- Last session: 2026-04-05T01:09:00+03:00
-- Stopped at: Completed 38-01-PLAN.md
+- Last session: 2026-04-04T14:08:00+03:00
+- Stopped at: Completed 34-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-05 — Phase 38 Plan 01 completed*
+*Last updated: 2026-04-04 — Phase 37 formally closed, Phase 34 in progress*

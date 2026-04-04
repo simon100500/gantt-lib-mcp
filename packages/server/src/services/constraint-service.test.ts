@@ -2,18 +2,37 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ConstraintService, ConstraintServiceError } from './constraint-service.js';
 
-function createPrismaStub(planByUser: Record<string, string>) {
+interface StubSubscription {
+  plan: string;
+  billingState?: string;
+  trialPlan?: string | null;
+}
+
+function createPrismaStub(subsByUser: Record<string, string | StubSubscription>) {
   const counters = new Map<string, { userId: string; limitKey: string; periodBucket: string; usage: number }>();
   const projectCounts = new Map<string, number>();
+
+  function resolveSub(userId: string): StubSubscription | null {
+    const raw = subsByUser[userId];
+    if (!raw) return null;
+    if (typeof raw === 'string') return { plan: raw };
+    return raw;
+  }
 
   return {
     projectCounts,
     counters,
     prisma: {
       subscription: {
-        async findUnique({ where }: { where: { userId: string } }) {
-          const plan = planByUser[where.userId];
-          return plan ? { plan } : null;
+        async findUnique({ where, select }: { where: { userId: string }; select?: { plan?: true; billingState?: true; trialPlan?: true } }) {
+          const sub = resolveSub(where.userId);
+          if (!sub) return null;
+
+          const result: Record<string, unknown> = {};
+          if (!select || select.plan) result.plan = sub.plan;
+          if (select?.billingState) result.billingState = sub.billingState;
+          if (select?.trialPlan) result.trialPlan = sub.trialPlan;
+          return result as { plan: string; billingState?: string; trialPlan?: string | null };
         },
       },
       project: {
@@ -198,5 +217,52 @@ describe('ConstraintService', () => {
         return true;
       },
     );
+  });
+
+  // Trial plan resolution tests
+
+  it('resolves trial_active user with trialPlan=start as start plan', async () => {
+    const stub = createPrismaStub({
+      'trial-user': { plan: 'free', billingState: 'trial_active', trialPlan: 'start' },
+    });
+    const service = new ConstraintService({
+      prisma: stub.prisma as never,
+      now: () => new Date('2026-04-02T12:00:00.000Z'),
+    });
+
+    const usage = await service.getUsage('trial-user', 'ai_queries');
+
+    assert.equal(usage.planId, 'start');
+    assert.equal(usage.limit, 25); // start plan daily AI limit
+  });
+
+  it('resolves trial_active user with null trialPlan as start plan by default', async () => {
+    const stub = createPrismaStub({
+      'trial-user': { plan: 'free', billingState: 'trial_active', trialPlan: null },
+    });
+    const service = new ConstraintService({
+      prisma: stub.prisma as never,
+      now: () => new Date('2026-04-02T12:00:00.000Z'),
+    });
+
+    const usage = await service.getUsage('trial-user', 'ai_queries');
+
+    assert.equal(usage.planId, 'start');
+    assert.equal(usage.limit, 25);
+  });
+
+  it('non-trial user uses stored plan regardless of trialPlan field', async () => {
+    const stub = createPrismaStub({
+      'paid-user': { plan: 'team', billingState: 'paid_active', trialPlan: 'start' },
+    });
+    const service = new ConstraintService({
+      prisma: stub.prisma as never,
+      now: () => new Date('2026-04-02T12:00:00.000Z'),
+    });
+
+    const usage = await service.getUsage('paid-user', 'ai_queries');
+
+    assert.equal(usage.planId, 'team');
+    assert.equal(usage.limit, 50); // team plan daily AI limit
   });
 });
