@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: planning
-last_updated: "2026-04-04T11:46:10.235Z"
+last_updated: "2026-04-04T22:36:13.924Z"
 last_activity: 2026-04-04
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 23
-  completed_plans: 23
+  total_phases: 10
+  completed_phases: 7
+  total_plans: 29
+  completed_plans: 24
   percent: 89
 ---
 
@@ -116,6 +116,8 @@ packages/
 - [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits.
 - [Phase 34]: Export tier comparison uses ordered array index for clear level ordering
 - [Phase 34]: Locked export tiers are clickable buttons triggering upsell modal instead of dead/hidden UI
+- [Phase 38]: Used window.confirm for rollback impact preview instead of custom modal to match existing admin panel simplicity
+- [Phase 38]: Showed billingState badges only for non-free/non-paid_active states to avoid badge clutter in user list
 
 ## Performance Metrics
 
@@ -129,6 +131,7 @@ packages/
 | 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
 | 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
 | 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
+| Phase 38 P04 | 2min | 1 tasks | 1 files |
 
 ## Session
 

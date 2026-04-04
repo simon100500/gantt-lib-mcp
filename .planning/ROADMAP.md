@@ -161,7 +161,7 @@ Plans:
 | 35. Scheduling Core Adoption | v5.0 | 3/3 | Complete | 2026-03-31 |
 | 36. Unified Scheduling Core | v5.0 | 7/7 | Complete | 2026-04-01 |
 | 37. Calendar Source of Truth Cleanup | v5.0 | — | Complete | 2026-04-04 |
-| 38. Paywall Trial Transition | v5.0 | 0/6 | Not started | - |
+| 38. Paywall Trial Transition | v5.0 | 1/6 | In Progress|  |
 | 39. Constraint Overrides | Future | 0/? | Not started | - |
 
 ---
@@ -231,7 +231,7 @@ Plans:
 **Goal:** Free -> Triggered 14-day Start trial -> Paid Start/Team -> Auto-rollback to Free. Trial state model, admin controls, self-serve triggers, safe rollback, post-trial upsell.
 **Requirements**: PRD-only (`.planning/paywall-trial-transition-prd.md`)
 **Depends on:** Phase 30, Phase 31, Phase 32, Phase 33, Phase 34
-**Plans:** 6 plans
+**Plans:** 1/6 plans executed
 
 **Success Criteria** (what must be TRUE):
   1. User can activate a 14-day Start trial after a value trigger — no payment required
@@ -244,7 +244,7 @@ Plans:
 - [ ] 38-01-PLAN.md — Trial data model + TrialService lifecycle operations
 - [ ] 38-02-PLAN.md — Trial-aware ConstraintService + trial expiry checker
 - [ ] 38-03-PLAN.md — Admin trial management API routes
-- [ ] 38-04-PLAN.md — Admin UI trial controls + billing events timeline
+- [x] 38-04-PLAN.md — Admin UI trial controls + billing events timeline
 - [ ] 38-05-PLAN.md — Frontend trial UX (offer modal, reminders, expiry screen)
 - [ ] 38-06-PLAN.md — Self-serve trial trigger + activation API + frontend hook
 
