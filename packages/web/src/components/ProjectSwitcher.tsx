@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Archive, ChevronDown, Folder, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Folder, Layers, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ interface ProjectSwitcherProps {
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
+  onOpenResourcePool?: () => void | Promise<void>;
   onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
   footer?: ReactNode;
@@ -224,6 +225,7 @@ export function ProjectSwitcher({
   onArchive,
   onRestore,
   onDelete,
+  onOpenResourcePool,
   onMenuOpenChange,
   onClose,
   footer,
@@ -310,6 +312,17 @@ export function ProjectSwitcher({
               <p className="px-3 py-2 text-xs text-slate-400">Архив пуст</p>
             )}
           </ProjectSection>
+
+          {onOpenResourcePool && (
+            <button
+              type="button"
+              onClick={() => void onOpenResourcePool()}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Layers className="h-4 w-4 text-slate-400" />
+              <span>Пул ресурсов</span>
+            </button>
+          )}
         </div>
       </div>
 

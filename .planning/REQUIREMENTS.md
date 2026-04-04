@@ -78,13 +78,8 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | FUX-02 | Phase 33 | Complete |
 | FUX-03 | Phase 33 | Complete |
 | GATE-01 | Phase 34 | Complete |
-<<<<<<< HEAD
-| GATE-02 | Phase 34 | Pending |
-| GATE-03 | Phase 34 | Pending |
-=======
 | GATE-02 | Phase 34 | Complete |
 | GATE-03 | Phase 34 | Complete |
->>>>>>> worktree-agent-a48551bb
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |

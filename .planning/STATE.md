@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-04T14:08:00+03:00"
-last_activity: 2026-04-04 -- Phase 34 Wave 1 complete (plans 01+02)
+last_updated: "2026-04-04T14:20:00+03:00"
+last_activity: 2026-04-04 -- Phase 34 Wave 2 complete (plan 03)
 progress:
   total_phases: 9
   completed_phases: 6
@@ -112,6 +112,8 @@ packages/
 - [Phase 34]: Feature gates skip usage snapshots in modal content since archive/resource_pool/export are boolean/access-level, not tracked counters.
 - [Phase 34]: Plan-to-tier map for export upgrade targets so modal shows next concrete access level (free->start/pdf, start->team/pdf_excel, team->enterprise/pdf_excel_api).
 - [Phase 34]: Frontend constraint contract expanded to cover archive, resource_pool, export with typed selectors, expanded ConstraintLimitKey, FEATURE_GATE_CODES, plan-aware descriptions.
+- [Phase 34]: Renamed projectLimitDenial to constraintDenial as generic denial bridge for all 403 constraint responses.
+- [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits.
 
 ## Performance Metrics
 
@@ -123,6 +125,7 @@ packages/
 | 33 | 02 | 15 min | 2 | 6 | 2026-04-04 |
 | 34 | 01 | 4 min | 2 | 4 | 2026-04-04 |
 | 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
+| 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
 
 ## Session
 
