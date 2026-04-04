@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: planning
-last_updated: "2026-04-04T01:08:00+03:00"
+last_updated: "2026-04-04T11:24:07.129Z"
 last_activity: 2026-04-04 -- Phase 33 verified and completed
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 23
+  completed_plans: 20
   percent: 100
 ---
 
@@ -107,6 +107,8 @@ packages/
 - Phase 32 Plan 02 scoped MCP enforcement to the eight public task-mutation tools and left read-only tools plus `add_message` available.
 - Phase 33 kept legacy modal scenarios as a compatibility shim while making structured denial payloads the primary limit UX contract.
 - Phase 33 centralized project/AI usage selectors in the billing store so future feature gates can reuse the same normalized tariff state.
+- [Phase 34]: Renamed projectLimitDenial to constraintDenial as generic denial bridge for all 403 constraint responses
+- [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits
 
 ## Performance Metrics
 
@@ -116,6 +118,7 @@ packages/
 | 32 | 02 | 4 min | 2 | 6 | 2026-04-03 |
 | 33 | 01 | 20 min | 2 | 3 | 2026-04-04 |
 | 33 | 02 | 15 min | 2 | 6 | 2026-04-04 |
+| Phase 34 P03 | 8min | 2 tasks | 4 files |
 
 ## Session
 
