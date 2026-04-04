@@ -243,8 +243,8 @@ Plans:
 Plans:
 - [ ] 38-01-PLAN.md — Trial data model + TrialService lifecycle operations
 - [ ] 38-02-PLAN.md — Trial-aware ConstraintService + trial expiry checker
-- [x] 38-03-PLAN.md — Admin trial management API routes
-- [ ] 38-04-PLAN.md — Admin UI trial controls + billing events timeline
+- [ ] 38-03-PLAN.md — Admin trial management API routes
+- [x] 38-04-PLAN.md — Admin UI trial controls + billing events timeline
 - [ ] 38-05-PLAN.md — Frontend trial UX (offer modal, reminders, expiry screen)
 - [ ] 38-06-PLAN.md — Self-serve trial trigger + activation API + frontend hook
 

@@ -18,6 +18,8 @@ interface AdminUserSummary {
     planLabel: string;
     isActive: boolean;
     periodEnd: string | null;
+    billingState: string;
+    trialEndsAt: string | null;
   };
   projects: {
     active: number;
@@ -39,6 +41,15 @@ interface AdminUserDetails {
     plan: PlanId;
     periodEnd: string | null;
     isActive: boolean;
+    billingState: string;
+    trial: {
+      startedAt: string | null;
+      endsAt: string | null;
+      endedAt: string | null;
+      source: string | null;
+      convertedAt: string | null;
+      rolledBackAt: string | null;
+    };
     usage: {
       ai_queries: {
         usageState: 'tracked' | 'not_applicable';
@@ -62,6 +73,15 @@ interface AdminUserDetails {
       };
     };
   };
+  billingEvents: Array<{
+    id: string;
+    actorType: string;
+    actorId: string | null;
+    previousState: string | null;
+    newState: string;
+    reason: string | null;
+    createdAt: string;
+  }>;
   payments: Array<{
     id: string;
     created_at: string;
@@ -86,6 +106,23 @@ interface AdminProjectMessage {
   content: string;
   createdAt: string;
 }
+
+function daysUntil(iso: string | null): number {
+  if (!iso) return 0;
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+}
+
+const billingStateColors: Record<string, string> = {
+  trial_active: 'bg-blue-100 text-blue-700',
+  trial_expired: 'bg-orange-100 text-orange-700',
+  paid_expired: 'bg-red-100 text-red-700',
+};
+
+const billingStateLabels: Record<string, string> = {
+  trial_active: 'Пробный',
+  trial_expired: 'Пробный истёк',
+  paid_expired: 'Оплачен истёк',
+};
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', {
@@ -324,6 +361,30 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     }
   }, [loadUsers, query, selectedUserId]);
 
+  const trialAction = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
+    if (!selectedUserId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/users/${selectedUserId}/trial/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${response.status}`);
+      }
+      const data = await response.json() as AdminUserDetails;
+      setSelectedUser(data);
+      await loadUsers(query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Trial action failed');
+    } finally {
+      setSaving(false);
+    }
+  }, [loadUsers, query, selectedUserId]);
+
   const openProjectView = useCallback(async (projectId: string) => {
     setOpeningProjectId(projectId);
     setError(null);
@@ -470,6 +531,11 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                               {user.subscription.isActive ? 'активна' : 'истекла'}
                             </span>
                           )}
+                          {user.subscription.billingState && user.subscription.billingState !== 'free' && user.subscription.billingState !== 'paid_active' && (
+                            <span className={`rounded-full px-2 py-0.5 font-medium ${billingStateColors[user.subscription.billingState] ?? 'bg-slate-100 text-slate-600'}`}>
+                              {billingStateLabels[user.subscription.billingState] ?? user.subscription.billingState}
+                            </span>
+                          )}
                           <span className="text-slate-500">{user.projects.active} пр.</span>
                         </div>
                       </button>
@@ -550,6 +616,128 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                           <div className="mt-1 text-sm text-slate-500">Осталось: {String(selectedUser.subscription.remaining.projects.remaining ?? '—')}</div>
                         </div>
                       </div>
+
+                      {/* Trial Status Card */}
+                      {selectedUser.subscription.trial?.startedAt && (
+                        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                          <div className="text-sm font-medium text-blue-900">Пробный период</div>
+                          <div className="mt-2 text-sm text-blue-700">
+                            {selectedUser.subscription.billingState === 'trial_active'
+                              ? `Активен, осталось ${daysUntil(selectedUser.subscription.trial.endsAt)} дн.`
+                              : selectedUser.subscription.billingState === 'trial_expired'
+                                ? 'Закончился'
+                                : 'Откат выполнен'}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-600">
+                            {selectedUser.subscription.trial.startedAt && (
+                              <span>Начало: {formatDate(selectedUser.subscription.trial.startedAt)}</span>
+                            )}
+                            {selectedUser.subscription.trial.endsAt && (
+                              <span>Конец: {formatDate(selectedUser.subscription.trial.endsAt)}</span>
+                            )}
+                            {selectedUser.subscription.trial.endedAt && (
+                              <span>Завершён: {formatDate(selectedUser.subscription.trial.endedAt)}</span>
+                            )}
+                            {selectedUser.subscription.trial.rolledBackAt && (
+                              <span>Откат: {formatDate(selectedUser.subscription.trial.rolledBackAt)}</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Trial Actions */}
+                      {selectedUser.subscription.billingState && (
+                        <div className="rounded-2xl border border-slate-200 p-4">
+                          <div className="text-sm font-medium text-slate-900">Управление пробным периодом</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {selectedUser.subscription.billingState === 'free' && (
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => void trialAction('start', { durationDays: 14, reason: 'Admin initiated' })}
+                                className="rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Начать 14-дневный пробный период
+                              </button>
+                            )}
+                            {selectedUser.subscription.billingState === 'trial_active' && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void trialAction('extend', { days: 3, reason: 'Admin extend 3d' })}
+                                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Продлить +3 дня
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void trialAction('extend', { days: 7, reason: 'Admin extend 7d' })}
+                                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Продлить +7 дней
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void trialAction('end', { reason: 'Admin ended trial' })}
+                                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Завершить сейчас
+                                </button>
+                              </>
+                            )}
+                            {(selectedUser.subscription.billingState === 'trial_active' || selectedUser.subscription.billingState === 'trial_expired') && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => {
+                                    const overLimit = selectedSummary ? Math.max(0, selectedSummary.projects.active - 3) : 0;
+                                    const msg = overLimit > 0
+                                      ? `У пользователя ${overLimit} проект(ов) сверх лимта бесплатного плана. Они будут скрыты. Продолжить откат?`
+                                      : 'Сбросить пробный период и вернуть на бесплатный план?';
+                                    if (window.confirm(msg)) {
+                                      void trialAction('rollback', { reason: 'Admin rollback' });
+                                    }
+                                  }}
+                                  className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Откатить на Free
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void trialAction('convert', { paidPlan: 'start', period: 'monthly', reason: 'Admin convert' })}
+                                  className="rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Конвертировать в Start
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Billing Events Timeline */}
+                      {selectedUser.billingEvents && selectedUser.billingEvents.length > 0 && (
+                        <div className="rounded-2xl border border-slate-200 p-4">
+                          <div className="text-sm font-medium text-slate-900">История событий</div>
+                          <div className="mt-3 space-y-2">
+                            {selectedUser.billingEvents.slice(0, 10).map((event) => (
+                              <div key={event.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                                <div className="text-slate-900">
+                                  {event.previousState ?? '—'} {'->'} {event.newState}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {event.actorType}{event.reason ? `: ${event.reason}` : ''} {formatDate(event.createdAt)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="rounded-2xl border border-slate-200 p-4">
                         <div className="text-sm font-medium text-slate-900">План и срок</div>

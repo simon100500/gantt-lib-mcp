@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: planning
-last_updated: "2026-04-04T22:30:54.759Z"
+last_updated: "2026-04-04T22:36:13.924Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 10
@@ -116,8 +116,8 @@ packages/
 - [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits.
 - [Phase 34]: Export tier comparison uses ordered array index for clear level ordering
 - [Phase 34]: Locked export tiers are clickable buttons triggering upsell modal instead of dead/hidden UI
-- [Phase 38]: TrialService and Prisma schema created inline as 38-01 dependency prerequisite in parallel worktree execution
-- [Phase 38]: Any-cast pattern for Prisma calls to new fields required due to npm workspace symlink resolving to main repo types in git worktree
+- [Phase 38]: Used window.confirm for rollback impact preview instead of custom modal to match existing admin panel simplicity
+- [Phase 38]: Showed billingState badges only for non-free/non-paid_active states to avoid badge clutter in user list
 
 ## Performance Metrics
 
@@ -131,7 +131,7 @@ packages/
 | 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
 | 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
 | 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
-| Phase 38 P03 | 10min | 1 tasks | 4 files |
+| Phase 38 P04 | 2min | 1 tasks | 1 files |
 
 ## Session
 
