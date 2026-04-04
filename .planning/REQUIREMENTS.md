@@ -34,9 +34,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### Feature Gates
 
-- [ ] **GATE-01**: Feature gate для archive — доступно на Старт+ (бесплатный видит upsell)
-- [ ] **GATE-02**: Feature gate для resource pool — доступно на Старт+ (бесплатный видит upsell)
-- [ ] **GATE-03**: Feature gate для export formats — PDF на Старт, PDF+Excel на Команда, PDF+Excel+API на Корпоративный
+- [x] **GATE-01**: Feature gate для archive — доступно на Старт+ (бесплатный видит upsell)
+- [x] **GATE-02**: Feature gate для resource pool — доступно на Старт+ (бесплатный видит upsell)
+- [x] **GATE-03**: Feature gate для export formats — PDF на Старт, PDF+Excel на Команда, PDF+Excel+API на Корпоративный
 
 ## Future Requirements
 
@@ -77,9 +77,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | FUX-01 | Phase 33 | Complete |
 | FUX-02 | Phase 33 | Complete |
 | FUX-03 | Phase 33 | Complete |
-| GATE-01 | Phase 34 | Pending |
-| GATE-02 | Phase 34 | Pending |
-| GATE-03 | Phase 34 | Pending |
+| GATE-01 | Phase 34 | Complete |
+| GATE-02 | Phase 34 | Complete |
+| GATE-03 | Phase 34 | Complete |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |
