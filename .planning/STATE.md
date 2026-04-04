@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: planning
-last_updated: "2026-04-04T11:46:10.235Z"
+last_updated: "2026-04-04T22:25:53.074Z"
 last_activity: 2026-04-04
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 23
-  completed_plans: 23
+  total_phases: 10
+  completed_phases: 7
+  total_plans: 29
+  completed_plans: 24
   percent: 89
 ---
 
@@ -116,6 +116,10 @@ packages/
 - [Phase 34]: Extended buildProactiveConstraintDenial to handle boolean feature gates (archive, resource_pool) alongside tracked limits.
 - [Phase 34]: Export tier comparison uses ordered array index for clear level ordering
 - [Phase 34]: Locked export tiers are clickable buttons triggering upsell modal instead of dead/hidden UI
+- [Phase 38]: ConstraintService reads billingState and trialPlan from Subscription to resolve effective plan for trial users
+- [Phase 38]: Trial plan defaults to start when trialPlan is null during trial_active state
+- [Phase 38]: BillingService uses Record<string,unknown> cast for billingState/trial fields for forward compatibility with Prisma schema from 38-01
+- [Phase 38]: checkAndRollExpiredTrials is a standalone exported function for flexible scheduling, not a BillingService method
 
 ## Performance Metrics
 
@@ -129,6 +133,7 @@ packages/
 | 34 | 02 | 7 min | 2 | 5 | 2026-04-04 |
 | 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
 | 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
+| Phase 38 P02 | 5min | 2 tasks | 4 files |
 
 ## Session
 
