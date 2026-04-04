@@ -72,6 +72,20 @@ enum ActorType {
   import_actor
 }
 
+enum BillingState {
+  free
+  trial_active
+  trial_expired
+  paid_active
+  paid_expired
+}
+
+enum TrialSource {
+  self_serve
+  admin
+  promo
+}
+
 // Users table
 model User {
   id        String   @id @default(uuid())
@@ -84,6 +98,7 @@ model User {
   subscriptions Subscription[]
   payments      Payment[]
   usageCounters UsageCounter[]
+  billingEvents BillingEvent[]
 
   @@map("users")
 }
@@ -264,12 +279,39 @@ model Subscription {
   aiUsed      Int      @default(0) @map("ai_used")
   createdAt   DateTime @default(now()) @map("created_at")
 
+  billingState     BillingState @default(free) @map("billing_state")
+  trialPlan        String?      @map("trial_plan")
+  trialStartedAt   DateTime?    @map("trial_started_at")
+  trialEndsAt      DateTime?    @map("trial_ends_at")
+  trialEndedAt     DateTime?    @map("trial_ended_at")
+  trialSource      TrialSource? @map("trial_source")
+  trialConvertedAt DateTime?    @map("trial_converted_at")
+  rolledBackAt     DateTime?    @map("rolled_back_at")
+
   // Relations
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   payments Payment[]
 
   @@map("subscriptions")
   @@index([userId])
+}
+
+model BillingEvent {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  actorType     String   @map("actor_type")
+  actorId       String?  @map("actor_id")
+  previousState String?  @map("previous_state")
+  newState      String   @map("new_state")
+  reason        String?
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("billing_events")
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model UsageCounter {
