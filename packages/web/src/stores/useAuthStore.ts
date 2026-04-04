@@ -45,7 +45,7 @@ export interface AuthState {
   project: AuthProject | null;
   accessToken: string | null;
   projects: AuthProject[];
-  projectLimitDenial: Partial<ConstraintDenialPayload> | null;
+  constraintDenial: Partial<ConstraintDenialPayload> | null;
 }
 
 export interface UseAuthResult extends AuthState {
@@ -78,7 +78,7 @@ const INITIAL_AUTH_STATE: AuthState = {
   project: null,
   accessToken: null,
   projects: [],
-  projectLimitDenial: null,
+  constraintDenial: null,
 };
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -181,7 +181,7 @@ function toAuthState(storedState: StoredAuthState | null): AuthState {
     project: storedState.project,
     accessToken: storedState.accessToken,
     projects: storedState.projects.length > 0 ? storedState.projects : [storedState.project],
-    projectLimitDenial: null,
+    constraintDenial: null,
   };
 }
 
@@ -504,7 +504,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
       if (response.status === 403) {
         const denial = await response.json().catch(() => null) as Partial<ConstraintDenialPayload> | null;
-        set({ projectLimitDenial: denial });
+        set({ constraintDenial: denial });
         return null;
       }
 
@@ -612,6 +612,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const { response, token } = await fetchWithAuthRetry(`/api/projects/${projectId}/archive`, {
       method: 'POST',
     });
+
+    if (response.status === 403) {
+      const denial = await response.json().catch(() => null) as Partial<ConstraintDenialPayload> | null;
+      set({ constraintDenial: denial });
+      throw new Error('ARCHIVE_FEATURE_LOCKED');
+    }
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };

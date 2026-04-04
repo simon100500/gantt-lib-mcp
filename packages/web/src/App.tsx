@@ -42,11 +42,11 @@ interface RouteState {
 type BillingConstraintStatus = UsageStatus | SubscriptionStatus | null;
 
 function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
-  return code === 'PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED';
+  return code === 'PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED' || code === 'ARCHIVE_FEATURE_LOCKED';
 }
 
 function buildProactiveConstraintDenial(
-  limitKey: ConstraintLimitKey,
+  limitKey: ConstraintLimitKey | 'archive' | 'resource_pool',
   status: BillingConstraintStatus,
 ): Partial<ConstraintDenialPayload> | null {
   const plan = ((status?.plan as PlanId | undefined) ?? 'free');
@@ -61,6 +61,27 @@ function buildProactiveConstraintDenial(
       plan,
       planLabel,
       upgradeHint: 'Продлите тариф, чтобы снова создавать проекты и пользоваться AI.',
+    };
+  }
+
+  // Boolean feature gates (archive, resource_pool)
+  if (limitKey === 'archive' || limitKey === 'resource_pool') {
+    const limitValue = status?.limits?.[limitKey];
+    if (limitValue === true) {
+      return null;
+    }
+    const gateCode = limitKey === 'archive' ? 'ARCHIVE_FEATURE_LOCKED' : 'RESOURCE_POOL_FEATURE_LOCKED';
+    const hint = limitKey === 'archive'
+      ? 'Архив проектов доступен на тарифе Старт и выше.'
+      : 'Пул ресурсов доступен на тарифе Старт и выше.';
+    return {
+      code: gateCode,
+      limitKey: null,
+      reasonCode: 'feature_disabled',
+      remaining: null,
+      plan,
+      planLabel,
+      upgradeHint: hint,
     };
   }
 
@@ -309,7 +330,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     denial: ConstraintDenialPayload;
     usage: BillingConstraintStatus;
   } | null>(null);
-  const projectLimitDenial = useAuthStore((s) => s.projectLimitDenial);
+  const constraintDenial = useAuthStore((s) => s.constraintDenial);
   const subscription = useBillingStore((state) => state.subscription);
   const usage = useBillingStore((state) => state.usage);
   const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
@@ -317,6 +338,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const billingStatus = usage ?? subscription;
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
+  const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
   const chatDisabledReason = proactiveChatDenial
     ? proactiveChatDenial.code === 'SUBSCRIPTION_EXPIRED'
       ? 'Подписка истекла. Продлите тариф, чтобы снова отправлять запросы.'
@@ -351,14 +373,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [auth.isAuthenticated, fetchSubscription, fetchUsage, hasShareToken]);
 
   useEffect(() => {
-    if (!projectLimitDenial) {
+    if (!constraintDenial) {
       return;
     }
 
-    void openLimitModal(projectLimitDenial).finally(() => {
-      useAuthStore.setState({ projectLimitDenial: null });
+    void openLimitModal(constraintDenial).finally(() => {
+      useAuthStore.setState({ constraintDenial: null });
     });
-  }, [openLimitModal, projectLimitDenial]);
+  }, [openLimitModal, constraintDenial]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
@@ -699,8 +721,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [auth.isAuthenticated, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
+    if (proactiveArchiveDenial) {
+      await openLimitModal(proactiveArchiveDenial);
+      return;
+    }
     await auth.archiveProject(projectId);
-  }, [auth]);
+  }, [auth, openLimitModal, proactiveArchiveDenial]);
 
   const handleRestoreProject = useCallback(async (projectId: string) => {
     await auth.restoreProject(projectId);
