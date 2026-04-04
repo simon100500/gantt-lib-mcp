@@ -8,6 +8,7 @@ import { getPrisma } from '@gantt/mcp/prisma';
 import { PLAN_CATALOG, type LimitKey, type PlanId } from '@gantt/mcp/constraints';
 import { ConstraintService, type ConstraintUsageSnapshot } from './constraint-service.js';
 import { getPlanLimits, isPlanActive, type PlanKey } from './plan-config.js';
+import { TrialService } from './trial-service.js';
 
 export interface PaymentRow {
   id: string;
@@ -23,6 +24,10 @@ export interface PaymentRow {
 export interface BillingSubscriptionStatus {
   plan: PlanId;
   periodEnd: string | null;
+  billingState: string;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  trialSource: string | null;
   aiUsed: number;
   aiLimit: number;
   isActive: boolean;
@@ -93,13 +98,20 @@ export class BillingService {
   async getSubscriptionStatus(userId: string): Promise<BillingSubscriptionStatus> {
     const sub = await this.getOrCreateSubscription(userId);
     const plan = sub.plan as PlanId;
-    const active = isPlanActive(sub.periodEnd?.toISOString() ?? null);
+    const billingState = (sub as Record<string, unknown>).billingState as string | undefined;
+    const effectiveBillingState = billingState ?? 'free';
+    const isTrialActive = effectiveBillingState === 'trial_active';
+    const active = isTrialActive || isPlanActive(sub.periodEnd?.toISOString() ?? null);
     const usageStatus = await this.getUsageStatus(userId, plan);
     const aiUsage = usageStatus.usage.ai_queries;
 
     return {
       plan,
       periodEnd: sub.periodEnd?.toISOString() ?? null,
+      billingState: effectiveBillingState,
+      trialStartedAt: ((sub as Record<string, unknown>).trialStartedAt as Date | undefined)?.toISOString() ?? null,
+      trialEndsAt: ((sub as Record<string, unknown>).trialEndsAt as Date | undefined)?.toISOString() ?? null,
+      trialSource: ((sub as Record<string, unknown>).trialSource as string | null | undefined) ?? null,
       aiUsed: aiUsage.usageState === 'tracked' ? aiUsage.used : 0,
       aiLimit: aiUsage.usageState === 'tracked' && typeof aiUsage.limit === 'number' ? aiUsage.limit : 0,
       isActive: active,
@@ -290,4 +302,32 @@ export class BillingService {
 
     return count > 0;
   }
+}
+
+/**
+ * Find all expired trial_active subscriptions and roll them back to free.
+ * Can be called from a cron job, interval timer, or middleware.
+ * Returns the number of expired trials that were rolled back.
+ */
+export async function checkAndRollExpiredTrials(): Promise<number> {
+  const prisma = getPrisma();
+  const trialService = new TrialService();
+  const now = new Date();
+
+  const expiredTrials = await prisma.subscription.findMany({
+    where: {
+      billingState: 'trial_active',
+      trialEndsAt: { lt: now },
+    },
+    select: { userId: true },
+  });
+
+  for (const trial of expiredTrials) {
+    await trialService.rollbackTrialToFree(trial.userId, {
+      actorType: 'system',
+      reason: 'Trial expired automatically',
+    });
+  }
+
+  return expiredTrials.length;
 }
