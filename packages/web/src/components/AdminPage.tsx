@@ -443,23 +443,38 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                 ) : users.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">Пользователи не найдены.</div>
                 ) : (
-                  users.map((user) => (
-                    <button
-                      key={user.id}
-                      type="button"
-                      onClick={() => setSelectedUserId(user.id)}
-                      className={`w-full rounded-2xl border p-4 text-left transition-colors ${
-                        selectedUserId === user.id ? 'border-primary bg-primary/[0.04]' : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="text-sm font-medium text-slate-900">{user.email}</div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                        <span>{user.subscription.planLabel}</span>
-                        <span>{user.subscription.isActive ? 'активна' : 'истекла'}</span>
-                        <span>{user.projects.active} активных проектов</span>
-                      </div>
-                    </button>
-                  ))
+                  users.map((user) => {
+                    const planColors: Record<string, string> = {
+                      free: 'bg-slate-100 text-slate-600',
+                      start: 'bg-blue-100 text-blue-700',
+                      team: 'bg-violet-100 text-violet-700',
+                      enterprise: 'bg-amber-100 text-amber-700',
+                    };
+                    const statusColor = user.subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+                    return (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => setSelectedUserId(user.id)}
+                        className={`w-full rounded-2xl border p-4 text-left transition-colors ${
+                          selectedUserId === user.id ? 'border-primary bg-primary/[0.04]' : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="text-sm font-medium text-slate-900">{user.email}</div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className={`rounded-full px-2 py-0.5 font-medium ${planColors[user.subscription.plan] ?? 'bg-slate-100 text-slate-600'}`}>
+                            {user.subscription.planLabel}
+                          </span>
+                          {user.subscription.plan !== 'free' && (
+                            <span className={`rounded-full px-2 py-0.5 font-medium ${statusColor}`}>
+                              {user.subscription.isActive ? 'активна' : 'истекла'}
+                            </span>
+                          )}
+                          <span className="text-slate-500">{user.projects.active} пр.</span>
+                        </div>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -646,7 +661,12 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="font-medium text-slate-900">{project.name}</div>
-                                <div className="mt-1 text-slate-500">{project.status} • {formatDate(project.createdAt)}</div>
+                                <div className="mt-1 flex items-center gap-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${project.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>
+                                    {project.status === 'active' ? 'активный' : 'архив'}
+                                  </span>
+                                  <span className="text-xs text-slate-500">{formatDate(project.createdAt)}</span>
+                                </div>
                               </div>
                               <div className="flex shrink-0 gap-2">
                                 <button
