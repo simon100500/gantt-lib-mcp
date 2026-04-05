@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-05T11:54:38.948Z"
+last_updated: "2026-04-05T14:06:21.636Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 29
-  completed_plans: 28
+  completed_plans: 29
   percent: 89
 ---
 
@@ -33,7 +33,7 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 38 (paywall-trial-transition) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-04-05
 
@@ -120,6 +120,9 @@ packages/
 - [Phase 38]: Showed billingState badges only for non-free/non-paid_active states to avoid badge clutter in user list
 - [Phase 38]: Trial state selectors colocated with billing store for single import
 - [Phase 38]: Post-trial gate detection via reasonCode or upgradeHint content matching in constraintUi
+- [Phase 38]: Trigger B (premium_feature_attempt) is deliberately simple: client detects constraint denial 403s, server validates project with tasks exists
+- [Phase 38]: Trial decline tracked in sessionStorage to re-offer in new sessions
+- [Phase 38]: useTrialTrigger integrates with authStore.constraintDenial for automatic trigger on feature denial
 
 ## Performance Metrics
 
@@ -135,6 +138,7 @@ packages/
 | 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
 | Phase 38 P04 | 2min | 1 tasks | 1 files |
 | Phase 38 P05 | 2min | 1 tasks | 5 files |
+| Phase 38 P06 | 6min | 2 tasks | 4 files |
 
 ## Session
 
