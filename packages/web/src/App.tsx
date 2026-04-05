@@ -6,6 +6,9 @@ import { DeleteProjectModal } from './components/DeleteProjectModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
+import { TrialExpiryScreen } from './components/TrialExpiryScreen.tsx';
+import { TrialOfferModal } from './components/TrialOfferModal.tsx';
+import { TrialReminderBanner } from './components/TrialReminderBanner.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
@@ -14,6 +17,7 @@ import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
+import { useTrialTrigger } from './hooks/useTrialTrigger.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
@@ -23,7 +27,7 @@ import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
-import { useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
+import { useBillingStore, isTrialActive, isTrialExpired, getTrialDaysRemaining, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
@@ -335,6 +339,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const usage = useBillingStore((state) => state.usage);
   const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
   const fetchUsage = useBillingStore((state) => state.fetchUsage);
+  const [showTrialExpiry, setShowTrialExpiry] = useState(false);
+  const trialTrigger = useTrialTrigger();
   const billingStatus = usage ?? subscription;
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
@@ -381,6 +387,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       useAuthStore.setState({ constraintDenial: null });
     });
   }, [openLimitModal, constraintDenial]);
+
+  // Show trial expiry screen when trial has expired
+  useEffect(() => {
+    if (isTrialExpired(subscription) && !trialTrigger.shouldShowOffer && !limitModal) {
+      setShowTrialExpiry(true);
+    }
+  }, [subscription, trialTrigger.shouldShowOffer, limitModal]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken) {
@@ -1041,11 +1054,43 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       )}
     </ProjectMenu>
 
-    {limitModal && (
+    {isTrialActive(subscription) && (
+      <TrialReminderBanner
+        daysRemaining={getTrialDaysRemaining(subscription)}
+        onDismiss={() => {}}
+      />
+    )}
+
+    {trialTrigger.shouldShowOffer ? (
+      <TrialOfferModal
+        open={true}
+        onAccept={async () => {
+          const ok = await trialTrigger.activateTrial();
+          if (ok) {
+            setLimitModal(null);
+          }
+        }}
+        onDecline={() => {
+          trialTrigger.dismissOffer();
+        }}
+        triggerFeature={trialTrigger.triggerFeature ?? undefined}
+      />
+    ) : limitModal ? (
       <LimitReachedModal
         denial={limitModal.denial}
         usage={limitModal.usage}
         onClose={() => setLimitModal(null)}
+      />
+    ) : null}
+
+    {showTrialExpiry && !trialTrigger.shouldShowOffer && (
+      <TrialExpiryScreen
+        open={true}
+        onUpgrade={() => {
+          setShowTrialExpiry(false);
+          setShowBillingPage(true);
+        }}
+        onClose={() => setShowTrialExpiry(false)}
       />
     )}
 
