@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: planning
-last_updated: "2026-04-04T22:36:13.924Z"
-last_activity: 2026-04-04
+status: executing
+last_updated: "2026-04-05T11:54:38.948Z"
+last_activity: 2026-04-05
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 29
-  completed_plans: 24
+  completed_plans: 28
   percent: 89
 ---
 
@@ -17,7 +17,7 @@ progress:
 
 **Last updated:** 2026-04-04
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to plan
+**Status:** Ready to execute
 
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 34 — feature-gates plans 03/04 remaining
+**Current focus:** Phase 38 — paywall-trial-transition
 
 ---
 
 ## Current Position
 
-Phase: 35
-Plan: Not started
-Status: Phase 34 complete — all feature gates implemented
-Last activity: 2026-04-04
+Phase: 38 (paywall-trial-transition) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-04-05
 
 Progress: [████████░░] 89%
 
@@ -118,6 +118,8 @@ packages/
 - [Phase 34]: Locked export tiers are clickable buttons triggering upsell modal instead of dead/hidden UI
 - [Phase 38]: Used window.confirm for rollback impact preview instead of custom modal to match existing admin panel simplicity
 - [Phase 38]: Showed billingState badges only for non-free/non-paid_active states to avoid badge clutter in user list
+- [Phase 38]: Trial state selectors colocated with billing store for single import
+- [Phase 38]: Post-trial gate detection via reasonCode or upgradeHint content matching in constraintUi
 
 ## Performance Metrics
 
@@ -132,6 +134,7 @@ packages/
 | 34 | 03 | 8 min | 2 | 4 | 2026-04-04 |
 | 34 | 04 | 4 min | 2 | 4 | 2026-04-04 |
 | Phase 38 P04 | 2min | 1 tasks | 1 files |
+| Phase 38 P05 | 2min | 1 tasks | 5 files |
 
 ## Session
 
