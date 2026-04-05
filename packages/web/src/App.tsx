@@ -1046,6 +1046,20 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         denial={limitModal.denial}
         usage={limitModal.usage}
         onClose={() => setLimitModal(null)}
+        onActivateTrial={auth.isAuthenticated ? async () => {
+          const token = useAuthStore.getState().accessToken;
+          if (!token) return false;
+          try {
+            const res = await fetch('/api/billing/trial/start', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ triggerType: 'premium_feature_attempt' }),
+            });
+            if (!res.ok) return false;
+            await fetchSubscription();
+            return true;
+          } catch { return false; }
+        } : undefined}
       />
     )}
 

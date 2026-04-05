@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { formatPrice } from '../lib/billing.ts';
 import {
@@ -16,6 +16,7 @@ interface LimitReachedModalProps {
   denial?: Partial<ConstraintDenialPayload> | null;
   usage?: UsageStatus | SubscriptionStatus | null;
   onClose: () => void;
+  onActivateTrial?: () => Promise<boolean>;
   primaryButtonLabel?: string;
   secondaryButtonLabel?: string;
   actionHref?: string;
@@ -54,6 +55,7 @@ export function LimitReachedModal({
   denial,
   usage,
   onClose,
+  onActivateTrial,
   primaryButtonLabel,
   secondaryButtonLabel,
   actionHref = '/purchase',
@@ -71,12 +73,16 @@ export function LimitReachedModal({
       upgradeHint: 'Обновите тариф, чтобы продолжить работу без ограничений.',
     });
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [trialActivating, setTrialActivating] = useState(false);
+  const billingState = (usage as SubscriptionStatus | null)?.billingState;
+  const trialStartedAt = (usage as SubscriptionStatus | null)?.trialStartedAt;
+  const canStartTrial = !trialStartedAt && onActivateTrial;
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
     : null;
   const resolvedPrimaryLabel = primaryButtonLabel
-    ?? (content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ'
-      : content.limitKey === 'archive' ? 'Расширить тариф'
+    ?? (canStartTrial ? 'Включить 14 дней бесплатно'
+      : content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ'
         : 'Расширить тариф');
   const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
@@ -161,10 +167,13 @@ export function LimitReachedModal({
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={() => { window.location.href = actionHref; }}
-            className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+            disabled={canStartTrial && trialActivating}
+            onClick={canStartTrial
+              ? () => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }
+              : () => { window.location.href = actionHref; }}
+            className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
           >
-            {resolvedPrimaryLabel}
+            {trialActivating ? 'Активация...' : resolvedPrimaryLabel}
           </button>
           <button
             type="button"
