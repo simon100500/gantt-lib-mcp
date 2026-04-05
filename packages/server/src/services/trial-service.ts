@@ -5,6 +5,8 @@
  * convertTrialToPaid, checkTrialEligibility.
  */
 
+import { Prisma } from '@gantt/mcp/prisma';
+import type { PrismaClient } from '@gantt/mcp/prisma';
 import { computeNextPeriodEnd } from './billing-service.js';
 
 /** Mirrors the Prisma BillingState enum values. Keep in sync with schema.prisma. */
@@ -61,18 +63,7 @@ interface SubscriptionRow {
   rolledBackAt: Date | null;
 }
 
-interface TrialServicePrisma {
-  subscription: {
-    findUnique(args: { where: { userId: string } }): Promise<SubscriptionRow | null>;
-    update(args: { where: { userId: string }; data: Partial<SubscriptionRow> }): Promise<SubscriptionRow>;
-  };
-  billingEvent: {
-    create(args: { data: BillingEventData }): Promise<void>;
-  };
-  project: {
-    count(args: { where: { userId: string; status: string } }): Promise<number>;
-  };
-}
+type TrialServicePrisma = Pick<PrismaClient, 'subscription' | 'billingEvent' | 'project'>;
 
 interface BillingEventData {
   userId: string;
@@ -81,7 +72,7 @@ interface BillingEventData {
   previousState: string | null;
   newState: string;
   reason?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Prisma.InputJsonValue;
 }
 
 interface TrialServiceDeps {
@@ -90,12 +81,19 @@ interface TrialServiceDeps {
 }
 
 export class TrialService {
-  private readonly prisma: TrialServicePrisma;
+  private prisma?: TrialServicePrisma;
   private readonly now: () => Date;
+  private readonly _providedPrisma: TrialServicePrisma | undefined;
 
   constructor(deps: TrialServiceDeps = {}) {
-    this.prisma = deps.prisma ?? getDefaultPrisma();
+    this._providedPrisma = deps.prisma;
     this.now = deps.now ?? (() => new Date());
+  }
+
+  private async getPrisma(): Promise<TrialServicePrisma> {
+    if (this._providedPrisma) return this._providedPrisma;
+    if (!this.prisma) this.prisma = await getDefaultPrisma();
+    return this.prisma;
   }
 
   async startTrial(
@@ -117,7 +115,7 @@ export class TrialService {
     const trialEndsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
     const trialPlan = opts.trialPlan ?? 'start';
 
-    await this.prisma.subscription.update({
+    await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
         plan: trialPlan,
@@ -155,7 +153,7 @@ export class TrialService {
 
     const previousState = sub.billingState;
 
-    await this.prisma.subscription.update({
+    await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
         billingState: 'trial_expired',
@@ -192,12 +190,12 @@ export class TrialService {
     const newState: BillingState = previousState === 'trial_active' ? 'trial_expired' : 'free';
 
     // Count active projects to determine over-limit count
-    const activeProjects = await this.prisma.project.count({
+    const activeProjects = await (await this.getPrisma()).project.count({
       where: { userId, status: 'active' },
     });
     const overLimitProjects = Math.max(0, activeProjects - FREE_PROJECT_LIMIT);
 
-    await this.prisma.subscription.update({
+    await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
         plan: 'free',
@@ -235,7 +233,7 @@ export class TrialService {
     const currentEnd = sub.trialEndsAt ?? this.now();
     const newTrialEndsAt = new Date(currentEnd.getTime() + days * 24 * 60 * 60 * 1000);
 
-    await this.prisma.subscription.update({
+    await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
         trialEndsAt: newTrialEndsAt,
@@ -271,7 +269,7 @@ export class TrialService {
     const previousState = sub.billingState;
     const periodEnd = computeNextPeriodEnd(sub.periodEnd, now, opts.period);
 
-    await this.prisma.subscription.update({
+    await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
         plan: opts.paidPlan,
@@ -297,7 +295,7 @@ export class TrialService {
   }
 
   async checkTrialEligibility(userId: string): Promise<TrialEligibility> {
-    const sub = await this.prisma.subscription.findUnique({ where: { userId } });
+    const sub = await (await this.getPrisma()).subscription.findUnique({ where: { userId } });
 
     if (!sub) {
       return { eligible: true };
@@ -315,7 +313,7 @@ export class TrialService {
   }
 
   private async getSubscription(userId: string): Promise<SubscriptionRow> {
-    const sub = await this.prisma.subscription.findUnique({ where: { userId } });
+    const sub = await (await this.getPrisma()).subscription.findUnique({ where: { userId } });
     if (!sub) {
       throw new Error(`Subscription not found for user ${userId}`);
     }
@@ -323,13 +321,11 @@ export class TrialService {
   }
 
   private async recordBillingEvent(params: BillingEventData): Promise<void> {
-    await this.prisma.billingEvent.create({ data: params });
+    await (await this.getPrisma()).billingEvent.create({ data: params });
   }
 }
 
-function getDefaultPrisma(): TrialServicePrisma {
-  // Lazy import to avoid circular dependency at module load time
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getPrisma } = require('@gantt/mcp/prisma') as { getPrisma: () => TrialServicePrisma };
+async function getDefaultPrisma(): Promise<TrialServicePrisma> {
+  const { getPrisma } = await import('@gantt/mcp/prisma');
   return getPrisma();
 }
