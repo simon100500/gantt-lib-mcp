@@ -709,6 +709,18 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                 <button
                                   type="button"
                                   disabled={saving}
+                                  onClick={() => {
+                                    if (window.confirm('Полностью сбросить триал? Пользователь сможет запустить триал заново.')) {
+                                      void trialAction('reset', { reason: 'Admin trial reset' });
+                                    }
+                                  }}
+                                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Сбросить триал
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={saving}
                                   onClick={() => void trialAction('convert', { paidPlan: 'start', period: 'monthly', reason: 'Admin convert' })}
                                   className="rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
                                 >

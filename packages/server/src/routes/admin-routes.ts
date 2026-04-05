@@ -447,6 +447,31 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
+  fastify.post('/api/admin/users/:id/trial/reset', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const adminUserId = req.user!.userId;
+
+    try {
+      const prisma = getPrisma();
+      await (prisma.subscription.update as any)({
+        where: { userId },
+        data: {
+          billingState: 'free',
+          trialStartedAt: null,
+          trialEndsAt: null,
+          trialEndedAt: null,
+          trialSource: null,
+          trialConvertedAt: null,
+          rolledBackAt: null,
+        },
+      });
+      const details = await buildAdminUserDetails(userId);
+      return reply.send(details);
+    } catch (err) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : 'Trial reset failed' });
+    }
+  });
+
   fastify.post('/api/admin/users/:id/trial/convert', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
     const userId = (req.params as { id: string }).id;
     const body = (req.body ?? {}) as { paidPlan: string; period: string; reason?: string };
