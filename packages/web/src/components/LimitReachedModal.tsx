@@ -7,7 +7,7 @@ import {
   normalizeConstraintDenialPayload,
   type ConstraintDenialPayload,
 } from '../lib/constraintUi.ts';
-import type { SubscriptionStatus, UsageStatus } from '../stores/useBillingStore.ts';
+import { type SubscriptionStatus, type UsageStatus, useBillingStore } from '../stores/useBillingStore.ts';
 
 type LegacyLimitScenario = 'free-ai' | 'paid-ai' | 'project-limit';
 
@@ -74,9 +74,8 @@ export function LimitReachedModal({
     });
   const dialogRef = useRef<HTMLDivElement>(null);
   const [trialActivating, setTrialActivating] = useState(false);
-  const billingState = (usage as SubscriptionStatus | null)?.billingState;
-  const trialStartedAt = (usage as SubscriptionStatus | null)?.trialStartedAt;
-  const canStartTrial = !trialStartedAt && onActivateTrial;
+  const subscription = useBillingStore((s) => s.subscription);
+  const canStartTrial = !subscription?.trialStartedAt && onActivateTrial;
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
     : null;
