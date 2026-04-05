@@ -688,7 +688,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                 </button>
                               </>
                             )}
-                            {(selectedUser.subscription.billingState === 'trial_active' || selectedUser.subscription.billingState === 'trial_expired') && (
+                            {selectedUser.subscription.trial?.startedAt && (
                               <>
                                 <button
                                   type="button"
