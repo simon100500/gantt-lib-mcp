@@ -119,6 +119,14 @@ describe('BillingService.getSubscriptionStatus', () => {
       periodStart: null,
       periodEnd: new Date('2026-04-30T00:00:00.000Z'),
       createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      billingState: 'paid_active' as const,
+      trialPlan: null,
+      trialStartedAt: null,
+      trialEndsAt: null,
+      trialEndedAt: null,
+      trialSource: null,
+      trialConvertedAt: null,
+      rolledBackAt: null,
     });
 
     const status = await service.getSubscriptionStatus('team-user');

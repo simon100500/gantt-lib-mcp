@@ -324,7 +324,6 @@ export async function checkAndRollExpiredTrials(): Promise<number> {
 
   for (const trial of expiredTrials) {
     await trialService.rollbackTrialToFree(trial.userId, {
-      actorType: 'system',
       reason: 'Trial expired automatically',
     });
   }
