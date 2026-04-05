@@ -726,11 +726,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     await auth.archiveProject(projectId);
-  }, [auth, openLimitModal, proactiveArchiveDenial]);
+    await fetchUsage();
+  }, [auth, fetchUsage, openLimitModal, proactiveArchiveDenial]);
 
   const handleRestoreProject = useCallback(async (projectId: string) => {
     await auth.restoreProject(projectId);
-  }, [auth]);
+    await fetchUsage();
+  }, [auth, fetchUsage]);
 
   const handleOpenResourcePool = useCallback(async () => {
     const proactiveResourcePoolDenial = buildProactiveConstraintDenial('resource_pool', billingStatus);
@@ -1068,6 +1070,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         projectName={deleteProjectDraft.name}
         onDelete={async () => {
           await auth.deleteProject(deleteProjectDraft.id);
+          await fetchUsage();
           setDeleteProjectDraft(null);
         }}
         onClose={() => setDeleteProjectDraft(null)}

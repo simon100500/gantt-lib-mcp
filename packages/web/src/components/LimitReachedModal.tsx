@@ -75,7 +75,11 @@ export function LimitReachedModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [trialActivating, setTrialActivating] = useState(false);
   const subscription = useBillingStore((s) => s.subscription);
-  const canStartTrial = !subscription?.trialStartedAt && onActivateTrial;
+  const trialIneligible = !subscription
+    || subscription.billingState === 'trial_active'
+    || subscription.billingState === 'trial_expired'
+    || subscription.trialStartedAt !== null;
+  const canStartTrial = !trialIneligible && !!onActivateTrial;
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
     : null;
