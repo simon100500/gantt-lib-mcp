@@ -1,7 +1,8 @@
 # PRD: Transition to Triggered 14-Day Trial with Auto-Rollback to Free
 
 Date: 2026-04-04
-Status: Draft
+Status: Implemented
+Updated: 2026-04-05
 Owner: Product / Growth
 
 ## 1. Summary
@@ -105,22 +106,17 @@ Triggered trial is preferred because:
 
 ### 6.3 Trial offer timing
 
-Trial should appear only after at least one value event. Initial recommended triggers:
+v1 implementation: the trial offer appears at the point of constraint denial.
 
-1. User created their first meaningful graph successfully.
-2. User completed several AI edits or refinements.
-3. User attempts a premium feature:
-   - export
-   - archive
-   - resource pool
-   - second project creation
-4. User returns to the product on a second active day after first graph creation.
+When a free user hits any limit (projects, AI queries, feature gate) and has never started a trial, the LimitReachedModal shows a trial activation CTA instead of the standard upgrade redirect.
 
-Recommended rule for v1:
+This means:
+- No separate trigger detection or value-event tracking needed for v1
+- The offer surfaces at the exact moment the user experiences the value of a premium feature
+- Simplifies frontend logic — one modal, conditionally different primary CTA
+- Eligibility is determined by `trialStartedAt === null` — clear, unambiguous check
 
-- Show trial offer after first graph is created and the user either:
-  - attempts a premium feature, or
-  - completes at least 3 AI interactions in the same project
+Future enhancement: trigger trial offer proactively after value events (AI interactions, first graph) before the user hits a hard limit. The `TrialTriggerService` backend and `useTrialTrigger` frontend hook exist as infrastructure for this but are not wired into the main flow in v1.
 
 ### 6.4 Trial scope
 
@@ -170,21 +166,24 @@ Recommended heuristic for active-project downgrade:
 
 ## 7.1 Trial invitation
 
-The offer should be framed around value, not pressure.
+The trial offer is embedded directly into the existing LimitReachedModal — no separate modal or interception flow.
 
-Principles:
+**Mechanism:** When a free user hits a limit (projects, AI, feature gate) and has never started a trial (`trialStartedAt === null`), the LimitReachedModal adapts its primary CTA:
+- **Never had trial** → primary button shows "Включить 14 дней бесплатно" and calls `POST /api/billing/trial/start`
+- **Trial existed (even if rolled back)** → primary button shows standard "Расширить тариф" redirecting to `/purchase`
 
-- user has already seen value
-- user understands what trial unlocks
-- decline path is clear
-- copy speaks in construction/planning language, not SaaS jargon
+This means:
+- No separate trigger detection system for v1 — trial offer surfaces naturally at constraint denial points
+- No race conditions between separate modals
+- The offer appears at the exact moment the user experiences the value of a premium feature (hitting the limit)
+- Eligibility check is purely `trialStartedAt === null` — simple and unambiguous
 
-Example framing:
+Copy follows the value-first framing:
 
-- "Попробуйте 14 дней тарифа Старт"
-- "Сделайте ещё объекты, экспортируйте график и работайте без ручных пересчётов"
-- CTA: "Включить 14 дней бесплатно"
-- Secondary CTA: "Пока не нужно"
+- Title and description remain unchanged from existing LimitReachedModal content
+- Primary CTA changes to "Включить 14 дней бесплатно"
+- On success, modal closes and billing state refreshes — limit is immediately lifted
+- On failure (API error), modal stays open with standard fallback behavior
 
 ## 7.2 Trial reminders
 
@@ -263,7 +262,8 @@ The billing tab in admin should add:
   - `Extend 3 days`
   - `Extend 7 days`
   - `End trial now`
-  - `Rollback to free`
+  - `Rollback to free` (sets billingState=free, preserves trial history — user cannot self-start trial again)
+  - `Reset trial` (clears all trial fields — user appears as never having had a trial and can self-start again)
   - `Convert to Start monthly`
 - a billing-state badge separate from plan label
 - explicit timeline:
@@ -283,7 +283,8 @@ Recommended admin operations:
 - `startTrial(userId, trialPlan = start, durationDays = 14)`
 - `extendTrial(userId, days)`
 - `endTrialNow(userId)`
-- `rollbackTrialToFree(userId)`
+- `rollbackTrialToFree(userId)` — billingState→free, keeps trialStartedAt (user blocked from self-serve trial)
+- `resetTrial(userId)` — clears ALL trial fields (billingState→free, trialStartedAt→null, etc.)
 - `convertTrialToPaid(userId, paidPlan, period)`
 
 Each operation should record:
@@ -345,13 +346,23 @@ The system must determine whether the user is eligible for a self-serve trial.
 Rules for v1:
 
 - one self-serve trial per workspace/user
-- trial available only from `free`
-- not available if user already had a completed trial
-- admin can still override manually
+- eligibility determined by `trialStartedAt === null` (user has never had a trial)
+- not available if user already had a trial, even if it was rolled back to free
+- admin can override via "Reset trial" to clear trial history and allow re-offer
+- backend `TrialTriggerService` checks project+tasks existence and AI usage as additional trigger conditions
 
 ### FR-2 Trial activation
 
-Eligible users must be able to activate a 14-day `Start` trial without payment.
+Eligible users activate trial directly from the LimitReachedModal when hitting a constraint:
+
+1. Free user hits a limit → LimitReachedModal opens
+2. Modal checks `trialStartedAt === null` and has `onActivateTrial` callback
+3. Primary CTA shows "Включить 14 дней бесплатно"
+4. On click → `POST /api/billing/trial/start` with `source: 'self_serve'`
+5. On success → billing store refreshes, modal closes, limit is lifted
+6. On failure → modal stays open, standard behavior resumes
+
+Separate API endpoint `POST /api/billing/trial/start` and `GET /api/billing/trial/eligibility` exist for programmatic activation (future use by proactive triggers).
 
 ### FR-3 Trial entitlement
 
@@ -359,7 +370,9 @@ During trial, the system must enforce `Start` limits and unlock `Start` features
 
 ### FR-4 Reminder delivery
 
-The system must surface in-app reminder states at 7, 3, and 1 day before trial end.
+Components exist (`TrialReminderBanner`, `TrialExpiryScreen`) but are not wired into the main app flow in v1.
+
+v1 scope: trial offer via LimitReachedModal only. Reminder banner and expiry screen are available for future integration.
 
 ### FR-5 Trial expiry
 
@@ -376,6 +389,8 @@ After rollback, premium prompts must reference the value already experienced dur
 ### FR-8 Admin control
 
 Admin must be able to inspect, modify, and audit trial lifecycle without raw database edits.
+
+Additional v1 capability: "Reset trial" clears all trial fields entirely, allowing admin to let a user re-attempt self-serve trial as if they never had one. This differs from "Rollback to free" which preserves trial history.
 
 ## 11. Analytics Requirements
 
@@ -485,8 +500,32 @@ Mitigation:
 1. Should a user be allowed to purchase `Start` before trial, or should the UI always offer trial first when eligible?
 2. Should rollback preserve the most recently active project or the earliest created project?
 3. Should post-trial users get a grace window before premium feature gates become hard stops again?
-4. Should admins be allowed to grant a second trial explicitly?
+4. ~~Should admins be allowed to grant a second trial explicitly?~~ **Resolved:** Yes, via "Reset trial" which clears all trial fields.
 5. Should we show trial availability on the billing page proactively, or only contextually after value events?
+6. ~~Should trial offer appear as a separate modal or within the existing limit modal?~~ **Resolved:** Embedded in LimitReachedModal. Simpler, no race conditions, appears at exact moment of value realization.
+
+## 16. Implementation Notes (v1)
+
+### What shipped vs what was planned
+
+| Planned | Shipped in v1 | Deferred |
+|---------|---------------|----------|
+| Separate TrialOfferModal component | Created but not used in main flow | Proactive trigger-based offers |
+| Trigger detection (value events, AI count) | Backend `TrialTriggerService` exists | Frontend wiring (`useTrialTrigger` not called in App) |
+| Reminder banner (7/3/1 days) | `TrialReminderBanner` component exists | Not rendered in app |
+| Expiry screen | `TrialExpiryScreen` component exists | Not rendered in app |
+| Admin rollback | Rollback to free (preserves history) | — |
+| Admin reset trial | Full reset (clears all trial fields) | — |
+| Trial offer in LimitReachedModal | Adaptive CTA based on `trialStartedAt` | — |
+| Post-trial feature gate copy | `constraintUi.ts` detects `post_trial_feature_gate` | — |
+
+### Key architectural decisions
+
+1. **Eligibility by `trialStartedAt` not `billingState`:** After admin rollback to free, `billingState` is `free` but `trialStartedAt` is preserved — user cannot self-serve trial again. Only "Reset trial" clears this.
+
+2. **Single modal approach:** LimitReachedModal conditionally changes its primary CTA. No separate modals, no interception, no race conditions.
+
+3. **Backend infrastructure ready:** `TrialTriggerService`, `/api/billing/trial/eligibility`, and `useTrialTrigger` hook exist but are not the primary v1 flow. They support future proactive trigger-based offers.
 
 ## 16. Recommendation
 
