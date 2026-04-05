@@ -86,6 +86,8 @@ export interface SubscriptionStatus {
 
 export interface UsageStatus {
   plan: string;
+  billingState: SubscriptionStatus['billingState'];
+  trialStartedAt: SubscriptionStatus['trialStartedAt'];
   planMeta: SubscriptionStatus['planMeta'];
   limits: SubscriptionStatus['limits'];
   usage: SubscriptionStatus['usage'];
@@ -276,6 +278,8 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
         subscription: data,
         usage: {
           plan: data.plan,
+          billingState: data.billingState,
+          trialStartedAt: data.trialStartedAt,
           planMeta: data.planMeta,
           limits: data.limits,
           usage: data.usage,

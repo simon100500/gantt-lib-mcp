@@ -12,6 +12,8 @@ function makeUsageStatus(
 ): UsageStatus {
   return {
     plan,
+    billingState: plan === 'free' ? 'free' : 'paid_active',
+    trialStartedAt: null,
     planMeta: {
       id: plan,
       label: plan === 'free' ? 'Бесплатный' : 'Старт',
