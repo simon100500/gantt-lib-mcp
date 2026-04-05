@@ -40,6 +40,7 @@ export interface TrialEligibility {
 export interface RollbackResult {
   overLimitProjects: number;
   billingState: BillingState;
+  archivedProjectIds: string[];
 }
 
 // Free plan project limit (from catalog: free plan = 1 project)
@@ -61,6 +62,11 @@ interface SubscriptionRow {
   trialSource: 'self_serve' | 'admin' | 'promo' | null;
   trialConvertedAt: Date | null;
   rolledBackAt: Date | null;
+}
+
+interface ProjectRow {
+  id: string;
+  createdAt: Date;
 }
 
 type TrialServicePrisma = Pick<PrismaClient, 'subscription' | 'billingEvent' | 'project'>;
@@ -143,7 +149,7 @@ export class TrialService {
   async endTrialNow(
     userId: string,
     opts: TrialActionOptions = {},
-  ): Promise<{ billingState: BillingState }> {
+  ): Promise<{ billingState: BillingState; overLimitProjects: number; archivedProjectIds: string[] }> {
     const sub = await this.getSubscription(userId);
     const now = this.now();
 
@@ -153,6 +159,7 @@ export class TrialService {
 
     const previousState = sub.billingState;
 
+    // Step 1: Set trial_expired state
     await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
@@ -170,7 +177,17 @@ export class TrialService {
       reason: opts.reason,
     });
 
-    return { billingState: 'trial_expired' };
+    // Step 2: Auto-rollback to free with project archiving
+    const rollbackResult = await this.rollbackTrialToFree(userId, {
+      actorId: opts.actorId,
+      reason: opts.reason ?? 'Auto-rollback after trial end',
+    });
+
+    return {
+      billingState: rollbackResult.billingState,
+      overLimitProjects: rollbackResult.overLimitProjects,
+      archivedProjectIds: rollbackResult.archivedProjectIds,
+    };
   }
 
   async rollbackTrialToFree(
@@ -195,6 +212,25 @@ export class TrialService {
     });
     const overLimitProjects = Math.max(0, activeProjects - FREE_PROJECT_LIMIT);
 
+    // Archive excess projects (oldest first, keep newest within free limit)
+    let archivedProjectIds: string[] = [];
+    if (overLimitProjects > 0) {
+      const excessProjects = await (await this.getPrisma()).project.findMany({
+        where: { userId, status: 'active' },
+        orderBy: { createdAt: 'desc' as const },
+        skip: FREE_PROJECT_LIMIT,
+        select: { id: true },
+      });
+      archivedProjectIds = excessProjects.map((p: { id: string }) => p.id);
+
+      if (archivedProjectIds.length > 0) {
+        await (await this.getPrisma()).project.updateMany({
+          where: { id: { in: archivedProjectIds } },
+          data: { status: 'archived', archivedAt: now },
+        });
+      }
+    }
+
     await (await this.getPrisma()).subscription.update({
       where: { userId },
       data: {
@@ -213,10 +249,10 @@ export class TrialService {
       previousState,
       newState,
       reason: opts.reason ?? 'Trial rollback to free',
-      metadata: { activeProjects, overLimitProjects },
+      metadata: { activeProjects, overLimitProjects, archivedProjects: archivedProjectIds.length },
     });
 
-    return { overLimitProjects, billingState: newState };
+    return { overLimitProjects, billingState: newState, archivedProjectIds };
   }
 
   async extendTrial(

@@ -55,10 +55,14 @@ function createSubscription(overrides: Partial<SubscriptionRow> = {}): Subscript
 function createPrismaStub(subscriptions: Map<string, SubscriptionRow>) {
   const billingEvents: BillingEventRow[] = [];
   const projectCounts = new Map<string, number>();
+  const projectRows = new Map<string, { id: string; userId: string; status: string; createdAt: Date; archivedAt?: Date | null }>();
+  const updatedProjectIds: string[] = [];
 
   return {
     billingEvents,
     projectCounts,
+    projectRows,
+    updatedProjectIds,
     subscriptions,
     prisma: {
       subscription: {
@@ -84,7 +88,38 @@ function createPrismaStub(subscriptions: Map<string, SubscriptionRow>) {
       },
       project: {
         async count({ where }: { where: { userId: string; status: string } }) {
-          return projectCounts.get(where.userId) ?? 0;
+          if (where.status === 'active') {
+            return projectCounts.get(where.userId) ?? 0;
+          }
+          let count = 0;
+          for (const p of projectRows.values()) {
+            if (p.userId === where.userId && p.status === where.status) count++;
+          }
+          return count;
+        },
+        async findMany({ where, orderBy, skip, select }: { where: { userId: string; status: string }; orderBy?: { createdAt: string }; skip?: number; select?: { id: boolean } }) {
+          let projects = Array.from(projectRows.values())
+            .filter((p) => p.userId === where.userId && p.status === where.status);
+          if (orderBy?.createdAt === 'asc') {
+            projects.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+          } else if (orderBy?.createdAt === 'desc') {
+            projects.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          }
+          if (skip) {
+            projects = projects.slice(skip);
+          }
+          return projects.map((p) => select?.id ? { id: p.id } : p);
+        },
+        async updateMany({ where, data }: { where: { id: { in: string[] } }; data: { status: string; archivedAt: Date } }) {
+          for (const id of where.id.in) {
+            const p = projectRows.get(id);
+            if (p) {
+              p.status = data.status;
+              p.archivedAt = data.archivedAt;
+              updatedProjectIds.push(id);
+            }
+          }
+          return { count: where.id.in.length };
         },
       },
     },
@@ -167,8 +202,8 @@ describe('TrialService', () => {
     );
   });
 
-  // T4: endTrialNow sets billingState=trial_expired, records event
-  it('ends an active trial immediately', async () => {
+  // T4: endTrialNow sets billingState to free (via auto-rollback), archives excess projects, records events
+  it('ends an active trial immediately with auto-rollback to free', async () => {
     const subs = new Map<string, SubscriptionRow>([['user-1', createSubscription({
       userId: 'user-1',
       billingState: 'trial_active' as BillingState,
@@ -178,6 +213,11 @@ describe('TrialService', () => {
       trialSource: 'self_serve',
     })]]);
     const stub = createPrismaStub(subs);
+    // User has 3 active projects during trial, free limit is 1
+    stub.projectCounts.set('user-1', 3);
+    stub.projectRows.set('proj-1', { id: 'proj-1', userId: 'user-1', status: 'active', createdAt: new Date('2026-04-01') });
+    stub.projectRows.set('proj-2', { id: 'proj-2', userId: 'user-1', status: 'active', createdAt: new Date('2026-04-02') });
+    stub.projectRows.set('proj-3', { id: 'proj-3', userId: 'user-1', status: 'active', createdAt: new Date('2026-04-03') });
     const service = new TrialService({
       prisma: stub.prisma as never,
       now: () => now,
@@ -185,14 +225,21 @@ describe('TrialService', () => {
 
     const result = await service.endTrialNow('user-1');
 
-    assert.equal(result.billingState, 'trial_expired');
-    const sub = subs.get('user-1')!;
-    assert.equal(sub.billingState, 'trial_expired');
-    assert.equal(sub.trialEndedAt!.getTime(), now.getTime());
+    // Should rollback to free (via rollbackTrialToFree called internally)
+    assert.equal(result.billingState, 'free');
+    assert.equal(result.overLimitProjects, 2);
+    assert.equal(result.archivedProjectIds.length, 2);
 
-    assert.equal(stub.billingEvents.length, 1);
-    assert.equal(stub.billingEvents[0].previousState, 'trial_active');
+    const sub = subs.get('user-1')!;
+    assert.equal(sub.billingState, 'free');
+    assert.equal(sub.plan, 'free');
+    assert.equal(sub.trialEndedAt!.getTime(), now.getTime());
+    assert.equal(sub.rolledBackAt!.getTime(), now.getTime());
+
+    // Two billing events: trial_expired + rollback
+    assert.equal(stub.billingEvents.length, 2);
     assert.equal(stub.billingEvents[0].newState, 'trial_expired');
+    assert.equal(stub.billingEvents[1].newState, 'free');
   });
 
   // T5: endTrialNow rejects if not trial_active
@@ -217,8 +264,8 @@ describe('TrialService', () => {
     );
   });
 
-  // T6: rollbackTrialToFree sets plan=free, rolledBackAt, returns overLimitProjects
-  it('rolls back trial to free with over-limit project count', async () => {
+  // T6: rollbackTrialToFree sets plan=free, rolledBackAt, archives excess projects, returns overLimitProjects
+  it('rolls back trial to free with over-limit project archiving', async () => {
     const subs = new Map<string, SubscriptionRow>([['user-1', createSubscription({
       userId: 'user-1',
       billingState: 'trial_active' as BillingState,
@@ -230,6 +277,9 @@ describe('TrialService', () => {
     const stub = createPrismaStub(subs);
     // Free plan allows 1 project; user has 3 active
     stub.projectCounts.set('user-1', 3);
+    stub.projectRows.set('proj-1', { id: 'proj-1', userId: 'user-1', status: 'active', createdAt: new Date('2026-04-01') });
+    stub.projectRows.set('proj-2', { id: 'proj-2', userId: 'user-1', status: 'active', createdAt: new Date('2026-04-02') });
+    stub.projectRows.set('proj-3', { id: 'proj-3', userId: 'user-1', status: 'active', createdAt: new Date('2026-04-03') });
     const service = new TrialService({
       prisma: stub.prisma as never,
       now: () => now,
@@ -240,6 +290,15 @@ describe('TrialService', () => {
     assert.equal(result.billingState, 'trial_expired');
     // Free limit is 1 project, user has 3, so overLimit = 2
     assert.equal(result.overLimitProjects, 2);
+    // Two oldest projects should be archived (newest kept under free limit)
+    assert.equal(result.archivedProjectIds.length, 2);
+    // With desc order + skip 1: proj-3 (newest) kept, proj-2 and proj-1 archived
+    assert.deepEqual(result.archivedProjectIds.sort(), ['proj-1', 'proj-2']);
+
+    // Verify projects were actually archived
+    assert.equal(stub.projectRows.get('proj-1')!.status, 'archived');
+    assert.equal(stub.projectRows.get('proj-2')!.status, 'archived');
+    assert.equal(stub.projectRows.get('proj-3')!.status, 'active');
 
     const sub = subs.get('user-1')!;
     assert.equal(sub.plan, 'free');
