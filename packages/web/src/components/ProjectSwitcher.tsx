@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Archive, ChevronDown, Folder, Layers, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Folder, Layers, Lock, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -67,7 +67,12 @@ function ProjectRow({
           isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
         )}
       >
-        <span className="truncate text-xs">{project.name}</span>
+        <span className={cn('flex items-center gap-1 truncate text-xs', isArchived && 'opacity-60')}>
+          <span className="truncate">{project.name}</span>
+          {isArchived && (
+            <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="Только чтение" />
+          )}
+        </span>
         <span className="relative flex h-5 min-w-[20px] shrink-0 items-center justify-end">
           {project.taskCount === undefined ? (
             <span className="w-4 text-center text-xs text-slate-200">—</span>
