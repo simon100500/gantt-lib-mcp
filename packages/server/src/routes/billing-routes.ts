@@ -12,6 +12,8 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { BillingService } from '../services/billing-service.js';
+import { TrialService } from '../services/trial-service.js';
+import { TrialTriggerService } from '../services/trial-trigger-service.js';
 import { PLAN_CONFIG, getPlanPricing, type PlanKey } from '../services/plan-config.js';
 
 const YOOKASSA_BASE_URL = 'https://api.yookassa.ru/v3';
@@ -307,5 +309,51 @@ export async function registerBillingRoutes(fastify: FastifyInstance): Promise<v
   fastify.get('/api/billing/payments', { preHandler: [authMiddleware] }, async (req, reply) => {
     const payments = await billingService.getPaymentHistory(req.user!.userId);
     return reply.send(payments);
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/billing/trial/eligibility — check trial eligibility + trigger conditions
+  // ---------------------------------------------------------------------------
+  fastify.get('/api/billing/trial/eligibility', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const userId = req.user!.userId;
+    const trialService = new TrialService();
+    const triggerService = new TrialTriggerService();
+
+    const [eligibility, trigger] = await Promise.all([
+      trialService.checkTrialEligibility(userId),
+      triggerService.checkTriggerEligibility(userId),
+    ]);
+
+    return reply.send({
+      eligible: eligibility.eligible,
+      shouldOffer: eligibility.eligible && trigger.shouldOffer,
+      triggerType: trigger.triggerType ?? null,
+      reason: eligibility.reason ?? null,
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/billing/trial/start — self-serve trial activation
+  // ---------------------------------------------------------------------------
+  fastify.post('/api/billing/trial/start', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const userId = req.user!.userId;
+    const body = (req.body ?? {}) as { triggerType?: string };
+    const trialService = new TrialService();
+
+    try {
+      await trialService.startTrial(userId, {
+        source: 'self_serve',
+        actorId: userId,
+        reason: `Self-serve trial triggered via ${body.triggerType ?? 'unknown'}`,
+      });
+
+      // Return updated subscription status
+      const status = await billingService.getSubscriptionStatus(userId);
+      return reply.send({ status });
+    } catch (err) {
+      return reply.status(400).send({
+        error: err instanceof Error ? err.message : 'Trial activation failed',
+      });
+    }
   });
 }
