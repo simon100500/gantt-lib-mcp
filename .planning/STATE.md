@@ -68,6 +68,7 @@ packages/
 |---|-------------|------|--------|-----------|
 | 260330-m7o | Сделать возможность выбирать юзеру режим работы графика: рабочие дни или календарные дни, сохранить настройку в БД на уровне проекта и вынести в меню toolbar | 2026-03-30 | b339dcc | [260330-m7o-gantt-lib](./quick/260330-m7o-gantt-lib/) |
 | 260331-udj | Jira-like sidebar: hover overlay + click push dual-mode для переключения проектов | 2026-03-31 | eee8c8d | [260331-udj-sidebar-jira-hover-overlay-behavior](./quick/260331-udj-sidebar-jira-hover-overlay-behavior/) |
+| 260405-roi | endTrialNow auto-rollback + archive excess projects + Lock icon for archived projects | 2026-04-05 | 600c005 | [260405-roi-archive-readonly-trial-end-rollback-to-f](./quick/260405-roi-archive-readonly-trial-end-rollback-to-f/) |
 
 ---
 
@@ -123,6 +124,8 @@ packages/
 - [Phase 38]: Trigger B (premium_feature_attempt) is deliberately simple: client detects constraint denial 403s, server validates project with tasks exists
 - [Phase 38]: Trial decline tracked in sessionStorage to re-offer in new sessions
 - [Phase 38]: useTrialTrigger integrates with authStore.constraintDenial for automatic trigger on feature denial
+- [Quick 260405-roi]: endTrialNow auto-rollback to free + archive excess projects; rollbackTrialToFree archives oldest projects beyond FREE_PROJECT_LIMIT
+- [Quick 260405-roi]: Lock icon (lucide-react) with opacity-60 on archived projects in ProjectSwitcher sidebar
 
 ## Performance Metrics
 
@@ -142,9 +145,9 @@ packages/
 
 ## Session
 
-- Last session: 2026-04-04T14:08:00+03:00
-- Stopped at: Completed 34-02-PLAN.md
+- Last session: 2026-04-05T20:19:00+03:00
+- Stopped at: Completed 260405-roi-PLAN.md
 
 ---
 
-*Last updated: 2026-04-04 — Phase 37 formally closed, Phase 34 in progress*
+*Last updated: 2026-04-05 — Quick task 260405-roi completed*
