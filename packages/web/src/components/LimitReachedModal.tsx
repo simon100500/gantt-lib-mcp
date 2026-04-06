@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
-import { formatPrice, PLAN_FEATURES } from '../lib/billing.ts';
+import { Check, X } from 'lucide-react';
+import { formatPrice, PLAN_CATALOG, PLAN_FEATURES, PLAN_LABELS, type PaidPlanId } from '../lib/billing.ts';
 import {
   buildConstraintModalContent,
   FEATURE_GATE_CODES,
@@ -81,19 +81,26 @@ export function LimitReachedModal({
     || subscription.billingState === 'trial_expired'
     || subscription.trialStartedAt != null;
   const canStartTrial = !trialIneligible && !!onActivateTrial;
-  const startPlanBenefits = [
-    PLAN_FEATURES.start[0],
-    'AI-генерация и правки графиков',
-    'Управление бригадами и ресурсами',
-    'Экспорт в PDF и Excel',
-  ];
+  const paidPlans: PaidPlanId[] = ['start', 'team'];
+  const compactPlanFeatures: Record<PaidPlanId, string[]> = {
+    start: [
+      '3 активных проекта',
+      'AI-генерация и правки графиков',
+      'Управление бригадами и ресурсами',
+      'Экспорт в PDF и Excel',
+    ],
+    team: [
+      '7 активных проектов',
+      '50 AI-запросов в день',
+      'Больше участников команды',
+      'Приоритет для активной работы с несколькими объектами',
+    ],
+  };
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
     : null;
   const resolvedPrimaryLabel = primaryButtonLabel
     ?? (canStartTrial ? 'Включить 14 дней бесплатно'
-      : isFreeProjectLimitUpsell && content.upgradeOffer.price !== null
-        ? `Подключить Старт — ${formatPrice(content.upgradeOffer.price)}/мес`
       : content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ'
         : 'Расширить тариф');
   const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
@@ -112,6 +119,11 @@ export function LimitReachedModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  const redirectToPlan = (plan: PaidPlanId) => {
+    const separator = actionHref.includes('?') ? '&' : '?';
+    window.location.href = `${actionHref}${separator}plan=${plan}`;
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -121,7 +133,7 @@ export function LimitReachedModal({
     >
       <div
         ref={dialogRef}
-        className="relative w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border-0 bg-white p-6 shadow-2xl"
+        className="relative w-[720px] max-w-[calc(100vw-2rem)] rounded-2xl border-0 bg-white p-6 shadow-2xl sm:p-7"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -142,18 +154,54 @@ export function LimitReachedModal({
         </h3>
 
         <div className="mb-6 space-y-3 text-sm text-slate-600">
-          <p>{content.description}</p>
+          <p>
+            {isFreeProjectLimitUpsell
+              ? 'Чтобы вести несколько проектов одновременно, подключите расширенный тариф'
+              : content.description}
+          </p>
           {isFreeProjectLimitUpsell ? (
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="font-medium text-slate-900">С тарифом Старт вы получите:</p>
-              <ul className="mt-3 space-y-2 text-slate-700">
-                {startPlanBenefits.map((benefit) => (
-                  <li key={benefit} className="flex items-start gap-2">
-                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-                    <span>{benefit}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="-mx-2 overflow-x-auto px-2 pb-1">
+              <div className="grid min-w-[540px] grid-cols-2 gap-3">
+                {paidPlans.map((plan) => {
+                  const features = compactPlanFeatures[plan];
+                  return (
+                    <div
+                      key={plan}
+                      className="flex h-full flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-base font-semibold text-slate-900">{PLAN_LABELS[plan]}</div>
+                          <div className="mt-1 text-sm text-slate-500">
+                            {formatPrice(PLAN_CATALOG[plan].pricing.monthly)}/мес
+                          </div>
+                        </div>
+                      </div>
+
+                      <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-700">
+                        {features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-2">
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <div className="mt-4 text-xs text-slate-500">
+                        {plan === 'start' ? PLAN_FEATURES.start[6] : 'PDF + Excel и более широкий командный лимит'}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => redirectToPlan(plan)}
+                        className="mt-4 h-10 w-full rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+                      >
+                        {`Подключить ${PLAN_LABELS[plan]}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : content.limitKey && (
             <dl className="space-y-2 rounded-2xl bg-slate-50 p-4">
@@ -179,44 +227,55 @@ export function LimitReachedModal({
               )}
             </dl>
           )}
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-            <p className="font-medium text-emerald-900">
-              {isFreeProjectLimitUpsell
-                ? 'Подключите Старт, чтобы продолжать работу без ручного освобождения слотов.'
-                : content.upgradeHint}
-            </p>
-            {!isFreeProjectLimitUpsell && priceLine && (
-              <p className="mt-1 text-emerald-800">
-                Следующий шаг: {priceLine}
-              </p>
-            )}
-          </div>
+          {!isFreeProjectLimitUpsell && (
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="font-medium text-emerald-900">{content.upgradeHint}</p>
+              {priceLine && (
+                <p className="mt-1 text-emerald-800">
+                  Следующий шаг: {priceLine}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
+        {isFreeProjectLimitUpsell && (
+          <p className="mb-4 text-sm text-slate-500">
+            Чтобы создать новый проект на бесплатном тарифе, удалите существующий проект.
+          </p>
+        )}
+
         <div className="flex gap-3">
-          <button
-            type="button"
-            disabled={canStartTrial && trialActivating}
-            onClick={canStartTrial
-              ? () => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }
-              : () => { window.location.href = actionHref; }}
-            className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
-          >
-            {trialActivating ? 'Активация...' : resolvedPrimaryLabel}
-          </button>
+          {!isFreeProjectLimitUpsell && (
+            <button
+              type="button"
+              disabled={canStartTrial && trialActivating}
+              onClick={canStartTrial
+                ? () => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }
+                : () => { window.location.href = actionHref; }}
+              className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              {trialActivating ? 'Активация...' : resolvedPrimaryLabel}
+            </button>
+          )}
+          {isFreeProjectLimitUpsell && canStartTrial && (
+            <button
+              type="button"
+              disabled={trialActivating}
+              onClick={() => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }}
+              className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              {trialActivating ? 'Активация...' : 'Включить 14 дней бесплатно'}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 h-11 rounded-xl bg-slate-100 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+            className={`${isFreeProjectLimitUpsell && !canStartTrial ? 'w-full' : 'flex-1'} h-11 rounded-xl bg-slate-100 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2`}
           >
             {resolvedSecondaryLabel}
           </button>
         </div>
-        {isFreeProjectLimitUpsell && (
-          <p className="mt-3 text-center text-xs text-slate-500">
-            Если останетесь на бесплатном тарифе, освободите слот: архивируйте или удалите один активный проект.
-          </p>
-        )}
       </div>
     </div>
   );
