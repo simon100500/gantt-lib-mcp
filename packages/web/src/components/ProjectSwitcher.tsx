@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Archive, ChevronDown, Folder, Layers, Lock, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -70,7 +70,7 @@ function ProjectRow({
         <span className={cn('flex items-center gap-1 truncate text-xs', isArchived && 'opacity-60')}>
           <span className="truncate">{project.name}</span>
           {isArchived && (
-            <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="Только чтение" />
+            <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="Только для чтения" title="Только для чтения" />
           )}
         </span>
         <span className="relative flex h-5 min-w-[20px] shrink-0 items-center justify-end">
@@ -239,6 +239,15 @@ export function ProjectSwitcher({
   const archivedProjects = useMemo(() => projects.filter((project) => project.status === 'archived'), [projects]);
   const [activeOpen, setActiveOpen] = useState(true);
   const [archiveOpen, setArchiveOpen] = useState(currentProject.status === 'archived');
+  const prevArchivedCountRef = useRef(archivedProjects.length);
+
+  // Auto-open archive when new projects are archived (e.g. after trial rollback)
+  useEffect(() => {
+    if (archivedProjects.length > prevArchivedCountRef.current) {
+      setArchiveOpen(true);
+    }
+    prevArchivedCountRef.current = archivedProjects.length;
+  }, [archivedProjects.length]);
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
 
   return (
