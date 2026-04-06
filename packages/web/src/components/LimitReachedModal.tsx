@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, X } from 'lucide-react';
-import { formatPrice, PLAN_CATALOG, PLAN_FEATURES, PLAN_LABELS, type PaidPlanId } from '../lib/billing.ts';
+import { formatPrice, PLAN_CATALOG, PLAN_FEATURES, PLAN_LABELS, type BillingPeriod, type PaidPlanId } from '../lib/billing.ts';
 import {
   buildConstraintModalContent,
   FEATURE_GATE_CODES,
@@ -74,6 +74,7 @@ export function LimitReachedModal({
     });
   const dialogRef = useRef<HTMLDivElement>(null);
   const [trialActivating, setTrialActivating] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const subscription = useBillingStore((s) => s.subscription);
   const isFreeProjectLimitUpsell = content.code === 'PROJECT_LIMIT_REACHED' && content.plan === 'free';
   const trialIneligible = !subscription
@@ -121,7 +122,7 @@ export function LimitReachedModal({
 
   const redirectToPlan = (plan: PaidPlanId) => {
     const separator = actionHref.includes('?') ? '&' : '?';
-    window.location.href = `${actionHref}${separator}plan=${plan}`;
+    window.location.href = `${actionHref}${separator}plan=${plan}&period=${billingPeriod}&checkout=1`;
   };
 
   return (
@@ -133,7 +134,7 @@ export function LimitReachedModal({
     >
       <div
         ref={dialogRef}
-        className="relative w-[720px] max-w-[calc(100vw-2rem)] rounded-2xl border-0 bg-white p-6 shadow-2xl sm:p-7"
+        className="relative max-h-[calc(100dvh-2rem)] w-[720px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border-0 bg-white p-6 shadow-2xl sm:p-7"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -154,34 +155,80 @@ export function LimitReachedModal({
         </h3>
 
         <div className="mb-6 space-y-3 text-sm text-slate-600">
-          <p>
-            {isFreeProjectLimitUpsell
-              ? 'Чтобы вести несколько проектов одновременно, подключите расширенный тариф'
-              : content.description}
-          </p>
+          {!isFreeProjectLimitUpsell && <p>{content.description}</p>}
+          {isFreeProjectLimitUpsell && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-500">
+                Подключите тариф, чтобы не терять проекты
+              </div>
+              <div className="inline-flex w-fit rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setBillingPeriod('monthly')}
+                  className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'monthly'
+                    ? 'bg-slate-900 font-medium text-white'
+                    : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                  Месяц
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingPeriod('yearly')}
+                  className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
+                    ? 'bg-slate-900 font-medium text-white'
+                    : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                  Год
+                </button>
+              </div>
+            </div>
+          )}
           {isFreeProjectLimitUpsell ? (
             <div className="-mx-2 overflow-x-auto px-2 pb-1">
               <div className="grid min-w-[540px] grid-cols-2 gap-3">
                 {paidPlans.map((plan) => {
                   const features = compactPlanFeatures[plan];
+                  const isPopular = plan === 'start';
+                  const yearlySavings = PLAN_CATALOG[plan].pricing.monthly * 12 - PLAN_CATALOG[plan].pricing.yearly;
                   return (
                     <div
                       key={plan}
-                      className="flex h-full flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left"
+                      className={`flex h-full flex-col rounded-2xl border p-4 text-left shadow-sm transition-all ${isPopular
+                        ? 'border-primary/30 bg-primary/[0.045] text-slate-900 shadow-[0_20px_60px_-36px_rgba(97,88,224,0.35)]'
+                        : 'border-slate-200 bg-white text-slate-900'
+                        }`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <div className="text-base font-semibold text-slate-900">{PLAN_LABELS[plan]}</div>
-                          <div className="mt-1 text-sm text-slate-500">
-                            {formatPrice(PLAN_CATALOG[plan].pricing.monthly)}/мес
-                          </div>
                         </div>
+                        {isPopular && (
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isPopular ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            Популярный
+                          </span>
+                        )}
                       </div>
 
-                      <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-700">
+                      <div className="mt-4">
+                        <span className="text-3xl font-bold">{formatPrice(PLAN_CATALOG[plan].pricing[billingPeriod])}</span>
+                        <span className="ml-1 text-sm text-slate-500">
+                          /{billingPeriod === 'monthly' ? 'мес' : 'год'}
+                        </span>
+                        {billingPeriod === 'yearly' && yearlySavings > 0 && (
+                          <span className="mt-1 block text-sm text-emerald-600">
+                            Экономия {formatPrice(yearlySavings)} в год
+                          </span>
+                        )}
+                      </div>
+
+                      <ul className="mt-6 flex-1 space-y-2 text-sm text-slate-700">
                         {features.map((feature) => (
                           <li key={feature} className="flex items-start gap-2">
-                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                             <span>{feature}</span>
                           </li>
                         ))}
@@ -194,7 +241,10 @@ export function LimitReachedModal({
                       <button
                         type="button"
                         onClick={() => redirectToPlan(plan)}
-                        className="mt-4 h-10 w-full rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+                        className={`mt-4 h-10 w-full rounded-xl px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${isPopular
+                          ? 'bg-primary text-white hover:bg-primary/90'
+                          : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
+                          }`}
                       >
                         {`Подключить ${PLAN_LABELS[plan]}`}
                       </button>
@@ -239,12 +289,6 @@ export function LimitReachedModal({
           )}
         </div>
 
-        {isFreeProjectLimitUpsell && (
-          <p className="mb-4 text-sm text-slate-500">
-            Чтобы создать новый проект на бесплатном тарифе, удалите существующий проект.
-          </p>
-        )}
-
         <div className="flex gap-3">
           {!isFreeProjectLimitUpsell && (
             <button
@@ -276,6 +320,11 @@ export function LimitReachedModal({
             {resolvedSecondaryLabel}
           </button>
         </div>
+        {isFreeProjectLimitUpsell && (
+          <p className="mt-3 text-right text-sm text-slate-500">
+            Чтобы создать новый проект на бесплатном тарифе, удалите существующий проект.
+          </p>
+        )}
       </div>
     </div>
   );

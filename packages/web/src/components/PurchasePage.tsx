@@ -22,6 +22,8 @@ const FREE_FEATURES = [
 
 interface PurchasePageProps {
   initialPlan?: string | null;
+  initialPeriod?: string | null;
+  autoCheckout?: boolean;
   isAuthenticated: boolean;
   userEmail?: string | null;
   onLoginRequired: () => void;
@@ -29,6 +31,8 @@ interface PurchasePageProps {
 
 export function PurchasePage({
   initialPlan,
+  initialPeriod,
+  autoCheckout = false,
   isAuthenticated,
   userEmail,
   onLoginRequired,
@@ -45,7 +49,9 @@ export function PurchasePage({
     resetPaymentState,
   } = useBillingStore();
 
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>(() => (
+    initialPeriod === 'yearly' ? 'yearly' : 'monthly'
+  ));
   const [checkoutPlan, setCheckoutPlan] = useState<PaidPlanId | null>(null);
   const [pendingCheckout, setPendingCheckout] = useState<{ plan: PaidPlanId; period: BillingPeriod } | null>(null);
   const [preferredPlan, setPreferredPlan] = useState<PaidPlanId | null>(() => (
@@ -59,6 +65,12 @@ export function PurchasePage({
       setPreferredPlan(initialPlan);
     }
   }, [initialPlan]);
+
+  useEffect(() => {
+    if (initialPeriod === 'monthly' || initialPeriod === 'yearly') {
+      setBillingPeriod(initialPeriod);
+    }
+  }, [initialPeriod]);
 
   const startCheckout = useCallback(async (plan: PaidPlanId, period: BillingPeriod) => {
     resetPaymentState();
@@ -125,6 +137,19 @@ export function PurchasePage({
     setPendingCheckout(null);
     void startCheckout(pending.plan, pending.period);
   }, [isAuthenticated, pendingCheckout, startCheckout]);
+
+  useEffect(() => {
+    if (!autoCheckout || !isPaidPlan(initialPlan)) {
+      return;
+    }
+
+    const period: BillingPeriod = initialPeriod === 'yearly' ? 'yearly' : 'monthly';
+    setPendingCheckout((current) => current ?? { plan: initialPlan, period });
+
+    if (!isAuthenticated) {
+      onLoginRequired();
+    }
+  }, [autoCheckout, initialPeriod, initialPlan, isAuthenticated, onLoginRequired]);
 
   useEffect(() => () => {
     if (paymentContainerRef.current) {

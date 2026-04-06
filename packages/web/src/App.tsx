@@ -248,13 +248,18 @@ export default function App() {
   const isPurchaseRoute = normalizedPathname === '/purchase';
   const isAccountRoute = normalizedPathname === '/account';
   const isAdminRoute = normalizedPathname === '/admin';
-  const initialPurchasePlan = new URLSearchParams(route.search).get('plan');
+  const purchaseParams = new URLSearchParams(route.search);
+  const initialPurchasePlan = purchaseParams.get('plan');
+  const initialPurchasePeriod = purchaseParams.get('period');
+  const autoPurchaseCheckout = purchaseParams.get('checkout') === '1';
 
   return (
     <>
       {isPurchaseRoute ? (
         <PurchasePage
           initialPlan={initialPurchasePlan}
+          initialPeriod={initialPurchasePeriod}
+          autoCheckout={autoPurchaseCheckout}
           isAuthenticated={auth.isAuthenticated}
           userEmail={auth.user?.email ?? null}
           onLoginRequired={() => setShowOtpModal(true)}
