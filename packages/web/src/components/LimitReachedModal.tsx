@@ -94,9 +94,9 @@ export function LimitReachedModal({
     ],
     team: [
       '7 активных проектов',
+      'Общие ресурсы по всем проектам',
       '50 AI-запросов в день',
       'До 20 участников команды',
-      'Общие ресурсы по всем проектам',
       'Экспорт PDF + Excel',
       'Архив проектов и гостевые ссылки',
     ],
@@ -162,29 +162,31 @@ export function LimitReachedModal({
           {isFreeProjectLimitUpsell && (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-500">
-                Чтобы вести несколько проектов одновременно, подключите расширенный тариф.
+                Чтобы вести несколько проектов одновременно, подключите  тариф.
               </div>
-              <div className="inline-flex w-fit rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setBillingPeriod('monthly')}
-                  className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'monthly'
-                    ? 'bg-slate-900 font-medium text-white'
-                    : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                >
-                  Месяц
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillingPeriod('yearly')}
-                  className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
-                    ? 'bg-slate-900 font-medium text-white'
-                    : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                >
-                  Год (до -33%)
-                </button>
+              <div className="ml-auto flex items-center gap-2">
+                <div className="inline-flex w-fit rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setBillingPeriod('monthly')}
+                    className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'monthly'
+                      ? 'bg-slate-900 font-medium text-white'
+                      : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                  >
+                    Месяц
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingPeriod('yearly')}
+                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
+                      ? 'bg-slate-900 font-medium text-white'
+                      : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                  >
+                    Год -33%
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -218,8 +220,7 @@ export function LimitReachedModal({
                           <div className="text-base font-semibold text-slate-900">{PLAN_LABELS[plan]}</div>
                         </div>
                         {isPopular && (
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${isPopular ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'
-                            }`}
+                          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary/80"
                           >
                             Популярный
                           </span>
@@ -250,12 +251,9 @@ export function LimitReachedModal({
                       <button
                         type="button"
                         onClick={() => redirectToPlan(plan)}
-                        className={`mt-4 h-10 w-full rounded-xl px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${isPopular
-                          ? 'bg-slate-100 text-slate-900 hover:bg-slate-200'
-                          : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
-                          }`}
+                        className="mt-4 h-10 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
                       >
-                        {`Сразу оплатить ${PLAN_LABELS[plan]}`}
+                        {`Выбрать ${PLAN_LABELS[plan]}`}
                       </button>
                     </div>
                   );
@@ -323,7 +321,7 @@ export function LimitReachedModal({
         </div>
         {isFreeProjectLimitUpsell && (
           <p className="mt-3 text-sm text-slate-500">
-            Чтобы создать новый проект на бесплатном тарифе, удалите существующий проект.
+            Чтобы создать новый проект на бесплатном тарифе, архивируйте текущий проект.
           </p>
         )}
       </div>
