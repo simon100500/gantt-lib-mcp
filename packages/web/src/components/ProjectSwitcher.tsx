@@ -74,7 +74,9 @@ function ProjectRow({
         <span className={cn('flex items-center gap-1 truncate text-xs', isArchived && 'opacity-60')}>
           <span className="truncate">{project.name}</span>
           {isArchived && (
-            <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="Только для чтения" title="Только для чтения" />
+            <span title="Только для чтения">
+              <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="Только для чтения" />
+            </span>
           )}
         </span>
         <span className="relative flex h-5 w-11 shrink-0 items-center justify-end">

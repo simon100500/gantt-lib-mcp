@@ -147,6 +147,8 @@ describe('legacy compatibility', () => {
     const result = normalizeConstraintDenialPayload(denial);
     expect(result!.limitKey).toBe('projects');
     const content = buildConstraintModalContent(result!);
+    expect(content.title).toBe('Пора расширяться');
+    expect(content.description).toContain('подключите тариф Старт');
     expect(content.limitLabel).toBe('лимит проектов');
   });
 

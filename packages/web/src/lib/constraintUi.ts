@@ -229,6 +229,7 @@ export function buildConstraintModalContent(
   const limitLabel = denial.limitKey ? LIMIT_LABELS[denial.limitKey] : 'доступ к редактированию';
   const upgradeOffer = getUpgradeOffer(denial.plan);
   const planLabel = denial.planLabel || getConstraintPlanLabel(denial.plan);
+  const isFreeProjectLimitUpsell = denial.code === 'PROJECT_LIMIT_REACHED' && denial.plan === 'free';
 
   let title: string;
   let description: string;
@@ -236,6 +237,9 @@ export function buildConstraintModalContent(
   if (denial.code === 'SUBSCRIPTION_EXPIRED') {
     title = 'Подписка требует продления';
     description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
+  } else if (isFreeProjectLimitUpsell) {
+    title = 'Пора расширяться';
+    description = 'Чтобы вести несколько проектов одновременно, подключите тариф Старт и управляйте всеми объектами в одном месте.';
   } else if (isPostTrialFeatureGate(denial)) {
     title = `${limitLabel} — пробный период закончился`;
     description = 'Вы использовали расширенные возможности тарифа Старт. Перейдите на платный тариф, чтобы сохранить доступ.';

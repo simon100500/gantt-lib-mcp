@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { formatPrice } from '../lib/billing.ts';
+import { formatPrice, PLAN_FEATURES } from '../lib/billing.ts';
 import {
   buildConstraintModalContent,
   FEATURE_GATE_CODES,
@@ -75,23 +75,33 @@ export function LimitReachedModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [trialActivating, setTrialActivating] = useState(false);
   const subscription = useBillingStore((s) => s.subscription);
+  const isFreeProjectLimitUpsell = content.code === 'PROJECT_LIMIT_REACHED' && content.plan === 'free';
   const trialIneligible = !subscription
     || subscription.billingState === 'trial_active'
     || subscription.billingState === 'trial_expired'
     || subscription.trialStartedAt != null;
   const canStartTrial = !trialIneligible && !!onActivateTrial;
+  const startPlanBenefits = [
+    PLAN_FEATURES.start[0],
+    'AI-генерация и правки графиков',
+    'Управление бригадами и ресурсами',
+    'Экспорт в PDF и Excel',
+  ];
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
     : null;
   const resolvedPrimaryLabel = primaryButtonLabel
     ?? (canStartTrial ? 'Включить 14 дней бесплатно'
+      : isFreeProjectLimitUpsell && content.upgradeOffer.price !== null
+        ? `Подключить Старт — ${formatPrice(content.upgradeOffer.price)}/мес`
       : content.code === 'SUBSCRIPTION_EXPIRED' ? 'Продлить доступ'
         : 'Расширить тариф');
   const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.EXPORT_FEATURE_LOCKED;
   const resolvedSecondaryLabel = secondaryButtonLabel
-    ?? (content.limitKey === 'ai_queries' ? 'Понятно' : isFeatureGate ? 'Закрыть' : 'Закрыть');
+    ?? (isFreeProjectLimitUpsell ? 'Остаться на бесплатном'
+      : content.limitKey === 'ai_queries' ? 'Понятно' : isFeatureGate ? 'Закрыть' : 'Закрыть');
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -133,7 +143,19 @@ export function LimitReachedModal({
 
         <div className="mb-6 space-y-3 text-sm text-slate-600">
           <p>{content.description}</p>
-          {content.limitKey && (
+          {isFreeProjectLimitUpsell ? (
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="font-medium text-slate-900">С тарифом Старт вы получите:</p>
+              <ul className="mt-3 space-y-2 text-slate-700">
+                {startPlanBenefits.map((benefit) => (
+                  <li key={benefit} className="flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : content.limitKey && (
             <dl className="space-y-2 rounded-2xl bg-slate-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <dt className="text-slate-500">Ограничение</dt>
@@ -158,8 +180,12 @@ export function LimitReachedModal({
             </dl>
           )}
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-            <p className="font-medium text-emerald-900">{content.upgradeHint}</p>
-            {priceLine && (
+            <p className="font-medium text-emerald-900">
+              {isFreeProjectLimitUpsell
+                ? 'Подключите Старт, чтобы продолжать работу без ручного освобождения слотов.'
+                : content.upgradeHint}
+            </p>
+            {!isFreeProjectLimitUpsell && priceLine && (
               <p className="mt-1 text-emerald-800">
                 Следующий шаг: {priceLine}
               </p>
@@ -186,6 +212,11 @@ export function LimitReachedModal({
             {resolvedSecondaryLabel}
           </button>
         </div>
+        {isFreeProjectLimitUpsell && (
+          <p className="mt-3 text-center text-xs text-slate-500">
+            Если останетесь на бесплатном тарифе, освободите слот: архивируйте или удалите один активный проект.
+          </p>
+        )}
       </div>
     </div>
   );
