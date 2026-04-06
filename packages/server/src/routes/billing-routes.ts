@@ -278,6 +278,10 @@ export async function registerBillingRoutes(fastify: FastifyInstance): Promise<v
     return reply.send({
       plan: status.plan,
       periodEnd: status.periodEnd,
+      billingState: status.billingState,
+      trialStartedAt: status.trialStartedAt,
+      trialEndsAt: status.trialEndsAt,
+      trialSource: status.trialSource,
       aiUsed: status.aiUsed,
       aiLimit: status.aiLimit,
       isActive: status.isActive,

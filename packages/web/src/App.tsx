@@ -351,7 +351,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
 
     if (auth.isAuthenticated && !hasShareToken) {
-      await fetchUsage();
+      await Promise.all([fetchSubscription(), fetchUsage()]);
     }
 
     const nextBillingStatus = useBillingStore.getState().usage ?? useBillingStore.getState().subscription;

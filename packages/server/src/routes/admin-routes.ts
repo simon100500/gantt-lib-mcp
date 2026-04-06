@@ -449,13 +449,16 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
 
   fastify.post('/api/admin/users/:id/trial/reset', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
     const userId = (req.params as { id: string }).id;
-    const adminUserId = req.user!.userId;
 
     try {
       const prisma = getPrisma();
       await (prisma.subscription.update as any)({
         where: { userId },
         data: {
+          plan: 'free',
+          periodStart: null,
+          periodEnd: null,
+          aiUsed: 0,
           billingState: 'free',
           trialStartedAt: null,
           trialEndsAt: null,

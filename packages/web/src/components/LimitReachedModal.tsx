@@ -78,7 +78,7 @@ export function LimitReachedModal({
   const trialIneligible = !subscription
     || subscription.billingState === 'trial_active'
     || subscription.billingState === 'trial_expired'
-    || subscription.trialStartedAt !== null;
+    || subscription.trialStartedAt != null;
   const canStartTrial = !trialIneligible && !!onActivateTrial;
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
     ? `${content.upgradeOffer.planLabel} — ${formatPrice(content.upgradeOffer.price)}/${content.upgradeOffer.billingPeriod === 'monthly' ? 'мес' : 'год'}`
