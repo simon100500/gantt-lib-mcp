@@ -12,7 +12,7 @@ import type { AuthProject } from '../stores/useAuthStore.ts';
 interface ProjectSwitcherProps {
   currentProject: Pick<AuthProject, 'id' | 'name' | 'status' | 'taskCount'> & { kind?: 'project' | 'draft' };
   projects: AuthProject[];
-  onSwitch: (projectId: string) => void;
+  onSwitch: (projectId: string) => void | Promise<void>;
   onCreateNew: () => void;
   createDisabled?: boolean;
   createTitle?: string;
@@ -30,7 +30,7 @@ interface ProjectRowProps {
   project: AuthProject;
   isCurrent: boolean;
   menuActive: boolean;
-  onSwitch: (projectId: string) => void;
+  onSwitch: (projectId: string) => void | Promise<void>;
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
@@ -50,7 +50,11 @@ function ProjectRow({
   setOpenMenuProjectId,
 }: ProjectRowProps) {
   const isArchived = project.status === 'archived';
-  const showMenuButton = true;
+  const taskCountLabel = project.taskCount === undefined
+    ? '—'
+    : project.taskCount > 0
+      ? String(project.taskCount)
+      : '';
 
   return (
     <div
@@ -73,70 +77,59 @@ function ProjectRow({
             <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="Только для чтения" title="Только для чтения" />
           )}
         </span>
-        <span className="relative flex h-5 min-w-[20px] shrink-0 items-center justify-end">
-          {project.taskCount === undefined ? (
-            <span className="w-4 text-center text-xs text-slate-200">—</span>
-          ) : project.taskCount > 0 ? (
-            <span
-              className={cn(
-                'pr-1 text-xs transition-opacity',
-                isCurrent ? 'text-slate-600' : 'text-slate-400',
-                showMenuButton && 'group-hover:opacity-0 group-focus-within:opacity-0',
-              )}
-            >
-              {project.taskCount}
+        <span className="relative flex h-5 w-11 shrink-0 items-center justify-end">
+          {taskCountLabel ? (
+            <span className="pr-1 text-xs text-slate-400 transition-opacity group-hover:opacity-0">
+              {taskCountLabel}
             </span>
           ) : null}
 
-          {showMenuButton && (
-            <DropdownMenu
-              onOpenChange={(open) => {
-                setOpenMenuProjectId(open ? project.id : null);
-                onMenuOpenChange?.(open);
-              }}
-            >
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(event) => event.stopPropagation()}
-                  className={cn(
-                    'absolute right-0 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    menuActive ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700',
-                    'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
-                    menuActive && 'opacity-100',
-                  )}
-                  aria-label="Действия проекта"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
-                {!isArchived ? (
-                  <>
-                    <DropdownMenuItem onClick={() => void onArchive(project.id)}>
-                      <Archive className="h-4 w-4" />
-                      <span>В архив</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
-                      <Trash2 className="h-4 w-4" />
-                      <span>Удалить</span>
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenuItem onClick={() => void onRestore(project.id)}>
-                      <RotateCcw className="h-4 w-4" />
-                      <span>Вернуть</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
-                      <Trash2 className="h-4 w-4" />
-                      <span>Удалить</span>
-                    </DropdownMenuItem>
-                  </>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              setOpenMenuProjectId(open ? project.id : null);
+              onMenuOpenChange?.(open);
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={(event) => event.stopPropagation()}
+                className={cn(
+                  'absolute right-0 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  menuActive ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700',
+                  'opacity-0 group-hover:opacity-100',
                 )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+                aria-label="Действия проекта"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
+              {!isArchived ? (
+                <>
+                  <DropdownMenuItem onClick={() => void onArchive(project.id)}>
+                    <Archive className="h-4 w-4" />
+                    <span>В архив</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
+                    <Trash2 className="h-4 w-4" />
+                    <span>Удалить</span>
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={() => void onRestore(project.id)}>
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Вернуть</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
+                    <Trash2 className="h-4 w-4" />
+                    <span>Удалить</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </span>
       </button>
     </div>
@@ -240,6 +233,8 @@ export function ProjectSwitcher({
   const [activeOpen, setActiveOpen] = useState(true);
   const [archiveOpen, setArchiveOpen] = useState(currentProject.status === 'archived');
   const prevArchivedCountRef = useRef(archivedProjects.length);
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const selectedProjectId = pendingProjectId ?? currentProject.id;
 
   // Auto-open archive when new projects are archived (e.g. after trial rollback)
   useEffect(() => {
@@ -249,6 +244,35 @@ export function ProjectSwitcher({
     prevArchivedCountRef.current = archivedProjects.length;
   }, [archivedProjects.length]);
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (pendingProjectId && currentProject.id === pendingProjectId) {
+      setPendingProjectId(null);
+    }
+  }, [currentProject.id, pendingProjectId]);
+
+  useEffect(() => {
+    if (pendingProjectId && !projects.some((project) => project.id === pendingProjectId)) {
+      setPendingProjectId(null);
+    }
+  }, [pendingProjectId, projects]);
+
+  const handleSwitch = async (projectId: string) => {
+    if (projectId === selectedProjectId) {
+      return;
+    }
+
+    setOpenMenuProjectId(null);
+    onMenuOpenChange?.(false);
+    setPendingProjectId(projectId);
+
+    try {
+      await onSwitch(projectId);
+    } catch (error) {
+      setPendingProjectId(null);
+      throw error;
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -286,9 +310,9 @@ export function ProjectSwitcher({
                 <ProjectRow
                   key={project.id}
                   project={project}
-                  isCurrent={project.id === currentProject.id}
+                  isCurrent={project.id === selectedProjectId}
                   menuActive={openMenuProjectId === project.id}
-                  onSwitch={onSwitch}
+                  onSwitch={handleSwitch}
                   onArchive={onArchive}
                   onRestore={onRestore}
                   onDelete={onDelete}
@@ -312,9 +336,9 @@ export function ProjectSwitcher({
                 <ProjectRow
                   key={project.id}
                   project={project}
-                  isCurrent={project.id === currentProject.id}
+                  isCurrent={project.id === selectedProjectId}
                   menuActive={openMenuProjectId === project.id}
-                  onSwitch={onSwitch}
+                  onSwitch={handleSwitch}
                   onArchive={onArchive}
                   onRestore={onRestore}
                   onDelete={onDelete}

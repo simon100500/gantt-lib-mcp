@@ -286,13 +286,13 @@ export function ProjectMenu({
     startCloseTimer();
   };
 
-  const handleSwitchInOverlay = (id: string) => {
-    void onSwitchProject(id);
+  const handleSwitchInOverlay = async (id: string) => {
+    await onSwitchProject(id);
     setSidebarState('closed');
   };
 
-  const handleSwitchInSidebar = (id: string) => {
-    void onSwitchProject(id);
+  const handleSwitchInSidebar = async (id: string) => {
+    await onSwitchProject(id);
     // Keep sidebar open in sidebar mode
   };
 
