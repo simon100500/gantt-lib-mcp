@@ -87,14 +87,18 @@ export function LimitReachedModal({
     start: [
       '3 активных проекта',
       'AI-генерация и правки графиков',
+      'До 5 участников команды',
       'Управление бригадами и ресурсами',
-      'Экспорт в PDF и Excel',
+      'Экспорт в PDF',
+      'Гостевые ссылки',
     ],
     team: [
       '7 активных проектов',
       '50 AI-запросов в день',
-      'Больше участников команды',
-      'Приоритет для активной работы с несколькими объектами',
+      'До 20 участников команды',
+      'Общие ресурсы по всем проектам',
+      'Экспорт PDF + Excel',
+      'Архив проектов и гостевые ссылки',
     ],
   };
   const priceLine = content.upgradeOffer.planId && content.upgradeOffer.price !== null
@@ -108,8 +112,7 @@ export function LimitReachedModal({
     || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.EXPORT_FEATURE_LOCKED;
   const resolvedSecondaryLabel = secondaryButtonLabel
-    ?? (isFreeProjectLimitUpsell ? 'Остаться на бесплатном'
-      : content.limitKey === 'ai_queries' ? 'Понятно' : isFeatureGate ? 'Закрыть' : 'Закрыть');
+    ?? (content.limitKey === 'ai_queries' ? 'Понятно' : isFeatureGate ? 'Закрыть' : 'Закрыть');
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -159,7 +162,7 @@ export function LimitReachedModal({
           {isFreeProjectLimitUpsell && (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-500">
-                Подключите тариф, чтобы не терять проекты
+                Чтобы вести несколько проектов одновременно, подключите расширенный тариф.
               </div>
               <div className="inline-flex w-fit rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
                 <button
@@ -180,10 +183,20 @@ export function LimitReachedModal({
                     : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
-                  Год
+                  Год (до -33%)
                 </button>
               </div>
             </div>
+          )}
+          {isFreeProjectLimitUpsell && canStartTrial && (
+            <button
+              type="button"
+              disabled={trialActivating}
+              onClick={() => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }}
+              className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              {trialActivating ? 'Активация...' : 'Включить 14 дней бесплатно на Старт'}
+            </button>
           )}
           {isFreeProjectLimitUpsell ? (
             <div className="-mx-2 overflow-x-auto px-2 pb-1">
@@ -234,19 +247,15 @@ export function LimitReachedModal({
                         ))}
                       </ul>
 
-                      <div className="mt-4 text-xs text-slate-500">
-                        {plan === 'start' ? PLAN_FEATURES.start[6] : 'PDF + Excel и более широкий командный лимит'}
-                      </div>
-
                       <button
                         type="button"
                         onClick={() => redirectToPlan(plan)}
                         className={`mt-4 h-10 w-full rounded-xl px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${isPopular
-                          ? 'bg-primary text-white hover:bg-primary/90'
+                          ? 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                           : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                           }`}
                       >
-                        {`Подключить ${PLAN_LABELS[plan]}`}
+                        {`Сразу оплатить ${PLAN_LABELS[plan]}`}
                       </button>
                     </div>
                   );
@@ -302,26 +311,18 @@ export function LimitReachedModal({
               {trialActivating ? 'Активация...' : resolvedPrimaryLabel}
             </button>
           )}
-          {isFreeProjectLimitUpsell && canStartTrial && (
+          {!isFreeProjectLimitUpsell && (
             <button
               type="button"
-              disabled={trialActivating}
-              onClick={() => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }}
-              className="flex-1 h-11 rounded-xl bg-primary text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
+              onClick={onClose}
+              className="flex-1 h-11 rounded-xl bg-slate-100 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
             >
-              {trialActivating ? 'Активация...' : 'Включить 14 дней бесплатно'}
+              {resolvedSecondaryLabel}
             </button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className={`${isFreeProjectLimitUpsell && !canStartTrial ? 'w-full' : 'flex-1'} h-11 rounded-xl bg-slate-100 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2`}
-          >
-            {resolvedSecondaryLabel}
-          </button>
         </div>
         {isFreeProjectLimitUpsell && (
-          <p className="mt-3 text-right text-sm text-slate-500">
+          <p className="mt-3 text-sm text-slate-500">
             Чтобы создать новый проект на бесплатном тарифе, удалите существующий проект.
           </p>
         )}
