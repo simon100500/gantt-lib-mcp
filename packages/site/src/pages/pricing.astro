@@ -26,12 +26,13 @@ const plans = [
     yearlyPrice: "11 900 ₽",
     monthlyPeriod: "/ мес",
     yearlyPeriod: "/ год",
+    yearlySavings: "5 980 ₽",
     accent: true,
     badge: "Популярный",
     ctaLabel: "Выбрать Старт",
     ctaHref: "https://ai.getgantt.ru/purchase?plan=start",
     features: [
-      "3 проекта",
+      "5 проектов",
       "25 AI-генераций в день",
       "до 5 участников команды",
       "Архив проектов",
@@ -47,11 +48,12 @@ const plans = [
     yearlyPrice: "47 900 ₽",
     monthlyPeriod: "/ мес",
     yearlyPeriod: "/ год",
+    yearlySavings: "11 980 ₽",
     accent: false,
     ctaLabel: "Выбрать Команду",
     ctaHref: "https://ai.getgantt.ru/purchase?plan=team",
     features: [
-      "7 проектов",
+      "15 проектов",
       "50 AI-генераций в день",
       "до 20 участников команды",
       "Архив проектов",
@@ -67,6 +69,7 @@ const plans = [
     yearlyPrice: "129 000 ₽",
     monthlyPeriod: "/ мес",
     yearlyPeriod: "/ год",
+    yearlySavings: "25 800 ₽",
     accent: false,
     ctaLabel: "Напишите нам",
     ctaHref: "mailto:ai@getgantt.ru?subject=GetGantt%20Enterprise",
@@ -89,7 +92,7 @@ const compareRows = [
   },
   {
     label: "Проекты",
-    values: ["1 проект", "3 проекта", "7 проектов", "Безлимит"],
+    values: ["1 проект", "5 проектов", "15 проектов", "Безлимит"],
   },
   {
     label: "AI-генерации",
@@ -155,7 +158,7 @@ const compareRows = [
             data-billing-option="yearly"
             data-active="false"
           >
-            Год
+            Год -20%
           </button>
         </div>
       </div>
@@ -203,6 +206,15 @@ const compareRows = [
                     {plan.monthlyPeriod}
                   </span>
                 </div>
+                {plan.yearlySavings && (
+                  <span
+                    class="mt-1 hidden text-sm text-emerald-600"
+                    data-savings
+                    data-savings-value={plan.yearlySavings}
+                  >
+                    Экономия {plan.yearlySavings} в год
+                  </span>
+                )}
               </div>
 
               <ul class="mt-8 space-y-3 text-sm leading-relaxed text-foreground">
@@ -362,6 +374,7 @@ const compareRows = [
       toggle?.querySelectorAll("[data-billing-option]") ?? [];
     const priceNodes = document.querySelectorAll("[data-price-monthly]");
     const periodNodes = document.querySelectorAll("[data-period-monthly]");
+    const savingsNodes = document.querySelectorAll("[data-savings]");
 
     function setBilling(mode) {
       optionButtons.forEach((button) => {
@@ -385,6 +398,10 @@ const compareRows = [
           mode === "yearly"
             ? node.getAttribute("data-period-yearly")
             : node.getAttribute("data-period-monthly");
+      });
+
+      savingsNodes.forEach((node) => {
+        node.classList.toggle("hidden", mode !== "yearly");
       });
     }
 

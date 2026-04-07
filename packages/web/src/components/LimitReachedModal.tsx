@@ -49,7 +49,7 @@ const LEGACY_SCENARIOS: Record<LegacyLimitScenario, Partial<ConstraintDenialPayl
 
 const CARD_FEATURES: Record<UpgradePlanId, string[]> = {
   start: [
-    '3 активных проекта',
+    '5 активных проектов',
     'AI-генерация и правки графиков',
     'До 5 участников команды',
     'Управление бригадами и ресурсами',
@@ -57,7 +57,7 @@ const CARD_FEATURES: Record<UpgradePlanId, string[]> = {
     'Гостевые ссылки',
   ],
   team: [
-    '7 активных проектов',
+    '15 активных проектов',
     'Общие ресурсы по всем проектам',
     '50 AI-запросов в день',
     'До 20 участников команды',
@@ -118,12 +118,6 @@ export function LimitReachedModal({
   const canStartTrial = !trialIneligible && !!onActivateTrial;
   const upgradePlans = getUpgradePlans(content.plan);
   const showsUpgradeCards = upgradePlans.length > 0;
-  const maxYearlyDiscount = showsUpgradeCards
-    ? Math.max(...upgradePlans.map((plan) => {
-      const pricing = PLAN_CATALOG[plan].pricing;
-      return Math.round((1 - pricing.yearly / (pricing.monthly * 12)) * 100);
-    }))
-    : 0;
   const isFeatureGate = content.code === FEATURE_GATE_CODES.ARCHIVE_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.RESOURCE_POOL_FEATURE_LOCKED
     || content.code === FEATURE_GATE_CODES.EXPORT_FEATURE_LOCKED;
@@ -220,7 +214,7 @@ export function LimitReachedModal({
                       : 'text-slate-500 hover:text-slate-700'
                       }`}
                   >
-                    {maxYearlyDiscount > 0 ? `Год -${maxYearlyDiscount}%` : 'Год'}
+                    Год -20%
                   </button>
                 </div>
               </div>

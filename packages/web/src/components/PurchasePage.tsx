@@ -291,12 +291,12 @@ export function PurchasePage({
               <button
                 type="button"
                 onClick={() => setBillingPeriod('yearly')}
-                className={`rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
+                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 ${billingPeriod === 'yearly'
                   ? 'bg-slate-900 font-medium text-white'
                   : 'text-slate-500 hover:text-slate-700'
                   }`}
               >
-                Год
+                Год -20%
               </button>
             </div>
           </div>

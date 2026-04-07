@@ -29,7 +29,7 @@ export const PLAN_CATALOG: Record<PlanId, {
     label: 'Старт',
     pricing: { monthly: 1490, yearly: 11900 },
     limits: {
-      projects: 3,
+      projects: 5,
       ai_queries: { period: 'daily', value: 25 },
     },
   },
@@ -37,7 +37,7 @@ export const PLAN_CATALOG: Record<PlanId, {
     label: 'Команда',
     pricing: { monthly: 4990, yearly: 47900 },
     limits: {
-      projects: 7,
+      projects: 15,
       ai_queries: { period: 'daily', value: 50 },
     },
   },
@@ -59,7 +59,7 @@ export const PLAN_PRICES: Record<'start' | 'team' | 'enterprise', Record<Billing
 
 export const PLAN_FEATURES: Record<'start' | 'team' | 'enterprise', string[]> = {
   start: [
-    '3 активных проекта',
+    '5 активных проектов',
     '25 AI-запросов в день',
     'до 5 участников команды',
     'Архив проектов',
@@ -68,7 +68,7 @@ export const PLAN_FEATURES: Record<'start' | 'team' | 'enterprise', string[]> = 
     'Гостевые ссылки',
   ],
   team: [
-    '7 активных проектов',
+    '15 активных проектов',
     '50 AI-запросов в день',
     'до 20 участников команды',
     'Архив проектов',

@@ -110,7 +110,7 @@ export const PLAN_CATALOG: Record<PlanId, PlanDefinition> = {
       yearly: 11900,
     },
     limits: {
-      projects: 3,
+      projects: 5,
       ai_queries: { period: 'daily', value: 25 },
       archive: true,
       resource_pool: true,
@@ -124,7 +124,7 @@ export const PLAN_CATALOG: Record<PlanId, PlanDefinition> = {
       yearly: 47900,
     },
     limits: {
-      projects: 7,
+      projects: 15,
       ai_queries: { period: 'daily', value: 50 },
       archive: true,
       resource_pool: true,
