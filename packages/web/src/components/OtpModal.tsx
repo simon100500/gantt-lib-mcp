@@ -5,13 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { AuthSuccessResponse } from '../lib/apiTypes.ts';
+import { YandexAuthButton } from './YandexAuthButton.tsx';
 
 interface OtpModalProps {
   onSuccess: (result: AuthSuccessResponse) => void;
   onClose: () => void;
+  initialMethod?: 'yandex' | 'otp';
 }
 
-type Step = 'email' | 'otp';
+type Step = 'choice' | 'email' | 'otp';
+
+interface ApiErrorResponse {
+  error?: string;
+  message?: string;
+}
 
 async function readErrorMessage(
   res: Response,
@@ -24,20 +31,25 @@ async function readErrorMessage(
   }
 
   try {
-    const data = JSON.parse(raw) as { error?: string; message?: string };
+    const data = JSON.parse(raw) as ApiErrorResponse;
     return data.error || data.message || fallback;
   } catch {
     return `${fallback}: ${raw.slice(0, 200)}`;
   }
 }
 
-export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
-  const [step, setStep] = useState<Step>('email');
+export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpModalProps) {
+  const [step, setStep] = useState<Step>(initialMethod === 'otp' ? 'email' : 'choice');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setStep(initialMethod === 'otp' ? 'email' : 'choice');
+    setError(null);
+  }, [initialMethod]);
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +131,47 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      {step === 'email' ? (
+      {step === 'choice' ? (
+        <Card className="relative w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border-0 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-600"
+            aria-label="Закрыть"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <CardHeader className="space-y-2 pb-4">
+            <CardTitle className="text-xl font-semibold">Вход в ГетГант</CardTitle>
+            <CardDescription>
+              Быстрый вход через Яндекс открывает проект сразу. Почта остаётся резервным вариантом.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <YandexAuthButton onSuccess={onSuccess} onError={setError} />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              Если Яндекс недоступен или нужен запасной сценарий, можно войти по email-коду.
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              size="lg"
+              onClick={() => {
+                setError(null);
+                setStep('email');
+              }}
+            >
+              Войти по почте
+            </Button>
+          </CardFooter>
+        </Card>
+      ) : step === 'email' ? (
         <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onClose}
@@ -133,7 +185,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
           </button>
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl font-semibold">Вход в ГетГант</CardTitle>
-            <CardDescription>Введите email для получения кода</CardDescription>
+            <CardDescription>Введите email для получения кода или вернитесь ко входу через Яндекс</CardDescription>
           </CardHeader>
           <form onSubmit={handleRequestOtp}>
             <CardContent className="space-y-4">
@@ -155,7 +207,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col gap-3">
               <Button
                 type="submit"
                 className="w-full"
@@ -163,6 +215,17 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
                 disabled={loading}
               >
                 {loading ? 'Отправка...' : 'Отправить код'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setStep('choice');
+                }}
+              >
+                Назад ко входу через Яндекс
               </Button>
             </CardFooter>
           </form>
@@ -229,6 +292,17 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
                   </button>
                 </p>
               )}
+              <button
+                type="button"
+                className="w-full text-center text-sm text-slate-500 hover:text-slate-700"
+                onClick={() => {
+                  setOtp('');
+                  setError(null);
+                  setStep('choice');
+                }}
+              >
+                Вернуться ко входу через Яндекс
+              </button>
             </CardContent>
           </Card>
         </div>
