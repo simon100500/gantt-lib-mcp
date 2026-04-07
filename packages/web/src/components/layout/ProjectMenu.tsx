@@ -106,9 +106,9 @@ export function ProjectMenu({
           <button
             type="button"
             onClick={() => setShowBillingPage(true)}
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+            className="mt-2 flex w-full items-center justify-center rounded-lg border border-primary/35 bg-white px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
           >
-            <Gem className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+            <Gem className="mr-1.5 h-3.5 w-3.5" />
             Расширить
           </button>
         </>
