@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-05T14:06:21.636Z"
-last_activity: 2026-04-05
+last_updated: "2026-04-07T22:41:56.298Z"
+last_activity: 2026-04-07
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 8
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 32
+  completed_plans: 30
   percent: 89
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 38 — paywall-trial-transition
+**Current focus:** Phase 40 — yandex-auth
 
 ---
 
 ## Current Position
 
-Phase: 38 (paywall-trial-transition) — EXECUTING
-Plan: 3 of 6
+Phase: 40 (yandex-auth) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-04-05
+Last activity: 2026-04-07
 
 Progress: [████████░░] 89%
 
@@ -73,6 +73,10 @@ packages/
 ---
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 40 added: yandex-auth
 
 - v1.0-v4.0 shipped successfully
 - Billing infrastructure exists (YooKassa, subscription management)
