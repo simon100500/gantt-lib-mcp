@@ -190,16 +190,6 @@ export function LimitReachedModal({
               </div>
             </div>
           )}
-          {isFreeProjectLimitUpsell && canStartTrial && (
-            <button
-              type="button"
-              disabled={trialActivating}
-              onClick={() => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }}
-              className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
-            >
-              {trialActivating ? 'Активация...' : 'Включить 14 дней бесплатно на Старт'}
-            </button>
-          )}
           {isFreeProjectLimitUpsell ? (
             <div className="-mx-2 overflow-x-auto px-2 pb-1">
               <div className="grid min-w-[540px] grid-cols-2 gap-3">
@@ -283,6 +273,16 @@ export function LimitReachedModal({
                 </div>
               )}
             </dl>
+          )}
+          {isFreeProjectLimitUpsell && canStartTrial && (
+            <button
+              type="button"
+              disabled={trialActivating}
+              onClick={() => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }}
+              className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              {trialActivating ? 'Активация...' : 'Включить 14 дней бесплатно на Старт'}
+            </button>
           )}
           {!isFreeProjectLimitUpsell && (
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
