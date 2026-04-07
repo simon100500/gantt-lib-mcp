@@ -239,7 +239,10 @@ export function buildConstraintModalContent(
     description = `${planLabel} больше не активен для изменений. ${denial.upgradeHint}`;
   } else if (isFreeProjectLimitUpsell) {
     title = 'Пора расширяться';
-    description = 'Чтобы вести несколько проектов одновременно, подключите тариф Старт и управляйте всеми объектами в одном месте.';
+    description = `На тарифе ${planLabel} ${denial.upgradeHint.charAt(0).toLowerCase()}${denial.upgradeHint.slice(1)}`;
+  } else if (denial.code === 'PROJECT_LIMIT_REACHED') {
+    title = 'Пора расширяться';
+    description = `На тарифе ${planLabel} ${denial.upgradeHint.charAt(0).toLowerCase()}${denial.upgradeHint.slice(1)}`;
   } else if (isPostTrialFeatureGate(denial)) {
     title = `${limitLabel} — пробный период закончился`;
     description = 'Вы использовали расширенные возможности тарифа Старт. Перейдите на платный тариф, чтобы сохранить доступ.';
@@ -253,7 +256,7 @@ export function buildConstraintModalContent(
     }
   } else {
     title = `${capitalize(limitLabel)} достигнут`;
-    description = `${planLabel}: ${denial.upgradeHint}`;
+    description = `На тарифе ${planLabel} ${denial.upgradeHint.charAt(0).toLowerCase()}${denial.upgradeHint.slice(1)}`;
   }
 
   return {
