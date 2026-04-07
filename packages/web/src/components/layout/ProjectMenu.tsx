@@ -472,7 +472,10 @@ export function ProjectMenu({
               </div>
 
               <div className="hidden min-w-0 flex-1 px-4 lg:flex lg:px-8">
-                <TaskSearch onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)} />
+                <TaskSearch
+                  onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
+                  readOnly={hasShareToken || isArchivedProject}
+                />
               </div>
             </>
           )}

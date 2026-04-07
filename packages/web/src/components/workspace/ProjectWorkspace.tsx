@@ -138,11 +138,8 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
-  const effectiveTasks = useMemo(() => (
-    readOnly
-      ? tasks.map((task) => ({ ...task, locked: true }))
-      : tasks
-  ), [readOnly, tasks]);
+  const effectiveTasks = tasks;
+  const effectiveDisableTaskDrag = readOnly || disableTaskDrag;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
     if (!projectId || readOnly) return;
@@ -234,7 +231,7 @@ export function ProjectWorkspace({
           showShareButton={!hasShareToken && isAuthenticated}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
-          disableTaskDrag={disableTaskDrag}
+          disableTaskDrag={effectiveDisableTaskDrag}
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
           ganttDayMode={ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
@@ -271,7 +268,7 @@ export function ProjectWorkspace({
                 onCascade={readOnly ? undefined : onCascade}
                 disableTaskNameEditing={readOnly}
                 disableDependencyEditing={readOnly}
-                disableTaskDrag={disableTaskDrag}
+                disableTaskDrag={effectiveDisableTaskDrag}
                 highlightExpiredTasks={highlightExpiredTasks}
                 headerHeight={40}
                 viewMode={viewMode}

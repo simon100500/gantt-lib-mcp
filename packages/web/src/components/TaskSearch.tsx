@@ -13,9 +13,10 @@ import type { Task } from '../types';
 
 interface TaskSearchProps {
   onTaskNavigate?: (taskId: string) => void;
+  readOnly?: boolean;
 }
 
-export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
+export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const searchQuery = useUIStore((state) => state.searchQuery);
@@ -97,6 +98,10 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
   };
 
   const handleCreateTask = async () => {
+    if (readOnly) {
+      return;
+    }
+
     const taskName = searchQuery.trim() || 'Новая задача';
     const today = new Date().toISOString().split('T')[0];
 
@@ -212,11 +217,15 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
           )}
           {showCounter && !hasResults && (
             <div className="mr-1 flex items-center gap-1 text-xs text-slate-400">
-              <kbd className="pointer-events-none select-none inline-flex h-4.5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 font-sans text-[11px] font-medium">
-                Ctrl
-              </kbd>
-              <CornerDownLeft className="h-3 w-3" />
-              <span>создать</span>
+              {!readOnly && (
+                <>
+                  <kbd className="pointer-events-none select-none inline-flex h-4.5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 font-sans text-[11px] font-medium">
+                    Ctrl
+                  </kbd>
+                  <CornerDownLeft className="h-3 w-3" />
+                  <span>создать</span>
+                </>
+              )}
             </div>
           )}
           {hasResults && (
@@ -265,7 +274,12 @@ export function TaskSearch({ onTaskNavigate }: TaskSearchProps) {
         variant="default"
         size="sm"
         onClick={handleCreateTask}
-        className="h-7 px-2.5 text-xs font-medium shrink-0"
+        aria-disabled={readOnly}
+        title={readOnly ? 'Создание задач недоступно в режиме только чтения' : 'Создать задачу'}
+        className={cn(
+          'h-7 px-2.5 text-xs font-medium shrink-0',
+          readOnly && 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100',
+        )}
       >
         + Задача
       </Button>
