@@ -294,7 +294,8 @@ Notes:
 - `client_id` comes from the issued Yandex OAuth application
 - `response_type` is `token`
 - `redirect_uri` must exactly match the Redirect URI configured in Yandex OAuth
-- The second argument is the origin of the auxiliary token page as required by Yandex suggest docs
+- `tokenPageOrigin` for this phase is `https://ai.getgantt.ru/auth/yandex/callback`
+- The frontend button lazy-loads the suggest SDK only when the auth modal is opened
 
 On the auxiliary callback page `https://ai.getgantt.ru/auth/yandex/callback`:
 
@@ -312,22 +313,33 @@ Notes:
 
 - The callback page exists only for token handoff and may stay visually empty
 - It sends the OAuth token back to the main web-app origin `https://ai.getgantt.ru`
+- The callback route is handled inside `packages/web/src/App.tsx`; no Astro/site route is involved
 
 ### Env contract
 
 Frontend-only:
 
 - `VITE_YANDEX_CLIENT_ID=<issued-client-id>`
+- Place it in `packages/web/.env` for local development or the equivalent frontend deploy env
+- This is the only Yandex credential allowed in the web package
 
 Backend-only:
 
 - `YANDEX_CLIENT_SECRET=<issued-client-secret>` if the selected server-side verification/exchange path needs it
+- Store it only in backend/server runtime env; Phase 40 does not introduce a frontend secret or a `packages/site` env dependency
 
 Rules:
 
 - Never place `YANDEX_CLIENT_SECRET` into `packages/web/.env`
 - `Client ID` is safe for frontend usage
 - `Client Secret` stays server-only even if Phase 40 ends up not using it directly in v1
+
+### Shipping checklist
+
+- Set `VITE_YANDEX_CLIENT_ID` in the frontend runtime that serves `packages/web`
+- Keep `YANDEX_CLIENT_SECRET` in backend env only if the backend verification variant requires it
+- Ensure the Yandex OAuth application includes `https://ai.getgantt.ru/auth/yandex/callback` in Redirect URI
+- Do not add any matching auth routing to `packages/site`; Phase 40 scope remains web app + backend only
 
 ### Manual verification checklist
 
