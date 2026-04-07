@@ -343,10 +343,10 @@ Rules:
 
 ### Manual verification checklist
 
-1. Open the web-app auth modal and confirm Yandex login is the primary action.
-2. Start Yandex login and confirm the suggest script opens the Yandex auth flow.
-3. Confirm `https://ai.getgantt.ru/auth/yandex/callback` loads and returns the token to the opener page.
-4. Confirm frontend sends the Yandex token to backend and receives the standard app auth payload.
-5. Confirm successful Yandex login still runs the existing post-login import/bootstrap flow.
-6. Confirm OTP fallback remains available and works end to end.
-7. Confirm no `packages/site` / Astro changes are required for the auth flow to work.
+1. Open the web-app auth modal and confirm Yandex login is the primary CTA while "Войти по почте" remains visible as fallback.
+2. Start Yandex login and confirm the suggest script opens the Yandex auth flow with `redirect_uri = https://ai.getgantt.ru/auth/yandex/callback`.
+3. Confirm `https://ai.getgantt.ru/auth/yandex/callback` renders the callback screen and returns the token to the opener via `YaSendSuggestToken('https://ai.getgantt.ru', extraData)`.
+4. Confirm frontend sends the returned token to `POST /api/auth/yandex` and receives the standard auth payload (`accessToken`, `refreshToken`, `user`, `project`).
+5. Confirm successful Yandex login still runs the existing post-login import/bootstrap flow for local tasks and project name transfer.
+6. Switch to the email branch with "Войти по почте" and confirm OTP request + verification still work end to end.
+7. Confirm this flow only touches `packages/web` plus backend auth routes/services and does not require any `packages/site` / Astro changes.
