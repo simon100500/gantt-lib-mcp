@@ -268,7 +268,7 @@ Plans:
 **Goal:** Сделать быстрый вход через виджет Яндекса основным способом авторизации в web-app, сохранив OTP-почту как резервный fallback без регрессии текущих local-session и project bootstrap потоков.
 **Requirements**: YA-01, YA-02, YA-03, YA-04, YA-05
 **Depends on:** Phase 39
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 **Success Criteria** (what must be TRUE):
   1. Пользователь видит вход через Яндекс как основной CTA в auth-flow, а OTP остаётся доступным как fallback
@@ -280,7 +280,7 @@ Plans:
 Plans:
 - [x] 40-01-PLAN.md — Backend: Yandex token verification + shared local session issuance + `/api/auth/yandex`
 - [x] 40-02-PLAN.md — Frontend: Yandex-first auth modal + callback route + OTP fallback
-- [ ] 40-03-PLAN.md — Env/docs: credential split, callback contract, manual verification checklist
+- [x] 40-03-PLAN.md — Env/docs: credential split, callback contract, manual verification checklist
 
 ---
 *Last updated: 2026-04-08 — Phase 40 planned (3 plans across 3 waves)*
