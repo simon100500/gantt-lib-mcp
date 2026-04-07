@@ -7,6 +7,7 @@ import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
 import { DraftWorkspace } from './components/workspace/DraftWorkspace.tsx';
@@ -156,14 +157,15 @@ export default function App() {
     }
 
     const params = new URLSearchParams(route.search);
-    if (params.get('auth') !== 'otp') {
+    const requestedAuthMode = params.get('auth');
+    if (requestedAuthMode !== 'otp' && requestedAuthMode !== 'yandex') {
       return;
     }
 
     setShowOtpModal(true);
   }, [auth.isAuthenticated, route.search, setShowOtpModal]);
 
-  const handleOtpSuccess = useCallback(async (result: AuthSuccessResponse) => {
+  const handleAuthSuccess = useCallback(async (result: AuthSuccessResponse) => {
     auth.login(result, result.user, result.project);
     setShowOtpModal(false);
 
@@ -245,6 +247,8 @@ export default function App() {
   }, [auth, localTasks, setShowOtpModal]);
 
   const normalizedPathname = normalizePathname(route.pathname);
+  const authModalMethod = new URLSearchParams(route.search).get('auth') === 'otp' ? 'otp' : 'yandex';
+  const isYandexCallbackRoute = normalizedPathname === '/auth/yandex/callback';
   const isPurchaseRoute = normalizedPathname === '/purchase';
   const isAccountRoute = normalizedPathname === '/account';
   const isAdminRoute = normalizedPathname === '/admin';
@@ -255,7 +259,9 @@ export default function App() {
 
   return (
     <>
-      {isPurchaseRoute ? (
+      {isYandexCallbackRoute ? (
+        <YandexCallbackPage />
+      ) : isPurchaseRoute ? (
         <PurchasePage
           initialPlan={initialPurchasePlan}
           initialPeriod={initialPurchasePeriod}
@@ -286,12 +292,13 @@ export default function App() {
 
       {showOtpModal && (
         <OtpModal
-          onSuccess={handleOtpSuccess}
+          initialMethod={authModalMethod}
+          onSuccess={handleAuthSuccess}
           onClose={() => setShowOtpModal(false)}
         />
       )}
 
-      {!isPurchaseRoute && !isAccountRoute && !isAdminRoute && showEditProjectModal && (
+      {!isYandexCallbackRoute && !isPurchaseRoute && !isAccountRoute && !isAdminRoute && showEditProjectModal && (
         <EditProjectModal
           projectName={auth.isAuthenticated && auth.project ? auth.project.name : localTasks.projectName}
           onSave={async (name) => {
