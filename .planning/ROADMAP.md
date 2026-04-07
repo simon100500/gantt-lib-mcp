@@ -275,12 +275,12 @@ Plans:
   2. `https://ai.getgantt.ru/auth/yandex/callback` завершает widget flow и возвращает токен в приложение без ручных шагов
   3. Backend принимает Yandex access token, получает профиль пользователя, маппит его в существующий local account по email и возвращает стандартную пару app JWT-токенов
   4. Успешный логин через Яндекс использует тот же post-login flow, что и OTP: hydration auth store, import local tasks, default project bootstrap
-  5. Публичные CTA больше не ведут в OTP-first deep-link по умолчанию
+  5. `Client ID` хранится как frontend env, а `Client Secret` при необходимости остаётся только в backend env; `packages/site` не участвует в auth-flow этой фазы
 
 Plans:
 - [ ] 40-01-PLAN.md — Backend: Yandex token verification + shared local session issuance + `/api/auth/yandex`
 - [ ] 40-02-PLAN.md — Frontend: Yandex-first auth modal + callback route + OTP fallback
-- [ ] 40-03-PLAN.md — Rollout: CTA updates, env/docs, manual verification checklist
+- [ ] 40-03-PLAN.md — Env/docs: credential split, callback contract, manual verification checklist
 
 ---
 *Last updated: 2026-04-08 — Phase 40 planned (3 plans across 3 waves)*

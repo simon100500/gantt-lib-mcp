@@ -15,9 +15,9 @@ This phase delivers:
 2. **Yandex callback handling** at `https://ai.getgantt.ru/auth/yandex/callback`
 3. **Backend token exchange** from Yandex OAuth access token to the app's existing local JWT session
 4. **Fallback OTP path** preserved for users who prefer email or when Yandex login is unavailable
-5. **Rollout updates** so product entry points open the Yandex-first auth flow instead of OTP-first
+5. **Config and verification docs** for safe rollout of the new auth flow inside the web app
 
-**In scope:** Web auth flow, frontend widget integration, callback page/route, backend identity lookup, local session issuance, CTA/link updates, basic validation and docs
+**In scope:** Web auth flow, frontend widget integration, callback page/route, backend identity lookup, local session issuance, env/config setup, basic validation and docs
 **Out of scope:** Mobile auth, multiple social providers, account-linking UI, replacing email OTP entirely, deep auth schema redesign
 </domain>
 
@@ -31,8 +31,10 @@ This phase delivers:
 
 ### Yandex OAuth Flow
 - Use Yandex Passport instant-login widget / suggest flow documented in `.planning/phases/40-yandex-auth/docs.md`
+- On the auth page, call `YaAuthSuggest.init({ client_id, response_type: 'token', redirect_uri }, tokenPageOrigin)` exactly as required by Yandex suggest docs
 - Keep redirect/callback URL at `https://ai.getgantt.ru/auth/yandex/callback`
-- The callback route returns the Yandex access token to the opener via `postMessage` using Yandex's helper script flow
+- The callback route is an auxiliary page used only to return the Yandex token to the opener via `postMessage` using Yandex's helper script flow
+- The callback page must call `YaSendSuggestToken('https://ai.getgantt.ru', extraData)` so the token is delivered back to the web-app origin
 - Frontend sends the obtained Yandex access token to backend; backend, not frontend, resolves the Yandex user profile
 
 ### Backend Identity Mapping
@@ -46,9 +48,11 @@ This phase delivers:
 - Prefer a dedicated Yandex auth service/helper over embedding fetch/validation logic directly in the route file
 - Keep the existing `OtpModal` behavior as fallback, but evolve the auth entry UI to become Yandex-first
 
-### Rollout
-- Marketing/site CTAs that currently deep-link to `?auth=otp` should point to the Yandex-first login entry instead
-- Explicit OTP deep-link may remain supported (`?auth=otp`) for troubleshooting and reserve access
+### Configuration
+- `Client ID` is frontend configuration and should be exposed as `VITE_YANDEX_CLIENT_ID`
+- `Client Secret` must never be stored in `packages/web/.env`
+- If the chosen backend identity-exchange flow requires `Client Secret`, store it only in backend env as `YANDEX_CLIENT_SECRET`
+- If backend only consumes a widget-issued access token to fetch profile data, the secret may remain unused in Phase 40, but should still be documented as backend-only credential material
 
 ### Agent's Discretion
 - Exact frontend component split (`OtpModal` extension vs `AuthModal` wrapper)
@@ -80,13 +84,6 @@ This phase delivers:
 - `packages/server/src/auth.ts` — local JWT signing / verification
 - `packages/mcp/src/services/auth.service.ts` — user lookup, default project creation, session persistence
 
-### Product Entry Points
-- `packages/site/src/components/Header.astro` — top-level auth CTA
-- `packages/site/src/components/Footer.astro` — footer CTA
-- `packages/site/src/pages/features.astro` — product marketing CTA links
-- `packages/site/src/pages/faq.astro` — FAQ CTA links
-- `packages/site/src/pages/pricing.astro` — pricing CTA links
-
 ### External Documentation
 - `https://yandex.ru/dev/id/doc/ru/suggest/script-sdk-suggest` — widget / suggest flow
 - `https://yandex.ru/dev/id/doc/ru/suggest/script-sdk-suggest-token` — callback token helper flow
@@ -109,9 +106,10 @@ This phase delivers:
 - The callback URL explicitly provided for this phase is `https://ai.getgantt.ru/auth/yandex/callback`
 - The implementation must work both when the page is opened as part of the Yandex suggest flow and when it needs to send the token back to the opener window
 
-### Rollout Expectation
-- `?auth=yandex` (or default auth entry) becomes the recommended deep-link
-- `?auth=otp` remains supported for fallback and troubleshooting
+### Config Expectation
+- `packages/web/.env` should hold `VITE_YANDEX_CLIENT_ID`
+- Backend env may hold `YANDEX_CLIENT_SECRET`, but that credential must remain server-only
+- `?auth=otp` may remain supported for fallback and troubleshooting inside the web app
 </specifics>
 
 <deferred>

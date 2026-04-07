@@ -257,3 +257,84 @@ extraData
 </body>
 
 </html>
+
+---
+
+## Phase 40 implementation notes
+
+### Confirmed scope
+
+- Phase 40 applies only to `packages/web` and backend auth routes/services
+- `packages/site` / Astro does not participate in login orchestration in this phase
+- OTP stays as reserve fallback inside the web-app auth flow
+
+### Confirmed Yandex suggest flow
+
+On the web-app auth page:
+
+```html
+<script src="https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-with-polyfills-latest.js"></script>
+```
+
+Runtime contract:
+
+```js
+YaAuthSuggest.init(
+  {
+    client_id: VITE_YANDEX_CLIENT_ID,
+    response_type: 'token',
+    redirect_uri: 'https://ai.getgantt.ru/auth/yandex/callback'
+  },
+  'https://ai.getgantt.ru/auth/yandex/callback'
+)
+```
+
+Notes:
+
+- `client_id` comes from the issued Yandex OAuth application
+- `response_type` is `token`
+- `redirect_uri` must exactly match the Redirect URI configured in Yandex OAuth
+- The second argument is the origin of the auxiliary token page as required by Yandex suggest docs
+
+On the auxiliary callback page `https://ai.getgantt.ru/auth/yandex/callback`:
+
+```html
+<script src="https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-token-with-polyfills-latest.js"></script>
+```
+
+```js
+YaSendSuggestToken('https://ai.getgantt.ru', {
+  source: 'yandex-suggest'
+})
+```
+
+Notes:
+
+- The callback page exists only for token handoff and may stay visually empty
+- It sends the OAuth token back to the main web-app origin `https://ai.getgantt.ru`
+
+### Env contract
+
+Frontend-only:
+
+- `VITE_YANDEX_CLIENT_ID=<issued-client-id>`
+
+Backend-only:
+
+- `YANDEX_CLIENT_SECRET=<issued-client-secret>` if the selected server-side verification/exchange path needs it
+
+Rules:
+
+- Never place `YANDEX_CLIENT_SECRET` into `packages/web/.env`
+- `Client ID` is safe for frontend usage
+- `Client Secret` stays server-only even if Phase 40 ends up not using it directly in v1
+
+### Manual verification checklist
+
+1. Open the web-app auth modal and confirm Yandex login is the primary action.
+2. Start Yandex login and confirm the suggest script opens the Yandex auth flow.
+3. Confirm `https://ai.getgantt.ru/auth/yandex/callback` loads and returns the token to the opener page.
+4. Confirm frontend sends the Yandex token to backend and receives the standard app auth payload.
+5. Confirm successful Yandex login still runs the existing post-login import/bootstrap flow.
+6. Confirm OTP fallback remains available and works end to end.
+7. Confirm no `packages/site` / Astro changes are required for the auth flow to work.
