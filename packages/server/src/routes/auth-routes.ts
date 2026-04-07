@@ -19,6 +19,7 @@ import {
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireTrackedLimit, requireFeatureGate } from '../middleware/constraint-middleware.js';
+import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
 
 const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
@@ -80,6 +81,25 @@ async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse
   };
 }
 
+const yandexAuthService = new YandexAuthService();
+
+function mapYandexAuthError(error: unknown): { status: number; body: { error: string } } {
+  if (!(error instanceof YandexAuthError)) {
+    return { status: 500, body: { error: 'Yandex auth failed' } };
+  }
+
+  switch (error.code) {
+    case 'missing_token':
+    case 'profile_without_email':
+      return { status: 400, body: { error: error.message } };
+    case 'invalid_token':
+      return { status: 401, body: { error: error.message } };
+    case 'upstream_failure':
+    default:
+      return { status: 502, body: { error: error.message } };
+  }
+}
+
 /**
  * Register all authentication routes with Fastify
  *
@@ -126,6 +146,29 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     return reply.send(await issueLocalAuthSession(email));
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/auth/yandex
+  // ---------------------------------------------------------------------------
+  fastify.post('/api/auth/yandex', async (req, reply) => {
+    const body = req.body as { accessToken?: string };
+    const accessToken = body?.accessToken?.trim();
+
+    if (!accessToken) {
+      return reply.status(400).send({ error: 'accessToken required' });
+    }
+
+    try {
+      const profile = await yandexAuthService.getProfile(accessToken);
+      return reply.send(await issueLocalAuthSession(profile.defaultEmail));
+    } catch (error) {
+      const response = mapYandexAuthError(error);
+      if (response.status >= 500) {
+        fastify.log.error(error, 'Yandex auth failed');
+      }
+      return reply.status(response.status).send(response.body);
+    }
   });
 
   // ---------------------------------------------------------------------------
