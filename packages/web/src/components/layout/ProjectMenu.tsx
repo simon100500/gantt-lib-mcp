@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
+import { ChevronDown, Eye, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -108,7 +108,7 @@ export function ProjectMenu({
             onClick={() => setShowBillingPage(true)}
             className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
           >
-            <img src="/premium.svg" alt="" className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+            <Gem className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
             Расширить
           </button>
         </>
@@ -495,44 +495,55 @@ export function ProjectMenu({
                 <LoginButton onClick={onLoginRequired} />
               </div>
             ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 sm:max-w-[280px]"
-                  >
-                    <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
-                    <span className="hidden truncate text-slate-600 lg:inline">{auth.user?.email ?? 'Account'}</span>
-                    <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 lg:block" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel className="truncate text-slate-700">
-                    {auth.user?.email ?? 'Account'}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setShowBillingPage(true)} className="text-slate-700 focus:text-slate-900">
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Аккаунт</span>
-                  </DropdownMenuItem>
-                  {hasAdminAccess && (
-                    <DropdownMenuItem onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }} className="text-slate-700 focus:text-slate-900">
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBillingPage(true)}
+                  className="h-9 shrink-0 rounded-md border-primary/35 bg-white px-3 text-sm font-medium text-primary hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                >
+                  <Gem className="h-4 w-4" />
+                  <span>Расширить</span>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 sm:max-w-[280px]"
+                    >
+                      <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
+                      <span className="hidden truncate text-slate-600 lg:inline">{auth.user?.email ?? 'Account'}</span>
+                      <ChevronDown className="hidden h-3.5 w-3.5 shrink-0 text-slate-600 lg:block" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel className="truncate text-slate-700">
+                      {auth.user?.email ?? 'Account'}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShowBillingPage(true)} className="text-slate-700 focus:text-slate-900">
                       <User className="mr-2 h-4 w-4" />
-                      <span>Админка</span>
+                      <span>Аккаунт</span>
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => window.location.href = '/purchase'} className="text-slate-700 focus:text-slate-900">
-                    <img src="/premium.svg" alt="" className="mr-2 h-4 w-4 inline align-[-3px]" />
-                    <span>Тарифы</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Выйти</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    {hasAdminAccess && (
+                      <DropdownMenuItem onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }} className="text-slate-700 focus:text-slate-900">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Админка</span>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => window.location.href = '/purchase'} className="text-slate-700 focus:text-slate-900">
+                      <Gem className="mr-2 h-4 w-4" />
+                      <span>Тарифы</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={auth.logout} className="text-red-600 focus:text-red-700">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Выйти</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
             )}
           </div>
         </header>

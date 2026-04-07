@@ -173,7 +173,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
   const showCounter = searchQuery.trim().length > 0;
 
   return (
-    <div className="flex min-w-0 w-full max-w-[48rem] shrink items-center gap-2">
+    <div className="flex min-w-0 w-full max-w-[43rem] shrink items-center gap-2">
       <div className="relative flex min-w-0 flex-1 items-center group">
         {/* Иконка лупы слева */}
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors pointer-events-none">
