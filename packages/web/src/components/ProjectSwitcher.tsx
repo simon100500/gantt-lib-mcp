@@ -232,6 +232,8 @@ export function ProjectSwitcher({
 }: ProjectSwitcherProps) {
   const activeProjects = useMemo(() => projects.filter((project) => project.status !== 'archived'), [projects]);
   const archivedProjects = useMemo(() => projects.filter((project) => project.status === 'archived'), [projects]);
+  const activeTitle = activeProjects.length > 0 ? `Проекты (${activeProjects.length})` : 'Проекты';
+  const archiveTitle = archivedProjects.length > 0 ? `Архив (${archivedProjects.length})` : 'Архив';
   const [activeOpen, setActiveOpen] = useState(true);
   const [archiveOpen, setArchiveOpen] = useState(currentProject.status === 'archived');
   const prevArchivedCountRef = useRef(archivedProjects.length);
@@ -298,7 +300,7 @@ export function ProjectSwitcher({
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-1">
         <div className="flex flex-col gap-2">
           <ProjectSection
-            title="Проекты"
+            title={activeTitle}
             icon={<Folder className="h-4 w-4" />}
             open={activeOpen}
             onToggle={() => setActiveOpen((value) => !value)}
@@ -328,7 +330,7 @@ export function ProjectSwitcher({
           </ProjectSection>
 
           <ProjectSection
-            title="Архив"
+            title={archiveTitle}
             icon={<Archive className="h-4 w-4" />}
             open={archiveOpen}
             onToggle={() => setArchiveOpen((value) => !value)}
