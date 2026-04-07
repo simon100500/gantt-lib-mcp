@@ -23,9 +23,9 @@ AI может программно управлять диаграммами Г�
 
 ---
 
-## Current State (Phase 34 Complete)
+## Current State (Phase 40 Complete)
 
-**Status:** ✅ Phase 34 Feature Gates verified passed (2026-04-04)
+**Status:** ✅ Phase 40 Yandex-first auth verified passed (2026-04-08)
 
 **Tech Stack:**
 - Monorepo (npm workspaces): packages/mcp, packages/server, packages/web, packages/site
@@ -33,7 +33,7 @@ AI может программно управлять диаграммами Г�
 - Web Server: Fastify + WebSocket + Prisma + PostgreSQL
 - Frontend: React + Vite + Zustand + gantt-lib (drag-to-edit Gantt chart)
 - Marketing Site: Astro 5.0 + React + Tailwind
-- Auth: OTP email + JWT tokens
+- Auth: Yandex-first web login + OTP fallback + JWT tokens
 - Billing: YooKassa embedded widget
 - Deployment: Docker multi-stage build + Nginx + CapRover
 
@@ -107,15 +107,22 @@ AI может программно управлять диаграммами Г�
 - ✅ Project usage remains visible in the existing sidebar billing card while over-limit create actions still open the upgrade modal
 - ✅ AI chat shows usage context and blocks exhausted submissions with dedicated disabled reasons
 
+**Features Shipped (Phase 40 Yandex Auth):**
+- ✅ Dedicated backend Yandex profile/token validation service with explicit failure classes
+- ✅ Shared local auth bootstrap for OTP and Yandex login paths
+- ✅ Yandex-first auth modal with OTP fallback preserved in the same flow
+- ✅ SPA callback route at `/auth/yandex/callback` with token handoff back to the opener
+- ✅ Phase-local rollout docs covering `VITE_YANDEX_CLIENT_ID`, backend-only secrets, and manual verification
+
 **Known Gaps:**
-- Phase 9 Plan 6: Auth UI (OTP modal, project switcher) — backend complete, UI pending
+- Live manual verification still requires a real Yandex OAuth app configured with `https://ai.getgantt.ru/auth/yandex/callback`
 
 ---
 
 ## Next Milestone Goals
 
-**v5.0 Plan Constraints** — в разработке
-Phases 30-33 are complete: the system now enforces tariff limits on the backend and exposes the same limit context proactively in the frontend shell. Next up is Phase 34 (Feature Gates) to apply the same tariff state to archive, resource pool, and export access.
+**v5.0 Plan Constraints** — shipped
+Phases 30-40 now cover tariff enforcement, proactive frontend constraints, unified scheduling, calendar cleanup, trial transitions, and Yandex-first authentication for the app shell.
 
 ---
 
@@ -162,6 +169,7 @@ Phases 30-33 are complete: the system now enforces tariff limits on the backend 
 - ✓ ENG-01 through ENG-04 — Constraint Engine — v5.0
 - ✓ TRK-01 through TRK-03 — Usage Tracking — validated in Phase 31
 - ✓ ENF-01 through ENF-03 — Backend Enforcement — validated in Phase 32
+- ✓ YA-01 through YA-05 — Yandex-first auth flow — validated in Phase 40
 
 ### Out of Scope
 
@@ -234,4 +242,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 — Phase 34 Feature Gates complete, v5.0 milestone shipped*
+*Last updated: 2026-04-08 — Phase 40 Yandex auth complete*
