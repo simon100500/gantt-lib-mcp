@@ -30,6 +30,56 @@ const requireArchiveAccess = requireFeatureGate('archive', {
   upgradeHint: 'Архив проектов доступен на тарифе Старт и выше.',
 });
 
+type AuthSuccessResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; email: string };
+  project: {
+    id: string;
+    name: string;
+    status: 'active' | 'archived' | 'deleted';
+    ganttDayMode: 'business' | 'calendar';
+    calendarId: string | null;
+    calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    archivedAt: string | null;
+    deletedAt: string | null;
+  };
+};
+
+async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse> {
+  const user = await authService.findOrCreateUser(email);
+  const project = await authService.ensurePrimaryProject(user.id);
+  const session = await authService.createSession(user.id, project.id, '', '');
+
+  const tokenPayload = {
+    sub: user.id,
+    email: user.email,
+    projectId: project.id,
+    sessionId: session.id,
+  };
+
+  const accessToken = signAccessToken(tokenPayload);
+  const refreshToken = signRefreshToken(tokenPayload);
+
+  await authService.updateSessionTokens(session.id, accessToken, refreshToken);
+
+  return {
+    accessToken,
+    refreshToken,
+    user: { id: user.id, email: user.email },
+    project: {
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      ganttDayMode: project.ganttDayMode,
+      calendarId: project.calendarId,
+      calendarDays: project.calendarDays,
+      archivedAt: project.archivedAt,
+      deletedAt: project.deletedAt,
+    },
+  };
+}
+
 /**
  * Register all authentication routes with Fastify
  *
@@ -75,50 +125,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'Invalid or expired code' });
     }
 
-    // Find or create user
-    const user = await authService.findOrCreateUser(email);
-
-    // Get or create default project
-    let projects = await authService.listProjects(user.id);
-    if (projects.length === 0) {
-      await authService.createDefaultProject(user.id);
-      projects = await authService.listProjects(user.id);
-    }
-
-    const project = projects[0]!;
-
-    // Create session first to get the actual session ID from database
-    const session = await authService.createSession(user.id, project.id, '', '');
-
-    // Generate tokens with the actual session ID
-    const tokenPayload = {
-      sub: user.id,
-      email: user.email,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-
-    const accessToken = signAccessToken(tokenPayload);
-    const refreshToken = signRefreshToken(tokenPayload);
-
-    // Update session with the actual tokens
-    await authService.updateSessionTokens(session.id, accessToken, refreshToken);
-
-    return reply.send({
-      accessToken,
-      refreshToken,
-      user: { id: user.id, email: user.email },
-      project: {
-        id: project.id,
-        name: project.name,
-        status: project.status,
-        ganttDayMode: project.ganttDayMode,
-        calendarId: project.calendarId,
-        calendarDays: project.calendarDays,
-        archivedAt: project.archivedAt,
-        deletedAt: project.deletedAt,
-      },
-    });
+    return reply.send(await issueLocalAuthSession(email));
   });
 
   // ---------------------------------------------------------------------------

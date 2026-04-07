@@ -194,6 +194,22 @@ export class AuthService {
   }
 
   /**
+   * Resolve the project that should become active after login.
+   *
+   * Creates the default project for first-time users so OTP and social login
+   * can share the same bootstrap path.
+   */
+  async ensurePrimaryProject(userId: string): Promise<Project & { taskCount: number }> {
+    let projects = await this.listProjects(userId);
+    if (projects.length === 0) {
+      await this.createDefaultProject(userId);
+      projects = await this.listProjects(userId);
+    }
+
+    return projects[0]!;
+  }
+
+  /**
    * Find project by ID
    *
    * Delegates to ProjectService.
