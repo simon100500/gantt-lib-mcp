@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
+import { ChevronDown, Eye, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -26,6 +26,7 @@ interface ProjectMenuProps {
   children: ReactNode;
   error: string | null;
   hasShareToken: boolean;
+  isArchivedProject?: boolean;
   currentProjectLabel: string | undefined;
   onCreateProject: () => void | Promise<void>;
   createProjectDisabled?: boolean;
@@ -46,6 +47,7 @@ export function ProjectMenu({
   children,
   error,
   hasShareToken,
+  isArchivedProject = false,
   currentProjectLabel,
   onCreateProject,
   createProjectDisabled = false,
@@ -211,7 +213,7 @@ export function ProjectMenu({
   }, [auth.isAuthenticated, auth.project, localProjectName, workspace]);
 
   const commitInlineRename = async () => {
-    if (!isRenamingProject) {
+    if (!isRenamingProject || isArchivedProject) {
       return;
     }
 
@@ -395,7 +397,7 @@ export function ProjectMenu({
           {showProjectContext && (
             <>
               <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
-                {isRenamingProject && !hasShareToken ? (
+                {isRenamingProject && !hasShareToken && !isArchivedProject ? (
                   <input
                     type="text"
                     name="project-name"
@@ -419,20 +421,23 @@ export function ProjectMenu({
                   />
                 ) : (
                   <>
+                    {isArchivedProject && (
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="Только чтение" />
+                    )}
                     <span
                       className={cn(
                         'truncate text-sm font-semibold font-cascadia tracking-tight text-slate-900',
-                        !hasShareToken && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
+                        !hasShareToken && !isArchivedProject && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
                       )}
-                      title={hasShareToken ? undefined : 'Нажмите, чтобы переименовать'}
-                      onClick={hasShareToken ? undefined : () => {
+                      title={hasShareToken ? undefined : isArchivedProject ? 'Проект в архиве доступен только для чтения' : 'Нажмите, чтобы переименовать'}
+                      onClick={hasShareToken || isArchivedProject ? undefined : () => {
                         setRenameValue(currentProjectLabel ?? '');
                         setIsRenamingProject(true);
                       }}
                     >
                       {currentProjectLabel}
                     </span>
-                    {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'draft' && (
+                    {!hasShareToken && !isArchivedProject && auth.isAuthenticated && workspace.kind !== 'draft' && (
                       <button
                         type="button"
                         onClick={() => setShowEditProjectModal(true)}

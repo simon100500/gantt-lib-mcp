@@ -138,11 +138,16 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
+  const effectiveTasks = useMemo(() => (
+    readOnly
+      ? tasks.map((task) => ({ ...task, locked: true }))
+      : tasks
+  ), [readOnly, tasks]);
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
-    if (!projectId) return;
+    if (!projectId || readOnly) return;
     setProjectState(projectId, { disableTaskDrag: enabled });
-  }, [projectId, setProjectState]);
+  }, [projectId, readOnly, setProjectState]);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) return;
@@ -233,6 +238,7 @@ export function ProjectWorkspace({
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
           ganttDayMode={ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
+          readOnly={readOnly}
         />
       </div>
 
@@ -251,7 +257,7 @@ export function ProjectWorkspace({
             ) : (
               <GanttChart
                 ref={ganttRef as Ref<GanttChartRef>}
-                tasks={tasks}
+                tasks={effectiveTasks}
                 taskFilter={taskFilter}
                 onTasksChange={readOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
@@ -282,15 +288,23 @@ export function ProjectWorkspace({
               />
             )}
 
-            {tasks.length > 0 && (
+            {(tasks.length > 0 || readOnly) && (
               <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
-                <span className="font-mono text-[11px] text-slate-400">
-                  {formatTaskCount(tasks.length)}
-                </span>
+                {effectiveTasks.length > 0 && (
+                  <span className="font-mono text-[11px] text-slate-400">
+                    {formatTaskCount(effectiveTasks.length)}
+                  </span>
+                )}
 
                 <span className="font-mono text-[11px] text-slate-400">
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
+
+                {readOnly && (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">
+                    Только чтение
+                  </span>
+                )}
 
                 <span
                   className={cn(

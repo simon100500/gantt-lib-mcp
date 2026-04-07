@@ -344,11 +344,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const proactiveProjectDenial = buildProactiveConstraintDenial('projects', billingStatus);
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
   const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
-  const chatDisabledReason = proactiveChatDenial
-    ? proactiveChatDenial.code === 'SUBSCRIPTION_EXPIRED'
-      ? 'Подписка истекла. Продлите тариф, чтобы снова отправлять запросы.'
-      : 'Лимит AI-запросов исчерпан. Обновите тариф, чтобы продолжить.'
-    : null;
+  const isArchivedProject = !hasShareToken && workspace.kind === 'project' && auth.project?.status === 'archived';
+  const chatDisabledReason = isArchivedProject
+    ? 'Проект в архиве. AI-изменения недоступны в режиме только чтения.'
+    : proactiveChatDenial
+      ? proactiveChatDenial.code === 'SUBSCRIPTION_EXPIRED'
+        ? 'Подписка истекла. Продлите тариф, чтобы снова отправлять запросы.'
+        : 'Лимит AI-запросов исчерпан. Обновите тариф, чтобы продолжить.'
+      : null;
 
   const openLimitModal = useCallback(async (denial: Partial<ConstraintDenialPayload> | null | undefined) => {
     if (!denial?.code) {
@@ -519,6 +522,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, []);
 
   const submitChatMessage = useCallback(async (message: string) => {
+    if (isArchivedProject) {
+      return false;
+    }
+
     if (proactiveChatDenial) {
       await openLimitModal(proactiveChatDenial);
       return false;
@@ -572,10 +579,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       throw new Error(`HTTP ${response.status}`);
     }
     return true;
-  }, [auth, openLimitModal, proactiveChatDenial]);
+  }, [auth, isArchivedProject, openLimitModal, proactiveChatDenial]);
 
   const handleSend = useCallback((text: string) => {
     if (hasShareToken) {
+      return;
+    }
+    if (isArchivedProject) {
       return;
     }
     if (!auth.isAuthenticated) {
@@ -591,7 +601,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     void submitChatMessage(text).catch((submitError) => {
       useChatStore.getState().setError(String(submitError));
     });
-  }, [auth.isAuthenticated, hasShareToken, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
+  }, [auth.isAuthenticated, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
 
   const activateDraftWorkspace = useCallback(async ({
     firstPrompt,
@@ -676,8 +686,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setValidationErrors]);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
+    if (isArchivedProject) {
+      return;
+    }
     void batchUpdate.handleTasksChange(shiftedTasks);
-  }, [batchUpdate]);
+  }, [batchUpdate, isArchivedProject]);
 
   const handleEmptyChart = useCallback(async () => {
     if (hasShareToken) {
@@ -767,12 +780,18 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!auth.project) {
       throw new Error('Not authenticated');
     }
+    if (auth.project.status === 'archived') {
+      return;
+    }
     await auth.updateProject(auth.project.id, { name: newName });
   }, [auth, localTasks]);
 
   const handleGanttDayModeChange = useCallback(async (ganttDayMode: 'business' | 'calendar') => {
     if (!auth.project) {
       throw new Error('Not authenticated');
+    }
+    if (auth.project.status === 'archived') {
+      return;
     }
 
     if (auth.project.ganttDayMode === ganttDayMode) {
@@ -979,7 +998,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             displayConnected={displayConnected}
             isAuthenticated={auth.isAuthenticated}
             chatUsage={billingStatus}
-            chatDisabled={Boolean(proactiveChatDenial)}
+            chatDisabled={isArchivedProject || Boolean(proactiveChatDenial)}
             chatDisabledReason={chatDisabledReason}
             batchUpdate={batchUpdate}
             onSend={handleSend}
@@ -995,6 +1014,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCreateShareLink={handleCreateShareLink}
             ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
             calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
+            readOnly={isArchivedProject}
             onGanttDayModeChange={(ganttDayMode) => {
               void handleGanttDayModeChange(ganttDayMode).catch((error) => {
                 console.error('Failed to update gantt day mode:', error);
@@ -1029,6 +1049,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     <ProjectMenu
       error={error}
       hasShareToken={hasShareToken}
+      isArchivedProject={isArchivedProject}
       currentProjectLabel={currentProjectLabel}
       onCreateProject={handleCreateProject}
       onSwitchProject={handleSwitchProject}

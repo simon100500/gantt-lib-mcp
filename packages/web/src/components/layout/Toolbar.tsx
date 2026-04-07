@@ -42,6 +42,7 @@ interface ToolbarProps {
   onToggleDisableTaskDrag?: (enabled: boolean) => void;
   ganttDayMode?: 'business' | 'calendar';
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
+  readOnly?: boolean;
 }
 
 export function Toolbar({
@@ -60,6 +61,7 @@ export function Toolbar({
   onToggleDisableTaskDrag,
   ganttDayMode = 'business',
   onGanttDayModeChange,
+  readOnly = false,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
@@ -87,6 +89,16 @@ export function Toolbar({
 
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
+  const effectiveDisableTaskDrag = readOnly || disableTaskDrag;
+  const canChangeGanttDayMode = !readOnly && Boolean(onGanttDayModeChange);
+
+  const handleToggleDragLock = () => {
+    if (readOnly) {
+      return;
+    }
+
+    setDisableTaskDrag(!disableTaskDrag);
+  };
 
   // На мобильном (< 768px) обеспечиваем что только один режим включен
   useEffect(() => {
@@ -228,16 +240,18 @@ export function Toolbar({
       <Button
         size="sm"
         variant="ghost"
-        onClick={() => setDisableTaskDrag(!disableTaskDrag)}
-        aria-pressed={disableTaskDrag}
+        onClick={handleToggleDragLock}
+        aria-pressed={effectiveDisableTaskDrag}
+        disabled={readOnly}
         className={cn(
           actionButtonClassName,
-          disableTaskDrag && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
+          effectiveDisableTaskDrag && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
+          readOnly && 'cursor-not-allowed opacity-60',
           'hidden lg:flex',
         )}
-        title={disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
+        title={readOnly ? 'Проект в архиве доступен только для чтения' : disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
       >
-        {disableTaskDrag ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+        {effectiveDisableTaskDrag ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
       </Button>
 
       <FilterPopup>
@@ -343,11 +357,12 @@ export function Toolbar({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
-            onClick={() => setDisableTaskDrag(!disableTaskDrag)}
+            onClick={handleToggleDragLock}
+            disabled={readOnly}
             className="flex cursor-pointer items-center gap-2"
           >
-            {disableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
-            <span className="text-sm">{disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}</span>
+            {effectiveDisableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+            <span className="text-sm">{readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}</span>
           </DropdownMenuItem>
           <FilterPopup>
             <DropdownMenuItem
@@ -394,7 +409,7 @@ export function Toolbar({
             <span className="text-sm">Просроченные</span>
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={!onGanttDayModeChange}
+            disabled={!canChangeGanttDayMode}
             onSelect={(event) => {
               event.preventDefault();
               onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
@@ -454,7 +469,7 @@ export function Toolbar({
             <span className="text-sm">Просроченные</span>
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={!onGanttDayModeChange}
+            disabled={!canChangeGanttDayMode}
             onSelect={(event) => {
               event.preventDefault();
               onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
