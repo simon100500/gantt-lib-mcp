@@ -287,7 +287,7 @@ Plans:
 **Goal:** Пустой проект с broad initial-generation запросом идёт через AI-first pipeline `initial_generation` (planning -> quality gate -> deterministic compile/commit) без template fast path и без fallback в обычный mutation-agent flow
 **Requirements**: IGR-01, IGR-02, IGR-03, IGR-04
 **Depends on:** Phase 40
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 **Success Criteria** (what must be TRUE):
   1. Empty-project broad generation requests route to a first-class `initial_generation` pipeline instead of `initial_schedule_template` or regex-only content shortcuts
@@ -298,8 +298,8 @@ Plans:
 Plans:
 - [x] 41-01-PLAN.md — Contracts and routing shell for `initial_generation`, with template fast-path removal and typed model routing
 - [x] 41-02-PLAN.md — Domain brief, reference injection, strict `ProjectPlan` validation, and one-shot quality/repair loop
-- [ ] 41-03-PLAN.md — Deterministic compiler, partial salvage, and authoritative batch commit through `commandService`
+- [x] 41-03-PLAN.md — Deterministic compiler, partial salvage, and authoritative batch commit through `commandService`
 - [ ] 41-04-PLAN.md — End-to-end orchestration wiring, observability payloads, regression tests, and manual verification docs
 
 ---
-*Last updated: 2026-04-08 — Phase 41 Plan 02 completed*
+*Last updated: 2026-04-08 — Phase 41 Plan 03 completed*

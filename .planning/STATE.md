@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-08T14:31:22.000Z"
+last_updated: "2026-04-08T11:33:39.975Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 12
   completed_phases: 9
   total_plans: 36
-  completed_plans: 34
+  completed_plans: 35
   percent: 94
 ---
 
@@ -17,7 +17,7 @@ progress:
 
 **Last updated:** 2026-04-08
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Executing
+**Status:** Ready to execute
 
 ---
 
@@ -33,8 +33,8 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 41 (initial-gen-refactor) — EXECUTING
-Plan: 3 of 4
-Status: Executing
+Plan: 4 of 4
+Status: Ready to execute
 Last activity: 2026-04-08
 
 Progress: [█████████░] 94%
@@ -135,6 +135,8 @@ packages/
 - [Phase 41]: Server-side model choice is resolved once per run through resolveModelRoutingDecision() and logged as a typed decision.
 - [Phase 41]: Keep placeholder titles schema-invalid so repair focuses on hierarchy, coverage, and sequencing instead of filler cleanup.
 - [Phase 41]: Reuse the construction intent map as compact prompt context rather than reviving deterministic starter templates.
+- [Phase 41]: Deterministic initial-generation task IDs now derive from projectId and nodeKey so repeated compiles stay stable for the same serverDate.
+- [Phase 41]: Initial-generation partial builds prune only broken references, cycle edges, and empty containers, then require the locked 60% and 3-phase floor before commit.
 
 ## Performance Metrics
 
@@ -153,12 +155,13 @@ packages/
 | Phase 38 P06 | 6min | 2 tasks | 4 files |
 | Phase 41 P01 | 18 min | 2 tasks | 6 files |
 | Phase 41 P02 | 8 min | 2 tasks | 7 files |
+| Phase 41 P03 | 25 min | 2 tasks | 3 files |
 
 ## Session
 
-- Last session: 2026-04-08T14:31:22Z
-- Stopped at: Completed 41-02-PLAN.md
+- Last session: 2026-04-08T11:34:10Z
+- Stopped at: Completed 41-03-PLAN.md
 
 ---
 
-*Last updated: 2026-04-08 — Phase 41 Plan 02 completed*
+*Last updated: 2026-04-08 — Phase 41 Plan 03 completed*
