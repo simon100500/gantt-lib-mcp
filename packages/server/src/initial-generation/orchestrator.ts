@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
-import { resolveDomainReference, type ResolveDomainReferenceInput, type ResolvedDomainReference } from './domain-reference.js';
 import { executeInitialProjectPlan } from './executor.js';
 import { resolveModelRoutingDecision } from './model-routing.js';
 import { planInitialProject } from './planner.js';
@@ -52,7 +51,6 @@ export type InitialGenerationLogger = {
 };
 
 type InitialGenerationDeps = {
-  resolveDomainReference: (input: ResolveDomainReferenceInput) => ResolvedDomainReference;
   buildGenerationBrief: (input: BuildGenerationBriefInput) => GenerationBrief;
   resolveModelRoutingDecision: (input: {
     route: 'initial_generation' | 'mutation';
@@ -98,7 +96,6 @@ export type RunInitialGenerationInput = {
 
 function getDefaultDeps(): InitialGenerationDeps {
   return {
-    resolveDomainReference,
     buildGenerationBrief,
     resolveModelRoutingDecision,
   };
@@ -192,24 +189,9 @@ export async function runInitialGeneration(
     ...getDefaultDeps(),
     ...(input.deps ?? {}),
   } satisfies InitialGenerationDeps;
-  const reference = deps.resolveDomainReference({
-    userMessage: input.userMessage,
-  });
-
-  await input.logger.debug('object_type_inference', {
-    runId: input.runId,
-    projectId: input.projectId,
-    sessionId: input.sessionId,
-    userMessage: input.userMessage,
-    referenceKey: reference.referenceKey,
-    projectType: reference.projectType,
-    defaultInterpretation: reference.defaultInterpretation,
-    stageHints: reference.stageHints,
-  });
 
   const brief = input.brief ?? deps.buildGenerationBrief({
     userMessage: input.userMessage,
-    reference,
   });
   const structureModelRoutingDecision = input.structureModelRoutingDecision ?? deps.resolveModelRoutingDecision({
     route: 'initial_generation',
@@ -281,7 +263,6 @@ export async function runInitialGeneration(
     const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,
-      reference,
       structureModelDecision: structureModelRoutingDecision,
       schedulingModelDecision: schedulingModelRoutingDecision,
       sdkQuery: loggedPlannerQuery,

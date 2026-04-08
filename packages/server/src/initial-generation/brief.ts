@@ -1,19 +1,12 @@
-import type { ResolvedDomainReference } from './domain-reference.js';
 import type { GenerationBrief } from './types.js';
 
 export type BuildGenerationBriefInput = {
   userMessage: string;
-  reference: ResolvedDomainReference;
 };
 
-function detectScopeSignals(userMessage: string, reference: ResolvedDomainReference): string[] {
+function detectScopeSignals(userMessage: string): string[] {
   const signals = new Set<string>();
   const message = userMessage.toLowerCase();
-
-  if (reference.defaultInterpretation === 'private_residential_house') {
-    signals.add('broad_request');
-    signals.add('fallback_private_house_baseline');
-  }
 
   if (/(строит|construction|build)/i.test(message)) {
     signals.add('new_build');
@@ -39,17 +32,15 @@ function detectScopeSignals(userMessage: string, reference: ResolvedDomainRefere
 }
 
 export function buildGenerationBrief(input: BuildGenerationBriefInput): GenerationBrief {
-  const { reference } = input;
-
   return {
-    objectType: reference.defaultInterpretation ?? reference.projectType,
-    scopeSignals: detectScopeSignals(input.userMessage, reference),
+    objectType: 'project',
+    scopeSignals: detectScopeSignals(input.userMessage),
     starterScheduleExpectation:
-      'Return a full starter schedule baseline, not a fragment: include the main phases, enough concrete child tasks to make the project usable, and realistic sequencing from setup through handover.',
+      'Return a full starter schedule baseline with realistic phases, subphases, and tasks.',
     namingBan:
-      'Do not use filler titles such as "Этап 1", "Задача 2", "Stage 1", or "Task 3"; every node title must name a real construction or repair activity.',
-    domainContextSummary: reference.domainContextSummary,
+      'Do not use filler titles like "Этап 1" or "Task 3"; every node title must name a real activity.',
+    domainContextSummary: '',
     serverInferencePolicy:
-      'Infer the baseline server-side from the request and domain reference when the prompt is broad; produce the strongest plausible baseline without waiting for extra user input.',
+      'Rely on the user request itself.',
   };
 }

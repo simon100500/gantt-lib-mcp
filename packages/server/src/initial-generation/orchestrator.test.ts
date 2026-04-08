@@ -319,8 +319,7 @@ describe('runInitialGeneration', () => {
       { stage: 'structure_planning', model: 'gpt-strong' },
       { stage: 'schedule_metadata', model: 'gpt-cheap' },
     ]);
-    assert.deepEqual(harness.events.map((entry) => entry.event).slice(0, 3), [
-      'object_type_inference',
+    assert.deepEqual(harness.events.map((entry) => entry.event).slice(0, 2), [
       'model_routing_decision',
       'model_routing_decision',
     ]);

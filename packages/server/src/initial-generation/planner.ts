@@ -1,4 +1,3 @@
-import type { ResolvedDomainReference } from './domain-reference.js';
 import { parseModelJson } from './json-response.js';
 import {
   evaluateSchedulingQuality,
@@ -35,7 +34,6 @@ type PlannerQueryResult = string | { content?: string };
 export type PlanInitialProjectInput = {
   userMessage: string;
   brief: GenerationBrief;
-  reference: ResolvedDomainReference;
   structureModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   schedulingModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   sdkQuery: (input: PlannerQueryInput) => Promise<PlannerQueryResult>;
@@ -62,7 +60,7 @@ function readQueryContent(result: PlannerQueryResult): string {
   throw new Error('Planner returned an empty response');
 }
 
-function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'reference'>): string {
+function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief'>): string {
   return [
     'Return strict StructuredProjectPlan JSON only. No markdown, no prose, no code fences.',
     'StructuredProjectPlan JSON only with keys: projectType, assumptions, phases.',
@@ -80,7 +78,7 @@ function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage'
     'Prefer clear construction semantics over compact wording.',
     'Bad top-level titles: "Инженерное оснащение и контур здания", "Кровля и внутренняя отделка", "Фасады + электрика".',
     'Good top-level titles: "Нулевой цикл", "Несущий каркас", "Фасады и контур", "Инженерные системы", "Внутренняя отделка", "Благоустройство", "Сдача объекта".',
-    'For social infrastructure such as a kindergarten, preserve domain-specific workstreams like group rooms, пищеблок, прачечная, safety systems, site play areas, and commissioning.',
+    'If the request implies a specialized facility, preserve the major functional workstreams instead of collapsing them into generic phases.',
     'Do not optimize for fewer phases. Optimize for correct decomposition.',
     'Do not use placeholder titles like "Этап 1", "Подэтап 2", "Задача 3".',
     'Each task title must describe exactly one construction operation.',
@@ -89,11 +87,8 @@ function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage'
     'If the wording implies multiple operations, split them into separate tasks or separate subphases.',
     'Task-level compound formulations are forbidden.',
     'Each subphase title must describe one coherent grouping, not multiple unrelated operations compressed together.',
-    `Object type: ${input.brief.objectType}`,
-    `Domain context: ${input.reference.domainContextSummary}`,
     `Starter schedule expectation: ${input.brief.starterScheduleExpectation}`,
     `Naming ban: ${input.brief.namingBan}`,
-    `Server inference policy: ${input.brief.serverInferencePolicy}`,
     `User request: ${input.userMessage}`,
   ].join('\n');
 }
@@ -101,7 +96,7 @@ function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage'
 function buildStructureRepairPrompt(
   structure: StructuredProjectPlan,
   verdict: StructureQualityVerdict,
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'reference'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief'>,
 ): string {
   return [
     'Return a fully corrected StructuredProjectPlan JSON only.',
@@ -136,7 +131,6 @@ function buildSchedulingPrompt(input: Pick<PlanInitialProjectInput, 'userMessage
     'Do not add dependencies to phases or subphases.',
     'Build a realistic non-trivial dependency graph for the whole project with no cycles.',
     `User request: ${input.userMessage}`,
-    `Object type: ${input.brief.objectType}`,
     `Locked structure: ${JSON.stringify(structure)}`,
   ].join('\n');
 }

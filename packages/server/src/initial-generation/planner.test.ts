@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { buildGenerationBrief } from './brief.js';
-import { resolveDomainReference } from './domain-reference.js';
 import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
 import {
@@ -10,34 +9,10 @@ import {
   evaluateStructureQuality,
 } from './quality-gate.js';
 
-describe('initial-generation domain reference', () => {
-  it('injects the kindergarten reference for детского садика prompts', () => {
-    const reference = resolveDomainReference({
-      userMessage: 'Построй график строительства детского садика',
-    });
-
-    assert.equal(reference.referenceKey, 'kindergarten');
-    assert.equal(reference.projectType, 'kindergarten');
-    assert.equal(reference.defaultInterpretation, null);
-    assert.match(reference.domainContextSummary, /детск/i);
-  });
-
-  it('uses the private-house generic fallback for broad prompts like Построй график', () => {
-    const reference = resolveDomainReference({
-      userMessage: 'Построй график',
-    });
-
-    assert.equal(reference.referenceKey, 'construction');
-    assert.equal(reference.projectType, 'construction');
-    assert.equal(reference.defaultInterpretation, 'private_residential_house');
-  });
-});
-
 describe('initial-generation quality gate', () => {
   it('flags weak structures with placeholder titles and poor coverage', () => {
     const brief = buildGenerationBrief({
       userMessage: 'Построй график',
-      reference: resolveDomainReference({ userMessage: 'Построй график' }),
     });
 
     const verdict = evaluateStructureQuality({
@@ -128,7 +103,6 @@ describe('initial-generation quality gate', () => {
     };
     const brief = buildGenerationBrief({
       userMessage: 'График строительства жилого дома на 3 этажа + гараж',
-      reference: resolveDomainReference({ userMessage: 'График строительства жилого дома на 3 этажа + гараж' }),
     });
 
     const scheduled = {
@@ -177,9 +151,7 @@ describe('initial-generation planner', () => {
       userMessage: 'График строительства жилого дома на 3 этажа + гараж',
       brief: buildGenerationBrief({
         userMessage: 'График строительства жилого дома на 3 этажа + гараж',
-        reference: resolveDomainReference({ userMessage: 'График строительства жилого дома на 3 этажа + гараж' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'График строительства жилого дома на 3 этажа + гараж' }),
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage, prompt, model }) => {
@@ -392,7 +364,7 @@ describe('initial-generation planner', () => {
     assert.match(prompts[0]?.prompt ?? '', /Good top-level titles/i);
     assert.match(prompts[0]?.prompt ?? '', /Each task title must describe exactly one construction operation/i);
     assert.match(prompts[0]?.prompt ?? '', /Task-level compound formulations are forbidden/i);
-    assert.match(prompts[0]?.prompt ?? '', /kindergarten/i);
+    assert.match(prompts[0]?.prompt ?? '', /without server-side domain taxonomy/i);
     assert.match(prompts[1]?.prompt ?? '', /Do not create, delete, rename, merge, split, or move nodes/i);
   });
 
@@ -403,9 +375,7 @@ describe('initial-generation planner', () => {
       userMessage: 'График строительства частного дома',
       brief: buildGenerationBrief({
         userMessage: 'График строительства частного дома',
-        reference: resolveDomainReference({ userMessage: 'График строительства частного дома' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'График строительства частного дома' }),
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage }) => {
@@ -636,9 +606,7 @@ describe('initial-generation planner', () => {
       userMessage: 'График строительства детского сада на 3 этажа',
       brief: buildGenerationBrief({
         userMessage: 'График строительства детского сада на 3 этажа',
-        reference: resolveDomainReference({ userMessage: 'График строительства детского сада на 3 этажа' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'График строительства детского сада на 3 этажа' }),
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage }) => {
@@ -774,9 +742,7 @@ describe('initial-generation planner', () => {
       userMessage: 'График строительства детского сада на 3 этажа',
       brief: buildGenerationBrief({
         userMessage: 'График строительства детского сада на 3 этажа',
-        reference: resolveDomainReference({ userMessage: 'График строительства детского сада на 3 этажа' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'График строительства детского сада на 3 этажа' }),
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage }) => {
@@ -984,9 +950,7 @@ describe('initial-generation planner', () => {
       userMessage: 'График строительства детского сада на 3 этажа',
       brief: buildGenerationBrief({
         userMessage: 'График строительства детского сада на 3 этажа',
-        reference: resolveDomainReference({ userMessage: 'График строительства детского сада на 3 этажа' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'График строительства детского сада на 3 этажа' }),
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage }) => {
@@ -1045,9 +1009,7 @@ describe('initial-generation planner', () => {
       userMessage: 'График строительства загородного дома в 2 этажа',
       brief: buildGenerationBrief({
         userMessage: 'График строительства загородного дома в 2 этажа',
-        reference: resolveDomainReference({ userMessage: 'График строительства загородного дома в 2 этажа' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'График строительства загородного дома в 2 этажа' }),
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage }) => {
