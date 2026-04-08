@@ -34,6 +34,7 @@ describe('agent hierarchy mutation intent', () => {
   it('treats broad construction schedule bootstrap requests as mutations', () => {
     assert.equal(isMutationIntent('Построй типичный график строительства'), true);
     assert.equal(isMutationIntent('Составь примерный план строительства дома'), true);
+    assert.equal(isMutationIntent('Построй график'), true);
   });
 });
 
@@ -159,6 +160,25 @@ describe('initial-generation model routing', () => {
       selectedModel: 'gpt-strong',
       reason: 'cheap_model_missing_fallback_to_main',
     });
+  });
+});
+
+describe('agent initial-generation integration surface', () => {
+  it('removes the legacy template fast path from agent.ts', () => {
+    const source = readFileSync(join(__dirname, 'agent.ts'), 'utf-8');
+
+    assert.doesNotMatch(source, /parseInitialScheduleTemplateIntent/);
+    assert.doesNotMatch(source, /tryInitialScheduleTemplateFastPath/);
+    assert.doesNotMatch(source, /buildTypicalConstructionTemplate/);
+  });
+
+  it('logs route and model routing decisions before SDK execution', () => {
+    const source = readFileSync(join(__dirname, 'agent.ts'), 'utf-8');
+
+    assert.match(source, /route_selection/);
+    assert.match(source, /model_routing_decision/);
+    assert.match(source, /runInitialGeneration/);
+    assert.match(source, /OPENAI_CHEAP_MODEL|cheap_model/);
   });
 });
 

@@ -20,6 +20,9 @@ import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
 import type { CommitProjectCommandResponse, Task as MTask } from '@gantt/mcp/types';
+import { runInitialGeneration } from './initial-generation/orchestrator.js';
+import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
+import { selectAgentRoute } from './initial-generation/route-selection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -64,10 +67,6 @@ type FastShiftTaskMatch =
   | { kind: 'none'; matches: []; }
   | { kind: 'exact'; matches: ComparableTask[]; }
   | { kind: 'partial'; matches: ComparableTask[]; };
-
-type InitialScheduleTemplateIntent = {
-  domain: 'construction';
-};
 
 type NormalizedMutationToolName =
   | 'create_tasks'
@@ -123,11 +122,17 @@ let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
 let prismaModulePromise: Promise<PrismaModule> | undefined;
 
-function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
+function resolveEnv(): {
+  OPENAI_API_KEY: string;
+  OPENAI_BASE_URL: string;
+  OPENAI_MODEL: string;
+  OPENAI_CHEAP_MODEL?: string;
+} {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
     OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+    OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
   };
 }
 
@@ -174,7 +179,11 @@ export function isMutationIntent(message: string): boolean {
     return true;
   }
 
-  if (parseInitialScheduleTemplateIntent(message)) {
+  if (selectAgentRoute({
+    userMessage: message,
+    taskCount: 0,
+    hasHierarchy: false,
+  }).route === 'initial_generation') {
     return true;
   }
 
@@ -296,22 +305,6 @@ function buildNameVariants(value: string): string[] {
   const tokens = normalized.split(' ');
   const accusativeNormalized = tokens.map(normalizeRussianAccusativeToken).join(' ');
   return [...new Set([normalized, accusativeNormalized])];
-}
-
-export function parseInitialScheduleTemplateIntent(message: string): InitialScheduleTemplateIntent | null {
-  const normalized = normalizeName(message);
-
-  const isConstruction = /(строит|стройк|ремонт|construction|build)/.test(normalized);
-  const isScheduleBootstrap = /(постро|состав|сформир|распиш|create|build|generate|draft)/.test(normalized)
-    && /(график|план|расписан|schedule|timeline|gantt)/.test(normalized);
-  const isTypicalTemplate = /(типич|typical|template|шаблон|примерн)/.test(normalized)
-    && /(график|план|schedule|timeline|gantt)/.test(normalized);
-
-  if (isConstruction && (isScheduleBootstrap || isTypicalTemplate)) {
-    return { domain: 'construction' };
-  }
-
-  return null;
 }
 
 function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | undefined): number | null {
@@ -438,125 +431,6 @@ function buildFastShiftMultiSuccessMessage(taskName: string, matchCount: number,
   const unit = mode === 'working' ? 'рабоч' : 'календарн';
   const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
   return `Все ${matchCount} задачи «${taskName}» были ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
-}
-
-function buildTypicalConstructionTemplate(baseStartDate: Date): Array<{
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  parentId?: string;
-  dependencies?: Array<{ taskId: string; type: 'FS'; lag?: number }>;
-}> {
-  const phases = [
-    {
-      name: 'Подготовительный этап',
-      tasks: [
-        { name: 'Подготовка площадки', duration: 3 },
-        { name: 'Разбивка осей', duration: 2 },
-        { name: 'Временные сети и бытовой городок', duration: 3 },
-      ],
-    },
-    {
-      name: 'Фундамент',
-      tasks: [
-        { name: 'Земляные работы', duration: 4 },
-        { name: 'Устройство основания', duration: 3 },
-        { name: 'Армирование и опалубка', duration: 4 },
-        { name: 'Бетонирование фундамента', duration: 3 },
-      ],
-    },
-    {
-      name: 'Коробка здания',
-      tasks: [
-        { name: 'Монтаж несущего каркаса', duration: 6 },
-        { name: 'Перекрытия и лестницы', duration: 5 },
-        { name: 'Наружные стены и перегородки', duration: 6 },
-      ],
-    },
-    {
-      name: 'Контур здания',
-      tasks: [
-        { name: 'Кровельные работы', duration: 4 },
-        { name: 'Окна и наружные двери', duration: 4 },
-        { name: 'Фасадные работы', duration: 5 },
-      ],
-    },
-    {
-      name: 'Инженерные системы',
-      tasks: [
-        { name: 'Черновая электрика', duration: 5 },
-        { name: 'Сантехника и канализация', duration: 5 },
-        { name: 'Вентиляция и слаботочные сети', duration: 4 },
-      ],
-    },
-    {
-      name: 'Внутренняя отделка',
-      tasks: [
-        { name: 'Штукатурка и стяжка', duration: 6 },
-        { name: 'Чистовые покрытия', duration: 5 },
-        { name: 'Монтаж оборудования и дверей', duration: 4 },
-      ],
-    },
-    {
-      name: 'Пусконаладка и сдача',
-      tasks: [
-        { name: 'Пусконаладочные работы', duration: 3 },
-        { name: 'Испытания и устранение замечаний', duration: 3 },
-        { name: 'Сдача объекта', duration: 2 },
-      ],
-    },
-  ] as const;
-
-  const allTasks: Array<{
-    id: string;
-    name: string;
-    startDate: string;
-    endDate: string;
-    parentId?: string;
-    dependencies?: Array<{ taskId: string; type: 'FS'; lag?: number }>;
-  }> = [];
-
-  let phaseStart = alignToBusinessDay(baseStartDate);
-  let previousPhaseLastTaskId: string | undefined;
-
-  for (const phase of phases) {
-    const phaseId = crypto.randomUUID();
-    const childTasks: typeof allTasks = [];
-    let childStart = phaseStart;
-    let previousChildId = previousPhaseLastTaskId;
-
-    for (const step of phase.tasks) {
-      const taskId = crypto.randomUUID();
-      const endDate = addBusinessDays(childStart, step.duration);
-      childTasks.push({
-        id: taskId,
-        name: step.name,
-        startDate: formatDateOnly(childStart),
-        endDate: formatDateOnly(endDate),
-        parentId: phaseId,
-        dependencies: previousChildId ? [{ taskId: previousChildId, type: 'FS' }] : undefined,
-      });
-      previousChildId = taskId;
-      childStart = nextBusinessDay(endDate);
-    }
-
-    allTasks.push({
-      id: phaseId,
-      name: phase.name,
-      startDate: childTasks[0]!.startDate,
-      endDate: childTasks[childTasks.length - 1]!.endDate,
-    }, ...childTasks);
-
-    previousPhaseLastTaskId = childTasks[childTasks.length - 1]!.id;
-    phaseStart = nextBusinessDay(parseDateOnly(childTasks[childTasks.length - 1]!.endDate));
-  }
-
-  return allTasks;
-}
-
-function buildInitialConstructionTemplateMessage(taskCount: number): string {
-  return `Добавлен типовой график строительства: ${taskCount} задач по этапам от подготовки площадки до сдачи объекта.`;
 }
 
 export function assessMutationOutcome(
@@ -870,95 +744,6 @@ async function getPrismaModule(): Promise<PrismaModule> {
   return prismaModulePromise;
 }
 
-async function tryInitialScheduleTemplateFastPath(
-  userMessage: string,
-  projectId: string,
-  sessionId: string,
-  runId: string,
-  tasksBefore: ComparableTask[],
-  services: Pick<TaskServiceModule, 'taskService' | 'messageService' | 'commandService'>,
-  broadcastToSession: WsModule['broadcastToSession'],
-): Promise<boolean> {
-  const templateIntent = parseInitialScheduleTemplateIntent(userMessage);
-  if (!templateIntent || tasksBefore.length > 0) {
-    return false;
-  }
-
-  const { getPrisma } = await getPrismaModule();
-  const prisma = getPrisma();
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { version: true },
-  });
-
-  if (!project) {
-    return false;
-  }
-
-  const tasks = buildTypicalConstructionTemplate(alignToBusinessDay(new Date()));
-  const response = await services.commandService.commitCommand({
-    projectId,
-    clientRequestId: crypto.randomUUID(),
-    baseVersion: project.version,
-    command: {
-      type: 'create_tasks_batch',
-      tasks,
-    },
-  }, 'agent');
-
-  await writeServerDebugLog('initial_schedule_template_attempt', {
-    runId,
-    projectId,
-    sessionId,
-    template: templateIntent.domain,
-    taskCount: tasks.length,
-    accepted: response.accepted,
-    reason: response.accepted ? undefined : response.reason,
-  });
-
-  if (!response.accepted) {
-    return false;
-  }
-
-  const { tasks: tasksAfter } = await services.taskService.list(projectId);
-  const assistantResponse = buildInitialConstructionTemplateMessage(tasks.length);
-
-  await services.messageService.add('assistant', assistantResponse, projectId);
-  await writeServerDebugLog('agent_response_saved', {
-    runId,
-    projectId,
-    sessionId,
-    assistantResponse,
-    streamedContent: true,
-    finalTasksChanged: true,
-    finalChangedTaskIds: response.result.changedTaskIds,
-    finalAcceptedChangedTaskIds: response.result.changedTaskIds,
-    finalAcceptedChangedTaskIdMismatch: false,
-    fastPath: 'initial_schedule_template',
-  });
-
-  broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
-  broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter as MTask[] });
-  await writeServerDebugLog('tasks_broadcast', {
-    runId,
-    projectId,
-    sessionId,
-    taskCount: tasksAfter.length,
-    taskIds: tasksAfter.map((currentTask) => currentTask.id),
-    taskNames: tasksAfter.map((currentTask) => currentTask.name),
-    fastPath: 'initial_schedule_template',
-  });
-  broadcastToSession(sessionId, { type: 'done' });
-  await writeServerDebugLog('agent_run_completed', {
-    runId,
-    projectId,
-    sessionId,
-    fastPath: 'initial_schedule_template',
-  });
-
-  return true;
-}
-
 async function tryDirectShiftFastPath(
   userMessage: string,
   projectId: string,
@@ -1098,6 +883,7 @@ async function executeAgentAttempt(
   mcpServerPath: string,
   dbPath: string,
   env: ReturnType<typeof resolveEnv>,
+  model: string,
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
@@ -1107,7 +893,7 @@ async function executeAgentAttempt(
     prompt,
     options: {
       authType: 'openai',
-      model: env.OPENAI_MODEL,
+      model,
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
@@ -1340,6 +1126,11 @@ export async function runAgentWithHistory(
     const likelyMutationRequest = isMutationIntent(userMessage);
     const simpleMutationRequested = isSimpleMutationRequest(userMessage);
     const { tasks: tasksBefore } = await taskService.list(projectId);
+    const routeSelection = selectAgentRoute({
+      userMessage,
+      taskCount: tasksBefore.length,
+      hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+    });
 
     await writeServerDebugLog('agent_run_started', {
       runId,
@@ -1355,15 +1146,30 @@ export async function runAgentWithHistory(
 
     await messageService.add('user', userMessage, projectId);
 
-    if (await tryInitialScheduleTemplateFastPath(
-      userMessage,
+    await writeServerDebugLog('route_selection', {
+      runId,
       projectId,
       sessionId,
-      runId,
-      tasksBefore,
-      { taskService, messageService, commandService },
-      broadcastToSession,
-    )) {
+      userMessage,
+      ...routeSelection,
+    });
+
+    if (routeSelection.route === 'initial_generation') {
+      await runInitialGeneration({
+        projectId,
+        sessionId,
+        runId,
+        userMessage,
+        tasksBefore,
+        services: {
+          commandService,
+          messageService,
+          taskService,
+        },
+        logger: {
+          debug: (event, payload) => writeServerDebugLog(event, payload),
+        },
+      });
       return;
     }
 
@@ -1402,7 +1208,19 @@ export async function runAgentWithHistory(
       authType: 'openai',
       baseUrl: env.OPENAI_BASE_URL,
       model: env.OPENAI_MODEL,
+      cheapModel: env.OPENAI_CHEAP_MODEL,
       projectRoot: PROJECT_ROOT,
+    });
+
+    const modelRoutingDecision = resolveModelRoutingDecision({
+      route: 'mutation',
+      env,
+    });
+    await writeServerDebugLog('model_routing_decision', {
+      runId,
+      projectId,
+      sessionId,
+      ...modelRoutingDecision,
     });
 
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
@@ -1458,6 +1276,7 @@ export async function runAgentWithHistory(
           mcpServerPath,
           dbPath,
           env,
+          modelRoutingDecision.selectedModel,
           broadcastToSession,
         );
       } catch (error) {
