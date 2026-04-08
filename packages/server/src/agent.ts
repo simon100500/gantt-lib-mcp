@@ -1022,7 +1022,6 @@ async function executeAgentAttempt(
   attempt: number,
   simpleMutationRequested: boolean,
   mcpServerPath: string,
-  dbPath: string,
   env: ReturnType<typeof resolveEnv>,
   model: string,
   broadcastToSession: WsModule['broadcastToSession'],
@@ -1041,9 +1040,7 @@ async function executeAgentAttempt(
       maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
-      env: buildSdkEnv(env, {
-        DB_PATH: dbPath,
-      }),
+      env: buildSdkEnv(env),
       mcpServers: {
         gantt: {
           command: 'node',
@@ -1389,7 +1386,6 @@ export async function runAgentWithHistory(
 
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
       ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
-    const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
 
     let assistantResponse = '';
     let streamedContent = false;
@@ -1438,7 +1434,6 @@ export async function runAgentWithHistory(
           attempt,
           simpleMutationRequested,
           mcpServerPath,
-          dbPath,
           env,
           modelRoutingDecision.selectedModel,
           broadcastToSession,

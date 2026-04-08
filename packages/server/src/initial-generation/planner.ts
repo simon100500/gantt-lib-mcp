@@ -178,24 +178,20 @@ function normalizeLooseProjectPlan(raw: unknown): unknown {
 function normalizeDependency(input: unknown): ProjectPlanDependency {
   const dependency = input as Partial<ProjectPlanDependency> & { nodeKey?: unknown };
   if (!dependency || typeof dependency.nodeKey !== 'string' || dependency.nodeKey.trim().length === 0) {
-    throw new Error('ProjectPlan dependency reference is missing nodeKey');
+    return {
+      nodeKey: '',
+      type: 'FS',
+      lagDays: 0,
+    };
   }
 
   const type = dependency.type ?? 'FS';
   const lagDays = dependency.lagDays ?? 0;
 
-  if (!['FS', 'SS', 'FF', 'SF'].includes(type)) {
-    throw new Error(`ProjectPlan dependency type is invalid for ${dependency.nodeKey}`);
-  }
-
-  if (!Number.isInteger(lagDays)) {
-    throw new Error(`ProjectPlan dependency lagDays must be an integer for ${dependency.nodeKey}`);
-  }
-
   return {
     nodeKey: dependency.nodeKey,
-    type: type as ProjectPlanDependencyType,
-    lagDays,
+    type: ['FS', 'SS', 'FF', 'SF'].includes(type) ? type as ProjectPlanDependencyType : 'FS',
+    lagDays: Number.isInteger(lagDays) ? lagDays : 0,
   };
 }
 
@@ -209,49 +205,46 @@ function normalizeNode(input: unknown): ProjectPlanNode {
     dependsOn?: unknown;
   };
 
-  if (!node || typeof node.nodeKey !== 'string' || node.nodeKey.trim().length === 0) {
-    throw new Error('ProjectPlan node is missing nodeKey');
-  }
-
-  if (typeof node.title !== 'string' || node.title.trim().length === 0) {
-    throw new Error(`ProjectPlan node ${node.nodeKey} is missing title`);
-  }
-
-  if (PLACEHOLDER_TITLE_PATTERN.test(node.title.trim())) {
-    throw new Error(`ProjectPlan placeholder title detected for ${node.nodeKey}`);
-  }
-
-  if (node.kind !== 'phase' && node.kind !== 'task') {
-    throw new Error(`ProjectPlan node ${node.nodeKey} has invalid kind`);
-  }
-
-  if (!Number.isInteger(node.durationDays) || (node.durationDays as number) < 1) {
-    throw new Error(`ProjectPlan node ${node.nodeKey} is missing durationDays`);
-  }
-
-  if (node.parentNodeKey !== undefined && typeof node.parentNodeKey !== 'string') {
-    throw new Error(`ProjectPlan node ${node.nodeKey} has invalid parentNodeKey`);
-  }
+  const nodeKey = typeof node?.nodeKey === 'string' && node.nodeKey.trim().length > 0
+    ? node.nodeKey.trim()
+    : buildGeneratedNodeKey({
+      title: node?.title,
+      kind: node?.kind,
+      index: 0,
+    });
+  const title = typeof node?.title === 'string' && node.title.trim().length > 0
+    ? node.title.trim()
+    : nodeKey;
+  const kind = node?.kind === 'phase' || node?.kind === 'task'
+    ? node.kind
+    : (node?.parentNodeKey ? 'task' : 'phase');
+  const durationDays = Number.isInteger(node?.durationDays) && (node.durationDays as number) > 0
+    ? node.durationDays as number
+    : 1;
 
   const dependsOnInput = node.dependsOn ?? [];
-  if (!Array.isArray(dependsOnInput)) {
-    throw new Error(`ProjectPlan node ${node.nodeKey} has invalid dependsOn`);
-  }
+  const normalizedDependsOnInput = Array.isArray(dependsOnInput) ? dependsOnInput : [];
 
   return {
-    nodeKey: node.nodeKey,
-    title: node.title.trim(),
-    parentNodeKey: node.parentNodeKey,
-    kind: node.kind,
-    durationDays: node.durationDays as number,
-    dependsOn: dependsOnInput.map((dependency) => normalizeDependency(dependency)),
+    nodeKey,
+    title: PLACEHOLDER_TITLE_PATTERN.test(title) ? `${kind}-${nodeKey}` : title,
+    parentNodeKey: typeof node?.parentNodeKey === 'string' && node.parentNodeKey.trim().length > 0
+      ? node.parentNodeKey.trim()
+      : undefined,
+    kind,
+    durationDays,
+    dependsOn: normalizedDependsOnInput.map((dependency) => normalizeDependency(dependency)),
   };
 }
 
 function validateProjectPlan(raw: unknown): ProjectPlan {
   const normalizedRaw = normalizeLooseProjectPlan(raw);
   if (!normalizedRaw || typeof normalizedRaw !== 'object') {
-    throw new Error('ProjectPlan payload must be an object');
+    return {
+      projectType: 'construction',
+      nodes: [],
+      assumptions: [],
+    };
   }
 
   const payload = normalizedRaw as Partial<ProjectPlan> & {
@@ -260,54 +253,51 @@ function validateProjectPlan(raw: unknown): ProjectPlan {
     assumptions?: unknown;
   };
 
-  if (typeof payload.projectType !== 'string' || payload.projectType.trim().length === 0) {
-    throw new Error('ProjectPlan is missing projectType');
-  }
-
-  if (!Array.isArray(payload.nodes)) {
-    throw new Error('ProjectPlan is missing nodes');
-  }
-
-  if (payload.assumptions !== undefined && !Array.isArray(payload.assumptions)) {
-    throw new Error('ProjectPlan assumptions must be an array');
-  }
-
-  const nodes = payload.nodes.map((node) => normalizeNode(node));
-  const assumptions = (payload.assumptions ?? []).map((assumption) => {
-    if (typeof assumption !== 'string') {
-      throw new Error('ProjectPlan assumptions must contain strings');
+  const nodesInput = Array.isArray(payload.nodes) ? payload.nodes : [];
+  const nodes = nodesInput.map((node, index) => {
+    const normalizedNode = normalizeNode(node);
+    if (!normalizedNode.nodeKey || normalizedNode.nodeKey.startsWith('phase-generated-') || normalizedNode.nodeKey.startsWith('task-generated-')) {
+      normalizedNode.nodeKey = buildGeneratedNodeKey({
+        title: normalizedNode.title,
+        kind: normalizedNode.kind,
+        index,
+      });
     }
-
-    return assumption;
+    return normalizedNode;
   });
+  const assumptions = Array.isArray(payload.assumptions)
+    ? payload.assumptions.filter((assumption): assumption is string => typeof assumption === 'string')
+    : [];
 
   const seenNodeKeys = new Set<string>();
+  const dedupedNodes: ProjectPlanNode[] = [];
   for (const node of nodes) {
-    if (seenNodeKeys.has(node.nodeKey)) {
-      throw new Error(`ProjectPlan has duplicate nodeKey: ${node.nodeKey}`);
+    let nextNodeKey = node.nodeKey;
+    let duplicateIndex = 2;
+    while (seenNodeKeys.has(nextNodeKey)) {
+      nextNodeKey = `${node.nodeKey}-${duplicateIndex}`;
+      duplicateIndex += 1;
     }
-    seenNodeKeys.add(node.nodeKey);
+    seenNodeKeys.add(nextNodeKey);
+    dedupedNodes.push(nextNodeKey === node.nodeKey ? node : { ...node, nodeKey: nextNodeKey });
   }
 
-  for (const node of nodes) {
-    if (node.kind === 'task' && !node.parentNodeKey) {
-      throw new Error(`ProjectPlan has top-level task: ${node.nodeKey}`);
-    }
-
-    if (node.parentNodeKey && !seenNodeKeys.has(node.parentNodeKey)) {
-      throw new Error(`ProjectPlan parent reference is invalid for ${node.nodeKey}`);
-    }
-
-    for (const dependency of node.dependsOn) {
-      if (!seenNodeKeys.has(dependency.nodeKey)) {
-        throw new Error(`ProjectPlan dependency reference is invalid for ${node.nodeKey}: ${dependency.nodeKey}`);
-      }
-    }
-  }
+  const validPhaseKeys = new Set(dedupedNodes.filter((node) => node.kind === 'phase').map((node) => node.nodeKey));
+  const sanitizedNodes = dedupedNodes
+    .map((node) => ({
+      ...node,
+      parentNodeKey: node.kind === 'task' && node.parentNodeKey && validPhaseKeys.has(node.parentNodeKey)
+        ? node.parentNodeKey
+        : undefined,
+      dependsOn: node.dependsOn.filter((dependency) => dependency.nodeKey && seenNodeKeys.has(dependency.nodeKey)),
+    }))
+    .filter((node) => node.kind === 'phase' || node.parentNodeKey);
 
   return {
-    projectType: payload.projectType,
-    nodes,
+    projectType: typeof payload.projectType === 'string' && payload.projectType.trim().length > 0
+      ? payload.projectType
+      : 'construction',
+    nodes: sanitizedNodes,
     assumptions,
   };
 }
@@ -323,14 +313,7 @@ async function requestPlan(
     stage,
   });
   const content = readQueryContent(result);
-
-  try {
-    return validateProjectPlan(parsePlannerResponse(content));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const preview = content.slice(0, 600);
-    throw new Error(`${message}; planner_response_preview=${preview}`);
-  }
+  return validateProjectPlan(parsePlannerResponse(content));
 }
 
 export async function planInitialProject(input: PlanInitialProjectInput): Promise<PlanInitialProjectResult> {
