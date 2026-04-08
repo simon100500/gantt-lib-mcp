@@ -3,21 +3,21 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-08T11:21:05.512Z"
+last_updated: "2026-04-08T14:31:22.000Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 12
   completed_phases: 9
   total_plans: 36
-  completed_plans: 33
-  percent: 92
+  completed_plans: 34
+  percent: 94
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-08
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to execute
+**Status:** Executing
 
 ---
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 41 (initial-gen-refactor) — EXECUTING
-Plan: 2 of 4
-Status: Ready to execute
+Plan: 3 of 4
+Status: Executing
 Last activity: 2026-04-08
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ---
 
@@ -133,6 +133,8 @@ packages/
 - [Quick 260405-roi]: Lock icon (lucide-react) with opacity-60 on archived projects in ProjectSwitcher sidebar
 - [Phase 41]: Empty-project broad prompts now route through selectAgentRoute() before any fast path or SDK run.
 - [Phase 41]: Server-side model choice is resolved once per run through resolveModelRoutingDecision() and logged as a typed decision.
+- [Phase 41]: Keep placeholder titles schema-invalid so repair focuses on hierarchy, coverage, and sequencing instead of filler cleanup.
+- [Phase 41]: Reuse the construction intent map as compact prompt context rather than reviving deterministic starter templates.
 
 ## Performance Metrics
 
@@ -150,12 +152,13 @@ packages/
 | Phase 38 P05 | 2min | 1 tasks | 5 files |
 | Phase 38 P06 | 6min | 2 tasks | 4 files |
 | Phase 41 P01 | 18 min | 2 tasks | 6 files |
+| Phase 41 P02 | 8 min | 2 tasks | 7 files |
 
 ## Session
 
-- Last session: 2026-04-08T11:21:05Z
-- Stopped at: Completed 41-01-PLAN.md
+- Last session: 2026-04-08T14:31:22Z
+- Stopped at: Completed 41-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-08 — Phase 41 Plan 01 completed*
+*Last updated: 2026-04-08 — Phase 41 Plan 02 completed*
