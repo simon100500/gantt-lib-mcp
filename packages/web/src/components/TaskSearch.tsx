@@ -277,7 +277,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
         aria-disabled={readOnly}
         title={readOnly ? 'Создание задач недоступно в режиме только чтения' : 'Создать задачу'}
         className={cn(
-          'h-7 px-2.5 text-xs font-medium shrink-0',
+          'h-7 py-2.5 px-2.5 text-xs font-medium shrink-0',
           readOnly && 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100',
         )}
       >

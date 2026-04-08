@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, User } from 'lucide-react';
+import { ChevronDown, Eye, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -500,7 +500,7 @@ export function ProjectMenu({
                   variant="outline"
                   size="sm"
                   onClick={() => setShowBillingPage(true)}
-                  className="h-9 shrink-0 rounded-md border-primary/35 bg-white px-3 text-sm font-medium text-primary hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                  className="h-8 shrink-0 rounded-md border-primary/35 bg-white px-3 text-sm font-medium text-primary hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                 >
                   <Gem className="h-4 w-4" />
                   <span>Расширить</span>
@@ -510,7 +510,7 @@ export function ProjectMenu({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-9 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 sm:max-w-[280px]"
+                      className="h-8 max-w-[180px] gap-1.5 rounded-md border border-transparent px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:ring-offset-0 hover:border-slate-200 hover:bg-slate-50 sm:max-w-[280px]"
                     >
                       <User className="h-4 w-4 shrink-0 text-slate-600 lg:hidden" />
                       <span className="hidden truncate text-slate-600 lg:inline">{auth.user?.email ?? 'Account'}</span>
@@ -528,7 +528,7 @@ export function ProjectMenu({
                     </DropdownMenuItem>
                     {hasAdminAccess && (
                       <DropdownMenuItem onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }} className="text-slate-700 focus:text-slate-900">
-                        <User className="mr-2 h-4 w-4" />
+                        <ShieldCheck className="mr-2 h-4 w-4" />
                         <span>Админка</span>
                       </DropdownMenuItem>
                     )}
