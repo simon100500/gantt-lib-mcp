@@ -28,7 +28,7 @@ function createHarness(options?: {
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const messages: Array<{ role: string; content: string }> = [];
-  const broadcasts: Array<{ sessionId: string; message: { type: string } }> = [];
+  const broadcasts: Array<{ sessionId: string; message: { type: string; tasks?: unknown[]; provisional?: boolean } }> = [];
   const committedCommands: Array<{ type: string }> = [];
   let commitCall = 0;
 
@@ -293,7 +293,7 @@ function createHarness(options?: {
           events.push({ event, payload });
         },
       },
-      broadcastToSession(sessionId: string, message: { type: string }) {
+      broadcastToSession(sessionId: string, message: { type: string; tasks?: unknown[]; provisional?: boolean }) {
         broadcasts.push({ sessionId, message });
       },
     },
@@ -330,6 +330,8 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.some((entry) => entry.event === 'structure_gate_verdict'), true);
     assert.ok(harness.events.some((entry) => entry.event === 'schedule_metadata_output'));
     assert.ok(harness.events.some((entry) => entry.event === 'scheduling_gate_verdict'));
+    assert.equal(harness.events.some((entry) => entry.event === 'preview_tasks_broadcast'), true);
+    assert.equal(harness.broadcasts.some((entry) => entry.message.type === 'preview_tasks'), true);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 1);
   });
 

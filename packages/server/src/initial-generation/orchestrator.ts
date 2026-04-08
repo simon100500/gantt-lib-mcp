@@ -19,6 +19,8 @@ type ListedTask = {
   startDate?: string;
   endDate?: string;
   parentId?: string;
+  dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
+  sortOrder?: number;
 };
 
 type PlannerQueryInput = {
@@ -336,6 +338,27 @@ export async function runInitialGeneration(
       plan: planning.plan,
       commandService: input.services.commandService,
       serverDate: getServerDate(input.serverDate),
+      onCompiled: async (compiledSchedule) => {
+        const previewTasks = compiledSchedule.command.tasks.map((task) => ({
+          id: task.id,
+          name: task.name,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          parentId: task.parentId,
+          dependencies: task.dependencies,
+          sortOrder: task.sortOrder,
+        }));
+
+        input.broadcastToSession(input.sessionId, { type: 'preview_tasks', tasks: previewTasks, provisional: true });
+        await input.logger.debug('preview_tasks_broadcast', {
+          runId: input.runId,
+          projectId: input.projectId,
+          sessionId: input.sessionId,
+          taskCount: previewTasks.length,
+          taskIds: previewTasks.map((task) => task.id),
+          taskNames: previewTasks.map((task) => task.name),
+        });
+      },
     });
 
     await input.logger.debug('compile_verdict', {

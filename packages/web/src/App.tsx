@@ -127,6 +127,11 @@ function buildDependencyRowsFromTasks(tasks: Task[]) {
   );
 }
 
+type PreviewState = {
+  tasks: Task[];
+  active: boolean;
+};
+
 export default function App() {
   const auth = useAuth();
   const localTasks = useLocalTasks();
@@ -426,6 +431,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
   });
   const ganttRef = useRef<GanttChartRef>(null);
+  const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false });
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
@@ -435,8 +441,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setTasks]);
 
   const handleWsMessage = useCallback((msg: ServerMessage) => {
+    if (msg.type === 'preview_tasks') {
+      const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
+      setPreviewState({
+        tasks: normalizedPreviewTasks,
+        active: true,
+      });
+      return;
+    }
     if (msg.type === 'tasks') {
       const normalizedTasks = normalizeTasks(msg.tasks as Task[]);
+      setPreviewState({ tasks: [], active: false });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
       if (!hasShareToken && auth.isAuthenticated) {
@@ -453,10 +468,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'done') {
+      setPreviewState({ tasks: [], active: false });
       useChatStore.getState().finishStreaming();
       return;
     }
     if (msg.type === 'error') {
+      setPreviewState({ tasks: [], active: false });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
   }, [auth.isAuthenticated, hasShareToken]);
@@ -513,6 +530,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setWorkspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
+    setPreviewState({ tasks: [], active: false });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
@@ -958,6 +976,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [workspace, workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
+  const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'draft'
@@ -996,7 +1015,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ? (
           <ProjectWorkspace
             ganttRef={ganttRef}
-            tasks={tasks}
+            tasks={visibleTasks}
             setTasks={setTasks}
             loading={loading}
             sharedProject={sharedProject.project}
@@ -1022,6 +1041,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
             calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             readOnly={isArchivedProject}
+            previewState={previewState.active ? 'rendering' : 'idle'}
             onGanttDayModeChange={(ganttDayMode) => {
               void handleGanttDayModeChange(ganttDayMode).catch((error) => {
                 console.error('Failed to update gantt day mode:', error);

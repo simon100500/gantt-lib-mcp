@@ -30,6 +30,7 @@ import { authService } from '@gantt/mcp/services';
 export type ServerMessage =
   | { type: 'token'; content: string }
   | { type: 'tasks'; tasks: unknown[] }
+  | { type: 'preview_tasks'; tasks: unknown[]; provisional: true }
   | { type: 'error'; message: string }
   | { type: 'done' }
   | { type: 'connected' };
@@ -78,7 +79,7 @@ export function broadcastToSession(sessionId: string, msg: ServerMessage): void 
     messageType: msg.type,
     socketCount: sockets.size,
     contentLength: msg.type === 'token' ? msg.content?.length ?? 0 : undefined,
-    taskCount: msg.type === 'tasks' ? msg.tasks?.length ?? 0 : undefined,
+    taskCount: msg.type === 'tasks' || msg.type === 'preview_tasks' ? msg.tasks?.length ?? 0 : undefined,
     errorMessage: msg.type === 'error' ? msg.message : undefined,
   });
   for (const socket of sockets) {

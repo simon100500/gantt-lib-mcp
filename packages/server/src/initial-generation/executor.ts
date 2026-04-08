@@ -21,6 +21,7 @@ export type ExecuteInitialProjectPlanInput = {
     ): Promise<CommitProjectCommandResponse>;
   };
   serverDate: string;
+  onCompiled?: (compiledSchedule: CompiledInitialSchedule) => Promise<void> | void;
 };
 
 export type ExecuteInitialProjectPlanResult =
@@ -89,6 +90,8 @@ export async function executeInitialProjectPlan(
       hasBrokenReferences: error.issues.length > 0,
     };
   }
+
+  await input.onCompiled?.(compiledSchedule);
 
   const commitResponse = await input.commandService.commitCommand({
     projectId: input.projectId,

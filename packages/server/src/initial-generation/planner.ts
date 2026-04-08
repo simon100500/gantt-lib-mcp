@@ -83,6 +83,12 @@ function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage'
     'For social infrastructure such as a kindergarten, preserve domain-specific workstreams like group rooms, пищеблок, прачечная, safety systems, site play areas, and commissioning.',
     'Do not optimize for fewer phases. Optimize for correct decomposition.',
     'Do not use placeholder titles like "Этап 1", "Подэтап 2", "Задача 3".',
+    'Each task title must describe exactly one construction operation.',
+    'Each task title must have one dominant completion criterion and one dominant crew/work package.',
+    'Do not combine different operations in one task title with "и", "/", "+", commas, or similar compound wording.',
+    'If the wording implies multiple operations, split them into separate tasks or separate subphases.',
+    'Task-level compound formulations are forbidden.',
+    'Each subphase title must describe one coherent grouping, not multiple unrelated operations compressed together.',
     `Object type: ${input.brief.objectType}`,
     `Domain context: ${input.reference.domainContextSummary}`,
     `Starter schedule expectation: ${input.brief.starterScheduleExpectation}`,
@@ -253,16 +259,58 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? value as Record<string, unknown> : null;
 }
 
+function parseStringDependency(
+  input: string,
+  structureTaskKeys: Set<string>,
+): ProjectPlanDependency | null {
+  const normalized = input.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (structureTaskKeys.has(normalized)) {
+    return {
+      nodeKey: normalized,
+      type: 'FS',
+      lagDays: 0,
+    };
+  }
+
+  const suffixMatch = normalized.match(/^(.*?)(FS|SS|FF|SF)([+-]?\d+)?$/);
+  if (!suffixMatch) {
+    return null;
+  }
+
+  const [, candidateNodeKey, type, lagDaysRaw] = suffixMatch;
+  const nodeKey = candidateNodeKey?.trim() ?? '';
+  if (!nodeKey || !structureTaskKeys.has(nodeKey)) {
+    return null;
+  }
+
+  const lagDays = lagDaysRaw ? Number.parseInt(lagDaysRaw, 10) : 0;
+  return {
+    nodeKey,
+    type: type as ProjectPlanDependencyType,
+    lagDays: Number.isInteger(lagDays) ? lagDays : 0,
+  };
+}
+
 function normalizeDependency(
   input: unknown,
   structureTaskKeys: Set<string>,
 ): ProjectPlanDependency | null {
+  if (typeof input === 'string') {
+    return parseStringDependency(input, structureTaskKeys);
+  }
+
   const record = asObject(input);
   if (!record) {
     return null;
   }
 
-  const nodeKey = typeof record.nodeKey === 'string' ? record.nodeKey.trim() : '';
+  const taskKey = typeof record.taskKey === 'string' ? record.taskKey.trim() : '';
+  const fallbackNodeKey = typeof record.nodeKey === 'string' ? record.nodeKey.trim() : '';
+  const nodeKey = taskKey || fallbackNodeKey;
   if (!nodeKey || !structureTaskKeys.has(nodeKey)) {
     return null;
   }
