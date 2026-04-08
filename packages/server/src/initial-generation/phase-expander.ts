@@ -1,5 +1,6 @@
 import type { ResolvedDomainReference } from './domain-reference.js';
 import { evaluatePhaseExpansionQuality } from './quality-gate.js';
+import { normalizeGeneratedTitle } from './title-policy.js';
 import type {
   ExpandedPhasePlan,
   ExpandedPhaseTask,
@@ -47,7 +48,6 @@ function buildExpansionPrompt(input: ExpandPhasesInput, phase: SkeletonPhase): s
   const nextPhase = currentIndex >= 0 && currentIndex < orderedPhases.length - 1 ? orderedPhases[currentIndex + 1] : null;
 
   return [
-    `Model: ${input.modelDecision.selectedModel}`,
     'You are expanding one construction phase into executable child tasks.',
     'Return strict ExpandedPhasePlan JSON only. No markdown, no prose, no code fences.',
     'ExpandedPhasePlan JSON only with keys: phaseKey, tasks.',
@@ -64,6 +64,9 @@ function buildExpansionPrompt(input: ExpandPhasesInput, phase: SkeletonPhase): s
     `Current phase work packages: ${phase.workPackages.map((pkg) => pkg.title).join(' | ')}`,
     previousPhase ? `Previous phase: ${previousPhase.title}` : 'Previous phase: none',
     nextPhase ? `Next phase: ${nextPhase.title}` : 'Next phase: none',
+    'Return 3 to 5 child tasks only for this first pass. Never return more than 5 tasks.',
+    'Use no more than 2 entry tasks in the phase.',
+    'Keep every task title concise: one action plus one object, usually 30 to 55 characters, never longer than 70.',
     'Mark likely start tasks with sequenceRole="entry" and likely finish tasks with sequenceRole="exit" when clear.',
     'Use realistic durations in days. The dependency graph plus durations will determine dates later.',
   ].join('\n');
@@ -80,6 +83,7 @@ function buildExpansionRepairPrompt(
     `Phase: ${phase.title}`,
     `Criticism: ${verdict.reasons.join(', ')}`,
     `Metrics: tasks=${verdict.metrics.taskCount}, dependencies=${verdict.metrics.dependencyCount}, entryTasks=${verdict.metrics.entryTaskCount}, exitTasks=${verdict.metrics.exitTaskCount}, genericTitleRatio=${verdict.metrics.genericTitleRatio.toFixed(2)}`,
+    'Return 3 to 5 tasks only, no more than 2 entry tasks, and keep titles under 70 characters.',
     'Previous expansion:',
     JSON.stringify(expansion, null, 2),
   ].join('\n');
@@ -142,9 +146,9 @@ function normalizeTask(input: unknown, index: number): ExpandedPhaseTask {
       ? value.id.trim()
       : buildGeneratedTaskKey(value.title ?? value.name, index);
   const title = typeof value.title === 'string' && value.title.trim().length > 0
-    ? value.title.trim()
+    ? normalizeGeneratedTitle(value.title, nodeKey)
     : typeof value.name === 'string' && value.name.trim().length > 0
-      ? value.name.trim()
+      ? normalizeGeneratedTitle(value.name, nodeKey)
       : nodeKey;
 
   if (PLACEHOLDER_TITLE_PATTERN.test(title)) {

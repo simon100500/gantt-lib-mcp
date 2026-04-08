@@ -135,19 +135,18 @@ describe('runInitialGeneration', () => {
     assert.equal(result.ok, true);
     assert.equal(result.outcome, 'complete');
     assert.equal(harness.committedCommands.length, 5);
-    assert.deepEqual(
-      harness.events.map((entry) => entry.event).slice(0, 6),
-      [
-        'object_type_inference',
-        'model_routing_decision',
-        'wbs_skeleton_output',
-        'wbs_skeleton_verdict',
-        'phase_expansion_output',
-        'phase_expansion_verdict',
-      ],
-    );
+    assert.deepEqual(harness.events.map((entry) => entry.event).slice(0, 4), [
+      'object_type_inference',
+      'model_routing_decision',
+      'wbs_skeleton_output',
+      'wbs_skeleton_verdict',
+    ]);
+    assert.equal(harness.events[4]?.event, 'tasks_broadcast');
+    assert.ok(harness.events.some((entry) => entry.event === 'phase_expansion_output'));
+    assert.ok(harness.events.some((entry) => entry.event === 'phase_expansion_verdict'));
     assert.ok(harness.events.some((entry) => entry.event === 'cross_phase_linking_verdict'));
     assert.ok(harness.events.some((entry) => entry.event === 'compile_verdict'));
+    assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 6);
   });
 
   it('returns planning failure before any commit when skeleton is weak', async () => {
@@ -182,5 +181,6 @@ describe('runInitialGeneration', () => {
     assert.equal(result.outcome, 'partial');
     assert.ok(harness.committedCommands.length >= 2);
     assert.ok(harness.events.some((entry) => entry.event === 'compile_verdict'));
+    assert.ok(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length >= 2);
   });
 });

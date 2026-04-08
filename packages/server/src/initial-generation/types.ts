@@ -89,8 +89,11 @@ export type ProjectPlan = ExecutableProjectPlan;
 
 export type SkeletonRepairReason =
   | 'too_few_phases'
+  | 'too_many_phases'
   | 'too_few_work_packages'
+  | 'too_many_work_packages'
   | 'placeholder_titles'
+  | 'oversized_titles'
   | 'weak_object_fit'
   | 'missing_requested_component'
   | 'weak_phase_decomposition';
@@ -114,8 +117,11 @@ export type SkeletonQualityVerdict = {
 
 export type PhaseExpansionRepairReason =
   | 'too_few_tasks'
+  | 'too_many_tasks'
   | 'placeholder_titles'
+  | 'oversized_titles'
   | 'missing_entry_task'
+  | 'too_many_entry_tasks'
   | 'missing_exit_task'
   | 'broken_within_phase_dependency'
   | 'weak_within_phase_sequence'
@@ -140,10 +146,12 @@ export type PhaseExpansionQualityVerdict = {
 export type RepairReason =
   | 'missing_hierarchy'
   | 'placeholder_titles'
+  | 'oversized_titles'
   | 'weak_coverage'
   | 'weak_sequence'
   | 'too_few_phases'
   | 'too_few_tasks'
+  | 'too_many_tasks'
   | 'missing_dependency_graph'
   | 'weak_cross_phase_sequence'
   | 'weak_subject_specificity'

@@ -106,6 +106,69 @@ describe('initial-generation quality gate', () => {
     assert.ok(verdict.reasons.includes('placeholder_titles'));
   });
 
+  it('rejects oversized starter scope and long enumerative titles', () => {
+    const brief = buildGenerationBrief({
+      userMessage: 'Построй график',
+      reference: resolveDomainReference({ userMessage: 'Построй график' }),
+    });
+
+    const skeletonVerdict = evaluateSkeletonQuality({
+      projectType: 'private_residential_house',
+      assumptions: [],
+      phases: [
+        { phaseKey: 'phase-1', title: 'Подготовка участка, временные дороги, ограждение и бытовой городок', orderHint: 1, workPackages: [{ workPackageKey: 'wp-1', title: 'Разбивка осей' }, { workPackageKey: 'wp-2', title: 'Ограждение' }, { workPackageKey: 'wp-3', title: 'Подъезды' }, { workPackageKey: 'wp-4', title: 'Бытовой городок' }, { workPackageKey: 'wp-5', title: 'Подключения' }, { workPackageKey: 'wp-6', title: 'Охрана труда' }] },
+        { phaseKey: 'phase-2', title: 'Фундамент', orderHint: 2, workPackages: [{ workPackageKey: 'wp-1', title: 'Котлован' }, { workPackageKey: 'wp-2', title: 'Основание' }, { workPackageKey: 'wp-3', title: 'Армирование' }] },
+        { phaseKey: 'phase-3', title: 'Коробка', orderHint: 3, workPackages: [{ workPackageKey: 'wp-1', title: 'Стены' }, { workPackageKey: 'wp-2', title: 'Перекрытия' }, { workPackageKey: 'wp-3', title: 'Кровля' }] },
+        { phaseKey: 'phase-4', title: 'Инженерия', orderHint: 4, workPackages: [{ workPackageKey: 'wp-1', title: 'ОВ' }, { workPackageKey: 'wp-2', title: 'ВК' }, { workPackageKey: 'wp-3', title: 'ЭОМ' }] },
+        { phaseKey: 'phase-5', title: 'Отделка', orderHint: 5, workPackages: [{ workPackageKey: 'wp-1', title: 'Черновая' }, { workPackageKey: 'wp-2', title: 'Чистовая' }, { workPackageKey: 'wp-3', title: 'Фасады' }] },
+        { phaseKey: 'phase-6', title: 'Сдача', orderHint: 6, workPackages: [{ workPackageKey: 'wp-1', title: 'ПНР' }, { workPackageKey: 'wp-2', title: 'Испытания' }, { workPackageKey: 'wp-3', title: 'Документы' }] },
+        { phaseKey: 'phase-7', title: 'Благоустройство', orderHint: 7, workPackages: [{ workPackageKey: 'wp-1', title: 'Дорожки' }, { workPackageKey: 'wp-2', title: 'Озеленение' }, { workPackageKey: 'wp-3', title: 'Освещение' }] },
+      ],
+    }, brief, 'Построй график');
+
+    const expansionVerdict = evaluatePhaseExpansionQuality({
+      phaseKey: 'phase-shell',
+      tasks: [
+        { nodeKey: 'task-1', title: 'Разработка котлована', durationDays: 2, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+        { nodeKey: 'task-2', title: 'Устройство основания', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-1', type: 'FS', lagDays: 0 }], sequenceRole: 'entry' },
+        { nodeKey: 'task-3', title: 'Монтаж дренажа, выпусков канализации, вводов водоснабжения и гильз под коммуникации', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-2', type: 'FS', lagDays: 0 }], sequenceRole: 'entry' },
+        { nodeKey: 'task-4', title: 'Армирование', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-3', type: 'FS', lagDays: 0 }] },
+        { nodeKey: 'task-5', title: 'Бетонирование', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-4', type: 'FS', lagDays: 0 }] },
+        { nodeKey: 'task-6', title: 'Контроль', durationDays: 1, dependsOnWithinPhase: [{ nodeKey: 'task-5', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+      ],
+    });
+
+    const planVerdict = evaluateProjectPlanQuality({
+      projectType: 'private_residential_house',
+      assumptions: [],
+      nodes: [
+        ...Array.from({ length: 6 }, (_, phaseIndex) => ({
+          nodeKey: `phase-${phaseIndex + 1}`,
+          title: `Фаза ${phaseIndex + 1}`,
+          kind: 'phase' as const,
+          durationDays: 1,
+          dependsOn: [],
+        })),
+        ...Array.from({ length: 31 }, (_, taskIndex) => ({
+          nodeKey: `task-${taskIndex + 1}`,
+          title: `Работа ${taskIndex + 1}`,
+          parentNodeKey: `phase-${(taskIndex % 6) + 1}`,
+          kind: 'task' as const,
+          durationDays: 1,
+          dependsOn: taskIndex === 0 ? [] : [{ nodeKey: `task-${taskIndex}`, type: 'FS' as const, lagDays: 0 }],
+        })),
+      ],
+    }, brief);
+
+    assert.ok(skeletonVerdict.reasons.includes('too_many_phases'));
+    assert.ok(skeletonVerdict.reasons.includes('too_many_work_packages'));
+    assert.ok(skeletonVerdict.reasons.includes('oversized_titles'));
+    assert.ok(expansionVerdict.reasons.includes('too_many_tasks'));
+    assert.ok(expansionVerdict.reasons.includes('too_many_entry_tasks'));
+    assert.ok(expansionVerdict.reasons.includes('oversized_titles'));
+    assert.ok(planVerdict.reasons.includes('too_many_tasks'));
+  });
+
   it('flags executable plans that still lack enough task graph depth', () => {
     const brief = buildGenerationBrief({
       userMessage: 'Построй график',

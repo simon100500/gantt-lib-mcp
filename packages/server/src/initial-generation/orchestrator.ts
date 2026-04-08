@@ -138,9 +138,9 @@ async function saveAssistantMessage(
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
 }
 
-async function finishSuccessfulRun(
+async function broadcastTasksSnapshot(
   input: RunInitialGenerationInput,
-  assistantResponse: string,
+  reason: string,
 ): Promise<ListedTask[]> {
   const { tasks } = await input.services.taskService.list(input.projectId);
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks });
@@ -148,10 +148,20 @@ async function finishSuccessfulRun(
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
+    reason,
     taskCount: tasks.length,
     taskIds: tasks.map((task) => task.id),
     taskNames: tasks.map((task) => task.name),
   });
+
+  return tasks;
+}
+
+async function finishSuccessfulRun(
+  input: RunInitialGenerationInput,
+  assistantResponse: string,
+): Promise<ListedTask[]> {
+  const tasks = await broadcastTasksSnapshot(input, 'final_state');
   input.broadcastToSession(input.sessionId, { type: 'done' });
   await input.logger.debug('agent_run_completed', {
     runId: input.runId,
@@ -337,6 +347,7 @@ export async function runInitialGeneration(
         failureStage: 'compile',
       };
     }
+    await broadcastTasksSnapshot(input, 'skeleton_commit');
 
     const orderedPhases = [...skeletonResult.skeleton.phases].sort((left, right) => left.orderHint - right.orderHint);
     const expandedPhases: Array<{
@@ -457,6 +468,7 @@ export async function runInitialGeneration(
       }
 
       commitContext = commitResult;
+      await broadcastTasksSnapshot(input, `phase_commit:${expandedPhase.phase.phaseKey}`);
     }
 
     const executable = buildExecutablePlan({

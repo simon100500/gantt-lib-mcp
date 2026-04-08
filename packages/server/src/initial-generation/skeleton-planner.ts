@@ -1,5 +1,6 @@
 import type { ResolvedDomainReference } from './domain-reference.js';
 import { evaluateSkeletonQuality } from './quality-gate.js';
+import { normalizeGeneratedTitle } from './title-policy.js';
 import type {
   GenerationBrief,
   InitialGenerationPlannerStage,
@@ -37,7 +38,6 @@ export type PlanSkeletonResult = {
 
 function buildSkeletonPrompt(input: Pick<PlanSkeletonInput, 'userMessage' | 'brief' | 'reference' | 'modelDecision'>): string {
   return [
-    `Model: ${input.modelDecision.selectedModel}`,
     'You are an expert construction WBS planner.',
     'Return strict ProjectWbsSkeleton JSON only. No markdown, no prose, no code fences.',
     'ProjectWbsSkeleton JSON only with keys: projectType, assumptions, phases.',
@@ -45,7 +45,7 @@ function buildSkeletonPrompt(input: Pick<PlanSkeletonInput, 'userMessage' | 'bri
     'Each work package must contain: workPackageKey, title, objective?.',
     'Do not output dates, startDate, endDate, calendars, milestones, or compiler-ready task graphs.',
     'Do not output task-level dependencies or executable sequencing.',
-    'This stage defines only high-level phases and work packages.',
+    'This stage defines only high-level phases and work packages for a compact first pass.',
     `User request: ${input.userMessage}`,
     `Object type: ${input.brief.objectType}`,
     `Scope signals: ${input.brief.scopeSignals.join(', ')}`,
@@ -55,7 +55,10 @@ function buildSkeletonPrompt(input: Pick<PlanSkeletonInput, 'userMessage' | 'bri
     `Reference stages: ${input.reference.stageHints.join(' -> ')}`,
     `Parallel workstreams: ${input.reference.parallelWorkstreams.join(' | ')}`,
     `Server inference policy: ${input.brief.serverInferencePolicy}`,
-    'For broad construction generation provide at least 4 top-level phases and at least 3 work packages in each major phase.',
+    'For broad construction generation provide 4 to 6 top-level phases.',
+    'Each phase must contain 3 to 5 work packages only.',
+    'Treat this as a starter schedule budget, not a full production WBS.',
+    'Keep every phase title and work package title concise: one action plus one object, usually 30 to 55 characters, never longer than 70.',
     'Requested components such as garage or floor count must be reflected explicitly in phase titles or work packages.',
   ].join('\n');
 }
@@ -73,7 +76,8 @@ function buildSkeletonRepairPrompt(
     `Metrics: phases=${verdict.metrics.phaseCount}, workPackages=${verdict.metrics.workPackageCount}, minWorkPackagesPerPhase=${verdict.metrics.minWorkPackagesPerPhase}, genericTitleRatio=${verdict.metrics.genericTitleRatio.toFixed(2)}, requestedComponentCoverage=${verdict.metrics.requestedComponentCoverage.toFixed(2)}`,
     `Object type: ${input.brief.objectType}`,
     `Domain context: ${input.reference.domainContextSummary}`,
-    'Broad starter schedules must retain at least 4 phases and cover requested object parts explicitly.',
+    'Broad starter schedules must retain 4 to 6 phases and 3 to 5 work packages per phase.',
+    'Keep titles concise and never longer than 70 characters.',
     'Previous skeleton:',
     JSON.stringify(skeleton, null, 2),
   ].join('\n');
@@ -119,9 +123,9 @@ function normalizeWorkPackage(input: unknown, index: number): SkeletonWorkPackag
       ? value.id.trim()
       : buildGeneratedWorkPackageKey(value.title ?? value.name, index);
   const title = typeof value.title === 'string' && value.title.trim().length > 0
-    ? value.title.trim()
+    ? normalizeGeneratedTitle(value.title, workPackageKey)
     : typeof value.name === 'string' && value.name.trim().length > 0
-      ? value.name.trim()
+      ? normalizeGeneratedTitle(value.name, workPackageKey)
       : workPackageKey;
 
   if (PLACEHOLDER_TITLE_PATTERN.test(title)) {
@@ -143,9 +147,9 @@ function normalizePhase(input: unknown, index: number): SkeletonPhase {
       ? value.id.trim()
       : buildGeneratedPhaseKey(value.title ?? value.name, index);
   const title = typeof value.title === 'string' && value.title.trim().length > 0
-    ? value.title.trim()
+    ? normalizeGeneratedTitle(value.title, phaseKey)
     : typeof value.name === 'string' && value.name.trim().length > 0
-      ? value.name.trim()
+      ? normalizeGeneratedTitle(value.name, phaseKey)
       : phaseKey;
 
   if (PLACEHOLDER_TITLE_PATTERN.test(title)) {

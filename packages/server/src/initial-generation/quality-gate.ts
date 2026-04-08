@@ -11,9 +11,15 @@ import type {
   SkeletonQualityMetrics,
   SkeletonQualityVerdict,
 } from './types.js';
+import { isEnumerativeTitle, isTitleTooLong } from './title-policy.js';
 
 const PLACEHOLDER_TITLE_PATTERN = /^(?:этап|задача|stage|task)\s+\d+$/i;
 const GENERIC_TITLE_PATTERN = /^(?:строительн(?:ые)?\s+работы|общ(?:ие)?\s+работы|работы|construction works|general works|phase|stage)$/i;
+const MAX_STARTER_PHASES = 6;
+const MAX_WORK_PACKAGES_PER_PHASE = 5;
+const MAX_TASKS_PER_PHASE = 5;
+const MAX_ENTRY_TASKS_PER_PHASE = 2;
+const MAX_STARTER_TASK_NODES = 30;
 
 function isBroadRequest(brief: GenerationBrief): boolean {
   return brief.scopeSignals.includes('broad_request') || brief.scopeSignals.includes('starter_generation_request');
@@ -99,13 +105,23 @@ export function evaluateSkeletonQuality(
   if (metrics.phaseCount < (broadRequest ? 4 : 2)) {
     reasons.push('too_few_phases');
   }
+  if (broadRequest && metrics.phaseCount > MAX_STARTER_PHASES) {
+    reasons.push('too_many_phases');
+  }
 
   if (metrics.workPackageCount < (broadRequest ? 12 : 4) || metrics.minWorkPackagesPerPhase < (broadRequest ? 2 : 1)) {
     reasons.push('too_few_work_packages');
   }
+  if (broadRequest && skeleton.phases.some((phase) => phase.workPackages.length > MAX_WORK_PACKAGES_PER_PHASE)) {
+    reasons.push('too_many_work_packages');
+  }
 
   if (metrics.genericTitleCount > 0) {
     reasons.push('placeholder_titles');
+  }
+
+  if (titlesAreTooLongOrEnumerative(skeleton.phases.flatMap((phase) => [phase.title, ...phase.workPackages.map((pkg) => pkg.title)]))) {
+    reasons.push('oversized_titles');
   }
 
   if (metrics.objectTypeSignalCoverage < (broadRequest ? 0.08 : 0.04)) {
@@ -155,9 +171,20 @@ export function evaluatePhaseExpansionQuality(expansion: ExpandedPhasePlan): Pha
   if (metrics.taskCount < 3) {
     reasons.push('too_few_tasks');
   }
+  if (metrics.taskCount > MAX_TASKS_PER_PHASE) {
+    reasons.push('too_many_tasks');
+  }
 
   if (metrics.genericTitleCount > 0) {
     reasons.push('placeholder_titles');
+  }
+
+  if (metrics.entryTaskCount > MAX_ENTRY_TASKS_PER_PHASE) {
+    reasons.push('too_many_entry_tasks');
+  }
+
+  if (titlesAreTooLongOrEnumerative(expansion.tasks.map((task) => task.title))) {
+    reasons.push('oversized_titles');
   }
 
   if (metrics.entryTaskCount < 1) {
@@ -319,6 +346,10 @@ export function evaluateProjectPlanQuality(plan: ExecutableProjectPlan, brief: G
     reasons.push('too_few_tasks');
   }
 
+  if (broadRequest && metrics.taskNodeCount > MAX_STARTER_TASK_NODES) {
+    reasons.push('too_many_tasks');
+  }
+
   if (broadRequest && metrics.dependencyCount < 8) {
     reasons.push('missing_dependency_graph');
   }
@@ -350,4 +381,8 @@ export function evaluateProjectPlanQuality(plan: ExecutableProjectPlan, brief: G
     score: Math.max(0, 100 - uniqueReasons.length * 12.5),
     metrics,
   };
+}
+
+function titlesAreTooLongOrEnumerative(values: string[]): boolean {
+  return values.some((value) => isTitleTooLong(value) || isEnumerativeTitle(value));
 }
