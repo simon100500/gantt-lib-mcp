@@ -86,35 +86,45 @@ describe('agent simple mutation heuristic', () => {
 });
 
 describe('initial-generation route selection', () => {
-  it('routes broad empty-project prompts into initial_generation', () => {
-    assert.deepEqual(selectAgentRoute({
+  it('routes broad empty-project prompts into initial_generation', async () => {
+    assert.deepEqual(await selectAgentRoute({
       userMessage: 'Построй типичный график строительства',
       taskCount: 0,
       hasHierarchy: false,
+      model: 'gpt-route',
+      routeDecisionQuery: async () => JSON.stringify({
+        route: 'initial_generation',
+        confidence: 0.96,
+        reason: 'empty_project_broad_schedule_creation',
+        signals: ['empty_project', 'user_requests_new_schedule', 'request_scope_is_broad'],
+      }),
     }), {
       route: 'initial_generation',
-      reason: 'empty_project_broad_generation_request',
+      confidence: 0.96,
+      reason: 'empty_project_broad_schedule_creation',
+      signals: ['empty_project', 'user_requests_new_schedule', 'request_scope_is_broad'],
       isEmptyProject: true,
-      requestClass: 'broad_generation',
       hasHierarchy: false,
       taskCount: 0,
+      projectStateSummary: 'empty_project=true, task_count=0, has_hierarchy=false',
+      usedModelDecision: true,
     });
   });
 
-  it('treats vague bootstrap prompts as initial generation, not clarification', () => {
-    assert.equal(selectAgentRoute({
+  it('treats vague bootstrap prompts as initial generation, not clarification', async () => {
+    assert.equal((await selectAgentRoute({
       userMessage: 'Построй график',
       taskCount: 0,
       hasHierarchy: false,
-    }).route, 'initial_generation');
+    })).route, 'initial_generation');
   });
 
-  it('keeps ordinary edit prompts on mutation flow', () => {
-    assert.equal(selectAgentRoute({
+  it('keeps ordinary edit prompts on mutation flow', async () => {
+    assert.equal((await selectAgentRoute({
       userMessage: 'Сдвинь фундамент на 3 дня',
       taskCount: 4,
       hasHierarchy: true,
-    }).route, 'mutation');
+    })).route, 'mutation');
   });
 });
 
@@ -165,7 +175,7 @@ describe('initial-generation model routing', () => {
 
 describe('agent initial-generation integration surface', () => {
   it('removes the legacy template fast path from agent.ts', () => {
-    const source = readFileSync(join(__dirname, 'agent.ts'), 'utf-8');
+    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
 
     assert.doesNotMatch(source, /parseInitialScheduleTemplateIntent/);
     assert.doesNotMatch(source, /tryInitialScheduleTemplateFastPath/);
@@ -173,9 +183,10 @@ describe('agent initial-generation integration surface', () => {
   });
 
   it('logs route and model routing decisions before SDK execution', () => {
-    const source = readFileSync(join(__dirname, 'agent.ts'), 'utf-8');
+    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
 
     assert.match(source, /route_selection/);
+    assert.match(source, /route_decision_evidence/);
     assert.match(source, /model_routing_decision/);
     assert.match(source, /runInitialGeneration/);
     assert.match(source, /OPENAI_CHEAP_MODEL|cheap_model/);

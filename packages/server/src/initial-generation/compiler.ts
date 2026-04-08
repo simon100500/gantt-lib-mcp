@@ -28,6 +28,9 @@ export type CompileDiagnostic = {
   code: 'compiled_schedule';
   message: string;
   retainedNodeCount: number;
+  compiledTaskCount: number;
+  compiledDependencyCount: number;
+  topLevelPhaseCount: number;
 };
 
 export type CompiledInitialSchedule = {
@@ -37,6 +40,10 @@ export type CompiledInitialSchedule = {
   command: Extract<ProjectCommand, { type: 'create_tasks_batch' }>;
   nodeKeyToTaskId: Record<string, string>;
   retainedNodeCount: number;
+  compiledTaskCount: number;
+  compiledDependencyCount: number;
+  topLevelPhaseCount: number;
+  crossPhaseDependencyCount: number;
   diagnostics: CompileDiagnostic[];
 };
 
@@ -125,6 +132,11 @@ export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput)
     };
   });
 
+  const compiledTaskCount = commandTasks.filter((task) => Boolean(task.parentId)).length;
+  const compiledDependencyCount = commandTasks.reduce((sum, task) => sum + (task.dependencies?.length ?? 0), 0);
+  const topLevelPhaseCount = commandTasks.filter((task) => !task.parentId).length;
+  const crossPhaseDependencyCount = countCrossPhaseDependencies(orderedNodes, commandTasks, nodeKeyToTaskId);
+
   return {
     projectId: input.projectId,
     baseVersion: input.baseVersion,
@@ -135,13 +147,72 @@ export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput)
     },
     nodeKeyToTaskId,
     retainedNodeCount: normalizedPlan.nodes.length,
+    compiledTaskCount,
+    compiledDependencyCount,
+    topLevelPhaseCount,
+    crossPhaseDependencyCount,
     diagnostics: [{
       level: 'info',
       code: 'compiled_schedule',
       message: `Compiled ${normalizedPlan.nodes.length} nodes into one create_tasks_batch command`,
       retainedNodeCount: normalizedPlan.nodes.length,
+      compiledTaskCount,
+      compiledDependencyCount,
+      topLevelPhaseCount,
     }],
   };
+}
+
+function countCrossPhaseDependencies(
+  orderedNodes: NormalizedPlanNode[],
+  commandTasks: CreateTaskInput[],
+  nodeKeyToTaskId: Record<string, string>,
+): number {
+  const nodeMap = new Map(orderedNodes.map((node) => [node.nodeKey, node]));
+  const taskIdToNodeKey = new Map(Object.entries(nodeKeyToTaskId).map(([nodeKey, taskId]) => [taskId, nodeKey]));
+
+  const getRootPhaseKey = (node: NormalizedPlanNode): string | null => {
+    if (!node.parentNodeKey) {
+      return node.kind === 'phase' ? node.nodeKey : null;
+    }
+
+    const parent = nodeMap.get(node.parentNodeKey);
+    if (!parent) {
+      return null;
+    }
+
+    return getRootPhaseKey(parent);
+  };
+
+  return commandTasks.reduce((count, task) => {
+    if (!task.parentId || typeof task.id !== 'string') {
+      return count;
+    }
+
+    const nodeKey = taskIdToNodeKey.get(task.id);
+    if (!nodeKey) {
+      return count;
+    }
+
+    const node = nodeMap.get(nodeKey);
+    if (!node) {
+      return count;
+    }
+
+    const sourcePhase = getRootPhaseKey(node);
+    return count + (task.dependencies ?? []).filter((dependency) => {
+      const targetNodeKey = taskIdToNodeKey.get(dependency.taskId);
+      if (!targetNodeKey) {
+        return false;
+      }
+      const targetNode = nodeMap.get(targetNodeKey);
+      if (!targetNode) {
+        return false;
+      }
+
+      return sourcePhase !== null && getRootPhaseKey(targetNode) !== sourcePhase;
+    }).length;
+  }, 0);
 }
 
 function normalizePlan(plan: ProjectPlan): { projectType: string; assumptions: string[]; nodes: NormalizedPlanNode[] } {

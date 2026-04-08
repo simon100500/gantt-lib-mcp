@@ -97,6 +97,10 @@ describe('compileInitialProjectPlan', () => {
 
     assert.equal(compiled.command.type, 'create_tasks_batch');
     assert.equal(compiled.retainedNodeCount, PLAN.nodes.length);
+    assert.equal(compiled.compiledTaskCount, 5);
+    assert.equal(compiled.compiledDependencyCount, 4);
+    assert.equal(compiled.topLevelPhaseCount, 3);
+    assert.equal(compiled.crossPhaseDependencyCount, 2);
     assert.equal(Object.keys(compiled.nodeKeyToTaskId).length, PLAN.nodes.length);
 
     const excavation = taskByName('Excavation', compiled.command.tasks);
@@ -200,12 +204,16 @@ describe('executeInitialProjectPlan', () => {
       nodes: [
         { nodeKey: 'phase-a', title: 'Site prep', kind: 'phase', durationDays: 1, dependsOn: [] },
         { nodeKey: 'task-a', title: 'Survey', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'task-a2', title: 'Temp access', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-a', type: 'FS' }] },
         { nodeKey: 'phase-b', title: 'Foundation', kind: 'phase', durationDays: 1, dependsOn: [] },
         { nodeKey: 'task-b', title: 'Footings', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-a', type: 'FS' }] },
+        { nodeKey: 'task-b2', title: 'Waterproofing', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-b', type: 'FS' }] },
         { nodeKey: 'phase-c', title: 'Shell', kind: 'phase', durationDays: 1, dependsOn: [] },
         { nodeKey: 'task-c', title: 'Framing', parentNodeKey: 'phase-c', kind: 'task', durationDays: 3, dependsOn: [{ nodeKey: 'missing-task', type: 'FS' }] },
+        { nodeKey: 'task-c2', title: 'Roofing', parentNodeKey: 'phase-c', kind: 'task', durationDays: 3, dependsOn: [{ nodeKey: 'task-c', type: 'FS' }] },
         { nodeKey: 'phase-d', title: 'Finishes', kind: 'phase', durationDays: 1, dependsOn: [] },
         { nodeKey: 'task-d', title: 'Painting', parentNodeKey: 'phase-d', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-c', type: 'SS' }] },
+        { nodeKey: 'task-d2', title: 'Handover', parentNodeKey: 'phase-d', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-d', type: 'FS' }, { nodeKey: 'task-c2', type: 'FS' }] },
       ],
     };
 
@@ -248,6 +256,8 @@ describe('executeInitialProjectPlan', () => {
     assert.match(result.message, /partial/i);
     assert.deepEqual(result.droppedNodeKeys, []);
     assert.deepEqual(result.droppedDependencyNodeKeys, ['missing-task']);
+    assert.equal(result.compiledSchedule.compiledTaskCount, 8);
+    assert.equal(result.compiledSchedule.compiledDependencyCount >= 3, true);
     assert.equal(committed.length, 1);
     assert.equal(committed[0]!.actorType, 'agent');
     assert.equal(committed[0]!.actorId, 'agent-7');
@@ -293,12 +303,13 @@ describe('executeInitialProjectPlan', () => {
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'controlled_rejection');
     assert.equal(result.retainedTopLevelPhaseCount, 2);
+    assert.equal(result.compiledDependencyCount, 0);
     assert.equal(commitCalls, 0);
     assert.match(result.message, /could not build a reliable starter schedule/i);
   });
 
   it('does not reference mutation-agent fallback symbols in executor.ts', () => {
-    const source = readFileSync(join(__dirname, 'executor.ts'), 'utf-8');
+    const source = readFileSync(join(__dirname, '../../src/initial-generation/executor.ts'), 'utf-8');
 
     assert.doesNotMatch(source, /runInitialGeneration|executeAgentAttempt|buildPrompt/);
   });

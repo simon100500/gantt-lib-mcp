@@ -9,7 +9,10 @@ import {
 import type { ProjectPlan, ProjectPlanDependency, ProjectPlanNode } from './types.js';
 
 const MIN_RETAINED_NODE_RATIO = 0.6; // 60%
-const MIN_RETAINED_TOP_LEVEL_PHASES = 3; // 3 top-level phases
+const MIN_RETAINED_TOP_LEVEL_PHASES = 4;
+const MIN_COMPILED_TASKS = 8;
+const MIN_COMPILED_DEPENDENCIES = 3;
+const MIN_CROSS_PHASE_DEPENDENCIES = 2;
 
 export type ExecuteInitialProjectPlanInput = {
   projectId: string;
@@ -46,6 +49,9 @@ export type ExecuteInitialProjectPlanResult =
       retainedNodeCount: number;
       retainedNodeRatio: number;
       retainedTopLevelPhaseCount: number;
+      compiledTaskCount: number;
+      compiledDependencyCount: number;
+      crossPhaseDependencyCount: number;
       everyRetainedPhaseHasAChildTask: boolean;
       hasBrokenReferences: boolean;
       commitResponse?: Exclude<CommitProjectCommandResponse, { accepted: true }>;
@@ -67,6 +73,25 @@ export async function executeInitialProjectPlan(
       serverDate: input.serverDate,
       plan: input.plan,
     });
+    const compileFloor = evaluateCompiledScheduleFloor(compiledSchedule);
+
+    if (!compileFloor.met) {
+      return {
+        ok: false,
+        reason: 'controlled_rejection',
+        message: 'We could not build a reliable starter schedule from this request.',
+        droppedNodeKeys: [],
+        droppedDependencyNodeKeys: [],
+        retainedNodeCount: compiledSchedule.retainedNodeCount,
+        retainedNodeRatio: 1,
+        retainedTopLevelPhaseCount: compiledSchedule.topLevelPhaseCount,
+        compiledTaskCount: compiledSchedule.compiledTaskCount,
+        compiledDependencyCount: compiledSchedule.compiledDependencyCount,
+        crossPhaseDependencyCount: compiledSchedule.crossPhaseDependencyCount,
+        everyRetainedPhaseHasAChildTask: true,
+        hasBrokenReferences: false,
+      };
+    }
 
     return commitCompiledPlan(input, compiledSchedule, {
       outcome: 'complete',
@@ -97,6 +122,9 @@ export async function executeInitialProjectPlan(
         retainedNodeCount: salvaged.compiled.retainedNodeCount,
         retainedNodeRatio: salvaged.thresholds.retainedNodeRatio,
         retainedTopLevelPhaseCount: salvaged.thresholds.retainedTopLevelPhaseCount,
+        compiledTaskCount: salvaged.compiled.compiledTaskCount,
+        compiledDependencyCount: salvaged.compiled.compiledDependencyCount,
+        crossPhaseDependencyCount: salvaged.compiled.crossPhaseDependencyCount,
         everyRetainedPhaseHasAChildTask: salvaged.thresholds.everyRetainedPhaseHasAChildTask,
         hasBrokenReferences: salvaged.thresholds.hasBrokenReferences,
       };
@@ -138,6 +166,9 @@ async function commitCompiledPlan(
       retainedNodeCount: compiledSchedule.retainedNodeCount,
       retainedNodeRatio: 1,
       retainedTopLevelPhaseCount: countTopLevelPhases(compiledSchedule.command.tasks),
+      compiledTaskCount: compiledSchedule.compiledTaskCount,
+      compiledDependencyCount: compiledSchedule.compiledDependencyCount,
+      crossPhaseDependencyCount: compiledSchedule.crossPhaseDependencyCount,
       everyRetainedPhaseHasAChildTask: true,
       hasBrokenReferences: false,
       commitResponse,
@@ -388,6 +419,9 @@ function buildControlledRejection(
     retainedNodeCount: 0,
     retainedNodeRatio: originalPlan.nodes.length === 0 ? 0 : 0,
     retainedTopLevelPhaseCount: 0,
+    compiledTaskCount: 0,
+    compiledDependencyCount: 0,
+    crossPhaseDependencyCount: 0,
     everyRetainedPhaseHasAChildTask: false,
     hasBrokenReferences: true,
   };
@@ -408,4 +442,14 @@ function clonePlan(plan: ProjectPlan): ProjectPlan {
 
 function countTopLevelPhases(tasks: Array<{ parentId?: string }>): number {
   return tasks.filter((task) => !task.parentId).length;
+}
+
+function evaluateCompiledScheduleFloor(compiledSchedule: CompiledInitialSchedule): { met: boolean } {
+  return {
+    met:
+      compiledSchedule.topLevelPhaseCount >= MIN_RETAINED_TOP_LEVEL_PHASES
+      && compiledSchedule.compiledTaskCount >= MIN_COMPILED_TASKS
+      && compiledSchedule.compiledDependencyCount >= MIN_COMPILED_DEPENDENCIES
+      && compiledSchedule.crossPhaseDependencyCount >= MIN_CROSS_PHASE_DEPENDENCIES,
+  };
 }

@@ -13,12 +13,76 @@ const BASE_PLAN: ProjectPlan = {
   nodes: [
     { nodeKey: 'phase-site', title: 'Подготовка площадки', kind: 'phase', durationDays: 1, dependsOn: [] },
     { nodeKey: 'task-site', title: 'Геодезическая разбивка', parentNodeKey: 'phase-site', kind: 'task', durationDays: 2, dependsOn: [] },
-    { nodeKey: 'phase-structure', title: 'Коробка', kind: 'phase', durationDays: 1, dependsOn: [] },
-    { nodeKey: 'task-structure', title: 'Устройство фундамента', parentNodeKey: 'phase-structure', kind: 'task', durationDays: 4, dependsOn: [{ nodeKey: 'task-site', type: 'FS', lagDays: 0 }] },
-    { nodeKey: 'phase-finish', title: 'Отделка', kind: 'phase', durationDays: 1, dependsOn: [] },
-    { nodeKey: 'task-finish', title: 'Черновая отделка', parentNodeKey: 'phase-finish', kind: 'task', durationDays: 3, dependsOn: [{ nodeKey: 'task-structure', type: 'FS', lagDays: 0 }] },
+    { nodeKey: 'task-access', title: 'Временные дороги и бытовой городок', parentNodeKey: 'phase-site', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-site', type: 'FS', lagDays: 0 }] },
+    { nodeKey: 'phase-foundation', title: 'Фундамент и подземная часть', kind: 'phase', durationDays: 1, dependsOn: [] },
+    { nodeKey: 'task-excavation', title: 'Разработка котлована', parentNodeKey: 'phase-foundation', kind: 'task', durationDays: 4, dependsOn: [{ nodeKey: 'task-access', type: 'FS', lagDays: 0 }] },
+    { nodeKey: 'task-foundation', title: 'Армирование и бетонирование фундамента', parentNodeKey: 'phase-foundation', kind: 'task', durationDays: 5, dependsOn: [{ nodeKey: 'task-excavation', type: 'FS', lagDays: 1 }] },
+    { nodeKey: 'phase-shell', title: 'Коробка и кровля', kind: 'phase', durationDays: 1, dependsOn: [] },
+    { nodeKey: 'task-frame', title: 'Возведение стен и перекрытий', parentNodeKey: 'phase-shell', kind: 'task', durationDays: 8, dependsOn: [{ nodeKey: 'task-foundation', type: 'FS', lagDays: 0 }] },
+    { nodeKey: 'task-roof', title: 'Монтаж кровли и закрытие контура', parentNodeKey: 'phase-shell', kind: 'task', durationDays: 4, dependsOn: [{ nodeKey: 'task-frame', type: 'FS', lagDays: 0 }] },
+    { nodeKey: 'phase-finish', title: 'Инженерия и отделка', kind: 'phase', durationDays: 1, dependsOn: [] },
+    { nodeKey: 'task-mep', title: 'Черновой монтаж инженерных систем', parentNodeKey: 'phase-finish', kind: 'task', durationDays: 6, dependsOn: [{ nodeKey: 'task-frame', type: 'SS', lagDays: 1 }] },
+    { nodeKey: 'task-finish', title: 'Чистовая отделка и сдача', parentNodeKey: 'phase-finish', kind: 'task', durationDays: 5, dependsOn: [{ nodeKey: 'task-mep', type: 'FS', lagDays: 0 }, { nodeKey: 'task-roof', type: 'FS', lagDays: 0 }] },
   ],
 };
+
+const BASE_METRICS = {
+  phaseCount: 4,
+  taskNodeCount: 8,
+  dependencyCount: 7,
+  crossPhaseDependencyCount: 5,
+  genericTitleCount: 0,
+  genericTitleRatio: 0,
+  objectTypeSignalCoverage: 0.18,
+  passesProductAdequacyFloor: true,
+};
+
+function createVerdict(overrides?: Partial<PlanQualityVerdict>): PlanQualityVerdict {
+  return {
+    accepted: true,
+    reasons: [],
+    score: 94,
+    metrics: BASE_METRICS,
+    ...overrides,
+  };
+}
+
+function createCompiledSchedule(overrides?: Partial<ExecuteInitialProjectPlanResult & { compiledSchedule: Record<string, unknown> }>) {
+  return {
+    projectId: 'project-41',
+    baseVersion: 7,
+    serverDate: '2026-04-08',
+    command: {
+      type: 'create_tasks_batch' as const,
+      tasks: [
+        {
+          id: 'phase-site',
+          projectId: 'project-41',
+          name: 'Подготовка площадки',
+          startDate: '2026-04-08',
+          endDate: '2026-04-09',
+          sortOrder: 0,
+        },
+      ],
+    },
+    nodeKeyToTaskId: { 'phase-site': 'phase-site' },
+    retainedNodeCount: BASE_PLAN.nodes.length,
+    compiledTaskCount: 8,
+    compiledDependencyCount: 7,
+    topLevelPhaseCount: 4,
+    crossPhaseDependencyCount: 5,
+    diagnostics: [{
+      level: 'info' as const,
+      code: 'compiled_schedule' as const,
+      message: 'ok',
+      retainedNodeCount: BASE_PLAN.nodes.length,
+      compiledTaskCount: 8,
+      compiledDependencyCount: 7,
+      topLevelPhaseCount: 4,
+    }],
+    ...(overrides?.compiledSchedule ?? {}),
+  };
+}
 
 function createCommitResponse(): Extract<CommitProjectCommandResponse, { accepted: true }> {
   return {
@@ -50,27 +114,7 @@ function createHarness(overrides?: {
     ok: true as const,
     outcome: 'complete' as const,
     message: 'Built the starter schedule.',
-    compiledSchedule: {
-      projectId: 'project-41',
-      baseVersion: 7,
-      serverDate: '2026-04-08',
-      command: {
-        type: 'create_tasks_batch' as const,
-        tasks: [
-          {
-            id: 'phase-site',
-            projectId: 'project-41',
-            name: 'Подготовка площадки',
-            startDate: '2026-04-08',
-            endDate: '2026-04-09',
-            sortOrder: 0,
-          },
-        ],
-      },
-      nodeKeyToTaskId: { 'phase-site': 'phase-site' },
-      retainedNodeCount: BASE_PLAN.nodes.length,
-      diagnostics: [{ level: 'info' as const, code: 'compiled_schedule' as const, message: 'ok', retainedNodeCount: BASE_PLAN.nodes.length }],
-    },
+    compiledSchedule: createCompiledSchedule(),
     commitResponse: createCommitResponse(),
     droppedNodeKeys: [],
     droppedDependencyNodeKeys: [],
@@ -153,7 +197,7 @@ function createHarness(overrides?: {
         async planProject() {
           return {
             plan: BASE_PLAN,
-            verdict: overrides?.verdict ?? { accepted: true, reasons: [], score: 0.94 },
+            verdict: overrides?.verdict ?? createVerdict(),
             repairAttempted: overrides?.repairAttempted ?? false,
           };
         },
@@ -269,25 +313,26 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.broadcasts.length, 3);
   });
 
-  it('logs repair reasons when the quality gate requires one repair attempt', async () => {
+  it('logs repair reasons and returns a controlled planning failure when the repaired plan stays below the floor', async () => {
     const harness = createHarness({
-      verdict: {
+      verdict: createVerdict({
         accepted: false,
         reasons: ['placeholder_titles'],
-        score: 0.42,
-      },
+        score: 42,
+      }),
       repairAttempted: true,
     });
 
     const result = await runInitialGeneration(harness.input);
 
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, false);
     assert.equal(result.repairAttempted, true);
     assert.ok(harness.events.some((entry) => entry.event === 'plan_repair_requested'));
     assert.deepEqual(
       harness.events.find((entry) => entry.event === 'plan_repair_requested')?.payload.reasons,
       ['placeholder_titles'],
     );
+    assert.equal(harness.events.some((entry) => entry.event === 'compile_verdict'), false);
   });
 
   it('records compile verdict payloads for complete, partial salvage, and controlled failure outcomes', async () => {
@@ -297,15 +342,18 @@ describe('runInitialGeneration', () => {
         ok: true,
         outcome: 'partial',
         message: 'Built a partial starter schedule and skipped a few invalid plan references.',
-        compiledSchedule: {
-          projectId: 'project-41',
-          baseVersion: 7,
-          serverDate: '2026-04-08',
-          command: { type: 'create_tasks_batch', tasks: [] },
-          nodeKeyToTaskId: {},
-          retainedNodeCount: 4,
-          diagnostics: [],
-        },
+        compiledSchedule: createCompiledSchedule({
+          compiledSchedule: {
+            command: { type: 'create_tasks_batch', tasks: [] },
+            nodeKeyToTaskId: {},
+            retainedNodeCount: 12,
+            compiledTaskCount: 8,
+            compiledDependencyCount: 3,
+            topLevelPhaseCount: 4,
+            crossPhaseDependencyCount: 2,
+            diagnostics: [],
+          },
+        }),
         commitResponse: createCommitResponse(),
         droppedNodeKeys: ['task-finish'],
         droppedDependencyNodeKeys: ['missing-task'],
@@ -321,6 +369,9 @@ describe('runInitialGeneration', () => {
         retainedNodeCount: 3,
         retainedNodeRatio: 0.5,
         retainedTopLevelPhaseCount: 2,
+        compiledTaskCount: 4,
+        compiledDependencyCount: 0,
+        crossPhaseDependencyCount: 0,
         everyRetainedPhaseHasAChildTask: false,
         hasBrokenReferences: false,
       },
@@ -345,15 +396,18 @@ describe('runInitialGeneration', () => {
         ok: true,
         outcome: 'partial',
         message: 'Built a partial starter schedule and skipped a few invalid plan references.',
-        compiledSchedule: {
-          projectId: 'project-41',
-          baseVersion: 7,
-          serverDate: '2026-04-08',
-          command: { type: 'create_tasks_batch', tasks: [] },
-          nodeKeyToTaskId: {},
-          retainedNodeCount: 4,
-          diagnostics: [],
-        },
+        compiledSchedule: createCompiledSchedule({
+          compiledSchedule: {
+            command: { type: 'create_tasks_batch', tasks: [] },
+            nodeKeyToTaskId: {},
+            retainedNodeCount: 12,
+            compiledTaskCount: 8,
+            compiledDependencyCount: 3,
+            topLevelPhaseCount: 4,
+            crossPhaseDependencyCount: 2,
+            diagnostics: [],
+          },
+        }),
         commitResponse: createCommitResponse(),
         droppedNodeKeys: ['task-finish'],
         droppedDependencyNodeKeys: ['missing-task'],
@@ -379,6 +433,9 @@ describe('runInitialGeneration', () => {
         retainedNodeCount: 3,
         retainedNodeRatio: 0.5,
         retainedTopLevelPhaseCount: 2,
+        compiledTaskCount: 4,
+        compiledDependencyCount: 0,
+        crossPhaseDependencyCount: 0,
         everyRetainedPhaseHasAChildTask: false,
         hasBrokenReferences: false,
       },

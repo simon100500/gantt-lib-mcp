@@ -237,6 +237,10 @@ export async function runInitialGeneration(
       selectedModel: modelRoutingDecision.selectedModel,
       plan: planning.plan,
       repairAttempted: planning.repairAttempted,
+      phaseCount: planning.verdict.metrics.phaseCount,
+      taskNodeCount: planning.verdict.metrics.taskNodeCount,
+      dependencyCount: planning.verdict.metrics.dependencyCount,
+      crossPhaseDependencyCount: planning.verdict.metrics.crossPhaseDependencyCount,
     });
 
     await input.logger.debug('plan_quality_verdict', {
@@ -246,6 +250,7 @@ export async function runInitialGeneration(
       accepted: planning.verdict.accepted,
       reasons: planning.verdict.reasons,
       score: planning.verdict.score,
+      metrics: planning.verdict.metrics,
       repairAttempted: planning.repairAttempted,
     });
 
@@ -256,6 +261,30 @@ export async function runInitialGeneration(
         sessionId: input.sessionId,
         reasons: planning.verdict.reasons,
       });
+    }
+
+    if (!planning.verdict.accepted) {
+      const assistantResponse = buildFailureResponse('planning');
+      await saveAssistantMessage(input, assistantResponse);
+      await input.logger.debug('initial_generation_result', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        accepted: false,
+        outcome: 'quality_gate_rejected',
+        repairAttempted,
+        assistantResponse,
+        reasons: planning.verdict.reasons,
+        metrics: planning.verdict.metrics,
+      });
+      await finishFailedRun(input, assistantResponse);
+
+      return {
+        ok: false,
+        assistantResponse,
+        repairAttempted,
+        failureStage: 'planning',
+      };
     }
 
     const compileResult = await deps.executePlan({
@@ -276,6 +305,10 @@ export async function runInitialGeneration(
       message: compileResult.message,
       batchSize: compileResult.ok ? compileResult.compiledSchedule.command.tasks.length : 0,
       taskCount: compileResult.ok ? compileResult.compiledSchedule.retainedNodeCount : compileResult.retainedNodeCount,
+      compiledTaskCount: compileResult.ok ? compileResult.compiledSchedule.compiledTaskCount : compileResult.compiledTaskCount,
+      compiledDependencyCount: compileResult.ok ? compileResult.compiledSchedule.compiledDependencyCount : compileResult.compiledDependencyCount,
+      topLevelPhaseCount: compileResult.ok ? compileResult.compiledSchedule.topLevelPhaseCount : compileResult.retainedTopLevelPhaseCount,
+      crossPhaseDependencyCount: compileResult.ok ? compileResult.compiledSchedule.crossPhaseDependencyCount : compileResult.crossPhaseDependencyCount,
       droppedNodeKeys: compileResult.droppedNodeKeys,
       droppedDependencyNodeKeys: compileResult.droppedDependencyNodeKeys,
     });
@@ -288,7 +321,7 @@ export async function runInitialGeneration(
         projectId: input.projectId,
         sessionId: input.sessionId,
         accepted: false,
-        reason: compileResult.reason,
+        outcome: compileResult.reason,
         repairAttempted,
         assistantResponse,
       });
@@ -312,6 +345,8 @@ export async function runInitialGeneration(
       outcome: compileResult.outcome,
       repairAttempted,
       assistantResponse,
+      compiledTaskCount: compileResult.compiledSchedule.compiledTaskCount,
+      compiledDependencyCount: compileResult.compiledSchedule.compiledDependencyCount,
       droppedNodeKeys: compileResult.droppedNodeKeys,
       droppedDependencyNodeKeys: compileResult.droppedDependencyNodeKeys,
     });

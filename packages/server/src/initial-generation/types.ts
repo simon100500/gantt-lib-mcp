@@ -38,12 +38,30 @@ export type RepairReason =
   | 'missing_hierarchy'
   | 'placeholder_titles'
   | 'weak_coverage'
-  | 'weak_sequence';
+  | 'weak_sequence'
+  | 'too_few_phases'
+  | 'too_few_tasks'
+  | 'missing_dependency_graph'
+  | 'weak_cross_phase_sequence'
+  | 'weak_subject_specificity'
+  | 'weak_object_scale_fit';
+
+export type PlanQualityMetrics = {
+  phaseCount: number;
+  taskNodeCount: number;
+  dependencyCount: number;
+  crossPhaseDependencyCount: number;
+  genericTitleCount: number;
+  genericTitleRatio: number;
+  objectTypeSignalCoverage: number;
+  passesProductAdequacyFloor: boolean;
+};
 
 export type PlanQualityVerdict = {
   accepted: boolean;
   reasons: RepairReason[];
   score: number;
+  metrics: PlanQualityMetrics;
 };
 
 export type ModelRoutingDecisionReason =

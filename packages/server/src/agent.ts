@@ -63,6 +63,12 @@ type InitialGenerationPlannerQueryInput = {
   stage: 'planning' | 'repair';
 };
 
+type InitialGenerationRouteDecisionQueryInput = {
+  prompt: string;
+  model: string;
+  stage: 'route_decision';
+};
+
 type FastShiftIntent = {
   taskName: string;
   delta: number;
@@ -216,6 +222,55 @@ async function executeInitialGenerationPlannerQuery(
   return { content };
 }
 
+async function executeInitialGenerationRouteDecisionQuery(
+  input: InitialGenerationRouteDecisionQueryInput,
+): Promise<{ content: string }> {
+  const env = resolveEnv();
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+  }
+
+  const session = query({
+    prompt: input.prompt,
+    options: {
+      authType: 'openai',
+      model: input.model,
+      cwd: PROJECT_ROOT,
+      permissionMode: 'yolo',
+      env: buildSdkEnv(env),
+      maxSessionTurns: 2,
+    },
+  });
+
+  let content = '';
+
+  for await (const event of session) {
+    if (isSDKAssistantMessage(event)) {
+      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
+      if (text.trim().length > 0) {
+        content = text;
+      }
+    }
+
+    if (isSDKResultMessage(event)) {
+      if (event.is_error) {
+        throw new Error(typeof event.error === 'string' ? event.error : 'Initial route decision failed');
+      }
+
+      if (typeof event.result === 'string' && event.result.trim().length > 0) {
+        content = event.result;
+      }
+      break;
+    }
+  }
+
+  if (content.trim().length === 0) {
+    throw new Error('Initial route decision returned an empty response');
+  }
+
+  return { content };
+}
+
 export function isMutationIntent(message: string): boolean {
   const normalized = message.toLowerCase();
   if (/(?:сдвин\w*|передвин\w*|смест\w*|перенеси?\s+.+\s+на\s+\d+\s+дн\w*)/.test(normalized)) {
@@ -252,11 +307,10 @@ export function isMutationIntent(message: string): boolean {
     return true;
   }
 
-  if (selectAgentRoute({
-    userMessage: message,
-    taskCount: 0,
-    hasHierarchy: false,
-  }).route === 'initial_generation') {
+  if (
+    /(?:график|план|schedule|timeline|gantt)/i.test(message)
+    && /(?:постро|состав|сплан|нарис|create|build|draft|generate)/i.test(message)
+  ) {
     return true;
   }
 
@@ -1212,10 +1266,13 @@ export async function runAgentWithHistory(
     const likelyMutationRequest = isMutationIntent(userMessage);
     const simpleMutationRequested = isSimpleMutationRequest(userMessage);
     const { tasks: tasksBefore } = await taskService.list(projectId);
-    const routeSelection = selectAgentRoute({
+    const env = resolveEnv();
+    const routeSelection = await selectAgentRoute({
       userMessage,
       taskCount: tasksBefore.length,
       hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+      model: env.OPENAI_MODEL,
+      routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
     });
 
     await writeServerDebugLog('agent_run_started', {
@@ -1237,7 +1294,26 @@ export async function runAgentWithHistory(
       projectId,
       sessionId,
       userMessage,
-      ...routeSelection,
+      route: routeSelection.route,
+      reason: routeSelection.reason,
+      confidence: routeSelection.confidence,
+      isEmptyProject: routeSelection.isEmptyProject,
+      hasHierarchy: routeSelection.hasHierarchy,
+      taskCount: routeSelection.taskCount,
+      usedModelDecision: routeSelection.usedModelDecision,
+    });
+
+    await writeServerDebugLog('route_decision_evidence', {
+      runId,
+      projectId,
+      sessionId,
+      userMessage,
+      route: routeSelection.route,
+      confidence: routeSelection.confidence,
+      reason: routeSelection.reason,
+      signals: routeSelection.signals,
+      projectStateSummary: routeSelection.projectStateSummary,
+      usedModelDecision: routeSelection.usedModelDecision,
     });
 
     if (routeSelection.route === 'initial_generation') {
@@ -1285,7 +1361,6 @@ export async function runAgentWithHistory(
 
     const historyContext = buildHistoryContext(messages.slice(0, -1), false);
 
-    const env = resolveEnv();
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
