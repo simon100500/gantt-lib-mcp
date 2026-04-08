@@ -204,7 +204,8 @@ function validateExpansion(raw: unknown, phaseKey: string): ExpandedPhasePlan {
   }
 
   return {
-    phaseKey: typeof payload.phaseKey === 'string' && payload.phaseKey.trim().length > 0 ? payload.phaseKey.trim() : phaseKey,
+    // The orchestrator owns phase identity; model output cannot remap the phase key.
+    phaseKey,
     tasks,
   };
 }
@@ -223,7 +224,7 @@ async function requestExpansion(
   return validateExpansion(parsePlannerResponse(readQueryContent(result)), phase.phaseKey);
 }
 
-async function expandPhase(input: ExpandPhasesInput, phase: SkeletonPhase): Promise<ExpandedPhaseResult> {
+export async function expandSinglePhase(input: ExpandPhasesInput, phase: SkeletonPhase): Promise<ExpandedPhaseResult> {
   let expansion = await requestExpansion(buildExpansionPrompt(input, phase), input, phase, 'phase_expansion');
   let verdict = evaluatePhaseExpansionQuality(expansion);
   let repairAttempted = false;
@@ -252,7 +253,7 @@ export async function expandProjectPhases(input: ExpandPhasesInput): Promise<Exp
   const results: ExpandedPhaseResult[] = [];
 
   for (const phase of orderedPhases) {
-    results.push(await expandPhase(input, phase));
+    results.push(await expandSinglePhase(input, phase));
   }
 
   return results;

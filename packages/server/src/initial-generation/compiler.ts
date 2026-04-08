@@ -665,7 +665,7 @@ function orderNodes(nodes: NormalizedPlanNode[], childMap: Map<string, Normalize
   return ordered;
 }
 
-function buildDeterministicTaskId(projectId: string, nodeKey: string): string {
+export function buildDeterministicTaskId(projectId: string, nodeKey: string): string {
   return createHash('sha1').update(`${projectId}:${nodeKey}`).digest('hex').slice(0, 24);
 }
 
