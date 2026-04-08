@@ -13,7 +13,7 @@ interface OtpModalProps {
   initialMethod?: 'yandex' | 'otp';
 }
 
-type Step = 'choice' | 'email' | 'otp';
+type Step = 'choice' | 'otp';
 
 interface ApiErrorResponse {
   error?: string;
@@ -39,7 +39,7 @@ async function readErrorMessage(
 }
 
 export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpModalProps) {
-  const [step, setStep] = useState<Step>(initialMethod === 'otp' ? 'email' : 'choice');
+  const [step, setStep] = useState<Step>('choice');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,7 +47,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
   const otpInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setStep(initialMethod === 'otp' ? 'email' : 'choice');
+    setStep('choice');
     setError(null);
   }, [initialMethod]);
 
@@ -163,82 +163,34 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                 </span>
               </div>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12 w-full rounded-2xl border-slate-200 bg-white text-[15px] font-medium text-slate-800 hover:bg-slate-100"
-              size="lg"
-              onClick={() => {
-                setError(null);
-                setStep('email');
-              }}
-            >
-              Войти по почте
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : step === 'email' ? (
-        <Card className="relative w-[440px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
-            aria-label="Закрыть"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-          <CardHeader className="space-y-2 pb-5">
-            <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Вход по почте</CardTitle>
-            <CardDescription className="text-[15px] leading-6 text-slate-600">
-              Введите email, и мы отправим одноразовый код
-            </CardDescription>
-          </CardHeader>
-          <form onSubmit={handleRequestOtp}>
-            <CardContent className="space-y-4">
+            <form onSubmit={handleRequestOtp} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email адрес</Label>
+                <Label htmlFor="email" className="text-sm font-medium text-slate-700">Войти по почте</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="you@example.com"
                   className={cn(
-                    "h-12 rounded-2xl border-slate-200 bg-slate-50 text-[15px]",
+                    "h-12 rounded-2xl border-slate-200 bg-white text-[15px]",
                     error && "border-destructive focus-visible:ring-destructive"
                   )}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
-                  autoFocus
+                  autoFocus={initialMethod === 'otp'}
                 />
-                {error && <p className="text-sm leading-6 text-destructive">{error}</p>}
               </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-3">
               <Button
                 type="submit"
                 className="h-12 w-full rounded-2xl text-[15px] font-medium"
                 size="lg"
                 disabled={loading}
               >
-                {loading ? 'Отправка...' : 'Отправить код'}
+                {loading ? 'Отправка...' : 'Получить код по почте'}
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full rounded-2xl text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                onClick={() => {
-                  setError(null);
-                  setStep('choice');
-                }}
-              >
-                Назад ко входу через Яндекс
-              </Button>
-            </CardFooter>
-          </form>
+            </form>
+          </CardContent>
+          <CardFooter className="pt-0" />
         </Card>
       ) : (
         <div className="relative w-[440px] max-w-[calc(100vw-2rem)]">
@@ -258,7 +210,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
               <CardDescription className="flex items-center gap-1 flex-wrap text-[15px] leading-6 text-slate-600">
                 Мы отправили 6-значный код на {email}{' '}
                 <button
-                  onClick={() => setStep('email')}
+                  onClick={() => setStep('choice')}
                   className="text-sm font-medium text-primary hover:underline"
                 >
                   (изменить)
@@ -296,7 +248,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                   <button
                     type="button"
                     className="font-medium text-primary hover:underline"
-                    onClick={() => setStep('email')}
+                    onClick={() => setStep('choice')}
                   >
                     Отправить снова
                   </button>
@@ -311,7 +263,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                   setStep('choice');
                 }}
               >
-                Вернуться ко входу через Яндекс
+                Вернуться к выбору способа входа
               </button>
             </CardContent>
           </Card>
