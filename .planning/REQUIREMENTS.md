@@ -38,6 +38,13 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 - [x] **GATE-02**: Feature gate для resource pool — доступно на Старт+ (бесплатный видит upsell)
 - [x] **GATE-03**: Feature gate для export formats — PDF на Старт, PDF+Excel на Команда, PDF+Excel+API на Корпоративный
 
+### Initial Generation Refactor
+
+- [x] **IGR-01**: Empty broad prompts in empty projects route to the dedicated `initial_generation` lifecycle instead of deterministic template bootstrap
+- [x] **IGR-02**: Planning uses server-side brief/reference injection with strict `ProjectPlan` validation and at most one quality-gate repair cycle
+- [x] **IGR-03**: Approved plans compile deterministically through `commandService` with partial-salvage thresholds and controlled failure when salvage is too weak
+- [x] **IGR-04**: Lifecycle logs, regression tests, and manual verification docs reconstruct one full initial-generation run end to end
+
 ## Future Requirements
 
 ### Deferred to future milestones
@@ -80,13 +87,17 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | GATE-01 | Phase 34 | Complete |
 | GATE-02 | Phase 34 | Complete |
 | GATE-03 | Phase 34 | Complete |
+| IGR-01 | Phase 41 | Complete |
+| IGR-02 | Phase 41 | Complete |
+| IGR-03 | Phase 41 | Complete |
+| IGR-04 | Phase 41 | Complete |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |
 
 **Coverage:**
-- v5.0 requirements: 19 total
-- Mapped to phases: 19
+- v5.0 requirements: 23 total
+- Mapped to phases: 23
 - Unmapped: 0
 
 ---
