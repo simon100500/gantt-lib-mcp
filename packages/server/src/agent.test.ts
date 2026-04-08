@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, parseInitialScheduleTemplateIntent, resolveTasksByName } from './agent.js';
+import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, resolveTasksByName } from './agent.js';
+import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
+import { selectAgentRoute } from './initial-generation/route-selection.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -82,19 +84,81 @@ describe('agent simple mutation heuristic', () => {
   });
 });
 
-describe('agent initial schedule template intent', () => {
-  it('detects construction bootstrap requests', () => {
-    assert.deepEqual(parseInitialScheduleTemplateIntent('Построй типичный график строительства'), {
-      domain: 'construction',
-    });
-    assert.deepEqual(parseInitialScheduleTemplateIntent('Сформируй шаблонный план ремонта'), {
-      domain: 'construction',
+describe('initial-generation route selection', () => {
+  it('routes broad empty-project prompts into initial_generation', () => {
+    assert.deepEqual(selectAgentRoute({
+      userMessage: 'Построй типичный график строительства',
+      taskCount: 0,
+      hasHierarchy: false,
+    }), {
+      route: 'initial_generation',
+      reason: 'empty_project_broad_generation_request',
+      isEmptyProject: true,
+      requestClass: 'broad_generation',
+      hasHierarchy: false,
+      taskCount: 0,
     });
   });
 
-  it('ignores unrelated schedule requests', () => {
-    assert.equal(parseInitialScheduleTemplateIntent('Покажи текущий график строительства'), null);
-    assert.equal(parseInitialScheduleTemplateIntent('Сдвинь фундамент на 3 дня'), null);
+  it('treats vague bootstrap prompts as initial generation, not clarification', () => {
+    assert.equal(selectAgentRoute({
+      userMessage: 'Построй график',
+      taskCount: 0,
+      hasHierarchy: false,
+    }).route, 'initial_generation');
+  });
+
+  it('keeps ordinary edit prompts on mutation flow', () => {
+    assert.equal(selectAgentRoute({
+      userMessage: 'Сдвинь фундамент на 3 дня',
+      taskCount: 4,
+      hasHierarchy: true,
+    }).route, 'mutation');
+  });
+});
+
+describe('initial-generation model routing', () => {
+  it('uses the strong model for initial generation', () => {
+    assert.deepEqual(resolveModelRoutingDecision({
+      route: 'initial_generation',
+      env: {
+        OPENAI_MODEL: 'gpt-strong',
+      },
+    }), {
+      route: 'initial_generation',
+      tier: 'strong',
+      selectedModel: 'gpt-strong',
+      reason: 'initial_generation_requires_strong_model',
+    });
+  });
+
+  it('uses the cheap model for mutation when configured', () => {
+    assert.deepEqual(resolveModelRoutingDecision({
+      route: 'mutation',
+      env: {
+        OPENAI_MODEL: 'gpt-strong',
+        OPENAI_CHEAP_MODEL: 'gpt-cheap',
+      },
+    }), {
+      route: 'mutation',
+      tier: 'cheap',
+      selectedModel: 'gpt-cheap',
+      reason: 'mutation_prefers_cheap_model',
+    });
+  });
+
+  it('falls back deterministically to the main model when the cheap model is missing', () => {
+    assert.deepEqual(resolveModelRoutingDecision({
+      route: 'mutation',
+      env: {
+        OPENAI_MODEL: 'gpt-strong',
+      },
+    }), {
+      route: 'mutation',
+      tier: 'main_fallback',
+      selectedModel: 'gpt-strong',
+      reason: 'cheap_model_missing_fallback_to_main',
+    });
   });
 });
 
