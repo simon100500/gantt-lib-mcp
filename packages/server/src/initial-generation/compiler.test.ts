@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
+import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
+
 import { compileInitialProjectPlan } from './compiler.js';
 import { executeInitialProjectPlan } from './executor.js';
 import type { ProjectPlan } from './types.js';
@@ -207,10 +209,13 @@ describe('executeInitialProjectPlan', () => {
       ],
     };
 
-    const committed: Array<{ request: { command: { type: string; tasks: Array<{ name: string }> } }; actorType: string; actorId?: string }> = [];
+    const committed: Array<{ request: CommitProjectCommandRequest; actorType: ActorType; actorId?: string }> = [];
     const commandService = {
-      async commitCommand(request: { command: { type: string; tasks: Array<{ name: string }> } }, actorType: string, actorId?: string) {
+      async commitCommand(request: CommitProjectCommandRequest, actorType: ActorType, actorId?: string): Promise<CommitProjectCommandResponse> {
         committed.push({ request, actorType, actorId });
+        const changedTaskIds = request.command.type === 'create_tasks_batch'
+          ? request.command.tasks.map((task) => task.name)
+          : [];
         return {
           clientRequestId: 'client-1',
           accepted: true,
@@ -218,7 +223,7 @@ describe('executeInitialProjectPlan', () => {
           newVersion: 9,
           result: {
             snapshot: { tasks: [], dependencies: [] },
-            changedTaskIds: request.command.tasks.map((task) => task.name),
+            changedTaskIds,
             changedDependencyIds: [],
             conflicts: [],
             patches: [],
