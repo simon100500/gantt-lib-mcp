@@ -1,25 +1,4 @@
-import { readFileSync } from 'node:fs';
-
-const CONSTRUCTION_REFERENCE_PATH = new URL(
-  '../../../../.planning/reference/construction-work-intent-map-v3.json',
-  import.meta.url,
-);
-
-type ConstructionReferenceMap = {
-  stages: Array<{
-    id: string;
-    name: string;
-    description: string;
-  }>;
-  work_families: Array<{
-    id: string;
-    name: string;
-    description: string;
-  }>;
-  sequence_rules?: Array<{
-    statement: string;
-  }>;
-};
+import { constructionReference } from './construction-reference.js';
 
 export type DomainReferenceKey =
   | 'private_house'
@@ -41,10 +20,6 @@ export type ResolveDomainReferenceInput = {
   userMessage: string;
   inferredObjectType?: string | null;
 };
-
-const constructionReference = JSON.parse(
-  readFileSync(CONSTRUCTION_REFERENCE_PATH, 'utf-8'),
-) as ConstructionReferenceMap;
 
 function pickStageName(stageId: string): string {
   return constructionReference.stages.find((stage) => stage.id === stageId)?.name ?? stageId;
