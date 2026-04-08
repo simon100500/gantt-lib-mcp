@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: completed
-last_updated: "2026-04-07T22:50:31.458Z"
-last_activity: 2026-04-07
+status: executing
+last_updated: "2026-04-08T11:21:05.512Z"
+last_activity: 2026-04-08
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 9
-  total_plans: 32
-  completed_plans: 32
-  percent: 89
+  total_plans: 36
+  completed_plans: 33
+  percent: 92
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-04
+**Last updated:** 2026-04-08
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Milestone complete
+**Status:** Ready to execute
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 40 — yandex-auth
+**Current focus:** Phase 41 — initial-gen-refactor
 
 ---
 
 ## Current Position
 
-Phase: 40
-Plan: Not started
+Phase: 41 (initial-gen-refactor) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-04-07
+Last activity: 2026-04-08
 
-Progress: [████████░░] 89%
+Progress: [█████████░] 92%
 
 ---
 
@@ -131,6 +131,8 @@ packages/
 - [Phase 38]: useTrialTrigger integrates with authStore.constraintDenial for automatic trigger on feature denial
 - [Quick 260405-roi]: endTrialNow auto-rollback to free + archive excess projects; rollbackTrialToFree archives oldest projects beyond FREE_PROJECT_LIMIT
 - [Quick 260405-roi]: Lock icon (lucide-react) with opacity-60 on archived projects in ProjectSwitcher sidebar
+- [Phase 41]: Empty-project broad prompts now route through selectAgentRoute() before any fast path or SDK run.
+- [Phase 41]: Server-side model choice is resolved once per run through resolveModelRoutingDecision() and logged as a typed decision.
 
 ## Performance Metrics
 
@@ -147,12 +149,13 @@ packages/
 | Phase 38 P04 | 2min | 1 tasks | 1 files |
 | Phase 38 P05 | 2min | 1 tasks | 5 files |
 | Phase 38 P06 | 6min | 2 tasks | 4 files |
+| Phase 41 P01 | 18 min | 2 tasks | 6 files |
 
 ## Session
 
-- Last session: 2026-04-05T20:19:00+03:00
-- Stopped at: Completed 260405-roi-PLAN.md
+- Last session: 2026-04-08T11:21:05Z
+- Stopped at: Completed 41-01-PLAN.md
 
 ---
 
-*Last updated: 2026-04-05 — Quick task 260405-roi completed*
+*Last updated: 2026-04-08 — Phase 41 Plan 01 completed*
