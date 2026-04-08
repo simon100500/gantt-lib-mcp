@@ -284,7 +284,7 @@ export function LimitReachedModal({
                   onClick={() => { setTrialActivating(true); void onActivateTrial!().then((ok) => { if (ok) onClose(); setTrialActivating(false); }); }}
                   className="h-11 w-full rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:opacity-50"
                 >
-                  {trialActivating ? 'Активация...' : 'Включить 14 дней бесплатно на Старт'}
+                  {trialActivating ? 'Активация...' : 'Включить бесплатно "Старт" на 14 дней'}
                 </button>
               )}
             </>
