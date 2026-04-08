@@ -285,7 +285,7 @@ YaAuthSuggest.init(
     response_type: 'token',
     redirect_uri: 'https://ai.getgantt.ru/auth/yandex/callback'
   },
-  'https://ai.getgantt.ru/auth/yandex/callback'
+  'https://ai.getgantt.ru'
 )
 ```
 
@@ -294,7 +294,7 @@ Notes:
 - `client_id` comes from the issued Yandex OAuth application
 - `response_type` is `token`
 - `redirect_uri` must exactly match the Redirect URI configured in Yandex OAuth
-- `tokenPageOrigin` for this phase is `https://ai.getgantt.ru/auth/yandex/callback`
+- `tokenPageOrigin` for this phase is the helper page origin: `https://ai.getgantt.ru`
 - The frontend button lazy-loads the suggest SDK only when the auth modal is opened
 
 On the auxiliary callback page `https://ai.getgantt.ru/auth/yandex/callback`:
@@ -313,6 +313,7 @@ Notes:
 
 - The callback page exists only for token handoff and may stay visually empty
 - It sends the OAuth token back to the main web-app origin `https://ai.getgantt.ru`
+- After sending the token, the helper window should close itself
 - The callback route is handled inside `packages/web/src/App.tsx`; no Astro/site route is involved
 
 ### Env contract
@@ -321,6 +322,7 @@ Frontend-only:
 
 - `VITE_YANDEX_CLIENT_ID=<issued-client-id>`
 - Place it in `packages/web/.env` for local development or the equivalent frontend deploy env
+- In this monorepo Docker/CapRover setup it must be passed into the `build-web` stage as a Docker build arg, because Vite reads `import.meta.env.*` at build time
 - This is the only Yandex credential allowed in the web package
 
 Backend-only:
@@ -337,6 +339,7 @@ Rules:
 ### Shipping checklist
 
 - Set `VITE_YANDEX_CLIENT_ID` in the frontend runtime that serves `packages/web`
+- For CapRover with repo-root `Dockerfile`, pass `VITE_YANDEX_CLIENT_ID` as a build arg, not only as a runtime app variable
 - Keep `YANDEX_CLIENT_SECRET` in backend env only if the backend verification variant requires it
 - Ensure the Yandex OAuth application includes `https://ai.getgantt.ru/auth/yandex/callback` in Redirect URI
 - Do not add any matching auth routing to `packages/site`; Phase 40 scope remains web app + backend only

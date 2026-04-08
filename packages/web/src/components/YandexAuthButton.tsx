@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import type { AuthSuccessResponse } from '../lib/apiTypes.ts';
 
 const YANDEX_SDK_SRC = 'https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-with-polyfills-latest.js';
-const PRODUCTION_ORIGIN = 'https://ai.getgantt.ru';
+const AUTH_TIMEOUT_MS = 60_000;
 
 declare global {
   interface Window {
@@ -20,6 +20,11 @@ declare global {
   }
 }
 
+type YandexCallbackMessage = {
+  source: 'gantt-yandex-auth';
+  accessToken: string;
+};
+
 interface YandexAuthButtonProps {
   onSuccess: (result: AuthSuccessResponse) => void;
   onError: (message: string | null) => void;
@@ -30,19 +35,59 @@ interface ApiErrorResponse {
   message?: string;
 }
 
+interface YandexSdkErrorShape {
+  code?: unknown;
+  message?: unknown;
+  description?: unknown;
+  error?: unknown;
+  error_description?: unknown;
+  status?: unknown;
+}
+
 let yandexSdkPromise: Promise<void> | null = null;
+
+function clearYandexSdkState(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const localKeys: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && /(yandex|passport|\bya\b)/i.test(key)) {
+        localKeys.push(key);
+      }
+    }
+    localKeys.forEach((key) => window.localStorage.removeItem(key));
+
+    const sessionKeys: string[] = [];
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const key = window.sessionStorage.key(index);
+      if (key && /(yandex|passport|\bya\b)/i.test(key)) {
+        sessionKeys.push(key);
+      }
+    }
+    sessionKeys.forEach((key) => window.sessionStorage.removeItem(key));
+  } catch (error) {
+    console.warn('[YandexAuth] failed to clear SDK storage state', error);
+  }
+}
 
 function getAppOrigin(): string {
   if (typeof window === 'undefined') {
-    return PRODUCTION_ORIGIN;
+    throw new Error('Yandex login is only available in the browser');
   }
 
-  const { origin, hostname } = window.location;
-  return hostname === 'localhost' || hostname === '127.0.0.1' ? origin : PRODUCTION_ORIGIN;
+  return window.location.origin;
 }
 
 function getCallbackUrl(): string {
   return new URL('/auth/yandex/callback', getAppOrigin()).toString();
+}
+
+function getTokenPageOrigin(): string {
+  return new URL(getCallbackUrl()).origin;
 }
 
 function ensureYandexSdk(): Promise<void> {
@@ -120,11 +165,87 @@ function extractAccessToken(payload: unknown): string | null {
   return null;
 }
 
+function waitForCallbackToken(timeoutMs: number): Promise<{ access_token: string }> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('Yandex login is only available in the browser'));
+      return;
+    }
+
+    const expectedOrigin = getAppOrigin();
+    const timeoutId = window.setTimeout(() => {
+      window.removeEventListener('message', handleMessage);
+      reject(new Error('Превышено время ожидания авторизации через Яндекс'));
+    }, timeoutMs);
+
+    function handleMessage(event: MessageEvent<unknown>) {
+      if (event.origin !== expectedOrigin || !event.data || typeof event.data !== 'object') {
+        return;
+      }
+
+      const payload = event.data as Partial<YandexCallbackMessage>;
+      if (payload.source !== 'gantt-yandex-auth' || typeof payload.accessToken !== 'string' || !payload.accessToken.trim()) {
+        return;
+      }
+
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('message', handleMessage);
+      resolve({ access_token: payload.accessToken.trim() });
+    }
+
+    window.addEventListener('message', handleMessage);
+  });
+}
+
+function normalizeYandexError(error: unknown): { message: string; rawMessage: string; code: string | null } {
+  if (error instanceof Error) {
+    return { message: error.message, rawMessage: error.message, code: null };
+  }
+
+  if (typeof error === 'string') {
+    return { message: error, rawMessage: error, code: null };
+  }
+
+  if (error && typeof error === 'object') {
+    const candidate = error as YandexSdkErrorShape;
+    const code = typeof candidate.code === 'string' ? candidate.code : null;
+    const parts = [
+      code ? `code=${code}` : null,
+      typeof candidate.message === 'string' ? candidate.message : null,
+      typeof candidate.description === 'string' ? candidate.description : null,
+      typeof candidate.error === 'string' ? candidate.error : null,
+      typeof candidate.error_description === 'string' ? candidate.error_description : null,
+      typeof candidate.status === 'string' || typeof candidate.status === 'number' ? `status=${candidate.status}` : null,
+    ].filter(Boolean);
+
+    const rawMessage = parts.join(' | ');
+    if (rawMessage) {
+      return { message: rawMessage, rawMessage, code };
+    }
+
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}') {
+        return { message: `Ошибка Яндекс SDK: ${serialized}`, rawMessage: serialized, code };
+      }
+    } catch {
+      // ignore JSON serialization failure
+    }
+  }
+
+  return {
+    message: 'Не удалось выполнить вход через Яндекс',
+    rawMessage: String(error ?? ''),
+    code: null,
+  };
+}
+
 export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) {
   const [loading, setLoading] = useState(false);
   const [sdkReady, setSdkReady] = useState(false);
 
   useEffect(() => {
+    clearYandexSdkState();
     void ensureYandexSdk()
       .then(() => setSdkReady(true))
       .catch((error) => {
@@ -142,6 +263,7 @@ export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) 
     try {
       setLoading(true);
       onError(null);
+      clearYandexSdkState();
 
       await ensureYandexSdk();
       if (!window.YaAuthSuggest) {
@@ -155,10 +277,18 @@ export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) 
           response_type: 'token',
           redirect_uri: redirectUri,
         },
-        redirectUri,
+        getTokenPageOrigin(),
       );
 
-      const widgetResult = await handler();
+      const widgetResult = await Promise.race([
+        Promise.race([
+          handler(),
+          waitForCallbackToken(AUTH_TIMEOUT_MS),
+        ]),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error('Превышено время ожидания авторизации через Яндекс')), AUTH_TIMEOUT_MS);
+        }),
+      ]);
       const accessToken = extractAccessToken(widgetResult);
       if (!accessToken) {
         throw new Error('Яндекс не вернул access token');
@@ -176,7 +306,21 @@ export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) 
 
       onSuccess(await response.json() as AuthSuccessResponse);
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Не удалось выполнить вход через Яндекс');
+      console.error('[YandexAuth] login failed', error);
+      const { message, rawMessage, code } = normalizeYandexError(error);
+      if (code === 'denied' || message === 'denied' || rawMessage.includes('cancelled')) {
+        onError(null);
+        return;
+      }
+      if (code === 'in_progress') {
+        onError('Окно авторизации Яндекса уже открыто. Завершите вход в нём или закройте его и попробуйте снова.');
+        return;
+      }
+      if (code === 'not_available') {
+        onError('Yandex ID недоступен в текущем окружении. Для локального запуска обычно нужно, чтобы `localhost` callback был добавлен в OAuth-приложение и браузер разрешал popup/cookies.');
+        return;
+      }
+      onError(message || 'Не удалось выполнить вход через Яндекс');
     } finally {
       setLoading(false);
     }

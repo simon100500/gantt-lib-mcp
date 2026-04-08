@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 const YANDEX_TOKEN_SDK_SRC = 'https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-token-with-polyfills-latest.js';
-const PRODUCTION_ORIGIN = 'https://ai.getgantt.ru';
 
 declare global {
   interface Window {
@@ -11,13 +10,25 @@ declare global {
 
 let yandexTokenSdkPromise: Promise<void> | null = null;
 
-function getAppOrigin(): string {
+function readAccessTokenFromLocation(): string | null {
   if (typeof window === 'undefined') {
-    return PRODUCTION_ORIGIN;
+    return null;
   }
 
-  const { origin, hostname } = window.location;
-  return hostname === 'localhost' || hostname === '127.0.0.1' ? origin : PRODUCTION_ORIGIN;
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const hashParams = new URLSearchParams(hash);
+  const queryParams = new URLSearchParams(window.location.search);
+
+  const token = hashParams.get('access_token') ?? queryParams.get('access_token');
+  return token?.trim() || null;
+}
+
+function getAppOrigin(): string {
+  if (typeof window === 'undefined') {
+    throw new Error('Yandex callback is only available in the browser');
+  }
+
+  return window.location.origin;
 }
 
 function ensureYandexTokenSdk(): Promise<void> {
@@ -67,9 +78,23 @@ export function YandexCallbackPage() {
           throw new Error('Yandex callback helper недоступен');
         }
 
+        const accessToken = readAccessTokenFromLocation();
+        if (accessToken && window.opener && !window.opener.closed) {
+          window.opener.postMessage(
+            {
+              source: 'gantt-yandex-auth',
+              accessToken,
+            },
+            getAppOrigin(),
+          );
+        }
+
         window.YaSendSuggestToken(getAppOrigin(), {
           source: 'yandex-suggest',
         });
+        window.setTimeout(() => {
+          window.close();
+        }, 800);
       })
       .catch((nextError) => {
         setError(nextError instanceof Error ? nextError.message : 'Не удалось вернуть токен в приложение');
@@ -82,7 +107,7 @@ export function YandexCallbackPage() {
         <p className="text-xs uppercase tracking-[0.32em] text-white/50">Yandex Auth</p>
         <h1 className="text-2xl font-semibold">Возвращаем вас в приложение</h1>
         <p className="text-sm text-white/70">
-          {error ?? 'Подтверждаем вход и передаём токен обратно в окно ГетГант.'}
+          {error ?? 'Подтверждаем вход, отправляем токен в основное окно и закрываем эту вкладку.'}
         </p>
       </div>
     </div>

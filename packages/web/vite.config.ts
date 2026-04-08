@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: ['.ngrok-free.app'],
     proxy: {
       // Proxy API and WebSocket to backend
       '/api': 'http://127.0.0.1:3000',
