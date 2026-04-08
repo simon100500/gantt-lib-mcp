@@ -57,6 +57,12 @@ type VerificationResult = {
   acceptedChangedTaskIdMismatch: boolean;
 };
 
+type InitialGenerationPlannerQueryInput = {
+  prompt: string;
+  model: string;
+  stage: 'planning' | 'repair';
+};
+
 type FastShiftIntent = {
   taskName: string;
   delta: number;
@@ -141,6 +147,55 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
     .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
     .map((block) => block.text ?? '')
     .join('');
+}
+
+async function executeInitialGenerationPlannerQuery(
+  input: InitialGenerationPlannerQueryInput,
+): Promise<{ content: string }> {
+  const env = resolveEnv();
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+  }
+
+  const session = query({
+    prompt: input.prompt,
+    options: {
+      authType: 'openai',
+      model: input.model,
+      cwd: PROJECT_ROOT,
+      permissionMode: 'yolo',
+      env,
+      maxSessionTurns: input.stage === 'repair' ? 4 : 3,
+    },
+  });
+
+  let content = '';
+
+  for await (const event of session) {
+    if (isSDKAssistantMessage(event)) {
+      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
+      if (text.trim().length > 0) {
+        content = text;
+      }
+    }
+
+    if (isSDKResultMessage(event)) {
+      if (event.is_error) {
+        throw new Error(typeof event.error === 'string' ? event.error : 'Initial generation planner failed');
+      }
+
+      if (typeof event.result === 'string' && event.result.trim().length > 0) {
+        content = event.result;
+      }
+      break;
+    }
+  }
+
+  if (content.trim().length === 0) {
+    throw new Error('Initial generation planner returned an empty response');
+  }
+
+  return { content };
 }
 
 export function isMutationIntent(message: string): boolean {
@@ -873,6 +928,20 @@ async function tryDirectShiftFastPath(
   return true;
 }
 
+async function getProjectBaseVersion(projectId: string): Promise<number> {
+  const { getPrisma } = await getPrismaModule();
+  const project = await getPrisma().project.findUnique({
+    where: { id: projectId },
+    select: { version: true },
+  });
+
+  if (!project) {
+    throw new Error(`Project ${projectId} was not found`);
+  }
+
+  return project.version;
+}
+
 async function executeAgentAttempt(
   prompt: string,
   runId: string,
@@ -1161,6 +1230,8 @@ export async function runAgentWithHistory(
         runId,
         userMessage,
         tasksBefore,
+        baseVersion: await getProjectBaseVersion(projectId),
+        plannerQuery: executeInitialGenerationPlannerQuery,
         services: {
           commandService,
           messageService,
@@ -1169,6 +1240,7 @@ export async function runAgentWithHistory(
         logger: {
           debug: (event, payload) => writeServerDebugLog(event, payload),
         },
+        broadcastToSession,
       });
       return;
     }

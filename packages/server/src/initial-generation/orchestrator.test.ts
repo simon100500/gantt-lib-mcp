@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 
 import { runInitialGeneration } from './orchestrator.js';
+import type { ExecuteInitialProjectPlanResult } from './executor.js';
 import type { PlanQualityVerdict, ProjectPlan } from './types.js';
 
 const BASE_PLAN: ProjectPlan = {
@@ -39,7 +40,7 @@ function createCommitResponse(): Extract<CommitProjectCommandResponse, { accepte
 function createHarness(overrides?: {
   verdict?: PlanQualityVerdict;
   repairAttempted?: boolean;
-  compileResult?: Awaited<ReturnType<NonNullable<Parameters<typeof runInitialGeneration>[0]['deps']>['executePlan']>>;
+  compileResult?: ExecuteInitialProjectPlanResult;
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const messages: Array<{ role: string; content: string }> = [];
@@ -172,7 +173,7 @@ describe('runInitialGeneration', () => {
 
     assert.equal(result.ok, true);
     assert.equal(result.outcome, 'complete');
-    assert.match(result.assistantResponse, /starter schedule/i);
+    assert.match(result.assistantResponse, /стартовый график/i);
     assert.deepEqual(harness.messages.map((entry) => entry.role), ['assistant']);
     assert.deepEqual(
       harness.events.map((entry) => entry.event),
@@ -271,6 +272,7 @@ describe('runInitialGeneration', () => {
         'plan_quality_verdict',
         'compile_verdict',
         'initial_generation_result',
+        'agent_run_completed',
       ],
     );
   });
