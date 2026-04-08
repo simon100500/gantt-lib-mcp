@@ -61,7 +61,7 @@ type NormalizedPlanNode = ProjectPlanNode & {
 
 type ScheduledNode = {
   nodeKey: string;
-  kind: 'phase' | 'task';
+  kind: 'phase' | 'subphase' | 'task';
   title: string;
   parentNodeKey?: string;
   startDate: string;
@@ -132,7 +132,7 @@ export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput)
     };
   });
 
-  const compiledTaskCount = commandTasks.filter((task) => Boolean(task.parentId)).length;
+  const compiledTaskCount = normalizedPlan.nodes.filter((node) => node.kind === 'task').length;
   const compiledDependencyCount = commandTasks.reduce((sum, task) => sum + (task.dependencies?.length ?? 0), 0);
   const topLevelPhaseCount = commandTasks.filter((task) => !task.parentId).length;
   const crossPhaseDependencyCount = countCrossPhaseDependencies(orderedNodes, commandTasks, nodeKeyToTaskId);
@@ -273,7 +273,7 @@ function normalizeNode(node: ProjectPlanNode, index: number, duplicateGuard: Set
     }]);
   }
 
-  if (node.kind !== 'phase' && node.kind !== 'task') {
+  if (node.kind !== 'phase' && node.kind !== 'subphase' && node.kind !== 'task') {
     throw new InitialPlanCompileError('Project plan contains an invalid node kind', [{
       code: 'invalid_plan',
       message: `Node ${nodeKey} has invalid kind`,
@@ -384,10 +384,17 @@ function collectStructuralIssues(
           nodeKey: node.nodeKey,
           relatedNodeKeys: [node.parentNodeKey],
         });
-      } else if (parent.kind !== 'phase') {
+      } else if (node.kind === 'subphase' && parent.kind !== 'phase') {
         issues.push({
           code: 'missing_parent',
-          message: `Node ${node.nodeKey} must be nested under a phase container`,
+          message: `Subphase ${node.nodeKey} must be nested under a phase container`,
+          nodeKey: node.nodeKey,
+          relatedNodeKeys: [parent.nodeKey],
+        });
+      } else if (node.kind === 'task' && parent.kind !== 'subphase') {
+        issues.push({
+          code: 'missing_parent',
+          message: `Task ${node.nodeKey} must be nested under a subphase container`,
           nodeKey: node.nodeKey,
           relatedNodeKeys: [parent.nodeKey],
         });
@@ -400,11 +407,11 @@ function collectStructuralIssues(
       });
     }
 
-    if (node.kind === 'phase') {
+    if (node.kind === 'phase' || node.kind === 'subphase') {
       if (node.dependencies.length > 0) {
         issues.push({
           code: 'phase_has_dependencies',
-          message: `Phase ${node.nodeKey} cannot carry dependencies`,
+          message: `${node.kind === 'phase' ? 'Phase' : 'Subphase'} ${node.nodeKey} cannot carry dependencies`,
           nodeKey: node.nodeKey,
         });
       }
@@ -630,7 +637,7 @@ function rollupPhaseDates(
 
     const rolledUpNode: ScheduledNode = {
       nodeKey: node.nodeKey,
-      kind: 'phase',
+      kind: node.kind,
       title: node.title,
       parentNodeKey: node.parentNodeKey,
       startDate: formatDateOnly(start),
@@ -641,7 +648,7 @@ function rollupPhaseDates(
     return rolledUpNode;
   };
 
-  for (const node of nodes.filter((entry) => entry.kind === 'phase').sort((left, right) => right.index - left.index)) {
+  for (const node of nodes.filter((entry) => entry.kind === 'phase' || entry.kind === 'subphase').sort((left, right) => right.index - left.index)) {
     visit(node);
   }
 

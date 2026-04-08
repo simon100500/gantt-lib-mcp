@@ -24,9 +24,17 @@ const PLAN: ProjectPlan = {
       dependsOn: [],
     },
     {
+      nodeKey: 'subphase-foundation-base',
+      title: 'Base works',
+      parentNodeKey: 'phase-foundation',
+      kind: 'subphase',
+      durationDays: 1,
+      dependsOn: [],
+    },
+    {
       nodeKey: 'task-excavation',
       title: 'Excavation',
-      parentNodeKey: 'phase-foundation',
+      parentNodeKey: 'subphase-foundation-base',
       kind: 'task',
       durationDays: 3,
       dependsOn: [],
@@ -34,7 +42,7 @@ const PLAN: ProjectPlan = {
     {
       nodeKey: 'task-concrete',
       title: 'Concrete pour',
-      parentNodeKey: 'phase-foundation',
+      parentNodeKey: 'subphase-foundation-base',
       kind: 'task',
       durationDays: 2,
       dependsOn: [{ nodeKey: 'task-excavation', type: 'FS', lagDays: 1 }],
@@ -47,9 +55,17 @@ const PLAN: ProjectPlan = {
       dependsOn: [],
     },
     {
+      nodeKey: 'subphase-shell-frame',
+      title: 'Frame works',
+      parentNodeKey: 'phase-shell',
+      kind: 'subphase',
+      durationDays: 1,
+      dependsOn: [],
+    },
+    {
       nodeKey: 'task-framing',
       title: 'Framing',
-      parentNodeKey: 'phase-shell',
+      parentNodeKey: 'subphase-shell-frame',
       kind: 'task',
       durationDays: 4,
       dependsOn: [{ nodeKey: 'task-concrete', type: 'SS', lagDays: 0 }],
@@ -57,7 +73,7 @@ const PLAN: ProjectPlan = {
     {
       nodeKey: 'task-roof',
       title: 'Roofing',
-      parentNodeKey: 'phase-shell',
+      parentNodeKey: 'subphase-shell-frame',
       kind: 'task',
       durationDays: 2,
       dependsOn: [{ nodeKey: 'task-framing', type: 'FF', lagDays: 1 }],
@@ -70,9 +86,17 @@ const PLAN: ProjectPlan = {
       dependsOn: [],
     },
     {
+      nodeKey: 'subphase-interiors-rough',
+      title: 'Rough-in',
+      parentNodeKey: 'phase-interiors',
+      kind: 'subphase',
+      durationDays: 1,
+      dependsOn: [],
+    },
+    {
       nodeKey: 'task-electrical',
       title: 'Electrical rough-in',
-      parentNodeKey: 'phase-interiors',
+      parentNodeKey: 'subphase-interiors-rough',
       kind: 'task',
       durationDays: 3,
       dependsOn: [{ nodeKey: 'task-roof', type: 'SF', lagDays: 0 }],
@@ -109,8 +133,11 @@ describe('compileInitialProjectPlan', () => {
     const roofing = taskByName('Roofing', compiled.command.tasks);
     const electrical = taskByName('Electrical rough-in', compiled.command.tasks);
     const foundation = taskByName('Foundation', compiled.command.tasks);
+    const foundationBase = taskByName('Base works', compiled.command.tasks);
     const shell = taskByName('Shell', compiled.command.tasks);
+    const shellFrame = taskByName('Frame works', compiled.command.tasks);
     const interiors = taskByName('Interiors', compiled.command.tasks);
+    const interiorsRough = taskByName('Rough-in', compiled.command.tasks);
 
     assert.deepEqual(
       { startDate: excavation.startDate, endDate: excavation.endDate },
@@ -140,11 +167,23 @@ describe('compileInitialProjectPlan', () => {
       'rollup parent ranges come only from child tasks',
     );
     assert.deepEqual(
+      { startDate: foundationBase.startDate, endDate: foundationBase.endDate },
+      { startDate: '2026-04-06', endDate: '2026-04-13' },
+    );
+    assert.deepEqual(
       { startDate: shell.startDate, endDate: shell.endDate },
       { startDate: '2026-04-10', endDate: '2026-04-16' },
     );
     assert.deepEqual(
+      { startDate: shellFrame.startDate, endDate: shellFrame.endDate },
+      { startDate: '2026-04-10', endDate: '2026-04-16' },
+    );
+    assert.deepEqual(
       { startDate: interiors.startDate, endDate: interiors.endDate },
+      { startDate: '2026-04-10', endDate: '2026-04-14' },
+    );
+    assert.deepEqual(
+      { startDate: interiorsRough.startDate, endDate: interiorsRough.endDate },
       { startDate: '2026-04-10', endDate: '2026-04-14' },
     );
 
@@ -251,9 +290,11 @@ describe('executeInitialProjectPlan', () => {
       assumptions: [],
       nodes: [
         { nodeKey: 'phase-a', title: 'Phase A', kind: 'phase', durationDays: 1, dependsOn: [] },
-        { nodeKey: 'task-a', title: 'Task A', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'subphase-a', title: 'Subphase A', parentNodeKey: 'phase-a', kind: 'subphase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-a', title: 'Task A', parentNodeKey: 'subphase-a', kind: 'task', durationDays: 2, dependsOn: [] },
         { nodeKey: 'phase-b', title: 'Phase B', kind: 'phase', durationDays: 1, dependsOn: [] },
-        { nodeKey: 'task-b', title: 'Task B', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'subphase-b', title: 'Subphase B', parentNodeKey: 'phase-b', kind: 'subphase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-b', title: 'Task B', parentNodeKey: 'subphase-b', kind: 'task', durationDays: 2, dependsOn: [] },
         { nodeKey: 'phase-c', title: 'Phase C', kind: 'phase', durationDays: 1, dependsOn: [] },
         { nodeKey: 'task-c', title: 'Task C', parentNodeKey: 'missing-phase-c', kind: 'task', durationDays: 2, dependsOn: [] },
         { nodeKey: 'phase-d', title: 'Phase D', kind: 'phase', durationDays: 1, dependsOn: [] },

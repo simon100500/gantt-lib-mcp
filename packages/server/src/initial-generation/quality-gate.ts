@@ -1,25 +1,20 @@
 import type {
   ExecutableProjectPlan,
-  ExpandedPhasePlan,
   GenerationBrief,
-  PhaseExpansionQualityMetrics,
-  PhaseExpansionQualityVerdict,
-  PlanQualityMetrics,
-  PlanQualityVerdict,
   ProjectPlanNode,
-  ProjectWbsSkeleton,
-  SkeletonQualityMetrics,
-  SkeletonQualityVerdict,
+  ScheduledProjectPlan,
+  SchedulingQualityMetrics,
+  SchedulingQualityVerdict,
+  StructuredProjectPlan,
+  StructureQualityMetrics,
+  StructureQualityVerdict,
 } from './types.js';
 import { isEnumerativeTitle, isTitleTooLong } from './title-policy.js';
 
-const PLACEHOLDER_TITLE_PATTERN = /^(?:этап|задача|stage|task)\s+\d+$/i;
-const GENERIC_TITLE_PATTERN = /^(?:строительн(?:ые)?\s+работы|общ(?:ие)?\s+работы|работы|construction works|general works|phase|stage)$/i;
-const MAX_STARTER_PHASES = 6;
-const MAX_WORK_PACKAGES_PER_PHASE = 5;
-const MAX_TASKS_PER_PHASE = 5;
-const MAX_ENTRY_TASKS_PER_PHASE = 2;
-const MAX_STARTER_TASK_NODES = 30;
+const PLACEHOLDER_TITLE_PATTERN = /^(?:этап|подэтап|задача|phase|subphase|task)\s+\d+$/i;
+const GENERIC_TITLE_PATTERN = /^(?:строительн(?:ые)?\s+работы|общ(?:ие)?\s+работы|работы|construction works|general works|phase|stage|subphase|task)$/i;
+const MAX_TOP_LEVEL_PHASES = 7;
+const MAX_TASKS = 40;
 
 function isBroadRequest(brief: GenerationBrief): boolean {
   return brief.scopeSignals.includes('broad_request') || brief.scopeSignals.includes('starter_generation_request');
@@ -54,7 +49,7 @@ function inferRequestedComponentCoverage(userMessage: string, text: string): num
     userMessage
       .toLowerCase()
       .split(/[^a-zа-я0-9]+/i)
-      .filter((token) => token.length >= 4 || token === '3'),
+      .filter((token) => token.length >= 4 || /^\d+$/.test(token)),
   );
 
   if (requestedSignals.size === 0) {
@@ -66,168 +61,12 @@ function inferRequestedComponentCoverage(userMessage: string, text: string): num
   return matchedSignals.length / requestedSignals.size;
 }
 
-export function collectSkeletonMetrics(
-  skeleton: ProjectWbsSkeleton,
-  brief: GenerationBrief,
-  userMessage: string,
-): SkeletonQualityMetrics {
-  const phaseCount = skeleton.phases.length;
-  const workPackageCount = skeleton.phases.reduce((sum, phase) => sum + phase.workPackages.length, 0);
-  const minWorkPackagesPerPhase = skeleton.phases.length === 0
-    ? 0
-    : Math.min(...skeleton.phases.map((phase) => phase.workPackages.length));
-  const titles = skeleton.phases.flatMap((phase) => [phase.title, ...phase.workPackages.map((pkg) => pkg.title)]);
-  const genericTitleCount = countGenericTitles(titles);
-  const genericTitleRatio = titles.length === 0 ? 1 : genericTitleCount / titles.length;
-  const objectTypeSignalCoverage = inferSignalCoverage(brief, titles.join(' '));
-  const requestedComponentCoverage = inferRequestedComponentCoverage(userMessage, titles.join(' '));
-
-  return {
-    phaseCount,
-    workPackageCount,
-    minWorkPackagesPerPhase,
-    genericTitleCount,
-    genericTitleRatio,
-    objectTypeSignalCoverage,
-    requestedComponentCoverage,
-  };
-}
-
-export function evaluateSkeletonQuality(
-  skeleton: ProjectWbsSkeleton,
-  brief: GenerationBrief,
-  userMessage: string,
-): SkeletonQualityVerdict {
-  const metrics = collectSkeletonMetrics(skeleton, brief, userMessage);
-  const reasons: SkeletonQualityVerdict['reasons'] = [];
-  const broadRequest = isBroadRequest(brief);
-
-  if (metrics.phaseCount < (broadRequest ? 4 : 2)) {
-    reasons.push('too_few_phases');
-  }
-  if (broadRequest && metrics.phaseCount > MAX_STARTER_PHASES) {
-    reasons.push('too_many_phases');
-  }
-
-  if (metrics.workPackageCount < (broadRequest ? 12 : 4) || metrics.minWorkPackagesPerPhase < (broadRequest ? 2 : 1)) {
-    reasons.push('too_few_work_packages');
-  }
-  if (broadRequest && skeleton.phases.some((phase) => phase.workPackages.length > MAX_WORK_PACKAGES_PER_PHASE)) {
-    reasons.push('too_many_work_packages');
-  }
-
-  if (metrics.genericTitleCount > 0) {
-    reasons.push('placeholder_titles');
-  }
-
-  if (titlesAreTooLongOrEnumerative(skeleton.phases.flatMap((phase) => [phase.title, ...phase.workPackages.map((pkg) => pkg.title)]))) {
-    reasons.push('oversized_titles');
-  }
-
-  if (metrics.objectTypeSignalCoverage < (broadRequest ? 0.08 : 0.04)) {
-    reasons.push('weak_object_fit');
-  }
-
-  if (metrics.requestedComponentCoverage < (broadRequest ? 0.2 : 0.1)) {
-    reasons.push('missing_requested_component');
-  }
-
-  if (broadRequest && metrics.minWorkPackagesPerPhase < 3) {
-    reasons.push('weak_phase_decomposition');
-  }
-
-  const uniqueReasons = [...new Set(reasons)];
-  return {
-    accepted: uniqueReasons.length === 0,
-    reasons: uniqueReasons,
-    score: Math.max(0, 100 - uniqueReasons.length * 15),
-    metrics,
-  };
-}
-
-export function collectPhaseExpansionMetrics(expansion: ExpandedPhasePlan): PhaseExpansionQualityMetrics {
-  const dependencyCount = expansion.tasks.reduce((sum, task) => sum + task.dependsOnWithinPhase.length, 0);
-  const dependencyTargets = new Set(expansion.tasks.flatMap((task) => task.dependsOnWithinPhase.map((dependency) => dependency.nodeKey)));
-  const entryTaskCount = expansion.tasks.filter((task) => task.sequenceRole === 'entry' || task.dependsOnWithinPhase.length === 0).length;
-  const exitTaskCount = expansion.tasks.filter((task) => task.sequenceRole === 'exit' || !dependencyTargets.has(task.nodeKey)).length;
-  const genericTitleCount = countGenericTitles(expansion.tasks.map((task) => task.title));
-  const genericTitleRatio = expansion.tasks.length === 0 ? 1 : genericTitleCount / expansion.tasks.length;
-
-  return {
-    taskCount: expansion.tasks.length,
-    dependencyCount,
-    entryTaskCount,
-    exitTaskCount,
-    genericTitleCount,
-    genericTitleRatio,
-  };
-}
-
-export function evaluatePhaseExpansionQuality(expansion: ExpandedPhasePlan): PhaseExpansionQualityVerdict {
-  const metrics = collectPhaseExpansionMetrics(expansion);
-  const reasons: PhaseExpansionQualityVerdict['reasons'] = [];
-  const taskKeys = new Set(expansion.tasks.map((task) => task.nodeKey));
-
-  if (metrics.taskCount < 3) {
-    reasons.push('too_few_tasks');
-  }
-  if (metrics.taskCount > MAX_TASKS_PER_PHASE) {
-    reasons.push('too_many_tasks');
-  }
-
-  if (metrics.genericTitleCount > 0) {
-    reasons.push('placeholder_titles');
-  }
-
-  if (metrics.entryTaskCount > MAX_ENTRY_TASKS_PER_PHASE) {
-    reasons.push('too_many_entry_tasks');
-  }
-
-  if (titlesAreTooLongOrEnumerative(expansion.tasks.map((task) => task.title))) {
-    reasons.push('oversized_titles');
-  }
-
-  if (metrics.entryTaskCount < 1) {
-    reasons.push('missing_entry_task');
-  }
-
-  if (metrics.exitTaskCount < 1) {
-    reasons.push('missing_exit_task');
-  }
-
-  const invalidDependency = expansion.tasks.some((task) =>
-    task.dependsOnWithinPhase.some((dependency) => !taskKeys.has(dependency.nodeKey)),
-  );
-  if (invalidDependency) {
-    reasons.push('broken_within_phase_dependency');
-  }
-
-  const selfDependency = expansion.tasks.some((task) =>
-    task.dependsOnWithinPhase.some((dependency) => dependency.nodeKey === task.nodeKey),
-  );
-  if (selfDependency) {
-    reasons.push('self_dependency');
-  }
-
-  if (metrics.dependencyCount < Math.max(1, metrics.taskCount - 2)) {
-    reasons.push('weak_within_phase_sequence');
-  }
-
-  const uniqueReasons = [...new Set(reasons)];
-  return {
-    accepted: uniqueReasons.length === 0,
-    reasons: uniqueReasons,
-    score: Math.max(0, 100 - uniqueReasons.length * 16),
-    metrics,
-  };
-}
-
-function getPhaseNodes(plan: ExecutableProjectPlan): ProjectPlanNode[] {
-  return plan.nodes.filter((node) => node.kind === 'phase' && !node.parentNodeKey);
-}
-
 function getTaskNodes(plan: ExecutableProjectPlan): ProjectPlanNode[] {
   return plan.nodes.filter((node) => node.kind === 'task');
+}
+
+function getNodeMap(plan: ExecutableProjectPlan): Map<string, ProjectPlanNode> {
+  return new Map(plan.nodes.map((node) => [node.nodeKey, node]));
 }
 
 function getRootPhaseKey(plan: ExecutableProjectPlan, node: ProjectPlanNode): string | null {
@@ -235,7 +74,7 @@ function getRootPhaseKey(plan: ExecutableProjectPlan, node: ProjectPlanNode): st
     return node.kind === 'phase' ? node.nodeKey : null;
   }
 
-  const parent = plan.nodes.find((candidate) => candidate.nodeKey === node.parentNodeKey);
+  const parent = getNodeMap(plan).get(node.parentNodeKey);
   if (!parent) {
     return null;
   }
@@ -244,7 +83,7 @@ function getRootPhaseKey(plan: ExecutableProjectPlan, node: ProjectPlanNode): st
 }
 
 function countCrossPhaseDependencies(plan: ExecutableProjectPlan): number {
-  const nodesByKey = new Map(plan.nodes.map((node) => [node.nodeKey, node]));
+  const nodesByKey = getNodeMap(plan);
 
   return getTaskNodes(plan).reduce((count, node) => {
     const sourcePhase = getRootPhaseKey(plan, node);
@@ -286,88 +125,214 @@ function hasTaskCycle(plan: ExecutableProjectPlan): boolean {
   return tasks.some((task) => visit(task.nodeKey));
 }
 
-export function collectProjectPlanMetrics(plan: ExecutableProjectPlan, brief: GenerationBrief): PlanQualityMetrics {
-  const phaseCount = getPhaseNodes(plan).length;
-  const taskNodes = getTaskNodes(plan);
-  const taskNodeCount = taskNodes.length;
-  const dependencyCount = taskNodes.reduce((sum, node) => sum + node.dependsOn.length, 0);
-  const crossPhaseDependencyCount = countCrossPhaseDependencies(plan);
-  const genericTitleCount = countGenericTitles(plan.nodes.map((node) => node.title));
-  const genericTitleRatio = plan.nodes.length === 0 ? 1 : genericTitleCount / plan.nodes.length;
-  const objectTypeSignalCoverage = inferSignalCoverage(brief, plan.nodes.map((node) => node.title).join(' '));
-  const broadRequest = isBroadRequest(brief);
-  const passesProductAdequacyFloor = !broadRequest || (
-    phaseCount >= 4
-    && taskNodeCount >= 12
-    && dependencyCount >= 8
-    && crossPhaseDependencyCount >= 2
-    && genericTitleRatio <= 0.2
-    && objectTypeSignalCoverage >= 0.08
+function titlesAreTooLongOrEnumerative(values: string[]): boolean {
+  return values.some((value) => isTitleTooLong(value) || isEnumerativeTitle(value));
+}
+
+function getStructureSignature(structure: StructuredProjectPlan | ScheduledProjectPlan): string[] {
+  const signature: string[] = [];
+
+  for (const phase of structure.phases) {
+    signature.push(`phase:${phase.phaseKey}:${phase.title}`);
+    for (const subphase of phase.subphases) {
+      signature.push(`subphase:${phase.phaseKey}:${subphase.subphaseKey}:${subphase.title}`);
+      for (const task of subphase.tasks) {
+        signature.push(`task:${phase.phaseKey}:${subphase.subphaseKey}:${task.taskKey}:${task.title}`);
+      }
+    }
+  }
+
+  return signature;
+}
+
+export function collectStructureMetrics(
+  structure: StructuredProjectPlan,
+  brief: GenerationBrief,
+  userMessage: string,
+): StructureQualityMetrics {
+  const phaseCount = structure.phases.length;
+  const subphaseCount = structure.phases.reduce((sum, phase) => sum + phase.subphases.length, 0);
+  const taskCount = structure.phases.reduce(
+    (sum, phase) => sum + phase.subphases.reduce((subphaseSum, subphase) => subphaseSum + subphase.tasks.length, 0),
+    0,
   );
+  const minSubphasesPerPhase = phaseCount === 0
+    ? 0
+    : Math.min(...structure.phases.map((phase) => phase.subphases.length));
+  const minTasksPerSubphase = subphaseCount === 0
+    ? 0
+    : Math.min(...structure.phases.flatMap((phase) => phase.subphases.map((subphase) => subphase.tasks.length)));
+  const titles = structure.phases.flatMap((phase) => [
+    phase.title,
+    ...phase.subphases.flatMap((subphase) => [subphase.title, ...subphase.tasks.map((task) => task.title)]),
+  ]);
+  const genericTitleCount = countGenericTitles(titles);
+  const genericTitleRatio = titles.length === 0 ? 1 : genericTitleCount / titles.length;
+  const objectTypeSignalCoverage = inferSignalCoverage(brief, titles.join(' '));
+  const requestedComponentCoverage = inferRequestedComponentCoverage(userMessage, titles.join(' '));
 
   return {
     phaseCount,
-    taskNodeCount,
-    dependencyCount,
-    crossPhaseDependencyCount,
+    subphaseCount,
+    taskCount,
+    minSubphasesPerPhase,
+    minTasksPerSubphase,
     genericTitleCount,
     genericTitleRatio,
     objectTypeSignalCoverage,
-    passesProductAdequacyFloor,
+    requestedComponentCoverage,
   };
 }
 
-export function evaluateProjectPlanQuality(plan: ExecutableProjectPlan, brief: GenerationBrief): PlanQualityVerdict {
-  const reasons: PlanQualityVerdict['reasons'] = [];
-  const metrics = collectProjectPlanMetrics(plan, brief);
+export function evaluateStructureQuality(
+  structure: StructuredProjectPlan,
+  brief: GenerationBrief,
+  userMessage: string,
+): StructureQualityVerdict {
+  const metrics = collectStructureMetrics(structure, brief, userMessage);
+  const reasons: StructureQualityVerdict['reasons'] = [];
   const broadRequest = isBroadRequest(brief);
 
-  if (metrics.phaseCount < 2 || metrics.taskNodeCount < 2) {
+  if (metrics.phaseCount < (broadRequest ? 4 : 2)) {
+    reasons.push('too_few_phases');
+  }
+  if (metrics.phaseCount > MAX_TOP_LEVEL_PHASES) {
     reasons.push('missing_hierarchy');
+  }
+
+  if (metrics.subphaseCount < (broadRequest ? 8 : 3) || metrics.minSubphasesPerPhase < (broadRequest ? 2 : 1)) {
+    reasons.push('too_few_subphases');
+  }
+
+  if (metrics.taskCount < (broadRequest ? 16 : 4) || metrics.minTasksPerSubphase < (broadRequest ? 2 : 1)) {
+    reasons.push('too_few_tasks');
   }
 
   if (metrics.genericTitleCount > 0) {
     reasons.push('placeholder_titles');
   }
 
-  if (metrics.phaseCount < (broadRequest ? 4 : 2) || metrics.taskNodeCount < (broadRequest ? 6 : 4)) {
-    reasons.push('weak_coverage');
+  if (titlesAreTooLongOrEnumerative(structure.phases.flatMap((phase) => [
+    phase.title,
+    ...phase.subphases.flatMap((subphase) => [subphase.title, ...subphase.tasks.map((task) => task.title)]),
+  ]))) {
+    reasons.push('oversized_titles');
   }
 
-  if (metrics.dependencyCount < Math.max(1, Math.floor(metrics.taskNodeCount / 2))) {
-    reasons.push('weak_sequence');
+  if (metrics.objectTypeSignalCoverage < (broadRequest ? 0.08 : 0.04)) {
+    reasons.push('weak_object_fit');
   }
 
-  if (broadRequest && metrics.phaseCount < 4) {
-    reasons.push('too_few_phases');
+  if (metrics.requestedComponentCoverage < (broadRequest ? 0.2 : 0.1)) {
+    reasons.push('missing_requested_component');
   }
 
-  if (broadRequest && metrics.taskNodeCount < 12) {
-    reasons.push('too_few_tasks');
+  if (broadRequest && metrics.minSubphasesPerPhase < 2) {
+    reasons.push('weak_subphase_decomposition');
   }
 
-  if (broadRequest && metrics.taskNodeCount > MAX_STARTER_TASK_NODES) {
-    reasons.push('too_many_tasks');
+  const uniqueReasons = [...new Set(reasons)];
+  return {
+    accepted: uniqueReasons.length === 0,
+    reasons: uniqueReasons,
+    score: Math.max(0, 100 - uniqueReasons.length * 14),
+    metrics,
+  };
+}
+
+export function collectSchedulingMetrics(
+  structure: StructuredProjectPlan,
+  scheduled: ScheduledProjectPlan,
+  plan: ExecutableProjectPlan,
+): SchedulingQualityMetrics {
+  const taskCount = structure.phases.reduce(
+    (sum, phase) => sum + phase.subphases.reduce((subphaseSum, subphase) => subphaseSum + subphase.tasks.length, 0),
+    0,
+  );
+  const tasks = getTaskNodes(plan);
+  const tasksWithDurationCount = tasks.filter((task) => Number.isInteger(task.durationDays) && task.durationDays >= 1).length;
+  const dependencyCount = tasks.reduce((sum, task) => sum + task.dependsOn.length, 0);
+  const tasksWithoutDependenciesCount = tasks.filter((task) => task.dependsOn.length === 0).length;
+  const crossPhaseDependencyCount = countCrossPhaseDependencies(plan);
+  void scheduled;
+
+  return {
+    taskCount,
+    tasksWithDurationCount,
+    dependencyCount,
+    tasksWithoutDependenciesCount,
+    crossPhaseDependencyCount,
+  };
+}
+
+export function evaluateSchedulingQuality(
+  structure: StructuredProjectPlan,
+  scheduled: ScheduledProjectPlan,
+  plan: ExecutableProjectPlan,
+): SchedulingQualityVerdict {
+  const reasons: SchedulingQualityVerdict['reasons'] = [];
+  const structureSignature = getStructureSignature(structure);
+  const scheduledSignature = getStructureSignature(scheduled);
+  const metrics = collectSchedulingMetrics(structure, scheduled, plan);
+  const nodeMap = getNodeMap(plan);
+  const taskKeys = new Set(getTaskNodes(plan).map((task) => task.nodeKey));
+
+  if (structureSignature.length !== scheduledSignature.length) {
+    reasons.push('structure_changed');
+  } else {
+    const structureEntries = new Set(structureSignature);
+    const scheduledEntries = new Set(scheduledSignature);
+    if (structureEntries.size !== scheduledEntries.size || [...structureEntries].some((entry) => !scheduledEntries.has(entry))) {
+      const structureKeySignature = structureSignature.map((entry) => entry.split(':').slice(0, -1).join(':'));
+      const scheduledKeySignature = scheduledSignature.map((entry) => entry.split(':').slice(0, -1).join(':'));
+      const structureTitleSignature = structureSignature.map((entry) => entry.split(':').at(-1) ?? '');
+      const scheduledTitleSignature = scheduledSignature.map((entry) => entry.split(':').at(-1) ?? '');
+
+      if (JSON.stringify(structureKeySignature) !== JSON.stringify(scheduledKeySignature)) {
+        reasons.push('hierarchy_changed');
+      }
+      if (JSON.stringify(structureTitleSignature) !== JSON.stringify(scheduledTitleSignature)) {
+        reasons.push('titles_changed');
+      }
+      if (!reasons.includes('hierarchy_changed') && !reasons.includes('titles_changed')) {
+        reasons.push('structure_changed');
+      }
+    }
   }
 
-  if (broadRequest && metrics.dependencyCount < 8) {
-    reasons.push('missing_dependency_graph');
+  if (metrics.tasksWithDurationCount < metrics.taskCount) {
+    reasons.push('missing_task_durations');
   }
 
-  if (broadRequest && metrics.crossPhaseDependencyCount < 2) {
-    reasons.push('weak_cross_phase_sequence');
+  if (getTaskNodes(plan).some((task) => !Number.isInteger(task.durationDays) || task.durationDays < 1)) {
+    reasons.push('invalid_task_duration');
   }
 
-  if (metrics.genericTitleRatio > 0.2) {
-    reasons.push('weak_subject_specificity');
-  }
-
-  if (broadRequest && metrics.objectTypeSignalCoverage < 0.08) {
-    reasons.push('weak_object_scale_fit');
-  }
-
-  if (plan.nodes.some((node) => node.kind === 'phase' && node.dependsOn.length > 0)) {
+  if (plan.nodes.some((node) => (node.kind === 'phase' || node.kind === 'subphase') && node.dependsOn.length > 0)) {
     reasons.push('phase_has_dependencies');
+  }
+
+  if (plan.nodes.some((node) => node.kind === 'task' && !node.parentNodeKey)) {
+    reasons.push('task_outside_subphase');
+  }
+
+  if (plan.nodes.some((node) => node.kind === 'task' && node.parentNodeKey && nodeMap.get(node.parentNodeKey)?.kind !== 'subphase')) {
+    reasons.push('task_outside_subphase');
+  }
+
+  for (const task of getTaskNodes(plan)) {
+    for (const dependency of task.dependsOn) {
+      const target = nodeMap.get(dependency.nodeKey);
+      if (!target) {
+        reasons.push('broken_dependency_reference');
+      } else if (!taskKeys.has(target.nodeKey)) {
+        reasons.push('dependency_target_not_task');
+      }
+    }
+  }
+
+  if (metrics.dependencyCount < Math.max(1, Math.floor(metrics.taskCount / 3))) {
+    reasons.push('missing_dependency_graph');
   }
 
   if (hasTaskCycle(plan)) {
@@ -378,11 +343,7 @@ export function evaluateProjectPlanQuality(plan: ExecutableProjectPlan, brief: G
   return {
     accepted: uniqueReasons.length === 0,
     reasons: uniqueReasons,
-    score: Math.max(0, 100 - uniqueReasons.length * 12.5),
+    score: Math.max(0, 100 - uniqueReasons.length * 14),
     metrics,
   };
-}
-
-function titlesAreTooLongOrEnumerative(values: string[]): boolean {
-  return values.some((value) => isTitleTooLong(value) || isEnumerativeTitle(value));
 }

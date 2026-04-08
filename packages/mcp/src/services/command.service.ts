@@ -41,6 +41,10 @@ import { randomUUID } from 'node:crypto';
 import { getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 
 const CORE_VERSION = '0.62.0';
+const INTERACTIVE_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 60_000,
+} as const;
 
 function isVersionBumpRace(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
@@ -204,6 +208,28 @@ async function bulkUpdateTaskSortOrders(
   `);
 }
 
+async function bulkUpdateTaskParents(
+  prismaClient: any,
+  projectId: string,
+  updates: Array<{ taskId: string; parentId: string }>,
+): Promise<void> {
+  if (updates.length === 0) {
+    return;
+  }
+
+  const valueRows = Prisma.join(
+    updates.map((update) => Prisma.sql`(${update.taskId}, ${update.parentId})`),
+  );
+
+  await prismaClient.$executeRaw(Prisma.sql`
+    UPDATE "tasks" AS t
+    SET "parent_id" = v.parent_id
+    FROM (VALUES ${valueRows}) AS v(id, parent_id)
+    WHERE t."id" = v.id
+      AND t."project_id" = ${projectId}
+  `);
+}
+
 async function bulkDeleteTasks(prismaClient: any, taskIds: string[]): Promise<void> {
   if (taskIds.length === 0) {
     return;
@@ -356,14 +382,20 @@ export class CommandService {
             })),
           });
 
-          for (const taskChange of createdTasks) {
-            if (taskChange.task?.parentId && createdTaskIds.has(taskChange.task.parentId)) {
-              await tx.task.update({
-                where: { id: taskChange.task.id },
-                data: { parentId: taskChange.task.parentId },
-              });
-            }
-          }
+          await bulkUpdateTaskParents(
+            tx,
+            projectId,
+            createdTasks
+              .filter((taskChange): taskChange is typeof taskChange & { task: Task } => Boolean(
+                taskChange.task?.id
+                && taskChange.task.parentId
+                && createdTaskIds.has(taskChange.task.parentId),
+              ))
+              .map((taskChange) => ({
+                taskId: taskChange.task.id,
+                parentId: taskChange.task.parentId!,
+              })),
+          );
 
           const dependencyRows = createdTasks.flatMap((taskChange) => (
             (taskChange.task?.dependencies ?? []).map((dep) => ({
@@ -417,14 +449,20 @@ export class CommandService {
             }
           }
 
-          for (const taskChange of createdTasks) {
-            if (taskChange.task?.parentId && createdTaskIds.has(taskChange.task.parentId)) {
-              await tx.task.update({
-                where: { id: taskChange.task.id },
-                data: { parentId: taskChange.task.parentId },
-              });
-            }
-          }
+          await bulkUpdateTaskParents(
+            tx,
+            projectId,
+            createdTasks
+              .filter((taskChange): taskChange is typeof taskChange & { task: Task } => Boolean(
+                taskChange.task?.id
+                && taskChange.task.parentId
+                && createdTaskIds.has(taskChange.task.parentId),
+              ))
+              .map((taskChange) => ({
+                taskId: taskChange.task.id,
+                parentId: taskChange.task.parentId!,
+              })),
+          );
 
           for (const taskChange of createdTasks) {
             if (taskChange.task?.dependencies?.length) {
@@ -563,7 +601,7 @@ export class CommandService {
           },
           snapshot,
         };
-      });
+      }, INTERACTIVE_TRANSACTION_OPTIONS);
 
       return result;
     } catch (error: any) {
@@ -581,10 +619,7 @@ export class CommandService {
         errorCode: error?.code,
         errorMeta: error?.meta,
         stack: error instanceof Error ? error.stack : undefined,
-      }, {
-        maxWait: 10_000,
-        timeout: 60_000,
-      });
+      }, INTERACTIVE_TRANSACTION_OPTIONS);
 
       if (isVersionBumpRace(error)) {
         const project = await this.prisma.project.findUnique({

@@ -4,19 +4,10 @@ import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandRespon
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
 import { resolveDomainReference, type ResolveDomainReferenceInput, type ResolvedDomainReference } from './domain-reference.js';
-import {
-  commitExpandedPhase,
-  commitSkeletonStructure,
-  type ExecuteIncrementalInitialGenerationResult,
-  type IncrementalCommitContext,
-} from './incremental-executor.js';
-import { buildExecutablePlan } from './link-reconciliation.js';
+import { executeInitialProjectPlan } from './executor.js';
 import { resolveModelRoutingDecision } from './model-routing.js';
-import { expandSinglePhase } from './phase-expander.js';
-import type { PlanInitialProjectResult } from './planner.js';
-import { planProjectSkeleton } from './skeleton-planner.js';
+import { planInitialProject } from './planner.js';
 import type {
-  ExpandedPhasePlan,
   GenerationBrief,
   InitialGenerationPlannerStage,
   ModelRoutingDecision,
@@ -62,14 +53,14 @@ type InitialGenerationDeps = {
   resolveDomainReference: (input: ResolveDomainReferenceInput) => ResolvedDomainReference;
   buildGenerationBrief: (input: BuildGenerationBriefInput) => GenerationBrief;
   resolveModelRoutingDecision: (input: {
-    route: 'initial_generation';
+    route: 'initial_generation' | 'mutation';
     env: Record<string, string | undefined>;
   }) => ModelRoutingDecision;
 };
 
 type InitialGenerationSuccess = {
   ok: true;
-  outcome: 'complete' | 'partial';
+  outcome: 'complete';
   assistantResponse: string;
   repairAttempted: boolean;
   tasksAfter: ListedTask[];
@@ -93,7 +84,8 @@ export type RunInitialGenerationInput = {
   baseVersion: number;
   serverDate?: string;
   brief?: GenerationBrief;
-  modelRoutingDecision?: ModelRoutingDecision;
+  structureModelRoutingDecision?: ModelRoutingDecision;
+  schedulingModelRoutingDecision?: ModelRoutingDecision;
   routingEnv?: Record<string, string | undefined>;
   plannerQuery: (input: PlannerQueryInput) => Promise<PlannerQueryResult>;
   services: InitialGenerationServices;
@@ -114,20 +106,24 @@ function getServerDate(value?: string): string {
   return (value ?? new Date().toISOString()).slice(0, 10);
 }
 
-function buildSuccessResponse(outcome: 'complete' | 'partial'): string {
-  if (outcome === 'partial') {
-    return 'Я создал каркас графика и успел развернуть только часть фаз. Базовая структура уже в проекте.';
+function readPlannerQueryContent(result: PlannerQueryResult): string {
+  if (typeof result === 'string') {
+    return result;
   }
 
-  return 'Я подготовил стартовый график проекта с основными этапами и реалистичной последовательностью работ.';
+  return typeof result?.content === 'string' ? result.content : '';
 }
 
-function buildFailureResponse(stage: 'planning' | 'compile'): string {
-  if (stage === 'planning') {
-    return 'Не удалось подготовить надежный стартовый график по этому запросу.';
+function buildSuccessResponse(): string {
+  return 'Я подготовил стартовый график проекта с фазами, подэтапами и задачами.';
+}
+
+function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): string {
+  if (stage === 'compile') {
+    return 'Не удалось собрать и сохранить стартовый график полностью.';
   }
 
-  return 'Не удалось собрать и сохранить стартовый график полностью, но часть структуры могла уже появиться в проекте.';
+  return 'Не удалось подготовить надежный стартовый график по этому запросу.';
 }
 
 async function saveAssistantMessage(
@@ -187,12 +183,6 @@ async function finishFailedRun(
   });
 }
 
-function isCommitFailure(
-  result: IncrementalCommitContext | Exclude<ExecuteIncrementalInitialGenerationResult, { ok: true }>,
-): result is Exclude<ExecuteIncrementalInitialGenerationResult, { ok: true }> {
-  return 'ok' in result && result.ok === false;
-}
-
 export async function runInitialGeneration(
   input: RunInitialGenerationInput,
 ): Promise<InitialGenerationResult> {
@@ -219,8 +209,12 @@ export async function runInitialGeneration(
     userMessage: input.userMessage,
     reference,
   });
-  const modelRoutingDecision = input.modelRoutingDecision ?? deps.resolveModelRoutingDecision({
+  const structureModelRoutingDecision = input.structureModelRoutingDecision ?? deps.resolveModelRoutingDecision({
     route: 'initial_generation',
+    env: input.routingEnv ?? process.env,
+  });
+  const schedulingModelRoutingDecision = input.schedulingModelRoutingDecision ?? deps.resolveModelRoutingDecision({
+    route: 'mutation',
     env: input.routingEnv ?? process.env,
   });
 
@@ -228,115 +222,156 @@ export async function runInitialGeneration(
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
-    ...modelRoutingDecision,
+    stage: 'structure_planning',
+    ...structureModelRoutingDecision,
+  });
+  await input.logger.debug('model_routing_decision', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    stage: 'schedule_metadata',
+    ...schedulingModelRoutingDecision,
   });
 
   let repairAttempted = false;
+  const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
+    const startedAt = Date.now();
+    await input.logger.debug('planner_query_request', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      stage: plannerInput.stage,
+      model: plannerInput.model,
+      prompt: plannerInput.prompt,
+      promptLength: plannerInput.prompt.length,
+    });
+
+    try {
+      const result = await input.plannerQuery(plannerInput);
+      const content = readPlannerQueryContent(result);
+      await input.logger.debug('planner_query_response', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        stage: plannerInput.stage,
+        model: plannerInput.model,
+        durationMs: Date.now() - startedAt,
+        response: content,
+        responseLength: content.length,
+        responseType: typeof result === 'string' ? 'string' : 'object',
+      });
+      return result;
+    } catch (error) {
+      await input.logger.debug('planner_query_failed', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        stage: plannerInput.stage,
+        model: plannerInput.model,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
 
   try {
-    const skeletonResult = await planProjectSkeleton({
+    const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,
       reference,
-      modelDecision: modelRoutingDecision,
-      sdkQuery: input.plannerQuery,
+      structureModelDecision: structureModelRoutingDecision,
+      schedulingModelDecision: schedulingModelRoutingDecision,
+      sdkQuery: loggedPlannerQuery,
     });
-    repairAttempted = skeletonResult.repairAttempted;
+    repairAttempted = planning.repairAttempted;
 
-    await input.logger.debug('wbs_skeleton_output', {
+    await input.logger.debug('structure_plan_output', {
       runId: input.runId,
       projectId: input.projectId,
       sessionId: input.sessionId,
-      selectedModel: modelRoutingDecision.selectedModel,
-      skeleton: skeletonResult.skeleton,
-      repairAttempted: skeletonResult.repairAttempted,
-      phaseCount: skeletonResult.verdict.metrics.phaseCount,
-      workPackageCount: skeletonResult.verdict.metrics.workPackageCount,
+      selectedModel: structureModelRoutingDecision.selectedModel,
+      structure: planning.structure,
+      repairAttempted: planning.repairAttempted,
     });
-
-    await input.logger.debug('wbs_skeleton_verdict', {
+    await input.logger.debug('structure_gate_verdict', {
       runId: input.runId,
       projectId: input.projectId,
       sessionId: input.sessionId,
-      accepted: skeletonResult.verdict.accepted,
-      reasons: skeletonResult.verdict.reasons,
-      score: skeletonResult.verdict.score,
-      metrics: skeletonResult.verdict.metrics,
+      accepted: planning.structureVerdict.accepted,
+      reasons: planning.structureVerdict.reasons,
+      score: planning.structureVerdict.score,
+      metrics: planning.structureVerdict.metrics,
     });
 
-    if (!skeletonResult.verdict.accepted) {
-      const assistantResponse = buildFailureResponse('planning');
+    await input.logger.debug('schedule_metadata_output', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      selectedModel: schedulingModelRoutingDecision.selectedModel,
+      scheduled: planning.scheduled,
+    });
+    await input.logger.debug('scheduling_gate_verdict', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      accepted: planning.schedulingVerdict.accepted,
+      reasons: planning.schedulingVerdict.reasons,
+      score: planning.schedulingVerdict.score,
+      metrics: planning.schedulingVerdict.metrics,
+    });
+
+    await input.logger.debug('executable_plan_output', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      plan: planning.plan,
+    });
+
+    const execution = await executeInitialProjectPlan({
+      projectId: input.projectId,
+      baseVersion: input.baseVersion,
+      clientRequestId: randomUUID(),
+      actorId: input.runId,
+      plan: planning.plan,
+      commandService: input.services.commandService,
+      serverDate: getServerDate(input.serverDate),
+    });
+
+    await input.logger.debug('compile_verdict', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      ok: execution.ok,
+      ...(execution.ok
+        ? {
+            outcome: execution.outcome,
+            retainedNodeCount: execution.compiledSchedule.retainedNodeCount,
+            compiledTaskCount: execution.compiledSchedule.compiledTaskCount,
+            compiledDependencyCount: execution.compiledSchedule.compiledDependencyCount,
+            topLevelPhaseCount: execution.compiledSchedule.topLevelPhaseCount,
+          }
+        : {
+            outcome: execution.reason,
+            message: execution.message,
+            retainedNodeCount: execution.retainedNodeCount,
+            retainedTopLevelPhaseCount: execution.retainedTopLevelPhaseCount,
+            compiledTaskCount: execution.compiledTaskCount,
+            compiledDependencyCount: execution.compiledDependencyCount,
+          }),
+    });
+
+    if (!execution.ok) {
+      const assistantResponse = buildFailureResponse('compile');
       await saveAssistantMessage(input, assistantResponse);
       await input.logger.debug('initial_generation_result', {
         runId: input.runId,
         projectId: input.projectId,
         sessionId: input.sessionId,
         accepted: false,
-        outcome: 'skeleton_rejected',
+        outcome: execution.reason,
         repairAttempted,
         assistantResponse,
-        reasons: skeletonResult.verdict.reasons,
-        metrics: skeletonResult.verdict.metrics,
-      });
-      await finishFailedRun(input, assistantResponse);
-
-      return {
-        ok: false,
-        assistantResponse,
-        repairAttempted,
-        failureStage: 'planning',
-      };
-    }
-
-    const planningShell: PlanInitialProjectResult = {
-      skeleton: skeletonResult.skeleton,
-      skeletonVerdict: skeletonResult.verdict,
-      expandedPhases: [],
-      crossPhaseLinkPlan: { links: [] },
-      plan: {
-        projectType: skeletonResult.skeleton.projectType,
-        assumptions: skeletonResult.skeleton.assumptions,
-        nodes: [],
-      },
-      verdict: {
-        accepted: false,
-        reasons: ['missing_hierarchy'],
-        score: 0,
-        metrics: {
-          phaseCount: 0,
-          taskNodeCount: 0,
-          dependencyCount: 0,
-          crossPhaseDependencyCount: 0,
-          genericTitleCount: 0,
-          genericTitleRatio: 1,
-          objectTypeSignalCoverage: 0,
-          passesProductAdequacyFloor: false,
-        },
-      },
-      repairAttempted,
-    };
-
-    let commitContext = await commitSkeletonStructure({
-      projectId: input.projectId,
-      baseVersion: input.baseVersion,
-      clientRequestId: randomUUID(),
-      serverDate: getServerDate(input.serverDate),
-      planning: planningShell,
-      commandService: input.services.commandService,
-    });
-
-    if (isCommitFailure(commitContext)) {
-      const assistantResponse = buildFailureResponse('compile');
-      await saveAssistantMessage(input, assistantResponse);
-      await input.logger.debug('compile_verdict', {
-        runId: input.runId,
-        projectId: input.projectId,
-        sessionId: input.sessionId,
-        ok: false,
-        outcome: commitContext.reason,
-        message: commitContext.message,
-        committedPhaseKeys: commitContext.committedPhaseKeys,
-        committedTaskNodeKeys: commitContext.committedTaskNodeKeys,
       });
       await finishFailedRun(input, assistantResponse);
 
@@ -347,191 +382,23 @@ export async function runInitialGeneration(
         failureStage: 'compile',
       };
     }
-    await broadcastTasksSnapshot(input, 'skeleton_commit');
 
-    const orderedPhases = [...skeletonResult.skeleton.phases].sort((left, right) => left.orderHint - right.orderHint);
-    const expandedPhases: Array<{
-      phaseKey: string;
-      title: string;
-      expansion: ExpandedPhasePlan;
-      verdict: Awaited<ReturnType<typeof expandSinglePhase>>['verdict'];
-      repairAttempted: boolean;
-    }> = [];
-
-    for (const phase of orderedPhases) {
-      const expandedPhase = await expandSinglePhase({
-        userMessage: input.userMessage,
-        brief,
-        reference,
-        skeleton: skeletonResult.skeleton,
-        modelDecision: modelRoutingDecision,
-        sdkQuery: input.plannerQuery,
-      }, phase);
-
-      expandedPhases.push({
-        phaseKey: expandedPhase.phase.phaseKey,
-        title: expandedPhase.phase.title,
-        expansion: expandedPhase.expansion,
-        verdict: expandedPhase.verdict,
-        repairAttempted: expandedPhase.repairAttempted,
-      });
-      repairAttempted = repairAttempted || expandedPhase.repairAttempted;
-
-      await input.logger.debug('phase_expansion_output', {
-        runId: input.runId,
-        projectId: input.projectId,
-        sessionId: input.sessionId,
-        phaseKey: expandedPhase.phase.phaseKey,
-        phaseTitle: expandedPhase.phase.title,
-        expansion: expandedPhase.expansion,
-        repairAttempted: expandedPhase.repairAttempted,
-      });
-
-      await input.logger.debug('phase_expansion_verdict', {
-        runId: input.runId,
-        projectId: input.projectId,
-        sessionId: input.sessionId,
-        phaseKey: expandedPhase.phase.phaseKey,
-        phaseTitle: expandedPhase.phase.title,
-        accepted: expandedPhase.verdict.accepted,
-        reasons: expandedPhase.verdict.reasons,
-        score: expandedPhase.verdict.score,
-        metrics: expandedPhase.verdict.metrics,
-      });
-
-      if (!expandedPhase.verdict.accepted) {
-        const assistantResponse = buildSuccessResponse('partial');
-        await saveAssistantMessage(input, assistantResponse);
-        await input.logger.debug('initial_generation_result', {
-          runId: input.runId,
-          projectId: input.projectId,
-          sessionId: input.sessionId,
-          accepted: true,
-          outcome: 'partial',
-          repairAttempted,
-          assistantResponse,
-          stoppingPhaseKey: expandedPhase.phase.phaseKey,
-          reasons: expandedPhase.verdict.reasons,
-        });
-        const tasksAfter = await finishSuccessfulRun(input, assistantResponse);
-        return {
-          ok: true,
-          outcome: 'partial',
-          assistantResponse,
-          repairAttempted,
-          tasksAfter,
-        };
-      }
-
-      const commitResult = await commitExpandedPhase({
-        projectId: input.projectId,
-        baseVersion: input.baseVersion,
-        clientRequestId: randomUUID(),
-        serverDate: getServerDate(input.serverDate),
-        planning: {
-          ...planningShell,
-          expandedPhases,
-        },
-        commandService: input.services.commandService,
-      }, commitContext, expandedPhases, expandedPhases[expandedPhases.length - 1]!);
-
-      if (isCommitFailure(commitResult)) {
-        const assistantResponse = buildSuccessResponse('partial');
-        await saveAssistantMessage(input, assistantResponse);
-        await input.logger.debug('compile_verdict', {
-          runId: input.runId,
-          projectId: input.projectId,
-          sessionId: input.sessionId,
-          ok: false,
-          outcome: commitResult.reason,
-          message: commitResult.message,
-          committedPhaseKeys: commitResult.committedPhaseKeys,
-          committedTaskNodeKeys: commitResult.committedTaskNodeKeys,
-        });
-        await input.logger.debug('initial_generation_result', {
-          runId: input.runId,
-          projectId: input.projectId,
-          sessionId: input.sessionId,
-          accepted: true,
-          outcome: 'partial',
-          repairAttempted,
-          assistantResponse,
-        });
-        const tasksAfter = await finishSuccessfulRun(input, assistantResponse);
-        return {
-          ok: true,
-          outcome: 'partial',
-          assistantResponse,
-          repairAttempted,
-          tasksAfter,
-        };
-      }
-
-      commitContext = commitResult;
-      await broadcastTasksSnapshot(input, `phase_commit:${expandedPhase.phase.phaseKey}`);
-    }
-
-    const executable = buildExecutablePlan({
-      brief,
-      skeleton: skeletonResult.skeleton,
-      expansions: expandedPhases.map((phase) => phase.expansion),
-    });
-
-    await input.logger.debug('cross_phase_linking_verdict', {
-      runId: input.runId,
-      projectId: input.projectId,
-      sessionId: input.sessionId,
-      linkCount: executable.crossPhaseLinkPlan.links.length,
-      links: executable.crossPhaseLinkPlan.links,
-    });
-
-    await input.logger.debug('executable_plan_output', {
-      runId: input.runId,
-      projectId: input.projectId,
-      sessionId: input.sessionId,
-      plan: executable.plan,
-    });
-
-    await input.logger.debug('plan_quality_verdict', {
-      runId: input.runId,
-      projectId: input.projectId,
-      sessionId: input.sessionId,
-      accepted: executable.verdict.accepted,
-      reasons: executable.verdict.reasons,
-      score: executable.verdict.score,
-      metrics: executable.verdict.metrics,
-      repairAttempted,
-    });
-
-    const outcome = executable.verdict.accepted ? 'complete' : 'partial';
-    const assistantResponse = buildSuccessResponse(outcome);
+    const assistantResponse = buildSuccessResponse();
     await saveAssistantMessage(input, assistantResponse);
-    await input.logger.debug('compile_verdict', {
-      runId: input.runId,
-      projectId: input.projectId,
-      sessionId: input.sessionId,
-      ok: true,
-      outcome,
-      message: 'Incremental commit completed',
-      committedPhaseKeys: commitContext.committedPhaseKeys,
-      committedTaskNodeKeys: commitContext.committedTaskNodeKeys,
-    });
     await input.logger.debug('initial_generation_result', {
       runId: input.runId,
       projectId: input.projectId,
       sessionId: input.sessionId,
       accepted: true,
-      outcome,
+      outcome: 'complete',
       repairAttempted,
       assistantResponse,
-      committedPhaseKeys: commitContext.committedPhaseKeys,
-      committedTaskNodeKeys: commitContext.committedTaskNodeKeys,
     });
     const tasksAfter = await finishSuccessfulRun(input, assistantResponse);
 
     return {
       ok: true,
-      outcome,
+      outcome: 'complete',
       assistantResponse,
       repairAttempted,
       tasksAfter,

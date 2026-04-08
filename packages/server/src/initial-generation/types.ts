@@ -1,12 +1,12 @@
 export type GenerationMode = 'initial_generation' | 'mutation';
 
 export type InitialGenerationPlannerStage =
-  | 'skeleton'
-  | 'skeleton_repair'
-  | 'phase_expansion'
-  | 'phase_expansion_repair';
+  | 'structure_planning'
+  | 'structure_planning_repair'
+  | 'schedule_metadata'
+  | 'schedule_metadata_repair';
 
-export type ProjectPlanNodeKind = 'phase' | 'task';
+export type ProjectPlanNodeKind = 'phase' | 'subphase' | 'task';
 
 export type ProjectPlanDependencyType = 'FS' | 'SS' | 'FF' | 'SF';
 
@@ -25,6 +25,52 @@ export type ProjectPlanDependency = {
   lagDays?: number;
 };
 
+export type StructuredTask = {
+  taskKey: string;
+  title: string;
+};
+
+export type StructuredSubphase = {
+  subphaseKey: string;
+  title: string;
+  tasks: StructuredTask[];
+};
+
+export type StructuredPhase = {
+  phaseKey: string;
+  title: string;
+  subphases: StructuredSubphase[];
+};
+
+export type StructuredProjectPlan = {
+  projectType: string;
+  assumptions: string[];
+  phases: StructuredPhase[];
+};
+
+export type ScheduledTask = StructuredTask & {
+  durationDays: number;
+  dependsOn: ProjectPlanDependency[];
+};
+
+export type ScheduledSubphase = {
+  subphaseKey: string;
+  title: string;
+  tasks: ScheduledTask[];
+};
+
+export type ScheduledPhase = {
+  phaseKey: string;
+  title: string;
+  subphases: ScheduledSubphase[];
+};
+
+export type ScheduledProjectPlan = {
+  projectType: string;
+  assumptions: string[];
+  phases: ScheduledPhase[];
+};
+
 export type ProjectPlanNode = {
   nodeKey: string;
   title: string;
@@ -32,51 +78,6 @@ export type ProjectPlanNode = {
   kind: ProjectPlanNodeKind;
   durationDays: number;
   dependsOn: ProjectPlanDependency[];
-};
-
-export type SkeletonWorkPackage = {
-  workPackageKey: string;
-  title: string;
-  objective?: string;
-};
-
-export type SkeletonPhase = {
-  phaseKey: string;
-  title: string;
-  objective?: string;
-  orderHint: number;
-  dependsOnPhaseKeys?: string[];
-  workPackages: SkeletonWorkPackage[];
-};
-
-export type ProjectWbsSkeleton = {
-  projectType: string;
-  assumptions: string[];
-  phases: SkeletonPhase[];
-};
-
-export type ExpandedPhaseTask = {
-  nodeKey: string;
-  title: string;
-  durationDays: number;
-  dependsOnWithinPhase: ProjectPlanDependency[];
-  sequenceRole?: 'entry' | 'intermediate' | 'exit';
-};
-
-export type ExpandedPhasePlan = {
-  phaseKey: string;
-  tasks: ExpandedPhaseTask[];
-};
-
-export type CrossPhaseLink = {
-  fromNodeKey: string;
-  toNodeKey: string;
-  type: ProjectPlanDependencyType;
-  lagDays?: number;
-};
-
-export type CrossPhaseLinkPlan = {
-  links: CrossPhaseLink[];
 };
 
 export type ExecutableProjectPlan = {
@@ -87,94 +88,62 @@ export type ExecutableProjectPlan = {
 
 export type ProjectPlan = ExecutableProjectPlan;
 
-export type SkeletonRepairReason =
+export type StructureRepairReason =
+  | 'missing_hierarchy'
   | 'too_few_phases'
-  | 'too_many_phases'
-  | 'too_few_work_packages'
-  | 'too_many_work_packages'
+  | 'too_few_subphases'
+  | 'too_few_tasks'
   | 'placeholder_titles'
   | 'oversized_titles'
   | 'weak_object_fit'
   | 'missing_requested_component'
-  | 'weak_phase_decomposition';
+  | 'weak_subphase_decomposition';
 
-export type SkeletonQualityMetrics = {
+export type StructureQualityMetrics = {
   phaseCount: number;
-  workPackageCount: number;
-  minWorkPackagesPerPhase: number;
+  subphaseCount: number;
+  taskCount: number;
+  minSubphasesPerPhase: number;
+  minTasksPerSubphase: number;
   genericTitleCount: number;
   genericTitleRatio: number;
   objectTypeSignalCoverage: number;
   requestedComponentCoverage: number;
 };
 
-export type SkeletonQualityVerdict = {
+export type StructureQualityVerdict = {
   accepted: boolean;
-  reasons: SkeletonRepairReason[];
+  reasons: StructureRepairReason[];
   score: number;
-  metrics: SkeletonQualityMetrics;
+  metrics: StructureQualityMetrics;
 };
 
-export type PhaseExpansionRepairReason =
-  | 'too_few_tasks'
-  | 'too_many_tasks'
-  | 'placeholder_titles'
-  | 'oversized_titles'
-  | 'missing_entry_task'
-  | 'too_many_entry_tasks'
-  | 'missing_exit_task'
-  | 'broken_within_phase_dependency'
-  | 'weak_within_phase_sequence'
-  | 'self_dependency';
-
-export type PhaseExpansionQualityMetrics = {
-  taskCount: number;
-  dependencyCount: number;
-  entryTaskCount: number;
-  exitTaskCount: number;
-  genericTitleCount: number;
-  genericTitleRatio: number;
-};
-
-export type PhaseExpansionQualityVerdict = {
-  accepted: boolean;
-  reasons: PhaseExpansionRepairReason[];
-  score: number;
-  metrics: PhaseExpansionQualityMetrics;
-};
-
-export type RepairReason =
-  | 'missing_hierarchy'
-  | 'placeholder_titles'
-  | 'oversized_titles'
-  | 'weak_coverage'
-  | 'weak_sequence'
-  | 'too_few_phases'
-  | 'too_few_tasks'
-  | 'too_many_tasks'
+export type SchedulingRepairReason =
+  | 'structure_changed'
+  | 'titles_changed'
+  | 'hierarchy_changed'
+  | 'missing_task_durations'
+  | 'invalid_task_duration'
   | 'missing_dependency_graph'
-  | 'weak_cross_phase_sequence'
-  | 'weak_subject_specificity'
-  | 'weak_object_scale_fit'
+  | 'broken_dependency_reference'
+  | 'dependency_target_not_task'
+  | 'task_outside_subphase'
   | 'phase_has_dependencies'
   | 'graph_cycle_detected';
 
-export type PlanQualityMetrics = {
-  phaseCount: number;
-  taskNodeCount: number;
+export type SchedulingQualityMetrics = {
+  taskCount: number;
+  tasksWithDurationCount: number;
   dependencyCount: number;
+  tasksWithoutDependenciesCount: number;
   crossPhaseDependencyCount: number;
-  genericTitleCount: number;
-  genericTitleRatio: number;
-  objectTypeSignalCoverage: number;
-  passesProductAdequacyFloor: boolean;
 };
 
-export type PlanQualityVerdict = {
+export type SchedulingQualityVerdict = {
   accepted: boolean;
-  reasons: RepairReason[];
+  reasons: SchedulingRepairReason[];
   score: number;
-  metrics: PlanQualityMetrics;
+  metrics: SchedulingQualityMetrics;
 };
 
 export type ModelRoutingDecisionReason =
