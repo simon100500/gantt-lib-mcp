@@ -166,6 +166,84 @@ function createHarness(overrides?: {
 }
 
 describe('runInitialGeneration', () => {
+  it('injects the recognized domain reference into the planning prompt', async () => {
+    const harness = createHarness();
+    const prompts: string[] = [];
+
+    const result = await runInitialGeneration({
+      ...harness.input,
+      userMessage: 'Построй график строительства детского садика',
+      routingEnv: { OPENAI_MODEL: 'gpt-strong' },
+      deps: {
+        executePlan: harness.input.deps.executePlan,
+      },
+      plannerQuery: async (queryInput) => {
+        prompts.push(queryInput.prompt);
+        return { content: JSON.stringify(BASE_PLAN) };
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(prompts[0]?.includes('Object type: kindergarten'));
+    assert.ok(prompts[0]?.includes('Kindergarten / детский сад'));
+  });
+
+  it('injects the fallback private-house baseline for broad prompts', async () => {
+    const harness = createHarness();
+    const prompts: string[] = [];
+
+    const result = await runInitialGeneration({
+      ...harness.input,
+      userMessage: 'Построй график',
+      routingEnv: { OPENAI_MODEL: 'gpt-strong' },
+      deps: {
+        executePlan: harness.input.deps.executePlan,
+      },
+      plannerQuery: async (queryInput) => {
+        prompts.push(queryInput.prompt);
+        return { content: JSON.stringify(BASE_PLAN) };
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(prompts[0]?.includes('Object type: private_residential_house'));
+    assert.ok(prompts[0]?.includes('Generic construction fallback'));
+  });
+
+  it('turns ProjectPlan schema rejection into a controlled planning failure', async () => {
+    const harness = createHarness();
+
+    const result = await runInitialGeneration({
+      ...harness.input,
+      routingEnv: { OPENAI_MODEL: 'gpt-strong' },
+      deps: {
+        executePlan: async () => {
+          throw new Error('executePlan should not run after schema rejection');
+        },
+      },
+      plannerQuery: async () => ({
+        content: JSON.stringify({
+          projectType: 'private_residential_house',
+          assumptions: [],
+          nodes: [
+            {
+              nodeKey: 'task-root',
+              title: 'Task 1',
+              kind: 'task',
+              durationDays: 2,
+              dependsOn: [],
+            },
+          ],
+        }),
+      }),
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.failureStage, 'planning');
+    assert.match(result.assistantResponse, /Не удалось подготовить надежный стартовый график/i);
+    assert.equal(harness.events.some((entry) => entry.event === 'compile_verdict'), false);
+  });
+
   it('runs planning through compile, saves the assistant reply, broadcasts tasks, and logs the lifecycle', async () => {
     const harness = createHarness();
 
@@ -210,6 +288,55 @@ describe('runInitialGeneration', () => {
       harness.events.find((entry) => entry.event === 'plan_repair_requested')?.payload.reasons,
       ['placeholder_titles'],
     );
+  });
+
+  it('records compile verdict payloads for complete, partial salvage, and controlled failure outcomes', async () => {
+    const completeHarness = createHarness();
+    const partialHarness = createHarness({
+      compileResult: {
+        ok: true,
+        outcome: 'partial',
+        message: 'Built a partial starter schedule and skipped a few invalid plan references.',
+        compiledSchedule: {
+          projectId: 'project-41',
+          baseVersion: 7,
+          serverDate: '2026-04-08',
+          command: { type: 'create_tasks_batch', tasks: [] },
+          nodeKeyToTaskId: {},
+          retainedNodeCount: 4,
+          diagnostics: [],
+        },
+        commitResponse: createCommitResponse(),
+        droppedNodeKeys: ['task-finish'],
+        droppedDependencyNodeKeys: ['missing-task'],
+      },
+    });
+    const rejectedHarness = createHarness({
+      compileResult: {
+        ok: false,
+        reason: 'controlled_rejection',
+        message: 'We could not build a reliable starter schedule from this request.',
+        droppedNodeKeys: ['task-finish'],
+        droppedDependencyNodeKeys: ['missing-task'],
+        retainedNodeCount: 3,
+        retainedNodeRatio: 0.5,
+        retainedTopLevelPhaseCount: 2,
+        everyRetainedPhaseHasAChildTask: false,
+        hasBrokenReferences: false,
+      },
+    });
+
+    await runInitialGeneration(completeHarness.input);
+    await runInitialGeneration(partialHarness.input);
+    await runInitialGeneration(rejectedHarness.input);
+
+    const completeVerdict = completeHarness.events.find((entry) => entry.event === 'compile_verdict');
+    const partialVerdict = partialHarness.events.find((entry) => entry.event === 'compile_verdict');
+    const rejectedVerdict = rejectedHarness.events.find((entry) => entry.event === 'compile_verdict');
+
+    assert.equal(completeVerdict?.payload.outcome, 'complete');
+    assert.equal(partialVerdict?.payload.outcome, 'partial');
+    assert.equal(rejectedVerdict?.payload.outcome, 'controlled_rejection');
   });
 
   it('communicates partial salvage without exposing compiler jargon', async () => {
