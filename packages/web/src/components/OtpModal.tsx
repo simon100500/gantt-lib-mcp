@@ -5,13 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { AuthSuccessResponse } from '../lib/apiTypes.ts';
+import { YandexAuthButton } from './YandexAuthButton.tsx';
 
 interface OtpModalProps {
   onSuccess: (result: AuthSuccessResponse) => void;
   onClose: () => void;
+  initialMethod?: 'yandex' | 'otp';
 }
 
-type Step = 'email' | 'otp';
+type Step = 'choice' | 'otp';
+
+interface ApiErrorResponse {
+  error?: string;
+  message?: string;
+}
 
 async function readErrorMessage(
   res: Response,
@@ -24,20 +31,25 @@ async function readErrorMessage(
   }
 
   try {
-    const data = JSON.parse(raw) as { error?: string; message?: string };
+    const data = JSON.parse(raw) as ApiErrorResponse;
     return data.error || data.message || fallback;
   } catch {
     return `${fallback}: ${raw.slice(0, 200)}`;
   }
 }
 
-export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
-  const [step, setStep] = useState<Step>('email');
+export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpModalProps) {
+  const [step, setStep] = useState<Step>('choice');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setStep('choice');
+    setError(null);
+  }, [initialMethod]);
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,12 +130,12 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
   }, [otp, step]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      {step === 'email' ? (
-        <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+      {step === 'choice' ? (
+        <Card className="relative w-[440px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+            className="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-600"
             aria-label="Закрыть"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -131,45 +143,58 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl font-semibold">Вход в ГетГант</CardTitle>
-            <CardDescription>Введите email для получения кода</CardDescription>
+          <CardHeader className="space-y-3 pb-5">
+            <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Вход в ГетГант</CardTitle>
           </CardHeader>
-          <form onSubmit={handleRequestOtp}>
-            <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
+            <YandexAuthButton onSuccess={onSuccess} onError={setError} />
+            {error && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+                {error}
+              </div>
+            )}
+            <div className="relative my-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-3 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                  или
+                </span>
+              </div>
+            </div>
+            <form onSubmit={handleRequestOtp} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email адрес</Label>
+                <Label htmlFor="email" className="text-sm font-medium text-slate-700">Войти по почте</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="you@example.com"
                   className={cn(
-                    "h-11",
+                    "h-12 rounded-2xl border-slate-200 bg-white text-[15px]",
                     error && "border-destructive focus-visible:ring-destructive"
                   )}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
-                  autoFocus
+                  autoFocus={initialMethod === 'otp'}
                 />
-                {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
-            </CardContent>
-            <CardFooter>
               <Button
                 type="submit"
-                className="w-full"
+                className="h-12 w-full rounded-2xl text-[15px] font-medium"
                 size="lg"
                 disabled={loading}
               >
-                {loading ? 'Отправка...' : 'Отправить код'}
+                {loading ? 'Отправка...' : 'Получить код по почте'}
               </Button>
-            </CardFooter>
-          </form>
+            </form>
+          </CardContent>
+          <CardFooter className="pt-0" />
         </Card>
       ) : (
-        <div className="relative w-[420px] max-w-[calc(100vw-2rem)]">
-          <Card className="w-full shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
+        <div className="relative w-[440px] max-w-[calc(100vw-2rem)]">
+          <Card className="relative w-full rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={onClose}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -180,13 +205,13 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-xl font-semibold">Проверьте email</CardTitle>
-              <CardDescription className="flex items-center gap-1 flex-wrap">
+            <CardHeader className="space-y-2 pb-5">
+              <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Проверьте email</CardTitle>
+              <CardDescription className="flex items-center gap-1 flex-wrap text-[15px] leading-6 text-slate-600">
                 Мы отправили 6-значный код на {email}{' '}
                 <button
-                  onClick={() => setStep('email')}
-                  className="text-primary hover:underline text-sm"
+                  onClick={() => setStep('choice')}
+                  className="text-sm font-medium text-primary hover:underline"
                 >
                   (изменить)
                 </button>
@@ -194,7 +219,7 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="otp">Код подтверждения</Label>
+                <Label htmlFor="otp" className="text-sm font-medium text-slate-700">Код подтверждения</Label>
                 <Input
                   ref={otpInputRef}
                   id="otp"
@@ -209,26 +234,37 @@ export function OtpModal({ onSuccess, onClose }: OtpModalProps) {
                     setOtp(value);
                   }}
                   className={cn(
-                    "h-14 text-center !text-4xl font-mono tracking-widest py-4",
+                    "h-16 rounded-2xl border-slate-200 bg-slate-50 text-center !text-4xl font-mono tracking-[0.32em] py-4",
                     error && "border-destructive focus-visible:ring-destructive"
                   )}
                   disabled={loading}
                   autoFocus
                 />
-                {error && <p className="text-sm text-destructive text-center">{error}</p>}
+                {error && <p className="text-sm leading-6 text-destructive text-center">{error}</p>}
               </div>
               {!loading && (
                 <p className="text-sm text-muted-foreground text-center">
                   Не получили?{' '}
                   <button
                     type="button"
-                    className="text-primary hover:underline"
-                    onClick={() => setStep('email')}
+                    className="font-medium text-primary hover:underline"
+                    onClick={() => setStep('choice')}
                   >
                     Отправить снова
                   </button>
                 </p>
               )}
+              <button
+                type="button"
+                className="w-full text-center text-sm text-slate-500 hover:text-slate-700"
+                onClick={() => {
+                  setOtp('');
+                  setError(null);
+                  setStep('choice');
+                }}
+              >
+                Вернуться к выбору способа входа
+              </button>
             </CardContent>
           </Card>
         </div>
