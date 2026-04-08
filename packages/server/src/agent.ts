@@ -65,6 +65,10 @@ type FastShiftTaskMatch =
   | { kind: 'exact'; matches: ComparableTask[]; }
   | { kind: 'partial'; matches: ComparableTask[]; };
 
+type InitialScheduleTemplateIntent = {
+  domain: 'construction';
+};
+
 type NormalizedMutationToolName =
   | 'create_tasks'
   | 'update_tasks'
@@ -167,6 +171,10 @@ export function isMutationIntent(message: string): boolean {
   ];
 
   if (russianMutationMarkers.some((marker) => normalized.includes(marker))) {
+    return true;
+  }
+
+  if (parseInitialScheduleTemplateIntent(message)) {
     return true;
   }
 
@@ -290,6 +298,22 @@ function buildNameVariants(value: string): string[] {
   return [...new Set([normalized, accusativeNormalized])];
 }
 
+export function parseInitialScheduleTemplateIntent(message: string): InitialScheduleTemplateIntent | null {
+  const normalized = normalizeName(message);
+
+  const isConstruction = /(строит|стройк|ремонт|construction|build)/.test(normalized);
+  const isScheduleBootstrap = /(постро|состав|сформир|распиш|create|build|generate|draft)/.test(normalized)
+    && /(график|план|расписан|schedule|timeline|gantt)/.test(normalized);
+  const isTypicalTemplate = /(типич|typical|template|шаблон|примерн)/.test(normalized)
+    && /(график|план|schedule|timeline|gantt)/.test(normalized);
+
+  if (isConstruction && (isScheduleBootstrap || isTypicalTemplate)) {
+    return { domain: 'construction' };
+  }
+
+  return null;
+}
+
 function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | undefined): number | null {
   const amount = rawAmount ? Number.parseInt(rawAmount, 10) : 1;
   if (Number.isNaN(amount) || amount === 0) {
@@ -306,24 +330,24 @@ function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | un
 
 export function parseFastShiftIntent(message: string): FastShiftIntent | null {
   const trimmed = message.trim();
-  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode'] }> = [
+  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode']; defaultDelta?: number }> = [
     { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'working' },
     { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'calendar' },
     { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'project_default' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i, defaultDelta: 7 },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+working\s+days?$/i, mode: 'working' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+calendar\s+days?$/i, mode: 'calendar' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+weeks?$/i, mode: 'project_default' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+days?$/i, mode: 'project_default' },
   ];
 
-  for (const { regex, mode } of patterns) {
+  for (const { regex, mode, defaultDelta } of patterns) {
     const match = trimmed.match(regex);
     if (!match) {
       continue;
     }
     const taskName = match[1]?.trim();
-    const delta = parseFastShiftDelta(match[2], match[3]);
+    const delta = defaultDelta ?? parseFastShiftDelta(match[2], match[3]);
     if (!taskName || delta === null) {
       return null;
     }
@@ -357,6 +381,45 @@ export function resolveTasksByName(tasks: ComparableTask[], taskName: string): F
   return { kind: 'none', matches: [] };
 }
 
+function createUtcDate(year: number, monthIndex: number, day: number): Date {
+  return new Date(Date.UTC(year, monthIndex, day));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  return createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days);
+}
+
+function isWeekend(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function alignToBusinessDay(date: Date): Date {
+  let current = createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  while (isWeekend(current)) {
+    current = addUtcDays(current, 1);
+  }
+  return current;
+}
+
+function addBusinessDays(start: Date, businessDays: number): Date {
+  let current = alignToBusinessDay(start);
+  let remaining = Math.max(0, businessDays - 1);
+
+  while (remaining > 0) {
+    current = addUtcDays(current, 1);
+    if (!isWeekend(current)) {
+      remaining -= 1;
+    }
+  }
+
+  return current;
+}
+
+function nextBusinessDay(date: Date): Date {
+  return alignToBusinessDay(addUtcDays(date, 1));
+}
+
 function formatDateOnly(date: Date): string {
   return date.toISOString().split('T')[0];
 }
@@ -375,6 +438,125 @@ function buildFastShiftMultiSuccessMessage(taskName: string, matchCount: number,
   const unit = mode === 'working' ? 'рабоч' : 'календарн';
   const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
   return `Все ${matchCount} задачи «${taskName}» были ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
+}
+
+function buildTypicalConstructionTemplate(baseStartDate: Date): Array<{
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+  dependencies?: Array<{ taskId: string; type: 'FS'; lag?: number }>;
+}> {
+  const phases = [
+    {
+      name: 'Подготовительный этап',
+      tasks: [
+        { name: 'Подготовка площадки', duration: 3 },
+        { name: 'Разбивка осей', duration: 2 },
+        { name: 'Временные сети и бытовой городок', duration: 3 },
+      ],
+    },
+    {
+      name: 'Фундамент',
+      tasks: [
+        { name: 'Земляные работы', duration: 4 },
+        { name: 'Устройство основания', duration: 3 },
+        { name: 'Армирование и опалубка', duration: 4 },
+        { name: 'Бетонирование фундамента', duration: 3 },
+      ],
+    },
+    {
+      name: 'Коробка здания',
+      tasks: [
+        { name: 'Монтаж несущего каркаса', duration: 6 },
+        { name: 'Перекрытия и лестницы', duration: 5 },
+        { name: 'Наружные стены и перегородки', duration: 6 },
+      ],
+    },
+    {
+      name: 'Контур здания',
+      tasks: [
+        { name: 'Кровельные работы', duration: 4 },
+        { name: 'Окна и наружные двери', duration: 4 },
+        { name: 'Фасадные работы', duration: 5 },
+      ],
+    },
+    {
+      name: 'Инженерные системы',
+      tasks: [
+        { name: 'Черновая электрика', duration: 5 },
+        { name: 'Сантехника и канализация', duration: 5 },
+        { name: 'Вентиляция и слаботочные сети', duration: 4 },
+      ],
+    },
+    {
+      name: 'Внутренняя отделка',
+      tasks: [
+        { name: 'Штукатурка и стяжка', duration: 6 },
+        { name: 'Чистовые покрытия', duration: 5 },
+        { name: 'Монтаж оборудования и дверей', duration: 4 },
+      ],
+    },
+    {
+      name: 'Пусконаладка и сдача',
+      tasks: [
+        { name: 'Пусконаладочные работы', duration: 3 },
+        { name: 'Испытания и устранение замечаний', duration: 3 },
+        { name: 'Сдача объекта', duration: 2 },
+      ],
+    },
+  ] as const;
+
+  const allTasks: Array<{
+    id: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+    parentId?: string;
+    dependencies?: Array<{ taskId: string; type: 'FS'; lag?: number }>;
+  }> = [];
+
+  let phaseStart = alignToBusinessDay(baseStartDate);
+  let previousPhaseLastTaskId: string | undefined;
+
+  for (const phase of phases) {
+    const phaseId = crypto.randomUUID();
+    const childTasks: typeof allTasks = [];
+    let childStart = phaseStart;
+    let previousChildId = previousPhaseLastTaskId;
+
+    for (const step of phase.tasks) {
+      const taskId = crypto.randomUUID();
+      const endDate = addBusinessDays(childStart, step.duration);
+      childTasks.push({
+        id: taskId,
+        name: step.name,
+        startDate: formatDateOnly(childStart),
+        endDate: formatDateOnly(endDate),
+        parentId: phaseId,
+        dependencies: previousChildId ? [{ taskId: previousChildId, type: 'FS' }] : undefined,
+      });
+      previousChildId = taskId;
+      childStart = nextBusinessDay(endDate);
+    }
+
+    allTasks.push({
+      id: phaseId,
+      name: phase.name,
+      startDate: childTasks[0]!.startDate,
+      endDate: childTasks[childTasks.length - 1]!.endDate,
+    }, ...childTasks);
+
+    previousPhaseLastTaskId = childTasks[childTasks.length - 1]!.id;
+    phaseStart = nextBusinessDay(parseDateOnly(childTasks[childTasks.length - 1]!.endDate));
+  }
+
+  return allTasks;
+}
+
+function buildInitialConstructionTemplateMessage(taskCount: number): string {
+  return `Добавлен типовой график строительства: ${taskCount} задач по этапам от подготовки площадки до сдачи объекта.`;
 }
 
 export function assessMutationOutcome(
@@ -686,6 +868,95 @@ async function getPrismaModule(): Promise<PrismaModule> {
   }
 
   return prismaModulePromise;
+}
+
+async function tryInitialScheduleTemplateFastPath(
+  userMessage: string,
+  projectId: string,
+  sessionId: string,
+  runId: string,
+  tasksBefore: ComparableTask[],
+  services: Pick<TaskServiceModule, 'taskService' | 'messageService' | 'commandService'>,
+  broadcastToSession: WsModule['broadcastToSession'],
+): Promise<boolean> {
+  const templateIntent = parseInitialScheduleTemplateIntent(userMessage);
+  if (!templateIntent || tasksBefore.length > 0) {
+    return false;
+  }
+
+  const { getPrisma } = await getPrismaModule();
+  const prisma = getPrisma();
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { version: true },
+  });
+
+  if (!project) {
+    return false;
+  }
+
+  const tasks = buildTypicalConstructionTemplate(alignToBusinessDay(new Date()));
+  const response = await services.commandService.commitCommand({
+    projectId,
+    clientRequestId: crypto.randomUUID(),
+    baseVersion: project.version,
+    command: {
+      type: 'create_tasks_batch',
+      tasks,
+    },
+  }, 'agent');
+
+  await writeServerDebugLog('initial_schedule_template_attempt', {
+    runId,
+    projectId,
+    sessionId,
+    template: templateIntent.domain,
+    taskCount: tasks.length,
+    accepted: response.accepted,
+    reason: response.accepted ? undefined : response.reason,
+  });
+
+  if (!response.accepted) {
+    return false;
+  }
+
+  const { tasks: tasksAfter } = await services.taskService.list(projectId);
+  const assistantResponse = buildInitialConstructionTemplateMessage(tasks.length);
+
+  await services.messageService.add('assistant', assistantResponse, projectId);
+  await writeServerDebugLog('agent_response_saved', {
+    runId,
+    projectId,
+    sessionId,
+    assistantResponse,
+    streamedContent: true,
+    finalTasksChanged: true,
+    finalChangedTaskIds: response.result.changedTaskIds,
+    finalAcceptedChangedTaskIds: response.result.changedTaskIds,
+    finalAcceptedChangedTaskIdMismatch: false,
+    fastPath: 'initial_schedule_template',
+  });
+
+  broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
+  broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter as MTask[] });
+  await writeServerDebugLog('tasks_broadcast', {
+    runId,
+    projectId,
+    sessionId,
+    taskCount: tasksAfter.length,
+    taskIds: tasksAfter.map((currentTask) => currentTask.id),
+    taskNames: tasksAfter.map((currentTask) => currentTask.name),
+    fastPath: 'initial_schedule_template',
+  });
+  broadcastToSession(sessionId, { type: 'done' });
+  await writeServerDebugLog('agent_run_completed', {
+    runId,
+    projectId,
+    sessionId,
+    fastPath: 'initial_schedule_template',
+  });
+
+  return true;
 }
 
 async function tryDirectShiftFastPath(
@@ -1083,6 +1354,18 @@ export async function runAgentWithHistory(
     });
 
     await messageService.add('user', userMessage, projectId);
+
+    if (await tryInitialScheduleTemplateFastPath(
+      userMessage,
+      projectId,
+      sessionId,
+      runId,
+      tasksBefore,
+      { taskService, messageService, commandService },
+      broadcastToSession,
+    )) {
+      return;
+    }
 
     if (await tryDirectShiftFastPath(
       userMessage,

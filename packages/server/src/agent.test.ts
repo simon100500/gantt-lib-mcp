@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, resolveTasksByName } from './agent.js';
+import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, parseInitialScheduleTemplateIntent, resolveTasksByName } from './agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -27,6 +27,11 @@ describe('agent hierarchy mutation intent', () => {
   it('treats Russian relative shift requests as mutations', () => {
     assert.equal(isMutationIntent('сдвинь штукатурку на 2 дня'), true);
     assert.equal(isMutationIntent('перенеси штукатурку на 2 дня вперед'), true);
+  });
+
+  it('treats broad construction schedule bootstrap requests as mutations', () => {
+    assert.equal(isMutationIntent('Построй типичный график строительства'), true);
+    assert.equal(isMutationIntent('Составь примерный план строительства дома'), true);
   });
 });
 
@@ -74,6 +79,22 @@ describe('agent simple mutation heuristic', () => {
   it('treats broad planning requests as non-simple', () => {
     assert.equal(isSimpleMutationRequest('Создай график строительства с этапами и зависимостями'), false);
     assert.equal(isSimpleMutationRequest('add tasks for all floors with dependencies'), false);
+  });
+});
+
+describe('agent initial schedule template intent', () => {
+  it('detects construction bootstrap requests', () => {
+    assert.deepEqual(parseInitialScheduleTemplateIntent('Построй типичный график строительства'), {
+      domain: 'construction',
+    });
+    assert.deepEqual(parseInitialScheduleTemplateIntent('Сформируй шаблонный план ремонта'), {
+      domain: 'construction',
+    });
+  });
+
+  it('ignores unrelated schedule requests', () => {
+    assert.equal(parseInitialScheduleTemplateIntent('Покажи текущий график строительства'), null);
+    assert.equal(parseInitialScheduleTemplateIntent('Сдвинь фундамент на 3 дня'), null);
   });
 });
 
