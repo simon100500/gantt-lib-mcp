@@ -197,26 +197,7 @@ describe('compileInitialProjectPlan', () => {
 });
 
 describe('executeInitialProjectPlan', () => {
-  it('commits a partial initial schedule after dropping only broken references and reports a partial outcome', async () => {
-    const partialPlan: ProjectPlan = {
-      projectType: 'private_residential_house',
-      assumptions: [],
-      nodes: [
-        { nodeKey: 'phase-a', title: 'Site prep', kind: 'phase', durationDays: 1, dependsOn: [] },
-        { nodeKey: 'task-a', title: 'Survey', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [] },
-        { nodeKey: 'task-a2', title: 'Temp access', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-a', type: 'FS' }] },
-        { nodeKey: 'phase-b', title: 'Foundation', kind: 'phase', durationDays: 1, dependsOn: [] },
-        { nodeKey: 'task-b', title: 'Footings', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-a', type: 'FS' }] },
-        { nodeKey: 'task-b2', title: 'Waterproofing', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-b', type: 'FS' }] },
-        { nodeKey: 'phase-c', title: 'Shell', kind: 'phase', durationDays: 1, dependsOn: [] },
-        { nodeKey: 'task-c', title: 'Framing', parentNodeKey: 'phase-c', kind: 'task', durationDays: 3, dependsOn: [{ nodeKey: 'missing-task', type: 'FS' }] },
-        { nodeKey: 'task-c2', title: 'Roofing', parentNodeKey: 'phase-c', kind: 'task', durationDays: 3, dependsOn: [{ nodeKey: 'task-c', type: 'FS' }] },
-        { nodeKey: 'phase-d', title: 'Finishes', kind: 'phase', durationDays: 1, dependsOn: [] },
-        { nodeKey: 'task-d', title: 'Painting', parentNodeKey: 'phase-d', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-c', type: 'SS' }] },
-        { nodeKey: 'task-d2', title: 'Handover', parentNodeKey: 'phase-d', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-d', type: 'FS' }, { nodeKey: 'task-c2', type: 'FS' }] },
-      ],
-    };
-
+  it('commits a valid initial schedule and reports a complete outcome', async () => {
     const committed: Array<{ request: CommitProjectCommandRequest; actorType: ActorType; actorId?: string }> = [];
     const commandService = {
       async commitCommand(request: CommitProjectCommandRequest, actorType: ActorType, actorId?: string): Promise<CommitProjectCommandResponse> {
@@ -247,24 +228,24 @@ describe('executeInitialProjectPlan', () => {
       clientRequestId: 'client-1',
       actorId: 'agent-7',
       serverDate: '2026-04-07',
-      plan: partialPlan,
+      plan: PLAN,
       commandService,
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.outcome, 'partial');
-    assert.match(result.message, /partial/i);
+    assert.equal(result.outcome, 'complete');
+    assert.match(result.message, /starter schedule/i);
     assert.deepEqual(result.droppedNodeKeys, []);
-    assert.deepEqual(result.droppedDependencyNodeKeys, ['missing-task']);
-    assert.equal(result.compiledSchedule.compiledTaskCount, 8);
-    assert.equal(result.compiledSchedule.compiledDependencyCount >= 3, true);
+    assert.deepEqual(result.droppedDependencyNodeKeys, []);
+    assert.equal(result.compiledSchedule.compiledTaskCount, 5);
+    assert.equal(result.compiledSchedule.compiledDependencyCount, 4);
     assert.equal(committed.length, 1);
     assert.equal(committed[0]!.actorType, 'agent');
     assert.equal(committed[0]!.actorId, 'agent-7');
     assert.equal(committed[0]!.request.command.type, 'create_tasks_batch');
   });
 
-  it('rejects a too-weak partial result instead of silently falling back', async () => {
+  it('rejects a structurally invalid result instead of salvaging it', async () => {
     const weakPlan: ProjectPlan = {
       projectType: 'private_residential_house',
       assumptions: [],
@@ -302,7 +283,7 @@ describe('executeInitialProjectPlan', () => {
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'controlled_rejection');
-    assert.equal(result.retainedTopLevelPhaseCount, 2);
+    assert.equal(result.retainedTopLevelPhaseCount, 5);
     assert.equal(result.compiledDependencyCount, 0);
     assert.equal(commitCalls, 0);
     assert.match(result.message, /could not build a reliable starter schedule/i);

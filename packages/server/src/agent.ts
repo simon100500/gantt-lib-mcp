@@ -60,7 +60,7 @@ type VerificationResult = {
 type InitialGenerationPlannerQueryInput = {
   prompt: string;
   model: string;
-  stage: 'planning' | 'repair';
+  stage: 'skeleton' | 'skeleton_repair' | 'phase_expansion' | 'phase_expansion_repair';
 };
 
 type InitialGenerationRouteDecisionQueryInput = {
@@ -189,7 +189,7 @@ async function executeInitialGenerationPlannerQuery(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       env: buildSdkEnv(env),
-      maxSessionTurns: input.stage === 'repair' ? 4 : 3,
+      maxSessionTurns: input.stage === 'skeleton_repair' || input.stage === 'phase_expansion_repair' ? 4 : 3,
     },
   });
 

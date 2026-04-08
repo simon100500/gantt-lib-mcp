@@ -7,7 +7,7 @@ import { resolveDomainReference, type ResolveDomainReferenceInput, type Resolved
 import { executeInitialProjectPlan, type ExecuteInitialProjectPlanInput, type ExecuteInitialProjectPlanResult } from './executor.js';
 import { resolveModelRoutingDecision } from './model-routing.js';
 import { planInitialProject, type PlanInitialProjectInput, type PlanInitialProjectResult } from './planner.js';
-import type { GenerationBrief, ModelRoutingDecision } from './types.js';
+import type { GenerationBrief, InitialGenerationPlannerStage, ModelRoutingDecision } from './types.js';
 
 type ListedTask = {
   id: string;
@@ -20,7 +20,7 @@ type ListedTask = {
 type PlannerQueryInput = {
   prompt: string;
   model: string;
-  stage: 'planning' | 'repair';
+  stage: InitialGenerationPlannerStage;
 };
 
 type PlannerQueryResult = string | { content?: string };
@@ -230,17 +230,64 @@ export async function runInitialGeneration(
     });
     repairAttempted = planning.repairAttempted;
 
-    await input.logger.debug('planning_output', {
+    await input.logger.debug('wbs_skeleton_output', {
       runId: input.runId,
       projectId: input.projectId,
       sessionId: input.sessionId,
       selectedModel: modelRoutingDecision.selectedModel,
+      skeleton: planning.skeleton,
+      repairAttempted: planning.skeletonVerdict.accepted ? false : planning.repairAttempted,
+      phaseCount: planning.skeletonVerdict.metrics.phaseCount,
+      workPackageCount: planning.skeletonVerdict.metrics.workPackageCount,
+    });
+
+    await input.logger.debug('wbs_skeleton_verdict', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      accepted: planning.skeletonVerdict.accepted,
+      reasons: planning.skeletonVerdict.reasons,
+      score: planning.skeletonVerdict.score,
+      metrics: planning.skeletonVerdict.metrics,
+    });
+
+    for (const expandedPhase of planning.expandedPhases) {
+      await input.logger.debug('phase_expansion_output', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        phaseKey: expandedPhase.phaseKey,
+        phaseTitle: expandedPhase.title,
+        expansion: expandedPhase.expansion,
+        repairAttempted: expandedPhase.repairAttempted,
+      });
+
+      await input.logger.debug('phase_expansion_verdict', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        phaseKey: expandedPhase.phaseKey,
+        phaseTitle: expandedPhase.title,
+        accepted: expandedPhase.verdict.accepted,
+        reasons: expandedPhase.verdict.reasons,
+        score: expandedPhase.verdict.score,
+        metrics: expandedPhase.verdict.metrics,
+      });
+    }
+
+    await input.logger.debug('cross_phase_linking_verdict', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      linkCount: planning.crossPhaseLinkPlan.links.length,
+      links: planning.crossPhaseLinkPlan.links,
+    });
+
+    await input.logger.debug('executable_plan_output', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
       plan: planning.plan,
-      repairAttempted: planning.repairAttempted,
-      phaseCount: planning.verdict.metrics.phaseCount,
-      taskNodeCount: planning.verdict.metrics.taskNodeCount,
-      dependencyCount: planning.verdict.metrics.dependencyCount,
-      crossPhaseDependencyCount: planning.verdict.metrics.crossPhaseDependencyCount,
     });
 
     await input.logger.debug('plan_quality_verdict', {
@@ -259,7 +306,11 @@ export async function runInitialGeneration(
         runId: input.runId,
         projectId: input.projectId,
         sessionId: input.sessionId,
-        reasons: planning.verdict.reasons,
+        reasons: [
+          ...planning.skeletonVerdict.reasons,
+          ...planning.expandedPhases.flatMap((phase) => phase.verdict.reasons),
+          ...planning.verdict.reasons,
+        ],
       });
     }
 

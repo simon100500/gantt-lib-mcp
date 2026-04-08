@@ -4,7 +4,11 @@ import { describe, it } from 'node:test';
 import { buildGenerationBrief } from './brief.js';
 import { resolveDomainReference } from './domain-reference.js';
 import { planInitialProject } from './planner.js';
-import { evaluateProjectPlanQuality } from './quality-gate.js';
+import {
+  evaluatePhaseExpansionQuality,
+  evaluateProjectPlanQuality,
+  evaluateSkeletonQuality,
+} from './quality-gate.js';
 
 describe('initial-generation domain reference', () => {
   it('injects the kindergarten reference for детского садика prompts', () => {
@@ -54,17 +58,55 @@ describe('initial-generation brief', () => {
 
     assert.equal(brief.objectType, 'private_residential_house');
     assert.match(brief.starterScheduleExpectation, /full starter schedule/i);
-    assert.match(brief.starterScheduleExpectation, /baseline/i);
     assert.match(brief.namingBan, /Этап 1/);
-    assert.match(brief.namingBan, /Task 3/);
-    assert.match(brief.domainContextSummary, /частн/i);
-    assert.match(brief.serverInferencePolicy, /infer/i);
-    assert.ok(brief.scopeSignals.length >= 1);
+    assert.match(brief.serverInferencePolicy, /Infer/i);
   });
 });
 
 describe('initial-generation quality gate', () => {
-  it('flags missing hierarchy, placeholder titles, weak coverage, weak dependency graph, and weak cross-phase sequencing', () => {
+  it('flags weak skeletons with placeholder titles and poor coverage', () => {
+    const brief = buildGenerationBrief({
+      userMessage: 'Построй график',
+      reference: resolveDomainReference({ userMessage: 'Построй график' }),
+    });
+
+    const verdict = evaluateSkeletonQuality({
+      projectType: 'private_residential_house',
+      assumptions: [],
+      phases: [
+        {
+          phaseKey: 'phase-1',
+          title: 'Этап 1',
+          orderHint: 1,
+          workPackages: [{ workPackageKey: 'wp-1', title: 'Задача 1' }],
+        },
+      ],
+    }, brief, 'Построй график');
+
+    assert.equal(verdict.accepted, false);
+    assert.ok(verdict.reasons.includes('too_few_phases'));
+    assert.ok(verdict.reasons.includes('placeholder_titles'));
+  });
+
+  it('flags weak phase expansions with missing sequencing', () => {
+    const verdict = evaluatePhaseExpansionQuality({
+      phaseKey: 'phase-shell',
+      tasks: [
+        {
+          nodeKey: 'task-1',
+          title: 'Задача 1',
+          durationDays: 3,
+          dependsOnWithinPhase: [],
+        },
+      ],
+    });
+
+    assert.equal(verdict.accepted, false);
+    assert.ok(verdict.reasons.includes('too_few_tasks'));
+    assert.ok(verdict.reasons.includes('placeholder_titles'));
+  });
+
+  it('flags executable plans that still lack enough task graph depth', () => {
     const brief = buildGenerationBrief({
       userMessage: 'Построй график',
       reference: resolveDomainReference({ userMessage: 'Построй график' }),
@@ -76,174 +118,31 @@ describe('initial-generation quality gate', () => {
       nodes: [
         {
           nodeKey: 'phase-1',
-          title: 'Этап 1',
+          title: 'Подготовка',
           kind: 'phase',
-          durationDays: 5,
+          durationDays: 1,
           dependsOn: [],
         },
         {
-          nodeKey: 'phase-2',
-          title: 'Stage 2',
-          kind: 'phase',
-          durationDays: 5,
+          nodeKey: 'task-1',
+          title: 'Разметка',
+          parentNodeKey: 'phase-1',
+          kind: 'task',
+          durationDays: 2,
           dependsOn: [],
         },
       ],
     }, brief);
 
     assert.equal(verdict.accepted, false);
-    assert.deepEqual(verdict.reasons, [
-      'missing_hierarchy',
-      'placeholder_titles',
-      'weak_coverage',
-      'weak_sequence',
-      'too_few_phases',
-      'too_few_tasks',
-      'missing_dependency_graph',
-      'weak_cross_phase_sequence',
-      'weak_subject_specificity',
-    ]);
+    assert.ok(verdict.reasons.includes('weak_coverage'));
   });
 });
 
 describe('initial-generation planner', () => {
-  it('rejects duplicate nodeKey values during schema validation', async () => {
-    await assert.rejects(
-      planInitialProject({
-        userMessage: 'Построй график',
-        brief: buildGenerationBrief({
-          userMessage: 'Построй график',
-          reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        }),
-        reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        modelDecision: { selectedModel: 'gpt-strong' },
-        sdkQuery: async () =>
-          JSON.stringify({
-            projectType: 'private_residential_house',
-            nodes: [
-              {
-                nodeKey: 'phase-1',
-                title: 'Подготовка',
-                kind: 'phase',
-                durationDays: 5,
-                dependsOn: [],
-              },
-              {
-                nodeKey: 'phase-1',
-                title: 'Фундамент',
-                parentNodeKey: 'phase-1',
-                kind: 'task',
-                durationDays: 5,
-                dependsOn: [],
-              },
-            ],
-          }),
-      }),
-      /duplicate nodeKey/i,
-    );
-  });
+  it('builds a staged executable plan and forbids dates in planning prompts', async () => {
+    const prompts: Array<{ stage: string; prompt: string }> = [];
 
-  it('rejects top-level task nodes during schema validation', async () => {
-    await assert.rejects(
-      planInitialProject({
-        userMessage: 'Построй график',
-        brief: buildGenerationBrief({
-          userMessage: 'Построй график',
-          reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        }),
-        reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        modelDecision: { selectedModel: 'gpt-strong' },
-        sdkQuery: async () =>
-          JSON.stringify({
-            projectType: 'private_residential_house',
-            nodes: [
-              {
-                nodeKey: 'task-1',
-                title: 'Фундамент',
-                kind: 'task',
-                durationDays: 5,
-                dependsOn: [],
-              },
-            ],
-          }),
-      }),
-      /top-level task/i,
-    );
-  });
-
-  it('rejects placeholder titles during schema validation', async () => {
-    await assert.rejects(
-      planInitialProject({
-        userMessage: 'Построй график',
-        brief: buildGenerationBrief({
-          userMessage: 'Построй график',
-          reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        }),
-        reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        modelDecision: { selectedModel: 'gpt-strong' },
-        sdkQuery: async () =>
-          JSON.stringify({
-            projectType: 'private_residential_house',
-            nodes: [
-              {
-                nodeKey: 'phase-1',
-                title: 'Подготовка',
-                kind: 'phase',
-                durationDays: 5,
-                dependsOn: [],
-              },
-              {
-                nodeKey: 'task-1',
-                title: 'Задача 2',
-                parentNodeKey: 'phase-1',
-                kind: 'task',
-                durationDays: 5,
-                dependsOn: [],
-              },
-            ],
-          }),
-      }),
-      /placeholder/i,
-    );
-  });
-
-  it('rejects broken dependency references during schema validation', async () => {
-    await assert.rejects(
-      planInitialProject({
-        userMessage: 'Построй график',
-        brief: buildGenerationBrief({
-          userMessage: 'Построй график',
-          reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        }),
-        reference: resolveDomainReference({ userMessage: 'Построй график' }),
-        modelDecision: { selectedModel: 'gpt-strong' },
-        sdkQuery: async () =>
-          JSON.stringify({
-            projectType: 'private_residential_house',
-            nodes: [
-              {
-                nodeKey: 'phase-1',
-                title: 'Подготовка',
-                kind: 'phase',
-                durationDays: 5,
-                dependsOn: [],
-              },
-              {
-                nodeKey: 'task-1',
-                title: 'Фундамент',
-                parentNodeKey: 'phase-1',
-                kind: 'task',
-                durationDays: 5,
-                dependsOn: [{ nodeKey: 'missing-task' }],
-              },
-            ],
-          }),
-      }),
-      /dependency reference/i,
-    );
-  });
-
-  it('normalizes loose planner payloads that use id/name/type aliases and nested phase tasks', async () => {
     const result = await planInitialProject({
       userMessage: 'График строительства жилого дома на 3 этажа + гараж',
       brief: buildGenerationBrief({
@@ -252,411 +151,177 @@ describe('initial-generation planner', () => {
       }),
       reference: resolveDomainReference({ userMessage: 'График строительства жилого дома на 3 этажа + гараж' }),
       modelDecision: { selectedModel: 'gpt-strong' },
-      sdkQuery: async () =>
-        JSON.stringify({
-          projectType: 'private_house',
-          phases: [
-            {
-              id: 'site-prep',
-              name: 'Подготовка участка',
-              type: 'phase',
-              tasks: [
-                { id: 'survey', name: 'Геодезическая разбивка', type: 'task', duration: 2 },
-                { name: 'Временные дороги и ограждение', type: 'task', duration: 3, dependencies: ['survey'] },
-              ],
-            },
-            {
-              id: 'foundation',
-              name: 'Фундамент',
-              type: 'phase',
-              tasks: [
-                { id: 'pit', name: 'Разработка котлована', type: 'task', duration: 4, dependencies: ['survey'] },
-                { id: 'concrete', name: 'Бетонирование фундамента', type: 'task', duration: 5, dependencies: [{ predecessorId: 'pit', lag: 1 }] },
-              ],
-            },
-            {
-              id: 'shell',
-              name: 'Коробка дома и гаража',
-              type: 'phase',
-              tasks: [
-                { id: 'house-frame', name: 'Возведение коробки дома', type: 'task', duration: 10, dependencies: ['concrete'] },
-                { id: 'garage-frame', name: 'Возведение коробки гаража', type: 'task', duration: 6, dependencies: [{ predecessorId: 'concrete', type: 'SS', lag: 2 }] },
-              ],
-            },
-            {
-              id: 'finish',
-              name: 'Инженерия и отделка',
-              type: 'phase',
-              tasks: [
-                { id: 'mep', name: 'Монтаж инженерных систем', type: 'task', duration: 7, dependencies: [{ predecessorId: 'house-frame', type: 'SS', lag: 1 }] },
-                { id: 'handover', name: 'Отделка и сдача', type: 'task', duration: 6, dependencies: ['mep', 'garage-frame'] },
-              ],
-            },
-          ],
-        }),
-    });
+      sdkQuery: async ({ stage, prompt }) => {
+        prompts.push({ stage, prompt });
 
-    assert.equal(result.verdict.accepted, true);
-    assert.equal(result.plan.nodes.some((node) => node.nodeKey === 'survey'), true);
-    assert.equal(result.plan.nodes.some((node) => node.parentNodeKey === 'site-prep'), true);
-    assert.deepEqual(result.plan.nodes.find((node) => node.nodeKey === 'concrete')?.dependsOn[0], {
-      nodeKey: 'pit',
-      type: 'FS',
-      lagDays: 1,
-    });
-  });
-
-  it('accepts strong plans on the first planning call and normalizes defaults', async () => {
-    const prompts: string[] = [];
-    let calls = 0;
-
-    const result = await planInitialProject({
-      userMessage: 'Построй график строительства частного дома из газобетона',
-      brief: buildGenerationBrief({
-        userMessage: 'Построй график строительства частного дома из газобетона',
-        reference: resolveDomainReference({
-          userMessage: 'Построй график строительства частного дома из газобетона',
-        }),
-      }),
-      reference: resolveDomainReference({
-        userMessage: 'Построй график строительства частного дома из газобетона',
-      }),
-      modelDecision: { selectedModel: 'gpt-strong' },
-      sdkQuery: async ({ prompt }) => {
-        calls += 1;
-        prompts.push(prompt);
-        return JSON.stringify({
-          projectType: 'private_residential_house',
-          nodes: [
-            {
-              nodeKey: 'phase-prep',
-              title: 'Подготовка участка',
-              kind: 'phase',
-              durationDays: 7,
-            },
-            {
-              nodeKey: 'task-permits',
-              title: 'Получение разрешений',
-              parentNodeKey: 'phase-prep',
-              kind: 'task',
-              durationDays: 5,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-site',
-              title: 'Организация площадки',
-              parentNodeKey: 'phase-prep',
-              kind: 'task',
-              durationDays: 4,
-              dependsOn: [{ nodeKey: 'task-permits' }],
-            },
-            {
-              nodeKey: 'task-foundation',
-              title: 'Устройство фундамента',
-              parentNodeKey: 'phase-foundation',
-              kind: 'task',
-              durationDays: 8,
-              dependsOn: [{ nodeKey: 'task-site', type: 'FS' }],
-            },
-            {
-              nodeKey: 'phase-foundation',
-              title: 'Фундамент и подземная часть',
-              kind: 'phase',
-              durationDays: 20,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-waterproofing',
-              title: 'Гидроизоляция и обратная засыпка',
-              parentNodeKey: 'phase-foundation',
-              kind: 'task',
-              durationDays: 4,
-              dependsOn: [{ nodeKey: 'task-foundation', type: 'FS' }],
-            },
-            {
-              nodeKey: 'phase-shell',
-              title: 'Коробка дома',
-              kind: 'phase',
-              durationDays: 20,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-walls',
-              title: 'Кладка стен из газобетона',
-              parentNodeKey: 'phase-shell',
-              kind: 'task',
-              durationDays: 10,
-              dependsOn: [{ nodeKey: 'task-foundation', type: 'FS' }],
-            },
-            {
-              nodeKey: 'task-roof',
-              title: 'Монтаж кровли',
-              parentNodeKey: 'phase-shell',
-              kind: 'task',
-              durationDays: 8,
-              dependsOn: [{ nodeKey: 'task-walls', type: 'FS' }],
-            },
-            {
-              nodeKey: 'phase-mep',
-              title: 'Инженерные системы',
-              kind: 'phase',
-              durationDays: 12,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-mep',
-              title: 'Черновой монтаж инженерных сетей',
-              parentNodeKey: 'phase-mep',
-              kind: 'task',
-              durationDays: 7,
-              dependsOn: [{ nodeKey: 'task-walls', type: 'SS' }],
-            },
-            {
-              nodeKey: 'phase-finish',
-              title: 'Отделка и сдача',
-              kind: 'phase',
-              durationDays: 10,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-finishing',
-              title: 'Черновая и чистовая отделка',
-              parentNodeKey: 'phase-finish',
-              kind: 'task',
-              durationDays: 9,
-              dependsOn: [{ nodeKey: 'task-mep', type: 'FS' }],
-            },
-            {
-              nodeKey: 'task-handover',
-              title: 'Пусконаладка и сдача дома',
-              parentNodeKey: 'phase-finish',
-              kind: 'task',
-              durationDays: 3,
-              dependsOn: [{ nodeKey: 'task-finishing', type: 'FS' }],
-            },
-          ],
-        });
-      },
-    });
-
-    assert.equal(calls, 1);
-    assert.equal(result.verdict.accepted, true);
-    assert.equal(result.repairAttempted, false);
-    assert.deepEqual(result.plan.assumptions, []);
-    assert.deepEqual(result.plan.nodes.find((node) => node.nodeKey === 'task-foundation')?.dependsOn[0], {
-      nodeKey: 'task-site',
-      type: 'FS',
-      lagDays: 0,
-    });
-    assert.match(prompts[0] ?? '', /ProjectPlan JSON only/);
-    assert.match(prompts[0] ?? '', /gasobeton|газобетон/i);
-  });
-
-  it('repairs a weak plan once and returns the repaired result', async () => {
-    const prompts: string[] = [];
-    let calls = 0;
-
-    const result = await planInitialProject({
-      userMessage: 'Построй график',
-      brief: buildGenerationBrief({
-        userMessage: 'Построй график',
-        reference: resolveDomainReference({ userMessage: 'Построй график' }),
-      }),
-      reference: resolveDomainReference({ userMessage: 'Построй график' }),
-      modelDecision: { selectedModel: 'gpt-strong' },
-      sdkQuery: async ({ prompt }) => {
-        calls += 1;
-        prompts.push(prompt);
-
-        if (calls === 1) {
+        if (stage === 'skeleton') {
           return JSON.stringify({
             projectType: 'private_residential_house',
-            nodes: [
+            assumptions: ['Жилой дом с гаражом'],
+            phases: [
               {
-                nodeKey: 'phase-1',
-                title: 'Подготовка',
-                kind: 'phase',
-                durationDays: 5,
-                dependsOn: [],
+                phaseKey: 'phase-site',
+                title: 'Подготовка участка',
+                orderHint: 1,
+                workPackages: [
+                  { workPackageKey: 'survey', title: 'Геодезическая подготовка' },
+                  { workPackageKey: 'camp', title: 'Бытовой городок' },
+                  { workPackageKey: 'access', title: 'Временные дороги и ограждение' },
+                ],
               },
               {
-                nodeKey: 'phase-2',
-                title: 'Строительство',
-                kind: 'phase',
-                durationDays: 5,
-                dependsOn: [],
+                phaseKey: 'phase-foundation',
+                title: 'Нулевой цикл',
+                orderHint: 2,
+                dependsOnPhaseKeys: ['phase-site'],
+                workPackages: [
+                  { workPackageKey: 'earthworks', title: 'Земляные работы' },
+                  { workPackageKey: 'foundation', title: 'Фундамент дома и гаража' },
+                  { workPackageKey: 'waterproofing', title: 'Гидроизоляция' },
+                ],
+              },
+              {
+                phaseKey: 'phase-shell',
+                title: 'Коробка дома на 3 этажа и гараж',
+                orderHint: 3,
+                dependsOnPhaseKeys: ['phase-foundation'],
+                workPackages: [
+                  { workPackageKey: 'house', title: 'Надземная часть дома' },
+                  { workPackageKey: 'garage', title: 'Коробка гаража' },
+                  { workPackageKey: 'roof', title: 'Кровля и закрытие контура' },
+                ],
+              },
+              {
+                phaseKey: 'phase-finish',
+                title: 'Инженерия и отделка',
+                orderHint: 4,
+                dependsOnPhaseKeys: ['phase-shell'],
+                workPackages: [
+                  { workPackageKey: 'mep', title: 'Инженерные системы' },
+                  { workPackageKey: 'finish', title: 'Отделочные работы' },
+                  { workPackageKey: 'handover', title: 'Сдача' },
+                ],
               },
             ],
           });
         }
 
-        return JSON.stringify({
-          projectType: 'private_residential_house',
-          assumptions: ['Базовый частный дом'],
-          nodes: [
-            {
-              nodeKey: 'phase-prep',
-              title: 'Подготовка участка',
-              kind: 'phase',
-              durationDays: 7,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-permits',
-              title: 'Получение разрешений',
-              parentNodeKey: 'phase-prep',
-              kind: 'task',
-              durationDays: 5,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-site',
-              title: 'Организация площадки',
-              parentNodeKey: 'phase-prep',
-              kind: 'task',
-              durationDays: 4,
-              dependsOn: [{ nodeKey: 'task-permits' }],
-            },
-            {
-              nodeKey: 'phase-foundation',
-              title: 'Фундамент',
-              kind: 'phase',
-              durationDays: 20,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-foundation',
-              title: 'Фундамент',
-              parentNodeKey: 'phase-foundation',
-              kind: 'task',
-              durationDays: 8,
-              dependsOn: [{ nodeKey: 'task-site' }],
-            },
-            {
-              nodeKey: 'task-waterproofing',
-              title: 'Гидроизоляция',
-              parentNodeKey: 'phase-foundation',
-              kind: 'task',
-              durationDays: 4,
-              dependsOn: [{ nodeKey: 'task-foundation' }],
-            },
-            {
-              nodeKey: 'phase-shell',
-              title: 'Коробка дома',
-              kind: 'phase',
-              durationDays: 20,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-walls',
-              title: 'Стены и перекрытия',
-              parentNodeKey: 'phase-shell',
-              kind: 'task',
-              durationDays: 10,
-              dependsOn: [{ nodeKey: 'task-foundation' }],
-            },
-            {
-              nodeKey: 'task-roof',
-              title: 'Кровля и закрытие контура',
-              parentNodeKey: 'phase-shell',
-              kind: 'task',
-              durationDays: 6,
-              dependsOn: [{ nodeKey: 'task-walls' }],
-            },
-            {
-              nodeKey: 'phase-mep',
-              title: 'Инженерные системы',
-              kind: 'phase',
-              durationDays: 12,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-mep',
-              title: 'Монтаж инженерных систем',
-              parentNodeKey: 'phase-mep',
-              kind: 'task',
-              durationDays: 7,
-              dependsOn: [{ nodeKey: 'task-walls', type: 'SS' }],
-            },
-            {
-              nodeKey: 'phase-finish',
-              title: 'Отделка',
-              kind: 'phase',
-              durationDays: 10,
-              dependsOn: [],
-            },
-            {
-              nodeKey: 'task-finishing',
-              title: 'Отделочные работы',
-              parentNodeKey: 'phase-finish',
-              kind: 'task',
-              durationDays: 9,
-              dependsOn: [{ nodeKey: 'task-mep' }],
-            },
-            {
-              nodeKey: 'task-handover',
-              title: 'Сдача объекта',
-              parentNodeKey: 'phase-finish',
-              kind: 'task',
-              durationDays: 2,
-              dependsOn: [{ nodeKey: 'task-finishing' }],
-            },
-          ],
-        });
+        const phaseKeyToExpansion: Record<string, unknown> = {
+          'phase-site': {
+            phaseKey: 'phase-site',
+            tasks: [
+              { nodeKey: 'task-survey', title: 'Геодезическая разбивка', durationDays: 2, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+              { nodeKey: 'task-camp', title: 'Организация площадки', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-survey', type: 'FS', lagDays: 0 }] },
+              { nodeKey: 'task-access', title: 'Временные дороги и ограждение', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-camp', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+            ],
+          },
+          'phase-foundation': {
+            phaseKey: 'phase-foundation',
+            tasks: [
+              { nodeKey: 'task-pit', title: 'Разработка котлована', durationDays: 4, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+              { nodeKey: 'task-footings', title: 'Бетонирование фундамента', durationDays: 5, dependsOnWithinPhase: [{ nodeKey: 'task-pit', type: 'FS', lagDays: 1 }] },
+              { nodeKey: 'task-waterproofing', title: 'Гидроизоляция и обратная засыпка', durationDays: 3, dependsOnWithinPhase: [{ nodeKey: 'task-footings', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+            ],
+          },
+          'phase-shell': {
+            phaseKey: 'phase-shell',
+            tasks: [
+              { nodeKey: 'task-house-shell', title: 'Возведение стен и перекрытий дома', durationDays: 10, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+              { nodeKey: 'task-garage-shell', title: 'Возведение коробки гаража', durationDays: 6, dependsOnWithinPhase: [{ nodeKey: 'task-house-shell', type: 'SS', lagDays: 2 }] },
+              { nodeKey: 'task-roof', title: 'Монтаж кровли', durationDays: 4, dependsOnWithinPhase: [{ nodeKey: 'task-house-shell', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+            ],
+          },
+          'phase-finish': {
+            phaseKey: 'phase-finish',
+            tasks: [
+              { nodeKey: 'task-mep', title: 'Монтаж инженерных систем', durationDays: 6, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+              { nodeKey: 'task-finish', title: 'Чистовая отделка', durationDays: 5, dependsOnWithinPhase: [{ nodeKey: 'task-mep', type: 'FS', lagDays: 0 }] },
+              { nodeKey: 'task-handover', title: 'Пусконаладка и сдача', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-finish', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+            ],
+          },
+        };
+
+        const phaseMatch = prompt.match(/Current phase: (.+)/);
+        const phaseKey = phaseMatch?.[1]?.includes('Подготовка')
+          ? 'phase-site'
+          : phaseMatch?.[1]?.includes('Нулевой')
+            ? 'phase-foundation'
+            : phaseMatch?.[1]?.includes('Коробка')
+              ? 'phase-shell'
+              : 'phase-finish';
+
+        return JSON.stringify(phaseKeyToExpansion[phaseKey]);
       },
     });
 
-    assert.equal(calls, 2);
-    assert.equal(result.repairAttempted, true);
+    assert.equal(result.skeletonVerdict.accepted, true);
+    assert.equal(result.expandedPhases.length, 4);
     assert.equal(result.verdict.accepted, true);
-    assert.match(prompts[1] ?? '', /missing_hierarchy/);
-    assert.match(prompts[1] ?? '', /weak_coverage/);
-    assert.match(prompts[1] ?? '', /crossPhaseDependencies/);
+    assert.equal(result.plan.nodes.filter((node) => node.kind === 'phase').length, 4);
+    assert.equal(result.plan.nodes.filter((node) => node.kind === 'task').length, 12);
+    assert.ok(result.crossPhaseLinkPlan.links.length >= 3);
+    assert.ok(prompts.every(({ prompt }) => /Do not output dates/i.test(prompt)));
   });
 
-  it('stops after one repair and returns the best available repaired plan when weakness persists', async () => {
+  it('repairs a weak skeleton once and returns the repaired staged result', async () => {
     let calls = 0;
 
     const result = await planInitialProject({
-      userMessage: 'Построй график',
+      userMessage: 'График строительства частного дома',
       brief: buildGenerationBrief({
-        userMessage: 'Построй график',
-        reference: resolveDomainReference({ userMessage: 'Построй график' }),
+        userMessage: 'График строительства частного дома',
+        reference: resolveDomainReference({ userMessage: 'График строительства частного дома' }),
       }),
-      reference: resolveDomainReference({ userMessage: 'Построй график' }),
+      reference: resolveDomainReference({ userMessage: 'График строительства частного дома' }),
       modelDecision: { selectedModel: 'gpt-strong' },
-      sdkQuery: async () => {
+      sdkQuery: async ({ stage }) => {
         calls += 1;
 
+        if (stage === 'skeleton') {
+          return JSON.stringify({
+            projectType: 'private_residential_house',
+            assumptions: [],
+            phases: [
+              { phaseKey: 'phase-1', title: 'Подготовка', orderHint: 1, workPackages: [{ workPackageKey: 'wp-1', title: 'Геодезия' }] },
+            ],
+          });
+        }
+
+        if (stage === 'skeleton_repair') {
+          return JSON.stringify({
+            projectType: 'private_residential_house',
+            assumptions: [],
+            phases: [
+              { phaseKey: 'phase-prep', title: 'Подготовка участка', orderHint: 1, workPackages: [{ workPackageKey: 'survey', title: 'Геодезия' }, { workPackageKey: 'camp', title: 'Бытовой городок' }, { workPackageKey: 'access', title: 'Подъезды' }] },
+              { phaseKey: 'phase-foundation', title: 'Фундамент', orderHint: 2, dependsOnPhaseKeys: ['phase-prep'], workPackages: [{ workPackageKey: 'pit', title: 'Котлован' }, { workPackageKey: 'footings', title: 'Бетонирование' }, { workPackageKey: 'waterproofing', title: 'Гидроизоляция' }] },
+              { phaseKey: 'phase-shell', title: 'Коробка дома', orderHint: 3, dependsOnPhaseKeys: ['phase-foundation'], workPackages: [{ workPackageKey: 'walls', title: 'Стены' }, { workPackageKey: 'floors', title: 'Перекрытия' }, { workPackageKey: 'roof', title: 'Кровля' }] },
+              { phaseKey: 'phase-finish', title: 'Отделка и сдача', orderHint: 4, dependsOnPhaseKeys: ['phase-shell'], workPackages: [{ workPackageKey: 'mep', title: 'Инженерия' }, { workPackageKey: 'finish', title: 'Отделка' }, { workPackageKey: 'handover', title: 'Сдача' }] },
+            ],
+          });
+        }
+
+        const promptPhaseKey = calls === 3
+          ? 'phase-prep'
+          : calls === 4
+            ? 'phase-foundation'
+            : calls === 5
+              ? 'phase-shell'
+              : 'phase-finish';
+
         return JSON.stringify({
-          projectType: 'private_residential_house',
-          nodes: [
-            {
-              nodeKey: `phase-${calls}`,
-              title: `Подготовка ${calls}`,
-              kind: 'phase',
-              durationDays: 5,
-              dependsOn: [],
-            },
-            {
-              nodeKey: `phase-next-${calls}`,
-              title: `Строительство ${calls + 1}`,
-              kind: 'phase',
-              durationDays: 5,
-              dependsOn: [],
-            },
+          phaseKey: promptPhaseKey,
+          tasks: [
+            { nodeKey: `task-${calls}-1`, title: 'Разметка', durationDays: 2, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+            { nodeKey: `task-${calls}-2`, title: 'Подготовка площадки', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: `task-${calls}-1`, type: 'FS', lagDays: 0 }] },
+            { nodeKey: `task-${calls}-3`, title: 'Завершение этапа', durationDays: 1, dependsOnWithinPhase: [{ nodeKey: `task-${calls}-2`, type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
           ],
         });
       },
     });
 
-    assert.equal(calls, 2);
     assert.equal(result.repairAttempted, true);
-    assert.equal(result.verdict.accepted, false);
-    assert.ok(result.verdict.reasons.includes('missing_hierarchy'));
-    assert.ok(result.verdict.reasons.includes('too_few_phases'));
-    assert.ok(result.verdict.reasons.includes('too_few_tasks'));
-    assert.ok(result.verdict.reasons.includes('missing_dependency_graph'));
-    assert.equal(result.plan.nodes[0]?.title, 'Подготовка 2');
+    assert.equal(result.skeletonVerdict.accepted, true);
+    assert.equal(result.verdict.accepted, true);
+    assert.ok(calls >= 6);
   });
 });

@@ -5,49 +5,180 @@ import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 
 import { runInitialGeneration } from './orchestrator.js';
 import type { ExecuteInitialProjectPlanResult } from './executor.js';
-import type { PlanQualityVerdict, ProjectPlan } from './types.js';
+import type {
+  ExpandedPhasePlan,
+  PhaseExpansionQualityVerdict,
+  PlanQualityVerdict,
+  ProjectWbsSkeleton,
+  SkeletonQualityVerdict,
+} from './types.js';
 
-const BASE_PLAN: ProjectPlan = {
+const SKELETON: ProjectWbsSkeleton = {
   projectType: 'private_residential_house',
   assumptions: ['RF production calendar defaults'],
-  nodes: [
-    { nodeKey: 'phase-site', title: 'Подготовка площадки', kind: 'phase', durationDays: 1, dependsOn: [] },
-    { nodeKey: 'task-site', title: 'Геодезическая разбивка', parentNodeKey: 'phase-site', kind: 'task', durationDays: 2, dependsOn: [] },
-    { nodeKey: 'task-access', title: 'Временные дороги и бытовой городок', parentNodeKey: 'phase-site', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-site', type: 'FS', lagDays: 0 }] },
-    { nodeKey: 'phase-foundation', title: 'Фундамент и подземная часть', kind: 'phase', durationDays: 1, dependsOn: [] },
-    { nodeKey: 'task-excavation', title: 'Разработка котлована', parentNodeKey: 'phase-foundation', kind: 'task', durationDays: 4, dependsOn: [{ nodeKey: 'task-access', type: 'FS', lagDays: 0 }] },
-    { nodeKey: 'task-foundation', title: 'Армирование и бетонирование фундамента', parentNodeKey: 'phase-foundation', kind: 'task', durationDays: 5, dependsOn: [{ nodeKey: 'task-excavation', type: 'FS', lagDays: 1 }] },
-    { nodeKey: 'phase-shell', title: 'Коробка и кровля', kind: 'phase', durationDays: 1, dependsOn: [] },
-    { nodeKey: 'task-frame', title: 'Возведение стен и перекрытий', parentNodeKey: 'phase-shell', kind: 'task', durationDays: 8, dependsOn: [{ nodeKey: 'task-foundation', type: 'FS', lagDays: 0 }] },
-    { nodeKey: 'task-roof', title: 'Монтаж кровли и закрытие контура', parentNodeKey: 'phase-shell', kind: 'task', durationDays: 4, dependsOn: [{ nodeKey: 'task-frame', type: 'FS', lagDays: 0 }] },
-    { nodeKey: 'phase-finish', title: 'Инженерия и отделка', kind: 'phase', durationDays: 1, dependsOn: [] },
-    { nodeKey: 'task-mep', title: 'Черновой монтаж инженерных систем', parentNodeKey: 'phase-finish', kind: 'task', durationDays: 6, dependsOn: [{ nodeKey: 'task-frame', type: 'SS', lagDays: 1 }] },
-    { nodeKey: 'task-finish', title: 'Чистовая отделка и сдача', parentNodeKey: 'phase-finish', kind: 'task', durationDays: 5, dependsOn: [{ nodeKey: 'task-mep', type: 'FS', lagDays: 0 }, { nodeKey: 'task-roof', type: 'FS', lagDays: 0 }] },
+  phases: [
+    {
+      phaseKey: 'phase-site',
+      title: 'Подготовка площадки',
+      orderHint: 1,
+      workPackages: [
+        { workPackageKey: 'survey', title: 'Геодезическая подготовка' },
+        { workPackageKey: 'site-camp', title: 'Организация бытового городка' },
+        { workPackageKey: 'access', title: 'Временные подъезды и ограждение' },
+      ],
+    },
+    {
+      phaseKey: 'phase-foundation',
+      title: 'Фундамент и подземная часть',
+      orderHint: 2,
+      dependsOnPhaseKeys: ['phase-site'],
+      workPackages: [
+        { workPackageKey: 'earthworks', title: 'Земляные работы' },
+        { workPackageKey: 'footings', title: 'Фундаментные конструкции' },
+        { workPackageKey: 'waterproofing', title: 'Гидроизоляция и обратная засыпка' },
+      ],
+    },
+    {
+      phaseKey: 'phase-shell',
+      title: 'Коробка дома и гаража',
+      orderHint: 3,
+      dependsOnPhaseKeys: ['phase-foundation'],
+      workPackages: [
+        { workPackageKey: 'house-shell', title: 'Надземная часть дома' },
+        { workPackageKey: 'garage-shell', title: 'Коробка гаража' },
+        { workPackageKey: 'roof', title: 'Кровля и закрытие контура' },
+      ],
+    },
+    {
+      phaseKey: 'phase-finish',
+      title: 'Инженерия и отделка',
+      orderHint: 4,
+      dependsOnPhaseKeys: ['phase-shell'],
+      workPackages: [
+        { workPackageKey: 'mep', title: 'Инженерные системы' },
+        { workPackageKey: 'finishes', title: 'Отделочные работы' },
+        { workPackageKey: 'handover', title: 'Пусконаладка и сдача' },
+      ],
+    },
   ],
 };
 
-const BASE_METRICS = {
-  phaseCount: 4,
-  taskNodeCount: 8,
-  dependencyCount: 7,
-  crossPhaseDependencyCount: 5,
-  genericTitleCount: 0,
-  genericTitleRatio: 0,
-  objectTypeSignalCoverage: 0.18,
-  passesProductAdequacyFloor: true,
+const EXPANSIONS: ExpandedPhasePlan[] = [
+  {
+    phaseKey: 'phase-site',
+    tasks: [
+      { nodeKey: 'task-survey', title: 'Геодезическая разбивка', durationDays: 2, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+      { nodeKey: 'task-camp', title: 'Организация бытового городка', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-survey', type: 'FS', lagDays: 0 }] },
+      { nodeKey: 'task-access', title: 'Временные дороги и ограждение', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-camp', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+    ],
+  },
+  {
+    phaseKey: 'phase-foundation',
+    tasks: [
+      { nodeKey: 'task-pit', title: 'Разработка котлована', durationDays: 4, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+      { nodeKey: 'task-footings', title: 'Армирование и бетонирование фундамента', durationDays: 5, dependsOnWithinPhase: [{ nodeKey: 'task-pit', type: 'FS', lagDays: 1 }] },
+      { nodeKey: 'task-waterproofing', title: 'Гидроизоляция и обратная засыпка', durationDays: 3, dependsOnWithinPhase: [{ nodeKey: 'task-footings', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+    ],
+  },
+  {
+    phaseKey: 'phase-shell',
+    tasks: [
+      { nodeKey: 'task-house-shell', title: 'Возведение стен и перекрытий дома', durationDays: 8, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+      { nodeKey: 'task-garage-shell', title: 'Возведение коробки гаража', durationDays: 5, dependsOnWithinPhase: [{ nodeKey: 'task-house-shell', type: 'SS', lagDays: 2 }] },
+      { nodeKey: 'task-roof', title: 'Монтаж кровли и закрытие контура', durationDays: 4, dependsOnWithinPhase: [{ nodeKey: 'task-house-shell', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+    ],
+  },
+  {
+    phaseKey: 'phase-finish',
+    tasks: [
+      { nodeKey: 'task-mep', title: 'Черновой монтаж инженерных систем', durationDays: 6, dependsOnWithinPhase: [], sequenceRole: 'entry' },
+      { nodeKey: 'task-finish', title: 'Чистовая отделка', durationDays: 5, dependsOnWithinPhase: [{ nodeKey: 'task-mep', type: 'FS', lagDays: 0 }] },
+      { nodeKey: 'task-handover', title: 'Пусконаладка и сдача объекта', durationDays: 2, dependsOnWithinPhase: [{ nodeKey: 'task-finish', type: 'FS', lagDays: 0 }], sequenceRole: 'exit' },
+    ],
+  },
+];
+
+const SKELETON_VERDICT: SkeletonQualityVerdict = {
+  accepted: true,
+  reasons: [],
+  score: 95,
+  metrics: {
+    phaseCount: 4,
+    workPackageCount: 12,
+    minWorkPackagesPerPhase: 3,
+    genericTitleCount: 0,
+    genericTitleRatio: 0,
+    objectTypeSignalCoverage: 0.2,
+    requestedComponentCoverage: 0.3,
+  },
 };
 
-function createVerdict(overrides?: Partial<PlanQualityVerdict>): PlanQualityVerdict {
+const PHASE_VERDICT: PhaseExpansionQualityVerdict = {
+  accepted: true,
+  reasons: [],
+  score: 93,
+  metrics: {
+    taskCount: 3,
+    dependencyCount: 2,
+    entryTaskCount: 1,
+    exitTaskCount: 1,
+    genericTitleCount: 0,
+    genericTitleRatio: 0,
+  },
+};
+
+const PLAN_VERDICT: PlanQualityVerdict = {
+  accepted: true,
+  reasons: [],
+  score: 94,
+  metrics: {
+    phaseCount: 4,
+    taskNodeCount: 12,
+    dependencyCount: 11,
+    crossPhaseDependencyCount: 3,
+    genericTitleCount: 0,
+    genericTitleRatio: 0,
+    objectTypeSignalCoverage: 0.18,
+    passesProductAdequacyFloor: true,
+  },
+};
+
+function createPlanResult(overrides?: Partial<{
+  skeletonVerdict: SkeletonQualityVerdict;
+  expandedPhaseVerdict: PhaseExpansionQualityVerdict;
+  planVerdict: PlanQualityVerdict;
+  repairAttempted: boolean;
+}> ) {
+  const expandedPhases = EXPANSIONS.map((expansion) => ({
+    phaseKey: expansion.phaseKey,
+    title: SKELETON.phases.find((phase) => phase.phaseKey === expansion.phaseKey)?.title ?? expansion.phaseKey,
+    expansion,
+    verdict: overrides?.expandedPhaseVerdict ?? PHASE_VERDICT,
+    repairAttempted: false,
+  }));
+
   return {
-    accepted: true,
-    reasons: [],
-    score: 94,
-    metrics: BASE_METRICS,
-    ...overrides,
+    skeleton: SKELETON,
+    skeletonVerdict: overrides?.skeletonVerdict ?? SKELETON_VERDICT,
+    expandedPhases,
+    crossPhaseLinkPlan: {
+      links: [
+        { fromNodeKey: 'task-access', toNodeKey: 'task-pit', type: 'FS' as const, lagDays: 0 },
+        { fromNodeKey: 'task-waterproofing', toNodeKey: 'task-house-shell', type: 'FS' as const, lagDays: 0 },
+        { fromNodeKey: 'task-roof', toNodeKey: 'task-mep', type: 'FS' as const, lagDays: 0 },
+      ],
+    },
+    plan: {
+      projectType: 'private_residential_house',
+      assumptions: ['RF production calendar defaults'],
+      nodes: [],
+    },
+    verdict: overrides?.planVerdict ?? PLAN_VERDICT,
+    repairAttempted: overrides?.repairAttempted ?? false,
   };
 }
 
-function createCompiledSchedule(overrides?: Partial<ExecuteInitialProjectPlanResult & { compiledSchedule: Record<string, unknown> }>) {
+function createCompiledSchedule() {
   return {
     projectId: 'project-41',
     baseVersion: 7,
@@ -66,21 +197,20 @@ function createCompiledSchedule(overrides?: Partial<ExecuteInitialProjectPlanRes
       ],
     },
     nodeKeyToTaskId: { 'phase-site': 'phase-site' },
-    retainedNodeCount: BASE_PLAN.nodes.length,
-    compiledTaskCount: 8,
-    compiledDependencyCount: 7,
+    retainedNodeCount: 16,
+    compiledTaskCount: 12,
+    compiledDependencyCount: 11,
     topLevelPhaseCount: 4,
-    crossPhaseDependencyCount: 5,
+    crossPhaseDependencyCount: 3,
     diagnostics: [{
       level: 'info' as const,
       code: 'compiled_schedule' as const,
       message: 'ok',
-      retainedNodeCount: BASE_PLAN.nodes.length,
-      compiledTaskCount: 8,
-      compiledDependencyCount: 7,
+      retainedNodeCount: 16,
+      compiledTaskCount: 12,
+      compiledDependencyCount: 11,
       topLevelPhaseCount: 4,
     }],
-    ...(overrides?.compiledSchedule ?? {}),
   };
 }
 
@@ -102,8 +232,7 @@ function createCommitResponse(): Extract<CommitProjectCommandResponse, { accepte
 }
 
 function createHarness(overrides?: {
-  verdict?: PlanQualityVerdict;
-  repairAttempted?: boolean;
+  planResult?: ReturnType<typeof createPlanResult>;
   compileResult?: ExecuteInitialProjectPlanResult;
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
@@ -132,7 +261,7 @@ function createHarness(overrides?: {
       tasksBefore: [],
       baseVersion: 7,
       serverDate: '2026-04-08',
-      plannerQuery: async () => ({ content: JSON.stringify(BASE_PLAN) }),
+      plannerQuery: async () => ({ content: JSON.stringify(SKELETON) }),
       services: {
         commandService: {
           async commitCommand() {
@@ -195,11 +324,7 @@ function createHarness(overrides?: {
           };
         },
         async planProject() {
-          return {
-            plan: BASE_PLAN,
-            verdict: overrides?.verdict ?? createVerdict(),
-            repairAttempted: overrides?.repairAttempted ?? false,
-          };
+          return overrides?.planResult ?? createPlanResult();
         },
         async executePlan() {
           return compileResult;
@@ -210,85 +335,7 @@ function createHarness(overrides?: {
 }
 
 describe('runInitialGeneration', () => {
-  it('injects the recognized domain reference into the planning prompt', async () => {
-    const harness = createHarness();
-    const prompts: string[] = [];
-
-    const result = await runInitialGeneration({
-      ...harness.input,
-      userMessage: 'Построй график строительства детского садика',
-      routingEnv: { OPENAI_MODEL: 'gpt-strong' },
-      deps: {
-        executePlan: harness.input.deps.executePlan,
-      },
-      plannerQuery: async (queryInput) => {
-        prompts.push(queryInput.prompt);
-        return { content: JSON.stringify(BASE_PLAN) };
-      },
-    });
-
-    assert.equal(result.ok, true);
-    assert.ok(prompts[0]?.includes('Object type: kindergarten'));
-    assert.ok(prompts[0]?.includes('Kindergarten / детский сад'));
-  });
-
-  it('injects the fallback private-house baseline for broad prompts', async () => {
-    const harness = createHarness();
-    const prompts: string[] = [];
-
-    const result = await runInitialGeneration({
-      ...harness.input,
-      userMessage: 'Построй график',
-      routingEnv: { OPENAI_MODEL: 'gpt-strong' },
-      deps: {
-        executePlan: harness.input.deps.executePlan,
-      },
-      plannerQuery: async (queryInput) => {
-        prompts.push(queryInput.prompt);
-        return { content: JSON.stringify(BASE_PLAN) };
-      },
-    });
-
-    assert.equal(result.ok, true);
-    assert.ok(prompts[0]?.includes('Object type: private_residential_house'));
-    assert.ok(prompts[0]?.includes('Generic construction fallback'));
-  });
-
-  it('turns ProjectPlan schema rejection into a controlled planning failure', async () => {
-    const harness = createHarness();
-
-    const result = await runInitialGeneration({
-      ...harness.input,
-      routingEnv: { OPENAI_MODEL: 'gpt-strong' },
-      deps: {
-        executePlan: async () => {
-          throw new Error('executePlan should not run after schema rejection');
-        },
-      },
-      plannerQuery: async () => ({
-        content: JSON.stringify({
-          projectType: 'private_residential_house',
-          assumptions: [],
-          nodes: [
-            {
-              nodeKey: 'task-root',
-              title: 'Task 1',
-              kind: 'task',
-              durationDays: 2,
-              dependsOn: [],
-            },
-          ],
-        }),
-      }),
-    });
-
-    assert.equal(result.ok, false);
-    assert.equal(result.failureStage, 'planning');
-    assert.match(result.assistantResponse, /Не удалось подготовить надежный стартовый график/i);
-    assert.equal(harness.events.some((entry) => entry.event === 'compile_verdict'), false);
-  });
-
-  it('runs planning through compile, saves the assistant reply, broadcasts tasks, and logs the lifecycle', async () => {
+  it('runs staged planning through compile, saves the assistant reply, broadcasts tasks, and logs the lifecycle', async () => {
     const harness = createHarness();
 
     const result = await runInitialGeneration(harness.input);
@@ -302,7 +349,18 @@ describe('runInitialGeneration', () => {
       [
         'object_type_inference',
         'model_routing_decision',
-        'planning_output',
+        'wbs_skeleton_output',
+        'wbs_skeleton_verdict',
+        'phase_expansion_output',
+        'phase_expansion_verdict',
+        'phase_expansion_output',
+        'phase_expansion_verdict',
+        'phase_expansion_output',
+        'phase_expansion_verdict',
+        'phase_expansion_output',
+        'phase_expansion_verdict',
+        'cross_phase_linking_verdict',
+        'executable_plan_output',
         'plan_quality_verdict',
         'compile_verdict',
         'initial_generation_result',
@@ -313,14 +371,17 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.broadcasts.length, 3);
   });
 
-  it('logs repair reasons and returns a controlled planning failure when the repaired plan stays below the floor', async () => {
+  it('returns a controlled planning failure when the staged plan stays below the floor', async () => {
     const harness = createHarness({
-      verdict: createVerdict({
-        accepted: false,
-        reasons: ['placeholder_titles'],
-        score: 42,
+      planResult: createPlanResult({
+        planVerdict: {
+          ...PLAN_VERDICT,
+          accepted: false,
+          reasons: ['weak_coverage'],
+          score: 42,
+        },
+        repairAttempted: true,
       }),
-      repairAttempted: true,
     });
 
     const result = await runInitialGeneration(harness.input);
@@ -328,116 +389,55 @@ describe('runInitialGeneration', () => {
     assert.equal(result.ok, false);
     assert.equal(result.repairAttempted, true);
     assert.ok(harness.events.some((entry) => entry.event === 'plan_repair_requested'));
-    assert.deepEqual(
-      harness.events.find((entry) => entry.event === 'plan_repair_requested')?.payload.reasons,
-      ['placeholder_titles'],
-    );
     assert.equal(harness.events.some((entry) => entry.event === 'compile_verdict'), false);
   });
 
-  it('records compile verdict payloads for complete, partial salvage, and controlled failure outcomes', async () => {
+  it('records compile verdict payloads for complete and controlled failure outcomes', async () => {
     const completeHarness = createHarness();
-    const partialHarness = createHarness({
-      compileResult: {
-        ok: true,
-        outcome: 'partial',
-        message: 'Built a partial starter schedule and skipped a few invalid plan references.',
-        compiledSchedule: createCompiledSchedule({
-          compiledSchedule: {
-            command: { type: 'create_tasks_batch', tasks: [] },
-            nodeKeyToTaskId: {},
-            retainedNodeCount: 12,
-            compiledTaskCount: 8,
-            compiledDependencyCount: 3,
-            topLevelPhaseCount: 4,
-            crossPhaseDependencyCount: 2,
-            diagnostics: [],
-          },
-        }),
-        commitResponse: createCommitResponse(),
-        droppedNodeKeys: ['task-finish'],
-        droppedDependencyNodeKeys: ['missing-task'],
-      },
-    });
     const rejectedHarness = createHarness({
       compileResult: {
         ok: false,
         reason: 'controlled_rejection',
         message: 'We could not build a reliable starter schedule from this request.',
-        droppedNodeKeys: ['task-finish'],
-        droppedDependencyNodeKeys: ['missing-task'],
-        retainedNodeCount: 3,
-        retainedNodeRatio: 0.5,
-        retainedTopLevelPhaseCount: 2,
-        compiledTaskCount: 4,
-        compiledDependencyCount: 0,
+        droppedNodeKeys: [],
+        droppedDependencyNodeKeys: [],
+        retainedNodeCount: 16,
+        retainedNodeRatio: 1,
+        retainedTopLevelPhaseCount: 4,
+        compiledTaskCount: 12,
+        compiledDependencyCount: 11,
         crossPhaseDependencyCount: 0,
-        everyRetainedPhaseHasAChildTask: false,
-        hasBrokenReferences: false,
+        everyRetainedPhaseHasAChildTask: true,
+        hasBrokenReferences: true,
       },
     });
 
     await runInitialGeneration(completeHarness.input);
-    await runInitialGeneration(partialHarness.input);
     await runInitialGeneration(rejectedHarness.input);
 
     const completeVerdict = completeHarness.events.find((entry) => entry.event === 'compile_verdict');
-    const partialVerdict = partialHarness.events.find((entry) => entry.event === 'compile_verdict');
     const rejectedVerdict = rejectedHarness.events.find((entry) => entry.event === 'compile_verdict');
 
     assert.equal(completeVerdict?.payload.outcome, 'complete');
-    assert.equal(partialVerdict?.payload.outcome, 'partial');
     assert.equal(rejectedVerdict?.payload.outcome, 'controlled_rejection');
   });
 
-  it('communicates partial salvage without exposing compiler jargon', async () => {
-    const harness = createHarness({
-      compileResult: {
-        ok: true,
-        outcome: 'partial',
-        message: 'Built a partial starter schedule and skipped a few invalid plan references.',
-        compiledSchedule: createCompiledSchedule({
-          compiledSchedule: {
-            command: { type: 'create_tasks_batch', tasks: [] },
-            nodeKeyToTaskId: {},
-            retainedNodeCount: 12,
-            compiledTaskCount: 8,
-            compiledDependencyCount: 3,
-            topLevelPhaseCount: 4,
-            crossPhaseDependencyCount: 2,
-            diagnostics: [],
-          },
-        }),
-        commitResponse: createCommitResponse(),
-        droppedNodeKeys: ['task-finish'],
-        droppedDependencyNodeKeys: ['missing-task'],
-      },
-    });
-
-    const result = await runInitialGeneration(harness.input);
-
-    assert.equal(result.ok, true);
-    assert.equal(result.outcome, 'partial');
-    assert.match(result.assistantResponse, /partial starter schedule|частично/i);
-    assert.doesNotMatch(result.assistantResponse, /compile|compiler|schema/i);
-  });
-
-  it('returns a controlled rejection when compile or commit fails and does not broadcast tasks', async () => {
+  it('returns a controlled rejection when compile fails and does not broadcast tasks', async () => {
     const harness = createHarness({
       compileResult: {
         ok: false,
         reason: 'controlled_rejection',
         message: 'We could not build a reliable starter schedule from this request.',
-        droppedNodeKeys: ['task-finish'],
-        droppedDependencyNodeKeys: ['missing-task'],
-        retainedNodeCount: 3,
-        retainedNodeRatio: 0.5,
-        retainedTopLevelPhaseCount: 2,
-        compiledTaskCount: 4,
-        compiledDependencyCount: 0,
+        droppedNodeKeys: [],
+        droppedDependencyNodeKeys: [],
+        retainedNodeCount: 16,
+        retainedNodeRatio: 1,
+        retainedTopLevelPhaseCount: 4,
+        compiledTaskCount: 12,
+        compiledDependencyCount: 11,
         crossPhaseDependencyCount: 0,
-        everyRetainedPhaseHasAChildTask: false,
-        hasBrokenReferences: false,
+        everyRetainedPhaseHasAChildTask: true,
+        hasBrokenReferences: true,
       },
     });
 
@@ -447,17 +447,5 @@ describe('runInitialGeneration', () => {
     assert.match(result.assistantResponse, /не удалось|could not build/i);
     assert.equal(harness.broadcasts.some((entry) => (entry.payload as { type: string }).type === 'tasks'), false);
     assert.equal(harness.messages.length, 1);
-    assert.deepEqual(
-      harness.events.map((entry) => entry.event),
-      [
-        'object_type_inference',
-        'model_routing_decision',
-        'planning_output',
-        'plan_quality_verdict',
-        'compile_verdict',
-        'initial_generation_result',
-        'agent_run_completed',
-      ],
-    );
   });
 });

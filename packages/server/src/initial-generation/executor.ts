@@ -3,17 +3,16 @@ import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandRespon
 import {
   compileInitialProjectPlan,
   InitialPlanCompileError,
-  type CompileIssue,
   type CompiledInitialSchedule,
 } from './compiler.js';
-import type { ProjectPlan, ProjectPlanDependency, ProjectPlanNode } from './types.js';
+import type { ExecutableProjectPlan } from './types.js';
 
 export type ExecuteInitialProjectPlanInput = {
   projectId: string;
   baseVersion: number;
   clientRequestId: string;
   actorId?: string;
-  plan: ProjectPlan;
+  plan: ExecutableProjectPlan;
   commandService: {
     commitCommand(
       request: CommitProjectCommandRequest,
@@ -27,7 +26,7 @@ export type ExecuteInitialProjectPlanInput = {
 export type ExecuteInitialProjectPlanResult =
   | {
       ok: true;
-      outcome: 'complete' | 'partial';
+      outcome: 'complete';
       message: string;
       compiledSchedule: CompiledInitialSchedule;
       commitResponse: Extract<CommitProjectCommandResponse, { accepted: true }>;
@@ -51,61 +50,46 @@ export type ExecuteInitialProjectPlanResult =
       commitResponse?: Exclude<CommitProjectCommandResponse, { accepted: true }>;
     };
 
-type SanitizedPlanState = {
-  plan: ProjectPlan;
-  droppedNodeKeys: Set<string>;
-  droppedDependencyNodeKeys: Set<string>;
-};
-
 export async function executeInitialProjectPlan(
   input: ExecuteInitialProjectPlanInput,
 ): Promise<ExecuteInitialProjectPlanResult> {
+  let compiledSchedule: CompiledInitialSchedule;
+
   try {
-    const compiledSchedule = compileInitialProjectPlan({
+    compiledSchedule = compileInitialProjectPlan({
       projectId: input.projectId,
       baseVersion: input.baseVersion,
       serverDate: input.serverDate,
       plan: input.plan,
-    });
-
-    return commitCompiledPlan(input, compiledSchedule, {
-      outcome: 'complete',
-      message: 'Built the starter schedule.',
-      droppedNodeKeys: [],
-      droppedDependencyNodeKeys: [],
     });
   } catch (error) {
     if (!(error instanceof InitialPlanCompileError)) {
       throw error;
     }
 
-    const salvaged = attemptPartialPlanCleanup(input, error);
-    if (!salvaged) {
-      return buildControlledRejection(input.plan, {
-        droppedNodeKeys: [],
-        droppedDependencyNodeKeys: [],
-      });
-    }
+    const topLevelPhaseCount = input.plan.nodes.filter((node) => node.kind === 'phase' && !node.parentNodeKey).length;
+    const taskNodeCount = input.plan.nodes.filter((node) => node.kind === 'task').length;
+    const dependencyCount = input.plan.nodes
+      .filter((node) => node.kind === 'task')
+      .reduce((sum, node) => sum + node.dependsOn.length, 0);
 
-    return commitCompiledPlan(input, salvaged.compiled, {
-      outcome: 'partial',
-      message: 'Built a partial starter schedule and skipped a few invalid plan references.',
-      droppedNodeKeys: Array.from(salvaged.state.droppedNodeKeys).sort(),
-      droppedDependencyNodeKeys: Array.from(salvaged.state.droppedDependencyNodeKeys).sort(),
-    });
+    return {
+      ok: false,
+      reason: 'controlled_rejection',
+      message: 'We could not build a reliable starter schedule from this request.',
+      droppedNodeKeys: [],
+      droppedDependencyNodeKeys: [],
+      retainedNodeCount: input.plan.nodes.length,
+      retainedNodeRatio: 1,
+      retainedTopLevelPhaseCount: topLevelPhaseCount,
+      compiledTaskCount: taskNodeCount,
+      compiledDependencyCount: dependencyCount,
+      crossPhaseDependencyCount: 0,
+      everyRetainedPhaseHasAChildTask: true,
+      hasBrokenReferences: error.issues.length > 0,
+    };
   }
-}
 
-async function commitCompiledPlan(
-  input: ExecuteInitialProjectPlanInput,
-  compiledSchedule: CompiledInitialSchedule,
-  outcome: {
-    outcome: 'complete' | 'partial';
-    message: string;
-    droppedNodeKeys: string[];
-    droppedDependencyNodeKeys: string[];
-  },
-): Promise<ExecuteInitialProjectPlanResult> {
   const commitResponse = await input.commandService.commitCommand({
     projectId: input.projectId,
     clientRequestId: input.clientRequestId,
@@ -118,11 +102,11 @@ async function commitCompiledPlan(
       ok: false,
       reason: 'commit_rejected',
       message: 'The starter schedule could not be committed.',
-      droppedNodeKeys: outcome.droppedNodeKeys,
-      droppedDependencyNodeKeys: outcome.droppedDependencyNodeKeys,
+      droppedNodeKeys: [],
+      droppedDependencyNodeKeys: [],
       retainedNodeCount: compiledSchedule.retainedNodeCount,
       retainedNodeRatio: 1,
-      retainedTopLevelPhaseCount: countTopLevelPhases(compiledSchedule.command.tasks),
+      retainedTopLevelPhaseCount: compiledSchedule.topLevelPhaseCount,
       compiledTaskCount: compiledSchedule.compiledTaskCount,
       compiledDependencyCount: compiledSchedule.compiledDependencyCount,
       crossPhaseDependencyCount: compiledSchedule.crossPhaseDependencyCount,
@@ -134,266 +118,11 @@ async function commitCompiledPlan(
 
   return {
     ok: true,
-    outcome: outcome.outcome,
-    message: outcome.message,
+    outcome: 'complete',
+    message: 'Built the starter schedule.',
     compiledSchedule,
     commitResponse,
-    droppedNodeKeys: outcome.droppedNodeKeys,
-    droppedDependencyNodeKeys: outcome.droppedDependencyNodeKeys,
+    droppedNodeKeys: [],
+    droppedDependencyNodeKeys: [],
   };
-}
-
-function attemptPartialPlanCleanup(
-  input: ExecuteInitialProjectPlanInput,
-  initialError: InitialPlanCompileError,
-): {
-  compiled: CompiledInitialSchedule;
-  state: SanitizedPlanState;
-  thresholds: ReturnType<typeof evaluateCleanupThresholds>;
-} | null {
-  const state: SanitizedPlanState = {
-    plan: clonePlan(input.plan),
-    droppedNodeKeys: new Set<string>(),
-    droppedDependencyNodeKeys: new Set<string>(),
-  };
-
-  let currentError: InitialPlanCompileError = initialError;
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const changed = applyCompileIssues(state, currentError.issues);
-    if (!changed) {
-      return null;
-    }
-
-    cleanupEmptyPhases(state);
-
-    try {
-      const compiled = compileInitialProjectPlan({
-        projectId: input.projectId,
-        baseVersion: input.baseVersion,
-        serverDate: input.serverDate,
-        plan: state.plan,
-      });
-      const thresholds = evaluateCleanupThresholds(input.plan, state.plan, compiled.retainedNodeCount);
-      return { compiled, state, thresholds };
-    } catch (error) {
-      if (!(error instanceof InitialPlanCompileError)) {
-        throw error;
-      }
-      currentError = error;
-    }
-  }
-
-  return null;
-}
-
-function applyCompileIssues(state: SanitizedPlanState, issues: CompileIssue[]): boolean {
-  let changed = false;
-
-  for (const issue of issues) {
-    switch (issue.code) {
-      case 'missing_parent':
-      case 'top_level_task':
-      case 'phase_has_dependencies':
-      case 'empty_phase':
-        if (issue.nodeKey && dropNode(state, issue.nodeKey)) {
-          changed = true;
-        }
-        break;
-      case 'invalid_dependency_reference':
-      case 'dependency_target_not_task':
-        if (issue.nodeKey && issue.dependencyNodeKey && dropDependency(state, issue.nodeKey, issue.dependencyNodeKey)) {
-          changed = true;
-        }
-        break;
-      case 'cycle_detected': {
-        const cyclePath = issue.relatedNodeKeys ?? [];
-        const ownerNodeKey = cyclePath[cyclePath.length - 2];
-        const dependencyNodeKey = cyclePath[cyclePath.length - 1];
-        if (ownerNodeKey && dependencyNodeKey && dropDependency(state, ownerNodeKey, dependencyNodeKey)) {
-          changed = true;
-        }
-        break;
-      }
-      case 'duplicate_node_key':
-      case 'invalid_plan':
-        break;
-    }
-  }
-
-  return changed;
-}
-
-function dropNode(state: SanitizedPlanState, nodeKey: string): boolean {
-  const nodeExists = state.plan.nodes.some((node) => node.nodeKey === nodeKey);
-  if (!nodeExists) {
-    return false;
-  }
-
-  const removedNodeKeys = new Set<string>();
-  const queue = [nodeKey];
-
-  while (queue.length > 0) {
-    const currentNodeKey = queue.pop()!;
-    if (removedNodeKeys.has(currentNodeKey)) {
-      continue;
-    }
-    removedNodeKeys.add(currentNodeKey);
-    for (const child of state.plan.nodes.filter((node) => node.parentNodeKey === currentNodeKey)) {
-      queue.push(child.nodeKey);
-    }
-  }
-
-  for (const removedNodeKey of removedNodeKeys) {
-    state.droppedNodeKeys.add(removedNodeKey);
-  }
-
-  state.plan = {
-    ...state.plan,
-    nodes: state.plan.nodes
-      .filter((node) => !removedNodeKeys.has(node.nodeKey))
-      .map((node) => ({
-        ...node,
-        dependsOn: (node.dependsOn ?? []).filter((dependency) => {
-          if (!removedNodeKeys.has(dependency.nodeKey)) {
-            return true;
-          }
-          state.droppedDependencyNodeKeys.add(dependency.nodeKey);
-          return false;
-        }),
-      })),
-  };
-
-  return true;
-}
-
-function dropDependency(state: SanitizedPlanState, nodeKey: string, dependencyNodeKey: string): boolean {
-  let changed = false;
-  state.plan = {
-    ...state.plan,
-    nodes: state.plan.nodes.map((node) => {
-      if (node.nodeKey !== nodeKey) {
-        return node;
-      }
-
-      const filtered = (node.dependsOn ?? []).filter((dependency) => {
-        const shouldDrop = dependency.nodeKey === dependencyNodeKey;
-        if (shouldDrop) {
-          changed = true;
-          state.droppedDependencyNodeKeys.add(dependencyNodeKey);
-        }
-        return !shouldDrop;
-      });
-
-      return changed ? { ...node, dependsOn: filtered } : node;
-    }),
-  };
-
-  return changed;
-}
-
-function cleanupEmptyPhases(state: SanitizedPlanState): void {
-  let removed = true;
-  while (removed) {
-    removed = false;
-    const phaseKeysToDrop = state.plan.nodes
-      .filter((node) => node.kind === 'phase')
-      .filter((phase) => !state.plan.nodes.some((node) => node.parentNodeKey === phase.nodeKey))
-      .map((phase) => phase.nodeKey);
-
-    if (phaseKeysToDrop.length === 0) {
-      continue;
-    }
-
-    for (const phaseKey of phaseKeysToDrop) {
-      dropNode(state, phaseKey);
-      removed = true;
-    }
-  }
-}
-
-function evaluateCleanupThresholds(
-  originalPlan: ProjectPlan,
-  cleanedPlan: ProjectPlan,
-  retainedNodeCount: number,
-): {
-  met: boolean;
-  retainedNodeRatio: number;
-  retainedTopLevelPhaseCount: number;
-  everyRetainedPhaseHasAChildTask: boolean;
-  hasBrokenReferences: boolean;
-} {
-  const retainedNodeRatio = originalPlan.nodes.length === 0 ? 0 : retainedNodeCount / originalPlan.nodes.length;
-  const retainedTopLevelPhaseCount = cleanedPlan.nodes.filter((node) => node.kind === 'phase' && !node.parentNodeKey).length;
-  const everyRetainedPhaseHasAChildTask = cleanedPlan.nodes
-    .filter((node) => node.kind === 'phase')
-    .every((phase) => phaseHasDescendantTask(cleanedPlan.nodes, phase.nodeKey));
-  const hasBrokenReferences = cleanedPlan.nodes.some((node) => {
-    if (node.parentNodeKey && !cleanedPlan.nodes.some((candidate) => candidate.nodeKey === node.parentNodeKey)) {
-      return true;
-    }
-
-    return (node.dependsOn ?? []).some((dependency) => !cleanedPlan.nodes.some((candidate) => candidate.nodeKey === dependency.nodeKey));
-  });
-
-  const met = everyRetainedPhaseHasAChildTask && !hasBrokenReferences;
-
-  return {
-    met,
-    retainedNodeRatio,
-    retainedTopLevelPhaseCount,
-    everyRetainedPhaseHasAChildTask,
-    hasBrokenReferences,
-  };
-}
-
-function phaseHasDescendantTask(nodes: ProjectPlanNode[], phaseNodeKey: string): boolean {
-  const children = nodes.filter((node) => node.parentNodeKey === phaseNodeKey);
-  for (const child of children) {
-    if (child.kind === 'task') {
-      return true;
-    }
-    if (phaseHasDescendantTask(nodes, child.nodeKey)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function buildControlledRejection(
-  originalPlan: ProjectPlan,
-  dropped: { droppedNodeKeys: string[]; droppedDependencyNodeKeys: string[] },
-): ExecuteInitialProjectPlanResult {
-  return {
-    ok: false,
-    reason: 'controlled_rejection',
-    message: 'We could not build a reliable starter schedule from this request.',
-    droppedNodeKeys: dropped.droppedNodeKeys,
-    droppedDependencyNodeKeys: dropped.droppedDependencyNodeKeys,
-    retainedNodeCount: 0,
-    retainedNodeRatio: originalPlan.nodes.length === 0 ? 0 : 0,
-    retainedTopLevelPhaseCount: 0,
-    compiledTaskCount: 0,
-    compiledDependencyCount: 0,
-    crossPhaseDependencyCount: 0,
-    everyRetainedPhaseHasAChildTask: false,
-    hasBrokenReferences: true,
-  };
-}
-
-function clonePlan(plan: ProjectPlan): ProjectPlan {
-  return {
-    projectType: plan.projectType,
-    assumptions: [...(plan.assumptions ?? [])],
-    nodes: plan.nodes.map((node) => ({
-      ...node,
-      dependsOn: (node.dependsOn ?? []).map((dependency): ProjectPlanDependency => ({
-        ...dependency,
-      })),
-    })),
-  };
-}
-
-function countTopLevelPhases(tasks: Array<{ parentId?: string }>): number {
-  return tasks.filter((task) => !task.parentId).length;
 }
