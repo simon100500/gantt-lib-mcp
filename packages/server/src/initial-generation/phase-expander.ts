@@ -1,4 +1,5 @@
 import type { ResolvedDomainReference } from './domain-reference.js';
+import { parseModelJson } from './json-response.js';
 import { evaluatePhaseExpansionQuality } from './quality-gate.js';
 import { normalizeGeneratedTitle } from './title-policy.js';
 import type {
@@ -100,7 +101,7 @@ function readQueryContent(result: PlannerQueryResult): string {
 }
 
 function parsePlannerResponse(payload: string): unknown {
-  return JSON.parse(payload);
+  return parseModelJson(payload);
 }
 
 function slugifyKeyPart(value: string): string {

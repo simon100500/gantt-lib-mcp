@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { buildGenerationBrief } from './brief.js';
 import { resolveDomainReference } from './domain-reference.js';
+import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
 import {
   evaluatePhaseExpansionQuality,
@@ -199,6 +200,14 @@ describe('initial-generation quality gate', () => {
 
     assert.equal(verdict.accepted, false);
     assert.ok(verdict.reasons.includes('weak_coverage'));
+  });
+});
+
+describe('initial-generation json response parsing', () => {
+  it('extracts the first balanced JSON object from a noisy model response', () => {
+    const parsed = parseModelJson(`Ниже корректный JSON.\n{"projectType":"private_house","assumptions":["a"],"phases":[]}\nГотово.`) as { projectType: string };
+
+    assert.equal(parsed.projectType, 'private_house');
   });
 });
 
