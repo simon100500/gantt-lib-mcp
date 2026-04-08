@@ -142,6 +142,24 @@ function resolveEnv(): {
   };
 }
 
+function buildSdkEnv(
+  env: ReturnType<typeof resolveEnv>,
+  extraEnv: Record<string, string> = {},
+): Record<string, string> {
+  const sdkEnv: Record<string, string> = {
+    OPENAI_API_KEY: env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+    OPENAI_MODEL: env.OPENAI_MODEL,
+    ...extraEnv,
+  };
+
+  if (env.OPENAI_CHEAP_MODEL) {
+    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
+  }
+
+  return sdkEnv;
+}
+
 function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
   return content
     .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
@@ -164,7 +182,7 @@ async function executeInitialGenerationPlannerQuery(
       model: input.model,
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
-      env,
+      env: buildSdkEnv(env),
       maxSessionTurns: input.stage === 'repair' ? 4 : 3,
     },
   });
@@ -969,10 +987,9 @@ async function executeAgentAttempt(
       maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
-      env: {
-        ...env,
+      env: buildSdkEnv(env, {
         DB_PATH: dbPath,
-      },
+      }),
       mcpServers: {
         gantt: {
           command: 'node',
