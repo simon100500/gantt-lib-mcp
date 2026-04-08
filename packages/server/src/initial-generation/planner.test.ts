@@ -345,14 +345,14 @@ describe('initial-generation planner', () => {
             nodes: [
               {
                 nodeKey: 'phase-1',
-                title: 'Этап 1',
+                title: 'Подготовка',
                 kind: 'phase',
                 durationDays: 5,
                 dependsOn: [],
               },
               {
                 nodeKey: 'phase-2',
-                title: 'Этап 2',
+                title: 'Строительство',
                 kind: 'phase',
                 durationDays: 5,
                 dependsOn: [],
@@ -420,7 +420,7 @@ describe('initial-generation planner', () => {
     assert.equal(result.repairAttempted, true);
     assert.equal(result.verdict.accepted, true);
     assert.match(prompts[1] ?? '', /missing_hierarchy/);
-    assert.match(prompts[1] ?? '', /placeholder_titles/);
+    assert.match(prompts[1] ?? '', /weak_coverage/);
   });
 
   it('stops after one repair and returns the best available repaired plan when weakness persists', async () => {
@@ -442,14 +442,14 @@ describe('initial-generation planner', () => {
           nodes: [
             {
               nodeKey: `phase-${calls}`,
-              title: `Этап ${calls}`,
+              title: `Подготовка ${calls}`,
               kind: 'phase',
               durationDays: 5,
               dependsOn: [],
             },
             {
               nodeKey: `phase-next-${calls}`,
-              title: `Stage ${calls + 1}`,
+              title: `Строительство ${calls + 1}`,
               kind: 'phase',
               durationDays: 5,
               dependsOn: [],
@@ -464,10 +464,9 @@ describe('initial-generation planner', () => {
     assert.equal(result.verdict.accepted, false);
     assert.deepEqual(result.verdict.reasons, [
       'missing_hierarchy',
-      'placeholder_titles',
       'weak_coverage',
       'weak_sequence',
     ]);
-    assert.equal(result.plan.nodes[0]?.title, 'Этап 2');
+    assert.equal(result.plan.nodes[0]?.title, 'Подготовка 2');
   });
 });

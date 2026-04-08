@@ -1,13 +1,5 @@
 import type { ResolvedDomainReference } from './domain-reference.js';
-
-export type PlannerGenerationBrief = {
-  objectType: string;
-  scopeSignals: string[];
-  starterScheduleExpectation: string;
-  namingBan: string;
-  domainContextSummary: string;
-  serverInferencePolicy: string;
-};
+import type { GenerationBrief } from './types.js';
 
 export type BuildGenerationBriefInput = {
   userMessage: string;
@@ -46,7 +38,7 @@ function detectScopeSignals(userMessage: string, reference: ResolvedDomainRefere
   return [...signals];
 }
 
-export function buildGenerationBrief(input: BuildGenerationBriefInput): PlannerGenerationBrief {
+export function buildGenerationBrief(input: BuildGenerationBriefInput): GenerationBrief {
   const { reference } = input;
 
   return {

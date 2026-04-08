@@ -5,11 +5,12 @@ export type ProjectPlanNodeKind = 'phase' | 'task';
 export type ProjectPlanDependencyType = 'FS' | 'SS' | 'FF' | 'SF';
 
 export type GenerationBrief = {
-  projectType: string;
-  projectScopeSummary: string;
-  expectations: string[];
-  assumptions: string[];
-  generationMode: GenerationMode;
+  objectType: string;
+  scopeSignals: string[];
+  starterScheduleExpectation: string;
+  namingBan: string;
+  domainContextSummary: string;
+  serverInferencePolicy: string;
 };
 
 export type ProjectPlanDependency = {
@@ -35,14 +36,14 @@ export type ProjectPlan = {
 
 export type RepairReason =
   | 'missing_hierarchy'
-  | 'placeholder_naming'
-  | 'weak_sequence_realism'
-  | 'insufficient_scale'
-  | 'invalid_dependencies';
+  | 'placeholder_titles'
+  | 'weak_coverage'
+  | 'weak_sequence';
 
 export type PlanQualityVerdict = {
-  status: 'accepted' | 'repair_required' | 'accepted_after_repair';
+  accepted: boolean;
   reasons: RepairReason[];
+  score: number;
 };
 
 export type ModelRoutingDecisionReason =
