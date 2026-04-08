@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: completed
-last_updated: "2026-04-07T22:50:31.458Z"
-last_activity: 2026-04-07
+status: ready_for_verification
+last_updated: "2026-04-08T11:45:25.854Z"
+last_activity: 2026-04-08
 progress:
-  total_phases: 11
-  completed_phases: 9
-  total_plans: 32
-  completed_plans: 32
-  percent: 89
+  total_phases: 12
+  completed_phases: 10
+  total_plans: 36
+  completed_plans: 36
+  percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-04
+**Last updated:** 2026-04-08
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Milestone complete
+**Status:** Ready for verification
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 40 — yandex-auth
+**Current focus:** Phase 41 — initial-gen-refactor
 
 ---
 
 ## Current Position
 
-Phase: 40
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-07
+Phase: 41 (initial-gen-refactor) — READY FOR VERIFICATION
+Plan: 4 of 4
+Status: Completed 41-04-PLAN.md
+Last activity: 2026-04-08
 
-Progress: [████████░░] 89%
+Progress: [██████████] 100%
 
 ---
 
@@ -76,6 +76,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 41 added: initial-gen-refactor
 - Phase 40 added: yandex-auth
 
 - v1.0-v4.0 shipped successfully
@@ -130,6 +131,14 @@ packages/
 - [Phase 38]: useTrialTrigger integrates with authStore.constraintDenial for automatic trigger on feature denial
 - [Quick 260405-roi]: endTrialNow auto-rollback to free + archive excess projects; rollbackTrialToFree archives oldest projects beyond FREE_PROJECT_LIMIT
 - [Quick 260405-roi]: Lock icon (lucide-react) with opacity-60 on archived projects in ProjectSwitcher sidebar
+- [Phase 41]: Empty-project broad prompts now route through selectAgentRoute() before any fast path or SDK run.
+- [Phase 41]: Server-side model choice is resolved once per run through resolveModelRoutingDecision() and logged as a typed decision.
+- [Phase 41]: Keep placeholder titles schema-invalid so repair focuses on hierarchy, coverage, and sequencing instead of filler cleanup.
+- [Phase 41]: Reuse the construction intent map as compact prompt context rather than reviving deterministic starter templates.
+- [Phase 41]: Deterministic initial-generation task IDs now derive from projectId and nodeKey so repeated compiles stay stable for the same serverDate.
+- [Phase 41]: Initial-generation partial builds prune only broken references, cycle edges, and empty containers, then require the locked 60% and 3-phase floor before commit.
+- [Phase 41]: The agent now passes a dedicated planner SDK query and project baseVersion into the initial-generation orchestrator instead of reusing mutation execution.
+- [Phase 41]: Controlled initial-generation failures are surfaced as assistant messages with final lifecycle logs, not as a silent fallback into ordinary mutation flow.
 
 ## Performance Metrics
 
@@ -146,12 +155,16 @@ packages/
 | Phase 38 P04 | 2min | 1 tasks | 1 files |
 | Phase 38 P05 | 2min | 1 tasks | 5 files |
 | Phase 38 P06 | 6min | 2 tasks | 4 files |
+| Phase 41 P01 | 18 min | 2 tasks | 6 files |
+| Phase 41 P02 | 8 min | 2 tasks | 7 files |
+| Phase 41 P03 | 25 min | 2 tasks | 3 files |
+| 41 | 04 | 5min | 2 | 4 | 2026-04-08 |
 
 ## Session
 
-- Last session: 2026-04-05T20:19:00+03:00
-- Stopped at: Completed 260405-roi-PLAN.md
+- Last session: 2026-04-08T11:45:25Z
+- Stopped at: Completed 41-04-PLAN.md
 
 ---
 
-*Last updated: 2026-04-05 — Quick task 260405-roi completed*
+*Last updated: 2026-04-08 — Phase 41 Plan 04 completed*

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export interface ServerMessage {
-  type: 'connected' | 'token' | 'tasks' | 'error' | 'done';
+  type: 'connected' | 'token' | 'tasks' | 'preview_tasks' | 'error' | 'done';
   content?: string;
   tasks?: unknown[];
   message?: string;
+  provisional?: boolean;
 }
 
 export interface ClientMessage {

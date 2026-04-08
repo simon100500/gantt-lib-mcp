@@ -477,7 +477,6 @@ export async function handleCallToolRequest(
     tool: name,
     args,
     envProjectId: process.env.PROJECT_ID,
-    dbPath: process.env.DB_PATH,
   });
 
   // Ping tool for connectivity testing

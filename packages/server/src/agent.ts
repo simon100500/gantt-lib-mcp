@@ -20,6 +20,9 @@ import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
 import type { CommitProjectCommandResponse, Task as MTask } from '@gantt/mcp/types';
+import { runInitialGeneration } from './initial-generation/orchestrator.js';
+import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
+import { selectAgentRoute } from './initial-generation/route-selection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,6 +55,18 @@ type VerificationResult = {
   rejectedMutationCalls: MutationToolCall[];
   acceptedChangedTaskIds: string[];
   acceptedChangedTaskIdMismatch: boolean;
+};
+
+type InitialGenerationPlannerQueryInput = {
+  prompt: string;
+  model: string;
+  stage: 'structure_planning' | 'structure_planning_repair' | 'schedule_metadata' | 'schedule_metadata_repair';
+};
+
+type InitialGenerationRouteDecisionQueryInput = {
+  prompt: string;
+  model: string;
+  stage: 'route_decision';
 };
 
 type FastShiftIntent = {
@@ -119,12 +134,36 @@ let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
 let prismaModulePromise: Promise<PrismaModule> | undefined;
 
-function resolveEnv(): { OPENAI_API_KEY: string; OPENAI_BASE_URL: string; OPENAI_MODEL: string } {
+function resolveEnv(): {
+  OPENAI_API_KEY: string;
+  OPENAI_BASE_URL: string;
+  OPENAI_MODEL: string;
+  OPENAI_CHEAP_MODEL?: string;
+} {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
     OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+    OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
   };
+}
+
+function buildSdkEnv(
+  env: ReturnType<typeof resolveEnv>,
+  extraEnv: Record<string, string> = {},
+): Record<string, string> {
+  const sdkEnv: Record<string, string> = {
+    OPENAI_API_KEY: env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+    OPENAI_MODEL: env.OPENAI_MODEL,
+    ...extraEnv,
+  };
+
+  if (env.OPENAI_CHEAP_MODEL) {
+    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
+  }
+
+  return sdkEnv;
 }
 
 function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
@@ -132,6 +171,104 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
     .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
     .map((block) => block.text ?? '')
     .join('');
+}
+
+async function executeInitialGenerationPlannerQuery(
+  input: InitialGenerationPlannerQueryInput,
+): Promise<{ content: string }> {
+  const env = resolveEnv();
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+  }
+
+  const session = query({
+    prompt: input.prompt,
+    options: {
+      authType: 'openai',
+      model: input.model,
+      cwd: PROJECT_ROOT,
+      permissionMode: 'yolo',
+      env: buildSdkEnv(env),
+      maxSessionTurns: input.stage === 'structure_planning_repair' || input.stage === 'schedule_metadata_repair' ? 4 : 3,
+    },
+  });
+
+  let content = '';
+
+  for await (const event of session) {
+    if (isSDKAssistantMessage(event)) {
+      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
+      if (text.trim().length > 0) {
+        content = text;
+      }
+    }
+
+    if (isSDKResultMessage(event)) {
+      if (event.is_error) {
+        throw new Error(typeof event.error === 'string' ? event.error : 'Initial generation planner failed');
+      }
+
+      if (typeof event.result === 'string' && event.result.trim().length > 0) {
+        content = event.result;
+      }
+      break;
+    }
+  }
+
+  if (content.trim().length === 0) {
+    throw new Error('Initial generation planner returned an empty response');
+  }
+
+  return { content };
+}
+
+async function executeInitialGenerationRouteDecisionQuery(
+  input: InitialGenerationRouteDecisionQueryInput,
+): Promise<{ content: string }> {
+  const env = resolveEnv();
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+  }
+
+  const session = query({
+    prompt: input.prompt,
+    options: {
+      authType: 'openai',
+      model: input.model,
+      cwd: PROJECT_ROOT,
+      permissionMode: 'yolo',
+      env: buildSdkEnv(env),
+      maxSessionTurns: 2,
+    },
+  });
+
+  let content = '';
+
+  for await (const event of session) {
+    if (isSDKAssistantMessage(event)) {
+      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
+      if (text.trim().length > 0) {
+        content = text;
+      }
+    }
+
+    if (isSDKResultMessage(event)) {
+      if (event.is_error) {
+        throw new Error(typeof event.error === 'string' ? event.error : 'Initial route decision failed');
+      }
+
+      if (typeof event.result === 'string' && event.result.trim().length > 0) {
+        content = event.result;
+      }
+      break;
+    }
+  }
+
+  if (content.trim().length === 0) {
+    throw new Error('Initial route decision returned an empty response');
+  }
+
+  return { content };
 }
 
 export function isMutationIntent(message: string): boolean {
@@ -167,6 +304,13 @@ export function isMutationIntent(message: string): boolean {
   ];
 
   if (russianMutationMarkers.some((marker) => normalized.includes(marker))) {
+    return true;
+  }
+
+  if (
+    /(?:график|план|schedule|timeline|gantt)/i.test(message)
+    && /(?:постро|состав|сплан|нарис|create|build|draft|generate)/i.test(message)
+  ) {
     return true;
   }
 
@@ -306,24 +450,24 @@ function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | un
 
 export function parseFastShiftIntent(message: string): FastShiftIntent | null {
   const trimmed = message.trim();
-  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode'] }> = [
+  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode']; defaultDelta?: number }> = [
     { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'working' },
     { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'calendar' },
     { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'project_default' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i },
+    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i, defaultDelta: 7 },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+working\s+days?$/i, mode: 'working' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+calendar\s+days?$/i, mode: 'calendar' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+weeks?$/i, mode: 'project_default' },
     { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+days?$/i, mode: 'project_default' },
   ];
 
-  for (const { regex, mode } of patterns) {
+  for (const { regex, mode, defaultDelta } of patterns) {
     const match = trimmed.match(regex);
     if (!match) {
       continue;
     }
     const taskName = match[1]?.trim();
-    const delta = parseFastShiftDelta(match[2], match[3]);
+    const delta = defaultDelta ?? parseFastShiftDelta(match[2], match[3]);
     if (!taskName || delta === null) {
       return null;
     }
@@ -355,6 +499,45 @@ export function resolveTasksByName(tasks: ComparableTask[], taskName: string): F
   }
 
   return { kind: 'none', matches: [] };
+}
+
+function createUtcDate(year: number, monthIndex: number, day: number): Date {
+  return new Date(Date.UTC(year, monthIndex, day));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  return createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days);
+}
+
+function isWeekend(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function alignToBusinessDay(date: Date): Date {
+  let current = createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  while (isWeekend(current)) {
+    current = addUtcDays(current, 1);
+  }
+  return current;
+}
+
+function addBusinessDays(start: Date, businessDays: number): Date {
+  let current = alignToBusinessDay(start);
+  let remaining = Math.max(0, businessDays - 1);
+
+  while (remaining > 0) {
+    current = addUtcDays(current, 1);
+    if (!isWeekend(current)) {
+      remaining -= 1;
+    }
+  }
+
+  return current;
+}
+
+function nextBusinessDay(date: Date): Date {
+  return alignToBusinessDay(addUtcDays(date, 1));
 }
 
 function formatDateOnly(date: Date): string {
@@ -817,6 +1000,20 @@ async function tryDirectShiftFastPath(
   return true;
 }
 
+async function getProjectBaseVersion(projectId: string): Promise<number> {
+  const { getPrisma } = await getPrismaModule();
+  const project = await getPrisma().project.findUnique({
+    where: { id: projectId },
+    select: { version: true },
+  });
+
+  if (!project) {
+    throw new Error(`Project ${projectId} was not found`);
+  }
+
+  return project.version;
+}
+
 async function executeAgentAttempt(
   prompt: string,
   runId: string,
@@ -825,8 +1022,8 @@ async function executeAgentAttempt(
   attempt: number,
   simpleMutationRequested: boolean,
   mcpServerPath: string,
-  dbPath: string,
   env: ReturnType<typeof resolveEnv>,
+  model: string,
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
@@ -836,17 +1033,14 @@ async function executeAgentAttempt(
     prompt,
     options: {
       authType: 'openai',
-      model: env.OPENAI_MODEL,
+      model,
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
       maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
-      env: {
-        ...env,
-        DB_PATH: dbPath,
-      },
+      env: buildSdkEnv(env),
       mcpServers: {
         gantt: {
           command: 'node',
@@ -1069,6 +1263,14 @@ export async function runAgentWithHistory(
     const likelyMutationRequest = isMutationIntent(userMessage);
     const simpleMutationRequested = isSimpleMutationRequest(userMessage);
     const { tasks: tasksBefore } = await taskService.list(projectId);
+    const env = resolveEnv();
+    const routeSelection = await selectAgentRoute({
+      userMessage,
+      taskCount: tasksBefore.length,
+      hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+      model: env.OPENAI_MODEL,
+      routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
+    });
 
     await writeServerDebugLog('agent_run_started', {
       runId,
@@ -1083,6 +1285,55 @@ export async function runAgentWithHistory(
     });
 
     await messageService.add('user', userMessage, projectId);
+
+    await writeServerDebugLog('route_selection', {
+      runId,
+      projectId,
+      sessionId,
+      userMessage,
+      route: routeSelection.route,
+      reason: routeSelection.reason,
+      confidence: routeSelection.confidence,
+      isEmptyProject: routeSelection.isEmptyProject,
+      hasHierarchy: routeSelection.hasHierarchy,
+      taskCount: routeSelection.taskCount,
+      usedModelDecision: routeSelection.usedModelDecision,
+    });
+
+    await writeServerDebugLog('route_decision_evidence', {
+      runId,
+      projectId,
+      sessionId,
+      userMessage,
+      route: routeSelection.route,
+      confidence: routeSelection.confidence,
+      reason: routeSelection.reason,
+      signals: routeSelection.signals,
+      projectStateSummary: routeSelection.projectStateSummary,
+      usedModelDecision: routeSelection.usedModelDecision,
+    });
+
+    if (routeSelection.route === 'initial_generation') {
+      await runInitialGeneration({
+        projectId,
+        sessionId,
+        runId,
+        userMessage,
+        tasksBefore,
+        baseVersion: await getProjectBaseVersion(projectId),
+        plannerQuery: executeInitialGenerationPlannerQuery,
+        services: {
+          commandService,
+          messageService,
+          taskService,
+        },
+        logger: {
+          debug: (event, payload) => writeServerDebugLog(event, payload),
+        },
+        broadcastToSession,
+      });
+      return;
+    }
 
     if (await tryDirectShiftFastPath(
       userMessage,
@@ -1107,7 +1358,6 @@ export async function runAgentWithHistory(
 
     const historyContext = buildHistoryContext(messages.slice(0, -1), false);
 
-    const env = resolveEnv();
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
@@ -1119,12 +1369,23 @@ export async function runAgentWithHistory(
       authType: 'openai',
       baseUrl: env.OPENAI_BASE_URL,
       model: env.OPENAI_MODEL,
+      cheapModel: env.OPENAI_CHEAP_MODEL,
       projectRoot: PROJECT_ROOT,
+    });
+
+    const modelRoutingDecision = resolveModelRoutingDecision({
+      route: 'mutation',
+      env,
+    });
+    await writeServerDebugLog('model_routing_decision', {
+      runId,
+      projectId,
+      sessionId,
+      ...modelRoutingDecision,
     });
 
     const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
       ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
-    const dbPath = process.env.DB_PATH ?? join(PROJECT_ROOT, 'gantt.db');
 
     let assistantResponse = '';
     let streamedContent = false;
@@ -1173,8 +1434,8 @@ export async function runAgentWithHistory(
           attempt,
           simpleMutationRequested,
           mcpServerPath,
-          dbPath,
           env,
+          modelRoutingDecision.selectedModel,
           broadcastToSession,
         );
       } catch (error) {

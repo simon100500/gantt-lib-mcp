@@ -48,6 +48,7 @@ interface ProjectWorkspaceProps {
   ganttDayMode: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
+  previewState?: 'idle' | 'rendering';
 }
 
 function formatTaskCount(count: number) {
@@ -99,6 +100,7 @@ export function ProjectWorkspace({
   ganttDayMode,
   calendarDays = [],
   onGanttDayModeChange,
+  previewState = 'idle',
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -139,12 +141,14 @@ export function ProjectWorkspace({
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
   const effectiveTasks = tasks;
-  const effectiveDisableTaskDrag = readOnly || disableTaskDrag;
+  const previewRendering = previewState === 'rendering';
+  const effectiveReadOnly = readOnly || previewRendering;
+  const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
-    if (!projectId || readOnly) return;
+    if (!projectId || effectiveReadOnly) return;
     setProjectState(projectId, { disableTaskDrag: enabled });
-  }, [projectId, readOnly, setProjectState]);
+  }, [effectiveReadOnly, projectId, setProjectState]);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) return;
@@ -207,13 +211,13 @@ export function ProjectWorkspace({
 
     const reflowedTasks = reflowTasksOnModeSwitch(tasks, ganttDayMode === 'business', weekendPredicate) as Task[];
 
-    if (readOnly || !batchUpdate) {
+    if (effectiveReadOnly || !batchUpdate) {
       setTasks(reflowedTasks);
       return;
     }
 
     void batchUpdate.handleTasksChange(reflowedTasks);
-  }, [batchUpdate, ganttDayMode, readOnly, setTasks, tasks, weekendPredicate]);
+  }, [batchUpdate, effectiveReadOnly, ganttDayMode, setTasks, tasks, weekendPredicate]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -256,7 +260,7 @@ export function ProjectWorkspace({
                 ref={ganttRef as Ref<GanttChartRef>}
                 tasks={effectiveTasks}
                 taskFilter={taskFilter}
-                onTasksChange={readOnly ? undefined : batchUpdate?.handleTasksChange}
+                onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}
                 containerHeight="calc(100dvh - 136px)"
@@ -265,19 +269,19 @@ export function ProjectWorkspace({
                 taskListWidth={650}
                 onValidateDependencies={onValidation}
                 enableAutoSchedule={autoSchedule}
-                onCascade={readOnly ? undefined : onCascade}
-                disableTaskNameEditing={readOnly}
-                disableDependencyEditing={readOnly}
+                onCascade={effectiveReadOnly ? undefined : onCascade}
+                disableTaskNameEditing={effectiveReadOnly}
+                disableDependencyEditing={effectiveReadOnly}
                 disableTaskDrag={effectiveDisableTaskDrag}
                 highlightExpiredTasks={highlightExpiredTasks}
                 headerHeight={40}
                 viewMode={viewMode}
                 collapsedParentIds={collapsedParentIds}
                 onToggleCollapse={handleToggleCollapse}
-                onAdd={readOnly ? undefined : batchUpdate?.handleAdd}
-                onDelete={readOnly ? undefined : batchUpdate?.handleDelete}
-                onInsertAfter={readOnly ? undefined : batchUpdate?.handleInsertAfter}
-                onReorder={readOnly ? undefined : batchUpdate?.handleReorder}
+                onAdd={effectiveReadOnly ? undefined : batchUpdate?.handleAdd}
+                onDelete={effectiveReadOnly ? undefined : batchUpdate?.handleDelete}
+                onInsertAfter={effectiveReadOnly ? undefined : batchUpdate?.handleInsertAfter}
+                onReorder={effectiveReadOnly ? undefined : batchUpdate?.handleReorder}
                 customDays={customDays}
                 highlightedTaskIds={highlightedSearchTaskIds}
                 filterMode={filterMode}
@@ -297,9 +301,15 @@ export function ProjectWorkspace({
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
 
-                {readOnly && (
+                {effectiveReadOnly && (
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">
-                    Только чтение
+                    {previewRendering ? 'Предпросмотр' : 'Только чтение'}
+                  </span>
+                )}
+
+                {previewRendering && (
+                  <span className="font-mono text-[11px] text-amber-600">
+                    Предварительный график до финального сохранения
                   </span>
                 )}
 

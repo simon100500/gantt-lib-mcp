@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-05
+**Last updated:** 2026-04-08
 
 ## Progress Summary
 
@@ -282,5 +282,24 @@ Plans:
 - [x] 40-02-PLAN.md — Frontend: Yandex-first auth modal + callback route + OTP fallback
 - [x] 40-03-PLAN.md — Env/docs: credential split, callback contract, manual verification checklist
 
+### Phase 41: initial-gen-refactor
+
+**Goal:** Пустой проект с broad initial-generation запросом идёт через AI-first pipeline `initial_generation` (planning -> quality gate -> deterministic compile/commit) без template fast path и без fallback в обычный mutation-agent flow
+**Requirements**: IGR-01, IGR-02, IGR-03, IGR-04
+**Depends on:** Phase 40
+**Plans:** 4/4 plans complete
+
+**Success Criteria** (what must be TRUE):
+  1. Empty-project broad generation requests route to a first-class `initial_generation` pipeline instead of `initial_schedule_template` or regex-only content shortcuts
+  2. Planning produces a validated `ProjectPlan` using server-side domain brief/reference injection, applies a rule-based quality gate, and allows at most one repair cycle
+  3. Approved plans compile deterministically into one authoritative batch command executed through `commandService`, with locked partial-salvage thresholds and controlled failure when salvage is too weak
+  4. Logs and tests reconstruct the full lifecycle: route selection, model tier, planning output, quality verdict, compile verdict, dropped nodes/links, and final acceptance/rejection
+
+Plans:
+- [x] 41-01-PLAN.md — Contracts and routing shell for `initial_generation`, with template fast-path removal and typed model routing
+- [x] 41-02-PLAN.md — Domain brief, reference injection, strict `ProjectPlan` validation, and one-shot quality/repair loop
+- [x] 41-03-PLAN.md — Deterministic compiler, partial salvage, and authoritative batch commit through `commandService`
+- [x] 41-04-PLAN.md — End-to-end orchestration wiring, observability payloads, regression tests, and manual verification docs
+
 ---
-*Last updated: 2026-04-08 — Phase 40 planned (3 plans across 3 waves)*
+*Last updated: 2026-04-08 — Phase 41 Plan 04 completed*
