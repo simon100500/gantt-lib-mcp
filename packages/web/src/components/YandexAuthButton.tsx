@@ -330,11 +330,12 @@ export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) 
     <Button
       type="button"
       size="lg"
-      className="h-12 w-full bg-[#FC3F1D] text-white hover:bg-[#e53818]"
+      className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[15px] font-medium text-slate-900 shadow-sm hover:bg-slate-50 hover:text-slate-900"
       onClick={() => void handleLogin()}
       disabled={loading || !sdkReady}
     >
-      {loading ? 'Подключаем Яндекс…' : 'Войти через Яндекс'}
+      <img src="/Yandex_icon.svg" alt="" className="h-5 w-5" />
+      <span>{loading ? 'Открываем Яндекс…' : 'Войти с Яндекс ID'}</span>
     </Button>
   );
 }

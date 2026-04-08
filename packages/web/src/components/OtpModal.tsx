@@ -130,9 +130,9 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
   }, [otp, step]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
       {step === 'choice' ? (
-        <Card className="relative w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border-0 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <Card className="relative w-[440px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onClose}
             className="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-600"
@@ -143,24 +143,32 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-          <CardHeader className="space-y-2 pb-4">
-            <CardTitle className="text-xl font-semibold">Вход в ГетГант</CardTitle>
-            <CardDescription>
-              Быстрый вход через Яндекс открывает проект сразу. Почта остаётся резервным вариантом.
-            </CardDescription>
+          <CardHeader className="space-y-3 pb-5">
+            <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Вход в ГетГант</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <YandexAuthButton onSuccess={onSuccess} onError={setError} />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-              Если Яндекс недоступен или нужен запасной сценарий, можно войти по email-коду.
+            {error && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+                {error}
+              </div>
+            )}
+            <div className="relative my-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-3 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                  или
+                </span>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
             <Button
               type="button"
               variant="outline"
-              className="w-full"
+              className="h-12 w-full rounded-2xl border-slate-200 bg-white text-[15px] font-medium text-slate-800 hover:bg-slate-100"
               size="lg"
               onClick={() => {
                 setError(null);
@@ -172,7 +180,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
           </CardFooter>
         </Card>
       ) : step === 'email' ? (
-        <Card className="w-[420px] max-w-[calc(100vw-2rem)] shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
+        <Card className="relative w-[440px] max-w-[calc(100vw-2rem)] rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -183,20 +191,22 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-xl font-semibold">Вход в ГетГант</CardTitle>
-            <CardDescription>Введите email для получения кода или вернитесь ко входу через Яндекс</CardDescription>
+          <CardHeader className="space-y-2 pb-5">
+            <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Вход по почте</CardTitle>
+            <CardDescription className="text-[15px] leading-6 text-slate-600">
+              Введите email, и мы отправим одноразовый код
+            </CardDescription>
           </CardHeader>
           <form onSubmit={handleRequestOtp}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email адрес</Label>
+                <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email адрес</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="you@example.com"
                   className={cn(
-                    "h-11",
+                    "h-12 rounded-2xl border-slate-200 bg-slate-50 text-[15px]",
                     error && "border-destructive focus-visible:ring-destructive"
                   )}
                   value={email}
@@ -204,13 +214,13 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                   disabled={loading}
                   autoFocus
                 />
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && <p className="text-sm leading-6 text-destructive">{error}</p>}
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-3">
               <Button
                 type="submit"
-                className="w-full"
+                className="h-12 w-full rounded-2xl text-[15px] font-medium"
                 size="lg"
                 disabled={loading}
               >
@@ -219,7 +229,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
               <Button
                 type="button"
                 variant="ghost"
-                className="w-full"
+                className="w-full rounded-2xl text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                 onClick={() => {
                   setError(null);
                   setStep('choice');
@@ -231,8 +241,8 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
           </form>
         </Card>
       ) : (
-        <div className="relative w-[420px] max-w-[calc(100vw-2rem)]">
-          <Card className="w-full shadow-2xl border-0 rounded-2xl relative" onClick={(e) => e.stopPropagation()}>
+        <div className="relative w-[440px] max-w-[calc(100vw-2rem)]">
+          <Card className="relative w-full rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={onClose}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
@@ -243,13 +253,13 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-xl font-semibold">Проверьте email</CardTitle>
-              <CardDescription className="flex items-center gap-1 flex-wrap">
+            <CardHeader className="space-y-2 pb-5">
+              <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Проверьте email</CardTitle>
+              <CardDescription className="flex items-center gap-1 flex-wrap text-[15px] leading-6 text-slate-600">
                 Мы отправили 6-значный код на {email}{' '}
                 <button
                   onClick={() => setStep('email')}
-                  className="text-primary hover:underline text-sm"
+                  className="text-sm font-medium text-primary hover:underline"
                 >
                   (изменить)
                 </button>
@@ -257,7 +267,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="otp">Код подтверждения</Label>
+                <Label htmlFor="otp" className="text-sm font-medium text-slate-700">Код подтверждения</Label>
                 <Input
                   ref={otpInputRef}
                   id="otp"
@@ -272,20 +282,20 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                     setOtp(value);
                   }}
                   className={cn(
-                    "h-14 text-center !text-4xl font-mono tracking-widest py-4",
+                    "h-16 rounded-2xl border-slate-200 bg-slate-50 text-center !text-4xl font-mono tracking-[0.32em] py-4",
                     error && "border-destructive focus-visible:ring-destructive"
                   )}
                   disabled={loading}
                   autoFocus
                 />
-                {error && <p className="text-sm text-destructive text-center">{error}</p>}
+                {error && <p className="text-sm leading-6 text-destructive text-center">{error}</p>}
               </div>
               {!loading && (
                 <p className="text-sm text-muted-foreground text-center">
                   Не получили?{' '}
                   <button
                     type="button"
-                    className="text-primary hover:underline"
+                    className="font-medium text-primary hover:underline"
                     onClick={() => setStep('email')}
                   >
                     Отправить снова
