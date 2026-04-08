@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { compileInitialProjectPlan } from './compiler.js';
+import { executeInitialProjectPlan } from './executor.js';
 import type { ProjectPlan } from './types.js';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const PLAN: ProjectPlan = {
   projectType: 'private_residential_house',
@@ -181,5 +187,114 @@ describe('compileInitialProjectPlan', () => {
     });
 
     assert.deepEqual(second, first);
+  });
+});
+
+describe('executeInitialProjectPlan', () => {
+  it('commits a partial initial schedule after dropping only broken references and reports a partial outcome', async () => {
+    const partialPlan: ProjectPlan = {
+      projectType: 'private_residential_house',
+      assumptions: [],
+      nodes: [
+        { nodeKey: 'phase-a', title: 'Site prep', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-a', title: 'Survey', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'phase-b', title: 'Foundation', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-b', title: 'Footings', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-a', type: 'FS' }] },
+        { nodeKey: 'phase-c', title: 'Shell', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-c', title: 'Framing', parentNodeKey: 'phase-c', kind: 'task', durationDays: 3, dependsOn: [{ nodeKey: 'missing-task', type: 'FS' }] },
+        { nodeKey: 'phase-d', title: 'Finishes', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-d', title: 'Painting', parentNodeKey: 'phase-d', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-c', type: 'SS' }] },
+      ],
+    };
+
+    const committed: Array<{ request: { command: { type: string; tasks: Array<{ name: string }> } }; actorType: string; actorId?: string }> = [];
+    const commandService = {
+      async commitCommand(request: { command: { type: string; tasks: Array<{ name: string }> } }, actorType: string, actorId?: string) {
+        committed.push({ request, actorType, actorId });
+        return {
+          clientRequestId: 'client-1',
+          accepted: true,
+          baseVersion: 8,
+          newVersion: 9,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: request.command.tasks.map((task) => task.name),
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        };
+      },
+    };
+
+    const result = await executeInitialProjectPlan({
+      projectId: 'project-41',
+      baseVersion: 8,
+      clientRequestId: 'client-1',
+      actorId: 'agent-7',
+      serverDate: '2026-04-07',
+      plan: partialPlan,
+      commandService,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.outcome, 'partial');
+    assert.match(result.message, /partial/i);
+    assert.deepEqual(result.droppedNodeKeys, []);
+    assert.deepEqual(result.droppedDependencyNodeKeys, ['missing-task']);
+    assert.equal(committed.length, 1);
+    assert.equal(committed[0]!.actorType, 'agent');
+    assert.equal(committed[0]!.actorId, 'agent-7');
+    assert.equal(committed[0]!.request.command.type, 'create_tasks_batch');
+  });
+
+  it('rejects a too-weak partial result instead of silently falling back', async () => {
+    const weakPlan: ProjectPlan = {
+      projectType: 'private_residential_house',
+      assumptions: [],
+      nodes: [
+        { nodeKey: 'phase-a', title: 'Phase A', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-a', title: 'Task A', parentNodeKey: 'phase-a', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'phase-b', title: 'Phase B', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-b', title: 'Task B', parentNodeKey: 'phase-b', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'phase-c', title: 'Phase C', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-c', title: 'Task C', parentNodeKey: 'missing-phase-c', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'phase-d', title: 'Phase D', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-d', title: 'Task D', parentNodeKey: 'missing-phase-d', kind: 'task', durationDays: 2, dependsOn: [] },
+        { nodeKey: 'phase-e', title: 'Phase E', kind: 'phase', durationDays: 1, dependsOn: [] },
+        { nodeKey: 'task-e', title: 'Task E', parentNodeKey: 'missing-phase-e', kind: 'task', durationDays: 2, dependsOn: [] },
+      ],
+    };
+
+    let commitCalls = 0;
+    const commandService = {
+      async commitCommand() {
+        commitCalls += 1;
+        throw new Error('commit should not run');
+      },
+    };
+
+    const result = await executeInitialProjectPlan({
+      projectId: 'project-41',
+      baseVersion: 8,
+      clientRequestId: 'client-2',
+      actorId: 'agent-7',
+      serverDate: '2026-04-07',
+      plan: weakPlan,
+      commandService,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'controlled_rejection');
+    assert.equal(result.retainedTopLevelPhaseCount, 2);
+    assert.equal(commitCalls, 0);
+    assert.match(result.message, /could not build a reliable starter schedule/i);
+  });
+
+  it('does not reference mutation-agent fallback symbols in executor.ts', () => {
+    const source = readFileSync(join(__dirname, 'executor.ts'), 'utf-8');
+
+    assert.doesNotMatch(source, /runInitialGeneration|executeAgentAttempt|buildPrompt/);
   });
 });
