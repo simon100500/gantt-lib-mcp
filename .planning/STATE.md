@@ -76,6 +76,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 41 added: initial-gen-refactor
 - Phase 40 added: yandex-auth
 
 - v1.0-v4.0 shipped successfully
