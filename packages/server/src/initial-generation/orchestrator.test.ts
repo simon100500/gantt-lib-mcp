@@ -415,5 +415,12 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_request').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_response').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 0);
+    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks').length, 1);
+    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'done').length, 1);
+    const previewBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_tasks');
+    const doneBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'done');
+    assert.notEqual(previewBroadcastIndex, -1);
+    assert.notEqual(doneBroadcastIndex, -1);
+    assert.ok(previewBroadcastIndex < doneBroadcastIndex);
   });
 });

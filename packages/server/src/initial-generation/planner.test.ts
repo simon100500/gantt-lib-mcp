@@ -364,8 +364,9 @@ describe('initial-generation planner', () => {
     assert.match(prompts[0]?.prompt ?? '', /Good top-level titles/i);
     assert.match(prompts[0]?.prompt ?? '', /Each task title must describe exactly one construction operation/i);
     assert.match(prompts[0]?.prompt ?? '', /Task-level compound formulations are forbidden/i);
-    assert.match(prompts[0]?.prompt ?? '', /without server-side domain taxonomy/i);
+    assert.match(prompts[0]?.prompt ?? '', /If the request implies a specialized facility, preserve the major functional workstreams/i);
     assert.match(prompts[1]?.prompt ?? '', /Do not create, delete, rename, merge, split, or move nodes/i);
+    assert.match(prompts[1]?.prompt ?? '', /Each dependency object must have exactly this shape/i);
   });
 
   it('repairs structure once before moving to scheduling', async () => {

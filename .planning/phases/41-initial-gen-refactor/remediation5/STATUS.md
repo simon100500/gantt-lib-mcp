@@ -56,7 +56,10 @@ Phase status: in progress
 
 4. Optionally add more protocol/UI coverage for preview path.
 
-- Current coverage is strongest in planner/orchestrator server tests.
+- Added explicit orchestrator coverage for:
+  - preview broadcast before final commit failure
+  - preview path ending with `done` and no final `tasks` broadcast on rejected commit
+- Current remaining gap is manual/live UX verification rather than core server protocol coverage.
 
 ## Success Criteria Check
 
@@ -75,10 +78,19 @@ Phase status: in progress
 5. Final DB writes remain authoritative and single-commit.
 - Status: implemented and preserved.
 
+6. Preview protocol is covered for both success and rejected-commit paths.
+- Status: confirmed by orchestrator test coverage on 2026-04-09.
+
 ## Suggested Next Step
 
-Run and inspect the acceptance prompt:
+Run and inspect the acceptance prompt in a live environment:
 
 - `График строительства детского сада на 3 этажа`
 
-Then close the remaining verification items and mark remediation complete.
+Focus on:
+
+- confirm preview visibly renders before final commit
+- confirm final persisted graph preserves dependencies
+- confirm compound task wording is materially reduced versus earlier runs
+
+After that, remediation can be marked complete.
