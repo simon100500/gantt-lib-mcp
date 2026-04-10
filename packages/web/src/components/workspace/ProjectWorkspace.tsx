@@ -48,7 +48,8 @@ interface ProjectWorkspaceProps {
   ganttDayMode: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
-  previewState?: 'idle' | 'rendering';
+  previewState?: 'idle' | 'rendering' | 'failed';
+  previewMessage?: string | null;
 }
 
 function formatTaskCount(count: number) {
@@ -101,6 +102,7 @@ export function ProjectWorkspace({
   calendarDays = [],
   onGanttDayModeChange,
   previewState = 'idle',
+  previewMessage = null,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -142,7 +144,8 @@ export function ProjectWorkspace({
   }, [projectId, projectStates]);
   const effectiveTasks = tasks;
   const previewRendering = previewState === 'rendering';
-  const effectiveReadOnly = readOnly || previewRendering;
+  const previewFailed = previewState === 'failed';
+  const effectiveReadOnly = readOnly || previewRendering || previewFailed;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
@@ -289,7 +292,7 @@ export function ProjectWorkspace({
               />
             )}
 
-            {(tasks.length > 0 || readOnly) && (
+            {(effectiveTasks.length > 0 || effectiveReadOnly) && (
               <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
                 {effectiveTasks.length > 0 && (
                   <span className="font-mono text-[11px] text-slate-400">
@@ -303,13 +306,19 @@ export function ProjectWorkspace({
 
                 {effectiveReadOnly && (
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">
-                    {previewRendering ? 'Предпросмотр' : 'Только чтение'}
+                    {previewRendering ? 'Предпросмотр' : previewFailed ? 'Не сохранено' : 'Только чтение'}
                   </span>
                 )}
 
                 {previewRendering && (
                   <span className="font-mono text-[11px] text-amber-600">
                     Предварительный график до финального сохранения
+                  </span>
+                )}
+
+                {previewFailed && (
+                  <span className="font-mono text-[11px] text-red-600">
+                    {previewMessage ?? 'Предварительный график не был сохранён'}
                   </span>
                 )}
 

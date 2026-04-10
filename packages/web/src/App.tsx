@@ -130,6 +130,8 @@ function buildDependencyRowsFromTasks(tasks: Task[]) {
 type PreviewState = {
   tasks: Task[];
   active: boolean;
+  mode: 'rendering' | 'failed';
+  message: string | null;
 };
 
 export default function App() {
@@ -431,7 +433,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
   });
   const ganttRef = useRef<GanttChartRef>(null);
-  const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false });
+  const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false, mode: 'rendering', message: null });
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
@@ -446,12 +448,25 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPreviewState({
         tasks: normalizedPreviewTasks,
         active: true,
+        mode: 'rendering',
+        message: null,
       });
+      return;
+    }
+    if (msg.type === 'preview_failed') {
+      setPreviewState((current) => current.active
+        ? {
+            ...current,
+            mode: 'failed',
+            message: msg.message ?? 'Предварительный график не был сохранён.',
+          }
+        : current);
+      useChatStore.getState().setError(msg.message ?? 'Предварительный график не был сохранён.');
       return;
     }
     if (msg.type === 'tasks') {
       const normalizedTasks = normalizeTasks(msg.tasks as Task[]);
-      setPreviewState({ tasks: [], active: false });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
       if (!hasShareToken && auth.isAuthenticated) {
@@ -468,12 +483,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'done') {
-      setPreviewState({ tasks: [], active: false });
+      setPreviewState((current) => current.mode === 'failed'
+        ? current
+        : { tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().finishStreaming();
       return;
     }
     if (msg.type === 'error') {
-      setPreviewState({ tasks: [], active: false });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
   }, [auth.isAuthenticated, hasShareToken]);
@@ -530,7 +547,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setWorkspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
-    setPreviewState({ tasks: [], active: false });
+    setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
@@ -1041,7 +1058,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
             calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             readOnly={isArchivedProject}
-            previewState={previewState.active ? 'rendering' : 'idle'}
+            previewState={previewState.active ? previewState.mode : 'idle'}
+            previewMessage={previewState.active ? previewState.message : null}
             onGanttDayModeChange={(ganttDayMode) => {
               void handleGanttDayModeChange(ganttDayMode).catch((error) => {
                 console.error('Failed to update gantt day mode:', error);

@@ -218,6 +218,7 @@ export async function runInitialGeneration(
   });
 
   let repairAttempted = false;
+  let previewBroadcasted = false;
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
     const startedAt = Date.now();
     await input.logger.debug('planner_query_request', {
@@ -331,6 +332,7 @@ export async function runInitialGeneration(
         }));
 
         input.broadcastToSession(input.sessionId, { type: 'preview_tasks', tasks: previewTasks, provisional: true });
+        previewBroadcasted = true;
         await input.logger.debug('preview_tasks_broadcast', {
           runId: input.runId,
           projectId: input.projectId,
@@ -367,6 +369,12 @@ export async function runInitialGeneration(
 
     if (!execution.ok) {
       const assistantResponse = buildFailureResponse('compile');
+      if (previewBroadcasted) {
+        input.broadcastToSession(input.sessionId, {
+          type: 'preview_failed',
+          message: 'Предварительный график не был сохранён. Проверьте ошибку и повторите запуск.',
+        });
+      }
       await saveAssistantMessage(input, assistantResponse);
       await input.logger.debug('initial_generation_result', {
         runId: input.runId,

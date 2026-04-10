@@ -28,7 +28,7 @@ function createHarness(options?: {
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const messages: Array<{ role: string; content: string }> = [];
-  const broadcasts: Array<{ sessionId: string; message: { type: string; tasks?: unknown[]; provisional?: boolean } }> = [];
+  const broadcasts: Array<{ sessionId: string; message: { type: string; tasks?: unknown[]; provisional?: boolean; message?: string } }> = [];
   const committedCommands: Array<{ type: string }> = [];
   let commitCall = 0;
 
@@ -293,7 +293,7 @@ function createHarness(options?: {
           events.push({ event, payload });
         },
       },
-      broadcastToSession(sessionId: string, message: { type: string; tasks?: unknown[]; provisional?: boolean }) {
+      broadcastToSession(sessionId: string, message: { type: string; tasks?: unknown[]; provisional?: boolean; message?: string }) {
         broadcasts.push({ sessionId, message });
       },
     },
@@ -416,11 +416,17 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_response').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 0);
     assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks').length, 1);
+    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_failed').length, 1);
     assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'done').length, 1);
     const previewBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_tasks');
+    const previewFailedBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_failed');
     const doneBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'done');
     assert.notEqual(previewBroadcastIndex, -1);
+    assert.notEqual(previewFailedBroadcastIndex, -1);
     assert.notEqual(doneBroadcastIndex, -1);
+    assert.ok(previewBroadcastIndex < previewFailedBroadcastIndex);
+    assert.ok(previewFailedBroadcastIndex < doneBroadcastIndex);
+    assert.match(harness.broadcasts[previewFailedBroadcastIndex]?.message.message ?? '', /не был сохранён/i);
     assert.ok(previewBroadcastIndex < doneBroadcastIndex);
   });
 });

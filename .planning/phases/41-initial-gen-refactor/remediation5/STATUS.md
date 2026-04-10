@@ -34,6 +34,12 @@ Phase status: in progress
 - Web client renders preview state and replaces it with authoritative final `tasks`.
 - Database persistence remains authoritative and final-state driven.
 
+4. Preview failure downgrade UX is now implemented.
+
+- Server emits explicit `preview_failed` when provisional graph was rendered but final commit is rejected.
+- Web client no longer drops the provisional graph immediately on that path.
+- UI keeps the provisional graph visible in read-only mode and marks it as not saved.
+
 ## Remaining Work
 
 1. Verify live kindergarten run end-to-end.
@@ -52,7 +58,7 @@ Phase status: in progress
 
 3. Verify preview failure behavior.
 
-- Need to confirm UI clears or downgrades preview state when final commit fails.
+- Need to confirm live UI keeps preview visible as failed provisional state when final commit fails.
 
 4. Optionally add more protocol/UI coverage for preview path.
 
@@ -80,6 +86,9 @@ Phase status: in progress
 
 6. Preview protocol is covered for both success and rejected-commit paths.
 - Status: confirmed by orchestrator test coverage on 2026-04-09.
+
+7. Failed final commit does not silently erase already rendered preview.
+- Status: implemented in protocol and UI on 2026-04-10; still needs live/manual confirmation.
 
 ## Suggested Next Step
 
