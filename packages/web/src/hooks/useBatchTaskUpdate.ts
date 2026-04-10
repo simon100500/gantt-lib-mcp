@@ -342,11 +342,6 @@ export function useBatchTaskUpdate({
     }
 
     if (isAuthenticatedMode) {
-      if (isDeletionRelated && changedTasks.length > 0) {
-        console.log('%c[useBatchTaskUpdate] handleTasksChange: deletion preflight detected — skipping, delete_task owns persistence', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
-        return;
-      }
-
       try {
         setSavingStateWithReset('saving');
 
