@@ -619,6 +619,87 @@ describe('Dependency Type Regression', () => {
 // ============================================================
 
 describe('CommandService command dispatch', () => {
+  it('create_task snaps weekend start in business-day mode', async () => {
+    const service = new CommandService() as any;
+    const isWeekend = (d: Date) => { const day = d.getUTCDay(); return day === 0 || day === 6; };
+
+    const result = await service.executeCommand(
+      {
+        type: 'create_task',
+        task: {
+          name: 'Weekend Task',
+          startDate: '2026-04-04',
+          endDate: '2026-04-05',
+          dependencies: [],
+        },
+      },
+      [],
+      { businessDays: true, weekendPredicate: isWeekend },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(
+      result.changedTasks.map((task: Task) => ({
+        name: task.name,
+        startDate: task.startDate,
+        endDate: task.endDate,
+      })),
+      [
+        {
+          name: 'Weekend Task',
+          startDate: '2026-04-06',
+          endDate: '2026-04-07',
+        },
+      ],
+    );
+  });
+
+  it('create_tasks_batch normalizes new tasks through core scheduling in business-day mode', async () => {
+    const service = new CommandService() as any;
+    const isWeekend = (d: Date) => { const day = d.getUTCDay(); return day === 0 || day === 6; };
+
+    const result = await service.executeCommand(
+      {
+        type: 'create_tasks_batch',
+        tasks: [
+          {
+            id: 'A',
+            projectId: 'project-1',
+            name: 'A',
+            startDate: '2026-04-04',
+            endDate: '2026-04-06',
+            dependencies: [],
+          },
+          {
+            id: 'B',
+            projectId: 'project-1',
+            name: 'B',
+            startDate: '2026-04-04',
+            endDate: '2026-04-05',
+            dependencies: [{ taskId: 'A', type: 'FS', lag: 1 }],
+          },
+        ],
+      },
+      [],
+      { businessDays: true, weekendPredicate: isWeekend },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(
+      result.changedTasks.map((task: Task) => ({
+        id: task.id,
+        startDate: task.startDate,
+        endDate: task.endDate,
+      })),
+      [
+        { id: 'A', startDate: '2026-04-06', endDate: '2026-04-08' },
+        { id: 'B', startDate: '2026-04-10', endDate: '2026-04-13' },
+      ],
+    );
+  });
+
   it('reorder_tasks batches visual sort updates without scheduling changes', async () => {
     const service = new CommandService() as any;
     const snapshot = toCoreSnapshot(createFSChainSnapshot());

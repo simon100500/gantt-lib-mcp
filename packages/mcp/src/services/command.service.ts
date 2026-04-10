@@ -13,6 +13,7 @@
 import {
   buildTaskRangeFromEnd,
   buildTaskRangeFromStart,
+  getTaskDuration,
   moveTaskWithCascade,
   resizeTaskWithCascade,
   recalculateTaskFromDependencies,
@@ -281,6 +282,56 @@ function applyTaskFieldUpdateToSnapshot(
       candidate.id === updatedTask.id ? updatedTask : candidate,
     ),
     changedIds: coreResult.changedIds,
+  };
+}
+
+function normalizeCreatedTask(task: Task, opts: CoreOptions): Task {
+  const duration = getTaskDuration(
+    task.startDate as string,
+    task.endDate as string,
+    opts.businessDays ?? false,
+    opts.weekendPredicate,
+  );
+  const normalizedRange = buildTaskRangeFromStart(
+    parseDateOnly(task.startDate as string),
+    duration,
+    opts.businessDays ?? false,
+    opts.weekendPredicate,
+  );
+
+  return {
+    ...task,
+    startDate: normalizedRange.start.toISOString().split('T')[0],
+    endDate: normalizedRange.end.toISOString().split('T')[0],
+  };
+}
+
+function scheduleCreatedTasks(
+  snapshot: CoreTask[],
+  newTasks: Task[],
+  opts: CoreOptions,
+): CoreResult {
+  const normalizedNewTasks = newTasks.map((task) => normalizeCreatedTask(task, opts)) as CoreTask[];
+  const updatedSnapshot = [...snapshot, ...normalizedNewTasks];
+  const recalculated = recalculateProjectSchedule(updatedSnapshot, opts);
+  const newTaskIds = new Set(normalizedNewTasks.map((task) => task.id));
+  const finalNewTasksById = new Map(normalizedNewTasks.map((task) => [task.id, task]));
+
+  for (const changedTask of recalculated.changedTasks) {
+    if (newTaskIds.has(changedTask.id)) {
+      finalNewTasksById.set(changedTask.id, changedTask);
+    }
+  }
+
+  const existingChangedTasks = recalculated.changedTasks.filter((task) => !newTaskIds.has(task.id));
+  const changedTasks = [
+    ...newTasks.map((task) => finalNewTasksById.get(task.id) ?? (task as CoreTask)),
+    ...existingChangedTasks,
+  ];
+
+  return {
+    changedTasks,
+    changedIds: changedTasks.map((task) => task.id),
   };
 }
 
@@ -925,20 +976,7 @@ export class CommandService {
           sortOrder: command.task.sortOrder,
         };
         taskChanges.push({ action: 'create', task: { ...newTask, id: taskId } });
-
-        // Add to snapshot and recalculate if has dependencies
-        const updatedSnapshot = [...coreSnapshot, newTask as CoreTask];
-        if (newTask.dependencies?.length) {
-          coreResult = recalculateTaskFromDependencies(taskId, updatedSnapshot, opts);
-          // Include the new task itself
-          const changedMap = new Map(coreResult.changedTasks.map(t => [t.id, t]));
-          if (!changedMap.has(taskId)) {
-            coreResult.changedTasks.push(newTask as CoreTask);
-            coreResult.changedIds.push(taskId);
-          }
-        } else {
-          coreResult = { changedTasks: [newTask as CoreTask], changedIds: [taskId] };
-        }
+        coreResult = scheduleCreatedTasks(coreSnapshot, [newTask], opts);
         break;
       }
 
@@ -958,10 +996,7 @@ export class CommandService {
         for (const task of newTasks) {
           taskChanges.push({ action: 'create', task });
         }
-        coreResult = {
-          changedTasks: newTasks as CoreTask[],
-          changedIds: newTasks.map((task) => task.id),
-        };
+        coreResult = scheduleCreatedTasks(coreSnapshot, newTasks, opts);
         break;
       }
 
