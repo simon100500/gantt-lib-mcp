@@ -1,5 +1,51 @@
 export type GenerationMode = 'initial_generation' | 'mutation';
 
+export type ScopeMode =
+  | 'full_project'
+  | 'partial_scope'
+  | 'explicit_worklist';
+
+export type PlanningMode =
+  | 'whole_project_bootstrap'
+  | 'partial_scope_bootstrap'
+  | 'worklist_bootstrap';
+
+export type DetailLevel = 'low' | 'medium' | 'high';
+
+export type WorklistPolicy =
+  | 'strict_worklist'
+  | 'worklist_plus_inferred_supporting_tasks';
+
+export type SourceConfidence = 'low' | 'medium' | 'high';
+
+export type ClarificationReason =
+  | 'scope_boundary_ambiguity'
+  | 'fragment_target_ambiguity'
+  | 'worklist_completeness_ambiguity'
+  | 'detail_policy_ambiguity';
+
+export type LocationScope = {
+  sections?: string[];
+  floors?: string[];
+  zones?: string[];
+};
+
+export type IntakeScopeSignals = {
+  fragment: boolean;
+  wholeProject: boolean;
+  handoverIntent: boolean;
+  explicitWorklist: boolean;
+};
+
+export type NormalizedInitialRequest = {
+  rawRequest: string;
+  normalizedRequest: string;
+  scopeSignals: IntakeScopeSignals;
+  explicitWorkItems: string[];
+  locationScope?: LocationScope;
+  sourceConfidence: SourceConfidence;
+};
+
 export type InitialGenerationPlannerStage =
   | 'structure_planning'
   | 'structure_planning_repair'
@@ -17,7 +63,40 @@ export type GenerationBrief = {
   namingBan: string;
   domainContextSummary: string;
   serverInferencePolicy: string;
+  scopeMode?: ScopeMode;
+  planningMode?: PlanningMode;
+  detailLevel?: DetailLevel;
+  worklistPolicy?: WorklistPolicy;
+  locationScope?: LocationScope;
+  explicitWorkItems?: string[];
+  clarificationAssumptions?: string[];
 };
+
+export type InitialGenerationClassification = {
+  scopeMode: ScopeMode;
+  planningMode: PlanningMode;
+  projectArchetype: string;
+  objectProfile: string;
+  detailLevel: DetailLevel;
+  confidence: number;
+  explicitWorkItemsPresent: boolean;
+  worklistPolicy: WorklistPolicy;
+  locationScope?: LocationScope;
+};
+
+export type ClarificationDecision =
+  | {
+      action: 'proceed_with_assumptions';
+      assumptions: string[];
+    }
+  | {
+      action: 'ask';
+      impact: 'high';
+      reason: ClarificationReason;
+      question: string;
+      choices: string[];
+      fallbackAssumption: string;
+    };
 
 export type ProjectPlanDependency = {
   nodeKey: string;

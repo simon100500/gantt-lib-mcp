@@ -1,7 +1,15 @@
-import type { GenerationBrief } from './types.js';
+import type {
+  ClarificationDecision,
+  GenerationBrief,
+  InitialGenerationClassification,
+  NormalizedInitialRequest,
+} from './types.js';
 
 export type BuildGenerationBriefInput = {
   userMessage: string;
+  normalizedRequest?: NormalizedInitialRequest;
+  classification?: InitialGenerationClassification;
+  clarificationDecision?: ClarificationDecision;
 };
 
 function detectScopeSignals(userMessage: string): string[] {
@@ -32,15 +40,63 @@ function detectScopeSignals(userMessage: string): string[] {
 }
 
 export function buildGenerationBrief(input: BuildGenerationBriefInput): GenerationBrief {
+  const normalized = input.normalizedRequest;
+  const classification = input.classification;
+  const clarificationAssumptions = input.clarificationDecision?.action === 'proceed_with_assumptions'
+    ? input.clarificationDecision.assumptions
+    : input.clarificationDecision
+      ? [input.clarificationDecision.fallbackAssumption]
+      : [];
+
+  const scopeSignals = new Set(detectScopeSignals(input.userMessage));
+  if (classification?.scopeMode) {
+    scopeSignals.add(classification.scopeMode);
+  }
+  if (normalized?.scopeSignals.fragment) {
+    scopeSignals.add('fragment_request');
+  }
+  if (normalized?.scopeSignals.wholeProject) {
+    scopeSignals.add('broad_request');
+  }
+  if (normalized?.scopeSignals.handoverIntent) {
+    scopeSignals.add('handover_intent');
+  }
+  if (normalized?.explicitWorkItems.length) {
+    scopeSignals.add('explicit_worklist');
+  }
+
+  let objectType = 'project';
+  if (classification) {
+    if (classification.objectProfile !== 'unknown') {
+      objectType = classification.objectProfile;
+    } else if (classification.projectArchetype !== 'unknown') {
+      objectType = classification.projectArchetype;
+    }
+  }
+
   return {
-    objectType: 'project',
-    scopeSignals: detectScopeSignals(input.userMessage),
+    objectType,
+    scopeSignals: [...scopeSignals],
     starterScheduleExpectation:
       'Return a full starter schedule baseline with realistic phases, subphases, and tasks.',
     namingBan:
       'Do not use filler titles like "Этап 1" or "Task 3"; every node title must name a real activity.',
-    domainContextSummary: '',
+    domainContextSummary: classification
+      ? [
+          `planning_mode=${classification.planningMode}`,
+          `scope_mode=${classification.scopeMode}`,
+          `project_archetype=${classification.projectArchetype}`,
+          `object_profile=${classification.objectProfile}`,
+        ].join('; ')
+      : '',
     serverInferencePolicy:
-      'Rely on the user request itself.',
+      'Rely on the normalized request, classification, and explicit server-side assumptions.',
+    ...(classification?.scopeMode ? { scopeMode: classification.scopeMode } : {}),
+    ...(classification?.planningMode ? { planningMode: classification.planningMode } : {}),
+    ...(classification?.detailLevel ? { detailLevel: classification.detailLevel } : {}),
+    ...(classification?.worklistPolicy ? { worklistPolicy: classification.worklistPolicy } : {}),
+    ...(normalized?.locationScope ? { locationScope: normalized.locationScope } : {}),
+    ...(normalized?.explicitWorkItems ? { explicitWorkItems: normalized.explicitWorkItems } : {}),
+    ...(clarificationAssumptions.length > 0 ? { clarificationAssumptions } : {}),
   };
 }

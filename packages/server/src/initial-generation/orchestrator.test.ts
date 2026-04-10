@@ -323,6 +323,9 @@ describe('runInitialGeneration', () => {
       'model_routing_decision',
       'model_routing_decision',
     ]);
+    assert.equal(harness.events.some((entry) => entry.event === 'initial_generation_intake_normalized'), true);
+    assert.equal(harness.events.some((entry) => entry.event === 'initial_generation_classification'), true);
+    assert.equal(harness.events.some((entry) => entry.event === 'initial_generation_clarification'), true);
     assert.ok(harness.events.some((entry) => entry.event === 'planner_query_request' && entry.payload.stage === 'structure_planning'));
     assert.ok(harness.events.some((entry) => entry.event === 'planner_query_response' && entry.payload.stage === 'schedule_metadata'));
     assert.ok(harness.events.some((entry) => entry.event === 'structure_plan_output'));

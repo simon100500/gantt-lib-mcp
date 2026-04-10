@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { buildGenerationBrief } from './brief.js';
+import { classifyInitialRequest } from './classification.js';
+import { decideInitialClarification } from './clarification-gate.js';
+import { normalizeInitialRequest } from './intake-normalization.js';
 import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
 import {
@@ -146,12 +149,21 @@ describe('initial-generation json response parsing', () => {
 describe('initial-generation planner', () => {
   it('builds a two-step whole-project plan and forbids structural edits in scheduling prompt', async () => {
     const prompts: Array<{ stage: string; model: string; prompt: string }> = [];
+    const normalizedRequest = normalizeInitialRequest('График строительства жилого дома на 3 этажа + гараж');
+    const classification = classifyInitialRequest(normalizedRequest);
+    const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
 
     const result = await planInitialProject({
       userMessage: 'График строительства жилого дома на 3 этажа + гараж',
       brief: buildGenerationBrief({
         userMessage: 'График строительства жилого дома на 3 этажа + гараж',
+        normalizedRequest,
+        classification,
+        clarificationDecision,
       }),
+      normalizedRequest,
+      classification,
+      clarificationDecision,
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage, prompt, model }) => {
@@ -365,6 +377,7 @@ describe('initial-generation planner', () => {
     assert.match(prompts[0]?.prompt ?? '', /Each task title must describe exactly one construction operation/i);
     assert.match(prompts[0]?.prompt ?? '', /Task-level compound formulations are forbidden/i);
     assert.match(prompts[0]?.prompt ?? '', /If the request implies a specialized facility, preserve the major functional workstreams/i);
+    assert.match(prompts[0]?.prompt ?? '', /Planning mode: whole_project_bootstrap/i);
     assert.match(prompts[1]?.prompt ?? '', /Do not create, delete, rename, merge, split, or move nodes/i);
     assert.match(prompts[1]?.prompt ?? '', /Each dependency object must have exactly this shape/i);
   });

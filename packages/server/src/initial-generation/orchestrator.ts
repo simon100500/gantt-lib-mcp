@@ -4,13 +4,19 @@ import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandRespon
 import type { ScheduleCommandOptions } from '@gantt/mcp/types';
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
+import { classifyInitialRequest } from './classification.js';
+import { decideInitialClarification } from './clarification-gate.js';
 import { executeInitialProjectPlan } from './executor.js';
+import { normalizeInitialRequest } from './intake-normalization.js';
 import { resolveModelRoutingDecision } from './model-routing.js';
 import { planInitialProject } from './planner.js';
 import type {
+  ClarificationDecision,
   GenerationBrief,
+  InitialGenerationClassification,
   InitialGenerationPlannerStage,
   ModelRoutingDecision,
+  NormalizedInitialRequest,
 } from './types.js';
 
 type ListedTask = {
@@ -53,6 +59,12 @@ export type InitialGenerationLogger = {
 
 type InitialGenerationDeps = {
   buildGenerationBrief: (input: BuildGenerationBriefInput) => GenerationBrief;
+  normalizeInitialRequest: (rawRequest: string) => NormalizedInitialRequest;
+  classifyInitialRequest: (input: NormalizedInitialRequest) => InitialGenerationClassification;
+  decideInitialClarification: (
+    normalized: NormalizedInitialRequest,
+    classification: InitialGenerationClassification,
+  ) => ClarificationDecision;
   resolveModelRoutingDecision: (input: {
     route: 'initial_generation' | 'mutation';
     env: Record<string, string | undefined>;
@@ -99,6 +111,9 @@ export type RunInitialGenerationInput = {
 function getDefaultDeps(): InitialGenerationDeps {
   return {
     buildGenerationBrief,
+    normalizeInitialRequest,
+    classifyInitialRequest,
+    decideInitialClarification,
     resolveModelRoutingDecision,
   };
 }
@@ -192,8 +207,14 @@ export async function runInitialGeneration(
     ...(input.deps ?? {}),
   } satisfies InitialGenerationDeps;
 
+  const normalizedRequest = deps.normalizeInitialRequest(input.userMessage);
+  const classification = deps.classifyInitialRequest(normalizedRequest);
+  const clarificationDecision = deps.decideInitialClarification(normalizedRequest, classification);
   const brief = input.brief ?? deps.buildGenerationBrief({
     userMessage: input.userMessage,
+    normalizedRequest,
+    classification,
+    clarificationDecision,
   });
   const structureModelRoutingDecision = input.structureModelRoutingDecision ?? deps.resolveModelRoutingDecision({
     route: 'initial_generation',
@@ -217,6 +238,24 @@ export async function runInitialGeneration(
     sessionId: input.sessionId,
     stage: 'schedule_metadata',
     ...schedulingModelRoutingDecision,
+  });
+  await input.logger.debug('initial_generation_intake_normalized', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    normalizedRequest,
+  });
+  await input.logger.debug('initial_generation_classification', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    classification,
+  });
+  await input.logger.debug('initial_generation_clarification', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    clarificationDecision,
   });
 
   let repairAttempted = false;
@@ -266,6 +305,9 @@ export async function runInitialGeneration(
     const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,
+      normalizedRequest,
+      classification,
+      clarificationDecision,
       structureModelDecision: structureModelRoutingDecision,
       schedulingModelDecision: schedulingModelRoutingDecision,
       sdkQuery: loggedPlannerQuery,

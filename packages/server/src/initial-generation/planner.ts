@@ -5,10 +5,13 @@ import {
 } from './quality-gate.js';
 import { normalizeGeneratedTitle } from './title-policy.js';
 import type {
+  ClarificationDecision,
   ExecutableProjectPlan,
   GenerationBrief,
+  InitialGenerationClassification,
   InitialGenerationPlannerStage,
   ModelRoutingDecision,
+  NormalizedInitialRequest,
   ProjectPlanDependency,
   ProjectPlanDependencyType,
   ScheduledPhase,
@@ -34,6 +37,9 @@ type PlannerQueryResult = string | { content?: string };
 export type PlanInitialProjectInput = {
   userMessage: string;
   brief: GenerationBrief;
+  normalizedRequest?: NormalizedInitialRequest;
+  classification?: InitialGenerationClassification;
+  clarificationDecision?: ClarificationDecision;
   structureModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   schedulingModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   sdkQuery: (input: PlannerQueryInput) => Promise<PlannerQueryResult>;
@@ -60,14 +66,78 @@ function readQueryContent(result: PlannerQueryResult): string {
   throw new Error('Planner returned an empty response');
 }
 
-function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief'>): string {
+function buildPlanningContextLines(input: Pick<PlanInitialProjectInput, 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>): string[] {
+  const lines: string[] = [];
+  const classification = input.classification;
+  const normalized = input.normalizedRequest;
+  const clarification = input.clarificationDecision;
+
+  if (classification) {
+    lines.push(`Planning mode: ${classification.planningMode}`);
+    lines.push(`Scope mode: ${classification.scopeMode}`);
+    lines.push(`Project archetype: ${classification.projectArchetype}`);
+    lines.push(`Object profile: ${classification.objectProfile}`);
+    lines.push(`Detail level: ${classification.detailLevel}`);
+    lines.push(`Worklist policy: ${classification.worklistPolicy}`);
+  }
+
+  if (normalized?.locationScope) {
+    lines.push(`Location scope: ${JSON.stringify(normalized.locationScope)}`);
+  }
+
+  if (normalized?.explicitWorkItems.length) {
+    lines.push(`Explicit work items: ${JSON.stringify(normalized.explicitWorkItems)}`);
+  }
+
+  if (clarification?.action === 'ask') {
+    lines.push(`Clarification fallback assumption: ${clarification.fallbackAssumption}`);
+  } else if (clarification?.assumptions.length) {
+    lines.push(`Server assumptions: ${JSON.stringify(clarification.assumptions)}`);
+  }
+
+  if (input.brief.domainContextSummary) {
+    lines.push(`Domain context: ${input.brief.domainContextSummary}`);
+  }
+
+  return lines;
+}
+
+function buildModeSpecificStructureLines(input: Pick<PlanInitialProjectInput, 'brief' | 'classification' | 'normalizedRequest'>): string[] {
+  const planningMode = input.classification?.planningMode ?? input.brief.planningMode ?? 'whole_project_bootstrap';
+
+  if (planningMode === 'partial_scope_bootstrap') {
+    return [
+      'This is a partial-scope bootstrap, not a whole-project baseline.',
+      'Constrain phases and subphases to the requested fragment only.',
+      'Do not pad the graph with unrelated whole-project workstreams.',
+      'Include fragment-appropriate completion milestones for the requested fragment.',
+    ];
+  }
+
+  if (planningMode === 'worklist_bootstrap') {
+    return [
+      'This is a worklist bootstrap driven by explicit user-supplied work items.',
+      'Treat the explicit work list as the source of truth for scope.',
+      'Preserve user-supplied work items instead of replacing them with generic template content.',
+      'Only infer supporting tasks when they are clearly necessary and keep them aligned with the stated worklist policy.',
+    ];
+  }
+
+  return [
+    'Build one whole-project hierarchy in a single pass.',
+    'Use full-project milestones and balanced cross-phase workstreams.',
+  ];
+}
+
+function buildStructurePrompt(
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
+): string {
   return [
     'Return strict StructuredProjectPlan JSON only. No markdown, no prose, no code fences.',
     'StructuredProjectPlan JSON only with keys: projectType, assumptions, phases.',
     'Each phase must have: phaseKey, title, subphases.',
     'Each subphase must have: subphaseKey, title, tasks.',
     'Each task must have: taskKey, title.',
-    'Build one whole-project hierarchy in a single pass.',
     'Use exactly 3 hierarchy levels: phase -> subphase -> task.',
     'Do not output durationDays, dependencies, dates, sequencing metadata, or schedule dates.',
     'The main job of this step is to produce a clean WBS, not a compressed summary.',
@@ -87,6 +157,8 @@ function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage'
     'If the wording implies multiple operations, split them into separate tasks or separate subphases.',
     'Task-level compound formulations are forbidden.',
     'Each subphase title must describe one coherent grouping, not multiple unrelated operations compressed together.',
+    ...buildModeSpecificStructureLines(input),
+    ...buildPlanningContextLines(input),
     `Starter schedule expectation: ${input.brief.starterScheduleExpectation}`,
     `Naming ban: ${input.brief.namingBan}`,
     `User request: ${input.userMessage}`,
@@ -96,7 +168,7 @@ function buildStructurePrompt(input: Pick<PlanInitialProjectInput, 'userMessage'
 function buildStructureRepairPrompt(
   structure: StructuredProjectPlan,
   verdict: StructureQualityVerdict,
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
 ): string {
   return [
     'Return a fully corrected StructuredProjectPlan JSON only.',
@@ -110,7 +182,10 @@ function buildStructureRepairPrompt(
   ].join('\n');
 }
 
-function buildSchedulingPrompt(input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief'>, structure: StructuredProjectPlan): string {
+function buildSchedulingPrompt(
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
+  structure: StructuredProjectPlan,
+): string {
   return [
     'Return strict ScheduledProjectPlan JSON only. No markdown, no prose, no code fences.',
     'ScheduledProjectPlan JSON only with keys: projectType, assumptions, phases.',
@@ -129,7 +204,18 @@ function buildSchedulingPrompt(input: Pick<PlanInitialProjectInput, 'userMessage
     'If a dependency is uncertain, omit it instead of inventing or corrupting it.',
     'Do not create, delete, rename, merge, split, or move nodes.',
     'Do not add dependencies to phases or subphases.',
-    'Build a realistic non-trivial dependency graph for the whole project with no cycles.',
+    ...(input.classification?.planningMode === 'partial_scope_bootstrap'
+      ? [
+          'Build a realistic dependency graph for the requested fragment only with no cycles.',
+          'Do not introduce dependencies that imply unrelated whole-project work outside the requested fragment.',
+        ]
+      : input.classification?.planningMode === 'worklist_bootstrap'
+        ? [
+            'Sequence the explicit worklist credibly with no cycles.',
+            'Keep any inferred supporting dependencies aligned with the user-supplied scope.',
+          ]
+        : ['Build a realistic non-trivial dependency graph for the whole project with no cycles.']),
+    ...buildPlanningContextLines(input),
     `User request: ${input.userMessage}`,
     `Locked structure: ${JSON.stringify(structure)}`,
   ].join('\n');
@@ -139,7 +225,7 @@ function buildSchedulingRepairPrompt(
   structure: StructuredProjectPlan,
   scheduled: ScheduledProjectPlan,
   verdict: SchedulingQualityVerdict,
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
 ): string {
   return [
     'Return a fully corrected ScheduledProjectPlan JSON only.',
