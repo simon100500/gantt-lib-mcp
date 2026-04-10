@@ -4,7 +4,9 @@ import type { ScheduleCommandOptions } from '@gantt/mcp/types';
 import {
   compileInitialProjectPlan,
   InitialPlanCompileError,
+  materializeInitialProjectPlan,
   type CompiledInitialSchedule,
+  type CompiledInitialStructure,
 } from './compiler.js';
 import type { ExecutableProjectPlan } from './types.js';
 
@@ -56,16 +58,17 @@ export type ExecuteInitialProjectPlanResult =
 export async function executeInitialProjectPlan(
   input: ExecuteInitialProjectPlanInput,
 ): Promise<ExecuteInitialProjectPlanResult> {
+  let compiledStructure: CompiledInitialStructure;
   let compiledSchedule: CompiledInitialSchedule;
 
   try {
-    compiledSchedule = compileInitialProjectPlan({
+    compiledStructure = compileInitialProjectPlan({
       projectId: input.projectId,
       baseVersion: input.baseVersion,
       serverDate: input.serverDate,
       plan: input.plan,
-      scheduleOptions: input.scheduleOptions,
     });
+    compiledSchedule = materializeInitialProjectPlan(compiledStructure, input.scheduleOptions);
   } catch (error) {
     if (!(error instanceof InitialPlanCompileError)) {
       throw error;
@@ -110,12 +113,12 @@ export async function executeInitialProjectPlan(
       message: 'The starter schedule could not be committed.',
       droppedNodeKeys: [],
       droppedDependencyNodeKeys: [],
-      retainedNodeCount: compiledSchedule.retainedNodeCount,
+      retainedNodeCount: compiledStructure.retainedNodeCount,
       retainedNodeRatio: 1,
-      retainedTopLevelPhaseCount: compiledSchedule.topLevelPhaseCount,
-      compiledTaskCount: compiledSchedule.compiledTaskCount,
-      compiledDependencyCount: compiledSchedule.compiledDependencyCount,
-      crossPhaseDependencyCount: compiledSchedule.crossPhaseDependencyCount,
+      retainedTopLevelPhaseCount: compiledStructure.topLevelPhaseCount,
+      compiledTaskCount: compiledStructure.compiledTaskCount,
+      compiledDependencyCount: compiledStructure.compiledDependencyCount,
+      crossPhaseDependencyCount: compiledStructure.crossPhaseDependencyCount,
       everyRetainedPhaseHasAChildTask: true,
       hasBrokenReferences: false,
       commitResponse,

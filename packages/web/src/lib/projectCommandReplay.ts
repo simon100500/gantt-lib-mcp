@@ -1,6 +1,7 @@
 import {
   buildTaskRangeFromEnd,
   buildTaskRangeFromStart,
+  getTaskDuration,
   moveTaskWithCascade,
   resizeTaskWithCascade,
   recalculateProjectSchedule,
@@ -68,6 +69,57 @@ function toTaskArray(tasks: CoreTask[]): Task[] {
     ...task,
     dependencies: normalizeTaskDependencies(task.dependencies),
   }));
+}
+
+function normalizeCreatedTask(task: Task, options: ScheduleCommandOptions): Task {
+  const duration = getTaskDuration(
+    task.startDate as string,
+    task.endDate as string,
+    options.businessDays ?? false,
+    options.weekendPredicate,
+  );
+  const normalizedRange = buildTaskRangeFromStart(
+    parseDateOnly(task.startDate as string),
+    duration,
+    options.businessDays ?? false,
+    options.weekendPredicate,
+  );
+
+  return {
+    ...task,
+    startDate: normalizedRange.start.toISOString().split('T')[0],
+    endDate: normalizedRange.end.toISOString().split('T')[0],
+  };
+}
+
+function scheduleCreatedTasks(
+  snapshot: CoreTask[],
+  newTasks: Task[],
+  options: ScheduleCommandOptions,
+): ProjectSnapshot {
+  const normalizedNewTasks = newTasks.map((task) => normalizeCreatedTask(task, options));
+  const recalculated = recalculateProjectSchedule(
+    [...toTaskArray(snapshot), ...normalizedNewTasks].map(normalizeCoreTask),
+    options,
+  );
+  const newTaskIds = new Set(normalizedNewTasks.map((task) => task.id));
+  const finalNewTasksById = new Map(normalizedNewTasks.map((task) => [task.id, task]));
+
+  for (const changedTask of toTaskArray(recalculated.changedTasks)) {
+    if (newTaskIds.has(changedTask.id)) {
+      finalNewTasksById.set(changedTask.id, changedTask);
+    }
+  }
+
+  const mergedExistingTasks = toTaskArray(mergeChangedTasks(
+    snapshot,
+    recalculated.changedTasks.filter((task) => !newTaskIds.has(task.id)),
+  ));
+
+  return withTasks([
+    ...mergedExistingTasks,
+    ...newTasks.map((task) => finalNewTasksById.get(task.id) ?? task),
+  ]);
 }
 
 export function replayProjectCommand(
@@ -147,21 +199,16 @@ export function replayProjectCommand(
           ? { ...task, sortOrder: (task.sortOrder ?? createdSortOrder) + 1 }
           : task
       ));
-      nextTasks.push(createdTask);
-      if ((createdTask.dependencies?.length ?? 0) === 0) {
-        return withTasks(nextTasks);
-      }
-
-      const recalculated = recalculateTaskFromDependencies(taskId, nextTasks.map(normalizeCoreTask), options);
-      return withTasks(toTaskArray(mergeChangedTasks(nextTasks.map(normalizeCoreTask), recalculated.changedTasks)));
+      return scheduleCreatedTasks(nextTasks.map(normalizeCoreTask), [createdTask], options);
     }
 
     case 'create_tasks_batch': {
       const nextTasks = [...toTaskArray(coreSnapshot)];
+      const createdTasks: Task[] = [];
 
       for (const taskDef of command.tasks) {
         const taskId = taskDef.id ?? `pending:${requestId ?? crypto.randomUUID()}`;
-        nextTasks.push({
+        createdTasks.push({
           id: taskId,
           name: taskDef.name,
           startDate: taskDef.startDate,
@@ -174,7 +221,7 @@ export function replayProjectCommand(
         });
       }
 
-      return withTasks(nextTasks);
+      return scheduleCreatedTasks(nextTasks.map(normalizeCoreTask), createdTasks, options);
     }
 
     case 'delete_task': {

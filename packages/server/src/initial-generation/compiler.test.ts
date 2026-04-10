@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 
-import { compileInitialProjectPlan } from './compiler.js';
+import { compileInitialProjectPlan, materializeInitialProjectPlan } from './compiler.js';
 import { executeInitialProjectPlan } from './executor.js';
 import type { ProjectPlan } from './types.js';
 
@@ -111,13 +111,14 @@ function taskByName(name: string, tasks: Array<{ name: string; startDate: string
 }
 
 describe('compileInitialProjectPlan', () => {
-  it('builds one create_tasks_batch command with working day scheduling, rollup containers, and every dependency type', () => {
-    const compiled = compileInitialProjectPlan({
+  it('compiles deterministic structure and materializes one create_tasks_batch command through core scheduling', () => {
+    const structure = compileInitialProjectPlan({
       projectId: 'project-41',
       baseVersion: 12,
       serverDate: '2026-04-04',
       plan: PLAN,
     });
+    const compiled = materializeInitialProjectPlan(structure);
 
     assert.equal(compiled.command.type, 'create_tasks_batch');
     assert.equal(compiled.retainedNodeCount, PLAN.nodes.length);
@@ -245,7 +246,7 @@ describe('compileInitialProjectPlan', () => {
       return day === 0 || day === 6;
     };
 
-    const compiled = compileInitialProjectPlan({
+    const structure = compileInitialProjectPlan({
       projectId: 'project-41',
       baseVersion: 12,
       serverDate: '2026-04-04',
@@ -258,10 +259,10 @@ describe('compileInitialProjectPlan', () => {
           { nodeKey: 'task-a', title: 'Task A', parentNodeKey: 'subphase-a', kind: 'task', durationDays: 2, dependsOn: [] },
         ],
       },
-      scheduleOptions: {
-        businessDays: true,
-        weekendPredicate: customWeekendPredicate,
-      },
+    });
+    const compiled = materializeInitialProjectPlan(structure, {
+      businessDays: true,
+      weekendPredicate: customWeekendPredicate,
     });
 
     const task = taskByName('Task A', compiled.command.tasks);

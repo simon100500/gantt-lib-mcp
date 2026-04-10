@@ -505,41 +505,6 @@ function createUtcDate(year: number, monthIndex: number, day: number): Date {
   return new Date(Date.UTC(year, monthIndex, day));
 }
 
-function addUtcDays(date: Date, days: number): Date {
-  return createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days);
-}
-
-function isWeekend(date: Date): boolean {
-  const day = date.getUTCDay();
-  return day === 0 || day === 6;
-}
-
-function alignToBusinessDay(date: Date): Date {
-  let current = createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  while (isWeekend(current)) {
-    current = addUtcDays(current, 1);
-  }
-  return current;
-}
-
-function addBusinessDays(start: Date, businessDays: number): Date {
-  let current = alignToBusinessDay(start);
-  let remaining = Math.max(0, businessDays - 1);
-
-  while (remaining > 0) {
-    current = addUtcDays(current, 1);
-    if (!isWeekend(current)) {
-      remaining -= 1;
-    }
-  }
-
-  return current;
-}
-
-function nextBusinessDay(date: Date): Date {
-  return alignToBusinessDay(addUtcDays(date, 1));
-}
-
 function formatDateOnly(date: Date): string {
   return date.toISOString().split('T')[0];
 }

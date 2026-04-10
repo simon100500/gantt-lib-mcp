@@ -53,12 +53,25 @@ export type CompiledInitialSchedule = {
   diagnostics: CompileDiagnostic[];
 };
 
+export type CompiledInitialStructure = {
+  projectId: string;
+  baseVersion: number;
+  serverDate: string;
+  nodes: NormalizedPlanNode[];
+  nodeKeyToTaskId: Record<string, string>;
+  retainedNodeCount: number;
+  compiledTaskCount: number;
+  compiledDependencyCount: number;
+  topLevelPhaseCount: number;
+  crossPhaseDependencyCount: number;
+  diagnostics: CompileDiagnostic[];
+};
+
 export type CompileInitialProjectPlanInput = {
   projectId: string;
   baseVersion: number;
   serverDate: string;
   plan: ProjectPlan;
-  scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>;
 };
 
 type NormalizedPlanNode = ProjectPlanNode & {
@@ -92,7 +105,7 @@ export class InitialPlanCompileError extends Error {
   }
 }
 
-export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput): CompiledInitialSchedule {
+export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput): CompiledInitialStructure {
   const normalizedPlan = normalizePlan(input.plan);
   const nodeMap = new Map(normalizedPlan.nodes.map((node) => [node.nodeKey, node]));
   const childMap = buildChildMap(normalizedPlan.nodes);
@@ -108,54 +121,20 @@ export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput)
     throw new InitialPlanCompileError('Project plan contains a dependency cycle', [cycleIssue]);
   }
 
-  const taskSchedule = scheduleTasks(taskNodes, nodeMap, input.serverDate, input.scheduleOptions);
-  const rolledUpNodes = rollupPhaseDates(normalizedPlan.nodes, childMap, taskSchedule);
   const nodeKeyToTaskId = Object.fromEntries(
     normalizedPlan.nodes.map((node) => [node.nodeKey, buildDeterministicTaskId(input.projectId, node.nodeKey)]),
   );
 
-  const orderedNodes = orderNodes(normalizedPlan.nodes, childMap);
-  const commandTasks: CreateTaskInput[] = orderedNodes.map((node, index) => {
-    const scheduled = rolledUpNodes.get(node.nodeKey);
-    if (!scheduled) {
-      throw new InitialPlanCompileError('Project plan rollup failed', [{
-        code: 'invalid_plan',
-        message: `Missing rolled-up schedule for ${node.nodeKey}`,
-        nodeKey: node.nodeKey,
-      }]);
-    }
-
-    return {
-      id: nodeKeyToTaskId[node.nodeKey],
-      projectId: input.projectId,
-      name: node.title,
-      startDate: scheduled.startDate,
-      endDate: scheduled.endDate,
-      parentId: node.parentNodeKey ? nodeKeyToTaskId[node.parentNodeKey] : undefined,
-      dependencies: node.kind === 'task'
-        ? node.dependencies.map((dependency) => ({
-            taskId: nodeKeyToTaskId[dependency.nodeKey],
-            type: dependency.type,
-            lag: dependency.lagDays,
-          }))
-        : [],
-      sortOrder: index,
-    };
-  });
-
   const compiledTaskCount = normalizedPlan.nodes.filter((node) => node.kind === 'task').length;
-  const compiledDependencyCount = commandTasks.reduce((sum, task) => sum + (task.dependencies?.length ?? 0), 0);
-  const topLevelPhaseCount = commandTasks.filter((task) => !task.parentId).length;
-  const crossPhaseDependencyCount = countCrossPhaseDependencies(orderedNodes, commandTasks, nodeKeyToTaskId);
+  const compiledDependencyCount = taskNodes.reduce((sum, node) => sum + node.dependencies.length, 0);
+  const topLevelPhaseCount = normalizedPlan.nodes.filter((node) => node.kind === 'phase' && !node.parentNodeKey).length;
+  const crossPhaseDependencyCount = countCrossPhaseDependencies(normalizedPlan.nodes);
 
   return {
     projectId: input.projectId,
     baseVersion: input.baseVersion,
     serverDate: normalizeDateOnly(input.serverDate),
-    command: {
-      type: 'create_tasks_batch',
-      tasks: commandTasks,
-    },
+    nodes: normalizedPlan.nodes,
     nodeKeyToTaskId,
     retainedNodeCount: normalizedPlan.nodes.length,
     compiledTaskCount,
@@ -176,11 +155,8 @@ export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput)
 
 function countCrossPhaseDependencies(
   orderedNodes: NormalizedPlanNode[],
-  commandTasks: CreateTaskInput[],
-  nodeKeyToTaskId: Record<string, string>,
 ): number {
   const nodeMap = new Map(orderedNodes.map((node) => [node.nodeKey, node]));
-  const taskIdToNodeKey = new Map(Object.entries(nodeKeyToTaskId).map(([nodeKey, taskId]) => [taskId, nodeKey]));
 
   const getRootPhaseKey = (node: NormalizedPlanNode): string | null => {
     if (!node.parentNodeKey) {
@@ -195,28 +171,14 @@ function countCrossPhaseDependencies(
     return getRootPhaseKey(parent);
   };
 
-  return commandTasks.reduce((count, task) => {
-    if (!task.parentId || typeof task.id !== 'string') {
-      return count;
-    }
-
-    const nodeKey = taskIdToNodeKey.get(task.id);
-    if (!nodeKey) {
-      return count;
-    }
-
-    const node = nodeMap.get(nodeKey);
-    if (!node) {
+  return orderedNodes.reduce((count, node) => {
+    if (node.kind !== 'task') {
       return count;
     }
 
     const sourcePhase = getRootPhaseKey(node);
-    return count + (task.dependencies ?? []).filter((dependency) => {
-      const targetNodeKey = taskIdToNodeKey.get(dependency.taskId);
-      if (!targetNodeKey) {
-        return false;
-      }
-      const targetNode = nodeMap.get(targetNodeKey);
+    return count + node.dependencies.filter((dependency) => {
+      const targetNode = nodeMap.get(dependency.nodeKey);
       if (!targetNode) {
         return false;
       }
@@ -224,6 +186,53 @@ function countCrossPhaseDependencies(
       return sourcePhase !== null && getRootPhaseKey(targetNode) !== sourcePhase;
     }).length;
   }, 0);
+}
+
+export function materializeInitialProjectPlan(
+  structure: CompiledInitialStructure,
+  scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>,
+): CompiledInitialSchedule {
+  const childMap = buildChildMap(structure.nodes);
+  const nodeMap = new Map(structure.nodes.map((node) => [node.nodeKey, node]));
+  const taskNodes = structure.nodes.filter((node) => node.kind === 'task');
+  const taskSchedule = scheduleTasks(taskNodes, nodeMap, structure.serverDate, scheduleOptions);
+  const rolledUpNodes = rollupPhaseDates(structure.nodes, childMap, taskSchedule);
+  const orderedNodes = orderNodes(structure.nodes, childMap);
+  const commandTasks: CreateTaskInput[] = orderedNodes.map((node, index) => {
+    const scheduled = rolledUpNodes.get(node.nodeKey);
+    if (!scheduled) {
+      throw new InitialPlanCompileError('Project plan rollup failed', [{
+        code: 'invalid_plan',
+        message: `Missing rolled-up schedule for ${node.nodeKey}`,
+        nodeKey: node.nodeKey,
+      }]);
+    }
+
+    return {
+      id: structure.nodeKeyToTaskId[node.nodeKey],
+      projectId: structure.projectId,
+      name: node.title,
+      startDate: scheduled.startDate,
+      endDate: scheduled.endDate,
+      parentId: node.parentNodeKey ? structure.nodeKeyToTaskId[node.parentNodeKey] : undefined,
+      dependencies: node.kind === 'task'
+        ? node.dependencies.map((dependency) => ({
+            taskId: structure.nodeKeyToTaskId[dependency.nodeKey],
+            type: dependency.type,
+            lag: dependency.lagDays,
+          }))
+        : [],
+      sortOrder: index,
+    };
+  });
+
+  return {
+    ...structure,
+    command: {
+      type: 'create_tasks_batch',
+      tasks: commandTasks,
+    },
+  };
 }
 
 function normalizePlan(plan: ProjectPlan): { projectType: string; assumptions: string[]; nodes: NormalizedPlanNode[] } {
