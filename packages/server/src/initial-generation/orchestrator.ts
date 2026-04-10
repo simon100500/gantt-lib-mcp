@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
+import type { ScheduleCommandOptions } from '@gantt/mcp/types';
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
 import { executeInitialProjectPlan } from './executor.js';
@@ -83,6 +84,7 @@ export type RunInitialGenerationInput = {
   tasksBefore: Array<{ id: string; name: string }>;
   baseVersion: number;
   serverDate?: string;
+  scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>;
   brief?: GenerationBrief;
   structureModelRoutingDecision?: ModelRoutingDecision;
   schedulingModelRoutingDecision?: ModelRoutingDecision;
@@ -320,6 +322,7 @@ export async function runInitialGeneration(
       plan: planning.plan,
       commandService: input.services.commandService,
       serverDate: getServerDate(input.serverDate),
+      scheduleOptions: input.scheduleOptions,
       onCompiled: async (compiledSchedule) => {
         const previewTasks = compiledSchedule.command.tasks.map((task) => ({
           id: task.id,

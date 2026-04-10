@@ -1314,13 +1314,21 @@ export async function runAgentWithHistory(
     });
 
     if (routeSelection.route === 'initial_generation') {
+      const { getPrisma } = await getPrismaModule();
+      const prisma = getPrisma();
+      const [baseVersion, scheduleOptions] = await Promise.all([
+        getProjectBaseVersion(projectId),
+        getProjectScheduleOptionsForProject(prisma, projectId),
+      ]);
+
       await runInitialGeneration({
         projectId,
         sessionId,
         runId,
         userMessage,
         tasksBefore,
-        baseVersion: await getProjectBaseVersion(projectId),
+        baseVersion,
+        scheduleOptions,
         plannerQuery: executeInitialGenerationPlannerQuery,
         services: {
           commandService,

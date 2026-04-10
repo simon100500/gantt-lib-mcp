@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 
-import type { CreateTaskInput, DependencyType, ProjectCommand } from '@gantt/mcp/types';
+import {
+  buildTaskRangeFromStart,
+  recalculateTaskFromDependencies,
+  parseDateOnly as parseCoreDateOnly,
+  type Task as CoreTask,
+} from 'gantt-lib/core/scheduling';
+import type { CreateTaskInput, DependencyType, ProjectCommand, ScheduleCommandOptions } from '@gantt/mcp/types';
 
 import type { ProjectPlan, ProjectPlanDependency, ProjectPlanNode } from './types.js';
 
@@ -52,6 +58,7 @@ export type CompileInitialProjectPlanInput = {
   baseVersion: number;
   serverDate: string;
   plan: ProjectPlan;
+  scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>;
 };
 
 type NormalizedPlanNode = ProjectPlanNode & {
@@ -70,6 +77,10 @@ type ScheduledNode = {
 };
 
 const WORKING_DAY_MODE = true;
+const DEFAULT_WEEKEND_PREDICATE = (date: Date): boolean => {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+};
 
 export class InitialPlanCompileError extends Error {
   readonly issues: CompileIssue[];
@@ -97,7 +108,7 @@ export function compileInitialProjectPlan(input: CompileInitialProjectPlanInput)
     throw new InitialPlanCompileError('Project plan contains a dependency cycle', [cycleIssue]);
   }
 
-  const taskSchedule = scheduleTasks(taskNodes, nodeMap, input.serverDate);
+  const taskSchedule = scheduleTasks(taskNodes, nodeMap, input.serverDate, input.scheduleOptions);
   const rolledUpNodes = rollupPhaseDates(normalizedPlan.nodes, childMap, taskSchedule);
   const nodeKeyToTaskId = Object.fromEntries(
     normalizedPlan.nodes.map((node) => [node.nodeKey, buildDeterministicTaskId(input.projectId, node.nodeKey)]),
@@ -499,21 +510,69 @@ function scheduleTasks(
   taskNodes: NormalizedPlanNode[],
   nodeMap: Map<string, NormalizedPlanNode>,
   serverDate: string,
+  scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>,
 ): Map<string, ScheduledNode> {
   const scheduled = new Map<string, ScheduledNode>();
-  const anchorDate = alignToWorkingDay(parseDateOnly(serverDate));
+  const anchorDate = parseCoreDateOnly(normalizeDateOnly(serverDate));
   const orderedTasks = topologicalSort(taskNodes, nodeMap);
+  let workingSnapshot: CoreTask[] = [];
+  const businessDays = scheduleOptions?.businessDays ?? WORKING_DAY_MODE;
+  const weekendPredicate = businessDays
+    ? (scheduleOptions?.weekendPredicate ?? DEFAULT_WEEKEND_PREDICATE)
+    : undefined;
 
   for (const node of orderedTasks) {
-    const start = resolveTaskStart(node, scheduled, anchorDate);
-    const end = addWorkingDuration(start, node.durationDays);
+    const anchorRange = buildTaskRangeFromStart(
+      anchorDate,
+      node.durationDays,
+      businessDays,
+      weekendPredicate,
+    );
+    const seedTask: CoreTask = {
+      id: node.nodeKey,
+      name: node.title,
+      startDate: formatDateOnly(anchorRange.start),
+      endDate: formatDateOnly(anchorRange.end),
+      parentId: node.parentNodeKey,
+      dependencies: node.dependencies.map((dependency) => ({
+        taskId: dependency.nodeKey,
+        type: dependency.type,
+        lag: dependency.lagDays,
+      })),
+    };
+
+    workingSnapshot = [...workingSnapshot, seedTask];
+
+    const changedTask = node.dependencies.length > 0
+      ? recalculateTaskFromDependencies(
+          node.nodeKey,
+          workingSnapshot,
+          {
+            businessDays,
+            weekendPredicate,
+          },
+        ).changedTasks.find((task) => task.id === node.nodeKey)
+      : seedTask;
+
+    if (!changedTask) {
+      throw new InitialPlanCompileError('Project plan scheduling failed because a dependency was not scheduled', [{
+        code: 'invalid_dependency_reference',
+        message: `Task ${node.nodeKey} could not be scheduled through the core scheduler`,
+        nodeKey: node.nodeKey,
+      }]);
+    }
+
+    workingSnapshot = workingSnapshot.map((task) => (
+      task.id === changedTask.id ? changedTask : task
+    ));
+
     scheduled.set(node.nodeKey, {
       nodeKey: node.nodeKey,
       kind: 'task',
       title: node.title,
       parentNodeKey: node.parentNodeKey,
-      startDate: formatDateOnly(start),
-      endDate: formatDateOnly(end),
+      startDate: typeof changedTask.startDate === 'string' ? changedTask.startDate : formatDateOnly(changedTask.startDate),
+      endDate: typeof changedTask.endDate === 'string' ? changedTask.endDate : formatDateOnly(changedTask.endDate),
       dependencies: node.dependencies.map((dependency) => ({
         taskId: dependency.nodeKey,
         type: dependency.type,
@@ -549,54 +608,6 @@ function topologicalSort(taskNodes: NormalizedPlanNode[], nodeMap: Map<string, N
   }
 
   return ordered;
-}
-
-function resolveTaskStart(
-  node: NormalizedPlanNode,
-  scheduled: Map<string, ScheduledNode>,
-  anchorDate: Date,
-): Date {
-  let start = anchorDate;
-
-  for (const dependency of node.dependencies) {
-    const predecessor = scheduled.get(dependency.nodeKey);
-    if (!predecessor) {
-      throw new InitialPlanCompileError('Project plan scheduling failed because a dependency was not scheduled', [{
-        code: 'invalid_dependency_reference',
-        message: `Dependency ${dependency.nodeKey} for ${node.nodeKey} was not scheduled`,
-        nodeKey: node.nodeKey,
-        dependencyNodeKey: dependency.nodeKey,
-      }]);
-    }
-
-    const predecessorStart = parseDateOnly(predecessor.startDate);
-    const predecessorEnd = parseDateOnly(predecessor.endDate);
-    const candidateStart = resolveDependencyStart(dependency.type, predecessorStart, predecessorEnd, dependency.lagDays, node.durationDays);
-    if (candidateStart.getTime() > start.getTime()) {
-      start = candidateStart;
-    }
-  }
-
-  return start;
-}
-
-function resolveDependencyStart(
-  type: DependencyType,
-  predecessorStart: Date,
-  predecessorEnd: Date,
-  lagDays: number,
-  durationDays: number,
-): Date {
-  switch (type) {
-    case 'FS':
-      return shiftWorkingDays(predecessorEnd, lagDays + 1);
-    case 'SS':
-      return shiftWorkingDays(predecessorStart, lagDays);
-    case 'FF':
-      return buildTaskRangeFromEnd(shiftWorkingDays(predecessorEnd, lagDays), durationDays).start;
-    case 'SF':
-      return buildTaskRangeFromEnd(shiftWorkingDays(predecessorStart, lagDays - 1), durationDays).start;
-  }
 }
 
 function rollupPhaseDates(
@@ -694,60 +705,6 @@ function normalizeDateOnly(value: string): string {
 
 function formatDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-function isWeekend(date: Date): boolean {
-  const day = date.getUTCDay();
-  return day === 0 || day === 6;
-}
-
-function alignToWorkingDay(date: Date): Date {
-  if (!WORKING_DAY_MODE) {
-    return date;
-  }
-
-  let current = date;
-  while (isWeekend(current)) {
-    current = addUtcDays(current, 1);
-  }
-  return current;
-}
-
-function addWorkingDuration(startDate: Date, durationDays: number): Date {
-  return shiftWorkingDays(startDate, durationDays - 1);
-}
-
-function buildTaskRangeFromEnd(endDate: Date, durationDays: number): { start: Date; end: Date } {
-  return {
-    start: shiftWorkingDays(endDate, -(durationDays - 1)),
-    end: endDate,
-  };
-}
-
-function shiftWorkingDays(date: Date, offset: number): Date {
-  let current = alignToWorkingDay(date);
-  if (offset === 0) {
-    return current;
-  }
-
-  let remaining = Math.abs(offset);
-  const direction = offset > 0 ? 1 : -1;
-
-  while (remaining > 0) {
-    current = addUtcDays(current, direction);
-    current = alignBackwardOrForward(current, direction);
-    remaining -= 1;
-  }
-
-  return current;
-}
-
-function alignBackwardOrForward(date: Date, direction: 1 | -1): Date {
-  let current = date;
-  while (isWeekend(current)) {
-    current = addUtcDays(current, direction);
-  }
-  return current;
 }
 
 function addUtcDays(date: Date, delta: number): Date {

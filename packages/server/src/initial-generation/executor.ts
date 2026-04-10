@@ -1,4 +1,5 @@
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
+import type { ScheduleCommandOptions } from '@gantt/mcp/types';
 
 import {
   compileInitialProjectPlan,
@@ -21,6 +22,7 @@ export type ExecuteInitialProjectPlanInput = {
     ): Promise<CommitProjectCommandResponse>;
   };
   serverDate: string;
+  scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>;
   onCompiled?: (compiledSchedule: CompiledInitialSchedule) => Promise<void> | void;
 };
 
@@ -62,6 +64,7 @@ export async function executeInitialProjectPlan(
       baseVersion: input.baseVersion,
       serverDate: input.serverDate,
       plan: input.plan,
+      scheduleOptions: input.scheduleOptions,
     });
   } catch (error) {
     if (!(error instanceof InitialPlanCompileError)) {

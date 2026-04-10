@@ -233,6 +233,44 @@ describe('compileInitialProjectPlan', () => {
 
     assert.deepEqual(second, first);
   });
+
+  it('uses project calendar overrides passed via scheduleOptions', () => {
+    const customWeekendPredicate = (date: Date) => {
+      const iso = date.toISOString().slice(0, 10);
+      if (iso === '2026-04-04') {
+        return false;
+      }
+
+      const day = date.getUTCDay();
+      return day === 0 || day === 6;
+    };
+
+    const compiled = compileInitialProjectPlan({
+      projectId: 'project-41',
+      baseVersion: 12,
+      serverDate: '2026-04-04',
+      plan: {
+        projectType: 'private_residential_house',
+        assumptions: [],
+        nodes: [
+          { nodeKey: 'phase-a', title: 'Phase A', kind: 'phase', durationDays: 1, dependsOn: [] },
+          { nodeKey: 'subphase-a', title: 'Subphase A', parentNodeKey: 'phase-a', kind: 'subphase', durationDays: 1, dependsOn: [] },
+          { nodeKey: 'task-a', title: 'Task A', parentNodeKey: 'subphase-a', kind: 'task', durationDays: 2, dependsOn: [] },
+        ],
+      },
+      scheduleOptions: {
+        businessDays: true,
+        weekendPredicate: customWeekendPredicate,
+      },
+    });
+
+    const task = taskByName('Task A', compiled.command.tasks);
+    assert.deepEqual(
+      { startDate: task.startDate, endDate: task.endDate },
+      { startDate: '2026-04-04', endDate: '2026-04-06' },
+      'working Saturday from project calendar should be respected by the core scheduler',
+    );
+  });
 });
 
 describe('executeInitialProjectPlan', () => {
