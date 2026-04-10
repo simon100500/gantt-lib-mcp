@@ -97,7 +97,7 @@ export interface UpdateTaskInput {
   /** Optional end date in ISO format: 'YYYY-MM-DD' */
   endDate?: string;
   /** Optional display color */
-  color?: string;
+  color?: string | null;
   /** Optional parent task ID for hierarchy */
   parentId?: string;
   /** Optional progress percentage (0-100) */
@@ -290,7 +290,7 @@ export interface UpdateTasksInput {
   updates: Array<{
     id: string;
     name?: string;
-    color?: string;
+    color?: string | null;
     progress?: number;
   }>;
   includeSnapshot?: boolean;
@@ -549,11 +549,24 @@ export type ProjectCommand =
       taskId: string;
       fields: {
         name?: string;
-        color?: string;
+        color?: string | null;
         parentId?: string | null;
         progress?: number;
         dependencies?: TaskDependency[];
       };
+    }
+  | {
+      type: 'update_tasks_fields_batch';
+      updates: Array<{
+        taskId: string;
+        fields: {
+          name?: string;
+          color?: string | null;
+          parentId?: string | null;
+          progress?: number;
+          dependencies?: TaskDependency[];
+        };
+      }>;
     }
   | { type: 'create_task'; task: CreateTaskInput; }
   | { type: 'create_tasks_batch'; tasks: CreateTaskInput[]; }

@@ -689,15 +689,14 @@ Fix: Provide projectId or set PROJECT_ID.`);
       return jsonResult(buildRejectedResult(0, 'invalid_request'));
     }
 
-    const commands: ProjectCommand[] = [];
+    const updates: Extract<ProjectCommand, { type: 'update_tasks_fields_batch' }>['updates'] = [];
     for (const update of input.updates) {
       const hasMetadata = update.name !== undefined || update.color !== undefined || update.progress !== undefined;
       if (!update.id || !hasMetadata) {
         return jsonResult(buildRejectedResult(0, 'invalid_request'));
       }
 
-      commands.push({
-        type: 'update_task_fields',
+      updates.push({
         taskId: update.id,
         fields: {
           ...(update.name !== undefined ? { name: update.name } : {}),
@@ -707,7 +706,12 @@ Fix: Provide projectId or set PROJECT_ID.`);
       });
     }
 
-    return jsonResult(await executeNormalizedMutationBatch(resolvedProjectId, commands, input.includeSnapshot, deps.commitNormalizedCommand));
+    return jsonResult(await executeNormalizedMutationBatch(
+      resolvedProjectId,
+      [{ type: 'update_tasks_fields_batch', updates }],
+      input.includeSnapshot,
+      deps.commitNormalizedCommand,
+    ));
   }
 
   if (name === 'move_tasks') {

@@ -63,7 +63,7 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
     fieldUpdates.name = nextTask.name;
   }
   if ((nextTask.color ?? null) !== (originalTask.color ?? null)) {
-    fieldUpdates.color = nextTask.color;
+    fieldUpdates.color = nextTask.color ?? null;
   }
   if ((nextTask.parentId ?? null) !== (originalTask.parentId ?? null)) {
     fieldUpdates.parentId = nextTask.parentId ?? null;

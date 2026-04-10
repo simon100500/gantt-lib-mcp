@@ -79,11 +79,24 @@ export type FrontendProjectCommand =
       taskId: string;
       fields: {
         name?: string;
-        color?: string;
+        color?: string | null;
         parentId?: string | null;
         progress?: number;
         dependencies?: TaskDependency[];
       };
+    }
+  | {
+      type: 'update_tasks_fields_batch';
+      updates: Array<{
+        taskId: string;
+        fields: {
+          name?: string;
+          color?: string | null;
+          parentId?: string | null;
+          progress?: number;
+          dependencies?: TaskDependency[];
+        };
+      }>;
     }
   | { type: 'create_task'; task: Omit<Task, 'id'> & { id?: string }; }
   | { type: 'create_tasks_batch'; tasks: Array<Omit<Task, 'id'> & { id?: string }>; }

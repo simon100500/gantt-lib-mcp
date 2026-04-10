@@ -230,6 +230,60 @@ async function bulkUpdateTaskParents(
   `);
 }
 
+function applyTaskFieldUpdateToSnapshot(
+  snapshot: CoreTask[],
+  update: Extract<ProjectCommand, { type: 'update_task_fields' }>,
+  opts: CoreOptions,
+): CoreResult {
+  const task = snapshot.find((candidate) => candidate.id === update.taskId);
+  if (!task) {
+    return { changedTasks: [], changedIds: [] };
+  }
+
+  const updatedTask: CoreTask = {
+    ...task,
+    ...(update.fields.name !== undefined ? { name: update.fields.name } : {}),
+    ...(update.fields.color !== undefined ? { color: update.fields.color ?? undefined } : {}),
+    ...(update.fields.parentId !== undefined ? { parentId: update.fields.parentId ?? undefined } : {}),
+    ...(update.fields.progress !== undefined ? { progress: update.fields.progress } : {}),
+    ...(update.fields.dependencies !== undefined
+      ? {
+          dependencies: update.fields.dependencies.map((dependency) => ({
+            ...dependency,
+            lag: dependency.lag ?? 0,
+          })),
+        }
+      : {}),
+  };
+
+  const updatedSnapshot = snapshot.map((candidate) =>
+    candidate.id === update.taskId ? updatedTask : candidate,
+  );
+
+  let coreResult: CoreResult;
+  if (update.fields.parentId !== undefined) {
+    coreResult = recalculateProjectSchedule(updatedSnapshot, opts);
+  } else if (update.fields.dependencies !== undefined) {
+    coreResult = recalculateTaskFromDependencies(update.taskId, updatedSnapshot, opts);
+  } else {
+    coreResult = { changedTasks: [updatedTask], changedIds: [updatedTask.id] };
+  }
+
+  if (!coreResult.changedIds.includes(updatedTask.id)) {
+    return {
+      changedTasks: [updatedTask, ...coreResult.changedTasks],
+      changedIds: [updatedTask.id, ...coreResult.changedIds],
+    };
+  }
+
+  return {
+    changedTasks: coreResult.changedTasks.map((candidate) =>
+      candidate.id === updatedTask.id ? updatedTask : candidate,
+    ),
+    changedIds: coreResult.changedIds,
+  };
+}
+
 async function bulkDeleteTasks(prismaClient: any, taskIds: string[]): Promise<void> {
   if (taskIds.length === 0) {
     return;
@@ -661,6 +715,8 @@ export class CommandService {
         return command.taskId;
       case 'delete_tasks':
         return command.taskIds[0];
+      case 'update_tasks_fields_batch':
+        return command.updates[0]?.taskId;
       case 'reorder_tasks':
         return command.updates[0]?.taskId;
       case 'recalculate_schedule':
@@ -801,52 +857,48 @@ export class CommandService {
       }
 
       case 'update_task_fields': {
-        const task = coreSnapshot.find((candidate) => candidate.id === command.taskId);
-        if (!task) {
-          return { changedTasks: [], changedDependencyIds: [], conflicts: [], dependencyChanges: [], taskChanges };
+        coreResult = applyTaskFieldUpdateToSnapshot(coreSnapshot, command, opts);
+        break;
+      }
+
+      case 'update_tasks_fields_batch': {
+        let workingSnapshot = [...coreSnapshot];
+        const changedTaskMap = new Map<string, CoreTask>();
+        const changedIds: string[] = [];
+
+        for (const update of command.updates) {
+          const singleResult = applyTaskFieldUpdateToSnapshot(
+            workingSnapshot,
+            {
+              type: 'update_task_fields',
+              taskId: update.taskId,
+              fields: update.fields,
+            },
+            opts,
+          );
+
+          for (const changedTask of singleResult.changedTasks) {
+            changedTaskMap.set(changedTask.id, changedTask);
+          }
+
+          for (const changedId of singleResult.changedIds) {
+            if (!changedIds.includes(changedId)) {
+              changedIds.push(changedId);
+            }
+          }
+
+          if (singleResult.changedTasks.length > 0) {
+            const changedById = new Map(singleResult.changedTasks.map((task) => [task.id, task]));
+            workingSnapshot = workingSnapshot.map((task) => changedById.get(task.id) ?? task);
+          }
         }
 
-        const updatedTask: CoreTask = {
-          ...task,
-          ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
-          ...(command.fields.color !== undefined ? { color: command.fields.color } : {}),
-          ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
-          ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
-          ...(command.fields.dependencies !== undefined
-            ? {
-                dependencies: command.fields.dependencies.map((dependency) => ({
-                  ...dependency,
-                  lag: dependency.lag ?? 0,
-                })),
-              }
-            : {}),
+        coreResult = {
+          changedTasks: changedIds
+            .map((changedId) => changedTaskMap.get(changedId))
+            .filter((task): task is CoreTask => Boolean(task)),
+          changedIds,
         };
-
-        const updatedSnapshot = coreSnapshot.map((candidate) =>
-          candidate.id === command.taskId ? updatedTask : candidate,
-        );
-
-        if (command.fields.parentId !== undefined) {
-          coreResult = recalculateProjectSchedule(updatedSnapshot, opts);
-        } else if (command.fields.dependencies !== undefined) {
-          coreResult = recalculateTaskFromDependencies(command.taskId, updatedSnapshot, opts);
-        } else {
-          coreResult = { changedTasks: [updatedTask], changedIds: [updatedTask.id] };
-        }
-
-        if (!coreResult.changedIds.includes(updatedTask.id)) {
-          coreResult = {
-            changedTasks: [updatedTask, ...coreResult.changedTasks],
-            changedIds: [updatedTask.id, ...coreResult.changedIds],
-          };
-        } else {
-          coreResult = {
-            changedTasks: coreResult.changedTasks.map((candidate) =>
-              candidate.id === updatedTask.id ? updatedTask : candidate,
-            ),
-            changedIds: coreResult.changedIds,
-          };
-        }
         break;
       }
 

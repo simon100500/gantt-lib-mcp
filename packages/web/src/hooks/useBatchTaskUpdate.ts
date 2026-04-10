@@ -369,12 +369,26 @@ export function useBatchTaskUpdate({
               return buildCommandsFromDiff(originalTask, task);
             });
 
-        if (commands.length === 0) {
+        const batchedCommands = (
+          !primaryIsScheduleEdit
+          && commands.length > 1
+          && commands.every((command) => command.type === 'update_task_fields')
+        )
+          ? [{
+              type: 'update_tasks_fields_batch' as const,
+              updates: commands.map((command) => ({
+                taskId: command.taskId,
+                fields: command.fields,
+              })),
+            }]
+          : commands;
+
+        if (batchedCommands.length === 0) {
           setSavingStateWithReset('saved');
           return;
         }
 
-        await commitAuthCommands(commands);
+        await commitAuthCommands(batchedCommands);
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Command save failed:', error);

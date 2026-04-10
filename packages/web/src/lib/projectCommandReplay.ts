@@ -257,7 +257,7 @@ export function replayProjectCommand(
           ? {
               ...task,
               ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
-              ...(command.fields.color !== undefined ? { color: command.fields.color } : {}),
+              ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
               ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
               ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
               ...(command.fields.dependencies !== undefined ? { dependencies: normalizeTaskDependencies(command.fields.dependencies) } : {}),
@@ -272,6 +272,25 @@ export function replayProjectCommand(
       if (command.fields.dependencies !== undefined) {
         const result = recalculateTaskFromDependencies(command.taskId, nextTasks.map(normalizeCoreTask), options);
         return withTasks(toTaskArray(mergeChangedTasks(nextTasks.map(normalizeCoreTask), result.changedTasks)));
+      }
+
+      return withTasks(nextTasks);
+    }
+
+    case 'update_tasks_fields_batch': {
+      let nextTasks = toTaskArray(coreSnapshot);
+
+      for (const update of command.updates) {
+        nextTasks = replayProjectCommand(
+          withTasks(nextTasks),
+          {
+            type: 'update_task_fields',
+            taskId: update.taskId,
+            fields: update.fields,
+          },
+          options,
+          requestId,
+        ).tasks;
       }
 
       return withTasks(nextTasks);

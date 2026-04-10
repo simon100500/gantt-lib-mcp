@@ -173,6 +173,105 @@ describe('MCP normalized runtime surface', () => {
     assert.deepEqual(payload.snapshot.tasks.map((task: Task) => task.id), ['A', 'B', 'C']);
   });
 
+  it('update_tasks compiles metadata changes into one batch field-update command', async () => {
+    const snapshot = createSnapshot([
+      { ...createTask('A', '2026-04-01', '2026-04-03'), color: '#111111' },
+      { ...createTask('B', '2026-04-04', '2026-04-06'), color: '#222222' },
+    ]);
+    const committedCommands: ProjectCommand[] = [];
+
+    const payload = parseJsonContent(await handleCallToolRequest(
+      {
+        params: {
+          name: 'update_tasks',
+          arguments: {
+            projectId: 'project-1',
+            includeSnapshot: true,
+            updates: [
+              { id: 'A', color: '#aa0000' },
+              { id: 'B', color: '#00aa00' },
+            ],
+          },
+        },
+      },
+      createDeps({
+        commitNormalizedCommand: async (_projectId, command) => {
+          committedCommands.push(command);
+          return {
+            baseVersion: 4,
+            response: acceptedResponse(5, snapshot, {
+              changedTaskIds: ['A', 'B'],
+              changedDependencyIds: [],
+              conflicts: [],
+            }),
+          };
+        },
+      }),
+    ));
+
+    assert.deepEqual(committedCommands, [
+      {
+        type: 'update_tasks_fields_batch',
+        updates: [
+          { taskId: 'A', fields: { color: '#aa0000' } },
+          { taskId: 'B', fields: { color: '#00aa00' } },
+        ],
+      },
+    ]);
+    assert.equal(payload.status, 'accepted');
+    assert.equal(payload.baseVersion, 4);
+    assert.equal(payload.newVersion, 5);
+    assert.deepEqual(payload.changedTaskIds, ['A', 'B']);
+  });
+
+  it('update_tasks preserves null color to clear existing color', async () => {
+    const snapshot = createSnapshot([
+      { ...createTask('A', '2026-04-01', '2026-04-03'), color: '#111111' },
+    ]);
+    const committedCommands: ProjectCommand[] = [];
+
+    const payload = parseJsonContent(await handleCallToolRequest(
+      {
+        params: {
+          name: 'update_tasks',
+          arguments: {
+            projectId: 'project-1',
+            includeSnapshot: true,
+            updates: [
+              { id: 'A', color: null },
+            ],
+          },
+        },
+      },
+      createDeps({
+        commitNormalizedCommand: async (_projectId, command) => {
+          committedCommands.push(command);
+          return {
+            baseVersion: 6,
+            response: acceptedResponse(7, snapshot, {
+              changedTaskIds: ['A'],
+              changedDependencyIds: [],
+              conflicts: [],
+            }),
+          };
+        },
+      }),
+    ));
+
+    assert.deepEqual(committedCommands, [
+      {
+        type: 'update_tasks_fields_batch',
+        updates: [
+          { taskId: 'A', fields: { color: null } },
+        ],
+      },
+    ]);
+    assert.equal(payload.status, 'accepted');
+    assert.equal(payload.baseVersion, 6);
+    assert.equal(payload.newVersion, 7);
+    assert.deepEqual(payload.changedTaskIds, ['A']);
+  });
+
   it('link_tasks preserves normalized rejection shape with partial aggregate', async () => {
     const firstSnapshot = createSnapshot(
       [

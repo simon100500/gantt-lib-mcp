@@ -680,6 +680,36 @@ describe('CommandService command dispatch', () => {
     assert.strictEqual(result.changedTasks[0]?.progress, 55);
   });
 
+  it('update_task_fields clears color when fields.color is null', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot([
+      {
+        id: 'A',
+        name: 'A',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+        color: '#ff0000',
+        dependencies: [],
+      },
+    ]);
+
+    const result = await service.executeCommand(
+      {
+        type: 'update_task_fields',
+        taskId: 'A',
+        fields: { color: null },
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    assert.strictEqual(result.changedTasks.length, 1);
+    assert.strictEqual(result.changedTasks[0]?.id, 'A');
+    assert.strictEqual(result.changedTasks[0]?.color, undefined);
+  });
+
   it('update_task_fields with parent change includes rollup-affected tasks', async () => {
     const service = new CommandService() as any;
     const snapshot = toCoreSnapshot(createParentChildSnapshot());
@@ -698,6 +728,73 @@ describe('CommandService command dispatch', () => {
 
     assert.ok(result.changedTasks.some((task: Task) => task.id === 'child2'));
     assert.ok(result.changedTasks.some((task: Task) => task.id === 'parent'));
+  });
+
+  it('update_tasks_fields_batch applies color changes for multiple tasks in one command', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot(createFSChainSnapshot());
+
+    const result = await service.executeCommand(
+      {
+        type: 'update_tasks_fields_batch',
+        updates: [
+          { taskId: 'A', fields: { color: '#111111' } },
+          { taskId: 'B', fields: { color: '#222222' } },
+          { taskId: 'C', fields: { color: '#333333' } },
+        ],
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(result.changedDependencyIds, []);
+    assert.deepStrictEqual(result.conflicts, []);
+    assert.deepStrictEqual(result.changedTasks.map((task: Task) => task.id), ['A', 'B', 'C']);
+    assert.deepStrictEqual(
+      result.changedTasks.map((task: Task) => task.color),
+      ['#111111', '#222222', '#333333'],
+    );
+  });
+
+  it('update_tasks_fields_batch clears colors when updates pass null', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot([
+      {
+        id: 'A',
+        name: 'A',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+        color: '#111111',
+        dependencies: [],
+      },
+      {
+        id: 'B',
+        name: 'B',
+        startDate: '2026-04-04',
+        endDate: '2026-04-06',
+        color: '#222222',
+        dependencies: [],
+      },
+    ]);
+
+    const result = await service.executeCommand(
+      {
+        type: 'update_tasks_fields_batch',
+        updates: [
+          { taskId: 'A', fields: { color: null } },
+          { taskId: 'B', fields: { color: null } },
+        ],
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(result.changedTasks.map((task: Task) => task.id), ['A', 'B']);
+    assert.deepStrictEqual(result.changedTasks.map((task: Task) => task.color), [undefined, undefined]);
   });
 });
 
