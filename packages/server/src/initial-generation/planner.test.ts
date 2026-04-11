@@ -8,6 +8,7 @@ import { assembleDomainSkeleton } from './domain/assembly.js';
 import { normalizeInitialRequest } from './intake-normalization.js';
 import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
+import { buildStructurePrompt } from './prompts/index.js';
 import {
   evaluateSchedulingQuality,
   evaluateStructureQuality,
@@ -195,6 +196,39 @@ describe('initial-generation json response parsing', () => {
 });
 
 describe('initial-generation planner', () => {
+  it('adds a section-floor decomposition rule when counts are explicit in the request', () => {
+    const userMessage = 'График каменной кладки внутренних и наружных стен: на 5 секциях, 3 этажа на каждой.';
+    const normalizedRequest = normalizeInitialRequest(userMessage);
+    const classification = classifyInitialRequest(normalizedRequest);
+    const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+    });
+    const prompt = buildStructurePrompt({
+      userMessage,
+      brief: buildGenerationBrief({
+        userMessage,
+        normalizedRequest,
+        classification,
+        clarificationDecision,
+        domainSkeleton,
+      }),
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+      domainSkeleton,
+    });
+
+    assert.match(prompt, /infer location entity types from the user request itself/i);
+    assert.match(prompt, /minimal location unit is one floor within one section/i);
+    assert.match(prompt, /default to one explicit container per concrete location entity/i);
+    assert.match(prompt, /do not create grouped range containers such as "Секции 1-2"/i);
+    assert.match(prompt, /do not assume crew packaging or execution batching across entities/i);
+    assert.match(prompt, /when the request gives counts but not labels, enumerate coherent per-entity labels/i);
+  });
+
   it('builds a two-step whole-project plan and forbids structural edits in scheduling prompt', async () => {
     const prompts: Array<{ stage: string; model: string; prompt: string }> = [];
     const normalizedRequest = normalizeInitialRequest('График строительства жилого дома на 3 этажа + гараж');

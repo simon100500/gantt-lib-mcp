@@ -1,5 +1,5 @@
 import { buildPartialScopeSchedulingLines, buildPartialScopeStructureLines } from './partial-scope.js';
-import { buildPlanningContextLines, getPlanningMode } from './shared.js';
+import { buildLocationGranularityLines, buildPlanningContextLines, getPlanningMode } from './shared.js';
 import type {
   PlannerPromptContext,
   SchedulingPromptInput,
@@ -63,6 +63,7 @@ export function buildStructurePrompt(input: PlannerPromptContext): string {
     'If the wording implies multiple operations, split them into separate tasks or separate subphases.',
     'Task-level compound formulations are forbidden.',
     'Each subphase title must describe one coherent grouping, not multiple unrelated operations compressed together.',
+    ...buildLocationGranularityLines(input),
     ...buildModeSpecificStructureLines(input),
     ...buildPlanningContextLines(input),
     `Starter schedule expectation: ${input.brief.starterScheduleExpectation}`,
@@ -103,6 +104,7 @@ export function buildSchedulingPrompt(input: SchedulingPromptInput): string {
     'If a dependency is uncertain, omit it instead of inventing or corrupting it.',
     'Do not create, delete, rename, merge, split, or move nodes.',
     'Do not add dependencies to phases or subphases.',
+    ...buildLocationGranularityLines(input),
     ...buildModeSpecificSchedulingLines(input),
     ...buildPlanningContextLines(input),
     `User request: ${input.userMessage}`,
