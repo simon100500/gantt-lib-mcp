@@ -608,7 +608,13 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
     input.structureModelDecision.selectedModel,
     input.sdkQuery,
   );
-  let structureVerdict = evaluateStructureQuality(structure, input.brief, input.userMessage);
+  let structureVerdict = evaluateStructureQuality(structure, {
+    brief: input.brief,
+    userMessage: input.userMessage,
+    normalizedRequest: input.normalizedRequest,
+    classification: input.classification,
+    domainSkeleton: input.domainSkeleton,
+  });
 
   if (!structureVerdict.accepted) {
     repairAttempted = true;
@@ -618,7 +624,13 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
       input.structureModelDecision.selectedModel,
       input.sdkQuery,
     );
-    structureVerdict = evaluateStructureQuality(structure, input.brief, input.userMessage);
+    structureVerdict = evaluateStructureQuality(structure, {
+      brief: input.brief,
+      userMessage: input.userMessage,
+      normalizedRequest: input.normalizedRequest,
+      classification: input.classification,
+      domainSkeleton: input.domainSkeleton,
+    });
   }
 
   let scheduled = await requestScheduledProject(
@@ -629,7 +641,13 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
     structure,
   );
   let plan = flattenScheduledPlan(scheduled);
-  let schedulingVerdict = evaluateSchedulingQuality(structure, scheduled, plan);
+  let schedulingVerdict = evaluateSchedulingQuality(structure, scheduled, plan, {
+    brief: input.brief,
+    userMessage: input.userMessage,
+    normalizedRequest: input.normalizedRequest,
+    classification: input.classification,
+    domainSkeleton: input.domainSkeleton,
+  });
 
   if (!schedulingVerdict.accepted) {
     repairAttempted = true;
@@ -641,7 +659,13 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
       structure,
     );
     plan = flattenScheduledPlan(scheduled);
-    schedulingVerdict = evaluateSchedulingQuality(structure, scheduled, plan);
+    schedulingVerdict = evaluateSchedulingQuality(structure, scheduled, plan, {
+      brief: input.brief,
+      userMessage: input.userMessage,
+      normalizedRequest: input.normalizedRequest,
+      classification: input.classification,
+      domainSkeleton: input.domainSkeleton,
+    });
   }
 
   return {

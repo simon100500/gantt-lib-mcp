@@ -137,6 +137,53 @@ describe('initial-generation quality gate', () => {
 
     assert.ok(schedulingVerdict.reasons.includes('titles_changed'));
   });
+
+  it('flags partial-scope plans that leak out-of-scope section identifiers', () => {
+    const normalizedRequest = normalizeInitialRequest('график передачи конструкций подвала секции 5.1-5.4');
+    const classification = classifyInitialRequest(normalizedRequest);
+    const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+    });
+    const brief = buildGenerationBrief({
+      userMessage: normalizedRequest.normalizedRequest,
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+      domainSkeleton,
+    });
+
+    const verdict = evaluateStructureQuality({
+      projectType: 'residential_multi_section',
+      assumptions: [],
+      phases: [
+        {
+          phaseKey: 'phase-fragment',
+          title: 'Локальный фрагмент',
+          subphases: [
+            {
+              subphaseKey: 'subphase-fragment',
+              title: 'Работы по секциям',
+              tasks: [
+                { taskKey: 'task-1', title: 'Возведение стен секции 5.1' },
+                { taskKey: 'task-2', title: 'Устройство перекрытий секции 5.6' },
+              ],
+            },
+          ],
+        },
+      ],
+    }, {
+      brief,
+      userMessage: normalizedRequest.normalizedRequest,
+      normalizedRequest,
+      classification,
+      domainSkeleton,
+    });
+
+    assert.ok(verdict.reasons.includes('scope_boundary_violation'));
+  });
 });
 
 describe('initial-generation json response parsing', () => {

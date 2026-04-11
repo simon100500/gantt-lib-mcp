@@ -177,7 +177,11 @@ export type StructureRepairReason =
   | 'oversized_titles'
   | 'weak_object_fit'
   | 'missing_requested_component'
-  | 'weak_subphase_decomposition';
+  | 'weak_subphase_decomposition'
+  | 'scope_boundary_violation'
+  | 'missing_fragment_milestone'
+  | 'unexpected_whole_project_padding'
+  | 'worklist_scope_drift';
 
 export type StructureQualityMetrics = {
   phaseCount: number;
@@ -209,7 +213,9 @@ export type SchedulingRepairReason =
   | 'dependency_target_not_task'
   | 'task_outside_subphase'
   | 'phase_has_dependencies'
-  | 'graph_cycle_detected';
+  | 'graph_cycle_detected'
+  | 'scope_boundary_violation'
+  | 'worklist_scope_drift';
 
 export type SchedulingQualityMetrics = {
   taskCount: number;

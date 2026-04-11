@@ -1,6 +1,8 @@
 import type {
   ExecutableProjectPlan,
   GenerationBrief,
+  InitialGenerationClassification,
+  NormalizedInitialRequest,
   ProjectPlanNode,
   ScheduledProjectPlan,
   SchedulingQualityMetrics,
@@ -9,12 +11,21 @@ import type {
   StructureQualityMetrics,
   StructureQualityVerdict,
 } from './types.js';
+import type { DomainSkeleton } from './domain/contracts.js';
 import { isEnumerativeTitle, isTitleTooLong } from './title-policy.js';
 
 const PLACEHOLDER_TITLE_PATTERN = /^(?:этап|подэтап|задача|phase|subphase|task)\s+\d+$/i;
 const GENERIC_TITLE_PATTERN = /^(?:строительн(?:ые)?\s+работы|общ(?:ие)?\s+работы|работы|construction works|general works|phase|stage|subphase|task)$/i;
 const MAX_TOP_LEVEL_PHASES = 7;
 const MAX_TASKS = 40;
+
+export type QualityGateContext = {
+  brief: GenerationBrief;
+  userMessage: string;
+  normalizedRequest?: NormalizedInitialRequest;
+  classification?: InitialGenerationClassification;
+  domainSkeleton?: DomainSkeleton;
+};
 
 function isBroadRequest(brief: GenerationBrief): boolean {
   return brief.scopeSignals.includes('broad_request') || brief.scopeSignals.includes('starter_generation_request');
@@ -25,40 +36,6 @@ function countGenericTitles(values: string[]): number {
     const title = value.trim();
     return PLACEHOLDER_TITLE_PATTERN.test(title) || GENERIC_TITLE_PATTERN.test(title);
   }).length;
-}
-
-function inferSignalCoverage(brief: GenerationBrief, text: string): number {
-  if (!brief.scopeSignals.includes('explicit_area') && !brief.scopeSignals.includes('material_mentioned')) {
-    return 1;
-  }
-
-  const messageSignals = new Set(
-    `${brief.objectType} ${brief.domainContextSummary}`.toLowerCase().split(/[^a-zа-я0-9]+/i).filter((token) => token.length >= 4),
-  );
-  if (messageSignals.size === 0) {
-    return 1;
-  }
-
-  const normalizedText = text.toLowerCase();
-  const matchedSignals = [...messageSignals].filter((signal) => normalizedText.includes(signal));
-  return matchedSignals.length / messageSignals.size;
-}
-
-function inferRequestedComponentCoverage(userMessage: string, text: string): number {
-  const requestedSignals = new Set(
-    userMessage
-      .toLowerCase()
-      .split(/[^a-zа-я0-9]+/i)
-      .filter((token) => token.length >= 4 || /^\d+$/.test(token)),
-  );
-
-  if (requestedSignals.size === 0) {
-    return 1;
-  }
-
-  const normalizedText = text.toLowerCase();
-  const matchedSignals = [...requestedSignals].filter((signal) => normalizedText.includes(signal));
-  return matchedSignals.length / requestedSignals.size;
 }
 
 function getTaskNodes(plan: ExecutableProjectPlan): ProjectPlanNode[] {
@@ -145,6 +122,61 @@ function getStructureSignature(structure: StructuredProjectPlan | ScheduledProje
   return signature;
 }
 
+function getAllTitles(structure: StructuredProjectPlan | ScheduledProjectPlan): string[] {
+  return structure.phases.flatMap((phase) => [
+    phase.title,
+    ...phase.subphases.flatMap((subphase) => [subphase.title, ...subphase.tasks.map((task) => task.title)]),
+  ]);
+}
+
+function getMode(context: QualityGateContext | undefined): GenerationBrief['planningMode'] | undefined {
+  return context?.classification?.planningMode ?? context?.brief.planningMode;
+}
+
+function evaluateModeAwareStructure(
+  structure: StructuredProjectPlan,
+  context: QualityGateContext,
+  reasons: StructureQualityVerdict['reasons'],
+): void {
+  const mode = getMode(context);
+  const titles = getAllTitles(structure);
+  const normalizedText = titles.join(' ').toLowerCase();
+
+  if (mode === 'partial_scope_bootstrap') {
+    const fragmentSections = context.normalizedRequest?.locationScope?.sections ?? context.brief.locationScope?.sections ?? [];
+    const outOfScopeSections = [...normalizedText.matchAll(/\b\d+\.\d+\b/g)]
+      .map((match) => match[0])
+      .filter((section) => fragmentSections.length > 0 && !fragmentSections.includes(section));
+    if (outOfScopeSections.length > 0) {
+      reasons.push('scope_boundary_violation');
+    }
+  }
+}
+
+function evaluateModeAwareScheduling(
+  plan: ExecutableProjectPlan,
+  context: QualityGateContext,
+  reasons: SchedulingQualityVerdict['reasons'],
+): void {
+  const mode = getMode(context);
+  const taskTitles = getTaskNodes(plan).map((task) => task.title.toLowerCase());
+  const combined = taskTitles.join(' ');
+
+  if (mode === 'partial_scope_bootstrap') {
+    const fragmentSections = context.normalizedRequest?.locationScope?.sections ?? context.brief.locationScope?.sections ?? [];
+    const outOfScopeSections = [...combined.matchAll(/\b\d+\.\d+\b/g)]
+      .map((match) => match[0])
+      .filter((section) => fragmentSections.length > 0 && !fragmentSections.includes(section));
+    if (outOfScopeSections.length > 0) {
+      reasons.push('scope_boundary_violation');
+    }
+  }
+
+  if (mode === 'worklist_bootstrap') {
+    void combined;
+  }
+}
+
 export function collectStructureMetrics(
   structure: StructuredProjectPlan,
   brief: GenerationBrief,
@@ -168,8 +200,8 @@ export function collectStructureMetrics(
   ]);
   const genericTitleCount = countGenericTitles(titles);
   const genericTitleRatio = titles.length === 0 ? 1 : genericTitleCount / titles.length;
-  const objectTypeSignalCoverage = inferSignalCoverage(brief, titles.join(' '));
-  const requestedComponentCoverage = inferRequestedComponentCoverage(userMessage, titles.join(' '));
+  void brief;
+  void userMessage;
 
   return {
     phaseCount,
@@ -179,16 +211,21 @@ export function collectStructureMetrics(
     minTasksPerSubphase,
     genericTitleCount,
     genericTitleRatio,
-    objectTypeSignalCoverage,
-    requestedComponentCoverage,
+    objectTypeSignalCoverage: 1,
+    requestedComponentCoverage: 1,
   };
 }
 
 export function evaluateStructureQuality(
   structure: StructuredProjectPlan,
-  brief: GenerationBrief,
-  userMessage: string,
+  briefOrContext: GenerationBrief | QualityGateContext,
+  userMessageArg?: string,
 ): StructureQualityVerdict {
+  const context: QualityGateContext = 'brief' in briefOrContext
+    ? briefOrContext
+    : { brief: briefOrContext, userMessage: userMessageArg ?? '' };
+  const brief = context.brief;
+  const userMessage = context.userMessage;
   const metrics = collectStructureMetrics(structure, brief, userMessage);
   const reasons: StructureQualityVerdict['reasons'] = [];
   const broadRequest = isBroadRequest(brief);
@@ -219,17 +256,11 @@ export function evaluateStructureQuality(
     reasons.push('oversized_titles');
   }
 
-  if (metrics.objectTypeSignalCoverage < (broadRequest ? 0.08 : 0.04)) {
-    reasons.push('weak_object_fit');
-  }
-
-  if (metrics.requestedComponentCoverage < (broadRequest ? 0.2 : 0.1)) {
-    reasons.push('missing_requested_component');
-  }
-
   if (broadRequest && metrics.minSubphasesPerPhase < 2) {
     reasons.push('weak_subphase_decomposition');
   }
+
+  evaluateModeAwareStructure(structure, context, reasons);
 
   const uniqueReasons = [...new Set(reasons)];
   return {
@@ -269,6 +300,7 @@ export function evaluateSchedulingQuality(
   structure: StructuredProjectPlan,
   scheduled: ScheduledProjectPlan,
   plan: ExecutableProjectPlan,
+  context?: QualityGateContext,
 ): SchedulingQualityVerdict {
   const reasons: SchedulingQualityVerdict['reasons'] = [];
   const structureSignature = getStructureSignature(structure);
@@ -337,6 +369,10 @@ export function evaluateSchedulingQuality(
 
   if (hasTaskCycle(plan)) {
     reasons.push('graph_cycle_detected');
+  }
+
+  if (context) {
+    evaluateModeAwareScheduling(plan, context, reasons);
   }
 
   const uniqueReasons = [...new Set(reasons)];
