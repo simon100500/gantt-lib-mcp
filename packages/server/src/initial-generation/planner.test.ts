@@ -14,7 +14,7 @@ import {
 } from './quality-gate.js';
 
 describe('initial-generation quality gate', () => {
-  it('flags weak structures with placeholder titles and poor coverage', () => {
+  it('flags weak structures with placeholder titles and shallow decomposition', () => {
     const brief = buildGenerationBrief({
       userMessage: 'Построй график',
     });

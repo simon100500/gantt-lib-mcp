@@ -211,8 +211,6 @@ export function collectStructureMetrics(
     minTasksPerSubphase,
     genericTitleCount,
     genericTitleRatio,
-    objectTypeSignalCoverage: 1,
-    requestedComponentCoverage: 1,
   };
 }
 

@@ -175,13 +175,8 @@ export type StructureRepairReason =
   | 'too_few_tasks'
   | 'placeholder_titles'
   | 'oversized_titles'
-  | 'weak_object_fit'
-  | 'missing_requested_component'
   | 'weak_subphase_decomposition'
-  | 'scope_boundary_violation'
-  | 'missing_fragment_milestone'
-  | 'unexpected_whole_project_padding'
-  | 'worklist_scope_drift';
+  | 'scope_boundary_violation';
 
 export type StructureQualityMetrics = {
   phaseCount: number;
@@ -191,8 +186,6 @@ export type StructureQualityMetrics = {
   minTasksPerSubphase: number;
   genericTitleCount: number;
   genericTitleRatio: number;
-  objectTypeSignalCoverage: number;
-  requestedComponentCoverage: number;
 };
 
 export type StructureQualityVerdict = {
@@ -214,8 +207,7 @@ export type SchedulingRepairReason =
   | 'task_outside_subphase'
   | 'phase_has_dependencies'
   | 'graph_cycle_detected'
-  | 'scope_boundary_violation'
-  | 'worklist_scope_drift';
+  | 'scope_boundary_violation';
 
 export type SchedulingQualityMetrics = {
   taskCount: number;
