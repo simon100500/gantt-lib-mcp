@@ -4,6 +4,7 @@ import {
   evaluateStructureQuality,
 } from './quality-gate.js';
 import { normalizeGeneratedTitle } from './title-policy.js';
+import type { DomainSkeleton } from './domain/contracts.js';
 import type {
   ClarificationDecision,
   ExecutableProjectPlan,
@@ -40,6 +41,7 @@ export type PlanInitialProjectInput = {
   normalizedRequest?: NormalizedInitialRequest;
   classification?: InitialGenerationClassification;
   clarificationDecision?: ClarificationDecision;
+  domainSkeleton?: DomainSkeleton;
   structureModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   schedulingModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   sdkQuery: (input: PlannerQueryInput) => Promise<PlannerQueryResult>;
@@ -66,11 +68,14 @@ function readQueryContent(result: PlannerQueryResult): string {
   throw new Error('Planner returned an empty response');
 }
 
-function buildPlanningContextLines(input: Pick<PlanInitialProjectInput, 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>): string[] {
+function buildPlanningContextLines(
+  input: Pick<PlanInitialProjectInput, 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision' | 'domainSkeleton'>,
+): string[] {
   const lines: string[] = [];
   const classification = input.classification;
   const normalized = input.normalizedRequest;
   const clarification = input.clarificationDecision;
+  const domainSkeleton = input.domainSkeleton;
 
   if (classification) {
     lines.push(`Planning mode: ${classification.planningMode}`);
@@ -99,10 +104,23 @@ function buildPlanningContextLines(input: Pick<PlanInitialProjectInput, 'brief' 
     lines.push(`Domain context: ${input.brief.domainContextSummary}`);
   }
 
+  if (domainSkeleton) {
+    lines.push(`Domain skeleton stages: ${JSON.stringify(domainSkeleton.stageFamilies)}`);
+    lines.push(`Domain skeleton milestones: ${JSON.stringify(domainSkeleton.milestoneSkeleton)}`);
+    lines.push(`Domain required families: ${JSON.stringify(domainSkeleton.requiredFamilies)}`);
+    lines.push(`Domain sequencing expectations: ${JSON.stringify(domainSkeleton.sequencingExpectations)}`);
+    lines.push(`Domain scope boundaries: ${JSON.stringify(domainSkeleton.scopeBoundaries)}`);
+    lines.push(`Domain decomposition policy: ${JSON.stringify(domainSkeleton.decompositionPolicy)}`);
+    lines.push(`Rule pack mandatory families: ${JSON.stringify(domainSkeleton.rulePack.mandatoryFamilies)}`);
+    lines.push(`Rule pack forbidden ordering: ${JSON.stringify(domainSkeleton.rulePack.forbiddenOrderings)}`);
+    lines.push(`Rule pack parallelism: ${JSON.stringify(domainSkeleton.rulePack.allowableParallelismPatterns)}`);
+    lines.push(`Skeleton assumptions: ${JSON.stringify(domainSkeleton.assumptions)}`);
+  }
+
   return lines;
 }
 
-function buildModeSpecificStructureLines(input: Pick<PlanInitialProjectInput, 'brief' | 'classification' | 'normalizedRequest'>): string[] {
+function buildModeSpecificStructureLines(input: Pick<PlanInitialProjectInput, 'brief' | 'classification' | 'normalizedRequest' | 'domainSkeleton'>): string[] {
   const planningMode = input.classification?.planningMode ?? input.brief.planningMode ?? 'whole_project_bootstrap';
 
   if (planningMode === 'partial_scope_bootstrap') {
@@ -130,7 +148,7 @@ function buildModeSpecificStructureLines(input: Pick<PlanInitialProjectInput, 'b
 }
 
 function buildStructurePrompt(
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision' | 'domainSkeleton'>,
 ): string {
   return [
     'Return strict StructuredProjectPlan JSON only. No markdown, no prose, no code fences.',
@@ -168,7 +186,7 @@ function buildStructurePrompt(
 function buildStructureRepairPrompt(
   structure: StructuredProjectPlan,
   verdict: StructureQualityVerdict,
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision' | 'domainSkeleton'>,
 ): string {
   return [
     'Return a fully corrected StructuredProjectPlan JSON only.',
@@ -183,7 +201,7 @@ function buildStructureRepairPrompt(
 }
 
 function buildSchedulingPrompt(
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision' | 'domainSkeleton'>,
   structure: StructuredProjectPlan,
 ): string {
   return [
@@ -225,7 +243,7 @@ function buildSchedulingRepairPrompt(
   structure: StructuredProjectPlan,
   scheduled: ScheduledProjectPlan,
   verdict: SchedulingQualityVerdict,
-  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision'>,
+  input: Pick<PlanInitialProjectInput, 'userMessage' | 'brief' | 'normalizedRequest' | 'classification' | 'clarificationDecision' | 'domainSkeleton'>,
 ): string {
   return [
     'Return a fully corrected ScheduledProjectPlan JSON only.',

@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { buildGenerationBrief } from './brief.js';
 import { classifyInitialRequest } from './classification.js';
 import { decideInitialClarification } from './clarification-gate.js';
+import { assembleDomainSkeleton } from './domain/assembly.js';
 import { normalizeInitialRequest } from './intake-normalization.js';
 import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
@@ -152,6 +153,11 @@ describe('initial-generation planner', () => {
     const normalizedRequest = normalizeInitialRequest('График строительства жилого дома на 3 этажа + гараж');
     const classification = classifyInitialRequest(normalizedRequest);
     const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+    });
 
     const result = await planInitialProject({
       userMessage: 'График строительства жилого дома на 3 этажа + гараж',
@@ -160,10 +166,12 @@ describe('initial-generation planner', () => {
         normalizedRequest,
         classification,
         clarificationDecision,
+        domainSkeleton,
       }),
       normalizedRequest,
       classification,
       clarificationDecision,
+      domainSkeleton,
       structureModelDecision: { selectedModel: 'gpt-strong' },
       schedulingModelDecision: { selectedModel: 'gpt-cheap' },
       sdkQuery: async ({ stage, prompt, model }) => {
@@ -378,6 +386,8 @@ describe('initial-generation planner', () => {
     assert.match(prompts[0]?.prompt ?? '', /Task-level compound formulations are forbidden/i);
     assert.match(prompts[0]?.prompt ?? '', /If the request implies a specialized facility, preserve the major functional workstreams/i);
     assert.match(prompts[0]?.prompt ?? '', /Planning mode: whole_project_bootstrap/i);
+    assert.match(prompts[0]?.prompt ?? '', /Domain skeleton stages:/i);
+    assert.match(prompts[0]?.prompt ?? '', /Rule pack mandatory families:/i);
     assert.match(prompts[1]?.prompt ?? '', /Do not create, delete, rename, merge, split, or move nodes/i);
     assert.match(prompts[1]?.prompt ?? '', /Each dependency object must have exactly this shape/i);
   });

@@ -4,12 +4,14 @@ import type {
   InitialGenerationClassification,
   NormalizedInitialRequest,
 } from './types.js';
+import type { DomainSkeleton } from './domain/contracts.js';
 
 export type BuildGenerationBriefInput = {
   userMessage: string;
   normalizedRequest?: NormalizedInitialRequest;
   classification?: InitialGenerationClassification;
   clarificationDecision?: ClarificationDecision;
+  domainSkeleton?: DomainSkeleton;
 };
 
 function detectScopeSignals(userMessage: string): string[] {
@@ -42,6 +44,7 @@ function detectScopeSignals(userMessage: string): string[] {
 export function buildGenerationBrief(input: BuildGenerationBriefInput): GenerationBrief {
   const normalized = input.normalizedRequest;
   const classification = input.classification;
+  const domainSkeleton = input.domainSkeleton;
   const clarificationAssumptions = input.clarificationDecision?.action === 'proceed_with_assumptions'
     ? input.clarificationDecision.assumptions
     : input.clarificationDecision
@@ -89,6 +92,16 @@ export function buildGenerationBrief(input: BuildGenerationBriefInput): Generati
           `object_profile=${classification.objectProfile}`,
         ].join('; ')
       : '',
+    ...(domainSkeleton
+      ? {
+          domainSkeletonSummary: [
+            `fragment=${domainSkeleton.fragmentKey ?? 'none'}`,
+            `stages=${domainSkeleton.stageFamilies.join('|')}`,
+            `milestones=${domainSkeleton.milestoneSkeleton.join('|')}`,
+            `families=${domainSkeleton.requiredFamilies.join('|')}`,
+          ].join('; '),
+        }
+      : {}),
     serverInferencePolicy:
       'Rely on the normalized request, classification, and explicit server-side assumptions.',
     ...(classification?.scopeMode ? { scopeMode: classification.scopeMode } : {}),

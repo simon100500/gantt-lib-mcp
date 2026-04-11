@@ -63,6 +63,7 @@ export type GenerationBrief = {
   namingBan: string;
   domainContextSummary: string;
   serverInferencePolicy: string;
+  domainSkeletonSummary?: string;
   scopeMode?: ScopeMode;
   planningMode?: PlanningMode;
   detailLevel?: DetailLevel;

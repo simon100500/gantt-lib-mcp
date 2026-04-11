@@ -6,10 +6,12 @@ import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
 import { classifyInitialRequest } from './classification.js';
 import { decideInitialClarification } from './clarification-gate.js';
+import { assembleDomainSkeleton } from './domain/assembly.js';
 import { executeInitialProjectPlan } from './executor.js';
 import { normalizeInitialRequest } from './intake-normalization.js';
 import { resolveModelRoutingDecision } from './model-routing.js';
 import { planInitialProject } from './planner.js';
+import type { DomainSkeleton } from './domain/contracts.js';
 import type {
   ClarificationDecision,
   GenerationBrief,
@@ -65,6 +67,11 @@ type InitialGenerationDeps = {
     normalized: NormalizedInitialRequest,
     classification: InitialGenerationClassification,
   ) => ClarificationDecision;
+  assembleDomainSkeleton: (input: {
+    normalizedRequest: NormalizedInitialRequest;
+    classification: InitialGenerationClassification;
+    clarificationDecision: ClarificationDecision;
+  }) => DomainSkeleton;
   resolveModelRoutingDecision: (input: {
     route: 'initial_generation' | 'mutation';
     env: Record<string, string | undefined>;
@@ -114,6 +121,7 @@ function getDefaultDeps(): InitialGenerationDeps {
     normalizeInitialRequest,
     classifyInitialRequest,
     decideInitialClarification,
+    assembleDomainSkeleton,
     resolveModelRoutingDecision,
   };
 }
@@ -210,11 +218,17 @@ export async function runInitialGeneration(
   const normalizedRequest = deps.normalizeInitialRequest(input.userMessage);
   const classification = deps.classifyInitialRequest(normalizedRequest);
   const clarificationDecision = deps.decideInitialClarification(normalizedRequest, classification);
+  const domainSkeleton = deps.assembleDomainSkeleton({
+    normalizedRequest,
+    classification,
+    clarificationDecision,
+  });
   const brief = input.brief ?? deps.buildGenerationBrief({
     userMessage: input.userMessage,
     normalizedRequest,
     classification,
     clarificationDecision,
+    domainSkeleton,
   });
   const structureModelRoutingDecision = input.structureModelRoutingDecision ?? deps.resolveModelRoutingDecision({
     route: 'initial_generation',
@@ -256,6 +270,12 @@ export async function runInitialGeneration(
     projectId: input.projectId,
     sessionId: input.sessionId,
     clarificationDecision,
+  });
+  await input.logger.debug('initial_generation_domain_skeleton', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    domainSkeleton,
   });
 
   let repairAttempted = false;
@@ -308,6 +328,7 @@ export async function runInitialGeneration(
       normalizedRequest,
       classification,
       clarificationDecision,
+      domainSkeleton,
       structureModelDecision: structureModelRoutingDecision,
       schedulingModelDecision: schedulingModelRoutingDecision,
       sdkQuery: loggedPlannerQuery,
