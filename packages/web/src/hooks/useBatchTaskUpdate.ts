@@ -351,18 +351,21 @@ export function useBatchTaskUpdate({
           return;
         }
 
+        // Build commands for ALL changed tasks (not just the primary).
+        // Previously, when the primary had schedule changes, only its commands
+        // were generated — cascade secondary tasks were silently dropped.
+        // The server would then cascade independently (potentially differently),
+        // causing visual desyncs and lag mismatches.
+        const commands = changedTasks.flatMap((task) => {
+          const originalTask = tasks.find((candidate) => candidate.id === task.id);
+          if (!originalTask) {
+            return [];
+          }
+          return buildCommandsFromDiff(originalTask, task);
+        });
+
         const primaryOriginal = tasks.find((task) => task.id === primaryTask.id);
         const primaryIsScheduleEdit = primaryOriginal ? hasScheduleDiff(primaryOriginal, primaryTask) : false;
-
-        const commands = primaryIsScheduleEdit && primaryOriginal
-          ? buildCommandsFromDiff(primaryOriginal, primaryTask)
-          : changedTasks.flatMap((task) => {
-              const originalTask = tasks.find((candidate) => candidate.id === task.id);
-              if (!originalTask) {
-                return [];
-              }
-              return buildCommandsFromDiff(originalTask, task);
-            });
 
         const batchedCommands = (
           !primaryIsScheduleEdit
