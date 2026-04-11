@@ -45,16 +45,23 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   const nextEndDate = toDateString(nextTask.endDate);
   const originalStartDate = toDateString(originalTask.startDate);
   const originalEndDate = toDateString(originalTask.endDate);
+  const nextDependencies = normalizeDependencies(nextTask.dependencies);
+  const originalDependencies = normalizeDependencies(originalTask.dependencies);
+  const dependenciesChanged = JSON.stringify(nextDependencies) !== JSON.stringify(originalDependencies);
 
   const startChanged = nextStartDate !== originalStartDate;
   const endChanged = nextEndDate !== originalEndDate;
 
-  if (startChanged && endChanged) {
-    commands.push({ type: 'move_task', taskId: nextTask.id, startDate: nextStartDate });
-  } else if (startChanged) {
-    commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'start', date: nextStartDate });
-  } else if (endChanged) {
-    commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'end', date: nextEndDate });
+  // If dependencies changed in the same interaction, let the server recalculate dates
+  // from the authoritative dependency graph instead of sending an extra schedule command.
+  if (!dependenciesChanged) {
+    if (startChanged && endChanged) {
+      commands.push({ type: 'move_task', taskId: nextTask.id, startDate: nextStartDate });
+    } else if (startChanged) {
+      commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'start', date: nextStartDate });
+    } else if (endChanged) {
+      commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'end', date: nextEndDate });
+    }
   }
 
   const fieldUpdates: Extract<FrontendProjectCommand, { type: 'update_task_fields' }>['fields'] = {};
@@ -71,9 +78,7 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   if ((nextTask.progress ?? 0) !== (originalTask.progress ?? 0)) {
     fieldUpdates.progress = nextTask.progress;
   }
-  const nextDependencies = normalizeDependencies(nextTask.dependencies);
-  const originalDependencies = normalizeDependencies(originalTask.dependencies);
-  if (JSON.stringify(nextDependencies) !== JSON.stringify(originalDependencies)) {
+  if (dependenciesChanged) {
     fieldUpdates.dependencies = nextDependencies;
   }
 

@@ -127,6 +127,20 @@ function buildDependencyRowsFromTasks(tasks: Task[]) {
   );
 }
 
+function summarizeTasksForLog(tasks: Task[]) {
+  return tasks.slice(0, 20).map((task) => ({
+    id: task.id,
+    name: task.name,
+    startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
+    endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+    dependencies: (task.dependencies ?? []).map((dependency) => ({
+      taskId: dependency.taskId,
+      type: dependency.type,
+      lag: dependency.lag ?? 0,
+    })),
+  }));
+}
+
 type PreviewState = {
   tasks: Task[];
   active: boolean;
@@ -443,6 +457,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setTasks]);
 
   const handleWsMessage = useCallback((msg: ServerMessage) => {
+    console.log('[WS] message', msg);
     if (msg.type === 'preview_tasks') {
       const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
       setPreviewState({
@@ -466,11 +481,19 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
     if (msg.type === 'tasks') {
       const normalizedTasks = normalizeTasks(msg.tasks as Task[]);
+      console.log('[WS->UI] tasks', {
+        taskCount: normalizedTasks.length,
+        tasks: summarizeTasksForLog(normalizedTasks),
+      });
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
       if (!hasShareToken && auth.isAuthenticated) {
         const projectStore = useProjectStore.getState();
+        console.log('[WS->PROJECT_STORE] mergeConfirmedSnapshot', {
+          taskCount: normalizedTasks.length,
+          tasks: summarizeTasksForLog(normalizedTasks),
+        });
         projectStore.mergeConfirmedSnapshot({
           tasks: normalizedTasks,
           dependencies: buildDependencyRowsFromTasks(normalizedTasks),

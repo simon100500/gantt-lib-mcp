@@ -811,6 +811,46 @@ describe('CommandService command dispatch', () => {
     assert.ok(result.changedTasks.some((task: Task) => task.id === 'parent'));
   });
 
+  it('update_task_fields with dependency lag preserves recalculated dates', async () => {
+    const service = new CommandService() as any;
+    const snapshot = toCoreSnapshot([
+      {
+        id: 'pred',
+        name: 'Pred',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+        dependencies: [],
+      },
+      {
+        id: 'succ',
+        name: 'Succ',
+        startDate: '2026-04-04',
+        endDate: '2026-04-06',
+        dependencies: [{ taskId: 'pred', type: 'FS', lag: 0 }],
+      },
+    ]);
+
+    const result = await service.executeCommand(
+      {
+        type: 'update_task_fields',
+        taskId: 'succ',
+        fields: {
+          dependencies: [{ taskId: 'pred', type: 'FS', lag: -1 }],
+        },
+      },
+      snapshot,
+      { businessDays: false },
+      'project-1',
+      {},
+    );
+
+    const successor = result.changedTasks.find((task: Task) => task.id === 'succ');
+    assert.ok(successor, 'updated successor should be returned');
+    assert.strictEqual(successor!.dependencies?.[0]?.lag, -1);
+    assert.strictEqual(successor!.startDate as string, '2026-04-03');
+    assert.strictEqual(successor!.endDate as string, '2026-04-05');
+  });
+
   it('update_tasks_fields_batch applies color changes for multiple tasks in one command', async () => {
     const service = new CommandService() as any;
     const snapshot = toCoreSnapshot(createFSChainSnapshot());

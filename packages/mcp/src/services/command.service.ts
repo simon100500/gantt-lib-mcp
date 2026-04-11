@@ -279,7 +279,16 @@ function applyTaskFieldUpdateToSnapshot(
 
   return {
     changedTasks: coreResult.changedTasks.map((candidate) =>
-      candidate.id === updatedTask.id ? updatedTask : candidate,
+      candidate.id === updatedTask.id
+        ? {
+            ...candidate,
+            name: updatedTask.name,
+            color: updatedTask.color,
+            parentId: updatedTask.parentId,
+            progress: updatedTask.progress,
+            dependencies: updatedTask.dependencies,
+          }
+        : candidate,
     ),
     changedIds: coreResult.changedIds,
   };
