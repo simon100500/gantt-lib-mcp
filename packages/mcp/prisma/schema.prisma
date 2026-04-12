@@ -20,6 +20,11 @@ enum DependencyType {
   SF // Start-to-Finish
 }
 
+enum TaskType {
+  task
+  milestone
+}
+
 enum PaymentPeriod {
   monthly
   yearly
@@ -207,6 +212,7 @@ model Task {
   name      String
   startDate DateTime @map("start_date")
   endDate   DateTime @map("end_date")
+  type      TaskType @default(task)
   color     String?
   progress  Float    @default(0)
   parentId  String?  @map("parent_id")

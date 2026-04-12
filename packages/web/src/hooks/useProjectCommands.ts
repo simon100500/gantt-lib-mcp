@@ -7,6 +7,7 @@ export interface CreateTaskInput {
   name: string;
   startDate: string;
   endDate: string;
+  type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;
   progress?: number;
@@ -68,6 +69,9 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
 
   if (nextTask.name !== originalTask.name) {
     fieldUpdates.name = nextTask.name;
+  }
+  if ((nextTask.type ?? 'task') !== (originalTask.type ?? 'task')) {
+    fieldUpdates.type = nextTask.type ?? 'task';
   }
   if ((nextTask.color ?? null) !== (originalTask.color ?? null)) {
     fieldUpdates.color = nextTask.color ?? null;

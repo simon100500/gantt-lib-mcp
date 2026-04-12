@@ -15,6 +15,7 @@ function summarizeTasks(tasks: Task[]) {
     name: task.name,
     startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
     endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+    type: task.type ?? 'task',
     parentId: task.parentId ?? null,
     progress: task.progress ?? 0,
     dependencies: (task.dependencies ?? []).map((dependency) => ({
@@ -81,6 +82,7 @@ export function useBatchTaskUpdate({
     left.name === right.name
     && toDateString(left.startDate) === toDateString(right.startDate)
     && toDateString(left.endDate) === toDateString(right.endDate)
+    && (left.type ?? 'task') === (right.type ?? 'task')
     && (left.parentId ?? null) === (right.parentId ?? null)
     && (left.color ?? null) === (right.color ?? null)
     && (left.progress ?? 0) === (right.progress ?? 0)
@@ -235,6 +237,7 @@ export function useBatchTaskUpdate({
     name: task.name,
     startDate: typeof task.startDate === 'string' ? task.startDate.split('T')[0] : task.startDate.toISOString().split('T')[0],
     endDate: typeof task.endDate === 'string' ? task.endDate.split('T')[0] : task.endDate.toISOString().split('T')[0],
+    type: task.type,
     color: task.color,
     parentId: task.parentId,
     progress: task.progress,
@@ -523,6 +526,7 @@ export function useBatchTaskUpdate({
         name: task.name,
         startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
         endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+        type: task.type,
         color: task.color,
         parentId: task.parentId,
         progress: task.progress,
@@ -664,6 +668,7 @@ export function useBatchTaskUpdate({
         name: newTask.name,
         startDate: typeof newTask.startDate === 'string' ? newTask.startDate : newTask.startDate.toISOString().split('T')[0],
         endDate: typeof newTask.endDate === 'string' ? newTask.endDate : newTask.endDate.toISOString().split('T')[0],
+        type: newTask.type,
         color: newTask.color,
         parentId: newTask.parentId,
         progress: newTask.progress,

@@ -41,11 +41,22 @@ import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
 import { getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 
-const CORE_VERSION = '0.62.0';
+const CORE_VERSION = '0.70.0';
 const INTERACTIVE_TRANSACTION_OPTIONS = {
   maxWait: 10_000,
   timeout: 60_000,
 } as const;
+
+function normalizeTaskDatesForType<TTask extends { startDate: string | Date; endDate: string | Date; type?: 'task' | 'milestone' }>(task: TTask): TTask {
+  if ((task.type ?? 'task') !== 'milestone') {
+    return task;
+  }
+
+  return {
+    ...task,
+    endDate: task.startDate,
+  };
+}
 
 function isVersionBumpRace(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
@@ -55,7 +66,10 @@ function isVersionBumpRace(error: unknown): boolean {
  *  Fills lag: 0 where undefined so gantt-lib strict types are satisfied. */
 function normalizeSnapshot(tasks: Task[]): CoreTask[] {
   return tasks.map(t => ({
-    ...t,
+    ...normalizeTaskDatesForType({
+      ...t,
+      type: t.type ?? 'task',
+    }),
     dependencies: t.dependencies?.map(d => ({
       ...d,
       lag: d.lag ?? 0,
@@ -87,6 +101,7 @@ async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<T
       name: task.name,
       startDate: dateToDomain(task.startDate),
       endDate: dateToDomain(task.endDate),
+      type: task.type ?? 'task',
       color: task.color || undefined,
       parentId: task.parentId || undefined,
       progress: task.progress,
@@ -244,6 +259,7 @@ function applyTaskFieldUpdateToSnapshot(
   const updatedTask: CoreTask = {
     ...task,
     ...(update.fields.name !== undefined ? { name: update.fields.name } : {}),
+    ...(update.fields.type !== undefined ? { type: update.fields.type } : {}),
     ...(update.fields.color !== undefined ? { color: update.fields.color ?? undefined } : {}),
     ...(update.fields.parentId !== undefined ? { parentId: update.fields.parentId ?? undefined } : {}),
     ...(update.fields.progress !== undefined ? { progress: update.fields.progress } : {}),
@@ -258,11 +274,11 @@ function applyTaskFieldUpdateToSnapshot(
   };
 
   const updatedSnapshot = snapshot.map((candidate) =>
-    candidate.id === update.taskId ? updatedTask : candidate,
+    candidate.id === update.taskId ? normalizeTaskDatesForType(updatedTask) : candidate,
   );
 
   let coreResult: CoreResult;
-  if (update.fields.parentId !== undefined) {
+  if (update.fields.parentId !== undefined || update.fields.type !== undefined) {
     coreResult = recalculateProjectSchedule(updatedSnapshot, opts);
   } else if (update.fields.dependencies !== undefined) {
     coreResult = recalculateTaskFromDependencies(update.taskId, updatedSnapshot, opts);
@@ -283,6 +299,7 @@ function applyTaskFieldUpdateToSnapshot(
         ? {
             ...candidate,
             name: updatedTask.name,
+            type: updatedTask.type,
             color: updatedTask.color,
             parentId: updatedTask.parentId,
             progress: updatedTask.progress,
@@ -295,6 +312,13 @@ function applyTaskFieldUpdateToSnapshot(
 }
 
 function normalizeCreatedTask(task: Task, opts: CoreOptions): Task {
+  if ((task.type ?? 'task') === 'milestone') {
+    return normalizeTaskDatesForType({
+      ...task,
+      type: task.type ?? 'task',
+    });
+  }
+
   const duration = getTaskDuration(
     task.startDate as string,
     task.endDate as string,
@@ -487,6 +511,7 @@ export class CommandService {
               name: taskChange.task!.name,
               startDate: domainToDate(taskChange.task!.startDate),
               endDate: domainToDate(taskChange.task!.endDate),
+              type: taskChange.task!.type ?? 'task',
               color: taskChange.task!.color ?? null,
               parentId: taskChange.task!.parentId && !createdTaskIds.has(taskChange.task!.parentId)
                 ? taskChange.task!.parentId
@@ -552,6 +577,7 @@ export class CommandService {
                   name: taskChange.task.name,
                   startDate: domainToDate(taskChange.task.startDate),
                   endDate: domainToDate(taskChange.task.endDate),
+                  type: taskChange.task.type ?? 'task',
                   color: taskChange.task.color ?? null,
                   parentId: taskChange.task.parentId && !createdTaskIds.has(taskChange.task.parentId)
                     ? taskChange.task.parentId
@@ -648,6 +674,7 @@ export class CommandService {
               name: task.name,
               startDate: domainToDate(task.startDate as string),
               endDate: domainToDate(task.endDate as string),
+              type: task.type ?? 'task',
               color: task.color ?? null,
               parentId: task.parentId ?? null,
               progress: task.progress ?? 0,
@@ -978,6 +1005,7 @@ export class CommandService {
           name: command.task.name,
           startDate: command.task.startDate,
           endDate: command.task.endDate,
+          type: command.task.type ?? 'task',
           color: command.task.color,
           parentId: command.task.parentId,
           progress: command.task.progress,
@@ -995,6 +1023,7 @@ export class CommandService {
           name: task.name,
           startDate: task.startDate,
           endDate: task.endDate,
+          type: task.type ?? 'task',
           color: task.color,
           parentId: task.parentId,
           progress: task.progress,

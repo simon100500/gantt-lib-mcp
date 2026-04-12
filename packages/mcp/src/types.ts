@@ -13,6 +13,7 @@
  * SF: Start-Finish (task B finishes after task A starts)
  */
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
+export type TaskType = 'task' | 'milestone';
 
 /**
  * Task dependency relationship compatible with gantt-lib
@@ -38,6 +39,8 @@ export interface Task {
   startDate: string;
   /** End date in ISO format: 'YYYY-MM-DD' */
   endDate: string;
+  /** Optional task subtype */
+  type?: TaskType;
   /** Optional display color */
   color?: string;
   /** Optional parent task ID for hierarchy */
@@ -70,6 +73,8 @@ export interface CreateTaskInput {
   startDate: string;
   /** End date in ISO format: 'YYYY-MM-DD' */
   endDate: string;
+  /** Optional task subtype */
+  type?: TaskType;
   /** Optional display color */
   color?: string;
   /** Optional parent task ID for hierarchy */
@@ -96,6 +101,8 @@ export interface UpdateTaskInput {
   startDate?: string;
   /** Optional end date in ISO format: 'YYYY-MM-DD' */
   endDate?: string;
+  /** Optional task subtype */
+  type?: TaskType;
   /** Optional display color */
   color?: string | null;
   /** Optional parent task ID for hierarchy */
@@ -549,6 +556,7 @@ export type ProjectCommand =
       taskId: string;
       fields: {
         name?: string;
+        type?: TaskType;
         color?: string | null;
         parentId?: string | null;
         progress?: number;
@@ -561,6 +569,7 @@ export type ProjectCommand =
         taskId: string;
         fields: {
           name?: string;
+          type?: TaskType;
           color?: string | null;
           parentId?: string | null;
           progress?: number;

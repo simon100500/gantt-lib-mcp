@@ -19,11 +19,23 @@ function normalizeTaskDependencies(dependencies: TaskDependency[] | undefined): 
   }));
 }
 
-function normalizeCoreTask(task: Task): CoreTask {
+function normalizeTaskDatesForType<TTask extends Pick<Task, 'startDate' | 'endDate' | 'type'>>(task: TTask): TTask {
+  if ((task.type ?? 'task') !== 'milestone') {
+    return task;
+  }
+
   return {
     ...task,
-    dependencies: normalizeTaskDependencies(task.dependencies),
+    endDate: task.startDate,
   };
+}
+
+function normalizeCoreTask(task: Task): CoreTask {
+  return normalizeTaskDatesForType({
+    ...task,
+    type: task.type ?? 'task',
+    dependencies: normalizeTaskDependencies(task.dependencies),
+  }) as CoreTask;
 }
 
 function normalizeCoreSnapshot(snapshot: ProjectSnapshot): CoreTask[] {
@@ -65,13 +77,21 @@ function withTasks(tasks: Task[]): ProjectSnapshot {
 }
 
 function toTaskArray(tasks: CoreTask[]): Task[] {
-  return tasks.map((task) => ({
+  return tasks.map((task) => normalizeTaskDatesForType({
     ...task,
+    type: task.type ?? 'task',
     dependencies: normalizeTaskDependencies(task.dependencies),
   }));
 }
 
 function normalizeCreatedTask(task: Task, options: ScheduleCommandOptions): Task {
+  if ((task.type ?? 'task') === 'milestone') {
+    return normalizeTaskDatesForType({
+      ...task,
+      type: task.type ?? 'task',
+    });
+  }
+
   const duration = getTaskDuration(
     task.startDate as string,
     task.endDate as string,
@@ -187,6 +207,7 @@ export function replayProjectCommand(
         name: command.task.name,
         startDate: command.task.startDate,
         endDate: command.task.endDate,
+        type: command.task.type ?? 'task',
         color: command.task.color,
         parentId: command.task.parentId,
         progress: command.task.progress,
@@ -213,6 +234,7 @@ export function replayProjectCommand(
           name: taskDef.name,
           startDate: taskDef.startDate,
           endDate: taskDef.endDate,
+          type: taskDef.type ?? 'task',
           color: taskDef.color,
           parentId: taskDef.parentId,
           progress: taskDef.progress,
@@ -304,6 +326,7 @@ export function replayProjectCommand(
           ? {
               ...task,
               ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
+              ...(command.fields.type !== undefined ? { type: command.fields.type } : {}),
               ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
               ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
               ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
@@ -312,16 +335,18 @@ export function replayProjectCommand(
           : task
       ));
 
-      if (command.fields.parentId !== undefined) {
-        const result = recalculateProjectSchedule(nextTasks.map(normalizeCoreTask), options);
-        return withTasks(toTaskArray(mergeChangedTasks(nextTasks.map(normalizeCoreTask), result.changedTasks)));
+      const normalizedNextTasks = nextTasks.map((task) => normalizeTaskDatesForType(task));
+
+      if (command.fields.parentId !== undefined || command.fields.type !== undefined) {
+        const result = recalculateProjectSchedule(normalizedNextTasks.map(normalizeCoreTask), options);
+        return withTasks(toTaskArray(mergeChangedTasks(normalizedNextTasks.map(normalizeCoreTask), result.changedTasks)));
       }
       if (command.fields.dependencies !== undefined) {
-        const result = recalculateTaskFromDependencies(command.taskId, nextTasks.map(normalizeCoreTask), options);
-        return withTasks(toTaskArray(mergeChangedTasks(nextTasks.map(normalizeCoreTask), result.changedTasks)));
+        const result = recalculateTaskFromDependencies(command.taskId, normalizedNextTasks.map(normalizeCoreTask), options);
+        return withTasks(toTaskArray(mergeChangedTasks(normalizedNextTasks.map(normalizeCoreTask), result.changedTasks)));
       }
 
-      return withTasks(nextTasks);
+      return withTasks(normalizedNextTasks);
     }
 
     case 'update_tasks_fields_batch': {

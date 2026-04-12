@@ -221,6 +221,7 @@ export default function App() {
                   name: task.name,
                   startDate: typeof task.startDate === 'string' ? task.startDate : task.startDate.toISOString().split('T')[0],
                   endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
+                  type: task.type,
                   color: task.color,
                   parentId: task.parentId,
                   progress: task.progress,

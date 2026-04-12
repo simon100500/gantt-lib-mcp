@@ -25,6 +25,7 @@ export class TaskService {
       name: task.name,
       startDate: dateToDomain(task.startDate),
       endDate: dateToDomain(task.endDate),
+      type: task.type ?? 'task',
       color: task.color || undefined,
       parentId: task.parentId || undefined,
       progress: task.progress,

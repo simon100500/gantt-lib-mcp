@@ -36,6 +36,7 @@ type ComparableTask = {
   name: string;
   startDate: string;
   endDate: string;
+  type?: 'task' | 'milestone';
   parentId?: string;
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
 };
@@ -373,6 +374,7 @@ function normalizeTask(task: ComparableTask): ComparableTask {
     name: task.name,
     startDate: task.startDate,
     endDate: task.endDate,
+    type: task.type ?? 'task',
     parentId: task.parentId,
     dependencies: (task.dependencies ?? [])
       .map((dependency) => ({

@@ -34,6 +34,7 @@ export interface Task {
   name: string;
   startDate: string | Date;   // YYYY-MM-DD string or Date object (gantt-lib compatible)
   endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)
+  type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;          // Optional parent task ID for hierarchy
   progress?: number;
@@ -55,6 +56,8 @@ type RawTask = Omit<Task, 'dependencies'> & {
 export function normalizeTask(task: RawTask): Task {
   return {
     ...task,
+    type: task.type ?? 'task',
+    endDate: (task.type ?? 'task') === 'milestone' ? task.startDate : task.endDate,
     dependencies: task.dependencies?.map((dependency) => ({
       ...dependency,
       lag: dependency.lag ?? 0,
@@ -79,6 +82,7 @@ export type FrontendProjectCommand =
       taskId: string;
       fields: {
         name?: string;
+        type?: 'task' | 'milestone';
         color?: string | null;
         parentId?: string | null;
         progress?: number;
@@ -91,6 +95,7 @@ export type FrontendProjectCommand =
         taskId: string;
         fields: {
           name?: string;
+          type?: 'task' | 'milestone';
           color?: string | null;
           parentId?: string | null;
           progress?: number;

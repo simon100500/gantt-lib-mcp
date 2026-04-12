@@ -95,6 +95,7 @@ async function buildProjectLoadResponse(projectId: string): Promise<{
         name: task.name,
         startDate: task.startDate.toISOString().split('T')[0],
         endDate: task.endDate.toISOString().split('T')[0],
+        type: task.type ?? 'task',
         color: task.color ?? undefined,
         parentId: task.parentId ?? undefined,
         progress: task.progress,
