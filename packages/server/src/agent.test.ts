@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { assessMutationOutcome, buildHistoryContext, isMutationIntent, isSimpleMutationRequest, parseFastShiftIntent, resolveTasksByName } from './agent.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
+import { classifyMutationIntent } from './mutation/intent-classifier.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -305,5 +306,30 @@ describe('agent mutation verification assessment', () => {
     assert.equal(result.acceptedMutationCalls[0]?.status, 'accepted');
     assert.deepEqual(result.acceptedChangedTaskIds, ['A']);
     assert.equal(result.acceptedChangedTaskIdMismatch, false);
+  });
+});
+
+describe('agent staged mutation lifecycle integration', () => {
+  it('locks the classifier outputs for the core Russian mutation prompts', () => {
+    assert.equal(classifyMutationIntent('добавь сдачу технадзору').intentType, 'add_single_task');
+    assert.equal(classifyMutationIntent('перенеси фундамент на 2026-05-10').intentType, 'move_to_date');
+    assert.equal(classifyMutationIntent('добавь покраску обоев на каждый этаж').intentType, 'add_repeated_fragment');
+  });
+
+  it('hands ordinary edits into the staged shell before the legacy mutation attempt', () => {
+    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
+
+    assert.match(source, /runStagedMutation/);
+    assert.match(source, /mutation_lifecycle_started/);
+    assert.match(source, /intent_classified/);
+    assert.match(source, /execution_mode_selected/);
+    assert.match(source, /legacyFallbackAllowed/);
+    assert.match(source, /deferred_to_legacy/);
+
+    const stagedIndex = source.indexOf('runStagedMutation({');
+    const legacyIndex = source.indexOf('attemptResult = await executeAgentAttempt(');
+    assert.notEqual(stagedIndex, -1);
+    assert.notEqual(legacyIndex, -1);
+    assert.ok(stagedIndex < legacyIndex, 'expected staged mutation handoff before legacy mutation attempt');
   });
 });

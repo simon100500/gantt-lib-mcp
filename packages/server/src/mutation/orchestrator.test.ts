@@ -17,17 +17,15 @@ describe('staged mutation orchestrator', () => {
         OPENAI_BASE_URL: 'https://example.test',
         OPENAI_MODEL: 'gpt-main',
       },
-      services: {
-        messageService: {
-          add: async () => undefined,
-        },
-        taskService: {
-          list: async () => ({ tasks: [] }),
-        },
-        commandService: {
-          commitCommand: async () => {
-            throw new Error('not expected');
-          },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
         },
       },
       broadcastToSession: () => undefined,

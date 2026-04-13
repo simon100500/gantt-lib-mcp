@@ -1,5 +1,6 @@
 import { classifyMutationIntent } from './intent-classifier.js';
 import { selectMutationExecutionMode } from './execution-routing.js';
+import type { ServerMessage } from '../ws.js';
 import type {
   MutationExecutionMode,
   MutationOrchestrationResult,
@@ -34,8 +35,10 @@ export type RunStagedMutationInput = {
     OPENAI_MODEL: string;
     OPENAI_CHEAP_MODEL?: string;
   };
-  services: MutationServices;
-  broadcastToSession: (sessionId: string, message: unknown) => void;
+  messageService: MutationServices['messageService'];
+  taskService: MutationServices['taskService'];
+  commandService: MutationServices['commandService'];
+  broadcastToSession: (sessionId: string, message: ServerMessage) => void;
   logger: MutationLogger;
 };
 

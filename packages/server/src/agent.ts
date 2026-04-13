@@ -23,6 +23,7 @@ import type { CommitProjectCommandResponse, Task as MTask } from '@gantt/mcp/typ
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
+import { runStagedMutation } from './mutation/orchestrator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1320,6 +1321,92 @@ export async function runAgentWithHistory(
       broadcastToSession,
     )) {
       return;
+    }
+
+    if (likelyMutationRequest) {
+      await writeServerDebugLog('mutation_lifecycle_started', {
+        runId,
+        projectId,
+        sessionId,
+        userMessage,
+      });
+
+      const stagedMutation = await runStagedMutation({
+        userMessage,
+        projectId,
+        sessionId,
+        runId,
+        tasksBefore,
+        env,
+        messageService,
+        taskService,
+        commandService,
+        broadcastToSession,
+        logger: {
+          debug: (event, payload) => writeServerDebugLog(event, payload),
+        },
+      });
+
+      await writeServerDebugLog('intent_classified', {
+        runId,
+        projectId,
+        sessionId,
+        intent: stagedMutation.intent,
+      });
+      await writeServerDebugLog('execution_mode_selected', {
+        runId,
+        projectId,
+        sessionId,
+        executionMode: stagedMutation.executionMode,
+      });
+
+      if (stagedMutation.handled) {
+        const stagedAssistantResponse = sanitizeAssistantResponse(
+          userMessage,
+          stagedMutation.assistantResponse ?? stagedMutation.result.userFacingMessage,
+        );
+        const stagedTasksAfter = stagedMutation.tasksAfter ?? tasksBefore;
+
+        if (stagedAssistantResponse) {
+          broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
+          await messageService.add('assistant', stagedAssistantResponse, projectId);
+        }
+
+        await writeServerDebugLog('agent_response_saved', {
+          runId,
+          projectId,
+          sessionId,
+          assistantResponse: stagedAssistantResponse,
+          streamedContent: Boolean(stagedAssistantResponse),
+          finalTasksChanged: stagedMutation.result.changedTaskIds.length > 0,
+          finalChangedTaskIds: stagedMutation.result.changedTaskIds,
+          finalAcceptedChangedTaskIds: stagedMutation.result.changedTaskIds,
+          finalAcceptedChangedTaskIdMismatch: false,
+        });
+
+        broadcastToSession(sessionId, { type: 'tasks', tasks: stagedTasksAfter });
+        await writeServerDebugLog('tasks_broadcast', {
+          runId,
+          projectId,
+          sessionId,
+          taskCount: stagedTasksAfter.length,
+          taskIds: stagedTasksAfter.map((task) => task.id),
+          taskNames: stagedTasksAfter.map((task) => task.name),
+        });
+
+        broadcastToSession(sessionId, { type: 'done' });
+        await writeServerDebugLog('agent_run_completed', {
+          runId,
+          projectId,
+          sessionId,
+          stagedMutationHandled: true,
+        });
+        return;
+      }
+
+      if (stagedMutation.status !== 'deferred_to_legacy' || !stagedMutation.legacyFallbackAllowed) {
+        throw new Error('Staged mutation shell returned an unhandled non-legacy outcome.');
+      }
     }
 
     const messages = await messageService.list(projectId, 20);
