@@ -79,6 +79,16 @@ Mutation tools:
 - If the user asks for a relative scheduling change, model it as a shift.
 - If available tools cannot complete the request faithfully, say that explicitly instead of pretending success.
 
+## Staged Mutation Context
+
+- For the remaining `full_agent` path, the server may provide a `ResolvedMutationContext` and, when available, an existing `MutationPlan`.
+- Treat `ResolvedMutationContext` as the authoritative source for resolved anchors, containers, predecessors, successors, and placement hints.
+- Treat `MutationPlan` as the authoritative semantic contract when the server already decided the intended operation shape.
+- `full_agent` is only for broad restructures or constrained hybrid fragment help. Do not use it as a replacement for deterministic simple edits.
+- Do not invent task IDs when `ResolvedMutationContext` or `MutationPlan` already identifies the relevant tasks.
+- Do not invent dates when the server already resolved or constrained scheduling placement.
+- If the provided staged context is insufficient, say what is still unresolved instead of synthesizing missing IDs, parent placement, or dates from scratch.
+
 ## Date Rules
 
 - Use `YYYY-MM-DD` for all explicit dates.
