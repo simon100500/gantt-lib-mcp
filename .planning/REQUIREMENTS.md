@@ -51,7 +51,7 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 - [x] **MMR-02**: The server resolves task/container anchors for short natural-language edits without requiring the model to invent IDs, parent placement, or schedule dates from scratch
 - [x] **MMR-03**: Common ordinary mutations (`add`, `rename`, `move`, `link`, `unlink`, `shift`, `move-to-date`, `metadata update`, `fan-out by groups`, `WBS expansion`) can execute through deterministic or tightly constrained server-side paths with authoritative changed-set verification
 - [x] **MMR-04**: User-facing failures for simple mutation intents return typed controlled reasons (`anchor_not_found`, `container_not_resolved`, etc.) instead of the generic “no valid mutation tool call” outcome
-- [ ] **MMR-05**: Debug logs reconstruct the full mutation lifecycle including intent classification, resolution evidence, plan selection, execution mode, and final verification
+- [x] **MMR-05**: Debug logs reconstruct the full mutation lifecycle including intent classification, resolution evidence, plan selection, execution mode, and final verification
 
 ## Future Requirements
 
@@ -103,7 +103,7 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | MMR-02 | Phase 42 | Complete |
 | MMR-03 | Phase 42 | Complete |
 | MMR-04 | Phase 42 | Complete |
-| MMR-05 | Phase 42 | Pending |
+| MMR-05 | Phase 42 | Complete |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |
