@@ -59,7 +59,7 @@ function ProjectRow({
   return (
     <div
       className={cn(
-        'group flex items-center gap-2 rounded-md transition-colors',
+        'group flex items-center rounded-md transition-colors',
         isCurrent ? 'bg-slate-100' : 'hover:bg-slate-100',
       )}
     >
@@ -67,7 +67,7 @@ function ProjectRow({
         type="button"
         onClick={() => onSwitch(project.id)}
         className={cn(
-          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
         )}
       >
@@ -79,61 +79,60 @@ function ProjectRow({
             </span>
           )}
         </span>
-        <span className="relative flex h-5 w-11 shrink-0 items-center justify-end">
-          {taskCountLabel ? (
-            <span className="pr-1 text-xs text-slate-400 transition-opacity group-hover:opacity-0">
-              {taskCountLabel}
-            </span>
-          ) : null}
-
-          <DropdownMenu
-            onOpenChange={(open) => {
-              setOpenMenuProjectId(open ? project.id : null);
-              onMenuOpenChange?.(open);
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                onClick={(event) => event.stopPropagation()}
-                className={cn(
-                  'absolute right-0 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  menuActive ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700',
-                  'opacity-0 group-hover:opacity-100',
-                )}
-                aria-label="Действия проекта"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
-              {!isArchived ? (
-                <>
-                  <DropdownMenuItem onClick={() => void onArchive(project.id)}>
-                    <Archive className="h-4 w-4" />
-                    <span>В архив</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
-                    <Trash2 className="h-4 w-4" />
-                    <span>Удалить</span>
-                  </DropdownMenuItem>
-                </>
-              ) : (
-                <>
-                  <DropdownMenuItem onClick={() => void onRestore(project.id)}>
-                    <RotateCcw className="h-4 w-4" />
-                    <span>Вернуть</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
-                    <Trash2 className="h-4 w-4" />
-                    <span>Удалить</span>
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </span>
       </button>
+
+      <div className="relative mr-2 flex h-5 w-11 shrink-0 items-center justify-end">
+        {taskCountLabel ? (
+          <span className="pr-1 text-xs text-slate-400 transition-opacity group-hover:opacity-0">
+            {taskCountLabel}
+          </span>
+        ) : null}
+        <DropdownMenu
+          onOpenChange={(open) => {
+            setOpenMenuProjectId(open ? project.id : null);
+            onMenuOpenChange?.(open);
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                menuActive ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700',
+                'opacity-0 group-hover:opacity-100',
+              )}
+              aria-label="Действия проекта"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
+            {!isArchived ? (
+              <>
+                <DropdownMenuItem onClick={() => void onArchive(project.id)}>
+                  <Archive className="h-4 w-4" />
+                  <span>В архив</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Удалить</span>
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <>
+                <DropdownMenuItem onClick={() => void onRestore(project.id)}>
+                  <RotateCcw className="h-4 w-4" />
+                  <span>Вернуть</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Удалить</span>
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
