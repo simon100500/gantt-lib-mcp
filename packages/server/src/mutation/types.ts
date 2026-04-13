@@ -101,6 +101,7 @@ export type MutationOrchestrationResult = {
   handled: boolean;
   status: MutationExecutionStatus;
   legacyFallbackAllowed: boolean;
+  failureReason?: MutationFailureReason;
   intent: MutationIntent;
   executionMode: MutationExecutionMode;
   resolutionContext: ResolvedMutationContext | null;
