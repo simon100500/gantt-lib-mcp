@@ -74,7 +74,7 @@ export class ProjectService {
    * @returns Newly created default Project
    */
   async createDefaultProject(userId: string): Promise<Project> {
-    return this.create(userId, 'Default Project');
+    return this.create(userId, 'Первый проект');
   }
 
   /**
