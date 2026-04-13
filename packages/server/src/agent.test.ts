@@ -312,13 +312,16 @@ describe('agent mutation verification assessment', () => {
 describe('agent staged mutation lifecycle integration', () => {
   it('locks the classifier outputs for the core Russian mutation prompts', () => {
     assert.equal(classifyMutationIntent('добавь сдачу технадзору').intentType, 'add_single_task');
+    assert.equal(classifyMutationIntent('добавь техприсоединение').intentType, 'unsupported_or_ambiguous');
     assert.equal(classifyMutationIntent('сдвинь штукатурку на 2 дня').intentType, 'shift_relative');
     assert.equal(classifyMutationIntent('перенеси фундамент на 2026-05-10').intentType, 'move_to_date');
     assert.equal(classifyMutationIntent('добавь покраску обоев на каждый этаж').intentType, 'add_repeated_fragment');
     assert.equal(classifyMutationIntent('свяжи исполнительную документацию и акт приемки').intentType, 'link_tasks');
+    assert.equal(classifyMutationIntent('убери связь между исполнительной документацией и актом приемки').intentType, 'unlink_tasks');
     assert.equal(classifyMutationIntent('переименуй клининг').intentType, 'rename_task');
     assert.equal(classifyMutationIntent('сделай эту задачу красной').intentType, 'update_metadata');
-    assert.equal(classifyMutationIntent('распиши подробнее пункт "Монолит"').intentType, 'expand_wbs');
+    assert.equal(classifyMutationIntent('удали этап меблировки').intentType, 'delete_task');
+    assert.equal(classifyMutationIntent('распиши подробнее пункт "Инженерные системы"').intentType, 'expand_wbs');
   });
 
   it('hands ordinary edits into the staged shell before the legacy mutation attempt', () => {
@@ -345,5 +348,15 @@ describe('agent staged mutation lifecycle integration', () => {
     assert.equal(matches.length, 1);
     assert.match(source, /function buildNoMutationMessage\(\)/);
     assert.doesNotMatch(source, /staged.*не выполнила ни одного валидного mutation tool call/i);
+  });
+
+  it('locks the full_agent prompt to server-provided staged mutation context', () => {
+    const prompt = readFileSync(join(__dirname, '../../mcp/agent/prompts/system.md'), 'utf-8');
+
+    assert.match(prompt, /ResolvedMutationContext/);
+    assert.match(prompt, /MutationPlan/);
+    assert.match(prompt, /Do not invent task IDs/i);
+    assert.match(prompt, /Do not invent dates/i);
+    assert.match(prompt, /full_agent/);
   });
 });

@@ -181,6 +181,149 @@ describe('staged mutation orchestrator', () => {
     assert.equal(finalOutcome.verificationVerdict, 'not_run');
   });
 
+  it('returns group_scope_not_resolved for unresolved repeated-fragment prompts without generic fallback UX', async () => {
+    const result = await runStagedMutation({
+      userMessage: 'добавь покраску обоев на каждый этаж',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-1',
+      tasksBefore: [],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+    });
+
+    assert.equal(result.executionMode, 'hybrid');
+    assert.equal(result.result.failureReason, 'group_scope_not_resolved');
+    assert.doesNotMatch(result.assistantResponse ?? '', /не выполнила ни одного валидного mutation tool call/i);
+  });
+
+  it('returns expansion_anchor_not_resolved for unresolved WBS expansion prompts', async () => {
+    const result = await runStagedMutation({
+      userMessage: 'распиши подробнее пункт "Инженерные системы"',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-1',
+      tasksBefore: [],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+    });
+
+    assert.equal(result.executionMode, 'hybrid');
+    assert.equal(result.result.failureReason, 'expansion_anchor_not_resolved');
+  });
+
+  it('surfaces verification_failed for move-to-date requests when the changed set does not match', async () => {
+    const result = await runStagedMutation({
+      userMessage: 'перенеси фундамент на 2026-05-10',
+      projectId: 'project-1',
+      projectVersion: 5,
+      sessionId: 'session-1',
+      runId: 'run-1',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-04-01',
+        endDate: '2026-04-05',
+      }],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-foundation',
+            name: 'Фундамент',
+            parentId: null,
+            path: ['Основание', 'Фундамент'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-05',
+            matchType: 'exact',
+            score: 0.97,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number }) => ({
+          accepted: true,
+          clientRequestId: 'req-1',
+          baseVersion: request.baseVersion,
+          newVersion: request.baseVersion + 1,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: ['unexpected-task'],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        }),
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.result.failureReason, 'verification_failed');
+    assert.match(result.assistantResponse ?? '', /не подтверд/i);
+  });
+
   it('keeps unsupported intents on the legacy fallback path', async () => {
     const result = await runStagedMutation({
       userMessage: 'сделай что-нибудь получше',
@@ -219,6 +362,7 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.status, 'deferred_to_legacy');
     assert.equal(result.legacyFallbackAllowed, true);
     assert.equal(result.intent.intentType, 'unsupported_or_ambiguous');
+    assert.equal(result.executionMode, 'full_agent');
   });
 
   it('returns multiple_low_confidence_targets for ambiguous equal-score anchors', async () => {
