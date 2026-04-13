@@ -10,10 +10,12 @@ function buildIntent(overrides: Partial<MutationIntent> = {}): MutationIntent {
     confidence: 0.92,
     rawRequest: 'добавь сдачу технадзору',
     normalizedRequest: 'добавь сдачу технадзору',
-    entitiesMentioned: ['сдача'],
+    entitiesMentioned: ['сдача технадзору'],
     requiresResolution: true,
     requiresSchedulingPlacement: true,
     executionMode: 'deterministic',
+    taskTitle: 'Сдача технадзору',
+    durationDays: 1,
     ...overrides,
   };
 }
@@ -24,6 +26,7 @@ function buildContext(overrides: Partial<ResolvedMutationContext> = {}): Resolve
     projectVersion: 7,
     resolutionQuery: 'добавь сдачу технадзору',
     containers: [],
+    groupMemberIds: [],
     tasks: [],
     predecessors: [],
     successors: [],
@@ -37,7 +40,7 @@ function buildContext(overrides: Partial<ResolvedMutationContext> = {}): Resolve
 }
 
 describe('buildMutationPlan', () => {
-  it('maps add intents to append_task_to_container with server-side defaults', async () => {
+  it('maps add intents to append_task_to_container with model-provided semantics', async () => {
     const plan = await buildMutationPlan({
       intent: buildIntent(),
       resolutionContext: buildContext(),
@@ -71,6 +74,24 @@ describe('buildMutationPlan', () => {
     assert.deepEqual(plan.expectedChangedTaskIds, ['container-closeout:sdacha-tehnadzoru-3']);
   });
 
+  it('derives add-task title from the user phrase instead of hardcoded keywords', async () => {
+    const plan = await buildMutationPlan({
+      intent: buildIntent({
+        rawRequest: 'добавь пусконаладку насосной станции',
+        normalizedRequest: 'добавь пусконаладку насосной станции',
+        entitiesMentioned: ['пусконаладку насосной станции'],
+        taskTitle: 'Пусконаладка насосной станции',
+        durationDays: 3,
+      }),
+      resolutionContext: buildContext(),
+      userMessage: 'добавь пусконаладку насосной станции',
+      tasksBefore: [],
+    });
+
+    assert.equal(plan.operations[0]?.kind, 'append_task_to_container');
+    assert.equal(plan.operations[0]?.title, 'Пусконаладка насосной станции');
+  });
+
   it('maps date moves and metadata edits to deterministic semantic operations', async () => {
     const movePlan = await buildMutationPlan({
       intent: buildIntent({
@@ -79,6 +100,7 @@ describe('buildMutationPlan', () => {
         normalizedRequest: 'перенеси фундамент на 2026-05-10',
         entitiesMentioned: ['фундамент'],
         requiresSchedulingPlacement: false,
+        targetDate: '2026-05-10',
       }),
       resolutionContext: buildContext({
         tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
@@ -100,6 +122,7 @@ describe('buildMutationPlan', () => {
         normalizedRequest: 'сделай эту задачу красной',
         entitiesMentioned: ['эту задачу'],
         requiresSchedulingPlacement: false,
+        metadataFields: { color: '#ff4d4f' },
       }),
       resolutionContext: buildContext({
         tasks: [{ id: 'task-cleaning', name: 'Клининг', score: 0.99 }],
@@ -123,11 +146,18 @@ describe('buildMutationPlan', () => {
         normalizedRequest: 'добавь покраску обоев на каждый этаж',
         entitiesMentioned: ['покраска обоев'],
         executionMode: 'hybrid',
+        groupScopeHint: 'этаж',
+        fragmentPlan: {
+          title: 'Покраска обоев',
+          nodes: [{ nodeKey: 'wallpaper-paint', title: 'Покраска обоев', durationDays: 2, dependsOnNodeKeys: [] }],
+          why: 'semantic fragment',
+        },
       }),
       resolutionContext: buildContext({
         selectedContainerId: 'floors-root',
         placementPolicy: 'group_tail',
         containers: [{ id: 'floors-root', name: 'Этажи', score: 0.9 }],
+        groupMemberIds: ['floor-1', 'floor-2'],
       }),
       userMessage: 'добавь покраску обоев на каждый этаж',
       tasksBefore: [],
@@ -145,6 +175,15 @@ describe('buildMutationPlan', () => {
         normalizedRequest: 'распиши подробнее пункт "Инженерные системы"',
         entitiesMentioned: ['Инженерные системы'],
         executionMode: 'hybrid',
+        fragmentPlan: {
+          title: 'Инженерные системы',
+          nodes: [
+            { nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] },
+            { nodeKey: 'core', title: 'Основные работы', durationDays: 3, dependsOnNodeKeys: ['prep'] },
+            { nodeKey: 'handover', title: 'Сдача', durationDays: 1, dependsOnNodeKeys: ['core'] },
+          ],
+          why: 'semantic fragment',
+        },
       }),
       resolutionContext: buildContext({
         tasks: [{ id: 'task-engineering', name: 'Инженерные системы', score: 0.97 }],
@@ -159,9 +198,9 @@ describe('buildMutationPlan', () => {
     assert.equal(expansionPlan.operations[0]?.fragmentPlan.nodes.length, 3);
     assert.deepEqual(expansionPlan.expectedChangedTaskIds, [
       'task-engineering',
-      'task-engineering:engineering-systems-preparation',
-      'task-engineering:engineering-systems-core-work',
-      'task-engineering:engineering-systems-handover',
+      'task-engineering:prep',
+      'task-engineering:core',
+      'task-engineering:handover',
     ]);
   });
 });

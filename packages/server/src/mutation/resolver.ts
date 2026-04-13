@@ -104,6 +104,7 @@ function buildBaseContext(input: ResolveMutationContextInput): ResolvedMutationC
     projectVersion: input.projectVersion,
     resolutionQuery: input.intent.normalizedRequest,
     containers: [],
+    groupMemberIds: [],
     tasks: [],
     predecessors: [],
     successors: [],
@@ -130,14 +131,6 @@ function resolvePlacementPolicy(context: ResolvedMutationContext): PlacementPoli
 
 function extractPrimaryEntity(intent: MutationIntent, userMessage: string): string {
   return intent.entitiesMentioned[0] ?? userMessage.trim();
-}
-
-function looksLikeGroupFanout(intent: MutationIntent, userMessage: string): boolean {
-  if (intent.intentType !== 'add_repeated_fragment') {
-    return false;
-  }
-
-  return /кажд|по всем|every|all/u.test(userMessage.toLowerCase());
 }
 
 export async function resolveMutationContext(
@@ -184,8 +177,11 @@ export async function resolveMutationContext(
     return context;
   }
 
-  if (looksLikeGroupFanout(input.intent, input.userMessage)) {
-    const groupScopes = await input.taskService.findGroupScopes(input.projectId, input.userMessage);
+  if (input.intent.intentType === 'add_repeated_fragment') {
+    const groupScopes = await input.taskService.findGroupScopes(
+      input.projectId,
+      input.intent.groupScopeHint?.trim() || input.userMessage,
+    );
     const primaryGroup = groupScopes[0];
 
     if (primaryGroup) {
@@ -194,6 +190,7 @@ export async function resolveMutationContext(
         name: primaryGroup.label,
         score: 0.9,
       }];
+      context.groupMemberIds = [...primaryGroup.memberTaskIds];
       context.selectedContainerId = primaryGroup.rootTaskId;
       context.placementPolicy = 'group_tail';
       context.confidence = 0.9;

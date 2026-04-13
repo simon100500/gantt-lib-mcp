@@ -55,6 +55,14 @@ type MutationLogger = {
   debug(event: string, payload: Record<string, unknown>): void | Promise<void>;
 };
 
+type MutationSemanticIntentQueryInput = {
+  prompt: string;
+  model: string;
+  stage: 'mutation_semantic_extraction';
+};
+
+type MutationSemanticIntentQueryResult = string | { content?: string };
+
 export type RunStagedMutationInput = {
   userMessage: string;
   projectId: string;
@@ -73,6 +81,7 @@ export type RunStagedMutationInput = {
   commandService: MutationServices['commandService'];
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
   logger: MutationLogger;
+  semanticIntentQuery?: (input: MutationSemanticIntentQueryInput) => Promise<MutationSemanticIntentQueryResult>;
 };
 
 function buildDeferredResult(executionMode: MutationExecutionMode): MutationOrchestrationResult['result'] {
@@ -182,7 +191,11 @@ function resolveFailureReason(
 export async function runStagedMutation(
   input: RunStagedMutationInput,
 ): Promise<MutationOrchestrationResult> {
-  const intent = classifyMutationIntent(input.userMessage);
+  const intent = await classifyMutationIntent({
+    userMessage: input.userMessage,
+    env: input.env,
+    semanticIntentQuery: input.semanticIntentQuery,
+  });
   await input.logger.debug('intent_classified', {
     runId: input.runId,
     projectId: input.projectId,

@@ -1,5 +1,3 @@
-import { DEFAULT_MUTATION_DURATIONS } from './domain-defaults.js';
-import { planStructuredFragment } from './fragment-planner.js';
 import type {
   MutationIntent,
   MutationPlan,
@@ -56,91 +54,6 @@ function buildDeterministicTaskId(anchorId: string, hint: string, existingTaskId
   return `${baseId}-${suffix}`;
 }
 
-function findDuration(hint: string): number {
-  const normalized = hint.toLowerCase();
-  const entry = Object.entries(DEFAULT_MUTATION_DURATIONS).find(([key]) => normalized.includes(key));
-  return entry?.[1] ?? 1;
-}
-
-function extractTaskTitle(userMessage: string): string {
-  const normalized = userMessage.toLowerCase();
-
-  if (normalized.includes('сдач') && normalized.includes('технадзор')) {
-    return 'Сдача технадзору';
-  }
-  if (normalized.includes('сдач')) {
-    return 'Сдача';
-  }
-  if (normalized.includes('технадзор')) {
-    return 'Технадзор';
-  }
-  if (normalized.includes('исполнительная документация')) {
-    return 'Исполнительная документация';
-  }
-  if (normalized.includes('приемк')) {
-    return 'Приемка';
-  }
-  if (normalized.includes('пусконалад')) {
-    return 'Пусконаладка';
-  }
-  if (normalized.includes('покраска обоев')) {
-    return 'Покраска обоев';
-  }
-  if (normalized.includes('чистовая отделка')) {
-    return 'Чистовая отделка';
-  }
-
-  return titleCase(userMessage.replace(/^добавь\s+/iu, '').trim());
-}
-
-function extractDeltaDays(userMessage: string): number {
-  const lower = userMessage.toLowerCase();
-  const weeks = lower.match(/на\s+(-?\d+)\s+недел/iu);
-  if (weeks) {
-    return Number.parseInt(weeks[1] ?? '0', 10) * 7;
-  }
-
-  const days = lower.match(/на\s+(-?\d+)\s+дн/iu);
-  return Number.parseInt(days?.[1] ?? '0', 10);
-}
-
-function extractTargetDate(userMessage: string): string {
-  return userMessage.match(/\d{4}-\d{2}-\d{2}/u)?.[0] ?? '';
-}
-
-function extractColorFields(userMessage: string): { color?: string | null } {
-  if (/красн/iu.test(userMessage)) {
-    return { color: '#ff4d4f' };
-  }
-
-  return {};
-}
-
-function extractRenamedTitle(userMessage: string, fallbackName: string): string {
-  const quoted = userMessage.match(/["«](.+?)["»]/u)?.[1]?.trim();
-  if (quoted) {
-    return quoted;
-  }
-
-  const renamed = userMessage.replace(/^переименуй\s+/iu, '').trim();
-  return titleCase(renamed || fallbackName);
-}
-
-function extractEntityNames(userMessage: string): string[] {
-  const quoted = Array.from(userMessage.matchAll(/["«](.+?)["»]/gu)).map((match) => match[1]?.trim()).filter(Boolean);
-  if (quoted.length >= 2) {
-    return quoted as string[];
-  }
-
-  const split = userMessage
-    .replace(/^свяжи\s+/iu, '')
-    .replace(/^убери\s+связь\s+между\s+/iu, '')
-    .split(/\s+и\s+/iu)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return split.slice(0, 2);
-}
-
 function resolveTaskId(context: ResolvedMutationContext, fallbackIndex = 0): string {
   return context.selectedPredecessorTaskId
     ?? context.tasks[fallbackIndex]?.id
@@ -153,9 +66,9 @@ function unique(values: string[]): string[] {
 }
 
 export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<MutationPlan> {
-  const { intent, resolutionContext, userMessage } = input;
+  const { intent, resolutionContext } = input;
   const targetTaskId = resolveTaskId(resolutionContext);
-  const taskTitle = extractTaskTitle(userMessage);
+  const taskTitle = titleCase(intent.taskTitle ?? intent.entitiesMentioned[0] ?? input.userMessage);
   const existingTaskIds = new Set(input.tasksBefore.map((task) => task.id));
 
   let operations: MutationPlanOperation[] = [];
@@ -172,7 +85,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
         taskTitle,
         existingTaskIds,
       );
-      const durationDays = findDuration(taskTitle.toLowerCase());
+      const durationDays = intent.durationDays ?? 1;
 
       if (resolutionContext.selectedPredecessorTaskId) {
         operations = [{
@@ -212,7 +125,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       operations = [{
         kind: 'shift_task_by_delta',
         taskId: targetTaskId,
-        deltaDays: extractDeltaDays(userMessage),
+        deltaDays: intent.deltaDays ?? 0,
       }];
       why = `Сдвиг задачи "${targetTaskId}" вычислен как server-side relative delta.`;
       expectedChangedTaskIds = [targetTaskId];
@@ -222,7 +135,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       operations = [{
         kind: 'move_task_to_date',
         taskId: targetTaskId,
-        targetDate: extractTargetDate(userMessage),
+        targetDate: intent.targetDate ?? '',
       }];
       why = `Задача "${targetTaskId}" переносится через schedule command semantics на явную дату.`;
       expectedChangedTaskIds = [targetTaskId];
@@ -247,8 +160,9 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
         kind: 'link_tasks',
         taskId: linkedIds[1] ?? '',
         dependency: {
-          taskId: linkedIds[0] ?? '',
-          type: 'FS',
+          taskId: intent.dependency?.taskId ?? linkedIds[0] ?? '',
+          type: intent.dependency?.type ?? 'FS',
+          lag: intent.dependency?.lag,
         },
       }];
       why = `Связь между задачами строится через authoritative dependency command.`;
@@ -282,7 +196,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       operations = [{
         kind: 'rename_task',
         taskId: targetTaskId,
-        name: extractRenamedTitle(userMessage, fallbackName),
+        name: titleCase(intent.renamedTitle ?? fallbackName),
       }];
       why = `Переименование оформлено как typed field update без legacy mutation payload.`;
       expectedChangedTaskIds = [targetTaskId];
@@ -293,20 +207,25 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       operations = [{
         kind: 'update_task_metadata',
         taskId: targetTaskId,
-        fields: extractColorFields(userMessage),
+        fields: intent.metadataFields ?? {},
       }];
       why = `Обновление метаданных оформлено как typed update_task_metadata plan.`;
       expectedChangedTaskIds = [targetTaskId];
       break;
 
     case 'add_repeated_fragment': {
-      const fragmentPlan = await planStructuredFragment({
-        intentType: 'add_repeated_fragment',
-        userMessage,
-        anchorTaskId: resolutionContext.selectedContainerId ?? resolutionContext.projectId,
-        hint: intent.entitiesMentioned[0] ?? taskTitle,
-      });
-      const groupIds = resolutionContext.containers.map((container) => container.id);
+      const fragmentPlan = intent.fragmentPlan;
+      const groupIds = resolutionContext.groupMemberIds;
+      if (!fragmentPlan || groupIds.length === 0) {
+        return {
+          planType: intent.intentType,
+          operations: [],
+          why: 'Недостаточно структурированных semantic данных для repeated fragment plan.',
+          expectedChangedTaskIds: [],
+          canExecuteDeterministically: false,
+          needsAgentExecution: true,
+        };
+      }
       operations = [{
         kind: 'fanout_fragment_to_groups',
         groupIds,
@@ -320,12 +239,17 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
 
     case 'expand_wbs': {
       const anchorTaskId = targetTaskId;
-      const fragmentPlan = await planStructuredFragment({
-        intentType: 'expand_wbs',
-        userMessage,
-        anchorTaskId,
-        hint: intent.entitiesMentioned[0] ?? resolutionContext.tasks[0]?.name ?? 'Ветка',
-      });
+      const fragmentPlan = intent.fragmentPlan;
+      if (!fragmentPlan) {
+        return {
+          planType: intent.intentType,
+          operations: [],
+          why: 'Недостаточно структурированных semantic данных для branch expansion plan.',
+          expectedChangedTaskIds: [],
+          canExecuteDeterministically: false,
+          needsAgentExecution: true,
+        };
+      }
       operations = [{
         kind: 'expand_branch_from_plan',
         anchorTaskId,

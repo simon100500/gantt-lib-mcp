@@ -33,6 +33,8 @@ function buildIntent(overrides: Partial<MutationIntent> = {}): MutationIntent {
     requiresResolution: true,
     requiresSchedulingPlacement: true,
     executionMode: 'deterministic',
+    taskTitle: 'Сдача технадзору',
+    durationDays: 1,
     ...overrides,
   };
 }
@@ -127,6 +129,7 @@ describe('resolveMutationContext', () => {
         rawRequest: 'добавь покраску обоев на каждый этаж',
         normalizedRequest: 'добавь покраску обоев на каждый этаж',
         entitiesMentioned: ['покраску обоев'],
+        groupScopeHint: 'этаж',
       }),
       taskService: {
         list: async () => ({ tasks: [] }),
@@ -148,6 +151,7 @@ describe('resolveMutationContext', () => {
     assert.equal(result.selectedContainerId, 'floors-root');
     assert.equal(result.placementPolicy, 'group_tail');
     assert.deepEqual(result.containers.map((item) => item.id), ['floors-root']);
+    assert.deepEqual(result.groupMemberIds, ['floor-1', 'floor-2']);
     assert.equal(result.confidence, 0.9);
   });
 
@@ -205,6 +209,7 @@ describe('resolveMutationContext', () => {
         rawRequest: 'добавь покраску обоев на каждый этаж',
         normalizedRequest: 'добавь покраску обоев на каждый этаж',
         entitiesMentioned: ['покраску обоев'],
+        groupScopeHint: 'этаж',
       }),
       taskService: {
         list: async () => ({ tasks: [] }),

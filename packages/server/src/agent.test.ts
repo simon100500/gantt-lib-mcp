@@ -10,6 +10,90 @@ import { classifyMutationIntent } from './mutation/intent-classifier.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
+function semanticIntentQueryFor(userMessage: string) {
+  const payloads: Record<string, Record<string, unknown>> = {
+    'добавь сдачу технадзору': {
+      intentType: 'add_single_task',
+      confidence: 0.9,
+      entitiesMentioned: ['сдача технадзору'],
+      taskTitle: 'Сдача технадзору',
+      durationDays: 1,
+    },
+    'добавь техприсоединение': {
+      intentType: 'unsupported_or_ambiguous',
+      confidence: 0.2,
+      entitiesMentioned: [],
+    },
+    'сдвинь штукатурку на 2 дня': {
+      intentType: 'shift_relative',
+      confidence: 0.9,
+      entitiesMentioned: ['штукатурка'],
+      deltaDays: 2,
+    },
+    'перенеси фундамент на 2026-05-10': {
+      intentType: 'move_to_date',
+      confidence: 0.9,
+      entitiesMentioned: ['фундамент'],
+      targetDate: '2026-05-10',
+    },
+    'добавь покраску обоев на каждый этаж': {
+      intentType: 'add_repeated_fragment',
+      confidence: 0.9,
+      entitiesMentioned: ['покраска обоев'],
+      groupScopeHint: 'этаж',
+      fragmentPlan: {
+        title: 'Покраска обоев',
+        nodes: [{ nodeKey: 'paint', title: 'Покраска обоев', durationDays: 2, dependsOnNodeKeys: [] }],
+      },
+    },
+    'свяжи исполнительную документацию и акт приемки': {
+      intentType: 'link_tasks',
+      confidence: 0.9,
+      entitiesMentioned: ['исполнительная документация', 'акт приемки'],
+      dependency: { type: 'FS' },
+    },
+    'убери связь между исполнительной документацией и актом приемки': {
+      intentType: 'unlink_tasks',
+      confidence: 0.9,
+      entitiesMentioned: ['исполнительная документация', 'акт приемки'],
+    },
+    'переименуй клининг': {
+      intentType: 'rename_task',
+      confidence: 0.9,
+      entitiesMentioned: ['клининг'],
+      renamedTitle: 'Клининг',
+    },
+    'сделай эту задачу красной': {
+      intentType: 'update_metadata',
+      confidence: 0.9,
+      entitiesMentioned: ['эта задача'],
+      metadataFields: { color: '#ff4d4f' },
+    },
+    'удали этап меблировки': {
+      intentType: 'delete_task',
+      confidence: 0.9,
+      entitiesMentioned: ['этап меблировки'],
+    },
+    'распиши подробнее пункт "Инженерные системы"': {
+      intentType: 'expand_wbs',
+      confidence: 0.9,
+      entitiesMentioned: ['Инженерные системы'],
+      fragmentPlan: {
+        title: 'Инженерные системы',
+        nodes: [{ nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] }],
+      },
+    },
+  };
+
+  return async () => ({ content: JSON.stringify(payloads[userMessage] ?? { intentType: 'unsupported_or_ambiguous', confidence: 0.2, entitiesMentioned: [] }) });
+}
+
+const semanticEnv = {
+  OPENAI_API_KEY: '',
+  OPENAI_BASE_URL: 'https://example.test',
+  OPENAI_MODEL: 'gpt-main',
+};
+
 describe('agent hierarchy mutation intent', () => {
   it('treats Russian nesting requests as mutations', () => {
     assert.equal(
@@ -310,18 +394,18 @@ describe('agent mutation verification assessment', () => {
 });
 
 describe('agent staged mutation lifecycle integration', () => {
-  it('locks the classifier outputs for the core Russian mutation prompts', () => {
-    assert.equal(classifyMutationIntent('добавь сдачу технадзору').intentType, 'add_single_task');
-    assert.equal(classifyMutationIntent('добавь техприсоединение').intentType, 'unsupported_or_ambiguous');
-    assert.equal(classifyMutationIntent('сдвинь штукатурку на 2 дня').intentType, 'shift_relative');
-    assert.equal(classifyMutationIntent('перенеси фундамент на 2026-05-10').intentType, 'move_to_date');
-    assert.equal(classifyMutationIntent('добавь покраску обоев на каждый этаж').intentType, 'add_repeated_fragment');
-    assert.equal(classifyMutationIntent('свяжи исполнительную документацию и акт приемки').intentType, 'link_tasks');
-    assert.equal(classifyMutationIntent('убери связь между исполнительной документацией и актом приемки').intentType, 'unlink_tasks');
-    assert.equal(classifyMutationIntent('переименуй клининг').intentType, 'rename_task');
-    assert.equal(classifyMutationIntent('сделай эту задачу красной').intentType, 'update_metadata');
-    assert.equal(classifyMutationIntent('удали этап меблировки').intentType, 'delete_task');
-    assert.equal(classifyMutationIntent('распиши подробнее пункт "Инженерные системы"').intentType, 'expand_wbs');
+  it('locks the classifier outputs for the core Russian mutation prompts', async () => {
+    assert.equal((await classifyMutationIntent({ userMessage: 'добавь сдачу технадзору', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('добавь сдачу технадзору') })).intentType, 'add_single_task');
+    assert.equal((await classifyMutationIntent({ userMessage: 'добавь техприсоединение', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('добавь техприсоединение') })).intentType, 'unsupported_or_ambiguous');
+    assert.equal((await classifyMutationIntent({ userMessage: 'сдвинь штукатурку на 2 дня', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня') })).intentType, 'shift_relative');
+    assert.equal((await classifyMutationIntent({ userMessage: 'перенеси фундамент на 2026-05-10', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('перенеси фундамент на 2026-05-10') })).intentType, 'move_to_date');
+    assert.equal((await classifyMutationIntent({ userMessage: 'добавь покраску обоев на каждый этаж', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('добавь покраску обоев на каждый этаж') })).intentType, 'add_repeated_fragment');
+    assert.equal((await classifyMutationIntent({ userMessage: 'свяжи исполнительную документацию и акт приемки', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('свяжи исполнительную документацию и акт приемки') })).intentType, 'link_tasks');
+    assert.equal((await classifyMutationIntent({ userMessage: 'убери связь между исполнительной документацией и актом приемки', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('убери связь между исполнительной документацией и актом приемки') })).intentType, 'unlink_tasks');
+    assert.equal((await classifyMutationIntent({ userMessage: 'переименуй клининг', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('переименуй клининг') })).intentType, 'rename_task');
+    assert.equal((await classifyMutationIntent({ userMessage: 'сделай эту задачу красной', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('сделай эту задачу красной') })).intentType, 'update_metadata');
+    assert.equal((await classifyMutationIntent({ userMessage: 'удали этап меблировки', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('удали этап меблировки') })).intentType, 'delete_task');
+    assert.equal((await classifyMutationIntent({ userMessage: 'распиши подробнее пункт "Инженерные системы"', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('распиши подробнее пункт "Инженерные системы"') })).intentType, 'expand_wbs');
   });
 
   it('hands ordinary edits into the staged shell before the legacy mutation attempt', () => {

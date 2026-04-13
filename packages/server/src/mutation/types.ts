@@ -36,6 +36,23 @@ export type MutationIntent = {
   requiresResolution: boolean;
   requiresSchedulingPlacement: boolean;
   executionMode: MutationExecutionMode;
+  taskTitle?: string;
+  durationDays?: number;
+  deltaDays?: number;
+  targetDate?: string;
+  renamedTitle?: string;
+  metadataFields?: {
+    color?: string | null;
+    progress?: number;
+    parentId?: string | null;
+  };
+  groupScopeHint?: string;
+  dependency?: {
+    taskId?: string;
+    type: 'FS' | 'SS' | 'FF' | 'SF';
+    lag?: number;
+  };
+  fragmentPlan?: StructuredFragmentPlan;
 };
 
 export type MutationResolutionEntity = {
@@ -57,6 +74,7 @@ export type ResolvedMutationContext = {
   projectVersion: number | null;
   resolutionQuery: string;
   containers: MutationResolutionEntity[];
+  groupMemberIds: string[];
   tasks: MutationResolutionEntity[];
   predecessors: MutationResolutionEntity[];
   successors: MutationResolutionEntity[];

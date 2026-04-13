@@ -7,6 +7,73 @@ import {
 } from './messages.js';
 import { runStagedMutation } from './orchestrator.js';
 
+function semanticPayloadFor(userMessage: string): string {
+  switch (userMessage) {
+    case 'сдвинь штукатурку на 2 дня':
+      return JSON.stringify({
+        intentType: 'shift_relative',
+        confidence: 0.92,
+        entitiesMentioned: ['штукатурка'],
+        deltaDays: 2,
+      });
+    case 'добавь сдачу технадзору':
+      return JSON.stringify({
+        intentType: 'add_single_task',
+        confidence: 0.93,
+        entitiesMentioned: ['сдача технадзору'],
+        taskTitle: 'Сдача технадзору',
+        durationDays: 1,
+      });
+    case 'добавь покраску обоев на каждый этаж':
+      return JSON.stringify({
+        intentType: 'add_repeated_fragment',
+        confidence: 0.9,
+        entitiesMentioned: ['покраска обоев'],
+        groupScopeHint: 'этаж',
+        fragmentPlan: {
+          title: 'Покраска обоев',
+          nodes: [{ nodeKey: 'wallpaper-paint', title: 'Покраска обоев', durationDays: 2, dependsOnNodeKeys: [] }],
+        },
+      });
+    case 'распиши подробнее пункт "Инженерные системы"':
+      return JSON.stringify({
+        intentType: 'expand_wbs',
+        confidence: 0.91,
+        entitiesMentioned: ['Инженерные системы'],
+        fragmentPlan: {
+          title: 'Инженерные системы',
+          nodes: [
+            { nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] },
+            { nodeKey: 'core', title: 'Основные работы', durationDays: 3, dependsOnNodeKeys: ['prep'] },
+          ],
+        },
+      });
+    case 'перенеси фундамент на 2026-05-10':
+      return JSON.stringify({
+        intentType: 'move_to_date',
+        confidence: 0.94,
+        entitiesMentioned: ['фундамент'],
+        targetDate: '2026-05-10',
+      });
+    case 'сделай что-нибудь получше':
+      return JSON.stringify({
+        intentType: 'unsupported_or_ambiguous',
+        confidence: 0.25,
+        entitiesMentioned: [],
+      });
+    default:
+      return JSON.stringify({
+        intentType: 'unsupported_or_ambiguous',
+        confidence: 0.2,
+        entitiesMentioned: [],
+      });
+  }
+}
+
+function semanticIntentQueryFor(userMessage: string) {
+  return async () => ({ content: semanticPayloadFor(userMessage) });
+}
+
 describe('staged mutation orchestrator', () => {
   it('maps typed user-facing failure and success messages', () => {
     assert.match(
@@ -96,6 +163,7 @@ describe('staged mutation orchestrator', () => {
           loggedEvents.push({ event, payload });
         },
       },
+      semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня'),
     });
 
     assert.equal(result.handled, true);
@@ -156,6 +224,7 @@ describe('staged mutation orchestrator', () => {
           loggedEvents.push({ event, payload });
         },
       },
+      semanticIntentQuery: semanticIntentQueryFor('добавь сдачу технадзору'),
     });
 
     assert.equal(result.handled, true);
@@ -213,6 +282,7 @@ describe('staged mutation orchestrator', () => {
       logger: {
         debug: () => undefined,
       },
+      semanticIntentQuery: semanticIntentQueryFor('добавь покраску обоев на каждый этаж'),
     });
 
     assert.equal(result.executionMode, 'hybrid');
@@ -252,6 +322,7 @@ describe('staged mutation orchestrator', () => {
       logger: {
         debug: () => undefined,
       },
+      semanticIntentQuery: semanticIntentQueryFor('распиши подробнее пункт \"Инженерные системы\"'),
     });
 
     assert.equal(result.executionMode, 'hybrid');
@@ -317,6 +388,7 @@ describe('staged mutation orchestrator', () => {
       logger: {
         debug: () => undefined,
       },
+      semanticIntentQuery: semanticIntentQueryFor('перенеси фундамент на 2026-05-10'),
     });
 
     assert.equal(result.status, 'failed');
@@ -356,6 +428,7 @@ describe('staged mutation orchestrator', () => {
       logger: {
         debug: () => undefined,
       },
+      semanticIntentQuery: semanticIntentQueryFor('сделай что-нибудь получше'),
     });
 
     assert.equal(result.handled, false);
@@ -418,6 +491,7 @@ describe('staged mutation orchestrator', () => {
       logger: {
         debug: () => undefined,
       },
+      semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня'),
     });
 
     assert.equal(result.status, 'failed');
