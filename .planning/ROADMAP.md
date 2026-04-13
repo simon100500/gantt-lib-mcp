@@ -43,6 +43,8 @@
 - [x] **Phase 36: Unified Scheduling Core** — Typed commands, single scheduling authority — completed 2026-04-01
 - [x] **Phase 37: Calendar Source of Truth Cleanup** — DB-first calendar flow — completed 2026-04-04
 - [ ] **Phase 38: Paywall Trial Transition** — 14-day Start trial with auto-rollback to free
+- [x] **Phase 41: Initial Generation Refactor** — AI-first planning pipeline for empty-project broad schedule creation — completed 2026-04-08
+- [ ] **Phase 42: MCP Mutation Refactor** — Reliable staged conversational edits via intent, resolution, mutation plan, and deterministic execution
 
 <details>
 <summary>v1.0 MVP (Phases 1-14) — SHIPPED 2026-03-13</summary>
@@ -163,6 +165,8 @@ Plans:
 | 37. Calendar Source of Truth Cleanup | v5.0 | — | Complete | 2026-04-04 |
 | 38. Paywall Trial Transition | v5.0 | 6/6 | Complete   | 2026-04-05 |
 | 39. Constraint Overrides | Future | 0/? | Not started | - |
+| 41. Initial Generation Refactor | v5.0 | 4/4 | Complete | 2026-04-08 |
+| 42. MCP Mutation Refactor | v5.0 | 0/? | Not started | - |
 
 ---
 
@@ -247,6 +251,37 @@ Plans:
 - [x] 38-04-PLAN.md — Admin UI trial controls + billing events timeline
 - [x] 38-05-PLAN.md — Frontend trial UX (offer modal, reminders, expiry screen)
 - [x] 38-06-PLAN.md — Self-serve trial trigger + activation API + frontend hook
+
+### Phase 41: Initial Generation Refactor
+
+**Goal:** Пустой проект и широкий запрос на стартовый график идут в отдельный AI-first lifecycle `initial_generation`, а не в обычный mutation flow или deterministic template bootstrap
+**Requirements**: PRD-only (`INITIAL-GENERATION-REFACTOR-PLAN.md`)
+**Depends on:** Phase 36, Phase 37
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 41-01 — Route broad empty-project creation into dedicated initial_generation lifecycle
+- [x] 41-02 — Build structured planning pipeline with strict schema validation
+- [x] 41-03 — Compile approved plans deterministically through commandService
+- [x] 41-04 — Add logging, repair gating, and regression coverage
+
+### Phase 42: MCP Mutation Refactor
+
+**Goal:** Обычные conversational edits перестают зависеть от одного freeform cheap-model mutation run; сервер выполняет staged flow `intent -> resolution -> mutation plan -> deterministic commit/controlled agent execution -> verification`
+**Requirements**: PRD-only (`.planning/reference/mcp-mutation-refactor-prd.md`)
+**Depends on:** Phase 36, Phase 41
+**Plans:** 0/? plans complete
+
+**Success Criteria** (what must be TRUE):
+  1. Обычные conversational edits разных классов (`add`, `shift`, `move-to-date`, `metadata`, `fan-out`, `expand WBS`, `link/unlink`, `delete`) проходят через explicit staged lifecycle и заканчиваются подтверждённым изменением проекта или typed controlled failure
+  2. LLM остаётся слоем интерпретации недетерминированных вводных и semantic choices, а конечное исполнение mutation plan выполняется серверными алгоритмами
+  3. По одному run в логах восстанавливается полный mutation lifecycle: intent, resolution evidence, selected execution mode, authoritative changed set, final verdict
+
+Planned work:
+- [ ] 42-01 — Mutation intent classification and execution-mode routing
+- [ ] 42-02 — Task/container resolution layer for short natural-language edits
+- [ ] 42-03 — Typed mutation plan contract plus deterministic execution for common ordinary edits
+- [ ] 42-04 — Controlled failure semantics, telemetry, and regression suite for Russian edit prompts
 
 ### Phase 39: Constraint Overrides
 
