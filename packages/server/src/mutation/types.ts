@@ -47,9 +47,8 @@ export type MutationResolutionEntity = {
 export type PlacementPolicy =
   | 'after_predecessor'
   | 'before_successor'
-  | 'container_tail'
-  | 'group_fanout'
-  | 'expansion'
+  | 'tail_of_container'
+  | 'group_tail'
   | 'no_placement_required'
   | 'unresolved';
 
@@ -110,4 +109,3 @@ export type MutationOrchestrationResult = {
   assistantResponse?: string;
   tasksAfter?: MutationTaskSnapshot[];
 };
-

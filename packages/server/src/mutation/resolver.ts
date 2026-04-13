@@ -1,0 +1,185 @@
+import type {
+  MutationIntent,
+  MutationResolutionEntity,
+  PlacementPolicy,
+  ResolvedMutationContext,
+} from './types.js';
+
+type TaskSearchMatch = {
+  taskId: string;
+  name: string;
+  parentId: string | null;
+  path: string[];
+  startDate: string;
+  endDate: string;
+  matchType: 'exact' | 'includes' | 'token';
+  score: number;
+};
+
+type GroupScopeMatch = {
+  key: string;
+  label: string;
+  rootTaskId: string;
+  memberTaskIds: string[];
+  memberNames: string[];
+};
+
+type MutationResolverTaskService = {
+  findTasksByName(projectId: string, query: string, limit?: number): Promise<TaskSearchMatch[]>;
+  findContainerCandidates(projectId: string, query: string, limit?: number): Promise<TaskSearchMatch[]>;
+  listBranchTasks(projectId: string, rootTaskId: string): Promise<TaskSearchMatch[]>;
+  findGroupScopes(projectId: string, hint: string): Promise<GroupScopeMatch[]>;
+};
+
+export type ResolveMutationContextInput = {
+  projectId: string;
+  projectVersion: number | null;
+  intent: MutationIntent;
+  userMessage: string;
+  taskService: MutationResolverTaskService;
+};
+
+const CLOSEOUT_HINTS = ['сдача', 'closeout', 'handover', 'исполнительная документация', 'приемка'];
+
+function toResolutionEntity(match: TaskSearchMatch): MutationResolutionEntity {
+  return {
+    id: match.taskId,
+    name: match.name,
+    score: match.score,
+  };
+}
+
+function pickBestTaskMatch(matches: TaskSearchMatch[]): TaskSearchMatch | null {
+  const exact = matches.find((match) => match.matchType === 'exact');
+  return exact ?? matches[0] ?? null;
+}
+
+function buildBaseContext(input: ResolveMutationContextInput): ResolvedMutationContext {
+  return {
+    projectId: input.projectId,
+    projectVersion: input.projectVersion,
+    resolutionQuery: input.intent.normalizedRequest,
+    containers: [],
+    tasks: [],
+    predecessors: [],
+    successors: [],
+    selectedContainerId: null,
+    selectedPredecessorTaskId: null,
+    selectedSuccessorTaskId: null,
+    placementPolicy: 'unresolved',
+    confidence: 0,
+  };
+}
+
+function resolvePlacementPolicy(context: ResolvedMutationContext): PlacementPolicy {
+  if (context.selectedPredecessorTaskId) {
+    return 'after_predecessor';
+  }
+  if (context.selectedSuccessorTaskId) {
+    return 'before_successor';
+  }
+  if (context.selectedContainerId) {
+    return 'tail_of_container';
+  }
+  return 'unresolved';
+}
+
+function extractPrimaryEntity(intent: MutationIntent, userMessage: string): string {
+  return intent.entitiesMentioned[0] ?? userMessage.trim();
+}
+
+function looksLikeCloseoutIntent(intent: MutationIntent, userMessage: string): boolean {
+  const normalized = `${intent.normalizedRequest} ${userMessage.toLowerCase()}`;
+  return CLOSEOUT_HINTS.some((hint) => normalized.includes(hint));
+}
+
+function looksLikeGroupFanout(intent: MutationIntent, userMessage: string): boolean {
+  if (intent.intentType !== 'add_repeated_fragment') {
+    return false;
+  }
+
+  return /кажд|по всем|every|all/u.test(userMessage.toLowerCase());
+}
+
+export async function resolveMutationContext(
+  input: ResolveMutationContextInput,
+): Promise<ResolvedMutationContext> {
+  const context = buildBaseContext(input);
+  const anchorQuery = extractPrimaryEntity(input.intent, input.userMessage);
+
+  if (
+    input.intent.intentType === 'shift_relative'
+    || input.intent.intentType === 'move_to_date'
+    || input.intent.intentType === 'rename_task'
+    || input.intent.intentType === 'update_metadata'
+    || input.intent.intentType === 'delete_task'
+    || input.intent.intentType === 'link_tasks'
+    || input.intent.intentType === 'unlink_tasks'
+    || input.intent.intentType === 'move_in_hierarchy'
+  ) {
+    const taskMatches = await input.taskService.findTasksByName(input.projectId, anchorQuery, 8);
+    const bestTask = pickBestTaskMatch(taskMatches);
+
+    context.tasks = taskMatches.map(toResolutionEntity);
+    context.predecessors = bestTask ? [toResolutionEntity(bestTask)] : [];
+    context.selectedPredecessorTaskId = bestTask?.taskId ?? null;
+    context.placementPolicy = 'no_placement_required';
+    context.confidence = bestTask?.score ?? 0;
+    return context;
+  }
+
+  if (input.intent.intentType === 'expand_wbs') {
+    const taskMatches = await input.taskService.findTasksByName(input.projectId, anchorQuery, 8);
+    const bestTask = pickBestTaskMatch(taskMatches);
+    const branchMatches = bestTask
+      ? await input.taskService.listBranchTasks(input.projectId, bestTask.taskId)
+      : [];
+
+    context.tasks = branchMatches.length > 0
+      ? branchMatches.map(toResolutionEntity)
+      : taskMatches.map(toResolutionEntity);
+    context.predecessors = bestTask ? [toResolutionEntity(bestTask)] : [];
+    context.selectedPredecessorTaskId = bestTask?.taskId ?? null;
+    context.placementPolicy = 'no_placement_required';
+    context.confidence = bestTask?.score ?? 0;
+    return context;
+  }
+
+  if (looksLikeGroupFanout(input.intent, input.userMessage)) {
+    const groupScopes = await input.taskService.findGroupScopes(input.projectId, input.userMessage);
+    const primaryGroup = groupScopes[0];
+
+    if (primaryGroup) {
+      context.containers = [{
+        id: primaryGroup.rootTaskId,
+        name: primaryGroup.label,
+        score: 0.9,
+      }];
+      context.selectedContainerId = primaryGroup.rootTaskId;
+      context.placementPolicy = 'group_tail';
+      context.confidence = 0.9;
+    } else {
+      context.placementPolicy = 'unresolved';
+      context.confidence = 0;
+    }
+
+    return context;
+  }
+
+  if (input.intent.intentType === 'add_single_task' || input.intent.intentType === 'restructure_branch') {
+    const containerQuery = looksLikeCloseoutIntent(input.intent, input.userMessage)
+      ? CLOSEOUT_HINTS.join(' ')
+      : anchorQuery;
+    const containerMatches = await input.taskService.findContainerCandidates(input.projectId, containerQuery, 8);
+    const bestContainer = pickBestTaskMatch(containerMatches);
+
+    context.containers = containerMatches.map(toResolutionEntity);
+    context.selectedContainerId = bestContainer?.taskId ?? null;
+    context.placementPolicy = bestContainer ? resolvePlacementPolicy(context) : 'unresolved';
+    context.confidence = bestContainer?.score ?? 0;
+    return context;
+  }
+
+  context.placementPolicy = 'no_placement_required';
+  return context;
+}
