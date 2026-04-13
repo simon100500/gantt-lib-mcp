@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-08
+**Last updated:** 2026-04-13
 
 ## Progress Summary
 
@@ -166,7 +166,7 @@ Plans:
 | 38. Paywall Trial Transition | v5.0 | 6/6 | Complete   | 2026-04-05 |
 | 39. Constraint Overrides | Future | 0/? | Not started | - |
 | 41. Initial Generation Refactor | v5.0 | 4/4 | Complete | 2026-04-08 |
-| 42. MCP Mutation Refactor | v5.0 | 1/4 | In Progress|  |
+| 42. MCP Mutation Refactor | v5.0 | 2/4 | In Progress|  |
 
 ---
 
@@ -270,7 +270,7 @@ Plans:
 **Goal:** Обычные conversational edits перестают зависеть от одного freeform cheap-model mutation run; сервер выполняет staged flow `intent -> resolution -> mutation plan -> deterministic commit/controlled agent execution -> verification`
 **Requirements**: PRD-only (`.planning/reference/mcp-mutation-refactor-prd.md`)
 **Depends on:** Phase 36, Phase 41
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 **Success Criteria** (what must be TRUE):
   1. Обычные conversational edits разных классов (`add`, `shift`, `move-to-date`, `metadata`, `fan-out`, `expand WBS`, `link/unlink`, `delete`) проходят через explicit staged lifecycle и заканчиваются подтверждённым изменением проекта или typed controlled failure
@@ -279,7 +279,7 @@ Plans:
 
 Planned work:
 - [x] 42-01-PLAN.md — Staged mutation shell, intent-family classification, and execution-mode routing
-- [ ] 42-02-PLAN.md — Server-side task/container/group resolution with typed controlled anchor failures
+- [x] 42-02-PLAN.md — Server-side task/container/group resolution with typed controlled anchor failures
 - [ ] 42-03-PLAN.md — Typed mutation-plan formation plus deterministic/hybrid execution through `commandService`
 - [ ] 42-04-PLAN.md — Controlled failure UX, lifecycle telemetry, and Russian regression coverage
 
@@ -337,4 +337,4 @@ Plans:
 - [x] 41-04-PLAN.md — End-to-end orchestration wiring, observability payloads, regression tests, and manual verification docs
 
 ---
-*Last updated: 2026-04-08 — Phase 41 Plan 04 completed*
+*Last updated: 2026-04-13 — Phase 42 Plan 02 completed*

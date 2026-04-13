@@ -48,9 +48,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 ### MCP Mutation Refactor
 
 - [x] **MMR-01**: Ordinary conversational edits pass through explicit `intent -> resolution -> mutation_plan -> execution -> verification` stages instead of one opaque freeform mutation run
-- [ ] **MMR-02**: The server resolves task/container anchors for short natural-language edits without requiring the model to invent IDs, parent placement, or schedule dates from scratch
+- [x] **MMR-02**: The server resolves task/container anchors for short natural-language edits without requiring the model to invent IDs, parent placement, or schedule dates from scratch
 - [ ] **MMR-03**: Common ordinary mutations (`add`, `rename`, `move`, `link`, `unlink`, `shift`, `move-to-date`, `metadata update`, `fan-out by groups`, `WBS expansion`) can execute through deterministic or tightly constrained server-side paths with authoritative changed-set verification
-- [ ] **MMR-04**: User-facing failures for simple mutation intents return typed controlled reasons (`anchor_not_found`, `container_not_resolved`, etc.) instead of the generic “no valid mutation tool call” outcome
+- [x] **MMR-04**: User-facing failures for simple mutation intents return typed controlled reasons (`anchor_not_found`, `container_not_resolved`, etc.) instead of the generic “no valid mutation tool call” outcome
 - [ ] **MMR-05**: Debug logs reconstruct the full mutation lifecycle including intent classification, resolution evidence, plan selection, execution mode, and final verification
 
 ## Future Requirements
@@ -100,9 +100,9 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | IGR-03 | Phase 41 | Complete |
 | IGR-04 | Phase 41 | Complete |
 | MMR-01 | Phase 42 | Complete |
-| MMR-02 | Phase 42 | Pending |
+| MMR-02 | Phase 42 | Complete |
 | MMR-03 | Phase 42 | Pending |
-| MMR-04 | Phase 42 | Pending |
+| MMR-04 | Phase 42 | Complete |
 | MMR-05 | Phase 42 | Pending |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
@@ -115,4 +115,4 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-04-04 after Phase 33 completion*
+*Last updated: 2026-04-13 after Phase 42 Plan 02 completion*

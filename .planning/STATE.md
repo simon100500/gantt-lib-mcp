@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-13T20:21:41.146Z"
+last_updated: "2026-04-13T20:32:07.597Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 13
   completed_phases: 10
   total_plans: 40
-  completed_plans: 37
+  completed_plans: 38
   percent: 93
 ---
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 42 (mcp-mutation-refactor) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-13
 
-Progress: [█████████░] 93%
+Progress: [██████████] 95%
 
 ---
 
@@ -141,6 +141,8 @@ packages/
 - [Phase 41]: Controlled initial-generation failures are surfaced as assistant messages with final lifecycle logs, not as a silent fallback into ordinary mutation flow.
 - [Phase 42]: Ordinary mutation requests now enter a typed staged shell before any legacy SDK mutation attempt.
 - [Phase 42]: Intent classification owns requiresResolution and requiresSchedulingPlacement so agent.ts does not recompute those flags ad hoc.
+- [Phase 42]: Resolver helpers stay read-only inside TaskService so Stage 2 can gather evidence without mutating project state.
+- [Phase 42]: Ordinary staged mutations now stop with typed controlled failures after resolution; only full_agent and unsupported intents may still fall back to the legacy path.
 
 ## Performance Metrics
 
@@ -162,12 +164,13 @@ packages/
 | Phase 41 P03 | 25 min | 2 tasks | 3 files |
 | 41 | 04 | 5min | 2 | 4 | 2026-04-08 |
 | Phase 42 P01 | 7min | 2 tasks | 8 files |
+| Phase 42 P02 | 8min | 2 tasks | 7 files |
 
 ## Session
 
-- Last session: 2026-04-13T20:21:41Z
-- Stopped at: Completed 42-01-PLAN.md
+- Last session: 2026-04-13T20:32:07Z
+- Stopped at: Completed 42-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-13 — Phase 42 Plan 01 completed*
+*Last updated: 2026-04-13 — Phase 42 Plan 02 completed*
