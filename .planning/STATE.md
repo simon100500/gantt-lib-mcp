@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-13T20:32:07.597Z"
+last_updated: "2026-04-13T20:43:59.839Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 13
   completed_phases: 10
   total_plans: 40
-  completed_plans: 38
-  percent: 93
+  completed_plans: 39
+  percent: 98
 ---
 
 # Project State: gantt-lib MCP Server
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 42 (mcp-mutation-refactor) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-13
 
-Progress: [██████████] 95%
+Progress: [██████████] 98%
 
 ---
 
@@ -143,6 +143,9 @@ packages/
 - [Phase 42]: Intent classification owns requiresResolution and requiresSchedulingPlacement so agent.ts does not recompute those flags ad hoc.
 - [Phase 42]: Resolver helpers stay read-only inside TaskService so Stage 2 can gather evidence without mutating project state.
 - [Phase 42]: Ordinary staged mutations now stop with typed controlled failures after resolution; only full_agent and unsupported intents may still fall back to the legacy path.
+- [Phase 42]: MutationPlan now carries a typed operation union instead of string placeholders so the executor can compile authoritative commands without freeform payload synthesis.
+- [Phase 42]: Hybrid fan-out and WBS expansion use a constrained StructuredFragmentPlan contract; the server owns final task IDs, parent placement, and command commits.
+- [Phase 42]: Execution success is accepted only when commandService changedTaskIds match the plan's expected changed set.
 
 ## Performance Metrics
 
@@ -168,9 +171,9 @@ packages/
 
 ## Session
 
-- Last session: 2026-04-13T20:32:07Z
-- Stopped at: Completed 42-02-PLAN.md
+- Last session: 2026-04-13T20:43:59Z
+- Stopped at: Completed 42-03-PLAN.md
 
 ---
 
-*Last updated: 2026-04-13 — Phase 42 Plan 02 completed*
+*Last updated: 2026-04-13 — Phase 42 Plan 03 completed*
