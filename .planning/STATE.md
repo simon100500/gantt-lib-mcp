@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: ready_for_verification
-last_updated: "2026-04-08T11:45:25.854Z"
-last_activity: 2026-04-08
+status: executing
+last_updated: "2026-04-13T20:21:41.146Z"
+last_activity: 2026-04-13
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 10
-  total_plans: 36
-  completed_plans: 36
-  percent: 100
+  total_plans: 40
+  completed_plans: 37
+  percent: 93
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-08
+**Last updated:** 2026-04-13
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready for verification
+**Status:** Ready to execute
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 41 — initial-gen-refactor
+**Current focus:** Phase 42 — mcp-mutation-refactor
 
 ---
 
 ## Current Position
 
-Phase: 41 (initial-gen-refactor) — READY FOR VERIFICATION
-Plan: 4 of 4
-Status: Completed 41-04-PLAN.md
-Last activity: 2026-04-08
+Phase: 42 (mcp-mutation-refactor) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-13
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ---
 
@@ -139,6 +139,8 @@ packages/
 - [Phase 41]: Initial-generation partial builds prune only broken references, cycle edges, and empty containers, then require the locked 60% and 3-phase floor before commit.
 - [Phase 41]: The agent now passes a dedicated planner SDK query and project baseVersion into the initial-generation orchestrator instead of reusing mutation execution.
 - [Phase 41]: Controlled initial-generation failures are surfaced as assistant messages with final lifecycle logs, not as a silent fallback into ordinary mutation flow.
+- [Phase 42]: Ordinary mutation requests now enter a typed staged shell before any legacy SDK mutation attempt.
+- [Phase 42]: Intent classification owns requiresResolution and requiresSchedulingPlacement so agent.ts does not recompute those flags ad hoc.
 
 ## Performance Metrics
 
@@ -159,12 +161,13 @@ packages/
 | Phase 41 P02 | 8 min | 2 tasks | 7 files |
 | Phase 41 P03 | 25 min | 2 tasks | 3 files |
 | 41 | 04 | 5min | 2 | 4 | 2026-04-08 |
+| Phase 42 P01 | 7min | 2 tasks | 8 files |
 
 ## Session
 
-- Last session: 2026-04-08T11:45:25Z
-- Stopped at: Completed 41-04-PLAN.md
+- Last session: 2026-04-13T20:21:41Z
+- Stopped at: Completed 42-01-PLAN.md
 
 ---
 
-*Last updated: 2026-04-08 — Phase 41 Plan 04 completed*
+*Last updated: 2026-04-13 — Phase 42 Plan 01 completed*

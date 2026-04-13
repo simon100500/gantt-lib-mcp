@@ -47,7 +47,7 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### MCP Mutation Refactor
 
-- [ ] **MMR-01**: Ordinary conversational edits pass through explicit `intent -> resolution -> mutation_plan -> execution -> verification` stages instead of one opaque freeform mutation run
+- [x] **MMR-01**: Ordinary conversational edits pass through explicit `intent -> resolution -> mutation_plan -> execution -> verification` stages instead of one opaque freeform mutation run
 - [ ] **MMR-02**: The server resolves task/container anchors for short natural-language edits without requiring the model to invent IDs, parent placement, or schedule dates from scratch
 - [ ] **MMR-03**: Common ordinary mutations (`add`, `rename`, `move`, `link`, `unlink`, `shift`, `move-to-date`, `metadata update`, `fan-out by groups`, `WBS expansion`) can execute through deterministic or tightly constrained server-side paths with authoritative changed-set verification
 - [ ] **MMR-04**: User-facing failures for simple mutation intents return typed controlled reasons (`anchor_not_found`, `container_not_resolved`, etc.) instead of the generic “no valid mutation tool call” outcome
@@ -99,7 +99,7 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | IGR-02 | Phase 41 | Complete |
 | IGR-03 | Phase 41 | Complete |
 | IGR-04 | Phase 41 | Complete |
-| MMR-01 | Phase 42 | Pending |
+| MMR-01 | Phase 42 | Complete |
 | MMR-02 | Phase 42 | Pending |
 | MMR-03 | Phase 42 | Pending |
 | MMR-04 | Phase 42 | Pending |
