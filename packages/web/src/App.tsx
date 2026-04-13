@@ -846,7 +846,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         await openLimitModal(proactiveProjectDenial);
         return;
       }
-      if (auth.projects.length === 0) {
+      if (!auth.projects.some((project) => project.status !== 'archived')) {
         setShowCreateProjectModal(true);
         return;
       }
@@ -864,7 +864,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     setWorkspace({ kind: 'guest' });
-  }, [auth.isAuthenticated, auth.projects.length, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
+  }, [auth.isAuthenticated, auth.projects, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
@@ -1081,6 +1081,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
     : undefined;
+  const hasActiveProjects = auth.projects.some((project) => project.status !== 'archived');
   const currentProjectIsEmpty = workspace.kind === 'project' && currentProjectTaskCount === 0;
   const hasQueuedProjectPrompt = workspace.kind === 'project' && Boolean(queuedPromptRef.current);
   const projectChatOpen = workspace.kind === 'project' && workspace.chatOpen;
