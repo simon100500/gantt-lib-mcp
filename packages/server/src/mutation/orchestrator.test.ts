@@ -4,11 +4,92 @@ import assert from 'node:assert/strict';
 import { runStagedMutation } from './orchestrator.js';
 
 describe('staged mutation orchestrator', () => {
+  it('builds and executes deterministic plans for resolved ordinary edits', async () => {
+    const loggedEvents: string[] = [];
+    const result = await runStagedMutation({
+      userMessage: 'сдвинь штукатурку на 2 дня',
+      projectId: 'project-1',
+      projectVersion: 5,
+      sessionId: 'session-1',
+      runId: 'run-1',
+      tasksBefore: [{
+        id: 'task-plaster',
+        name: 'Штукатурка',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+      }],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-plaster',
+            name: 'Штукатурка',
+            parentId: null,
+            path: ['Отделка', 'Штукатурка'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-03',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string } }) => ({
+          accepted: true,
+          clientRequestId: 'req-1',
+          baseVersion: request.baseVersion,
+          newVersion: request.baseVersion + 1,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: ['task-plaster'],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        }),
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event) => {
+          loggedEvents.push(event);
+        },
+      },
+    });
+
+    assert.equal(result.handled, true);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.result.verificationVerdict, 'accepted');
+    assert.deepEqual(loggedEvents, [
+      'intent_classified',
+      'execution_mode_selected',
+      'resolution_started',
+      'resolution_result',
+      'mutation_plan_built',
+      'deterministic_execution_started',
+      'execution_committed',
+      'verification_result',
+      'final_outcome',
+    ]);
+  });
+
   it('returns a typed controlled failure when add intents cannot resolve a container', async () => {
     const loggedEvents: string[] = [];
     const result = await runStagedMutation({
       userMessage: 'добавь сдачу технадзору',
       projectId: 'project-1',
+      projectVersion: 3,
       sessionId: 'session-1',
       runId: 'run-1',
       tasksBefore: [],
@@ -59,6 +140,7 @@ describe('staged mutation orchestrator', () => {
     const result = await runStagedMutation({
       userMessage: 'сделай что-нибудь получше',
       projectId: 'project-1',
+      projectVersion: 3,
       sessionId: 'session-1',
       runId: 'run-1',
       tasksBefore: [],
@@ -98,6 +180,7 @@ describe('staged mutation orchestrator', () => {
     const result = await runStagedMutation({
       userMessage: 'сдвинь штукатурку на 2 дня',
       projectId: 'project-1',
+      projectVersion: 3,
       sessionId: 'session-1',
       runId: 'run-1',
       tasksBefore: [],

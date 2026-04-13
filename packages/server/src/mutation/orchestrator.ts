@@ -1,5 +1,7 @@
 import { classifyMutationIntent } from './intent-classifier.js';
+import { executeMutationPlan } from './execution.js';
 import { selectMutationExecutionMode } from './execution-routing.js';
+import { buildMutationPlan } from './plan-builder.js';
 import { resolveMutationContext } from './resolver.js';
 import type { ServerMessage } from '../ws.js';
 import type {
@@ -52,6 +54,7 @@ type MutationLogger = {
 export type RunStagedMutationInput = {
   userMessage: string;
   projectId: string;
+  projectVersion: number;
   sessionId: string;
   runId: string;
   tasksBefore: MutationTaskSnapshot[];
@@ -206,7 +209,7 @@ export async function runStagedMutation(
 
     resolutionContext = await resolveMutationContext({
       projectId: input.projectId,
-      projectVersion: null,
+      projectVersion: input.projectVersion,
       intent: {
         ...intent,
         executionMode,
@@ -255,16 +258,101 @@ export async function runStagedMutation(
   }
 
   if (resolutionContext && resolutionContext.confidence >= 0.7) {
-    return buildControlledFailure(
-      executionMode,
-      'unsupported_mutation_shape',
-      resolutionContext,
-      buildFailureMessage('unsupported_mutation_shape'),
-      {
+    const plan = await buildMutationPlan({
+      intent: {
         ...intent,
         executionMode,
       },
-    );
+      resolutionContext,
+      userMessage: input.userMessage,
+      tasksBefore: input.tasksBefore,
+    });
+
+    await input.logger.debug('mutation_plan_built', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      plan,
+    });
+
+    if (plan.needsAgentExecution) {
+      return {
+        handled: false,
+        status: 'deferred_to_legacy',
+        legacyFallbackAllowed: true,
+        failureReason: undefined,
+        intent: {
+          ...intent,
+          executionMode,
+        },
+        executionMode,
+        resolutionContext,
+        plan,
+        result: buildDeferredResult(executionMode),
+      };
+    }
+
+    await input.logger.debug('deterministic_execution_started', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      executionMode,
+      operationKinds: plan.operations.map((operation) => operation.kind),
+    });
+
+    const execution = await executeMutationPlan({
+      projectId: input.projectId,
+      projectVersion: input.projectVersion,
+      tasksBefore: input.tasksBefore,
+      plan,
+      commandService: input.commandService as Parameters<typeof executeMutationPlan>[0]['commandService'],
+    });
+
+    await input.logger.debug('execution_committed', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      committedCommandTypes: execution.committedCommandTypes,
+      changedTaskIds: execution.changedTaskIds,
+    });
+
+    await input.logger.debug('verification_result', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      verificationVerdict: execution.verificationVerdict,
+      expectedChangedTaskIds: plan.expectedChangedTaskIds,
+      changedTaskIds: execution.changedTaskIds,
+    });
+
+    const tasksAfter = execution.status === 'completed'
+      ? (await input.taskService.list(input.projectId)).tasks
+      : input.tasksBefore;
+
+    await input.logger.debug('final_outcome', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      status: execution.status,
+      failureReason: execution.failureReason,
+    });
+
+    return {
+      handled: true,
+      status: execution.status,
+      legacyFallbackAllowed: false,
+      failureReason: execution.failureReason,
+      intent: {
+        ...intent,
+        executionMode,
+      },
+      executionMode,
+      resolutionContext,
+      plan,
+      result: execution,
+      assistantResponse: execution.userFacingMessage,
+      tasksAfter,
+    };
   }
 
   if (resolutionContext && resolutionContext.confidence < 0.7) {

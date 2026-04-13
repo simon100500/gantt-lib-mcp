@@ -1324,6 +1324,8 @@ export async function runAgentWithHistory(
     }
 
     if (likelyMutationRequest) {
+      const projectVersion = await getProjectBaseVersion(projectId);
+
       await writeServerDebugLog('mutation_lifecycle_started', {
         runId,
         projectId,
@@ -1334,6 +1336,7 @@ export async function runAgentWithHistory(
       const stagedMutation = await runStagedMutation({
         userMessage,
         projectId,
+        projectVersion,
         sessionId,
         runId,
         tasksBefore,

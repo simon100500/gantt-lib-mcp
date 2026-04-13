@@ -312,8 +312,12 @@ describe('agent mutation verification assessment', () => {
 describe('agent staged mutation lifecycle integration', () => {
   it('locks the classifier outputs for the core Russian mutation prompts', () => {
     assert.equal(classifyMutationIntent('добавь сдачу технадзору').intentType, 'add_single_task');
+    assert.equal(classifyMutationIntent('сдвинь штукатурку на 2 дня').intentType, 'shift_relative');
     assert.equal(classifyMutationIntent('перенеси фундамент на 2026-05-10').intentType, 'move_to_date');
     assert.equal(classifyMutationIntent('добавь покраску обоев на каждый этаж').intentType, 'add_repeated_fragment');
+    assert.equal(classifyMutationIntent('свяжи исполнительную документацию и акт приемки').intentType, 'link_tasks');
+    assert.equal(classifyMutationIntent('переименуй клининг').intentType, 'rename_task');
+    assert.equal(classifyMutationIntent('сделай эту задачу красной').intentType, 'update_metadata');
     assert.equal(classifyMutationIntent('распиши подробнее пункт "Монолит"').intentType, 'expand_wbs');
   });
 

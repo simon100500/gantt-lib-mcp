@@ -18,6 +18,21 @@ function extractQuotedEntity(rawRequest: string): string[] {
   return quoted?.[1] ? [quoted[1]] : [];
 }
 
+function extractPairEntities(rawRequest: string): string[] {
+  const quoted = Array.from(rawRequest.matchAll(/["«](.+?)["»]/gu)).map((match) => match[1]?.trim()).filter(Boolean);
+  if (quoted.length >= 2) {
+    return quoted as string[];
+  }
+
+  return rawRequest
+    .replace(/^свяжи\s+/iu, '')
+    .replace(/^убери\s+связь\s+между\s+/iu, '')
+    .split(/\s+и\s+/iu)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
 function buildIntent(rawRequest: string, seed: ClassificationSeed): MutationIntent {
   const normalizedRequest = normalizeRequest(rawRequest);
   const intentWithoutMode = {
@@ -74,6 +89,26 @@ export function classifyMutationIntent(userMessage: string): MutationIntent {
     });
   }
 
+  if (/^свяжи\s+.+\s+и\s+.+$/u.test(normalizedRequest)) {
+    return buildIntent(rawRequest, {
+      intentType: 'link_tasks',
+      confidence: 0.9,
+      entitiesMentioned: extractPairEntities(rawRequest),
+      requiresResolution: true,
+      requiresSchedulingPlacement: false,
+    });
+  }
+
+  if (/^убери\s+связь\s+между\s+.+\s+и\s+.+$/u.test(normalizedRequest)) {
+    return buildIntent(rawRequest, {
+      intentType: 'unlink_tasks',
+      confidence: 0.88,
+      entitiesMentioned: extractPairEntities(rawRequest),
+      requiresResolution: true,
+      requiresSchedulingPlacement: false,
+    });
+  }
+
   if (/^добавь\s+.+\s+на\s+кажд(?:ый|ую|ое|ые)\b/u.test(normalizedRequest)) {
     const entity = normalizedRequest.match(/^добавь\s+(.+?)\s+на\s+кажд(?:ый|ую|ое|ые)\b/u)?.[1] ?? normalizedRequest;
     return buildIntent(rawRequest, {
@@ -102,6 +137,36 @@ export function classifyMutationIntent(userMessage: string): MutationIntent {
       intentType: 'update_metadata',
       confidence: 0.89,
       entitiesMentioned: [entity],
+      requiresResolution: true,
+      requiresSchedulingPlacement: false,
+    });
+  }
+
+  if (/^переименуй\s+.+$/u.test(normalizedRequest)) {
+    return buildIntent(rawRequest, {
+      intentType: 'rename_task',
+      confidence: 0.9,
+      entitiesMentioned: quotedEntity.length > 0 ? quotedEntity : [rawRequest.replace(/^переименуй\s+/iu, '').trim()],
+      requiresResolution: true,
+      requiresSchedulingPlacement: false,
+    });
+  }
+
+  if (/^удали\s+.+$/u.test(normalizedRequest)) {
+    return buildIntent(rawRequest, {
+      intentType: 'delete_task',
+      confidence: 0.9,
+      entitiesMentioned: quotedEntity.length > 0 ? quotedEntity : [rawRequest.replace(/^удали\s+/iu, '').trim()],
+      requiresResolution: true,
+      requiresSchedulingPlacement: false,
+    });
+  }
+
+  if (/(?:внутрь|подзадачей|под\s+["«a-zа-яё])/iu.test(normalizedRequest) && /(?:перенеси|сделай)/iu.test(normalizedRequest)) {
+    return buildIntent(rawRequest, {
+      intentType: 'move_in_hierarchy',
+      confidence: 0.84,
+      entitiesMentioned: quotedEntity,
       requiresResolution: true,
       requiresSchedulingPlacement: false,
     });
