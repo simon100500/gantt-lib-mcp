@@ -69,7 +69,7 @@ export type ResolvedMutationContext = {
 
 export type MutationPlan = {
   planType: MutationIntentType;
-  operations: string[];
+  operations: MutationPlanOperation[];
   why: string;
   expectedChangedTaskIds: string[];
   canExecuteDeterministically: boolean;
@@ -83,7 +83,7 @@ export type MutationExecutionResult = {
   executionMode: MutationExecutionMode;
   committedCommandTypes: string[];
   changedTaskIds: string[];
-  verificationVerdict: 'not_run' | 'passed' | 'failed';
+  verificationVerdict: 'not_run' | 'accepted' | 'failed';
   userFacingMessage: string;
   failureReason?: MutationFailureReason;
 };
@@ -93,6 +93,7 @@ export type MutationTaskSnapshot = {
   name: string;
   startDate?: string;
   endDate?: string;
+  color?: string;
   parentId?: string;
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
 };
@@ -110,3 +111,94 @@ export type MutationOrchestrationResult = {
   assistantResponse?: string;
   tasksAfter?: MutationTaskSnapshot[];
 };
+
+export type FragmentNode = {
+  nodeKey: string;
+  title: string;
+  durationDays: number;
+  dependsOnNodeKeys: string[];
+};
+
+export type StructuredFragmentPlan = {
+  title: string;
+  nodes: FragmentNode[];
+  why: string;
+};
+
+export type MutationPlanOperation =
+  | {
+      kind: 'append_task_after';
+      taskId: string;
+      title: string;
+      predecessorTaskId: string;
+      parentId: string | null;
+      durationDays: number;
+    }
+  | {
+      kind: 'append_task_before';
+      taskId: string;
+      title: string;
+      successorTaskId: string;
+      parentId: string | null;
+      durationDays: number;
+    }
+  | {
+      kind: 'append_task_to_container';
+      taskId: string;
+      title: string;
+      containerId: string;
+      durationDays: number;
+    }
+  | {
+      kind: 'shift_task_by_delta';
+      taskId: string;
+      deltaDays: number;
+    }
+  | {
+      kind: 'move_task_to_date';
+      taskId: string;
+      targetDate: string;
+    }
+  | {
+      kind: 'move_task_in_hierarchy';
+      taskId: string;
+      newParentId: string | null;
+    }
+  | {
+      kind: 'link_tasks';
+      taskId: string;
+      dependency: { taskId: string; type: 'FS' | 'SS' | 'FF' | 'SF'; lag?: number };
+    }
+  | {
+      kind: 'unlink_tasks';
+      taskId: string;
+      depTaskId: string;
+    }
+  | {
+      kind: 'delete_task';
+      taskId: string;
+    }
+  | {
+      kind: 'rename_task';
+      taskId: string;
+      name: string;
+    }
+  | {
+      kind: 'update_task_metadata';
+      taskId: string;
+      fields: {
+        color?: string | null;
+        progress?: number;
+        parentId?: string | null;
+      };
+    }
+  | {
+      kind: 'fanout_fragment_to_groups';
+      groupIds: string[];
+      fragmentPlan: StructuredFragmentPlan;
+    }
+  | {
+      kind: 'expand_branch_from_plan';
+      anchorTaskId: string;
+      fragmentPlan: StructuredFragmentPlan;
+    };
