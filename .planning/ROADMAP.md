@@ -270,7 +270,7 @@ Plans:
 **Goal:** Обычные conversational edits перестают зависеть от одного freeform cheap-model mutation run; сервер выполняет staged flow `intent -> resolution -> mutation plan -> deterministic commit/controlled agent execution -> verification`
 **Requirements**: PRD-only (`.planning/reference/mcp-mutation-refactor-prd.md`)
 **Depends on:** Phase 36, Phase 41
-**Plans:** 0/? plans complete
+**Plans:** 4 plans
 
 **Success Criteria** (what must be TRUE):
   1. Обычные conversational edits разных классов (`add`, `shift`, `move-to-date`, `metadata`, `fan-out`, `expand WBS`, `link/unlink`, `delete`) проходят через explicit staged lifecycle и заканчиваются подтверждённым изменением проекта или typed controlled failure
@@ -278,10 +278,10 @@ Plans:
   3. По одному run в логах восстанавливается полный mutation lifecycle: intent, resolution evidence, selected execution mode, authoritative changed set, final verdict
 
 Planned work:
-- [ ] 42-01 — Mutation intent classification and execution-mode routing
-- [ ] 42-02 — Task/container resolution layer for short natural-language edits
-- [ ] 42-03 — Typed mutation plan contract plus deterministic execution for common ordinary edits
-- [ ] 42-04 — Controlled failure semantics, telemetry, and regression suite for Russian edit prompts
+- [ ] 42-01-PLAN.md — Staged mutation shell, intent-family classification, and execution-mode routing
+- [ ] 42-02-PLAN.md — Server-side task/container/group resolution with typed controlled anchor failures
+- [ ] 42-03-PLAN.md — Typed mutation-plan formation plus deterministic/hybrid execution through `commandService`
+- [ ] 42-04-PLAN.md — Controlled failure UX, lifecycle telemetry, and Russian regression coverage
 
 ### Phase 39: Constraint Overrides
 
