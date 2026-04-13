@@ -51,6 +51,7 @@ describe('resolveMutationContext', () => {
         requiresSchedulingPlacement: false,
       }),
       taskService: {
+        list: async () => ({ tasks: [] }),
         findTasksByName: async () => ([
           {
             taskId: 'task-exact',
@@ -92,6 +93,7 @@ describe('resolveMutationContext', () => {
       userMessage: 'добавь сдачу технадзору',
       intent: buildIntent(),
       taskService: {
+        list: async () => ({ tasks: [] }),
         findTasksByName: async () => [],
         findContainerCandidates: async () => ([
           {
@@ -127,6 +129,7 @@ describe('resolveMutationContext', () => {
         entitiesMentioned: ['покраску обоев'],
       }),
       taskService: {
+        list: async () => ({ tasks: [] }),
         findTasksByName: async () => [],
         findContainerCandidates: async () => [],
         listBranchTasks: async () => [],
@@ -155,6 +158,7 @@ describe('resolveMutationContext', () => {
       userMessage: 'добавь сдачу технадзору',
       intent: buildIntent(),
       taskService: {
+        list: async () => ({ tasks: [] }),
         findTasksByName: async () => [],
         findContainerCandidates: async () => [],
         listBranchTasks: async () => [],
@@ -179,6 +183,7 @@ describe('resolveMutationContext', () => {
         requiresSchedulingPlacement: false,
       }),
       taskService: {
+        list: async () => ({ tasks: [] }),
         findTasksByName: async () => [],
         findContainerCandidates: async () => [],
         listBranchTasks: async () => [],
@@ -202,6 +207,7 @@ describe('resolveMutationContext', () => {
         entitiesMentioned: ['покраску обоев'],
       }),
       taskService: {
+        list: async () => ({ tasks: [] }),
         findTasksByName: async () => [],
         findContainerCandidates: async () => [],
         listBranchTasks: async () => [],
@@ -211,5 +217,66 @@ describe('resolveMutationContext', () => {
 
     assert.equal(result.selectedContainerId, null);
     assert.equal(result.placementPolicy, 'unresolved');
+  });
+
+  it('uses the direct container search query before applying a generic fallback', async () => {
+    const queries: string[] = [];
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 7,
+      userMessage: 'добавь сдачу технадзору',
+      intent: buildIntent(),
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async (_projectId, query) => {
+          queries.push(query);
+          return query === 'сдачу технадзору'
+            ? [{
+                taskId: 'container-closeout',
+                name: 'Клининг и сдача',
+                parentId: null,
+                path: ['Финиш', 'Клининг и сдача'],
+                startDate: '2026-05-01',
+                endDate: '2026-05-10',
+                matchType: 'includes',
+                score: 0.88,
+              }]
+            : [];
+        },
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+    });
+
+    assert.deepEqual(queries, ['сдачу технадзору']);
+    assert.equal(result.selectedContainerId, 'container-closeout');
+    assert.equal(result.placementPolicy, 'tail_of_container');
+    assert.equal(result.confidence, 0.88);
+  });
+
+  it('falls back to the latest top-level section when direct container search finds nothing', async () => {
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 7,
+      userMessage: 'добавь сдачу технадзору',
+      intent: buildIntent(),
+      taskService: {
+        list: async () => ({
+          tasks: [
+            { id: 'phase-1', name: 'Демонтаж', parentId: undefined, startDate: '2026-04-01', endDate: '2026-04-10' },
+            { id: 'phase-2', name: 'Меблировка и сдача объекта', parentId: undefined, startDate: '2026-04-11', endDate: '2026-04-25' },
+          ],
+        }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+    });
+
+    assert.equal(result.selectedContainerId, 'phase-2');
+    assert.equal(result.placementPolicy, 'tail_of_container');
+    assert.equal(result.confidence, 0.72);
   });
 });

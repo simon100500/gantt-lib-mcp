@@ -41,9 +41,19 @@ function titleCase(value: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
-function buildDeterministicTaskId(anchorId: string, hint: string): string {
+function buildDeterministicTaskId(anchorId: string, hint: string, existingTaskIds: Set<string>): string {
   const slug = slugify(hint) || 'task';
-  return `${anchorId}:${slug}`;
+  const baseId = `${anchorId}:${slug}`;
+  if (!existingTaskIds.has(baseId)) {
+    return baseId;
+  }
+
+  let suffix = 2;
+  while (existingTaskIds.has(`${baseId}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${baseId}-${suffix}`;
 }
 
 function findDuration(hint: string): number {
@@ -55,6 +65,9 @@ function findDuration(hint: string): number {
 function extractTaskTitle(userMessage: string): string {
   const normalized = userMessage.toLowerCase();
 
+  if (normalized.includes('сдач') && normalized.includes('технадзор')) {
+    return 'Сдача технадзору';
+  }
   if (normalized.includes('сдач')) {
     return 'Сдача';
   }
@@ -143,6 +156,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
   const { intent, resolutionContext, userMessage } = input;
   const targetTaskId = resolveTaskId(resolutionContext);
   const taskTitle = extractTaskTitle(userMessage);
+  const existingTaskIds = new Set(input.tasksBefore.map((task) => task.id));
 
   let operations: MutationPlanOperation[] = [];
   let why = '';
@@ -156,6 +170,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           ?? resolutionContext.selectedContainerId
           ?? resolutionContext.projectId,
         taskTitle,
+        existingTaskIds,
       );
       const durationDays = findDuration(taskTitle.toLowerCase());
 

@@ -50,9 +50,9 @@ export function buildMutationFailureMessage(
     case 'multiple_low_confidence_targets':
       return 'Нашлось несколько одинаково вероятных целей. Уточните, какую именно задачу нужно изменить.';
     case 'container_not_resolved':
-      return 'Не удалось определить контейнер, куда нужно добавить работу.';
+      return 'Не удалось понять, в какой раздел графика добавить эту работу.';
     case 'placement_not_resolved':
-      return 'Контейнер найден, но не удалось определить точное место вставки.';
+      return 'Подходящий раздел найден, но не удалось определить, куда именно вставить задачу.';
     case 'group_scope_not_resolved':
       return 'Не удалось определить повторяющиеся группы, куда нужно развернуть это добавление.';
     case 'expansion_anchor_not_resolved':

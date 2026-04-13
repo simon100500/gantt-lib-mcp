@@ -25,6 +25,7 @@ type GroupScopeMatch = {
 };
 
 type MutationResolverTaskService = {
+  list(projectId: string): Promise<{ tasks: Array<{ id: string; name: string; parentId?: string; startDate?: string; endDate?: string }> }>;
   findTasksByName(projectId: string, query: string, limit?: number): Promise<TaskSearchMatch[]>;
   findContainerCandidates(projectId: string, query: string, limit?: number): Promise<TaskSearchMatch[]>;
   listBranchTasks(projectId: string, rootTaskId: string): Promise<TaskSearchMatch[]>;
@@ -39,7 +40,50 @@ export type ResolveMutationContextInput = {
   taskService: MutationResolverTaskService;
 };
 
-const CLOSEOUT_HINTS = ['сдача', 'closeout', 'handover', 'исполнительная документация', 'приемка'];
+function parseComparableDate(value?: string): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function pickLatestProjectSection(
+  tasks: Array<{ id: string; name: string; parentId?: string; startDate?: string; endDate?: string }>,
+): TaskSearchMatch | null {
+  const topLevelTasks = tasks.filter((task) => !task.parentId);
+  if (topLevelTasks.length === 0) {
+    return null;
+  }
+
+  const latest = [...topLevelTasks].sort((left, right) => {
+    const endDiff = parseComparableDate(right.endDate) - parseComparableDate(left.endDate);
+    if (endDiff !== 0) {
+      return endDiff;
+    }
+    const startDiff = parseComparableDate(right.startDate) - parseComparableDate(left.startDate);
+    if (startDiff !== 0) {
+      return startDiff;
+    }
+    return left.name.localeCompare(right.name);
+  })[0];
+
+  if (!latest) {
+    return null;
+  }
+
+  return {
+    taskId: latest.id,
+    name: latest.name,
+    parentId: latest.parentId ?? null,
+    path: [latest.name],
+    startDate: latest.startDate ?? '',
+    endDate: latest.endDate ?? '',
+    matchType: 'token',
+    score: 0.72,
+  };
+}
 
 function toResolutionEntity(match: TaskSearchMatch): MutationResolutionEntity {
   return {
@@ -86,11 +130,6 @@ function resolvePlacementPolicy(context: ResolvedMutationContext): PlacementPoli
 
 function extractPrimaryEntity(intent: MutationIntent, userMessage: string): string {
   return intent.entitiesMentioned[0] ?? userMessage.trim();
-}
-
-function looksLikeCloseoutIntent(intent: MutationIntent, userMessage: string): boolean {
-  const normalized = `${intent.normalizedRequest} ${userMessage.toLowerCase()}`;
-  return CLOSEOUT_HINTS.some((hint) => normalized.includes(hint));
 }
 
 function looksLikeGroupFanout(intent: MutationIntent, userMessage: string): boolean {
@@ -167,10 +206,16 @@ export async function resolveMutationContext(
   }
 
   if (input.intent.intentType === 'add_single_task' || input.intent.intentType === 'restructure_branch') {
-    const containerQuery = looksLikeCloseoutIntent(input.intent, input.userMessage)
-      ? CLOSEOUT_HINTS.join(' ')
-      : anchorQuery;
-    const containerMatches = await input.taskService.findContainerCandidates(input.projectId, containerQuery, 8);
+    let containerMatches = await input.taskService.findContainerCandidates(input.projectId, anchorQuery, 8);
+
+    if (containerMatches.length === 0) {
+      const tasks = await input.taskService.list(input.projectId);
+      const fallbackSection = pickLatestProjectSection(tasks.tasks);
+      if (fallbackSection) {
+        containerMatches = [fallbackSection];
+      }
+    }
+
     const bestContainer = pickBestTaskMatch(containerMatches);
 
     context.containers = containerMatches.map(toResolutionEntity);

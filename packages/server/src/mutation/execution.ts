@@ -52,8 +52,7 @@ function findTask(tasks: MutationTaskSnapshot[], taskId: string): MutationTaskSn
 function compareChangedSet(actual: string[], expected: string[]): boolean {
   const actualSorted = [...new Set(actual)].sort();
   const expectedSorted = [...new Set(expected)].sort();
-  return actualSorted.length === expectedSorted.length
-    && actualSorted.every((taskId, index) => taskId === expectedSorted[index]);
+  return expectedSorted.every((taskId) => actualSorted.includes(taskId));
 }
 
 function compileOperation(

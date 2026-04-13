@@ -50,8 +50,25 @@ describe('buildMutationPlan', () => {
     assert.equal(plan.needsAgentExecution, false);
     assert.equal(plan.expectedChangedTaskIds.length, 1);
     assert.equal(plan.operations[0]?.kind, 'append_task_to_container');
+    assert.equal(plan.operations[0]?.title, 'Сдача технадзору');
     assert.equal(plan.operations[0]?.durationDays, 1);
     assert.equal(plan.operations[0]?.containerId, 'container-closeout');
+  });
+
+  it('adds a numeric suffix when the deterministic add-task id already exists', async () => {
+    const plan = await buildMutationPlan({
+      intent: buildIntent(),
+      resolutionContext: buildContext(),
+      userMessage: 'добавь сдачу технадзору',
+      tasksBefore: [
+        { id: 'container-closeout:sdacha-tehnadzoru', name: 'Сдача технадзору' },
+        { id: 'container-closeout:sdacha-tehnadzoru-2', name: 'Сдача технадзору' },
+      ],
+    });
+
+    assert.equal(plan.operations[0]?.kind, 'append_task_to_container');
+    assert.equal(plan.operations[0]?.taskId, 'container-closeout:sdacha-tehnadzoru-3');
+    assert.deepEqual(plan.expectedChangedTaskIds, ['container-closeout:sdacha-tehnadzoru-3']);
   });
 
   it('maps date moves and metadata edits to deterministic semantic operations', async () => {

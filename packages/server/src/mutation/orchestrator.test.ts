@@ -15,7 +15,7 @@ describe('staged mutation orchestrator', () => {
     );
     assert.match(
       buildMutationFailureMessage('container_not_resolved'),
-      /не удалось определить контейнер/i,
+      /в какой раздел графика добавить/i,
     );
     assert.match(
       buildMutationFailureMessage('group_scope_not_resolved'),
@@ -165,7 +165,7 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.executionMode, 'deterministic');
     assert.equal(result.result.status, 'failed');
     assert.equal(result.result.failureReason, 'container_not_resolved');
-    assert.match(result.assistantResponse ?? '', /контейнер/i);
+    assert.match(result.assistantResponse ?? '', /раздел графика/i);
     assert.deepEqual(loggedEvents.map((entry) => entry.event), [
       'intent_classified',
       'execution_mode_selected',
