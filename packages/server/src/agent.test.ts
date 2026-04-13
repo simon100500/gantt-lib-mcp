@@ -337,4 +337,13 @@ describe('agent staged mutation lifecycle integration', () => {
     assert.notEqual(legacyIndex, -1);
     assert.ok(stagedIndex < legacyIndex, 'expected staged mutation handoff before legacy mutation attempt');
   });
+
+  it('keeps the generic no-valid-tool-call message only in the legacy fallback branch', () => {
+    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
+    const matches = source.match(/не выполнила ни одного валидного mutation tool call/g) ?? [];
+
+    assert.equal(matches.length, 1);
+    assert.match(source, /function buildNoMutationMessage\(\)/);
+    assert.doesNotMatch(source, /staged.*не выполнила ни одного валидного mutation tool call/i);
+  });
 });

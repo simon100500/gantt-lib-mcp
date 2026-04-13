@@ -1,11 +1,41 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import {
+  buildMutationFailureMessage,
+  buildMutationSuccessMessage,
+} from './messages.js';
 import { runStagedMutation } from './orchestrator.js';
 
 describe('staged mutation orchestrator', () => {
+  it('maps typed user-facing failure and success messages', () => {
+    assert.match(
+      buildMutationFailureMessage('anchor_not_found'),
+      /не удалось надежно определить целевую задачу/i,
+    );
+    assert.match(
+      buildMutationFailureMessage('container_not_resolved'),
+      /не удалось определить контейнер/i,
+    );
+    assert.match(
+      buildMutationFailureMessage('group_scope_not_resolved'),
+      /повторяющиеся группы/i,
+    );
+    assert.match(
+      buildMutationFailureMessage('verification_failed'),
+      /изменени.*не подтверд/i,
+    );
+    assert.match(
+      buildMutationSuccessMessage({
+        changedTaskIds: ['task-plaster'],
+        changedTasks: [{ id: 'task-plaster', name: 'Штукатурка' }],
+      }),
+      /Штукатурк/i,
+    );
+  });
+
   it('builds and executes deterministic plans for resolved ordinary edits', async () => {
-    const loggedEvents: string[] = [];
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
     const result = await runStagedMutation({
       userMessage: 'сдвинь штукатурку на 2 дня',
       projectId: 'project-1',
@@ -62,8 +92,8 @@ describe('staged mutation orchestrator', () => {
       },
       broadcastToSession: () => undefined,
       logger: {
-        debug: (event) => {
-          loggedEvents.push(event);
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
         },
       },
     });
@@ -71,7 +101,7 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.handled, true);
     assert.equal(result.status, 'completed');
     assert.equal(result.result.verificationVerdict, 'accepted');
-    assert.deepEqual(loggedEvents, [
+    assert.deepEqual(loggedEvents.map((entry) => entry.event), [
       'intent_classified',
       'execution_mode_selected',
       'resolution_started',
@@ -82,10 +112,17 @@ describe('staged mutation orchestrator', () => {
       'verification_result',
       'final_outcome',
     ]);
+    const finalOutcome = loggedEvents.at(-1)?.payload ?? {};
+    assert.equal(finalOutcome.status, 'completed');
+    assert.equal(finalOutcome.executionMode, 'deterministic');
+    assert.deepEqual(finalOutcome.changedTaskIds, ['task-plaster']);
+    assert.equal(finalOutcome.verificationVerdict, 'accepted');
+    assert.equal(finalOutcome.failureReason, undefined);
+    assert.match(result.assistantResponse ?? '', /Штукатурк/i);
   });
 
   it('returns a typed controlled failure when add intents cannot resolve a container', async () => {
-    const loggedEvents: string[] = [];
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
     const result = await runStagedMutation({
       userMessage: 'добавь сдачу технадзору',
       projectId: 'project-1',
@@ -115,8 +152,8 @@ describe('staged mutation orchestrator', () => {
       },
       broadcastToSession: () => undefined,
       logger: {
-        debug: (event) => {
-          loggedEvents.push(event);
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
         },
       },
     });
@@ -128,12 +165,20 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.executionMode, 'deterministic');
     assert.equal(result.result.status, 'failed');
     assert.equal(result.result.failureReason, 'container_not_resolved');
-    assert.deepEqual(loggedEvents, [
+    assert.match(result.assistantResponse ?? '', /контейнер/i);
+    assert.deepEqual(loggedEvents.map((entry) => entry.event), [
       'intent_classified',
       'execution_mode_selected',
       'resolution_started',
       'resolution_result',
+      'final_outcome',
     ]);
+    const finalOutcome = loggedEvents.at(-1)?.payload ?? {};
+    assert.equal(finalOutcome.status, 'failed');
+    assert.equal(finalOutcome.executionMode, 'deterministic');
+    assert.equal(finalOutcome.failureReason, 'container_not_resolved');
+    assert.deepEqual(finalOutcome.changedTaskIds, []);
+    assert.equal(finalOutcome.verificationVerdict, 'not_run');
   });
 
   it('keeps unsupported intents on the legacy fallback path', async () => {
