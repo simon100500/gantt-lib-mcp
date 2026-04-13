@@ -1,6 +1,10 @@
 import { classifyMutationIntent } from './intent-classifier.js';
 import { executeMutationPlan } from './execution.js';
 import { selectMutationExecutionMode } from './execution-routing.js';
+import {
+  buildMutationFailureMessage,
+  buildMutationSuccessMessage,
+} from './messages.js';
 import { buildMutationPlan } from './plan-builder.js';
 import { resolveMutationContext } from './resolver.js';
 import type { ServerMessage } from '../ws.js';
@@ -82,14 +86,16 @@ function buildDeferredResult(executionMode: MutationExecutionMode): MutationOrch
   };
 }
 
-function buildControlledFailure(
+async function buildControlledFailure(
+  input: RunStagedMutationInput,
   executionMode: MutationExecutionMode,
   failureReason: MutationFailureReason,
   resolutionContext: ResolvedMutationContext | null,
+  plan: MutationOrchestrationResult['plan'],
   userFacingMessage: string,
   intent: MutationOrchestrationResult['intent'],
-): MutationOrchestrationResult {
-  return {
+): Promise<MutationOrchestrationResult> {
+  const result: MutationOrchestrationResult = {
     handled: true,
     status: 'failed',
     legacyFallbackAllowed: false,
@@ -97,7 +103,7 @@ function buildControlledFailure(
     intent,
     executionMode,
     resolutionContext,
-    plan: null,
+    plan,
     result: {
       status: 'failed',
       executionMode,
@@ -109,6 +115,19 @@ function buildControlledFailure(
     },
     assistantResponse: userFacingMessage,
   };
+
+  await input.logger.debug('final_outcome', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    status: result.status,
+    executionMode,
+    failureReason,
+    changedTaskIds: result.result.changedTaskIds,
+    verificationVerdict: result.result.verificationVerdict,
+  });
+
+  return result;
 }
 
 function hasTiedTopTaskScores(resolutionContext: ResolvedMutationContext): boolean {
@@ -158,25 +177,6 @@ function resolveFailureReason(
   }
 
   return 'unsupported_mutation_shape';
-}
-
-function buildFailureMessage(failureReason: MutationFailureReason): string {
-  switch (failureReason) {
-    case 'anchor_not_found':
-      return 'Не удалось надежно определить целевую задачу для этого изменения.';
-    case 'multiple_low_confidence_targets':
-      return 'Нашлось несколько одинаково вероятных целей. Уточните, какую именно задачу нужно изменить.';
-    case 'container_not_resolved':
-      return 'Не удалось определить контейнер, куда нужно добавить работу.';
-    case 'placement_not_resolved':
-      return 'Контейнер найден, но не удалось определить точное место вставки.';
-    case 'group_scope_not_resolved':
-      return 'Не удалось определить повторяющиеся группы для массового добавления.';
-    case 'expansion_anchor_not_resolved':
-      return 'Не удалось определить пункт, который нужно детализировать.';
-    default:
-      return 'Этот тип изменения пока не поддерживается в staged-маршруте.';
-  }
 }
 
 export async function runStagedMutation(
@@ -246,10 +246,12 @@ export async function runStagedMutation(
   if (resolutionContext && hasTiedTopTaskScores(resolutionContext)) {
     const failureReason = 'multiple_low_confidence_targets';
     return buildControlledFailure(
+      input,
       executionMode,
       failureReason,
       resolutionContext,
-      buildFailureMessage(failureReason),
+      null,
+      buildMutationFailureMessage(failureReason, { resolutionContext }),
       {
         ...intent,
         executionMode,
@@ -328,13 +330,34 @@ export async function runStagedMutation(
     const tasksAfter = execution.status === 'completed'
       ? (await input.taskService.list(input.projectId)).tasks
       : input.tasksBefore;
+    const knownChangedTasks = Array.from(
+      new Map(
+        [...tasksAfter, ...input.tasksBefore].map((task) => [task.id, task]),
+      ).values(),
+    );
+    const userFacingMessage = execution.status === 'completed'
+      ? buildMutationSuccessMessage({
+          changedTaskIds: execution.changedTaskIds,
+          changedTasks: knownChangedTasks,
+        })
+      : buildMutationFailureMessage(execution.failureReason ?? 'deterministic_execution_failed', {
+          details: execution.userFacingMessage,
+          resolutionContext,
+        });
+    const result = {
+      ...execution,
+      userFacingMessage,
+    };
 
     await input.logger.debug('final_outcome', {
       runId: input.runId,
       projectId: input.projectId,
       sessionId: input.sessionId,
       status: execution.status,
+      executionMode,
       failureReason: execution.failureReason,
+      changedTaskIds: execution.changedTaskIds,
+      verificationVerdict: execution.verificationVerdict,
     });
 
     return {
@@ -349,8 +372,8 @@ export async function runStagedMutation(
       executionMode,
       resolutionContext,
       plan,
-      result: execution,
-      assistantResponse: execution.userFacingMessage,
+      result,
+      assistantResponse: result.userFacingMessage,
       tasksAfter,
     };
   }
@@ -358,10 +381,12 @@ export async function runStagedMutation(
   if (resolutionContext && resolutionContext.confidence < 0.7) {
     const failureReason = resolveFailureReason(intent.intentType, resolutionContext);
     return buildControlledFailure(
+      input,
       executionMode,
       failureReason,
       resolutionContext,
-      buildFailureMessage(failureReason),
+      null,
+      buildMutationFailureMessage(failureReason, { resolutionContext }),
       {
         ...intent,
         executionMode,
@@ -370,10 +395,12 @@ export async function runStagedMutation(
   }
 
   return buildControlledFailure(
+    input,
     executionMode,
     'unsupported_mutation_shape',
     resolutionContext,
-    buildFailureMessage('unsupported_mutation_shape'),
+    null,
+    buildMutationFailureMessage('unsupported_mutation_shape', { resolutionContext }),
     {
       ...intent,
       executionMode,
