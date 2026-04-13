@@ -147,4 +147,69 @@ describe('resolveMutationContext', () => {
     assert.deepEqual(result.containers.map((item) => item.id), ['floors-root']);
     assert.equal(result.confidence, 0.9);
   });
+
+  it('leaves add intents unresolved when no container candidate is found for container_not_resolved handling', async () => {
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 1,
+      userMessage: 'добавь сдачу технадзору',
+      intent: buildIntent(),
+      taskService: {
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+    });
+
+    assert.equal(result.selectedContainerId, null);
+    assert.equal(result.confidence, 0);
+  });
+
+  it('leaves missing task anchors unresolved for anchor_not_found handling', async () => {
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 1,
+      userMessage: 'сдвинь штукатурку на 2 дня',
+      intent: buildIntent({
+        intentType: 'shift_relative',
+        rawRequest: 'сдвинь штукатурку на 2 дня',
+        normalizedRequest: 'сдвинь штукатурку на 2 дня',
+        entitiesMentioned: ['штукатурку'],
+        requiresSchedulingPlacement: false,
+      }),
+      taskService: {
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+    });
+
+    assert.equal(result.selectedPredecessorTaskId, null);
+    assert.equal(result.confidence, 0);
+  });
+
+  it('leaves repeated fragment requests unresolved when group_scope_not_resolved applies', async () => {
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 1,
+      userMessage: 'добавь покраску обоев на каждый этаж',
+      intent: buildIntent({
+        intentType: 'add_repeated_fragment',
+        rawRequest: 'добавь покраску обоев на каждый этаж',
+        normalizedRequest: 'добавь покраску обоев на каждый этаж',
+        entitiesMentioned: ['покраску обоев'],
+      }),
+      taskService: {
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+    });
+
+    assert.equal(result.selectedContainerId, null);
+    assert.equal(result.placementPolicy, 'unresolved');
+  });
 });

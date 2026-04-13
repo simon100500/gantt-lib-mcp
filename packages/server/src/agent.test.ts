@@ -314,6 +314,7 @@ describe('agent staged mutation lifecycle integration', () => {
     assert.equal(classifyMutationIntent('добавь сдачу технадзору').intentType, 'add_single_task');
     assert.equal(classifyMutationIntent('перенеси фундамент на 2026-05-10').intentType, 'move_to_date');
     assert.equal(classifyMutationIntent('добавь покраску обоев на каждый этаж').intentType, 'add_repeated_fragment');
+    assert.equal(classifyMutationIntent('распиши подробнее пункт "Монолит"').intentType, 'expand_wbs');
   });
 
   it('hands ordinary edits into the staged shell before the legacy mutation attempt', () => {
