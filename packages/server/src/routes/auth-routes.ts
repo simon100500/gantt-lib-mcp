@@ -18,17 +18,12 @@ import {
   verifyToken,
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
-import { requireTrackedLimit, requireFeatureGate } from '../middleware/constraint-middleware.js';
+import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
 import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
 
 const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
   upgradeHint: 'Upgrade your plan to create or restore more active projects.',
-});
-
-const requireArchiveAccess = requireFeatureGate('archive', {
-  code: 'ARCHIVE_FEATURE_LOCKED',
-  upgradeHint: 'Архив проектов доступен на тарифе Старт и выше.',
 });
 
 type AuthSuccessResponse = {
@@ -200,13 +195,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     if (!sessionProject) {
       const projects = await authService.listProjects(session.userId);
       const fallbackProject = projects.find((item) => item.status === 'active') ?? projects[0];
-
-      if (!fallbackProject) {
-        return reply.status(403).send({ error: 'Project unavailable' });
+      if (fallbackProject) {
+        await authService.updateSessionProject(session.id, fallbackProject.id);
+        resolvedProjectId = fallbackProject.id;
       }
-
-      await authService.updateSessionProject(session.id, fallbackProject.id);
-      resolvedProjectId = fallbackProject.id;
     }
 
     // Generate new ACCESS token only (refresh token stays the same - no rotation!)
@@ -458,7 +450,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({ project });
   });
 
-  fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware, requireArchiveAccess] }, async (req, reply) => {
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
     const result = await authService.archiveProject(projectId, req.user!.userId);
 
@@ -491,9 +483,6 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     const result = await authService.softDeleteProject(projectId, req.user!.userId);
     if (!result.ok) {
-      if (result.reason === 'last_project') {
-        return reply.status(409).send({ error: 'Нельзя удалить последний проект' });
-      }
       return reply.status(404).send({ error: 'Project not found' });
     }
 

@@ -98,7 +98,7 @@ export const PLAN_CATALOG: Record<PlanId, PlanDefinition> = {
     limits: {
       projects: 1,
       ai_queries: { period: 'lifetime', value: 20 },
-      archive: false,
+      archive: true,
       resource_pool: false,
       export: 'none',
     },

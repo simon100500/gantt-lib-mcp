@@ -324,7 +324,18 @@ export function ProjectSwitcher({
                 />
               ))
             ) : (
-              <p className="px-3 py-2 text-xs text-slate-400">Нет активных проектов</p>
+              <div className="px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => void onCreateNew()}
+                  disabled={createDisabled}
+                  title={createTitle ?? 'Новый проект'}
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Новый проект</span>
+                </button>
+              </div>
             )}
           </ProjectSection>
 

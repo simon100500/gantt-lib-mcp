@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccountPage } from './components/AccountPage.tsx';
 import { AdminPage } from './components/AdminPage.tsx';
 import { DeleteProjectModal } from './components/DeleteProjectModal.tsx';
+import { CreateProjectModal } from './components/CreateProjectModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
@@ -359,6 +360,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
   const [limitModal, setLimitModal] = useState<{
@@ -658,6 +660,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       void openLimitModal(proactiveChatDenial);
       return;
     }
+    if (!auth.project) {
+      return;
+    }
     if (auth.project?.taskCount === 0) {
       setActiveEmptyProjectModeProjectId(auth.project.id);
     }
@@ -667,6 +672,50 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       useChatStore.getState().setError(String(submitError));
     });
   }, [auth.isAuthenticated, auth.project, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
+
+  const activateImplicitProject = useCallback(async ({
+    firstPrompt,
+    createEmptyChart = false,
+  }: {
+    firstPrompt?: string;
+    createEmptyChart?: boolean;
+  }): Promise<boolean> => {
+    if (hasShareToken) {
+      return false;
+    }
+    if (!auth.isAuthenticated || activationInFlightRef.current) {
+      return false;
+    }
+
+    activationInFlightRef.current = true;
+    createEmptyChartAfterActivationRef.current = createEmptyChart;
+    queuedPromptRef.current = firstPrompt ?? null;
+    resetWorkspacePresentation();
+
+    if (firstPrompt) {
+      useChatStore.getState().addMessage({ role: 'user', content: firstPrompt });
+    }
+
+    const newProject = await auth.createProject(getDefaultProjectName());
+    if (!newProject) {
+      useChatStore.getState().finishStreaming();
+      queuedPromptRef.current = null;
+      activationInFlightRef.current = false;
+      createEmptyChartAfterActivationRef.current = false;
+      return false;
+    }
+
+    await auth.switchProject(newProject.id);
+    setSidebarState('closed');
+    if (createEmptyChart) {
+      setActiveEmptyProjectModeProjectId(newProject.id);
+    } else {
+      replaceTasksFromSystem([]);
+    }
+    setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: !createEmptyChart });
+    activationInFlightRef.current = false;
+    return true;
+  }, [auth, getDefaultProjectName, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setSidebarState, setWorkspace]);
 
   const activateDraftWorkspace = useCallback(async ({
     firstPrompt,
@@ -740,8 +789,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       await activateDraftWorkspace({ firstPrompt: text });
       return;
     }
+    if (!auth.project) {
+      await activateImplicitProject({ firstPrompt: text });
+      return;
+    }
     handleSend(text);
-  }, [activateDraftWorkspace, auth.isAuthenticated, handleSend, hasShareToken, onLoginRequired, workspace.kind]);
+  }, [activateDraftWorkspace, activateImplicitProject, auth.isAuthenticated, auth.project, handleSend, hasShareToken, onLoginRequired, workspace.kind]);
 
   const handleValidation = useCallback((result: ValidationResult) => {
     setValidationErrors(result.isValid ? [] : result.errors);
@@ -769,10 +822,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       await activateDraftWorkspace({ createEmptyChart: true });
       return;
     }
+    if (!auth.project) {
+      await activateImplicitProject({ createEmptyChart: true });
+      return;
+    }
     if (workspace.kind === 'project') {
       setActiveEmptyProjectModeProjectId(workspace.projectId);
     }
-  }, [activateDraftWorkspace, auth.isAuthenticated, hasShareToken, onLoginRequired, workspace]);
+  }, [activateDraftWorkspace, activateImplicitProject, auth.isAuthenticated, auth.project, hasShareToken, onLoginRequired, workspace]);
 
   const handleSwitchProject = useCallback(async (projectId: string) => {
     createEmptyChartAfterActivationRef.current = false;
@@ -789,6 +846,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         await openLimitModal(proactiveProjectDenial);
         return;
       }
+      if (auth.projects.length === 0) {
+        setShowCreateProjectModal(true);
+        return;
+      }
       createEmptyChartAfterActivationRef.current = false;
       queuedPromptRef.current = null;
       resetWorkspacePresentation();
@@ -803,7 +864,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     setWorkspace({ kind: 'guest' });
-  }, [auth.isAuthenticated, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
+  }, [auth.isAuthenticated, auth.projects.length, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
@@ -1021,10 +1082,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
     : undefined;
   const currentProjectIsEmpty = workspace.kind === 'project' && currentProjectTaskCount === 0;
+  const hasQueuedProjectPrompt = workspace.kind === 'project' && Boolean(queuedPromptRef.current);
+  const projectChatOpen = workspace.kind === 'project' && workspace.chatOpen;
   const showProjectStartScreen = workspace.kind === 'project'
     && !hasShareToken
     && currentProjectIsEmpty
     && !previewState.active
+    && !hasQueuedProjectPrompt
+    && !projectChatOpen
     && activeEmptyProjectModeProjectId !== workspace.projectId;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
@@ -1064,7 +1129,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ? (
           <DraftWorkspace
             isAuthenticated={auth.isAuthenticated}
-            onSend={handleSend}
+            onSend={handleStartScreenSend}
             onEmptyChart={handleEmptyChart}
             onLoginRequired={onLoginRequired}
           />
@@ -1186,6 +1251,28 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           setDeleteProjectDraft(null);
         }}
         onClose={() => setDeleteProjectDraft(null)}
+      />
+    )}
+
+    {showCreateProjectModal && (
+      <CreateProjectModal
+        onSave={async (name) => {
+          const newProject = await auth.createProject(name.trim());
+          if (!newProject) {
+            return null;
+          }
+
+          createEmptyChartAfterActivationRef.current = false;
+          queuedPromptRef.current = null;
+          resetWorkspacePresentation();
+          await auth.switchProject(newProject.id);
+          setSidebarState('closed');
+          replaceTasksFromSystem([]);
+          setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: false });
+          setShowCreateProjectModal(false);
+          return { id: newProject.id, name: newProject.name };
+        }}
+        onClose={() => setShowCreateProjectModal(false)}
       />
     )}
     </>

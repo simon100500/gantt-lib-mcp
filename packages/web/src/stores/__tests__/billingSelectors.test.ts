@@ -26,9 +26,9 @@ function makeUsageStatus(
 }
 
 describe('getArchiveAccess', () => {
-  it('returns false when archive limit is false (free plan)', () => {
-    const status = makeUsageStatus({ archive: false });
-    expect(getArchiveAccess(status)).toBe(false);
+  it('returns true when archive limit is true for free plan', () => {
+    const status = makeUsageStatus({ archive: true });
+    expect(getArchiveAccess(status)).toBe(true);
   });
 
   it('returns true when archive limit is true (paid plan)', () => {

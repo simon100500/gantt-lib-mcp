@@ -20,7 +20,7 @@ export type RestoreProjectResult =
 
 export type SoftDeleteProjectResult =
   | { ok: true }
-  | { ok: false; reason: 'not_found' | 'last_project' };
+  | { ok: false; reason: 'not_found' };
 
 export class ProjectService {
   private prisma = getPrisma();
@@ -246,17 +246,6 @@ export class ProjectService {
 
     if (!existing || existing.userId !== userId) {
       return { ok: false, reason: 'not_found' };
-    }
-
-    const remainingProjectCount = await this.prisma.project.count({
-      where: {
-        userId,
-        status: { not: 'deleted' },
-      },
-    });
-
-    if (remainingProjectCount <= 1) {
-      return { ok: false, reason: 'last_project' };
     }
 
     await this.prisma.project.update({

@@ -140,7 +140,7 @@ function readStoredAuth(): StoredAuthState | null {
   const projectStr = window.localStorage.getItem(PROJECT_KEY);
   const projectsStr = window.localStorage.getItem(PROJECTS_KEY);
 
-  if (!accessToken || !userStr || !projectStr) {
+  if (!accessToken || !userStr) {
     return null;
   }
 
@@ -152,10 +152,10 @@ function readStoredAuth(): StoredAuthState | null {
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
     });
-    const project = normalizeProject(JSON.parse(projectStr) as AuthProject);
+    const project = projectStr ? normalizeProject(JSON.parse(projectStr) as AuthProject) : null;
     const projects = projectsStr
       ? (JSON.parse(projectsStr) as AuthProject[]).map(normalizeProject)
-      : [project];
+      : project ? [project] : [];
 
     return {
       accessToken,
@@ -171,7 +171,7 @@ function readStoredAuth(): StoredAuthState | null {
 }
 
 function toAuthState(storedState: StoredAuthState | null): AuthState {
-  if (!storedState?.accessToken || !storedState.user || !storedState.project) {
+  if (!storedState?.accessToken || !storedState.user) {
     return INITIAL_AUTH_STATE;
   }
 
@@ -180,7 +180,7 @@ function toAuthState(storedState: StoredAuthState | null): AuthState {
     user: storedState.user,
     project: storedState.project,
     accessToken: storedState.accessToken,
-    projects: storedState.projects.length > 0 ? storedState.projects : [storedState.project],
+    projects: storedState.projects.length > 0 ? storedState.projects : (storedState.project ? [storedState.project] : []),
     constraintDenial: null,
   };
 }
@@ -698,9 +698,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       throw new Error(data.error || 'Failed to delete project');
     }
 
-    const nextProjects = get().projects.filter((project) => project.id !== projectId);
-    const nextProject = mergeCurrentProject(nextProjects, get().project);
     const accessToken = token ?? state.accessToken;
+    let nextProjects = get().projects.filter((project) => project.id !== projectId);
+
+    try {
+      nextProjects = await fetchProjects(accessToken);
+    } catch (error) {
+      console.error('Failed to refresh projects after delete:', error);
+    }
+
+    const currentProject = get().project?.id === projectId ? null : get().project;
+    const nextProject = mergeCurrentProject(nextProjects, currentProject);
 
     persistAuthSnapshot({
       accessToken,
@@ -722,7 +730,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const projects = await fetchProjects(token);
       const state = get();
-      const nextProjects = projects.length > 0 ? projects : state.projects;
+      const nextProjects = projects;
       const nextProject = mergeCurrentProject(nextProjects, state.project);
 
       persistStoredAuth({

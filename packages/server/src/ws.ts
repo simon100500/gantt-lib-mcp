@@ -141,12 +141,10 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
               if (!project) {
                 const availableProjects = await authService.listProjects(session.userId);
                 const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
-                if (!fallbackProject) {
-                  throw new Error('Project unavailable');
+                if (fallbackProject) {
+                  await authService.updateSessionProject(session.id, fallbackProject.id);
+                  resolvedProjectId = fallbackProject.id;
                 }
-
-                await authService.updateSessionProject(session.id, fallbackProject.id);
-                resolvedProjectId = fallbackProject.id;
               }
 
               isAuthenticated = true;
