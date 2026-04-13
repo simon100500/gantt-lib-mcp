@@ -12,6 +12,7 @@ import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
 import { DraftWorkspace } from './components/workspace/DraftWorkspace.tsx';
+import type { StartScreenSendResult } from './components/StartScreen.tsx';
 import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
@@ -645,23 +646,26 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     return true;
   }, [auth, isArchivedProject, openLimitModal, proactiveChatDenial]);
 
-  const handleSend = useCallback((text: string) => {
+  const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
-      return;
+      return { accepted: false };
     }
     if (isArchivedProject) {
-      return;
+      return {
+        accepted: false,
+        message: 'Проект в архиве. Восстановите его, чтобы отправить запрос.',
+      };
     }
     if (!auth.isAuthenticated) {
       onLoginRequired();
-      return;
+      return { accepted: false };
     }
     if (proactiveChatDenial) {
       void openLimitModal(proactiveChatDenial);
-      return;
+      return { accepted: false };
     }
     if (!auth.project) {
-      return;
+      return { accepted: false };
     }
     if (auth.project?.taskCount === 0) {
       setActiveEmptyProjectModeProjectId(auth.project.id);
@@ -671,6 +675,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     void submitChatMessage(text).catch((submitError) => {
       useChatStore.getState().setError(String(submitError));
     });
+    return { accepted: true };
   }, [auth.isAuthenticated, auth.project, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
 
   const activateImplicitProject = useCallback(async ({
@@ -777,24 +782,30 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     return true;
   }, [auth, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setProjectState, setSidebarState, setWorkspace, workspace]);
 
-  const handleStartScreenSend = useCallback(async (text: string) => {
+  const handleStartScreenSend = useCallback(async (text: string): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
-      return;
+      return { accepted: false };
     }
     if (!auth.isAuthenticated) {
       onLoginRequired();
-      return;
+      return { accepted: false };
+    }
+    if (isArchivedProject) {
+      return {
+        accepted: false,
+        message: 'Проект в архиве. Восстановите его, чтобы отправить запрос.',
+      };
     }
     if (workspace.kind === 'draft') {
-      await activateDraftWorkspace({ firstPrompt: text });
-      return;
+      const accepted = await activateDraftWorkspace({ firstPrompt: text });
+      return accepted ? { accepted: true } : { accepted: false };
     }
     if (!auth.project) {
-      await activateImplicitProject({ firstPrompt: text });
-      return;
+      const accepted = await activateImplicitProject({ firstPrompt: text });
+      return accepted ? { accepted: true } : { accepted: false };
     }
-    handleSend(text);
-  }, [activateDraftWorkspace, activateImplicitProject, auth.isAuthenticated, auth.project, handleSend, hasShareToken, onLoginRequired, workspace.kind]);
+    return handleSend(text);
+  }, [activateDraftWorkspace, activateImplicitProject, auth.isAuthenticated, auth.project, handleSend, hasShareToken, isArchivedProject, onLoginRequired, workspace.kind]);
 
   const handleValidation = useCallback((result: ValidationResult) => {
     setValidationErrors(result.isValid ? [] : result.errors);

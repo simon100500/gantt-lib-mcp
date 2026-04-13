@@ -2,8 +2,13 @@ import { useState, useRef } from 'react';
 import { ArrowUp, GanttChart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+export interface StartScreenSendResult {
+  accepted: boolean;
+  message?: string;
+}
+
 export interface StartScreenProps {
-  onSend: (text: string) => void;
+  onSend: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   onEmptyChart: () => void;
   isAuthenticated?: boolean;
   onLoginRequired?: () => void;
@@ -35,6 +40,7 @@ const CHIPS: Array<{ label: string; prompt: string; icon?: React.ComponentType<{
 
 export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLoginRequired }: StartScreenProps) {
   const [inputValue, setInputValue] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
@@ -45,7 +51,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
     el.style.overflowY = newHeight > 192 ? 'auto' : 'hidden';
   }
 
-  function handleSubmit(e?: React.FormEvent) {
+  async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
     const text = inputValue.trim();
     if (!text) return;
@@ -53,7 +59,12 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
       onLoginRequired?.();
       return;
     }
-    onSend(text);
+    setSubmitError(null);
+    const result = await onSend(text);
+    if (!result.accepted) {
+      setSubmitError(result.message ?? 'Не удалось отправить запрос.');
+      return;
+    }
     setInputValue('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -62,6 +73,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
   }
 
   function handleChipClick(prompt: string) {
+    setSubmitError(null);
     setInputValue(prompt);
     textareaRef.current?.focus();
   }
@@ -81,7 +93,12 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
               ref={textareaRef}
               rows={6}
               value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
+              onChange={e => {
+                if (submitError) {
+                  setSubmitError(null);
+                }
+                setInputValue(e.target.value);
+              }}
               onInput={handleTextareaInput}
               placeholder="Опишите ваш проект или выберите пример ниже"
               autoComplete="off"
@@ -109,6 +126,11 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
               <ArrowUp className="w-4 h-4" />
             </button>
           </div>
+          {submitError && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+              {submitError}
+            </div>
+          )}
 
           {/* Chips row */}
           <div className="flex flex-wrap gap-2 mt-3">

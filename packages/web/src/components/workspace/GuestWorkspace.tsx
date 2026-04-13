@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 
 import type { GanttChartRef } from '../GanttChart.tsx';
-import { StartScreen } from '../StartScreen.tsx';
+import { StartScreen, type StartScreenSendResult } from '../StartScreen.tsx';
 import { ProjectWorkspace } from './ProjectWorkspace.tsx';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import type { Task, ValidationResult } from '../../types.ts';
@@ -13,7 +13,7 @@ interface GuestWorkspaceProps {
   loading: boolean;
   isAuthenticated: boolean;
   batchUpdate: UseBatchTaskUpdateResult;
-  onSend: (text: string) => void | Promise<void>;
+  onSend: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   onEmptyChart: () => void | Promise<void>;
   onLoginRequired: () => void;
   onScrollToToday: () => void;
@@ -30,7 +30,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
   if (props.tasks.length === 0 && !props.loading) {
     return (
       <StartScreen
-        onSend={(text) => { void props.onSend(text); }}
+        onSend={props.onSend}
         onEmptyChart={() => { void props.onEmptyChart(); }}
         isAuthenticated={props.isAuthenticated}
         onLoginRequired={props.onLoginRequired}
