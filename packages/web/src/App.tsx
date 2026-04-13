@@ -357,6 +357,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
+  const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
@@ -452,6 +453,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
+  const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
     setTasks(nextTasks);
@@ -558,6 +560,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     });
   }, [auth.isAuthenticated, auth.project?.id, hasShareToken, setWorkspace]);
 
+  useEffect(() => {
+    setActiveEmptyProjectModeProjectId(null);
+  }, [auth.project?.id]);
+
   const closeProjectChat = useCallback(() => {
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: false } : current);
   }, [setWorkspace]);
@@ -576,16 +582,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
   }, [replaceTasksFromSystem]);
-
-  const createPlaceholderTask = useCallback((): Task => {
-    const today = new Date().toISOString().split('T')[0];
-    return {
-      id: `task-${Date.now()}`,
-      name: 'Новая задача',
-      startDate: today,
-      endDate: today,
-    };
-  }, []);
 
   const submitChatMessage = useCallback(async (message: string) => {
     if (isArchivedProject) {
@@ -662,12 +658,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       void openLimitModal(proactiveChatDenial);
       return;
     }
+    if (auth.project?.taskCount === 0) {
+      setActiveEmptyProjectModeProjectId(auth.project.id);
+    }
     useChatStore.getState().addMessage({ role: 'user', content: text });
     openProjectChat();
     void submitChatMessage(text).catch((submitError) => {
       useChatStore.getState().setError(String(submitError));
     });
-  }, [auth.isAuthenticated, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
+  }, [auth.isAuthenticated, auth.project, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
 
   const activateDraftWorkspace = useCallback(async ({
     firstPrompt,
@@ -720,14 +719,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     await auth.switchProject(newProject.id);
     setSidebarState('closed');
     if (createEmptyChart) {
-      setTasks([createPlaceholderTask()]);
+      setActiveEmptyProjectModeProjectId(newProject.id);
     } else {
       replaceTasksFromSystem([]);
     }
     setWorkspace({ kind: 'project', projectId: newProject.id, chatOpen: !createEmptyChart });
     activationInFlightRef.current = false;
     return true;
-  }, [auth, createPlaceholderTask, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setSidebarState, setTasks, setWorkspace, workspace]);
+  }, [auth, getDefaultProjectName, hasShareToken, onLoginRequired, replaceTasksFromSystem, resetWorkspacePresentation, setProjectState, setSidebarState, setWorkspace, workspace]);
 
   const handleStartScreenSend = useCallback(async (text: string) => {
     if (hasShareToken) {
@@ -770,17 +769,19 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       await activateDraftWorkspace({ createEmptyChart: true });
       return;
     }
-    void batchUpdate.handleAdd(createPlaceholderTask());
-    openProjectChat();
-  }, [activateDraftWorkspace, auth.isAuthenticated, batchUpdate, createPlaceholderTask, hasShareToken, onLoginRequired, openProjectChat, workspace.kind]);
+    if (workspace.kind === 'project') {
+      setActiveEmptyProjectModeProjectId(workspace.projectId);
+    }
+  }, [activateDraftWorkspace, auth.isAuthenticated, hasShareToken, onLoginRequired, workspace]);
 
   const handleSwitchProject = useCallback(async (projectId: string) => {
     createEmptyChartAfterActivationRef.current = false;
     queuedPromptRef.current = null;
-    resetWorkspacePresentation();
+    useTaskStore.setState({ loading: true, error: null });
+    useProjectStore.getState().clearTransientState();
     await auth.switchProject(projectId);
     setWorkspace({ kind: 'project', projectId, chatOpen: false });
-  }, [auth, resetWorkspacePresentation, setWorkspace]);
+  }, [auth, setWorkspace]);
 
   const handleCreateProject = useCallback(async () => {
     if (auth.isAuthenticated) {
@@ -965,17 +966,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!auth.isAuthenticated || hasShareToken || workspace.kind !== 'project') {
       return;
     }
-
-    if (tasks.length === 0) {
+    if (loading) {
       return;
     }
 
     auth.syncProjectTaskCount(workspace.projectId, tasks.length);
-  }, [auth, auth.isAuthenticated, hasShareToken, tasks.length, workspace]);
+  }, [auth, auth.isAuthenticated, hasShareToken, loading, tasks.length, workspace]);
 
   const handleScrollToToday = useCallback(() => ganttRef.current?.scrollToToday(), []);
 
-  const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const workspaceStateId = workspace.kind === 'project'
     ? workspace.projectId
     : workspace.kind === 'shared'
@@ -1018,6 +1017,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
+  const currentProjectTaskCount = workspace.kind === 'project'
+    ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
+    : undefined;
+  const currentProjectIsEmpty = workspace.kind === 'project' && currentProjectTaskCount === 0;
+  const showProjectStartScreen = workspace.kind === 'project'
+    && !hasShareToken
+    && currentProjectIsEmpty
+    && !previewState.active
+    && activeEmptyProjectModeProjectId !== workspace.projectId;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'draft'
@@ -1052,6 +1060,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           onLoginRequired={onLoginRequired}
         />
       )
+      : showProjectStartScreen
+        ? (
+          <DraftWorkspace
+            isAuthenticated={auth.isAuthenticated}
+            onSend={handleSend}
+            onEmptyChart={handleEmptyChart}
+            onLoginRequired={onLoginRequired}
+          />
+        )
       : workspace.kind === 'project'
         ? (
           <ProjectWorkspace

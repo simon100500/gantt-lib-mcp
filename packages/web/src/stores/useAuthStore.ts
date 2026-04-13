@@ -744,11 +744,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const currentProjectCount = state.project?.id === projectId ? state.project.taskCount : undefined;
     const listProjectCount = state.projects.find((project) => project.id === projectId)?.taskCount;
 
-    // NEVER overwrite non-zero with zero - zero means "not loaded yet"
-    if (taskCount === 0 && (currentProjectCount !== undefined || listProjectCount !== undefined)) {
-      return;
-    }
-
     if (currentProjectCount === taskCount && listProjectCount === taskCount) {
       return;
     }
