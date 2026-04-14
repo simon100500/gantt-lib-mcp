@@ -25,6 +25,7 @@ function createCommitResponse(newVersion: number): Extract<CommitProjectCommandR
 function createHarness(options?: {
   plannerQuery?: (input: { stage: string; prompt: string; model: string }) => Promise<string | { content?: string }>;
   commitReject?: boolean;
+  deps?: Record<string, unknown>;
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const messages: Array<{ role: string; content: string }> = [];
@@ -293,11 +294,21 @@ function createHarness(options?: {
           events.push({ event, payload });
         },
       },
+      deps: options?.deps,
       broadcastToSession(sessionId: string, message: { type: string; tasks?: unknown[]; provisional?: boolean; message?: string }) {
         broadcasts.push({ sessionId, message });
       },
     },
   };
+}
+
+function getEvent(
+  harness: ReturnType<typeof createHarness>,
+  event: string,
+): { event: string; payload: Record<string, unknown> } {
+  const entry = harness.events.find((candidate) => candidate.event === event);
+  assert.ok(entry, `Expected event ${event} to be logged`);
+  return entry;
 }
 
 describe('runInitialGeneration', () => {
@@ -336,6 +347,189 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.some((entry) => entry.event === 'preview_tasks_broadcast'), true);
     assert.equal(harness.broadcasts.some((entry) => entry.message.type === 'preview_tasks'), true);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 1);
+  });
+
+  it('logs the structured interpretation lifecycle and normalized downstream decisions', async () => {
+    const harness = createHarness({
+      deps: {
+        async interpretRequest() {
+          return {
+            interpretation: {
+              route: 'initial_generation',
+              confidence: 0.91,
+              requestKind: 'whole_project',
+              planningMode: 'whole_project_bootstrap',
+              scopeMode: 'full_project',
+              objectProfile: 'residential_multi_section',
+              projectArchetype: 'new_building',
+              locationScope: {
+                sections: ['A'],
+                floors: ['1', '2', '3'],
+                zones: ['garage'],
+              },
+              worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
+              clarification: {
+                needed: false,
+                reason: 'none',
+              },
+              signals: ['broad bootstrap request', 'garage included'],
+            },
+            usedModelDecision: true,
+            repairAttempted: false,
+            fallbackReason: 'none',
+          };
+        },
+      },
+    });
+
+    await runInitialGeneration(harness.input);
+
+    const interpretation = getEvent(harness, 'initial_generation_interpretation');
+    const validation = getEvent(harness, 'initial_generation_interpretation_validation');
+    const normalizedDecisions = getEvent(harness, 'initial_generation_normalized_decisions');
+
+    assert.equal(interpretation.payload.route, 'initial_generation');
+    assert.equal(interpretation.payload.requestKind, 'whole_project');
+    assert.equal(interpretation.payload.planningMode, 'whole_project_bootstrap');
+    assert.equal(interpretation.payload.scopeMode, 'full_project');
+    assert.equal(interpretation.payload.objectProfile, 'residential_multi_section');
+    assert.equal(interpretation.payload.projectArchetype, 'new_building');
+    assert.equal(interpretation.payload.worklistPolicy, 'worklist_plus_inferred_supporting_tasks');
+    assert.deepEqual(interpretation.payload.locationScope, {
+      sections: ['A'],
+      floors: ['1', '2', '3'],
+      zones: ['garage'],
+    });
+    assert.deepEqual(interpretation.payload.signals, ['broad bootstrap request', 'garage included']);
+    assert.equal(interpretation.payload.usedModelDecision, true);
+    assert.equal(interpretation.payload.repairAttempted, false);
+    assert.equal(interpretation.payload.fallbackReason, 'none');
+    assert.deepEqual(interpretation.payload.clarification, {
+      needed: false,
+      reason: 'none',
+    });
+
+    assert.equal(validation.payload.route, 'initial_generation');
+    assert.equal(validation.payload.requestKind, 'whole_project');
+    assert.equal(validation.payload.validationVerdict, 'accepted');
+    assert.equal(validation.payload.usedModelDecision, true);
+    assert.equal(validation.payload.repairAttempted, false);
+    assert.equal(validation.payload.fallbackReason, 'none');
+
+    assert.equal(normalizedDecisions.payload.route, 'initial_generation');
+    assert.equal(normalizedDecisions.payload.requestKind, 'whole_project');
+    assert.equal(normalizedDecisions.payload.planningMode, 'whole_project_bootstrap');
+    assert.equal(normalizedDecisions.payload.scopeMode, 'full_project');
+    assert.equal(normalizedDecisions.payload.objectProfile, 'residential_multi_section');
+    assert.equal(normalizedDecisions.payload.projectArchetype, 'new_building');
+    assert.equal(normalizedDecisions.payload.worklistPolicy, 'worklist_plus_inferred_supporting_tasks');
+    assert.deepEqual(normalizedDecisions.payload.locationScope, {
+      sections: ['A'],
+      floors: ['1', '2', '3'],
+      zones: ['garage'],
+    });
+    assert.ok(normalizedDecisions.payload.classification);
+    assert.ok(normalizedDecisions.payload.clarificationDecision);
+    assert.ok(normalizedDecisions.payload.domainSkeleton);
+    assert.ok(normalizedDecisions.payload.brief);
+  });
+
+  it('logs repair telemetry on the validation event when interpretation required repair', async () => {
+    const harness = createHarness({
+      deps: {
+        async interpretRequest() {
+          return {
+            interpretation: {
+              route: 'initial_generation',
+              confidence: 0.54,
+              requestKind: 'partial_scope',
+              planningMode: 'partial_scope_bootstrap',
+              scopeMode: 'partial_scope',
+              objectProfile: 'unknown',
+              projectArchetype: 'renovation',
+              locationScope: {
+                sections: ['5.1'],
+                floors: ['2'],
+                zones: [],
+              },
+              worklistPolicy: 'strict_worklist',
+              clarification: {
+                needed: true,
+                reason: 'missing_scope',
+              },
+              signals: ['repair output accepted'],
+            },
+            usedModelDecision: true,
+            repairAttempted: true,
+            fallbackReason: 'none',
+          };
+        },
+      },
+    });
+
+    await runInitialGeneration(harness.input);
+
+    const validation = getEvent(harness, 'initial_generation_interpretation_validation');
+    assert.equal(validation.payload.validationVerdict, 'accepted');
+    assert.equal(validation.payload.repairAttempted, true);
+    assert.equal(validation.payload.usedModelDecision, true);
+    assert.equal(validation.payload.fallbackReason, 'none');
+    assert.deepEqual(validation.payload.clarification, {
+      needed: true,
+      reason: 'missing_scope',
+    });
+  });
+
+  it('logs conservative fallback telemetry when interpretation falls back after schema failure', async () => {
+    const harness = createHarness({
+      deps: {
+        async interpretRequest() {
+          return {
+            interpretation: {
+              route: 'initial_generation',
+              confidence: 0.2,
+              requestKind: 'explicit_worklist',
+              planningMode: 'worklist_bootstrap',
+              scopeMode: 'explicit_worklist',
+              objectProfile: 'unknown',
+              projectArchetype: 'unknown',
+              locationScope: {
+                sections: [],
+                floors: [],
+                zones: [],
+              },
+              worklistPolicy: 'strict_worklist',
+              clarification: {
+                needed: false,
+                reason: 'none',
+              },
+              signals: ['fallback_from_project_state'],
+            },
+            usedModelDecision: false,
+            repairAttempted: true,
+            fallbackReason: 'schema_invalid',
+          };
+        },
+      },
+    });
+
+    await runInitialGeneration(harness.input);
+
+    const fallback = getEvent(harness, 'initial_generation_interpretation_fallback');
+    const validation = getEvent(harness, 'initial_generation_interpretation_validation');
+    const normalizedDecisions = getEvent(harness, 'initial_generation_normalized_decisions');
+
+    assert.equal(fallback.payload.route, 'initial_generation');
+    assert.equal(fallback.payload.requestKind, 'explicit_worklist');
+    assert.equal(fallback.payload.usedModelDecision, false);
+    assert.equal(fallback.payload.repairAttempted, true);
+    assert.equal(fallback.payload.fallbackReason, 'schema_invalid');
+    assert.deepEqual(fallback.payload.signals, ['fallback_from_project_state']);
+
+    assert.equal(validation.payload.validationVerdict, 'fallback_applied');
+    assert.equal(validation.payload.fallbackReason, 'schema_invalid');
+    assert.equal(validation.payload.usedModelDecision, false);
+    assert.equal(normalizedDecisions.payload.fallbackReason, 'schema_invalid');
   });
 
   it('continues to compile even when structure gate remains negative after repair', async () => {

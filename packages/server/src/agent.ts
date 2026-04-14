@@ -925,6 +925,26 @@ export async function runAgentWithHistory(
     });
 
     if (routeSelection.route === 'initial_generation') {
+      await writeServerDebugLog('initial_generation_interpretation', {
+        runId,
+        projectId,
+        sessionId,
+        userMessage,
+        route: routeSelection.interpretation.route,
+        requestKind: routeSelection.interpretation.requestKind,
+        planningMode: routeSelection.interpretation.planningMode,
+        scopeMode: routeSelection.interpretation.scopeMode,
+        objectProfile: routeSelection.interpretation.objectProfile,
+        projectArchetype: routeSelection.interpretation.projectArchetype,
+        worklistPolicy: routeSelection.interpretation.worklistPolicy,
+        locationScope: routeSelection.interpretation.locationScope,
+        confidence: routeSelection.interpretation.confidence,
+        signals: routeSelection.interpretation.signals,
+        clarification: routeSelection.interpretation.clarification,
+        usedModelDecision: routeSelection.usedModelDecision,
+        routeDecisionReason: routeSelection.reason,
+        projectStateSummary: routeSelection.projectStateSummary,
+      });
       const { getPrisma } = await getPrismaModule();
       const prisma = getPrisma();
       const [baseVersion, scheduleOptions] = await Promise.all([

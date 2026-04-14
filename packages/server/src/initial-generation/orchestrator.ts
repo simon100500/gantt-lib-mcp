@@ -241,6 +241,54 @@ async function finishFailedRun(
   });
 }
 
+function buildInterpretationTelemetry(input: {
+  interpretation: InitialRequestInterpretation;
+  usedModelDecision: boolean;
+  repairAttempted: boolean;
+  fallbackReason: 'none' | 'model_unavailable' | 'schema_invalid' | 'empty_response';
+}): Record<string, unknown> {
+  return {
+    route: input.interpretation.route,
+    requestKind: input.interpretation.requestKind,
+    planningMode: input.interpretation.planningMode,
+    scopeMode: input.interpretation.scopeMode,
+    objectProfile: input.interpretation.objectProfile,
+    projectArchetype: input.interpretation.projectArchetype,
+    worklistPolicy: input.interpretation.worklistPolicy,
+    locationScope: input.interpretation.locationScope,
+    confidence: input.interpretation.confidence,
+    signals: input.interpretation.signals,
+    clarification: input.interpretation.clarification,
+    usedModelDecision: input.usedModelDecision,
+    repairAttempted: input.repairAttempted,
+    fallbackReason: input.fallbackReason,
+  };
+}
+
+function buildNormalizedDecisionTelemetry(input: {
+  interpretation: InitialRequestInterpretation;
+  classification: InitialGenerationClassification;
+  clarificationDecision: ClarificationDecision;
+  brief: GenerationBrief;
+  domainSkeleton: DomainSkeleton;
+  usedModelDecision: boolean;
+  repairAttempted: boolean;
+  fallbackReason: 'none' | 'model_unavailable' | 'schema_invalid' | 'empty_response';
+}): Record<string, unknown> {
+  return {
+    ...buildInterpretationTelemetry({
+      interpretation: input.interpretation,
+      usedModelDecision: input.usedModelDecision,
+      repairAttempted: input.repairAttempted,
+      fallbackReason: input.fallbackReason,
+    }),
+    classification: input.classification,
+    clarificationDecision: input.clarificationDecision,
+    brief: input.brief,
+    domainSkeleton: input.domainSkeleton,
+  };
+}
+
 export async function runInitialGeneration(
   input: RunInitialGenerationInput,
 ): Promise<InitialGenerationResult> {
@@ -319,14 +367,32 @@ export async function runInitialGeneration(
     sessionId: input.sessionId,
     normalizedRequest,
   });
+  const interpretationTelemetry = buildInterpretationTelemetry({
+    interpretation,
+    usedModelDecision: interpretationResult.usedModelDecision,
+    repairAttempted: interpretationResult.repairAttempted,
+    fallbackReason: interpretationResult.fallbackReason,
+  });
   await input.logger.debug('initial_generation_interpretation', {
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
     interpretation,
-    usedModelDecision: interpretationResult.usedModelDecision,
-    repairAttempted: interpretationResult.repairAttempted,
-    fallbackReason: interpretationResult.fallbackReason,
+    ...interpretationTelemetry,
+  });
+  await input.logger.debug('initial_generation_interpretation_validation', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    validationVerdict: interpretationResult.fallbackReason === 'none' ? 'accepted' : 'fallback_applied',
+    ...interpretationTelemetry,
+  });
+  await input.logger.debug('initial_generation_interpretation_fallback', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    fallbackApplied: interpretationResult.fallbackReason !== 'none',
+    ...interpretationTelemetry,
   });
   await input.logger.debug('initial_generation_classification', {
     runId: input.runId,
@@ -345,6 +411,21 @@ export async function runInitialGeneration(
     projectId: input.projectId,
     sessionId: input.sessionId,
     domainSkeleton,
+  });
+  await input.logger.debug('initial_generation_normalized_decisions', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    ...buildNormalizedDecisionTelemetry({
+      interpretation,
+      classification,
+      clarificationDecision,
+      brief,
+      domainSkeleton,
+      usedModelDecision: interpretationResult.usedModelDecision,
+      repairAttempted: interpretationResult.repairAttempted,
+      fallbackReason: interpretationResult.fallbackReason,
+    }),
   });
 
   let repairAttempted = false;
