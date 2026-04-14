@@ -98,6 +98,26 @@ function pickBestTaskMatch(matches: TaskSearchMatch[]): TaskSearchMatch | null {
   return exact ?? matches[0] ?? null;
 }
 
+function uniqueById(entities: MutationResolutionEntity[]): MutationResolutionEntity[] {
+  const seen = new Set<string>();
+  const result: MutationResolutionEntity[] = [];
+
+  for (const entity of entities) {
+    if (seen.has(entity.id)) {
+      continue;
+    }
+
+    seen.add(entity.id);
+    result.push(entity);
+  }
+
+  return result;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 function buildBaseContext(input: ResolveMutationContextInput): ResolvedMutationContext {
   return {
     projectId: input.projectId,
@@ -182,16 +202,17 @@ export async function resolveMutationContext(
       input.projectId,
       input.intent.groupScopeHint?.trim() || input.userMessage,
     );
-    const primaryGroup = groupScopes[0];
 
-    if (primaryGroup) {
-      context.containers = [{
-        id: primaryGroup.rootTaskId,
-        name: primaryGroup.label,
+    if (groupScopes.length > 0) {
+      context.containers = uniqueById(groupScopes.map((groupScope) => ({
+        id: groupScope.rootTaskId,
+        name: groupScope.label,
         score: 0.9,
-      }];
-      context.groupMemberIds = [...primaryGroup.memberTaskIds];
-      context.selectedContainerId = primaryGroup.rootTaskId;
+      })));
+      context.groupMemberIds = uniqueStrings(groupScopes.flatMap((groupScope) => groupScope.memberTaskIds));
+      context.selectedContainerId = context.containers.length === 1
+        ? context.containers[0]?.id ?? null
+        : null;
       context.placementPolicy = 'group_tail';
       context.confidence = 0.9;
     } else {

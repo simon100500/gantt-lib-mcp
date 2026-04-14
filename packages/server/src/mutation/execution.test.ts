@@ -119,4 +119,58 @@ describe('executeMutationPlan', () => {
     assert.equal(result.failureReason, 'verification_failed');
     assert.deepEqual(result.changedTaskIds, ['unexpected-task']);
   });
+
+  it('preserves milestone type when compiling repeated fragment fan-out', async () => {
+    const committedCommands: Array<{ type: string; tasks?: Array<{ id?: string; type?: string }> }> = [];
+    const result = await executeMutationPlan({
+      projectId: 'project-1',
+      projectVersion: 4,
+      tasksBefore: [buildTask('floor-1', 'Секция 1, 1 этаж', '2026-04-01', '2026-04-05')],
+      plan: {
+        planType: 'add_repeated_fragment',
+        operations: [{
+          kind: 'fanout_fragment_to_groups',
+          groupIds: ['floor-1'],
+          fragmentPlan: {
+            title: 'Сдача технадзору',
+            nodes: [{
+              nodeKey: 'sdacha-tehnadzoru',
+              title: 'Сдача технадзору',
+              taskType: 'milestone',
+              durationDays: 1,
+              dependsOnNodeKeys: [],
+            }],
+            why: 'test',
+          },
+        }],
+        why: 'fanout repeated milestone',
+        expectedChangedTaskIds: ['floor-1:sdacha-tehnadzoru'],
+        canExecuteDeterministically: false,
+        needsAgentExecution: false,
+      } satisfies MutationPlan,
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string; tasks?: Array<{ id?: string; type?: string }> } }) => {
+          committedCommands.push(request.command);
+          return {
+            accepted: true,
+            clientRequestId: 'req-1',
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds: ['floor-1:sdacha-tehnadzoru'],
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          };
+        },
+      },
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(committedCommands[0]?.type, 'create_tasks_batch');
+    assert.equal(committedCommands[0]?.tasks?.[0]?.type, 'milestone');
+  });
 });

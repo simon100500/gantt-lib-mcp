@@ -37,6 +37,7 @@ export type MutationIntent = {
   requiresSchedulingPlacement: boolean;
   executionMode: MutationExecutionMode;
   taskTitle?: string;
+  taskType?: 'task' | 'milestone';
   durationDays?: number;
   deltaDays?: number;
   targetDate?: string;
@@ -111,6 +112,7 @@ export type MutationTaskSnapshot = {
   name: string;
   startDate?: string;
   endDate?: string;
+  type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
@@ -133,6 +135,7 @@ export type MutationOrchestrationResult = {
 export type FragmentNode = {
   nodeKey: string;
   title: string;
+  taskType?: 'task' | 'milestone';
   durationDays: number;
   dependsOnNodeKeys: string[];
 };
@@ -148,6 +151,7 @@ export type MutationPlanOperation =
       kind: 'append_task_after';
       taskId: string;
       title: string;
+      taskType?: 'task' | 'milestone';
       predecessorTaskId: string;
       parentId: string | null;
       durationDays: number;
@@ -156,6 +160,7 @@ export type MutationPlanOperation =
       kind: 'append_task_before';
       taskId: string;
       title: string;
+      taskType?: 'task' | 'milestone';
       successorTaskId: string;
       parentId: string | null;
       durationDays: number;
@@ -164,6 +169,7 @@ export type MutationPlanOperation =
       kind: 'append_task_to_container';
       taskId: string;
       title: string;
+      taskType?: 'task' | 'milestone';
       containerId: string;
       durationDays: number;
     }

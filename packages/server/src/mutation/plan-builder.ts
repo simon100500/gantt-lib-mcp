@@ -1,4 +1,5 @@
 import type {
+  FragmentNode,
   MutationIntent,
   MutationPlan,
   MutationPlanOperation,
@@ -65,10 +66,34 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function inferTaskType(input: Pick<BuildMutationPlanInput, 'userMessage' | 'intent'>): 'task' | 'milestone' | undefined {
+  if (input.intent.taskType) {
+    return input.intent.taskType;
+  }
+
+  return /(?:\bmilestone\b|вех)/iu.test(input.userMessage) ? 'milestone' : undefined;
+}
+
+function synthesizeRepeatedFragmentNode(input: BuildMutationPlanInput): FragmentNode | null {
+  const title = titleCase(input.intent.taskTitle ?? input.intent.entitiesMentioned[0] ?? input.userMessage);
+  if (!title) {
+    return null;
+  }
+
+  return {
+    nodeKey: slugify(title) || 'task',
+    title,
+    taskType: inferTaskType(input),
+    durationDays: input.intent.durationDays ?? 1,
+    dependsOnNodeKeys: [],
+  };
+}
+
 export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<MutationPlan> {
   const { intent, resolutionContext } = input;
   const targetTaskId = resolveTaskId(resolutionContext);
   const taskTitle = titleCase(intent.taskTitle ?? intent.entitiesMentioned[0] ?? input.userMessage);
+  const taskType = inferTaskType(input);
   const existingTaskIds = new Set(input.tasksBefore.map((task) => task.id));
 
   let operations: MutationPlanOperation[] = [];
@@ -92,6 +117,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           kind: 'append_task_after',
           taskId,
           title: taskTitle,
+          taskType,
           predecessorTaskId: resolutionContext.selectedPredecessorTaskId,
           parentId: resolutionContext.selectedContainerId,
           durationDays,
@@ -102,6 +128,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           kind: 'append_task_before',
           taskId,
           title: taskTitle,
+          taskType,
           successorTaskId: resolutionContext.selectedSuccessorTaskId,
           parentId: resolutionContext.selectedContainerId,
           durationDays,
@@ -112,6 +139,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           kind: 'append_task_to_container',
           taskId,
           title: taskTitle,
+          taskType,
           containerId: resolutionContext.selectedContainerId ?? '',
           durationDays,
         }];
@@ -214,7 +242,18 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       break;
 
     case 'add_repeated_fragment': {
-      const fragmentPlan = intent.fragmentPlan;
+      const fragmentPlan = intent.fragmentPlan ?? (() => {
+        const node = synthesizeRepeatedFragmentNode(input);
+        if (!node) {
+          return undefined;
+        }
+
+        return {
+          title: node.title,
+          nodes: [node],
+          why: 'Structured repeated fragment synthesized server-side from a simple repeated single-task request.',
+        };
+      })();
       const groupIds = resolutionContext.groupMemberIds;
       if (!fragmentPlan || groupIds.length === 0) {
         return {

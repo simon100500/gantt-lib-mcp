@@ -5,7 +5,7 @@ import {
 } from '@qwen-code/sdk';
 
 import { selectMutationExecutionMode } from './execution-routing.js';
-import type { MutationIntent, MutationIntentType, StructuredFragmentPlan } from './types.js';
+import type { FragmentNode, MutationIntent, MutationIntentType, StructuredFragmentPlan } from './types.js';
 
 type MutationIntentQueryInput = {
   prompt: string;
@@ -27,6 +27,7 @@ type RawMutationIntentPayload = {
   confidence?: unknown;
   entitiesMentioned?: unknown;
   taskTitle?: unknown;
+  taskType?: unknown;
   durationDays?: unknown;
   deltaDays?: unknown;
   targetDate?: unknown;
@@ -142,7 +143,7 @@ function buildPrompt(userMessage: string): string {
     'The server will execute only deterministic operations after your extraction.',
     'Allowed intentType values: "add_single_task", "add_repeated_fragment", "shift_relative", "move_to_date", "move_in_hierarchy", "link_tasks", "unlink_tasks", "delete_task", "rename_task", "update_metadata", "expand_wbs", "restructure_branch", "validate_only", "unsupported_or_ambiguous".',
     'Schema:',
-    '{"intentType":"...","confidence":0.0-1.0,"entitiesMentioned":["..."],"taskTitle":"optional","durationDays":1,"deltaDays":0,"targetDate":"YYYY-MM-DD","renamedTitle":"optional","metadataFields":{"color":"#RRGGBB","progress":0,"parentId":null},"groupScopeHint":"optional","dependency":{"taskId":"optional","type":"FS|SS|FF|SF","lag":0},"fragmentPlan":{"title":"...","nodes":[{"nodeKey":"stable-key","title":"...","durationDays":1,"dependsOnNodeKeys":["..."]}]}}',
+    '{"intentType":"...","confidence":0.0-1.0,"entitiesMentioned":["..."],"taskTitle":"optional","taskType":"task|milestone","durationDays":1,"deltaDays":0,"targetDate":"YYYY-MM-DD","renamedTitle":"optional","metadataFields":{"color":"#RRGGBB","progress":0,"parentId":null},"groupScopeHint":"optional","dependency":{"taskId":"optional","type":"FS|SS|FF|SF","lag":0},"fragmentPlan":{"title":"...","nodes":[{"nodeKey":"stable-key","title":"...","taskType":"task|milestone","durationDays":1,"dependsOnNodeKeys":["..."]}]}}',
     'Rules:',
     '1. Put entity names that the server must resolve into entitiesMentioned.',
     '2. For add_single_task, provide taskTitle and preferably durationDays.',
@@ -209,7 +210,7 @@ function parseFragmentPlan(value: unknown): StructuredFragmentPlan | undefined {
     return undefined;
   }
 
-  const nodes = raw.nodes.flatMap((node) => {
+  const nodes: FragmentNode[] = raw.nodes.flatMap((node) => {
     if (!node || typeof node !== 'object') {
       return [];
     }
@@ -217,6 +218,7 @@ function parseFragmentPlan(value: unknown): StructuredFragmentPlan | undefined {
     const rawNode = node as {
       nodeKey?: unknown;
       title?: unknown;
+      taskType?: unknown;
       durationDays?: unknown;
       dependsOnNodeKeys?: unknown;
     };
@@ -230,9 +232,14 @@ function parseFragmentPlan(value: unknown): StructuredFragmentPlan | undefined {
       return [];
     }
 
+    const taskType = rawNode.taskType === 'task' || rawNode.taskType === 'milestone'
+      ? rawNode.taskType
+      : undefined;
+
     return [{
       nodeKey: rawNode.nodeKey.trim(),
       title: rawNode.title.trim(),
+      taskType,
       durationDays: Math.max(1, Math.round(rawNode.durationDays)),
       dependsOnNodeKeys: asStringArray(rawNode.dependsOnNodeKeys),
     }];
@@ -281,6 +288,7 @@ function parseIntentPayload(userMessage: string, payload: string): MutationInten
     requiresSchedulingPlacement: requiresSchedulingPlacement(intentType),
     executionMode: 'deterministic',
     taskTitle: typeof parsed.taskTitle === 'string' ? parsed.taskTitle.trim() : undefined,
+    taskType: parsed.taskType === 'task' || parsed.taskType === 'milestone' ? parsed.taskType : undefined,
     durationDays: typeof parsed.durationDays === 'number' ? Math.max(1, Math.round(parsed.durationDays)) : undefined,
     deltaDays: typeof parsed.deltaDays === 'number' ? Math.round(parsed.deltaDays) : undefined,
     targetDate: typeof parsed.targetDate === 'string' ? parsed.targetDate.trim() : undefined,

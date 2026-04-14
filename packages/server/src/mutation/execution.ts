@@ -69,6 +69,7 @@ function compileOperation(
           task: {
             id: operation.taskId,
             name: operation.title,
+            type: operation.taskType,
             startDate,
             endDate: toEndDate(startDate, operation.durationDays),
             parentId: operation.parentId ?? undefined,
@@ -95,6 +96,7 @@ function compileOperation(
           task: {
             id: operation.taskId,
             name: operation.title,
+            type: operation.taskType,
             startDate,
             endDate,
             parentId: operation.parentId ?? undefined,
@@ -119,6 +121,7 @@ function compileOperation(
         task: {
           id: operation.taskId,
           name: operation.title,
+          type: operation.taskType,
           startDate,
           endDate: toEndDate(startDate, operation.durationDays),
           parentId: operation.containerId,
@@ -160,6 +163,7 @@ function compileOperation(
         return {
           id: `${groupId}:${node.nodeKey}`,
           name: node.title,
+          type: node.taskType,
           startDate,
           endDate: toEndDate(startDate, node.durationDays),
           parentId: groupId,
@@ -183,6 +187,7 @@ function compileOperation(
       const tasks = operation.fragmentPlan.nodes.map((node) => ({
         id: `${operation.anchorTaskId}:${node.nodeKey}`,
         name: node.title,
+        type: node.taskType,
         startDate,
         endDate: toEndDate(startDate, node.durationDays),
         parentId: operation.anchorTaskId,

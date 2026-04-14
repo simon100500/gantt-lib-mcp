@@ -203,4 +203,37 @@ describe('buildMutationPlan', () => {
       'task-engineering:handover',
     ]);
   });
+
+  it('synthesizes a one-node repeated fragment for simple repeated milestone requests', async () => {
+    const plan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'add_repeated_fragment',
+        rawRequest: 'на каждом этаже добавь работу (веху) Сдача технадзору',
+        normalizedRequest: 'на каждом этаже добавь работу (веху) сдача технадзору',
+        entitiesMentioned: ['Сдача технадзору'],
+        groupScopeHint: 'этаж',
+      }),
+      resolutionContext: buildContext({
+        selectedContainerId: null,
+        placementPolicy: 'group_tail',
+        containers: [
+          { id: 'section-1', name: 'Штукатурные работы: Секция 1', score: 0.9 },
+          { id: 'section-2', name: 'Штукатурные работы: Секция 2', score: 0.9 },
+        ],
+        groupMemberIds: ['section-1-floor-1', 'section-2-floor-1'],
+      }),
+      userMessage: 'На каждом этаже добавь работу (веху) Сдача технадзору',
+      tasksBefore: [],
+    });
+
+    assert.equal(plan.canExecuteDeterministically, false);
+    assert.equal(plan.needsAgentExecution, false);
+    assert.equal(plan.operations[0]?.kind, 'fanout_fragment_to_groups');
+    assert.equal(plan.operations[0]?.fragmentPlan.nodes[0]?.title, 'Сдача технадзору');
+    assert.equal(plan.operations[0]?.fragmentPlan.nodes[0]?.taskType, 'milestone');
+    assert.deepEqual(plan.expectedChangedTaskIds, [
+      'section-1-floor-1:sdacha-tehnadzoru',
+      'section-2-floor-1:sdacha-tehnadzoru',
+    ]);
+  });
 });

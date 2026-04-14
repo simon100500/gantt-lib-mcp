@@ -155,6 +155,56 @@ describe('resolveMutationContext', () => {
     assert.equal(result.confidence, 0.9);
   });
 
+  it('aggregates repeated group fan-out across multiple sibling roots', async () => {
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 11,
+      userMessage: 'добавь сдачу технадзору на каждый этаж',
+      intent: buildIntent({
+        intentType: 'add_repeated_fragment',
+        rawRequest: 'добавь сдачу технадзору на каждый этаж',
+        normalizedRequest: 'добавь сдачу технадзору на каждый этаж',
+        entitiesMentioned: ['сдачу технадзору'],
+        groupScopeHint: 'этаж',
+      }),
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => ([
+          {
+            key: 'floor',
+            label: 'Штукатурные работы: Секция 1',
+            rootTaskId: 'section-1',
+            memberTaskIds: ['section-1-floor-1', 'section-1-floor-2', 'section-1-floor-3'],
+            memberNames: ['Секция 1, 1 этаж', 'Секция 1, 2 этаж', 'Секция 1, 3 этаж'],
+          },
+          {
+            key: 'floor',
+            label: 'Штукатурные работы: Секция 2',
+            rootTaskId: 'section-2',
+            memberTaskIds: ['section-2-floor-1', 'section-2-floor-2', 'section-2-floor-3'],
+            memberNames: ['Секция 2, 1 этаж', 'Секция 2, 2 этаж', 'Секция 2, 3 этаж'],
+          },
+        ] satisfies GroupScope[]),
+      },
+    });
+
+    assert.equal(result.selectedContainerId, null);
+    assert.equal(result.placementPolicy, 'group_tail');
+    assert.deepEqual(result.containers.map((item) => item.id), ['section-1', 'section-2']);
+    assert.deepEqual(result.groupMemberIds, [
+      'section-1-floor-1',
+      'section-1-floor-2',
+      'section-1-floor-3',
+      'section-2-floor-1',
+      'section-2-floor-2',
+      'section-2-floor-3',
+    ]);
+    assert.equal(result.confidence, 0.9);
+  });
+
   it('leaves add intents unresolved when no container candidate is found for container_not_resolved handling', async () => {
     const result = await resolveMutationContext({
       projectId: 'project-1',

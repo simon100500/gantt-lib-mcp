@@ -35,6 +35,13 @@ function semanticPayloadFor(userMessage: string): string {
           nodes: [{ nodeKey: 'wallpaper-paint', title: 'Покраска обоев', durationDays: 2, dependsOnNodeKeys: [] }],
         },
       });
+    case 'на каждом этаже добавь работу (веху) сдача технадзору':
+      return JSON.stringify({
+        intentType: 'add_repeated_fragment',
+        confidence: 0.94,
+        entitiesMentioned: ['Сдача технадзору'],
+        groupScopeHint: 'этаж',
+      });
     case 'распиши подробнее пункт "Инженерные системы"':
       return JSON.stringify({
         intentType: 'expand_wbs',
@@ -288,6 +295,204 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.executionMode, 'hybrid');
     assert.equal(result.result.failureReason, 'group_scope_not_resolved');
     assert.doesNotMatch(result.assistantResponse ?? '', /не выполнила ни одного валидного mutation tool call/i);
+  });
+
+  it('executes simple repeated milestone fan-out without deferring to legacy fallback', async () => {
+    const committed: Array<{ type: string; tasks?: Array<{ id?: string; type?: string }> }> = [];
+    const result = await runStagedMutation({
+      userMessage: 'на каждом этаже добавь работу (веху) сдача технадзору',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-1',
+      tasksBefore: [
+        { id: 'section-1-floor-1', name: 'Секция 1, 1 этаж', startDate: '2026-04-01', endDate: '2026-04-03' },
+        { id: 'section-2-floor-1', name: 'Секция 2, 1 этаж', startDate: '2026-04-02', endDate: '2026-04-04' },
+      ],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({
+          tasks: [
+            { id: 'section-1-floor-1', name: 'Секция 1, 1 этаж', startDate: '2026-04-01', endDate: '2026-04-03' },
+            { id: 'section-2-floor-1', name: 'Секция 2, 1 этаж', startDate: '2026-04-02', endDate: '2026-04-04' },
+            { id: 'section-1-floor-1:sdacha-tehnadzoru', name: 'Сдача технадзору', startDate: '2026-04-02', endDate: '2026-04-02', parentId: 'section-1-floor-1', type: 'milestone' },
+            { id: 'section-2-floor-1:sdacha-tehnadzoru', name: 'Сдача технадзору', startDate: '2026-04-03', endDate: '2026-04-03', parentId: 'section-2-floor-1', type: 'milestone' },
+          ],
+        }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => ([
+          {
+            key: 'floor',
+            label: 'Штукатурные работы: Секция 1',
+            rootTaskId: 'section-1',
+            memberTaskIds: ['section-1-floor-1'],
+            memberNames: ['Секция 1, 1 этаж'],
+          },
+          {
+            key: 'floor',
+            label: 'Штукатурные работы: Секция 2',
+            rootTaskId: 'section-2',
+            memberTaskIds: ['section-2-floor-1'],
+            memberNames: ['Секция 2, 1 этаж'],
+          },
+        ]),
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string; tasks?: Array<{ id?: string; type?: string }> } }) => {
+          committed.push(request.command);
+          return {
+            accepted: true,
+            clientRequestId: 'req-1',
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds: ['section-1-floor-1:sdacha-tehnadzoru', 'section-2-floor-1:sdacha-tehnadzoru'],
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          };
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: semanticIntentQueryFor('на каждом этаже добавь работу (веху) сдача технадзору'),
+    });
+
+    assert.equal(result.handled, true);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.equal(committed.length, 1);
+    assert.equal(committed[0]?.type, 'create_tasks_batch');
+    assert.deepEqual(committed[0]?.tasks?.map((task) => task.type), ['milestone', 'milestone']);
+    assert.deepEqual(result.result.changedTaskIds, [
+      'section-1-floor-1:sdacha-tehnadzoru',
+      'section-2-floor-1:sdacha-tehnadzoru',
+    ]);
+  });
+
+  it('executes repeated fragments deterministically across multiple matched group roots', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const result = await runStagedMutation({
+      userMessage: 'добавь сдачу технадзору на каждый этаж',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-1',
+      tasksBefore: [
+        { id: 'section-1-floor-1', name: 'Секция 1, 1 этаж' },
+        { id: 'section-1-floor-2', name: 'Секция 1, 2 этаж' },
+        { id: 'section-2-floor-1', name: 'Секция 2, 1 этаж' },
+        { id: 'section-2-floor-2', name: 'Секция 2, 2 этаж' },
+      ],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({
+          tasks: [
+            { id: 'section-1-floor-1', name: 'Секция 1, 1 этаж' },
+            { id: 'section-1-floor-2', name: 'Секция 1, 2 этаж' },
+            { id: 'section-2-floor-1', name: 'Секция 2, 1 этаж' },
+            { id: 'section-2-floor-2', name: 'Секция 2, 2 этаж' },
+            { id: 'section-1-floor-1:tech-review', name: 'Сдача технадзору' },
+            { id: 'section-1-floor-2:tech-review', name: 'Сдача технадзору' },
+            { id: 'section-2-floor-1:tech-review', name: 'Сдача технадзору' },
+            { id: 'section-2-floor-2:tech-review', name: 'Сдача технадзору' },
+          ],
+        }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => ([
+          {
+            key: 'floor',
+            label: 'Штукатурные работы: Секция 1',
+            rootTaskId: 'section-1',
+            memberTaskIds: ['section-1-floor-1', 'section-1-floor-2'],
+            memberNames: ['Секция 1, 1 этаж', 'Секция 1, 2 этаж'],
+          },
+          {
+            key: 'floor',
+            label: 'Штукатурные работы: Секция 2',
+            rootTaskId: 'section-2',
+            memberTaskIds: ['section-2-floor-1', 'section-2-floor-2'],
+            memberNames: ['Секция 2, 1 этаж', 'Секция 2, 2 этаж'],
+          },
+        ]),
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string } }) => ({
+          accepted: true,
+          clientRequestId: 'req-1',
+          baseVersion: request.baseVersion,
+          newVersion: request.baseVersion + 1,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: [
+              'section-1-floor-1:tech-review',
+              'section-1-floor-2:tech-review',
+              'section-2-floor-1:tech-review',
+              'section-2-floor-2:tech-review',
+            ],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        }),
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
+      },
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          intentType: 'add_repeated_fragment',
+          confidence: 0.91,
+          entitiesMentioned: ['сдача технадзору'],
+          taskTitle: 'Сдача технадзору',
+          groupScopeHint: 'этаж',
+          fragmentPlan: {
+            title: 'Сдача технадзору',
+            nodes: [{ nodeKey: 'tech-review', title: 'Сдача технадзору', durationDays: 1, dependsOnNodeKeys: [] }],
+          },
+        }),
+      }),
+    });
+
+    assert.equal(result.handled, true);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.equal(result.result.verificationVerdict, 'accepted');
+    assert.deepEqual(result.plan?.operations.map((operation) => operation.kind), ['fanout_fragment_to_groups']);
+    assert.deepEqual(result.resolutionContext?.groupMemberIds, [
+      'section-1-floor-1',
+      'section-1-floor-2',
+      'section-2-floor-1',
+      'section-2-floor-2',
+    ]);
+    assert.ok(loggedEvents.some((entry) => entry.event === 'deterministic_execution_started'));
   });
 
   it('returns expansion_anchor_not_resolved for unresolved WBS expansion prompts', async () => {
