@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: verifying
-last_updated: "2026-04-14T10:16:59.390Z"
+status: completed
+last_updated: "2026-04-14T10:21:46.758Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 14
@@ -17,7 +17,7 @@ progress:
 
 **Last updated:** 2026-04-14
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Phase complete — ready for verification
+**Status:** Milestone complete
 
 ---
 
@@ -32,8 +32,8 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 
 ## Current Position
 
-Phase: 43 (initial-gen-no-regexp) — EXECUTING
-Plan: 3 of 3
+Phase: 43
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-14
 
