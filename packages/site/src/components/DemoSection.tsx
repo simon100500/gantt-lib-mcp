@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import type { Task } from 'gantt-lib';
 import InputDemo from './InputDemo.js';
 import GanttPreview from './GanttPreview.js';
-import RotatingWords from './RotatingWords.js';
 
 // ── Template task sets (today = 2026-03-24) ─────────────────────────────────
 // Each template starts 1-2 weeks ago, has realistic progress and one overdue task.
@@ -48,45 +47,50 @@ const TASKS_OFFICE: Task[] = [
   { id: 'o-p5-2', name: 'Техника и AV-системы', startDate: '2026-06-01', endDate: '2026-06-05', parentId: 'o-p5', progress: 0, dependencies: [{ taskId: 'o-p5-1', type: 'FS' as const, lag: 0 }] },
 ];
 
-const TASKS_IT: Task[] = [
-  { id: 'it-p1', name: 'Аналитика', startDate: '2026-03-11', endDate: '2026-03-25' },
-  { id: 'it-p1-1', name: 'Сбор требований', startDate: '2026-03-11', endDate: '2026-03-17', parentId: 'it-p1', progress: 100, accepted: true },
-  // OVERDUE: закончилось 21 марта, выполнено только 45%
-  { id: 'it-p1-2', name: 'Написание ТЗ', startDate: '2026-03-18', endDate: '2026-03-21', parentId: 'it-p1', progress: 45, dependencies: [{ taskId: 'it-p1-1', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p1-3', name: 'Утверждение ТЗ', startDate: '2026-03-22', endDate: '2026-03-25', parentId: 'it-p1', progress: 10, dependencies: [{ taskId: 'it-p1-2', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p2', name: 'Дизайн', startDate: '2026-03-26', endDate: '2026-04-10', dependencies: [{ taskId: 'it-p1', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p2-1', name: 'UI/UX дизайн', startDate: '2026-03-26', endDate: '2026-04-06', parentId: 'it-p2', progress: 0 },
-  { id: 'it-p2-2', name: 'Согласование макетов', startDate: '2026-04-07', endDate: '2026-04-10', parentId: 'it-p2', progress: 0, dependencies: [{ taskId: 'it-p2-1', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p3', name: 'Разработка', startDate: '2026-04-13', endDate: '2026-05-28', dependencies: [{ taskId: 'it-p2', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p3-1', name: 'Frontend', startDate: '2026-04-13', endDate: '2026-05-14', parentId: 'it-p3', progress: 0 },
-  { id: 'it-p3-2', name: 'Backend API', startDate: '2026-04-20', endDate: '2026-05-21', parentId: 'it-p3', progress: 0 },
-  { id: 'it-p3-3', name: 'Интеграция', startDate: '2026-05-22', endDate: '2026-05-28', parentId: 'it-p3', progress: 0, dependencies: [{ taskId: 'it-p3-1', type: 'FS' as const, lag: 0 }, { taskId: 'it-p3-2', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p4', name: 'Тестирование', startDate: '2026-06-01', endDate: '2026-06-12', dependencies: [{ taskId: 'it-p3', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p4-1', name: 'QA тестирование', startDate: '2026-06-01', endDate: '2026-06-06', parentId: 'it-p4', progress: 0 },
-  { id: 'it-p4-2', name: 'Исправление багов', startDate: '2026-06-07', endDate: '2026-06-12', parentId: 'it-p4', progress: 0, dependencies: [{ taskId: 'it-p4-1', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p5', name: 'Релиз', startDate: '2026-06-15', endDate: '2026-06-17', dependencies: [{ taskId: 'it-p4', type: 'FS' as const, lag: 0 }] },
-  { id: 'it-p5-1', name: 'Деплой на прод', startDate: '2026-06-15', endDate: '2026-06-15', parentId: 'it-p5', progress: 0 },
-  { id: 'it-p5-2', name: 'Документация', startDate: '2026-06-16', endDate: '2026-06-17', parentId: 'it-p5', progress: 0 },
+const TASKS_APARTMENT: Task[] = [
+  { id: 'ap-p1', name: 'Демонтаж', startDate: '2026-03-10', endDate: '2026-03-17' },
+  { id: 'ap-p1-1', name: 'Снос перегородок', startDate: '2026-03-10', endDate: '2026-03-14', parentId: 'ap-p1', progress: 100, accepted: true },
+  { id: 'ap-p1-2', name: 'Вывоз мусора', startDate: '2026-03-15', endDate: '2026-03-17', parentId: 'ap-p1', progress: 100, accepted: true, dependencies: [{ taskId: 'ap-p1-1', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p2', name: 'Электрика и сантехника', startDate: '2026-03-18', endDate: '2026-04-08' },
+  // OVERDUE: закончилось 22 марта, выполнено только 30%
+  { id: 'ap-p2-1', name: 'Разводка электрики', startDate: '2026-03-18', endDate: '2026-03-22', parentId: 'ap-p2', progress: 30 },
+  { id: 'ap-p2-2', name: 'Сантехника (скрытая)', startDate: '2026-03-18', endDate: '2026-03-28', parentId: 'ap-p2', progress: 20 },
+  { id: 'ap-p2-3', name: 'Штробление и заделка', startDate: '2026-03-29', endDate: '2026-04-08', parentId: 'ap-p2', progress: 0, dependencies: [{ taskId: 'ap-p2-1', type: 'FS' as const, lag: 0 }, { taskId: 'ap-p2-2', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p3', name: 'Стяжка и штукатурка', startDate: '2026-04-09', endDate: '2026-05-02', dependencies: [{ taskId: 'ap-p2', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p3-1', name: 'Стяжка пола', startDate: '2026-04-09', endDate: '2026-04-22', parentId: 'ap-p3', progress: 0 },
+  { id: 'ap-p3-2', name: 'Штукатурка стен', startDate: '2026-04-15', endDate: '2026-05-02', parentId: 'ap-p3', progress: 0, dependencies: [{ taskId: 'ap-p3-1', type: 'SS' as const, lag: 3 }] },
+  { id: 'ap-p4', name: 'Плитка и сантехника', startDate: '2026-05-05', endDate: '2026-05-23', dependencies: [{ taskId: 'ap-p3', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p4-1', name: 'Плитка в санузлах', startDate: '2026-05-05', endDate: '2026-05-16', parentId: 'ap-p4', progress: 0 },
+  { id: 'ap-p4-2', name: 'Установка сантехники', startDate: '2026-05-17', endDate: '2026-05-23', parentId: 'ap-p4', progress: 0, dependencies: [{ taskId: 'ap-p4-1', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p5', name: 'Чистовая отделка', startDate: '2026-05-26', endDate: '2026-06-20', dependencies: [{ taskId: 'ap-p4', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p5-1', name: 'Напольное покрытие', startDate: '2026-05-26', endDate: '2026-06-06', parentId: 'ap-p5', progress: 0 },
+  { id: 'ap-p5-2', name: 'Покраска и обои', startDate: '2026-06-02', endDate: '2026-06-13', parentId: 'ap-p5', progress: 0 },
+  { id: 'ap-p5-3', name: 'Двери и плинтусы', startDate: '2026-06-14', endDate: '2026-06-20', parentId: 'ap-p5', progress: 0, dependencies: [{ taskId: 'ap-p5-1', type: 'FS' as const, lag: 0 }, { taskId: 'ap-p5-2', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p6', name: 'Мебель и техника', startDate: '2026-06-23', endDate: '2026-06-30', dependencies: [{ taskId: 'ap-p5', type: 'FS' as const, lag: 0 }] },
+  { id: 'ap-p6-1', name: 'Сборка мебели', startDate: '2026-06-23', endDate: '2026-06-27', parentId: 'ap-p6', progress: 0 },
+  { id: 'ap-p6-2', name: 'Подключение техники', startDate: '2026-06-28', endDate: '2026-06-30', parentId: 'ap-p6', progress: 0, dependencies: [{ taskId: 'ap-p6-1', type: 'FS' as const, lag: 0 }] },
 ];
 
-const TASKS_EVENT: Task[] = [
-  { id: 'ev-p1', name: 'Площадка', startDate: '2026-03-10', endDate: '2026-03-20' },
-  { id: 'ev-p1-1', name: 'Выбор и просмотр площадок', startDate: '2026-03-10', endDate: '2026-03-14', parentId: 'ev-p1', progress: 100, accepted: true },
-  { id: 'ev-p1-2', name: 'Бронирование и договор', startDate: '2026-03-15', endDate: '2026-03-20', parentId: 'ev-p1', progress: 100, accepted: true, dependencies: [{ taskId: 'ev-p1-1', type: 'FS' as const, lag: 0 }] },
-  { id: 'ev-p2', name: 'Программа', startDate: '2026-03-16', endDate: '2026-04-03' },
-  { id: 'ev-p2-1', name: 'Разработка программы', startDate: '2026-03-16', endDate: '2026-03-25', parentId: 'ev-p2', progress: 55 },
-  // OVERDUE: закончилось 21 марта, выполнено только 30%
-  { id: 'ev-p2-2', name: 'Подтверждение спикеров', startDate: '2026-03-16', endDate: '2026-03-21', parentId: 'ev-p2', progress: 30 },
-  { id: 'ev-p2-3', name: 'Приглашение гостей', startDate: '2026-03-22', endDate: '2026-04-03', parentId: 'ev-p2', progress: 15, dependencies: [{ taskId: 'ev-p2-1', type: 'SS' as const, lag: 5 }] },
-  { id: 'ev-p3', name: 'Кейтеринг', startDate: '2026-03-23', endDate: '2026-04-10' },
-  { id: 'ev-p3-1', name: 'Выбор кейтеринга', startDate: '2026-03-23', endDate: '2026-03-28', parentId: 'ev-p3', progress: 10 },
-  { id: 'ev-p3-2', name: 'Согласование меню', startDate: '2026-03-29', endDate: '2026-04-10', parentId: 'ev-p3', progress: 0, dependencies: [{ taskId: 'ev-p3-1', type: 'FS' as const, lag: 0 }] },
-  { id: 'ev-p4', name: 'Продвижение', startDate: '2026-03-14', endDate: '2026-04-25' },
-  { id: 'ev-p4-1', name: 'Соцсети и реклама', startDate: '2026-03-14', endDate: '2026-04-14', parentId: 'ev-p4', progress: 40 },
-  { id: 'ev-p4-2', name: 'PR и пресс-релизы', startDate: '2026-04-01', endDate: '2026-04-25', parentId: 'ev-p4', progress: 0 },
-  { id: 'ev-p5', name: 'Проведение', startDate: '2026-04-28', endDate: '2026-04-30', dependencies: [{ taskId: 'ev-p2', type: 'FS' as const, lag: 0 }, { taskId: 'ev-p3', type: 'FS' as const, lag: 0 }, { taskId: 'ev-p4', type: 'FS' as const, lag: 0 }] },
-  { id: 'ev-p5-1', name: 'Репетиция', startDate: '2026-04-28', endDate: '2026-04-28', parentId: 'ev-p5', progress: 0 },
-  { id: 'ev-p5-2', name: 'День мероприятия', startDate: '2026-04-29', endDate: '2026-04-30', parentId: 'ev-p5', progress: 0, dependencies: [{ taskId: 'ev-p5-1', type: 'FS' as const, lag: 0 }] },
+const TASKS_OVERHAUL: Task[] = [
+  { id: 'ov-p1', name: 'Подготовка', startDate: '2026-03-10', endDate: '2026-03-20' },
+  { id: 'ov-p1-1', name: 'Дефектовка и смета', startDate: '2026-03-10', endDate: '2026-03-14', parentId: 'ov-p1', progress: 100, accepted: true },
+  { id: 'ov-p1-2', name: 'Отключение коммуникаций', startDate: '2026-03-15', endDate: '2026-03-17', parentId: 'ov-p1', progress: 100, accepted: true, dependencies: [{ taskId: 'ov-p1-1', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p1-3', name: 'Демонтаж покрытий', startDate: '2026-03-18', endDate: '2026-03-20', parentId: 'ov-p1', progress: 100, accepted: true, dependencies: [{ taskId: 'ov-p1-2', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p2', name: 'Конструктив', startDate: '2026-03-23', endDate: '2026-04-18', dependencies: [{ taskId: 'ov-p1', type: 'FS' as const, lag: 0 }] },
+  // OVERDUE: закончилось 27 марта, выполнено только 35%
+  { id: 'ov-p2-1', name: 'Усиление перекрытий', startDate: '2026-03-23', endDate: '2026-03-27', parentId: 'ov-p2', progress: 35 },
+  { id: 'ov-p2-2', name: 'Замена кровли', startDate: '2026-03-28', endDate: '2026-04-11', parentId: 'ov-p2', progress: 0, dependencies: [{ taskId: 'ov-p2-1', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p2-3', name: 'Ремонт фасада', startDate: '2026-03-28', endDate: '2026-04-18', parentId: 'ov-p2', progress: 0 },
+  { id: 'ov-p3', name: 'Инженерные сети', startDate: '2026-04-21', endDate: '2026-05-22', dependencies: [{ taskId: 'ov-p2', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p3-1', name: 'Замена трубопроводов', startDate: '2026-04-21', endDate: '2026-05-02', parentId: 'ov-p3', progress: 0 },
+  { id: 'ov-p3-2', name: 'Электроснабжение', startDate: '2026-04-21', endDate: '2026-05-09', parentId: 'ov-p3', progress: 0 },
+  { id: 'ov-p3-3', name: 'Отопление', startDate: '2026-05-05', endDate: '2026-05-22', parentId: 'ov-p3', progress: 0, dependencies: [{ taskId: 'ov-p3-1', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p4', name: 'Отделка', startDate: '2026-05-25', endDate: '2026-07-03', dependencies: [{ taskId: 'ov-p3', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p4-1', name: 'Стяжка и штукатурка', startDate: '2026-05-25', endDate: '2026-06-19', parentId: 'ov-p4', progress: 0 },
+  { id: 'ov-p4-2', name: 'Чистовая отделка', startDate: '2026-06-22', endDate: '2026-07-03', parentId: 'ov-p4', progress: 0, dependencies: [{ taskId: 'ov-p4-1', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p5', name: 'Сдача объекта', startDate: '2026-07-06', endDate: '2026-07-11', dependencies: [{ taskId: 'ov-p4', type: 'FS' as const, lag: 0 }] },
+  { id: 'ov-p5-1', name: 'Приёмка и замечания', startDate: '2026-07-06', endDate: '2026-07-09', parentId: 'ov-p5', progress: 0 },
+  { id: 'ov-p5-2', name: 'Устранение недостатков', startDate: '2026-07-10', endDate: '2026-07-11', parentId: 'ov-p5', progress: 0, dependencies: [{ taskId: 'ov-p5-1', type: 'FS' as const, lag: 0 }] },
 ];
 
 export const TEMPLATES = [
@@ -97,22 +101,22 @@ export const TEMPLATES = [
     tasks: TASKS_HOUSE,
   },
   {
-    label: 'Ремонт офиса',
-    title: 'Ремонт офиса',
-    prompt: 'Создай график ремонта офиса: демонтаж, электрика, отделка стен, пол, мебель',
+    label: 'Ремонт квартиры',
+    title: 'Ремонт квартиры',
+    prompt: 'Создай график ремонта двушки 60м²: демонтаж, электрика и сантехника параллельно, стяжка, штукатурка, плитка в санузле, чистовая отделка, мебель',
+    tasks: TASKS_APARTMENT,
+  },
+  {
+    label: 'Коммерческий объект',
+    title: 'Ремонт коммерческого объекта',
+    prompt: 'Создай график ремонта коммерческого помещения: демонтаж, электрика, вентиляция и кондиционирование, отделка стен и потолков, пол, мебель и оборудование',
     tasks: TASKS_OFFICE,
   },
   {
-    label: 'ИТ-проект',
-    title: 'ИТ-проект',
-    prompt: 'Создай график разработки ИТ-проекта: аналитика, дизайн, разработка, тестирование, релиз',
-    tasks: TASKS_IT,
-  },
-  {
-    label: 'Мероприятие',
-    title: 'Подготовка мероприятия',
-    prompt: 'Создай график подготовки мероприятия: площадка, кейтеринг, программа, продвижение, проведение',
-    tasks: TASKS_EVENT,
+    label: 'Капремонт',
+    title: 'Капитальный ремонт здания',
+    prompt: 'Создай график капремонта жилого дома: дефектовка, усиление конструкций, замена кровли, ремонт фасада, замена инженерных сетей, отделка',
+    tasks: TASKS_OVERHAUL,
   },
 ];
 
@@ -200,23 +204,19 @@ export default function DemoSection() {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
           <div className="max-w-[620px] px-8 lg:px-0">
             <h1
-              className="flex flex-col gap-2 font-extrabold leading-[0.96] text-foreground animate-fade-up"
+              className="font-extrabold leading-[1.05] text-foreground animate-fade-up"
               style={{ animationDelay: '120ms', fontSize: '3.5rem' }}
             >
-              <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span>Из</span>
-                <RotatingWords
-                  words={['текста', 'сметы', 'брифа', 'письма']}
-                />
-                в рабочий график
-              </span>
+              Из описания проекта —{' '}
+              <span className="text-primary">в&nbsp;диаграмму Ганта</span>{' '}
+              за 30 секунд
             </h1>
 
             <p
               className="mt-8 max-w-[560px] text-lg leading-8 text-secondary-foreground animate-fade-up"
               style={{ animationDelay: '190ms' }}
             >
-              Опишите проект и получите живой график Ганта, которым можно управлять
+              Опишите что нужно построить — ИИ создаст план работ с задачами, сроками и зависимостями. Не картинку, а живой график
             </p>
 
             <div

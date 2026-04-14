@@ -60,7 +60,7 @@ export default function InputDemo({
           readOnly
           rows={4}
           value={displayText}
-          placeholder="Выберите вариант проекта…"
+          placeholder="Например: Ремонт двушки 60м², сначала демонтаж, потом электрика и сантехника параллельно, затем стяжка, штукатурка, плитка в санузле, чистовая отделка"
           aria-label="Описание проекта"
           name="project"
           style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}
