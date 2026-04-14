@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { normalizeInitialRequest } from './intake-normalization.js';
 import { interpretInitialRequest } from './interpreter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const baseProjectState = {
   taskCount: 0,
@@ -258,5 +264,19 @@ describe('initial-request interpreter', () => {
 
     assert.equal(schemaInvalid.fallbackReason, 'schema_invalid');
     assert.equal(emptyResponse.fallbackReason, 'empty_response');
+  });
+
+  it('guards the interpretation path source against banned semantic helper functions', () => {
+    const interpreterSource = readFileSync(join(__dirname, 'interpreter.ts'), 'utf-8');
+    const classificationSource = readFileSync(join(__dirname, 'classification.ts'), 'utf-8');
+    const clarificationSource = readFileSync(join(__dirname, 'clarification-gate.ts'), 'utf-8');
+    const briefSource = readFileSync(join(__dirname, 'brief.ts'), 'utf-8');
+    const domainAssemblySource = readFileSync(join(__dirname, 'domain', 'assembly.ts'), 'utf-8');
+
+    assert.doesNotMatch(interpreterSource, /looksLikeTargetedEdit|detectScopeSignals|hasAmbiguousListLanguage|hasExplicitFragmentTarget|inferWorklistPolicy/);
+    assert.doesNotMatch(classificationSource, /inferWorklistPolicy/);
+    assert.doesNotMatch(clarificationSource, /hasAmbiguousListLanguage|hasExplicitFragmentTarget/);
+    assert.doesNotMatch(briefSource, /detectScopeSignals/);
+    assert.doesNotMatch(domainAssemblySource, /looksLikeTargetedEdit|detectScopeSignals|hasAmbiguousListLanguage|hasExplicitFragmentTarget|inferWorklistPolicy/);
   });
 });

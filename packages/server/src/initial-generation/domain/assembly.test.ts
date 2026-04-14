@@ -123,4 +123,66 @@ describe('initial-generation domain assembly', () => {
       'Бетонирование плиты',
     ]);
   });
+
+  it('keeps Russian and English kindergarten paraphrases on the same whole-project skeleton', () => {
+    const interpretation = createInterpretation();
+    const russianRequest = normalizeInitialRequest('Построй график строительства детского сада');
+    const englishRequest = normalizeInitialRequest('Build a starter schedule for a kindergarten');
+
+    const russianSkeleton = assembleDomainSkeleton({
+      normalizedRequest: russianRequest,
+      interpretation,
+      classification: classifyInitialRequest({ normalizedRequest: russianRequest, interpretation }),
+      clarificationDecision: decideInitialClarification({
+        normalizedRequest: russianRequest,
+        interpretation,
+        classification: classifyInitialRequest({ normalizedRequest: russianRequest, interpretation }),
+      }),
+    });
+    const englishSkeleton = assembleDomainSkeleton({
+      normalizedRequest: englishRequest,
+      interpretation,
+      classification: classifyInitialRequest({ normalizedRequest: englishRequest, interpretation }),
+      clarificationDecision: decideInitialClarification({
+        normalizedRequest: englishRequest,
+        interpretation,
+        classification: classifyInitialRequest({ normalizedRequest: englishRequest, interpretation }),
+      }),
+    });
+
+    assert.equal(russianSkeleton.objectProfile, englishSkeleton.objectProfile);
+    assert.deepEqual(russianSkeleton.stageFamilies, englishSkeleton.stageFamilies);
+    assert.deepEqual(russianSkeleton.requiredFamilies, englishSkeleton.requiredFamilies);
+  });
+
+  it('keeps fallback-driven partial-scope assembly bounded without semantic helper code', () => {
+    const normalizedRequest = normalizeInitialRequest('Build a starter schedule only for section 5.1');
+    const interpretation = createInterpretation({
+      confidence: 0.28,
+      requestKind: 'partial_scope',
+      planningMode: 'partial_scope_bootstrap',
+      scopeMode: 'partial_scope',
+      objectProfile: 'unknown',
+      projectArchetype: 'unknown',
+      locationScope: {
+        sections: ['5.1'],
+        floors: [],
+        zones: [],
+      },
+      signals: ['fallback_driven_partial_scope'],
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
+
+    const skeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      interpretation,
+      classification,
+      clarificationDecision,
+    });
+
+    assert.equal(skeleton.scopeMode, 'partial_scope');
+    assert.equal(skeleton.projectArchetype, 'new_building');
+    assert.ok(skeleton.scopeBoundaries.some((item) => /локальн/i.test(item)));
+  });
 });

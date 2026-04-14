@@ -85,7 +85,11 @@ export function classifyInitialRequest(input: ClassifyInitialRequestInput): Init
   const { normalizedRequest, interpretation } = input;
   const detailLevel = inferDetailLevel(normalizedRequest);
   const confidence = inferConfidence(normalizedRequest, interpretation);
-  const locationScope = normalizeLocationScope(normalizedRequest.locationScope ?? interpretation.locationScope);
+  const interpretedLocationScope = normalizeLocationScope(interpretation.locationScope);
+  const normalizedLocationScope = normalizeLocationScope(normalizedRequest.locationScope);
+  const locationScope = hasLocationScope(interpretedLocationScope)
+    ? interpretedLocationScope
+    : normalizedLocationScope;
 
   return {
     scopeMode: interpretation.scopeMode,

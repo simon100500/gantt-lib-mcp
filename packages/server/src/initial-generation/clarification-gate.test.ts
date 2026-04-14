@@ -149,4 +149,75 @@ describe('initial-generation clarification gate', () => {
     }
     assert.equal(decision.assumptions.length > 0, true);
   });
+
+  it('keeps Russian and English partial-scope paraphrases on the same ambiguity question', () => {
+    const interpretation = createInterpretation({
+      requestKind: 'partial_scope',
+      planningMode: 'partial_scope_bootstrap',
+      scopeMode: 'partial_scope',
+      clarification: {
+        needed: true,
+        reason: 'fragment_target_ambiguity',
+      },
+      locationScope: {
+        sections: ['5.1'],
+        floors: [],
+        zones: ['подвал'],
+      },
+    });
+
+    const russian = normalizeInitialRequest('Построй график подвала секции 5.1');
+    const english = normalizeInitialRequest('Build a starter schedule for the basement of section 5.1');
+    const russianDecision = decideInitialClarification({
+      normalizedRequest: russian,
+      interpretation,
+      classification: classifyInitialRequest({ normalizedRequest: russian, interpretation }),
+    });
+    const englishDecision = decideInitialClarification({
+      normalizedRequest: english,
+      interpretation,
+      classification: classifyInitialRequest({ normalizedRequest: english, interpretation }),
+    });
+
+    assert.deepEqual(englishDecision, russianDecision);
+    assert.equal(russianDecision.action, 'ask');
+  });
+
+  it('keeps fallback-driven explicit worklist clarification strict even on English paraphrase', () => {
+    const normalized = normalizeInitialRequest([
+      'Build a starter schedule only from this explicit worklist',
+      '1. Excavate foundation pit',
+      '2. Place rebar',
+      '3. Pour concrete',
+    ].join('\n'));
+    const interpretation = createInterpretation({
+      confidence: 0.31,
+      requestKind: 'explicit_worklist',
+      planningMode: 'worklist_bootstrap',
+      scopeMode: 'explicit_worklist',
+      objectProfile: 'unknown',
+      projectArchetype: 'unknown',
+      clarification: {
+        needed: false,
+        reason: 'none',
+      },
+      worklistPolicy: 'strict_worklist',
+      signals: ['fallback_driven_worklist'],
+    });
+    const classification = classifyInitialRequest({
+      normalizedRequest: normalized,
+      interpretation,
+    });
+    const decision = decideInitialClarification({
+      normalizedRequest: normalized,
+      interpretation,
+      classification,
+    });
+
+    assert.equal(decision.action, 'proceed_with_assumptions');
+    if (decision.action !== 'proceed_with_assumptions') {
+      return;
+    }
+    assert.ok(decision.assumptions.some((item) => /список работ/i.test(item)));
+  });
 });

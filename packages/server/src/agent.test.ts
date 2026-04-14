@@ -243,6 +243,32 @@ describe('initial-generation route selection', () => {
     assert.equal(nonEmptyProject.reason, 'fallback_non_empty_project_defaults_to_mutation');
     assert.equal(nonEmptyProject.route, 'mutation');
   });
+
+  it('keeps model failure fallback conservative for Build a starter schedule on both empty and non-empty project state', async () => {
+    const emptyProject = await selectAgentRoute({
+      userMessage: 'Build a starter schedule',
+      taskCount: 0,
+      hasHierarchy: false,
+      model: 'gpt-route',
+      routeDecisionQuery: async () => {
+        throw new Error('model failure');
+      },
+    });
+    const populatedProject = await selectAgentRoute({
+      userMessage: 'Build a starter schedule',
+      taskCount: 3,
+      hasHierarchy: true,
+      model: 'gpt-route',
+      routeDecisionQuery: async () => {
+        throw new Error('model failure');
+      },
+    });
+
+    assert.equal(emptyProject.route, 'initial_generation');
+    assert.equal(emptyProject.usedModelDecision, false);
+    assert.equal(populatedProject.route, 'mutation');
+    assert.equal(populatedProject.usedModelDecision, false);
+  });
 });
 
 describe('initial-generation model routing', () => {
@@ -316,6 +342,15 @@ describe('agent initial-generation integration surface', () => {
     assert.doesNotMatch(source, /isSimpleMutationRequest/);
     assert.doesNotMatch(source, /tryDirectShiftFastPath/);
     assert.doesNotMatch(source, /parseFastShiftIntent/);
+  });
+
+  it('guards the entrypoint and route-selection path against forbidden semantic helpers', () => {
+    const agentSource = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
+    const routeSelectionSource = readFileSync(join(__dirname, '../src/initial-generation/route-selection.ts'), 'utf-8');
+
+    assert.doesNotMatch(agentSource, /looksLikeTargetedEdit|detectScopeSignals|hasAmbiguousListLanguage|hasExplicitFragmentTarget|inferWorklistPolicy/);
+    assert.doesNotMatch(routeSelectionSource, /looksLikeTargetedEdit/);
+    assert.match(routeSelectionSource, /interpretInitialRequest/);
   });
 });
 

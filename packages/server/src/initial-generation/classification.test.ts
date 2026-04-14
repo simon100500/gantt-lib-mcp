@@ -106,4 +106,38 @@ describe('initial-generation classification', () => {
     assert.equal(classification.worklistPolicy, 'strict_worklist');
     assert.equal(normalized.explicitWorkItems.length, 5);
   });
+
+  it('keeps fallback-driven unknown classification deterministic for Russian and English paraphrases', () => {
+    const russian = normalizeInitialRequest('Построй график только по секции 5.1');
+    const english = normalizeInitialRequest('Build a starter schedule only for section 5.1');
+    const interpretation = createInterpretation({
+      confidence: 0.34,
+      requestKind: 'partial_scope',
+      planningMode: 'partial_scope_bootstrap',
+      scopeMode: 'partial_scope',
+      objectProfile: 'unknown',
+      projectArchetype: 'unknown',
+      locationScope: {
+        sections: ['5.1'],
+        floors: [],
+        zones: [],
+      },
+      signals: ['fallback_driven_partial_scope'],
+    });
+
+    const russianClassification = classifyInitialRequest({
+      normalizedRequest: russian,
+      interpretation,
+    });
+    const englishClassification = classifyInitialRequest({
+      normalizedRequest: english,
+      interpretation,
+    });
+
+    assert.deepEqual(russianClassification, englishClassification);
+    assert.equal(russianClassification.scopeMode, 'partial_scope');
+    assert.equal(russianClassification.objectProfile, 'unknown');
+    assert.equal(russianClassification.projectArchetype, 'unknown');
+    assert.deepEqual(russianClassification.locationScope?.sections, ['5.1']);
+  });
 });
