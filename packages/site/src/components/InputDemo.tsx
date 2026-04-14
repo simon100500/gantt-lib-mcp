@@ -26,6 +26,15 @@ export default function InputDemo({
 }: Props) {
   const [displayText, setDisplayText] = useState('');
   const timerId = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea when text changes
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [displayText]);
 
   // Typing animation when selected prompt changes
   useEffect(() => {
@@ -40,12 +49,12 @@ export default function InputDemo({
       i++;
       setDisplayText(selectedPrompt.slice(0, i));
       if (i < selectedPrompt.length) {
-        timerId.current = setTimeout(type, 22);
+        timerId.current = setTimeout(type, 10);
       } else {
         onSubmit();
       }
     };
-    timerId.current = setTimeout(type, 80);
+    timerId.current = setTimeout(type, 30);
     return () => { if (timerId.current) clearTimeout(timerId.current); };
   }, [selectedPrompt]);
 
@@ -64,14 +73,15 @@ export default function InputDemo({
 
         {/* Readonly textarea */}
         <textarea
+          ref={textareaRef}
           readOnly
           rows={4}
           value={displayText}
           placeholder="Например: Ремонт двушки 60м², сначала демонтаж, потом электрика и сантехника параллельно, затем стяжка, штукатурка, плитка в санузле, чистовая отделка"
           aria-label="Описание проекта"
           name="project"
-          style={{ maxHeight: '8rem', overflowY: 'auto', cursor: 'default' }}
-          className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-base leading-6 text-slate-700 select-none focus:outline-none"
+          style={{ overflowY: 'hidden', cursor: 'default' }}
+          className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-base leading-6 text-slate-700 select-none focus:outline-none transition-[height] duration-150"
         />
 
         {/* Chips */}

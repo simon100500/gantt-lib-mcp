@@ -30,27 +30,28 @@ export default function DemoSection() {
   const ganttRef = useRef<HTMLDivElement>(null);
   const shouldScrollAfterSubmit = useRef(false);
 
-  // Smooth-scroll to the chart after the delayed template switch.
-  useEffect(() => {
-    if (!shouldScrollAfterSubmit.current) {
-      return;
-    }
-    shouldScrollAfterSubmit.current = false;
+  function scrollToGantt(duration = 1200) {
     const el = ganttRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const targetY = window.scrollY + rect.top - (window.innerHeight - rect.height) / 2;
     const startY = window.scrollY;
     const distance = targetY - startY;
-    const duration = 1200;
     const start = performance.now();
-    const easeInOutCubic = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const ease = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const step = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
-      window.scrollTo(0, startY + distance * easeInOutCubic(t));
+      window.scrollTo(0, startY + distance * ease(t));
       if (t < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
+  }
+
+  // Smooth-scroll to the chart after the delayed template switch.
+  useEffect(() => {
+    if (!shouldScrollAfterSubmit.current) return;
+    shouldScrollAfterSubmit.current = false;
+    scrollToGantt();
   }, [activeIndex]);
 
   // Handle #demo hash — highlight input, scroll only if not visible
@@ -79,10 +80,10 @@ export default function DemoSection() {
   function handleSubmit() {
     if (selectedIndex === null) return;
     if (selectedIndex === activeIndex) {
-      shouldScrollAfterSubmit.current = false;
+      scrollToGantt();
       return;
     }
-    shouldScrollAfterSubmit.current = selectedIndex !== activeIndex;
+    shouldScrollAfterSubmit.current = true;
     setIsSubmitting(true);
     setTimeout(() => {
       setActiveTasks(TEMPLATES[selectedIndex].tasks);
