@@ -64,7 +64,7 @@ type InitialGenerationPlannerQueryInput = {
 type InitialGenerationRouteDecisionQueryInput = {
   prompt: string;
   model: string;
-  stage: 'route_decision';
+  stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
 };
 
 type NormalizedMutationToolName =
@@ -225,7 +225,7 @@ async function executeInitialGenerationRouteDecisionQuery(
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       env: buildSdkEnv(env),
-      maxSessionTurns: 2,
+      maxSessionTurns: input.stage === 'initial_request_interpretation_repair' ? 3 : 2,
     },
   });
 
