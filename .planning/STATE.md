@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: verifying
-last_updated: "2026-04-13T20:53:07.580Z"
-last_activity: 2026-04-13
+status: executing
+last_updated: "2026-04-14T09:38:28.038Z"
+last_activity: 2026-04-14
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 11
-  total_plans: 40
-  completed_plans: 40
+  total_plans: 43
+  completed_plans: 41
   percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-13
+**Last updated:** 2026-04-14
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Phase complete — ready for verification
+**Status:** Executing Phase 43
 
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 42 — mcp-mutation-refactor
+**Current focus:** Phase 43 — initial-gen-no-regexp
 
 ---
 
 ## Current Position
 
-Phase: 42 (mcp-mutation-refactor) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-04-13
+Phase: 43 (initial-gen-no-regexp) — EXECUTING
+Plan: 2 of 3
+Status: Plan 01 complete
+Last activity: 2026-04-14
 
 Progress: [██████████] 100%
 
@@ -149,6 +149,9 @@ packages/
 - [Phase 42]: Execution success is accepted only when commandService changedTaskIds match the plan's expected changed set.
 - [Phase 42]: Staged mutation UX now comes from shared server-side message builders so ordinary failures never fall back to the legacy no-tool-call message.
 - [Phase 42]: The remaining full_agent path must consume ResolvedMutationContext and optional MutationPlan instead of inventing IDs or dates from scratch.
+- [Phase 43]: Route selection now trusts the shared interpreter payload and maps only interpreter outcomes or project-state fallback reasons.
+- [Phase 43]: Conservative fallback uses only project emptiness, hierarchy, extracted worklist count, and parsed location scope; it does not inspect semantic user words.
+- [Phase 43]: The existing route-decision query hook in agent.ts was widened to interpreter and repair stages so the new boundary could reuse the production query path.
 
 ## Performance Metrics
 
@@ -172,12 +175,13 @@ packages/
 | Phase 42 P01 | 7min | 2 tasks | 8 files |
 | Phase 42 P02 | 8min | 2 tasks | 7 files |
 | Phase 42 P04 | 4 min | 2 tasks | 5 files |
+| Phase 43 P01 | 6 min | 2 tasks | 6 files |
 
 ## Session
 
-- Last session: 2026-04-13T20:53:07Z
-- Stopped at: Completed 42-04-PLAN.md
+- Last session: 2026-04-14T09:38:51Z
+- Stopped at: Completed 43-01-PLAN.md
 
 ---
 
-*Last updated: 2026-04-13 — Phase 42 Plan 04 completed*
+*Last updated: 2026-04-14 — Phase 43 Plan 01 completed*

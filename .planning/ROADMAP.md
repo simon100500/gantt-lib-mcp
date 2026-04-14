@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-13
+**Last updated:** 2026-04-14
 
 ## Progress Summary
 
@@ -341,7 +341,7 @@ Plans:
 **Goal:** Initial-generation intake semantics come from one strict structured interpretation step, and the runtime path no longer uses semantic regex/includes/word lists for route, classification, clarification, or scope/profile inference
 **Requirements**: IGNR-01, IGNR-02, IGNR-03, IGNR-04
 **Depends on:** Phase 42
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 **Success Criteria** (what must be TRUE):
   1. One shared strict-JSON interpretation step returns route, request kind, planning mode, scope mode, object profile, project archetype, worklist policy, clarification reason, and location scope for initial-generation intake
@@ -350,9 +350,9 @@ Plans:
   4. Logs and regression tests cover Russian and English paraphrases, ambiguity, explicit worklists, targeted-edit cases, and model-failure fallback
 
 Plans:
-- [ ] 43-01-PLAN.md — Unified interpretation contract, strict-JSON interpreter, and route-selection migration
+- [x] 43-01-PLAN.md — Unified interpretation contract, strict-JSON interpreter, and route-selection migration
 - [ ] 43-02-PLAN.md — Downstream consumer migration onto shared interpretation and technical-only normalization
 - [ ] 43-03-PLAN.md — Observability, fallback telemetry, and regression guards against semantic runtime heuristics
 
 ---
-*Last updated: 2026-04-13 — Phase 42 Plan 03 completed*
+*Last updated: 2026-04-14 — Phase 43 Plan 01 completed*

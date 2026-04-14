@@ -55,7 +55,7 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ### Initial Generation No Runtime Semantics
 
-- [ ] **IGNR-01**: Initial-generation intake uses one strict JSON interpretation contract that returns route, request kind, planning mode, scope mode, object profile, project archetype, worklist policy, clarification, and location scope
+- [x] **IGNR-01**: Initial-generation intake uses one strict JSON interpretation contract that returns route, request kind, planning mode, scope mode, object profile, project archetype, worklist policy, clarification, and location scope
 - [ ] **IGNR-02**: Runtime code in the initial-generation interpretation path does not derive semantics from keyword matching, `regexp`, `includes`, or hardcoded lexical marker lists for route, scope, profile, or clarification
 - [ ] **IGNR-03**: The server validates interpretation output strictly, keeps only technical parsing outside the model, and uses conservative non-semantic fallback when the model output is unavailable or invalid
 - [ ] **IGNR-04**: Logs and automated regressions cover Russian and English paraphrases, ambiguity, explicit worklists, targeted-edit cases, and model-failure fallback for the initial-generation intake path
@@ -111,7 +111,7 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | MMR-03 | Phase 42 | Complete |
 | MMR-04 | Phase 42 | Complete |
 | MMR-05 | Phase 42 | Complete |
-| IGNR-01 | Phase 43 | Pending |
+| IGNR-01 | Phase 43 | Complete |
 | IGNR-02 | Phase 43 | Pending |
 | IGNR-03 | Phase 43 | Pending |
 | IGNR-04 | Phase 43 | Pending |
@@ -126,4 +126,4 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-04-13 after Phase 42 Plan 03 completion*
+*Last updated: 2026-04-14 after Phase 43 Plan 01 completion*
