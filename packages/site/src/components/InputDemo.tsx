@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { ArrowDown } from 'lucide-react';
 
 interface Chip {
   label: string;
@@ -110,7 +111,7 @@ export default function InputDemo({
           disabled={!canSubmit}
           className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:opacity-40 disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none"
         >
-          {isSubmitting ? 'Загрузка…' : 'Показать график'}
+          {isSubmitting ? 'Загрузка…' : <><ArrowDown className="inline-block mr-1.5 h-4 w-4 align-[-2px]" />Показать график</>}
         </button>
       </div>
     </div>
