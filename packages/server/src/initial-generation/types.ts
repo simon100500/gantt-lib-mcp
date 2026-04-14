@@ -16,6 +16,47 @@ export type WorklistPolicy =
   | 'strict_worklist'
   | 'worklist_plus_inferred_supporting_tasks';
 
+export type InitialRequestInterpretationRoute = 'initial_generation' | 'mutation';
+
+export type InitialRequestKind = 'whole_project'|'partial_scope'|'explicit_worklist'|'targeted_edit'|'ambiguous';
+
+export type InitialRequestObjectProfile =
+  | 'unknown'
+  | 'office_fitout'
+  | 'kindergarten'
+  | 'residential_multi_section';
+
+export type InitialRequestProjectArchetype = 'unknown' | 'new_building' | 'renovation';
+
+export type InitialRequestClarificationReason =
+  | 'none'
+  | 'ambiguous_list'
+  | 'missing_scope'
+  | 'scope_boundary_ambiguity'
+  | 'fragment_target_ambiguity'
+  | 'worklist_completeness_ambiguity';
+
+export type InitialRequestInterpretation = {
+  route: InitialRequestInterpretationRoute;
+  confidence: number;
+  requestKind: InitialRequestKind;
+  planningMode: PlanningMode;
+  scopeMode: ScopeMode;
+  objectProfile: InitialRequestObjectProfile;
+  projectArchetype: InitialRequestProjectArchetype;
+  locationScope: {
+    sections: string[];
+    floors: string[];
+    zones: string[];
+  };
+  worklistPolicy: WorklistPolicy;
+  clarification: {
+    needed: boolean;
+    reason: InitialRequestClarificationReason;
+  };
+  signals: string[];
+};
+
 export type SourceConfidence = 'low' | 'medium' | 'high';
 
 export type ClarificationReason =
