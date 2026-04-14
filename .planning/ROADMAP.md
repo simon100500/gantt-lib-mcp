@@ -336,5 +336,23 @@ Plans:
 - [x] 41-03-PLAN.md — Deterministic compiler, partial salvage, and authoritative batch commit through `commandService`
 - [x] 41-04-PLAN.md — End-to-end orchestration wiring, observability payloads, regression tests, and manual verification docs
 
+### Phase 43: initial-gen-no-regexp
+
+**Goal:** Initial-generation intake semantics come from one strict structured interpretation step, and the runtime path no longer uses semantic regex/includes/word lists for route, classification, clarification, or scope/profile inference
+**Requirements**: IGNR-01, IGNR-02, IGNR-03, IGNR-04
+**Depends on:** Phase 42
+**Plans:** 3 plans
+
+**Success Criteria** (what must be TRUE):
+  1. One shared strict-JSON interpretation step returns route, request kind, planning mode, scope mode, object profile, project archetype, worklist policy, clarification reason, and location scope for initial-generation intake
+  2. `route-selection`, `classification`, `clarification-gate`, `brief`, and `domain/assembly` no longer derive semantics from runtime `regexp`, `includes`, or hardcoded lexical marker lists; only technical parsing remains
+  3. Conservative fallback is available for model failure or invalid output, but it uses project state and technical structure only, not semantic keyword inference
+  4. Logs and regression tests cover Russian and English paraphrases, ambiguity, explicit worklists, targeted-edit cases, and model-failure fallback
+
+Plans:
+- [ ] 43-01-PLAN.md — Unified interpretation contract, strict-JSON interpreter, and route-selection migration
+- [ ] 43-02-PLAN.md — Downstream consumer migration onto shared interpretation and technical-only normalization
+- [ ] 43-03-PLAN.md — Observability, fallback telemetry, and regression guards against semantic runtime heuristics
+
 ---
 *Last updated: 2026-04-13 — Phase 42 Plan 03 completed*

@@ -76,6 +76,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 43 added: initial-gen-no-regexp
 - Phase 41 added: initial-gen-refactor
 - Phase 40 added: yandex-auth
 

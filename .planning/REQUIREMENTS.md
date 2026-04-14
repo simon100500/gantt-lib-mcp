@@ -53,6 +53,13 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 - [x] **MMR-04**: User-facing failures for simple mutation intents return typed controlled reasons (`anchor_not_found`, `container_not_resolved`, etc.) instead of the generic “no valid mutation tool call” outcome
 - [x] **MMR-05**: Debug logs reconstruct the full mutation lifecycle including intent classification, resolution evidence, plan selection, execution mode, and final verification
 
+### Initial Generation No Runtime Semantics
+
+- [ ] **IGNR-01**: Initial-generation intake uses one strict JSON interpretation contract that returns route, request kind, planning mode, scope mode, object profile, project archetype, worklist policy, clarification, and location scope
+- [ ] **IGNR-02**: Runtime code in the initial-generation interpretation path does not derive semantics from keyword matching, `regexp`, `includes`, or hardcoded lexical marker lists for route, scope, profile, or clarification
+- [ ] **IGNR-03**: The server validates interpretation output strictly, keeps only technical parsing outside the model, and uses conservative non-semantic fallback when the model output is unavailable or invalid
+- [ ] **IGNR-04**: Logs and automated regressions cover Russian and English paraphrases, ambiguity, explicit worklists, targeted-edit cases, and model-failure fallback for the initial-generation intake path
+
 ## Future Requirements
 
 ### Deferred to future milestones
@@ -104,6 +111,10 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | MMR-03 | Phase 42 | Complete |
 | MMR-04 | Phase 42 | Complete |
 | MMR-05 | Phase 42 | Complete |
+| IGNR-01 | Phase 43 | Pending |
+| IGNR-02 | Phase 43 | Pending |
+| IGNR-03 | Phase 43 | Pending |
+| IGNR-04 | Phase 43 | Pending |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |
