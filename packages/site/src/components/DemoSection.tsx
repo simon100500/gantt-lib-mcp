@@ -99,10 +99,10 @@ export default function DemoSection() {
     <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
-          <div className="max-w-[620px] px-8 lg:px-0">
+          <div className="min-w-0 w-full lg:px-0">
             <h1
-              className="font-extrabold leading-[1.05] text-foreground animate-fade-up"
-              style={{ animationDelay: '120ms', fontSize: '3.5rem' }}
+              className="font-extrabold leading-[1.1] text-foreground animate-fade-up"
+              style={{ fontSize: 'clamp(1.5rem, 8vw, 3.5rem)', animationDelay: '120ms' }}
             >
               Из описания проекта —{' '}
               <span className="text-primary">в&nbsp;диаграмму Ганта</span>{' '}
@@ -110,7 +110,7 @@ export default function DemoSection() {
             </h1>
 
             <p
-              className="mt-8 max-w-[560px] text-lg leading-8 text-secondary-foreground animate-fade-up"
+              className="mt-6 text-base sm:text-lg leading-7 sm:leading-8 text-secondary-foreground animate-fade-up"
               style={{ animationDelay: '190ms' }}
             >
               Опишите что нужно построить — ИИ создаст план работ с задачами, сроками и зависимостями. Редактируйте текстом или мышкой.
@@ -129,14 +129,14 @@ export default function DemoSection() {
             </div>
           </div>
 
-          <div id="demo" className="relative lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
+          <div id="demo" className="relative min-w-0 w-full lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
             {highlightDemo && (
               <div className="absolute -top-11 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg">
                 Выберите пример проекта
                 <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-primary" />
               </div>
             )}
-            <div className={`relative rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.12)] sm:p-6 transition-shadow duration-500 ${highlightDemo ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
+            <div className={`relative w-full rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.12)] sm:p-6 transition-shadow duration-500 ${highlightDemo ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
               <InputDemo
                 chips={TEMPLATES.map(t => ({ label: t.label, prompt: t.prompt }))}
                 selectedIndex={selectedIndex}

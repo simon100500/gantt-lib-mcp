@@ -106,7 +106,7 @@ const navLinks = [
         height="26"
         class="h-[26px] w-[26px]"
       />
-      <span class="text-[15px]">GetGantt</span>
+      <span class="text-[15px]">ГетГант</span>
     </a>
 
     {/* Nav Links */}
@@ -157,6 +157,7 @@ const navLinks = [
   function openMenu() {
     drawer?.classList.remove("translate-x-full");
     drawer?.classList.add("translate-x-0");
+    drawer?.setAttribute("aria-hidden", "false");
     overlay?.classList.remove("opacity-0", "pointer-events-none");
     overlay?.classList.add("opacity-100", "pointer-events-auto");
     document.body.style.overflow = "hidden";
@@ -165,6 +166,7 @@ const navLinks = [
   function closeMenu() {
     drawer?.classList.remove("translate-x-0");
     drawer?.classList.add("translate-x-full");
+    drawer?.setAttribute("aria-hidden", "true");
     overlay?.classList.remove("opacity-100", "pointer-events-auto");
     overlay?.classList.add("opacity-0", "pointer-events-none");
     document.body.style.overflow = "";
@@ -179,15 +181,18 @@ const navLinks = [
     if (e.key === "Escape") closeMenu();
   });
 
-  // Handle "Демо" link — close mobile menu, set hash without browser scroll
-  document.addEventListener("click", (e) => {
-    const link = e.target.closest('a[href="/#demo"]');
+  // Close drawer on any link click inside it
+  drawer?.addEventListener("click", (e) => {
+    const link = (e.target as Element).closest("a");
     if (!link) return;
-    closeMenu();
-    if (window.location.pathname === "/") {
+    // Special handling for /#demo — no browser scroll
+    if (link.getAttribute("href") === "/#demo" && window.location.pathname === "/") {
       e.preventDefault();
+      closeMenu();
       history.pushState(null, "", "/#demo");
       window.dispatchEvent(new HashChangeEvent("hashchange"));
+    } else {
+      closeMenu();
     }
   });
 </script>
