@@ -130,43 +130,118 @@ describe('agent system prompt hierarchy guidance', () => {
 describe('initial-generation route selection', () => {
   it('routes broad empty-project prompts into initial_generation', async () => {
     assert.deepEqual(await selectAgentRoute({
-      userMessage: 'Построй типичный график строительства',
+      userMessage: 'Построй график',
       taskCount: 0,
       hasHierarchy: false,
       model: 'gpt-route',
       routeDecisionQuery: async () => JSON.stringify({
         route: 'initial_generation',
         confidence: 0.96,
-        reason: 'empty_project_broad_schedule_creation',
-        signals: ['empty_project', 'user_requests_new_schedule', 'request_scope_is_broad'],
+        requestKind: 'whole_project',
+        planningMode: 'whole_project_bootstrap',
+        scopeMode: 'full_project',
+        objectProfile: 'unknown',
+        projectArchetype: 'unknown',
+        locationScope: { sections: [], floors: [], zones: [] },
+        worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
+        clarification: { needed: false, reason: 'none' },
+        signals: ['broad_bootstrap'],
       }),
     }), {
       route: 'initial_generation',
       confidence: 0.96,
-      reason: 'empty_project_broad_schedule_creation',
-      signals: ['empty_project', 'user_requests_new_schedule', 'request_scope_is_broad'],
+      reason: 'interpreted_whole_project_initial_generation',
+      signals: ['broad_bootstrap'],
       isEmptyProject: true,
       hasHierarchy: false,
       taskCount: 0,
       projectStateSummary: 'empty_project=true, task_count=0, has_hierarchy=false',
       usedModelDecision: true,
+      interpretation: {
+        route: 'initial_generation',
+        confidence: 0.96,
+        requestKind: 'whole_project',
+        planningMode: 'whole_project_bootstrap',
+        scopeMode: 'full_project',
+        objectProfile: 'unknown',
+        projectArchetype: 'unknown',
+        locationScope: { sections: [], floors: [], zones: [] },
+        worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
+        clarification: { needed: false, reason: 'none' },
+        signals: ['broad_bootstrap'],
+      },
     });
   });
 
-  it('treats vague bootstrap prompts as initial generation, not clarification', async () => {
-    assert.equal((await selectAgentRoute({
+  it('keeps Russian and English broad bootstrap paraphrases on initial_generation', async () => {
+    const russian = await selectAgentRoute({
       userMessage: 'Построй график',
       taskCount: 0,
       hasHierarchy: false,
-    })).route, 'initial_generation');
+    });
+    const english = await selectAgentRoute({
+      userMessage: 'Build a starter schedule for a kindergarten',
+      taskCount: 0,
+      hasHierarchy: false,
+    });
+
+    assert.equal(russian.route, 'initial_generation');
+    assert.equal(english.route, 'initial_generation');
+    assert.equal(russian.reason, 'fallback_empty_project_defaults_to_initial_generation');
+    assert.equal(english.reason, 'fallback_empty_project_defaults_to_initial_generation');
   });
 
-  it('keeps ordinary edit prompts on mutation flow', async () => {
-    assert.equal((await selectAgentRoute({
-      userMessage: 'Сдвинь фундамент на 3 дня',
+  it('routes targeted edit payloads to mutation because the interpreter says targeted edit', async () => {
+    const result = await selectAgentRoute({
+      userMessage: 'targeted edit',
       taskCount: 4,
       hasHierarchy: true,
-    })).route, 'mutation');
+      model: 'gpt-route',
+      routeDecisionQuery: async () => JSON.stringify({
+        route: 'mutation',
+        confidence: 0.87,
+        requestKind: 'targeted_edit',
+        planningMode: 'partial_scope_bootstrap',
+        scopeMode: 'partial_scope',
+        objectProfile: 'unknown',
+        projectArchetype: 'renovation',
+        locationScope: { sections: [], floors: [], zones: [] },
+        worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
+        clarification: { needed: false, reason: 'none' },
+        signals: ['targeted_edit'],
+      }),
+    });
+
+    assert.equal(result.route, 'mutation');
+    assert.equal(result.reason, 'interpreted_targeted_edit_mutation');
+    assert.equal(result.interpretation.requestKind, 'targeted_edit');
+  });
+
+  it('uses project state fallback when the interpretation model is unavailable', async () => {
+    const emptyProject = await selectAgentRoute({
+      userMessage: 'Build a starter schedule',
+      taskCount: 0,
+      hasHierarchy: false,
+      model: 'gpt-route',
+      routeDecisionQuery: async () => {
+        throw new Error('model_unavailable');
+      },
+    });
+
+    const nonEmptyProject = await selectAgentRoute({
+      userMessage: 'Build a starter schedule',
+      taskCount: 8,
+      hasHierarchy: true,
+      model: 'gpt-route',
+      routeDecisionQuery: async () => {
+        throw new Error('model_unavailable');
+      },
+    });
+
+    assert.equal(emptyProject.reason, 'fallback_empty_project_defaults_to_initial_generation');
+    assert.equal(emptyProject.route, 'initial_generation');
+    assert.equal(nonEmptyProject.reason, 'fallback_non_empty_project_defaults_to_mutation');
+    assert.equal(nonEmptyProject.route, 'mutation');
   });
 });
 
