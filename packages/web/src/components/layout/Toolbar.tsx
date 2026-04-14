@@ -4,6 +4,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Ellipsis,
+  FileDown,
   FlagTriangleRight,
   Funnel,
   Link,
@@ -33,6 +34,7 @@ interface ToolbarProps {
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
+  onExportPdf?: () => void;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
@@ -52,6 +54,7 @@ export function Toolbar({
   onScrollToToday,
   onCollapseAll,
   onExpandAll,
+  onExportPdf,
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
@@ -212,6 +215,19 @@ export function Toolbar({
         <FlagTriangleRight className="h-3.5 w-3.5" />
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
+
+      {onExportPdf && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onExportPdf}
+          className={cn(actionButtonClassName, 'hidden sm:flex')}
+          title="Экспортировать график в PDF"
+        >
+          <FileDown className="h-3.5 w-3.5" />
+          <span className="hidden md:inline text-xs">PDF / Печать</span>
+        </Button>
+      )}
 
       {showShareButton && onCreateShareLink && (
         <Button

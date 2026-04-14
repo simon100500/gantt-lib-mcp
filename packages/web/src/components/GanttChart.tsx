@@ -3,6 +3,24 @@ import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, ValidationResult } from '../types.ts';
 import type { CustomDayConfig } from 'gantt-lib';
 
+export interface ExportToPdfHeaderOptions {
+  logoUrl?: string;
+  logoHref?: string;
+  serviceName?: string;
+  serviceHref?: string;
+  projectName?: string;
+  exportDate?: string | Date;
+}
+
+export interface ExportToPdfOptions {
+  header?: ExportToPdfHeaderOptions;
+  fileName?: string;
+  title?: string;
+  orientation?: 'portrait' | 'landscape';
+  includeTaskList?: boolean;
+  includeChart?: boolean;
+}
+
 export interface GanttChartProps {
   tasks: Task[];
   onTasksChange?: (tasks: Task[]) => void;
@@ -43,6 +61,7 @@ export interface GanttChartRef {
   scrollToRow: (taskId: string) => void;
   collapseAll: () => void;
   expandAll: () => void;
+  exportToPdf: (options?: ExportToPdfOptions) => Promise<void>;
 }
 
 export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
@@ -84,6 +103,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
     scrollToRow: (taskId: string) => void;
     collapseAll: () => void;
     expandAll: () => void;
+    exportToPdf: (options?: ExportToPdfOptions) => Promise<void>;
   } | null>(null);
 
   useImperativeHandle(ref, () => ({
@@ -92,6 +112,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
     scrollToRow: (taskId: string) => ganttLibRef.current?.scrollToRow(taskId),
     collapseAll: () => ganttLibRef.current?.collapseAll(),
     expandAll: () => ganttLibRef.current?.expandAll(),
+    exportToPdf: (options) => ganttLibRef.current?.exportToPdf(options) ?? Promise.resolve(),
   }));
 
   return (

@@ -19,6 +19,7 @@ interface GuestWorkspaceProps {
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
+  onExportPdf?: () => void;
   onValidation: (result: ValidationResult) => void;
   onCascade: (shiftedTasks: Task[]) => void;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
@@ -54,6 +55,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       onScrollToToday={props.onScrollToToday}
       onCollapseAll={props.onCollapseAll}
       onExpandAll={props.onExpandAll}
+      onExportPdf={props.onExportPdf}
       onValidation={props.onValidation}
       onCascade={props.onCascade}
       ganttDayMode={props.ganttDayMode}

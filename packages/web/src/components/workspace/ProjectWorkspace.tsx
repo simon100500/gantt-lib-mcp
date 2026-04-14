@@ -39,6 +39,7 @@ interface ProjectWorkspaceProps {
   onScrollToToday: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
+  onExportPdf?: () => void;
   onValidation: (result: ValidationResult) => void;
   onCascade?: (shiftedTasks: Task[]) => void;
   readOnly?: boolean;
@@ -92,6 +93,7 @@ export function ProjectWorkspace({
   onScrollToToday,
   onCollapseAll,
   onExpandAll,
+  onExportPdf,
   onValidation,
   onCascade,
   readOnly = false,
@@ -233,6 +235,7 @@ export function ProjectWorkspace({
           onScrollToToday={onScrollToToday}
           onCollapseAll={onCollapseAll}
           onExpandAll={onExpandAll}
+          onExportPdf={onExportPdf}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}

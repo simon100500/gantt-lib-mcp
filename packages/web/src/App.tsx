@@ -26,7 +26,7 @@ import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
-import { useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
+import { getExportAccessLevel, useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useUIStore } from './stores/useUIStore.ts';
@@ -88,6 +88,23 @@ function buildProactiveConstraintDenial(
     };
   }
 
+  if (limitKey === 'export') {
+    const exportAccessLevel = getExportAccessLevel(status);
+    if (exportAccessLevel !== 'none') {
+      return null;
+    }
+
+    return {
+      code: 'EXPORT_FEATURE_LOCKED',
+      limitKey,
+      reasonCode: 'feature_disabled',
+      remaining: null,
+      plan,
+      planLabel,
+      upgradeHint: 'Экспорт в PDF доступен на тарифе Старт и выше.',
+    };
+  }
+
   const usageEntry = limitKey === 'projects' ? status?.usage.projects : status?.usage.ai_queries;
   const remainingEntry = limitKey === 'projects' ? status?.remaining.projects : status?.remaining.ai_queries;
   if (remainingEntry?.remainingState !== 'tracked' || remainingEntry.remaining > 0) {
@@ -141,6 +158,16 @@ function summarizeTasksForLog(tasks: Task[]) {
       lag: dependency.lag ?? 0,
     })),
   }));
+}
+
+function formatPdfFileTimestamp(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  const hours = String(value.getHours()).padStart(2, '0');
+  const minutes = String(value.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hours}-${minutes}`;
 }
 
 type PreviewState = {
@@ -1110,6 +1137,28 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       : auth.isAuthenticated
         ? auth.project?.name
         : (localTasks.projectName || 'Мой проект');
+  const handleExportPdf = useCallback(async () => {
+    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
+    if (proactiveExportDenial) {
+      await openLimitModal(proactiveExportDenial);
+      return;
+    }
+
+    const projectName = currentProjectLabel?.trim() || 'Мой проект';
+    const exportDate = new Date();
+    await ganttRef.current?.exportToPdf({
+      fileName: `ГетГант - ${projectName} - ${formatPdfFileTimestamp(exportDate)}.pdf`,
+      title: projectName,
+      header: {
+        logoUrl: `${window.location.origin}/favicon.svg`,
+        logoHref: window.location.origin,
+        serviceName: 'GetGantt.ru',
+        serviceHref: window.location.origin,
+        projectName,
+        exportDate,
+      },
+    });
+  }, [billingStatus, currentProjectLabel, ganttRef, openLimitModal]);
 
   const workspaceShell = workspace.kind === 'shared'
     ? (
@@ -1169,6 +1218,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onScrollToToday={handleScrollToToday}
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
+            onExportPdf={handleExportPdf}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
@@ -1199,6 +1249,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onScrollToToday={handleScrollToToday}
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
+            onExportPdf={handleExportPdf}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
