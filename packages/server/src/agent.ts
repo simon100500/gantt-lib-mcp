@@ -9,17 +9,13 @@ import {
   isSDKPartialAssistantMessage,
   type ContentBlock,
 } from '@qwen-code/sdk';
-import {
-  parseDateOnly,
-  shiftBusinessDayOffset,
-} from 'gantt-lib/core/scheduling';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
-import type { CommitProjectCommandResponse, Task as MTask } from '@gantt/mcp/types';
+import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
@@ -70,17 +66,6 @@ type InitialGenerationRouteDecisionQueryInput = {
   model: string;
   stage: 'route_decision';
 };
-
-type FastShiftIntent = {
-  taskName: string;
-  delta: number;
-  mode: 'working' | 'calendar' | 'project_default';
-};
-
-type FastShiftTaskMatch =
-  | { kind: 'none'; matches: []; }
-  | { kind: 'exact'; matches: ComparableTask[]; }
-  | { kind: 'partial'; matches: ComparableTask[]; };
 
 type NormalizedMutationToolName =
   | 'create_tasks'
@@ -273,102 +258,6 @@ async function executeInitialGenerationRouteDecisionQuery(
   return { content };
 }
 
-export function isMutationIntent(message: string): boolean {
-  const normalized = message.toLowerCase();
-  if (/(?:сдвин\w*|передвин\w*|смест\w*|перенеси?\s+.+\s+на\s+\d+\s+дн\w*)/.test(normalized)) {
-    return true;
-  }
-  const russianMutationMarkers = [
-    '\u0434\u043e\u0431\u0430\u0432',
-    '\u0432\u043d\u0435\u0441',
-    '\u0441\u043e\u0437\u0434\u0430',
-    '\u0438\u0437\u043c\u0435\u043d\u0438',
-    '\u043e\u0431\u043d\u043e\u0432',
-    '\u0443\u0434\u0430\u043b',
-    '\u0443\u0431\u0435\u0440',
-    '\u0440\u0430\u0437\u0431\u0435\u0439',
-    '\u0440\u0430\u0437\u0434\u0435\u043b\u0438',
-    '\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d',
-    '\u0431\u043b\u043e\u043a \u0440\u0430\u0431\u043e\u0442',
-    '\u0440\u0430\u0431\u043e\u0442\u0443 \u0432 \u043a\u043e\u043d\u0435\u0446',
-    '\u0432\u043b\u043e\u0436',
-    '\u043f\u043e\u0434\u0437\u0430\u0434\u0430',
-    '\u0434\u043e\u0447\u0435\u0440\u043d',
-    '\u0432\u043d\u0443\u0442\u0440\u044c',
-    '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u0432',
-    '\u0441\u0434\u0432\u0438\u043d',
-    '\u0441\u0434\u0432\u0438\u043d\u044c',
-    '\u043f\u0435\u0440\u0435\u0434\u0432\u0438\u043d',
-    '\u0441\u043c\u0435\u0441\u0442\u0438',
-    '\u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0438 \u043d\u0430',
-    '\u0441\u0434\u0432\u0438\u0433 \u043d\u0430',
-    '\u0441\u0434\u0435\u043b\u0430\u0439 \u0438\u0435\u0440\u0430\u0440\u0445',
-  ];
-
-  if (russianMutationMarkers.some((marker) => normalized.includes(marker))) {
-    return true;
-  }
-
-  if (
-    /(?:график|план|schedule|timeline|gantt)/i.test(message)
-    && /(?:постро|состав|сплан|нарис|create|build|draft|generate)/i.test(message)
-  ) {
-    return true;
-  }
-
-  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|\bsplit\b|\brename\b|\bnest(?:ed|ing)?\b|\bsubtask(?:s)?\b|\bchild(?:ren)?\b|\bhierarchy\b|\bindent\b|\boutdent\b|\bmove\b.+\bunder\b|\bshift\b|\bmove\b.+\bby\b|\bpush\b.+\bdays?\b)/i.test(message);
-}
-
-export function isSimpleMutationRequest(message: string): boolean {
-  const normalized = message.toLowerCase().trim();
-
-  if (normalized.length > 120) {
-    return false;
-  }
-
-  const compactStructuralMarkers = [
-    'отдельным блоком',
-    'отдельный блок',
-    'новым блоком',
-    'new block',
-    'separate block',
-  ];
-
-  if (compactStructuralMarkers.some((marker) => normalized.includes(marker))) {
-    return true;
-  }
-
-  const broadScopeMarkers = [
-    'график',
-    'проект',
-    'wbs',
-    'иерарх',
-    'структур',
-    'этап',
-    'блок',
-    'phase',
-    'schedule',
-    'plan',
-    'fragment',
-    'package',
-    'dependencies',
-    'dependency',
-    'floor',
-    'section',
-    'секци',
-    'этаж',
-    'for all',
-    'для всех',
-    'массов',
-  ];
-
-  if (broadScopeMarkers.some((marker) => normalized.includes(marker))) {
-    return false;
-  }
-
-  return /(?:\badd\b|\bcreate\b|\bupdate\b|\bedit\b|\bdelete\b|\bremove\b|\binsert\b|добав|созда|измени|обнов|удал|убер)/i.test(normalized);
-}
-
 function normalizeTask(task: ComparableTask): ComparableTask {
   return {
     id: task.id,
@@ -409,123 +298,6 @@ function uniqueSorted(values: string[]): string[] {
 
 function normalizeName(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function normalizeRussianAccusativeToken(token: string): string {
-  if (token.endsWith('ку')) {
-    return `${token.slice(0, -2)}ка`;
-  }
-  if (token.endsWith('гу')) {
-    return `${token.slice(0, -2)}га`;
-  }
-  if (token.endsWith('ху')) {
-    return `${token.slice(0, -2)}ха`;
-  }
-  if (token.endsWith('ю')) {
-    return `${token.slice(0, -1)}я`;
-  }
-  if (token.endsWith('у')) {
-    return `${token.slice(0, -1)}а`;
-  }
-  return token;
-}
-
-function buildNameVariants(value: string): string[] {
-  const normalized = normalizeName(value);
-  const tokens = normalized.split(' ');
-  const accusativeNormalized = tokens.map(normalizeRussianAccusativeToken).join(' ');
-  return [...new Set([normalized, accusativeNormalized])];
-}
-
-function parseFastShiftDelta(rawAmount: string | undefined, rawUnit: string | undefined): number | null {
-  const amount = rawAmount ? Number.parseInt(rawAmount, 10) : 1;
-  if (Number.isNaN(amount) || amount === 0) {
-    return null;
-  }
-
-  const unit = (rawUnit ?? '').toLowerCase();
-  if (unit.startsWith('недел')) {
-    return amount * 7;
-  }
-
-  return amount;
-}
-
-export function parseFastShiftIntent(message: string): FastShiftIntent | null {
-  const trimmed = message.trim();
-  const patterns: Array<{ regex: RegExp; mode?: FastShiftIntent['mode']; defaultDelta?: number }> = [
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+рабоч(?:ий|их)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'working' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+календарн(?:ый|ых)?\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'calendar' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(-?\d+)\s+(дн(?:я|ей)?|недел(?:ю|и|ь))$/i, mode: 'project_default' },
-    { regex: /^(?:сдвинь|сдвинуть|перенеси|передвинь|смести)\s+["«]?(.+?)["»]?\s+на\s+(рабоч(?:ий|их)?|календарн(?:ую|ых)?|)?\s*недел(?:ю|и|ь)$/i, defaultDelta: 7 },
-    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+working\s+days?$/i, mode: 'working' },
-    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+calendar\s+days?$/i, mode: 'calendar' },
-    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+weeks?$/i, mode: 'project_default' },
-    { regex: /^(?:move|shift|push)\s+["“]?(.+?)["”]?\s+by\s+(-?\d+)\s+days?$/i, mode: 'project_default' },
-  ];
-
-  for (const { regex, mode, defaultDelta } of patterns) {
-    const match = trimmed.match(regex);
-    if (!match) {
-      continue;
-    }
-    const taskName = match[1]?.trim();
-    const delta = defaultDelta ?? parseFastShiftDelta(match[2], match[3]);
-    if (!taskName || delta === null) {
-      return null;
-    }
-    return {
-      taskName,
-      delta,
-      mode: mode ?? 'project_default',
-    };
-  }
-
-  return null;
-}
-
-export function resolveTasksByName(tasks: ComparableTask[], taskName: string): FastShiftTaskMatch {
-  const targetVariants = buildNameVariants(taskName);
-
-  for (const variant of targetVariants) {
-    const exactMatches = tasks.filter((task) => normalizeName(task.name) === variant);
-    if (exactMatches.length > 0) {
-      return { kind: 'exact', matches: exactMatches };
-    }
-  }
-
-  for (const variant of targetVariants) {
-    const partialMatches = tasks.filter((task) => normalizeName(task.name).includes(variant));
-    if (partialMatches.length > 0) {
-      return { kind: 'partial', matches: partialMatches };
-    }
-  }
-
-  return { kind: 'none', matches: [] };
-}
-
-function createUtcDate(year: number, monthIndex: number, day: number): Date {
-  return new Date(Date.UTC(year, monthIndex, day));
-}
-
-function formatDateOnly(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-function buildFastShiftSuccessMessage(taskName: string, delta: number, mode: 'working' | 'calendar'): string {
-  const absDelta = Math.abs(delta);
-  const direction = delta >= 0 ? 'сдвинута' : 'сдвинута раньше';
-  const unit = mode === 'working' ? 'рабоч' : 'календарн';
-  const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
-  return `Задача «${taskName}» была ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
-}
-
-function buildFastShiftMultiSuccessMessage(taskName: string, matchCount: number, delta: number, mode: 'working' | 'calendar'): string {
-  const absDelta = Math.abs(delta);
-  const direction = delta >= 0 ? 'сдвинуты' : 'сдвинуты раньше';
-  const unit = mode === 'working' ? 'рабоч' : 'календарн';
-  const daysWord = absDelta === 1 ? 'день' : (absDelta >= 2 && absDelta <= 4 ? 'дня' : 'дней');
-  return `Все ${matchCount} задачи «${taskName}» были ${direction} на ${absDelta} ${unit}${mode === 'working' ? 'ий' : 'ый'} ${daysWord}.`;
 }
 
 export function assessMutationOutcome(
@@ -839,135 +611,6 @@ async function getPrismaModule(): Promise<PrismaModule> {
   return prismaModulePromise;
 }
 
-async function tryDirectShiftFastPath(
-  userMessage: string,
-  projectId: string,
-  sessionId: string,
-  runId: string,
-  tasksBefore: ComparableTask[],
-  services: Pick<TaskServiceModule, 'taskService' | 'messageService' | 'commandService' | 'getProjectScheduleOptionsForProject'>,
-  broadcastToSession: WsModule['broadcastToSession'],
-): Promise<boolean> {
-  const intent = parseFastShiftIntent(userMessage);
-  if (!intent) {
-    return false;
-  }
-
-  const taskMatch = resolveTasksByName(tasksBefore, intent.taskName);
-  if (taskMatch.kind === 'none') {
-    await writeServerDebugLog('fast_shift_skipped', {
-      runId,
-      projectId,
-      sessionId,
-      reason: 'task_not_found',
-      taskName: intent.taskName,
-      taskCount: tasksBefore.length,
-    });
-    return false;
-  }
-
-  const { getPrisma } = await getPrismaModule();
-  const prisma = getPrisma();
-  const [project, scheduleOptions] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
-      select: { version: true },
-    }),
-    services.getProjectScheduleOptionsForProject(prisma, projectId),
-  ]);
-
-  if (!project) {
-    return false;
-  }
-
-  const mode = intent.mode === 'project_default'
-    ? (scheduleOptions.businessDays ? 'working' : 'calendar')
-    : intent.mode;
-  let baseVersion = project.version;
-  const allChangedTaskIds = new Set<string>();
-
-  for (const task of taskMatch.matches) {
-    const startDate = parseDateOnly(task.startDate);
-    const nextStart = mode === 'working' && scheduleOptions.weekendPredicate
-      ? shiftBusinessDayOffset(startDate, intent.delta, scheduleOptions.weekendPredicate)
-      : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + intent.delta));
-    const response = await services.commandService.commitCommand({
-      projectId,
-      clientRequestId: crypto.randomUUID(),
-      baseVersion,
-      command: {
-        type: 'move_task',
-        taskId: task.id,
-        startDate: formatDateOnly(nextStart),
-      },
-    }, 'agent');
-
-    await writeServerDebugLog('fast_shift_attempt', {
-      runId,
-      projectId,
-      sessionId,
-      taskId: task.id,
-      taskName: task.name,
-      taskMatchKind: taskMatch.kind,
-      matchedTaskCount: taskMatch.matches.length,
-      delta: intent.delta,
-      mode,
-      accepted: response.accepted,
-      reason: response.accepted ? undefined : response.reason,
-    });
-
-    if (!response.accepted) {
-      return false;
-    }
-
-    baseVersion = response.newVersion;
-    for (const taskId of response.result.changedTaskIds) {
-      allChangedTaskIds.add(taskId);
-    }
-  }
-
-  const { tasks: tasksAfter } = await services.taskService.list(projectId);
-  const assistantResponse = taskMatch.matches.length === 1
-    ? buildFastShiftSuccessMessage(taskMatch.matches[0]!.name, intent.delta, mode)
-    : buildFastShiftMultiSuccessMessage(taskMatch.matches[0]!.name, taskMatch.matches.length, intent.delta, mode);
-  const changedTaskIds = [...allChangedTaskIds].sort();
-
-  await services.messageService.add('assistant', assistantResponse, projectId);
-  await writeServerDebugLog('agent_response_saved', {
-    runId,
-    projectId,
-    sessionId,
-    assistantResponse,
-    streamedContent: true,
-    finalTasksChanged: true,
-    finalChangedTaskIds: changedTaskIds,
-    finalAcceptedChangedTaskIds: changedTaskIds,
-    finalAcceptedChangedTaskIdMismatch: false,
-    fastPath: 'direct_shift',
-  });
-
-  broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
-  broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter as MTask[] });
-  await writeServerDebugLog('tasks_broadcast', {
-    runId,
-    projectId,
-    sessionId,
-    taskCount: tasksAfter.length,
-    taskIds: tasksAfter.map((currentTask) => currentTask.id),
-    taskNames: tasksAfter.map((currentTask) => currentTask.name),
-    fastPath: 'direct_shift',
-  });
-  broadcastToSession(sessionId, { type: 'done' });
-  await writeServerDebugLog('agent_run_completed', {
-    runId,
-    projectId,
-    sessionId,
-    fastPath: 'direct_shift',
-  });
-
-  return true;
-}
-
 async function getProjectBaseVersion(projectId: string): Promise<number> {
   const { getPrisma } = await getPrismaModule();
   const project = await getPrisma().project.findUnique({
@@ -1228,8 +871,6 @@ export async function runAgentWithHistory(
     ]);
     broadcastToSession = wsModule.broadcastToSession;
     const runId = crypto.randomUUID();
-    const likelyMutationRequest = isMutationIntent(userMessage);
-    const simpleMutationRequested = isSimpleMutationRequest(userMessage);
     const { tasks: tasksBefore } = await taskService.list(projectId);
     const env = resolveEnv();
     const routeSelection = await selectAgentRoute({
@@ -1239,6 +880,8 @@ export async function runAgentWithHistory(
       model: env.OPENAI_MODEL,
       routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
     });
+    const likelyMutationRequest = routeSelection.route === 'mutation';
+    const simpleMutationRequested = false;
 
     await writeServerDebugLog('agent_run_started', {
       runId,
@@ -1308,18 +951,6 @@ export async function runAgentWithHistory(
         },
         broadcastToSession,
       });
-      return;
-    }
-
-    if (await tryDirectShiftFastPath(
-      userMessage,
-      projectId,
-      sessionId,
-      runId,
-      tasksBefore,
-      { taskService, messageService, commandService, getProjectScheduleOptionsForProject },
-      broadcastToSession,
-    )) {
       return;
     }
 
