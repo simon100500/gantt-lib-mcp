@@ -1,5 +1,4 @@
 import type {
-  IntakeScopeSignals,
   LocationScope,
   NormalizedInitialRequest,
   SourceConfidence,
@@ -130,34 +129,19 @@ function buildLocationScope(rawRequest: string): LocationScope | undefined {
   };
 }
 
-function detectScopeSignals(rawRequest: string, explicitWorkItems: string[], locationScope?: LocationScope): IntakeScopeSignals {
-  const message = rawRequest.toLowerCase();
-  const fragment = Boolean(
-    locationScope
-    || /(?:фрагмент|подвал|секци(?:я|и|ю|ях)|зона|фасад|крыло|корпус|паркинг)/i.test(message),
-  );
-  const wholeProject = /(?:строительств(?:о|а)|весь объект|по всему объекту|полный график|график проекта)/i.test(message);
-  const handoverIntent = /(?:передач[аи]|сдач[аи]|handover|готовност(?:ь|и))/i.test(message);
-
-  return {
-    fragment,
-    wholeProject,
-    handoverIntent,
-    explicitWorklist: explicitWorkItems.length > 0,
-  };
-}
-
 function inferSourceConfidence(
-  rawRequest: string,
   explicitWorkItems: string[],
   locationScope: LocationScope | undefined,
-  scopeSignals: IntakeScopeSignals,
 ): SourceConfidence {
-  if (explicitWorkItems.length >= 4) {
+  const locationEvidenceCount = (locationScope?.sections?.length ?? 0)
+    + (locationScope?.floors?.length ?? 0)
+    + (locationScope?.zones?.length ?? 0);
+
+  if (explicitWorkItems.length >= 4 || locationEvidenceCount >= 3) {
     return 'high';
   }
 
-  if (locationScope || scopeSignals.fragment || scopeSignals.wholeProject || rawRequest.length >= 40) {
+  if (explicitWorkItems.length >= 2 || locationEvidenceCount > 0) {
     return 'medium';
   }
 
@@ -168,13 +152,11 @@ export function normalizeInitialRequest(rawRequest: string): NormalizedInitialRe
   const normalizedRequest = normalizeWhitespace(rawRequest);
   const explicitWorkItems = extractExplicitWorkItems(normalizedRequest);
   const locationScope = buildLocationScope(normalizedRequest);
-  const scopeSignals = detectScopeSignals(normalizedRequest, explicitWorkItems, locationScope);
-  const sourceConfidence = inferSourceConfidence(normalizedRequest, explicitWorkItems, locationScope, scopeSignals);
+  const sourceConfidence = inferSourceConfidence(explicitWorkItems, locationScope);
 
   return {
     rawRequest,
     normalizedRequest,
-    scopeSignals,
     explicitWorkItems,
     ...(locationScope ? { locationScope } : {}),
     sourceConfidence,

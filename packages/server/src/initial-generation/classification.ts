@@ -1,150 +1,103 @@
 import type {
   DetailLevel,
   InitialGenerationClassification,
+  InitialRequestInterpretation,
   NormalizedInitialRequest,
-  PlanningMode,
-  ScopeMode,
-  WorklistPolicy,
 } from './types.js';
 
 function clampConfidence(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))));
 }
 
-function inferScopeMode(input: NormalizedInitialRequest): ScopeMode {
-  if (input.explicitWorkItems.length > 0) {
-    return 'explicit_worklist';
-  }
-
-  if (input.scopeSignals.fragment || input.locationScope) {
-    return 'partial_scope';
-  }
-
-  return 'full_project';
-}
-
-function inferPlanningMode(scopeMode: ScopeMode): PlanningMode {
-  if (scopeMode === 'partial_scope') {
-    return 'partial_scope_bootstrap';
-  }
-
-  if (scopeMode === 'explicit_worklist') {
-    return 'worklist_bootstrap';
-  }
-
-  return 'whole_project_bootstrap';
-}
-
-function inferProjectArchetype(input: NormalizedInitialRequest): string {
-  const message = input.normalizedRequest.toLowerCase();
-
-  if (/(?:fit[- ]?out|ремонт|отделк[аи]\s+офис|офисн(?:ая|ого)\s+отделк)/i.test(message)) {
-    return 'fit_out';
-  }
-
-  if (/(?:строительств(?:о|а)|детск(?:ий|ого)\s+сад|жил(?:ой|ого)\s+дом|секци(?:я|и)|подвал)/i.test(message)) {
-    return 'new_building';
-  }
-
-  return input.explicitWorkItems.length > 0 ? 'unknown' : 'new_building';
-}
-
-function inferObjectProfile(input: NormalizedInitialRequest): string {
-  const message = input.normalizedRequest.toLowerCase();
-
-  if (/детск(?:ий|ого)\s+сад/i.test(message)) {
-    return 'kindergarten';
-  }
-
-  if (
-    /(?:жил(?:ой|ого)\s+дом|многосекц|секци(?:я|и)|корпус(?:а|ов)?)/i.test(message)
-    || Boolean(input.locationScope?.sections?.length)
-  ) {
-    return 'residential_multi_section';
-  }
-
-  if (/(?:офис|fit[- ]?out|ремонт офиса|отделка офиса)/i.test(message)) {
-    return 'office_fitout';
-  }
-
-  return 'unknown';
-}
-
-function inferDetailLevel(input: NormalizedInitialRequest): DetailLevel {
-  if (input.explicitWorkItems.length >= 8) {
+function inferDetailLevel(normalizedRequest: NormalizedInitialRequest): DetailLevel {
+  if (normalizedRequest.explicitWorkItems.length >= 8) {
     return 'high';
   }
 
-  if (input.locationScope || input.scopeSignals.fragment || input.explicitWorkItems.length >= 4) {
+  const locationEvidenceCount = (normalizedRequest.locationScope?.sections?.length ?? 0)
+    + (normalizedRequest.locationScope?.floors?.length ?? 0)
+    + (normalizedRequest.locationScope?.zones?.length ?? 0);
+
+  if (locationEvidenceCount > 0 || normalizedRequest.explicitWorkItems.length >= 4) {
     return 'medium';
   }
 
   return 'medium';
 }
 
-function inferWorklistPolicy(input: NormalizedInitialRequest): WorklistPolicy {
-  const message = input.normalizedRequest.toLowerCase();
-
-  if (/(?:дополни|при необходимости добавь|можно дополнить|расшири)/i.test(message)) {
-    return 'worklist_plus_inferred_supporting_tasks';
-  }
-
-  return 'strict_worklist';
-}
-
 function inferConfidence(
-  input: NormalizedInitialRequest,
-  scopeMode: ScopeMode,
-  projectArchetype: string,
-  objectProfile: string,
+  normalizedRequest: NormalizedInitialRequest,
+  interpretation: InitialRequestInterpretation,
 ): number {
-  let confidence = input.sourceConfidence === 'high'
+  let confidence = normalizedRequest.sourceConfidence === 'high'
     ? 0.9
-    : input.sourceConfidence === 'medium'
+    : normalizedRequest.sourceConfidence === 'medium'
       ? 0.78
       : 0.62;
 
-  if (scopeMode === 'explicit_worklist') {
+  confidence = Math.max(confidence, interpretation.confidence);
+
+  if (interpretation.scopeMode === 'explicit_worklist') {
     confidence += 0.08;
   }
 
-  if (input.locationScope) {
+  if (normalizedRequest.locationScope) {
     confidence += 0.05;
   }
 
-  if (projectArchetype === 'unknown') {
+  if (interpretation.projectArchetype === 'unknown') {
     confidence -= 0.12;
   }
 
-  if (objectProfile === 'unknown') {
+  if (interpretation.objectProfile === 'unknown') {
     confidence -= 0.06;
   }
 
-  if (input.scopeSignals.fragment && input.scopeSignals.wholeProject) {
+  if (interpretation.requestKind === 'ambiguous') {
     confidence -= 0.18;
   }
 
   return clampConfidence(confidence);
 }
 
-export function classifyInitialRequest(input: NormalizedInitialRequest): InitialGenerationClassification {
-  const scopeMode = inferScopeMode(input);
-  const planningMode = inferPlanningMode(scopeMode);
-  const projectArchetype = inferProjectArchetype(input);
-  const objectProfile = inferObjectProfile(input);
-  const detailLevel = inferDetailLevel(input);
-  const worklistPolicy = inferWorklistPolicy(input);
-  const confidence = inferConfidence(input, scopeMode, projectArchetype, objectProfile);
+function hasLocationScope(locationScope: InitialRequestInterpretation['locationScope']): boolean {
+  return locationScope.sections.length > 0
+    || locationScope.floors.length > 0
+    || locationScope.zones.length > 0;
+}
+
+function normalizeLocationScope(
+  locationScope?: NormalizedInitialRequest['locationScope'] | InitialRequestInterpretation['locationScope'],
+): InitialRequestInterpretation['locationScope'] {
+  return {
+    sections: [...(locationScope?.sections ?? [])],
+    floors: [...(locationScope?.floors ?? [])],
+    zones: [...(locationScope?.zones ?? [])],
+  };
+}
+
+type ClassifyInitialRequestInput = {
+  normalizedRequest: NormalizedInitialRequest;
+  interpretation: InitialRequestInterpretation;
+};
+
+export function classifyInitialRequest(input: ClassifyInitialRequestInput): InitialGenerationClassification {
+  const { normalizedRequest, interpretation } = input;
+  const detailLevel = inferDetailLevel(normalizedRequest);
+  const confidence = inferConfidence(normalizedRequest, interpretation);
+  const locationScope = normalizeLocationScope(normalizedRequest.locationScope ?? interpretation.locationScope);
 
   return {
-    scopeMode,
-    planningMode,
-    projectArchetype,
-    objectProfile,
+    scopeMode: interpretation.scopeMode,
+    planningMode: interpretation.planningMode,
+    projectArchetype: interpretation.projectArchetype,
+    objectProfile: interpretation.objectProfile,
     detailLevel,
     confidence,
-    explicitWorkItemsPresent: input.explicitWorkItems.length > 0,
-    worklistPolicy,
-    ...(input.locationScope ? { locationScope: input.locationScope } : {}),
+    explicitWorkItemsPresent: normalizedRequest.explicitWorkItems.length > 0,
+    worklistPolicy: interpretation.worklistPolicy,
+    ...(hasLocationScope(locationScope)
+      ? { locationScope }
+      : {}),
   };
 }

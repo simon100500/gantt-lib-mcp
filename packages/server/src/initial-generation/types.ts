@@ -71,17 +71,9 @@ export type LocationScope = {
   zones?: string[];
 };
 
-export type IntakeScopeSignals = {
-  fragment: boolean;
-  wholeProject: boolean;
-  handoverIntent: boolean;
-  explicitWorklist: boolean;
-};
-
 export type NormalizedInitialRequest = {
   rawRequest: string;
   normalizedRequest: string;
-  scopeSignals: IntakeScopeSignals;
   explicitWorkItems: string[];
   locationScope?: LocationScope;
   sourceConfidence: SourceConfidence;
@@ -117,8 +109,8 @@ export type GenerationBrief = {
 export type InitialGenerationClassification = {
   scopeMode: ScopeMode;
   planningMode: PlanningMode;
-  projectArchetype: string;
-  objectProfile: string;
+  projectArchetype: InitialRequestProjectArchetype;
+  objectProfile: InitialRequestObjectProfile;
   detailLevel: DetailLevel;
   confidence: number;
   explicitWorkItemsPresent: boolean;

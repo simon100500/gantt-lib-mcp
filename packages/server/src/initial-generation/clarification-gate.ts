@@ -1,6 +1,7 @@
 import type {
   ClarificationDecision,
   InitialGenerationClassification,
+  InitialRequestInterpretation,
   NormalizedInitialRequest,
 } from './types.js';
 
@@ -11,22 +12,19 @@ function proceedWithAssumptions(...assumptions: string[]): ClarificationDecision
   };
 }
 
-function hasAmbiguousListLanguage(message: string): boolean {
-  return /(?:например|и\s+т\.?\s*д\.?|etc|основн(?:ые|ой)|чернов(?:ой|ые)|примерн(?:о|ый))/i.test(message);
-}
-
-function hasExplicitFragmentTarget(message: string): boolean {
-  return /(?:передач[аи]|сдач[аи]|handover|полная готовность|завершени[ея]|completion)/i.test(message);
-}
+type DecideInitialClarificationInput = {
+  normalizedRequest: NormalizedInitialRequest;
+  interpretation: InitialRequestInterpretation;
+  classification: InitialGenerationClassification;
+};
 
 export function decideInitialClarification(
-  normalized: NormalizedInitialRequest,
-  classification: InitialGenerationClassification,
+  input: DecideInitialClarificationInput,
 ): ClarificationDecision {
-  const message = normalized.normalizedRequest;
-  const sectionList = normalized.locationScope?.sections?.join(', ');
+  const { normalizedRequest, interpretation, classification } = input;
+  const sectionList = normalizedRequest.locationScope?.sections?.join(', ');
 
-  if (normalized.scopeSignals.fragment && normalized.scopeSignals.wholeProject) {
+  if (interpretation.clarification.needed && interpretation.clarification.reason === 'scope_boundary_ambiguity') {
     return {
       action: 'ask',
       impact: 'high',
@@ -37,7 +35,15 @@ export function decideInitialClarification(
     };
   }
 
-  if (classification.scopeMode === 'explicit_worklist' && hasAmbiguousListLanguage(message)) {
+  if (
+    interpretation.clarification.needed
+    && (
+      interpretation.clarification.reason === 'ambiguous_list'
+      || interpretation.clarification.reason === 'worklist_completeness_ambiguity'
+    )
+    && interpretation.scopeMode === 'explicit_worklist'
+    && interpretation.requestKind === 'explicit_worklist'
+  ) {
     return {
       action: 'ask',
       impact: 'high',
@@ -49,10 +55,11 @@ export function decideInitialClarification(
   }
 
   if (
-    classification.scopeMode === 'partial_scope'
-    && normalized.locationScope
-    && !hasExplicitFragmentTarget(message)
-    && !normalized.scopeSignals.handoverIntent
+    interpretation.clarification.needed
+    && interpretation.clarification.reason === 'fragment_target_ambiguity'
+    && interpretation.scopeMode === 'partial_scope'
+    && interpretation.requestKind === 'partial_scope'
+    && normalizedRequest.locationScope
   ) {
     const fragmentLabel = sectionList
       ? `по фрагменту ${sectionList}`
