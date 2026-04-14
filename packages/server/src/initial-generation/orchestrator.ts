@@ -9,6 +9,7 @@ import { decideInitialClarification } from './clarification-gate.js';
 import { assembleDomainSkeleton } from './domain/assembly.js';
 import { executeInitialProjectPlan } from './executor.js';
 import { normalizeInitialRequest } from './intake-normalization.js';
+import * as initialRequestInterpreter from './interpreter.js';
 import { resolveModelRoutingDecision } from './model-routing.js';
 import { planInitialProject } from './planner.js';
 import type { DomainSkeleton } from './domain/contracts.js';
@@ -17,6 +18,7 @@ import type {
   GenerationBrief,
   InitialGenerationClassification,
   InitialGenerationPlannerStage,
+  InitialRequestInterpretation,
   ModelRoutingDecision,
   NormalizedInitialRequest,
 } from './types.js';
@@ -38,6 +40,14 @@ type PlannerQueryInput = {
 };
 
 type PlannerQueryResult = string | { content?: string };
+
+type InterpretationQueryInput = {
+  prompt: string;
+  model: string;
+  stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
+};
+
+type InterpretationQueryResult = string | { content?: string };
 
 export type InitialGenerationServices = {
   commandService: {
@@ -62,13 +72,34 @@ export type InitialGenerationLogger = {
 type InitialGenerationDeps = {
   buildGenerationBrief: (input: BuildGenerationBriefInput) => GenerationBrief;
   normalizeInitialRequest: (rawRequest: string) => NormalizedInitialRequest;
-  classifyInitialRequest: (input: NormalizedInitialRequest) => InitialGenerationClassification;
-  decideInitialClarification: (
-    normalized: NormalizedInitialRequest,
-    classification: InitialGenerationClassification,
-  ) => ClarificationDecision;
+  interpretRequest: (input: {
+    userMessage: string;
+    normalizedRequest: NormalizedInitialRequest;
+    projectState: {
+      taskCount: number;
+      hasHierarchy: boolean;
+      isEmptyProject: boolean;
+    };
+    model: string;
+    interpretationQuery: (input: InterpretationQueryInput) => Promise<InterpretationQueryResult>;
+  }) => Promise<{
+    interpretation: InitialRequestInterpretation;
+    usedModelDecision: boolean;
+    repairAttempted: boolean;
+    fallbackReason: 'none' | 'model_unavailable' | 'schema_invalid' | 'empty_response';
+  }>;
+  classifyInitialRequest: (input: {
+    normalizedRequest: NormalizedInitialRequest;
+    interpretation: InitialRequestInterpretation;
+  }) => InitialGenerationClassification;
+  decideInitialClarification: (input: {
+    normalizedRequest: NormalizedInitialRequest;
+    interpretation: InitialRequestInterpretation;
+    classification: InitialGenerationClassification;
+  }) => ClarificationDecision;
   assembleDomainSkeleton: (input: {
     normalizedRequest: NormalizedInitialRequest;
+    interpretation: InitialRequestInterpretation;
     classification: InitialGenerationClassification;
     clarificationDecision: ClarificationDecision;
   }) => DomainSkeleton;
@@ -105,6 +136,8 @@ export type RunInitialGenerationInput = {
   serverDate?: string;
   scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>;
   brief?: GenerationBrief;
+  interpretationModel?: string;
+  interpretationQuery?: (input: InterpretationQueryInput) => Promise<InterpretationQueryResult>;
   structureModelRoutingDecision?: ModelRoutingDecision;
   schedulingModelRoutingDecision?: ModelRoutingDecision;
   routingEnv?: Record<string, string | undefined>;
@@ -119,6 +152,7 @@ function getDefaultDeps(): InitialGenerationDeps {
   return {
     buildGenerationBrief,
     normalizeInitialRequest,
+    interpretRequest: initialRequestInterpreter.interpretInitialRequest,
     classifyInitialRequest,
     decideInitialClarification,
     assembleDomainSkeleton,
@@ -216,16 +250,42 @@ export async function runInitialGeneration(
   } satisfies InitialGenerationDeps;
 
   const normalizedRequest = deps.normalizeInitialRequest(input.userMessage);
-  const classification = deps.classifyInitialRequest(normalizedRequest);
-  const clarificationDecision = deps.decideInitialClarification(normalizedRequest, classification);
+  const interpretationResult = await deps.interpretRequest({
+    userMessage: input.userMessage,
+    normalizedRequest,
+    projectState: {
+      taskCount: input.tasksBefore.length,
+      hasHierarchy: input.tasksBefore.some((task) => Boolean(task.id)),
+      isEmptyProject: input.tasksBefore.length === 0,
+    },
+    model: input.interpretationModel ?? input.structureModelRoutingDecision?.selectedModel ?? 'unavailable',
+    interpretationQuery: async (queryInput) => {
+      if (!input.interpretationQuery) {
+        throw new Error('model_unavailable');
+      }
+      return input.interpretationQuery(queryInput);
+    },
+  });
+  const interpretation = interpretationResult.interpretation;
+  const classification = deps.classifyInitialRequest({
+    normalizedRequest,
+    interpretation,
+  });
+  const clarificationDecision = deps.decideInitialClarification({
+    normalizedRequest,
+    interpretation,
+    classification,
+  });
   const domainSkeleton = deps.assembleDomainSkeleton({
     normalizedRequest,
+    interpretation,
     classification,
     clarificationDecision,
   });
   const brief = input.brief ?? deps.buildGenerationBrief({
     userMessage: input.userMessage,
     normalizedRequest,
+    interpretation,
     classification,
     clarificationDecision,
     domainSkeleton,
@@ -258,6 +318,15 @@ export async function runInitialGeneration(
     projectId: input.projectId,
     sessionId: input.sessionId,
     normalizedRequest,
+  });
+  await input.logger.debug('initial_generation_interpretation', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    interpretation,
+    usedModelDecision: interpretationResult.usedModelDecision,
+    repairAttempted: interpretationResult.repairAttempted,
+    fallbackReason: interpretationResult.fallbackReason,
   });
   await input.logger.debug('initial_generation_classification', {
     runId: input.runId,

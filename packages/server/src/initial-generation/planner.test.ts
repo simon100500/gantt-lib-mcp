@@ -9,10 +9,37 @@ import { normalizeInitialRequest } from './intake-normalization.js';
 import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
 import { buildStructurePrompt } from './prompts/index.js';
+import type { InitialRequestInterpretation } from './types.js';
 import {
   evaluateSchedulingQuality,
   evaluateStructureQuality,
 } from './quality-gate.js';
+
+function createInterpretation(
+  overrides: Partial<InitialRequestInterpretation> = {},
+): InitialRequestInterpretation {
+  return {
+    route: 'initial_generation',
+    confidence: 0.82,
+    requestKind: 'whole_project',
+    planningMode: 'whole_project_bootstrap',
+    scopeMode: 'full_project',
+    objectProfile: 'unknown',
+    projectArchetype: 'new_building',
+    locationScope: {
+      sections: [],
+      floors: [],
+      zones: [],
+    },
+    worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
+    clarification: {
+      needed: false,
+      reason: 'none',
+    },
+    signals: [],
+    ...overrides,
+  };
+}
 
 describe('initial-generation quality gate', () => {
   it('flags weak structures with placeholder titles and shallow decomposition', () => {
@@ -141,16 +168,33 @@ describe('initial-generation quality gate', () => {
 
   it('flags partial-scope plans that leak out-of-scope section identifiers', () => {
     const normalizedRequest = normalizeInitialRequest('график передачи конструкций подвала секции 5.1-5.4');
-    const classification = classifyInitialRequest(normalizedRequest);
-    const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
+    const interpretation = createInterpretation({
+      requestKind: 'partial_scope',
+      planningMode: 'partial_scope_bootstrap',
+      scopeMode: 'partial_scope',
+      objectProfile: 'residential_multi_section',
+      locationScope: {
+        sections: ['5.1', '5.2', '5.3', '5.4'],
+        floors: [],
+        zones: ['подвал'],
+      },
+      clarification: {
+        needed: true,
+        reason: 'fragment_target_ambiguity',
+      },
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
     const domainSkeleton = assembleDomainSkeleton({
       normalizedRequest,
+      interpretation,
       classification,
       clarificationDecision,
     });
     const brief = buildGenerationBrief({
       userMessage: normalizedRequest.normalizedRequest,
       normalizedRequest,
+      interpretation,
       classification,
       clarificationDecision,
       domainSkeleton,
@@ -199,10 +243,17 @@ describe('initial-generation planner', () => {
   it('adds a section-floor decomposition rule when counts are explicit in the request', () => {
     const userMessage = 'График каменной кладки внутренних и наружных стен: на 5 секциях, 3 этажа на каждой.';
     const normalizedRequest = normalizeInitialRequest(userMessage);
-    const classification = classifyInitialRequest(normalizedRequest);
-    const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
+    const interpretation = createInterpretation({
+      requestKind: 'partial_scope',
+      planningMode: 'partial_scope_bootstrap',
+      scopeMode: 'partial_scope',
+      objectProfile: 'residential_multi_section',
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
     const domainSkeleton = assembleDomainSkeleton({
       normalizedRequest,
+      interpretation,
       classification,
       clarificationDecision,
     });
@@ -211,6 +262,7 @@ describe('initial-generation planner', () => {
       brief: buildGenerationBrief({
         userMessage,
         normalizedRequest,
+        interpretation,
         classification,
         clarificationDecision,
         domainSkeleton,
@@ -232,10 +284,12 @@ describe('initial-generation planner', () => {
   it('builds a two-step whole-project plan and forbids structural edits in scheduling prompt', async () => {
     const prompts: Array<{ stage: string; model: string; prompt: string }> = [];
     const normalizedRequest = normalizeInitialRequest('График строительства жилого дома на 3 этажа + гараж');
-    const classification = classifyInitialRequest(normalizedRequest);
-    const clarificationDecision = decideInitialClarification(normalizedRequest, classification);
+    const interpretation = createInterpretation();
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
     const domainSkeleton = assembleDomainSkeleton({
       normalizedRequest,
+      interpretation,
       classification,
       clarificationDecision,
     });
@@ -245,6 +299,7 @@ describe('initial-generation planner', () => {
       brief: buildGenerationBrief({
         userMessage: 'График строительства жилого дома на 3 этажа + гараж',
         normalizedRequest,
+        interpretation,
         classification,
         clarificationDecision,
         domainSkeleton,

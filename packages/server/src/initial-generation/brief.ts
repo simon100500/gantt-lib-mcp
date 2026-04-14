@@ -2,6 +2,7 @@ import type {
   ClarificationDecision,
   GenerationBrief,
   InitialGenerationClassification,
+  InitialRequestInterpretation,
   NormalizedInitialRequest,
 } from './types.js';
 import type { DomainSkeleton } from './domain/contracts.js';
@@ -9,40 +10,64 @@ import type { DomainSkeleton } from './domain/contracts.js';
 export type BuildGenerationBriefInput = {
   userMessage: string;
   normalizedRequest?: NormalizedInitialRequest;
+  interpretation?: InitialRequestInterpretation;
   classification?: InitialGenerationClassification;
   clarificationDecision?: ClarificationDecision;
   domainSkeleton?: DomainSkeleton;
 };
 
-function detectScopeSignals(userMessage: string): string[] {
+function buildScopeSignals(
+  interpretation?: InitialRequestInterpretation,
+  normalizedRequest?: NormalizedInitialRequest,
+): string[] {
   const signals = new Set<string>();
-  const message = userMessage.toLowerCase();
 
-  if (/(строит|construction|build)/i.test(message)) {
-    signals.add('new_build');
+  if (!interpretation) {
+    return [];
   }
 
-  if (/(ремонт|fit[- ]?out|renovat)/i.test(message)) {
-    signals.add('renovation');
+  signals.add(interpretation.scopeMode);
+  signals.add(interpretation.requestKind);
+
+  if (interpretation.scopeMode === 'full_project') {
+    signals.add('broad_request');
   }
 
-  if (/(газобетон|brick|кирпич|монолит)/i.test(message)) {
-    signals.add('material_mentioned');
+  if (interpretation.scopeMode === 'partial_scope') {
+    signals.add('fragment_request');
   }
 
-  if (/(\d+(?:[.,]\d+)?)\s*(?:м2|м²|кв\.?\s*м)/i.test(message)) {
-    signals.add('explicit_area');
+  if (interpretation.scopeMode === 'explicit_worklist' || normalizedRequest?.explicitWorkItems.length) {
+    signals.add('explicit_worklist');
   }
 
-  if (signals.size === 0) {
-    signals.add('starter_generation_request');
+  if (
+    interpretation.clarification.reason === 'fragment_target_ambiguity'
+    || interpretation.signals.includes('fragment_delivery_state')
+  ) {
+    signals.add('handover_scope');
   }
 
   return [...signals];
 }
 
+function normalizeLocationScope(
+  locationScope?: NormalizedInitialRequest['locationScope'] | InitialRequestInterpretation['locationScope'],
+): InitialRequestInterpretation['locationScope'] | undefined {
+  if (!locationScope) {
+    return undefined;
+  }
+
+  return {
+    sections: [...(locationScope.sections ?? [])],
+    floors: [...(locationScope.floors ?? [])],
+    zones: [...(locationScope.zones ?? [])],
+  };
+}
+
 export function buildGenerationBrief(input: BuildGenerationBriefInput): GenerationBrief {
   const normalized = input.normalizedRequest;
+  const interpretation = input.interpretation;
   const classification = input.classification;
   const domainSkeleton = input.domainSkeleton;
   const clarificationAssumptions = input.clarificationDecision?.action === 'proceed_with_assumptions'
@@ -51,45 +76,44 @@ export function buildGenerationBrief(input: BuildGenerationBriefInput): Generati
       ? [input.clarificationDecision.fallbackAssumption]
       : [];
 
-  const scopeSignals = new Set(detectScopeSignals(input.userMessage));
-  if (classification?.scopeMode) {
-    scopeSignals.add(classification.scopeMode);
-  }
-  if (normalized?.scopeSignals.fragment) {
-    scopeSignals.add('fragment_request');
-  }
-  if (normalized?.scopeSignals.wholeProject) {
-    scopeSignals.add('broad_request');
-  }
-  if (normalized?.scopeSignals.handoverIntent) {
-    scopeSignals.add('handover_intent');
-  }
-  if (normalized?.explicitWorkItems.length) {
-    scopeSignals.add('explicit_worklist');
-  }
+  const scopeSignals = buildScopeSignals(interpretation, normalized);
 
   let objectType = 'project';
-  if (classification) {
-    if (classification.objectProfile !== 'unknown') {
-      objectType = classification.objectProfile;
-    } else if (classification.projectArchetype !== 'unknown') {
-      objectType = classification.projectArchetype;
-    }
+  if (interpretation?.objectProfile && interpretation.objectProfile !== 'unknown') {
+    objectType = interpretation.objectProfile;
+  } else if (interpretation?.projectArchetype && interpretation.projectArchetype !== 'unknown') {
+    objectType = interpretation.projectArchetype;
+  } else if (classification?.objectProfile && classification.objectProfile !== 'unknown') {
+    objectType = classification.objectProfile;
+  } else if (classification?.projectArchetype && classification.projectArchetype !== 'unknown') {
+    objectType = classification.projectArchetype;
   }
+
+  const locationScope = normalizeLocationScope(normalized?.locationScope ?? interpretation?.locationScope);
+  const locationSummary = locationScope
+    ? [
+        locationScope.sections.length > 0 ? `sections=${locationScope.sections.join('|')}` : '',
+        locationScope.floors.length > 0 ? `floors=${locationScope.floors.join('|')}` : '',
+        locationScope.zones.length > 0 ? `zones=${locationScope.zones.join('|')}` : '',
+      ].filter(Boolean).join('; ')
+    : '';
 
   return {
     objectType,
-    scopeSignals: [...scopeSignals],
+    scopeSignals,
     starterScheduleExpectation:
       'Return a full starter schedule baseline with realistic phases, subphases, and tasks.',
     namingBan:
       'Do not use filler titles like "Этап 1" or "Task 3"; every node title must name a real activity.',
-    domainContextSummary: classification
+    domainContextSummary: interpretation
       ? [
-          `planning_mode=${classification.planningMode}`,
-          `scope_mode=${classification.scopeMode}`,
-          `project_archetype=${classification.projectArchetype}`,
-          `object_profile=${classification.objectProfile}`,
+          `request_kind=${interpretation.requestKind}`,
+          `planning_mode=${interpretation.planningMode}`,
+          `scope_mode=${interpretation.scopeMode}`,
+          `project_archetype=${interpretation.projectArchetype}`,
+          `object_profile=${interpretation.objectProfile}`,
+          `worklist_policy=${interpretation.worklistPolicy}`,
+          ...(locationSummary ? [locationSummary] : []),
         ].join('; ')
       : '',
     ...(domainSkeleton
@@ -108,7 +132,7 @@ export function buildGenerationBrief(input: BuildGenerationBriefInput): Generati
     ...(classification?.planningMode ? { planningMode: classification.planningMode } : {}),
     ...(classification?.detailLevel ? { detailLevel: classification.detailLevel } : {}),
     ...(classification?.worklistPolicy ? { worklistPolicy: classification.worklistPolicy } : {}),
-    ...(normalized?.locationScope ? { locationScope: normalized.locationScope } : {}),
+    ...(locationScope ? { locationScope } : {}),
     ...(normalized?.explicitWorkItems ? { explicitWorkItems: normalized.explicitWorkItems } : {}),
     ...(clarificationAssumptions.length > 0 ? { clarificationAssumptions } : {}),
   };

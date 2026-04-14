@@ -1,4 +1,9 @@
-import type { ClarificationDecision, InitialGenerationClassification, NormalizedInitialRequest } from '../types.js';
+import type {
+  ClarificationDecision,
+  InitialGenerationClassification,
+  InitialRequestInterpretation,
+  NormalizedInitialRequest,
+} from '../types.js';
 import type { DomainPlanningContext, DomainSkeleton, FragmentDefinition } from './contracts.js';
 import {
   DECOMPOSITION_POLICIES,
@@ -17,23 +22,25 @@ function removeExcluded(values: string[], excluded: string[]): string[] {
   return values.filter((value) => !excludedSet.has(value));
 }
 
+function isBasementLikeScope(locationScope: InitialRequestInterpretation['locationScope']): boolean {
+  return locationScope.zones.includes('подвал');
+}
+
 function resolveFragmentDefinition(context: DomainPlanningContext): FragmentDefinition | undefined {
-  const { normalizedRequest, classification, clarificationDecision } = context;
+  const { interpretation, classification } = context;
 
   if (classification.scopeMode !== 'partial_scope') {
     return undefined;
   }
 
-  const hasBasement = normalizedRequest.locationScope?.zones?.includes('подвал')
-    || /подвал/i.test(normalizedRequest.normalizedRequest);
-  const handoverIntent = normalizedRequest.scopeSignals.handoverIntent
-    || (clarificationDecision.action === 'ask' && /передач/i.test(clarificationDecision.fallbackAssumption));
-
-  if (hasBasement && handoverIntent) {
+  if (
+    isBasementLikeScope(interpretation.locationScope)
+    && interpretation.clarification.reason === 'fragment_target_ambiguity'
+  ) {
     return FRAGMENT_DEFINITIONS.basement_handover;
   }
 
-  if (normalizedRequest.locationScope?.sections?.length) {
+  if (interpretation.locationScope.sections.length > 0) {
     return FRAGMENT_DEFINITIONS.section_fragment;
   }
 
@@ -48,7 +55,11 @@ function buildAssumptions(
 ): string[] {
   const clarificationAssumptions = context.clarificationDecision.action === 'proceed_with_assumptions'
     ? context.clarificationDecision.assumptions
-    : [context.clarificationDecision.fallbackAssumption];
+    : context.classification.scopeMode === 'explicit_worklist'
+      ? ['Считать пользовательский список работ исчерпывающей границей состава графика.']
+      : context.classification.scopeMode === 'partial_scope'
+        ? ['Считать генерацию ограниченной указанным локальным фрагментом.']
+        : ['Считать запрос стартовым графиком по всему объекту.'];
 
   return unique([
     ...archetypeAssumptions,

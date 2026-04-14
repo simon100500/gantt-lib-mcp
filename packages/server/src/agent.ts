@@ -940,6 +940,8 @@ export async function runAgentWithHistory(
         tasksBefore,
         baseVersion,
         scheduleOptions,
+        interpretationModel: env.OPENAI_MODEL,
+        interpretationQuery: executeInitialGenerationRouteDecisionQuery,
         plannerQuery: executeInitialGenerationPlannerQuery,
         services: {
           commandService,

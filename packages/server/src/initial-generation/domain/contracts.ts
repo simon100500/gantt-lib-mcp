@@ -2,6 +2,7 @@ import type {
   ClarificationDecision,
   DetailLevel,
   InitialGenerationClassification,
+  InitialRequestInterpretation,
   NormalizedInitialRequest,
   PlanningMode,
   ScopeMode,
@@ -54,6 +55,7 @@ export type DecompositionPolicyDefinition = {
 
 export type DomainPlanningContext = {
   normalizedRequest: NormalizedInitialRequest;
+  interpretation: InitialRequestInterpretation;
   classification: InitialGenerationClassification;
   clarificationDecision: ClarificationDecision;
 };
