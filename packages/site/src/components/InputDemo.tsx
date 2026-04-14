@@ -49,12 +49,19 @@ export default function InputDemo({
     return () => { if (timerId.current) clearTimeout(timerId.current); };
   }, [selectedPrompt]);
 
+  const canSubmit = selectedIndex !== null && !isSubmitting;
+
   return (
     <div
       className={`relative mx-auto max-w-[640px] animate-fade-up ${containerClassName}`}
       style={{ animationDelay: '350ms' }}
     >
       <div className="flex flex-col gap-3">
+        {/* Prompt label */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Промпт</span>
+        </div>
+
         {/* Readonly textarea */}
         <textarea
           readOnly
@@ -75,15 +82,26 @@ export default function InputDemo({
               type="button"
               onClick={() => onChipSelect(i)}
               disabled={isSubmitting}
-              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 disabled:pointer-events-none ${selectedIndex === i
-                ? 'border-primary bg-primary/5 text-primary font-medium'
-                : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
-                }`}
+              className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 disabled:pointer-events-none ${
+                selectedIndex === i
+                  ? 'border-primary bg-primary/5 text-primary font-medium'
+                  : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+              }`}
             >
               {chip.label}
             </button>
           ))}
         </div>
+
+        {/* Submit button */}
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!canSubmit}
+          className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:opacity-40 disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none"
+        >
+          {isSubmitting ? 'Загрузка…' : 'Показать график'}
+        </button>
       </div>
     </div>
   );

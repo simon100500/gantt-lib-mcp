@@ -6,12 +6,14 @@ import { TEMPLATE_HOUSE } from './templates/house.js';
 import { TEMPLATE_APARTMENT } from './templates/apartment.js';
 import { TEMPLATE_COMMERCIAL } from './templates/commercial.js';
 import { TEMPLATE_OVERHAUL } from './templates/overhaul.js';
+import { TEMPLATE_RESIDENTIAL } from './templates/residential.js';
 
 export const TEMPLATES = [
   TEMPLATE_HOUSE,
   TEMPLATE_APARTMENT,
   TEMPLATE_COMMERCIAL,
   TEMPLATE_OVERHAUL,
+  TEMPLATE_RESIDENTIAL,
 ];
 
 const DEFAULT_TEMPLATE_INDEX = 0;
