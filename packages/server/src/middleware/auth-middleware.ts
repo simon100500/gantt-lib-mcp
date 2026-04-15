@@ -9,8 +9,10 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { getPrisma } from '@gantt/mcp/prisma';
 import { verifyToken, type JwtPayload } from '../auth.js';
 import { authService } from '@gantt/mcp/services';
+import { isAdminEmail } from './admin-middleware.js';
 
 // ---------------------------------------------------------------------------
 // Module augmentation
@@ -82,11 +84,23 @@ export async function authMiddleware(
   let resolvedProjectId = session.projectId;
   const project = await authService.findProjectById(session.projectId);
   if (!project) {
-    const availableProjects = await authService.listProjects(session.userId);
-    const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
-    if (fallbackProject) {
-      await authService.updateSessionProject(session.id, fallbackProject.id);
-      resolvedProjectId = fallbackProject.id;
+    const prisma = getPrisma();
+    const deletedProject = isAdminEmail(payload.email)
+      ? await prisma.project.findUnique({
+        where: { id: session.projectId },
+        select: { id: true, status: true },
+      })
+      : null;
+
+    if (deletedProject) {
+      resolvedProjectId = deletedProject.id;
+    } else {
+      const availableProjects = await authService.listProjects(session.userId);
+      const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
+      if (fallbackProject) {
+        await authService.updateSessionProject(session.id, fallbackProject.id);
+        resolvedProjectId = fallbackProject.id;
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoginButton } from './LoginButton';
 import { PLAN_CATALOG, PLAN_LABELS, formatDate, type BillingPeriod, type PlanId } from '../lib/billing';
-import { useAuthStore } from '../stores/useAuthStore';
+import { useAuthStore, type AdminContext, type AuthProject } from '../stores/useAuthStore';
 
 interface AdminPageProps {
   isAuthenticated: boolean;
@@ -96,6 +96,7 @@ interface AdminUserDetails {
     status: string;
     createdAt: string;
     archivedAt: string | null;
+    deletedAt: string | null;
     messageCount: number;
   }>;
 }
@@ -407,6 +408,48 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       window.open(data.url, '_blank', 'noopener,noreferrer');
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : 'Failed to open project');
+    } finally {
+      setOpeningProjectId(null);
+    }
+  }, []);
+
+  const assumeProjectSession = useCallback(async (projectId: string) => {
+    setOpeningProjectId(projectId);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/projects/${projectId}/assume`, {
+        method: 'POST',
+      });
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        accessToken: string;
+        refreshToken: string;
+        project: AuthProject;
+        adminContext: AdminContext;
+      };
+
+      useAuthStore.getState().assumeAdminProjectSession(
+        {
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+        },
+        data.project,
+        data.adminContext,
+      );
+
+      window.location.href = '/';
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : 'Failed to open editable project');
     } finally {
       setOpeningProjectId(null);
     }
@@ -862,10 +905,26 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                               <div className="min-w-0">
                                 <div className="font-medium text-slate-900">{project.name}</div>
                                 <div className="mt-1 flex items-center gap-2">
-                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${project.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>
-                                    {project.status === 'active' ? 'активный' : 'архив'}
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    project.status === 'active'
+                                      ? 'bg-green-100 text-green-700'
+                                      : project.status === 'archived'
+                                        ? 'bg-slate-200 text-slate-600'
+                                        : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {project.status === 'active'
+                                      ? 'активный'
+                                      : project.status === 'archived'
+                                        ? 'архив'
+                                        : 'удалён'}
                                   </span>
                                   <span className="text-xs text-slate-500">{formatDate(project.createdAt)}</span>
+                                  {project.archivedAt && project.status === 'archived' && (
+                                    <span className="text-xs text-slate-500">архив: {formatDate(project.archivedAt)}</span>
+                                  )}
+                                  {project.deletedAt && project.status === 'deleted' && (
+                                    <span className="text-xs text-slate-500">удалён: {formatDate(project.deletedAt)}</span>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex shrink-0 gap-2">
@@ -884,10 +943,18 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                 <button
                                   type="button"
                                   disabled={openingProjectId === project.id}
-                                  onClick={() => void openProjectView(project.id)}
+                                  onClick={() => void (project.status === 'deleted' ? assumeProjectSession(project.id) : openProjectView(project.id))}
                                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {openingProjectId === project.id ? 'Открытие…' : 'Открыть'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={openingProjectId === project.id}
+                                  onClick={() => void assumeProjectSession(project.id)}
+                                  className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {openingProjectId === project.id ? 'Переключение…' : 'Редактировать'}
                                 </button>
                               </div>
                             </div>

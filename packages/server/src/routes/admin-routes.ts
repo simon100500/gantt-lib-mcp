@@ -1,7 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { getPrisma } from '@gantt/mcp/prisma';
 import { PLAN_CATALOG, type BillingPeriod, type PlanId } from '@gantt/mcp/constraints';
+import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import { authService } from '@gantt/mcp/services';
+import { signAccessToken } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireAdminAccess } from '../middleware/admin-middleware.js';
 import { BillingService } from '../services/billing-service.js';
@@ -89,13 +91,14 @@ async function buildAdminUserDetails(userId: string) {
     billingService.getUsageStatus(user.id),
     billingService.getPaymentHistory(user.id),
     prisma.project.findMany({
-      where: { userId: user.id, status: { not: 'deleted' } },
+      where: { userId: user.id },
       select: {
         id: true,
         name: true,
         status: true,
         createdAt: true,
         archivedAt: true,
+        deletedAt: true,
         _count: {
           select: {
             messages: true,
@@ -164,6 +167,7 @@ async function buildAdminUserDetails(userId: string) {
       status: project.status,
       createdAt: project.createdAt.toISOString(),
       archivedAt: project.archivedAt?.toISOString() ?? null,
+      deletedAt: project.deletedAt?.toISOString() ?? null,
       messageCount: project._count.messages,
     })),
   };
@@ -510,7 +514,6 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
-        status: { not: 'deleted' },
       },
       select: {
         id: true,
@@ -533,13 +536,79 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
     });
   });
 
+  fastify.post('/api/admin/projects/:id/assume', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const projectId = (req.params as { id: string }).id;
+    const prisma = getPrisma();
+    const [projectRecord, projectCalendar] = await Promise.all([
+      prisma.project.findFirst({
+        where: {
+          id: projectId,
+        },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          ganttDayMode: true,
+          calendarId: true,
+          archivedAt: true,
+          deletedAt: true,
+          userId: true,
+        },
+      }),
+      getProjectCalendarSettings(prisma, projectId),
+    ]);
+
+    if (!projectRecord) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const currentAccessToken = authHeader.slice(7);
+    const currentSession = await authService.findSessionByAccessToken(currentAccessToken);
+    if (!currentSession) {
+      return reply.status(401).send({ error: 'Session not found' });
+    }
+
+    const newAccessToken = signAccessToken({
+      sub: req.user!.userId,
+      email: req.user!.email,
+      projectId: projectRecord.id,
+      sessionId: req.user!.sessionId,
+    });
+
+    await authService.updateSessionTokens(req.user!.sessionId, newAccessToken, currentSession.refreshToken);
+    await authService.updateSessionProject(req.user!.sessionId, projectRecord.id);
+
+    return reply.send({
+      accessToken: newAccessToken,
+      refreshToken: currentSession.refreshToken,
+      project: {
+        id: projectRecord.id,
+        name: projectRecord.name,
+        status: projectRecord.status,
+        ganttDayMode: projectRecord.ganttDayMode,
+        calendarId: projectCalendar.calendarId,
+        calendarDays: projectCalendar.calendarDays,
+        archivedAt: projectRecord.archivedAt,
+        deletedAt: projectRecord.deletedAt,
+      },
+      adminContext: {
+        mode: 'project_override',
+        targetUserId: projectRecord.userId,
+      },
+    });
+  });
+
   fastify.get('/api/admin/projects/:id/messages', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
     const projectId = (req.params as { id: string }).id;
     const prisma = getPrisma();
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
-        status: { not: 'deleted' },
       },
       select: {
         id: true,

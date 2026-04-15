@@ -17,7 +17,8 @@ const REFRESH_TOKEN_KEY = 'gantt_refresh_token';
 const USER_KEY = 'gantt_user';
 const PROJECT_KEY = 'gantt_project';
 const PROJECTS_KEY = 'gantt_projects';
-const AUTH_STORAGE_KEYS = [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PROJECT_KEY, PROJECTS_KEY] as const;
+const ADMIN_CONTEXT_KEY = 'gantt_admin_context';
+const AUTH_STORAGE_KEYS = [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PROJECT_KEY, PROJECTS_KEY, ADMIN_CONTEXT_KEY] as const;
 
 export interface AuthUser {
   id: string;
@@ -39,18 +40,29 @@ export interface AuthProject {
   deletedAt?: string | null;
 }
 
+export interface AdminContext {
+  mode: 'project_override';
+  targetUserId: string | null;
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
   user: AuthUser | null;
   project: AuthProject | null;
   accessToken: string | null;
   projects: AuthProject[];
+  adminContext: AdminContext | null;
   constraintDenial: Partial<ConstraintDenialPayload> | null;
 }
 
 export interface UseAuthResult extends AuthState {
   login(tokens: { accessToken: string; refreshToken: string }, user: AuthUser, project: AuthProject): void;
   logout(): void;
+  assumeAdminProjectSession(
+    tokens: { accessToken: string; refreshToken: string },
+    project: AuthProject,
+    adminContext: AdminContext,
+  ): void;
   switchProject(projectId: string): Promise<void>;
   createProject(name: string): Promise<AuthProject | null>;
   updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null }): Promise<AuthProject>;
@@ -68,6 +80,7 @@ interface StoredAuthState {
   user: AuthUser | null;
   project: AuthProject | null;
   projects: AuthProject[];
+  adminContext: AdminContext | null;
 }
 
 type AuthStore = UseAuthResult;
@@ -78,6 +91,7 @@ const INITIAL_AUTH_STATE: AuthState = {
   project: null,
   accessToken: null,
   projects: [],
+  adminContext: null,
   constraintDenial: null,
 };
 
@@ -97,12 +111,13 @@ function clearStoredAuth(): void {
   window.localStorage.removeItem(USER_KEY);
   window.localStorage.removeItem(PROJECT_KEY);
   window.localStorage.removeItem(PROJECTS_KEY);
+  window.localStorage.removeItem(ADMIN_CONTEXT_KEY);
 }
 
 function persistStoredAuth(nextState: StoredAuthState): void {
   if (!canUseDOM()) return;
 
-  const { accessToken, refreshToken, user, project, projects } = nextState;
+  const { accessToken, refreshToken, user, project, projects, adminContext } = nextState;
 
   if (accessToken) {
     window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
@@ -129,6 +144,12 @@ function persistStoredAuth(nextState: StoredAuthState): void {
   }
 
   window.localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+
+  if (adminContext) {
+    window.localStorage.setItem(ADMIN_CONTEXT_KEY, JSON.stringify(adminContext));
+  } else {
+    window.localStorage.removeItem(ADMIN_CONTEXT_KEY);
+  }
 }
 
 function readStoredAuth(): StoredAuthState | null {
@@ -139,6 +160,7 @@ function readStoredAuth(): StoredAuthState | null {
   const userStr = window.localStorage.getItem(USER_KEY);
   const projectStr = window.localStorage.getItem(PROJECT_KEY);
   const projectsStr = window.localStorage.getItem(PROJECTS_KEY);
+  const adminContextStr = window.localStorage.getItem(ADMIN_CONTEXT_KEY);
 
   if (!accessToken || !userStr) {
     return null;
@@ -163,6 +185,7 @@ function readStoredAuth(): StoredAuthState | null {
       user,
       project,
       projects,
+      adminContext: adminContextStr ? JSON.parse(adminContextStr) as AdminContext : null,
     };
   } catch {
     clearStoredAuth();
@@ -181,6 +204,7 @@ function toAuthState(storedState: StoredAuthState | null): AuthState {
     project: storedState.project,
     accessToken: storedState.accessToken,
     projects: storedState.projects.length > 0 ? storedState.projects : (storedState.project ? [storedState.project] : []),
+    adminContext: storedState.adminContext,
     constraintDenial: null,
   };
 }
@@ -310,6 +334,7 @@ function persistAuthSnapshot(state: {
   user: AuthUser | null;
   project: AuthProject | null;
   projects: AuthProject[];
+  adminContext: AdminContext | null;
 }): void {
   persistStoredAuth({
     accessToken: state.accessToken,
@@ -317,6 +342,7 @@ function persistAuthSnapshot(state: {
     user: state.user,
     project: state.project,
     projects: state.projects,
+    adminContext: state.adminContext,
   });
 }
 
@@ -346,6 +372,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user,
       project,
       projects: fallbackProjects,
+      adminContext: null,
     });
 
     set({
@@ -354,6 +381,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       project,
       accessToken: tokens.accessToken,
       projects: fallbackProjects,
+      adminContext: null,
     });
 
     void fetchProjects(tokens.accessToken)
@@ -365,6 +393,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           user,
           project,
           projects: nextProjects,
+          adminContext: null,
         });
 
         set({
@@ -373,6 +402,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           project,
           accessToken: tokens.accessToken,
           projects: nextProjects,
+          adminContext: null,
         });
       })
       .catch((error) => {
@@ -383,6 +413,28 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   logout() {
     clearStoredAuth();
     set(INITIAL_AUTH_STATE);
+  },
+
+  assumeAdminProjectSession(tokens, project, adminContext) {
+    const state = get();
+    const projects = [project];
+
+    persistStoredAuth({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: state.user,
+      project,
+      projects,
+      adminContext,
+    });
+
+    set({
+      isAuthenticated: true,
+      accessToken: tokens.accessToken,
+      project,
+      projects,
+      adminContext,
+    });
   },
 
   async refreshAccessToken() {
@@ -420,6 +472,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           user: state.user,
           project: state.project,
           projects: state.projects,
+          adminContext: state.adminContext,
         });
 
         set({
@@ -478,6 +531,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project: data.project,
       projects,
+      adminContext: null,
     });
 
     set({
@@ -485,6 +539,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       project: data.project,
       projects,
       isAuthenticated: true,
+      adminContext: null,
     });
   },
 
@@ -523,6 +578,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: state.user,
         project: state.project,
         projects,
+        adminContext: state.adminContext,
       });
 
       set({ projects });
@@ -556,6 +612,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project: optimisticProject,
       projects: optimisticProjects,
+      adminContext: state.adminContext,
     });
 
     set({ project: optimisticProject, projects: optimisticProjects });
@@ -575,6 +632,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: state.user,
         project: previousProject,
         projects: previousProjects,
+        adminContext: state.adminContext,
       });
 
       set({ project: previousProject, projects: previousProjects });
@@ -597,6 +655,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project,
       projects,
+      adminContext: nextState.adminContext,
     });
 
     set({ accessToken, project, projects });
@@ -640,6 +699,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project,
       projects,
+      adminContext: nextState.adminContext,
     });
 
     set({ accessToken, project, projects });
@@ -677,6 +737,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project,
       projects,
+      adminContext: nextState.adminContext,
     });
 
     set({ accessToken, project, projects });
@@ -716,6 +777,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project: nextProject,
       projects: nextProjects,
+      adminContext: state.adminContext,
     });
 
     set({ accessToken, project: nextProject, projects: nextProjects });
@@ -723,7 +785,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   async refreshProjects() {
     const token = get().accessToken;
-    if (!token) {
+    if (!token || get().adminContext?.mode === 'project_override') {
       return;
     }
 
@@ -739,6 +801,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: state.user,
         project: nextProject,
         projects: nextProjects,
+        adminContext: state.adminContext,
       });
 
       set({ project: nextProject, projects: nextProjects });
@@ -771,6 +834,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project,
       projects,
+      adminContext: state.adminContext,
     });
 
     set({ project, projects });

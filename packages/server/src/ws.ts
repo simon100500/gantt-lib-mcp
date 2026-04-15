@@ -22,6 +22,8 @@ import { verifyToken } from './auth.js';
 import type { JwtPayload } from './auth.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { authService } from '@gantt/mcp/services';
+import { getPrisma } from '@gantt/mcp/prisma';
+import { isAdminEmail } from './middleware/admin-middleware.js';
 
 // ---------------------------------------------------------------------------
 // Message types (shared protocol between server and web client)
@@ -139,11 +141,23 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
               let resolvedProjectId = session.projectId;
               const project = await authService.findProjectById(session.projectId);
               if (!project) {
-                const availableProjects = await authService.listProjects(session.userId);
-                const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
-                if (fallbackProject) {
-                  await authService.updateSessionProject(session.id, fallbackProject.id);
-                  resolvedProjectId = fallbackProject.id;
+                const prisma = getPrisma();
+                const deletedProject = isAdminEmail(payload.email)
+                  ? await prisma.project.findUnique({
+                    where: { id: session.projectId },
+                    select: { id: true, status: true },
+                  })
+                  : null;
+
+                if (deletedProject) {
+                  resolvedProjectId = deletedProject.id;
+                } else {
+                  const availableProjects = await authService.listProjects(session.userId);
+                  const fallbackProject = availableProjects.find((item) => item.status === 'active') ?? availableProjects[0];
+                  if (fallbackProject) {
+                    await authService.updateSessionProject(session.id, fallbackProject.id);
+                    resolvedProjectId = fallbackProject.id;
+                  }
                 }
               }
 

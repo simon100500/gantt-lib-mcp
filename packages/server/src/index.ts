@@ -32,6 +32,7 @@ import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
+import { isAdminEmail } from './middleware/admin-middleware.js';
 
 const fastify = Fastify({ logger: true });
 const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
@@ -49,7 +50,7 @@ await registerCommandRoutes(fastify);
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function buildProjectLoadResponse(projectId: string): Promise<{
+async function buildProjectLoadResponse(projectId: string, requesterEmail?: string): Promise<{
   version: number;
   snapshot: ProjectSnapshot;
   project: {
@@ -61,8 +62,14 @@ async function buildProjectLoadResponse(projectId: string): Promise<{
   const { getPrisma } = await import('@gantt/mcp/prisma');
   const prisma = getPrisma();
   const accessibleProject = await authService.findProjectById(projectId);
+  const deletedProject = !accessibleProject && isAdminEmail(requesterEmail)
+    ? await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true },
+    })
+    : null;
 
-  if (!accessibleProject) {
+  if (!accessibleProject && !deletedProject) {
     throw new Error('Project unavailable');
   }
 
@@ -70,7 +77,6 @@ async function buildProjectLoadResponse(projectId: string): Promise<{
     prisma.project.findFirst({
       where: {
         id: projectId,
-        status: { not: 'deleted' },
       },
       select: { version: true },
     }),
@@ -124,7 +130,7 @@ async function buildProjectLoadResponse(projectId: string): Promise<{
 fastify.get('/api/health', async () => ({ status: 'ok' }));
 
 fastify.get('/api/project', { preHandler: [authMiddleware] }, async (req, reply) => {
-  const project = await buildProjectLoadResponse(req.user!.projectId);
+  const project = await buildProjectLoadResponse(req.user!.projectId, req.user!.email);
   return reply.send(project);
 });
 

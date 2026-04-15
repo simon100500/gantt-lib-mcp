@@ -18,6 +18,7 @@ import {
   verifyToken,
 } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { isAdminEmail } from '../middleware/admin-middleware.js';
 import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
 import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
 
@@ -193,11 +194,25 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     let resolvedProjectId = session.projectId;
     const sessionProject = await authService.findProjectById(session.projectId);
     if (!sessionProject) {
-      const projects = await authService.listProjects(session.userId);
-      const fallbackProject = projects.find((item) => item.status === 'active') ?? projects[0];
-      if (fallbackProject) {
-        await authService.updateSessionProject(session.id, fallbackProject.id);
-        resolvedProjectId = fallbackProject.id;
+      const { getPrisma } = await import('@gantt/mcp/prisma');
+      const prisma = getPrisma();
+      const sessionUser = await authService.findUserById(session.userId);
+      const deletedProject = isAdminEmail(sessionUser?.email)
+        ? await prisma.project.findUnique({
+          where: { id: session.projectId },
+          select: { id: true, status: true },
+        })
+        : null;
+
+      if (deletedProject) {
+        resolvedProjectId = deletedProject.id;
+      } else {
+        const projects = await authService.listProjects(session.userId);
+        const fallbackProject = projects.find((item) => item.status === 'active') ?? projects[0];
+        if (fallbackProject) {
+          await authService.updateSessionProject(session.id, fallbackProject.id);
+          resolvedProjectId = fallbackProject.id;
+        }
       }
     }
 
