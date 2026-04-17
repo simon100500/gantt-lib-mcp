@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-17T21:09:24.891Z"
-last_activity: 2026-04-17
+last_updated: "2026-04-17T21:20:44.356Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 15
   completed_phases: 12
   total_plans: 47
-  completed_plans: 44
-  percent: 100
+  completed_plans: 45
+  percent: 96
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-14
+**Last updated:** 2026-04-18
 **Current milestone:** v5.0 Plan Constraints
 **Status:** Ready to execute
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 44 (undo-redo) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-04-17
+Last activity: 2026-04-18
 
-Progress: [██████████] 100%
+Progress: [██████████] 96%
 
 ---
 
@@ -162,6 +162,9 @@ packages/
 - [Phase 44]: Every authoritative command commit now belongs to a MutationGroup, with synthetic single-command system groups when history metadata is absent
 - [Phase 44]: Delete inverses restore tasks through typed create_task/create_tasks_batch commands while preserving full delete context in ProjectEvent.metadata
 - [Phase 44]: Group undoability is finalized from persisted inverseCommand presence across accepted ProjectEvent rows rather than from patches or caller intent
+- [Phase 44-undo-redo]: Phase 44 Plan 02 keeps undo and redo orchestration inside HistoryService while replay always routes through commandService.commitCommand.
+- [Phase 44-undo-redo]: Phase 44 Plan 02 derives redoable grouped history from undo linkage and later applied-group inspection instead of persisting a separate flag.
+- [Phase 44-undo-redo]: Phase 44 Plan 02 maps history replay version_conflict to HTTP 409 while typed redo refusals stay HTTP 400 with authoritative snapshot/version payloads.
 
 ## Performance Metrics
 
@@ -189,12 +192,13 @@ packages/
 | Phase 43 P02 | 32min | 2 tasks | 11 files |
 | Phase 43 P03 | 6 min | 2 tasks | 9 files |
 | Phase 44 P01 | 28min | 2 tasks | 5 files |
+| Phase 44-undo-redo P02 | 4min | 2 tasks | 7 files |
 
 ## Session
 
-- Last session: 2026-04-14T10:16:59Z
-- Stopped at: Completed 43-03-PLAN.md
+- Last session: 2026-04-17T21:20:44Z
+- Stopped at: Completed 44-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-14 — Phase 43 Plan 03 completed*
+*Last updated: 2026-04-18 — Phase 44 Plan 02 completed*
