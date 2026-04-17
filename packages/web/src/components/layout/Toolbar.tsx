@@ -13,7 +13,6 @@ import {
   LockOpen,
   Sparkles,
 } from 'lucide-react';
-
 import { useEffect } from 'react';
 
 import { Button } from '../ui/button.tsx';
@@ -103,51 +102,46 @@ export function Toolbar({
     setDisableTaskDrag(!disableTaskDrag);
   };
 
-  // На мобильном (< 768px) обеспечиваем что только один режим включен
   useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-    if (isMobile && showTaskList && showChart) {
-      // Если оба включены на мобильном - оставляем только гант
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (window.innerWidth < 768 && showTaskList && showChart) {
       setShowTaskList(false);
     }
-  }, [showTaskList, showChart, setShowTaskList]);
+  }, [showChart, showTaskList, setShowTaskList]);
 
-  // Двойной toggle: нельзя скрыть оба элемента одновременно
-  // На мобильном (< 768px) показываем только один из двух
   const handleToggleTaskList = () => {
-    if (!showTaskList) {
-      // Список скрыт - показываем его
-      setShowTaskList(true);
-      // На мобильном скрываем гант
-      if (window.innerWidth < 768) {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      if (!showTaskList) {
+        setShowTaskList(true);
         setShowChart(false);
       }
-    } else if (showChart && window.innerWidth >= 768) {
-      // Список виден и календарь тоже (только на десктопе) - скрываем список
-      setShowTaskList(false);
-    } else {
-      // Список виден - скрываем его, показываем гант
-      setShowTaskList(false);
-      setShowChart(true);
+      return;
     }
+
+    if (showTaskList && !showChart) {
+      return;
+    }
+
+    setShowTaskList(!showTaskList);
   };
 
   const handleToggleChart = () => {
-    if (!showChart) {
-      // Календарь скрыт - показываем его
-      setShowChart(true);
-      // На мобильном скрываем задачи
-      if (window.innerWidth < 768) {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      if (!showChart) {
+        setShowChart(true);
         setShowTaskList(false);
       }
-    } else if (showTaskList && window.innerWidth >= 768) {
-      // Календарь виден и список тоже (только на десктопе) - скрываем календарь
-      setShowChart(false);
-    } else {
-      // Календарь виден - скрываем его, показываем задачи
-      setShowChart(false);
-      setShowTaskList(true);
+      return;
     }
+
+    if (showChart && !showTaskList) {
+      return;
+    }
+
+    setShowChart(!showChart);
   };
 
   const actionButtonClassName =
@@ -160,10 +154,10 @@ export function Toolbar({
           type="button"
           onClick={handleToggleTaskList}
           className={cn(
-            'flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium transition-colors focus-visible:outline-none rounded-l-md border-r',
+            'relative flex h-8 items-center gap-1.5 rounded-l-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
             showTaskList
-              ? 'border-y border-l border-primary text-primary bg-primary/5 hover:bg-primary/10'
-              : 'border-y border-l border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+              ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+              : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
           )}
         >
           <Rows3 className="h-3.5 w-3.5" />
@@ -173,10 +167,10 @@ export function Toolbar({
           type="button"
           onClick={handleToggleChart}
           className={cn(
-            'flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium transition-colors focus-visible:outline-none rounded-r-md border',
+            'relative ml-[-1px] flex h-8 items-center gap-1.5 rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
             showChart
-              ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
-              : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+              ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+              : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
           )}
         >
           <ChartNoAxesGantt className="h-3.5 w-3.5" />
