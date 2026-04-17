@@ -75,6 +75,24 @@ function clearYandexSdkState(): void {
   }
 }
 
+function resetYandexSdkRuntime(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  yandexSdkPromise = null;
+
+  try {
+    delete window.YaAuthSuggest;
+  } catch {
+    window.YaAuthSuggest = undefined;
+  }
+
+  document
+    .querySelectorAll<HTMLScriptElement>('script[data-yandex-sdk="suggest"]')
+    .forEach((script) => script.remove());
+}
+
 function getAppOrigin(): string {
   if (typeof window === 'undefined') {
     throw new Error('Yandex login is only available in the browser');
@@ -254,77 +272,96 @@ export function YandexAuthButton({ onSuccess, onError, onBeforeLogin }: YandexAu
       });
   }, [onError]);
 
-  const handleLogin = async () => {
-    if (onBeforeLogin && !onBeforeLogin()) {
-      return;
-    }
-
+  const performLogin = async () => {
     const clientId = import.meta.env.VITE_YANDEX_CLIENT_ID?.trim();
     if (!clientId) {
       onError('VITE_YANDEX_CLIENT_ID не настроен');
       return;
     }
 
+    resetYandexSdkRuntime();
+    clearYandexSdkState();
+    setSdkReady(false);
+
+    await ensureYandexSdk();
+    setSdkReady(true);
+
+    if (!window.YaAuthSuggest) {
+      throw new Error('Yandex SDK не инициализирован');
+    }
+
+    const redirectUri = getCallbackUrl();
+    const { handler } = await window.YaAuthSuggest.init(
+      {
+        client_id: clientId,
+        response_type: 'token',
+        redirect_uri: redirectUri,
+      },
+      getTokenPageOrigin(),
+    );
+
+    const widgetResult = await Promise.race([
+      Promise.race([
+        handler(),
+        waitForCallbackToken(AUTH_TIMEOUT_MS),
+      ]),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error('Превышено время ожидания авторизации через Яндекс')), AUTH_TIMEOUT_MS);
+      }),
+    ]);
+    const accessToken = extractAccessToken(widgetResult);
+    if (!accessToken) {
+      throw new Error('Яндекс не вернул access token');
+    }
+
+    const response = await fetch('/api/auth/yandex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response, 'Не удалось выполнить вход через Яндекс'));
+    }
+
+    onSuccess(await response.json() as AuthSuccessResponse);
+  };
+
+  const handleLogin = async () => {
+    if (onBeforeLogin && !onBeforeLogin()) {
+      return;
+    }
+
+    setLoading(true);
+    onError(null);
+
     try {
-      setLoading(true);
-      onError(null);
-      clearYandexSdkState();
-
-      await ensureYandexSdk();
-      if (!window.YaAuthSuggest) {
-        throw new Error('Yandex SDK не инициализирован');
-      }
-
-      const redirectUri = getCallbackUrl();
-      const { handler } = await window.YaAuthSuggest.init(
-        {
-          client_id: clientId,
-          response_type: 'token',
-          redirect_uri: redirectUri,
-        },
-        getTokenPageOrigin(),
-      );
-
-      const widgetResult = await Promise.race([
-        Promise.race([
-          handler(),
-          waitForCallbackToken(AUTH_TIMEOUT_MS),
-        ]),
-        new Promise<never>((_, reject) => {
-          window.setTimeout(() => reject(new Error('Превышено время ожидания авторизации через Яндекс')), AUTH_TIMEOUT_MS);
-        }),
-      ]);
-      const accessToken = extractAccessToken(widgetResult);
-      if (!accessToken) {
-        throw new Error('Яндекс не вернул access token');
-      }
-
-      const response = await fetch('/api/auth/yandex', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, 'Не удалось выполнить вход через Яндекс'));
-      }
-
-      onSuccess(await response.json() as AuthSuccessResponse);
+      await performLogin();
     } catch (error) {
       console.error('[YandexAuth] login failed', error);
       const { message, rawMessage, code } = normalizeYandexError(error);
+
       if (code === 'denied' || message === 'denied' || rawMessage.includes('cancelled')) {
         onError(null);
         return;
       }
+
       if (code === 'in_progress') {
-        onError('Окно авторизации Яндекса уже открыто. Завершите вход в нём или закройте его и попробуйте снова.');
-        return;
+        try {
+          await performLogin();
+          return;
+        } catch (retryError) {
+          console.error('[YandexAuth] retry after in_progress failed', retryError);
+          onError('Не удалось переоткрыть окно Яндекса. Попробуйте ещё раз.');
+          return;
+        }
       }
+
       if (code === 'not_available') {
         onError('Yandex ID недоступен в текущем окружении. Для локального запуска обычно нужно, чтобы `localhost` callback был добавлен в OAuth-приложение и браузер разрешал popup/cookies.');
         return;
       }
+
       onError(message || 'Не удалось выполнить вход через Яндекс');
     } finally {
       setLoading(false);
