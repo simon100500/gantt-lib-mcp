@@ -255,7 +255,7 @@ export function ProjectSwitcher({
         <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-3">
           <button type="button" onClick={onCreateNew} className="flex items-center gap-2">
             <img src="/favicon.svg" alt="GetGantt" width="20" height="20" className="h-5 w-5" />
-            <span className="text-base font-cascadia font-semibold tracking-tight text-slate-900">ГетГант</span>
+            <span className="text-base font-semibold tracking-tight text-slate-900">ГетГант</span>
           </button>
           <button
             type="button"

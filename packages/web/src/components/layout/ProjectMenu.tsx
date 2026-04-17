@@ -399,7 +399,7 @@ export function ProjectMenu({
             <button
               type="button"
               onClick={() => void onCreateProject()}
-              className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight"
+              className="flex select-none items-center gap-2.5 text-base tracking-tight"
             >
               <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
               <span className="text-[15px] font-semibold text-slate-900 hidden sm:inline">ГетГант</span>
@@ -445,7 +445,7 @@ export function ProjectMenu({
                     )}
                     <span
                       className={cn(
-                        'truncate text-sm font-semibold font-cascadia tracking-tight text-slate-900',
+                        'truncate text-sm font-semibold tracking-tight text-slate-900',
                         !hasShareToken && !isArchivedProject && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
                       )}
                       title={hasShareToken ? undefined : isArchivedProject ? 'Проект в архиве доступен только для чтения' : 'Нажмите, чтобы переименовать'}
