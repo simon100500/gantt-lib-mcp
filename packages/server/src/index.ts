@@ -32,6 +32,7 @@ import { registerAdminApiRoutes } from './routes/admin-routes.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
+import { registerHistoryRoutes } from './routes/history-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
@@ -47,6 +48,7 @@ await registerAdminRoutes(fastify);
 await registerAdminApiRoutes(fastify);
 await registerBillingRoutes(fastify);
 await registerCommandRoutes(fastify);
+await registerHistoryRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // Helpers
