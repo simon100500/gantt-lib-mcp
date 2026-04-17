@@ -307,9 +307,9 @@ export function ProjectWorkspace({
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
 
-                {effectiveReadOnly && (
+                {(previewRendering || previewFailed) && (
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">
-                    {previewRendering ? 'Предпросмотр' : previewFailed ? 'Не сохранено' : 'Только чтение'}
+                    {previewRendering ? 'Предпросмотр' : 'Не сохранено'}
                   </span>
                 )}
 

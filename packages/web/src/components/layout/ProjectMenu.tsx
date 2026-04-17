@@ -78,6 +78,8 @@ export function ProjectMenu({
   const [projectActionsMenuOpen, setProjectActionsMenuOpen] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
+  const isReadOnlyContext = hasShareToken || isArchivedProject;
+  const shouldShowUpgradeButton = subscription?.plan === 'free';
 
   const billingFooter = auth.isAuthenticated ? (
     <div className="border-t border-slate-200 px-3 py-3">
@@ -103,14 +105,16 @@ export function ProjectMenu({
                   : `${auth.projects.length}`} проектов
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowBillingPage(true)}
-            className="mt-2 flex w-full items-center justify-center rounded-lg border border-primary/35 bg-white px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
-          >
-            <Gem className="mr-1.5 h-3.5 w-3.5" />
-            Расширить
-          </button>
+          {shouldShowUpgradeButton && (
+            <button
+              type="button"
+              onClick={() => setShowBillingPage(true)}
+              className="mt-2 flex w-full items-center justify-center rounded-lg border border-primary/35 bg-white px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+            >
+              <Gem className="mr-1.5 h-3.5 w-3.5" />
+              Расширить
+            </button>
+          )}
         </>
       ) : null}
     </div>
@@ -298,6 +302,20 @@ export function ProjectMenu({
     // Keep sidebar open in sidebar mode
   };
 
+  const handleReadOnlyNewProject = async () => {
+    if (!auth.isAuthenticated) {
+      onLoginRequired();
+      return;
+    }
+
+    if (hasShareToken) {
+      window.location.assign(window.location.origin);
+      return;
+    }
+
+    await onCreateProject();
+  };
+
   // Compute whether toggle button should be hidden on desktop
   // Hidden only in sidebar mode (push), NOT in overlay mode
   const hideToggleOnDesktop = sidebarVisible;
@@ -380,10 +398,7 @@ export function ProjectMenu({
           <button
             type="button"
             onClick={() => void onCreateProject()}
-            className={cn(
-              'flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight',
-              hideToggleOnDesktop && 'sm:hidden'
-            )}
+            className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight"
           >
             <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
             <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
@@ -471,11 +486,21 @@ export function ProjectMenu({
                 )}
               </div>
 
-              <div className="hidden min-w-0 flex-1 px-4 lg:flex lg:px-8">
+              <div className="hidden min-w-0 flex-1 items-center gap-3 px-4 lg:flex lg:px-8">
                 <TaskSearch
                   onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
-                  readOnly={hasShareToken || isArchivedProject}
+                  readOnly={isReadOnlyContext}
                 />
+                {isReadOnlyContext && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => { void handleReadOnlyNewProject(); }}
+                    className="h-8 shrink-0 rounded-md px-3 text-sm font-medium"
+                  >
+                    Новый проект
+                  </Button>
+                )}
               </div>
             </>
           )}
@@ -496,15 +521,17 @@ export function ProjectMenu({
               </div>
             ) : (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowBillingPage(true)}
-                  className="h-8 shrink-0 rounded-md border-primary/35 bg-white px-3 text-sm font-medium text-primary hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
-                >
-                  <Gem className="h-4 w-4" />
-                  <span>Расширить</span>
-                </Button>
+                {shouldShowUpgradeButton && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowBillingPage(true)}
+                    className="h-8 shrink-0 rounded-md border-primary/35 bg-white px-3 text-sm font-medium text-primary hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                  >
+                    <Gem className="h-4 w-4" />
+                    <span>Расширить</span>
+                  </Button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button

@@ -879,6 +879,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [auth, setWorkspace]);
 
   const handleCreateProject = useCallback(async () => {
+    if (hasShareToken) {
+      window.location.assign(window.location.origin);
+      return;
+    }
+
     if (auth.isAuthenticated) {
       if (proactiveProjectDenial) {
         await openLimitModal(proactiveProjectDenial);
@@ -902,7 +907,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     queuedPromptRef.current = null;
     resetWorkspacePresentation();
     setWorkspace({ kind: 'guest' });
-  }, [auth.isAuthenticated, auth.projects, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
+  }, [auth.isAuthenticated, auth.projects, hasShareToken, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setWorkspace]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {

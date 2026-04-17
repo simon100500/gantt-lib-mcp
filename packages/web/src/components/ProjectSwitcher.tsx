@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Archive, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from './ui/button.tsx';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -142,9 +143,6 @@ interface ProjectSectionProps {
   icon: ReactNode;
   open: boolean;
   onToggle: () => void;
-  onCreateNew?: () => void;
-  createDisabled?: boolean;
-  createTitle?: string;
   usageLabel?: string | null;
   children: ReactNode;
 }
@@ -154,9 +152,6 @@ function ProjectSection({
   icon,
   open,
   onToggle,
-  onCreateNew,
-  createDisabled = false,
-  createTitle,
   usageLabel,
   children,
 }: ProjectSectionProps) {
@@ -183,30 +178,7 @@ function ProjectSection({
             )}
           </span>
         </span>
-        {onCreateNew ? (
-          <button
-            type="button"
-            disabled={createDisabled}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (!createDisabled) {
-                onCreateNew();
-              }
-            }}
-            className={cn(
-              'flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors',
-              createDisabled
-                ? 'cursor-not-allowed bg-slate-100 text-slate-300'
-                : 'hover:bg-white hover:text-slate-700',
-            )}
-            aria-label="Новый проект"
-            title={createTitle ?? 'Новый проект'}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        ) : (
-          <span className="h-6 w-6 shrink-0" />
-        )}
+        <span className="h-6 w-6 shrink-0" />
       </button>
       {open && children}
     </div>
@@ -298,14 +270,29 @@ export function ProjectSwitcher({
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-1">
         <div className="flex flex-col gap-2">
+          <div className="px-1.5">
+            <Button
+              variant="default"
+              size="sm"
+              disabled={createDisabled}
+              onClick={() => {
+                if (!createDisabled) {
+                  onCreateNew();
+                }
+              }}
+              className="h-8 w-full rounded-md px-3 text-sm font-medium"
+              title={createTitle ?? 'Новый проект'}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Новый проект</span>
+            </Button>
+          </div>
+
           <ProjectSection
             title={activeTitle}
             icon={<Folder className="h-4 w-4" />}
             open={activeOpen}
             onToggle={() => setActiveOpen((value) => !value)}
-            onCreateNew={onCreateNew}
-            createDisabled={createDisabled}
-            createTitle={createTitle}
             usageLabel={projectsUsageLabel}
           >
             {activeProjects.length > 0 ? (

@@ -8,7 +8,6 @@ import { useTaskStore } from '../stores/useTaskStore';
 import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStore.ts';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useProjectCommands } from '../hooks/useProjectCommands';
-import { cn } from '@/lib/utils';
 import type { Task } from '../types';
 
 interface TaskSearchProps {
@@ -204,7 +203,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
               }
             }
           }}
-          placeholder="Поиск или новая задача..."
+          placeholder={readOnly ? 'Поиск...' : 'Поиск или новая задача...'}
           className="h-8 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или +"
@@ -269,20 +268,17 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
           )}
         </div>
       </div>
-      {/* Кнопка создания задачи */}
-      <Button
-        variant="default"
-        size="sm"
-        onClick={handleCreateTask}
-        aria-disabled={readOnly}
-        title={readOnly ? 'Создание задач недоступно в режиме только чтения' : 'Создать задачу'}
-        className={cn(
-          'h-7 py-2.5 px-2.5 text-xs font-medium shrink-0',
-          readOnly && 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100',
-        )}
-      >
-        + Задача
-      </Button>
+      {!readOnly && (
+        <Button
+          variant="default"
+          size="sm"
+          onClick={handleCreateTask}
+          title="Создать задачу"
+          className="h-7 shrink-0 px-2.5 py-2.5 text-xs font-medium"
+        >
+          + Задача
+        </Button>
+      )}
     </div>
   );
 }
