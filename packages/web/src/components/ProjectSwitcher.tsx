@@ -338,6 +338,7 @@ export function ProjectSwitcher({
           ) : null}
 
         </div>
+        <div className="h-16 shrink-0" />
       </div>
 
       {footer && <div className="shrink-0">{footer}</div>}
