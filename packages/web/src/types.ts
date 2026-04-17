@@ -114,6 +114,14 @@ export type FrontendProjectCommand =
   | { type: 'reparent_task'; taskId: string; newParentId: string | null; }
   | { type: 'reorder_tasks'; updates: Array<{ taskId: string; sortOrder: number; }>; };
 
+export type FrontendHistoryGroupContext = {
+  groupId: string;
+  origin: 'user_ui';
+  title: string;
+  requestContextId: string;
+  finalizeGroup: boolean;
+};
+
 export interface ProjectSnapshot {
   tasks: Task[];
   dependencies: ProjectDependency[];

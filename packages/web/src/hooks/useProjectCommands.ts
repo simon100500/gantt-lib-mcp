@@ -1,4 +1,10 @@
-import { normalizeTasks, type FrontendProjectCommand, type Task, type TaskDependency } from '../types';
+import {
+  normalizeTasks,
+  type FrontendHistoryGroupContext,
+  type FrontendProjectCommand,
+  type Task,
+  type TaskDependency,
+} from '../types';
 import type { ProjectLoadResponse } from '../lib/apiTypes';
 import { useCommandCommit } from './useCommandCommit';
 
@@ -38,6 +44,48 @@ function normalizeDependencies(dependencies: TaskDependency[] | undefined): Task
     type: dependency.type,
     lag: dependency.lag ?? 0,
   }));
+}
+
+function createHistoryGroup(title: string, finalizeGroup: boolean, seed?: {
+  groupId: string;
+  requestContextId: string;
+}): FrontendHistoryGroupContext {
+  return {
+    groupId: seed?.groupId ?? crypto.randomUUID(),
+    origin: 'user_ui',
+    title,
+    requestContextId: seed?.requestContextId ?? crypto.randomUUID(),
+    finalizeGroup,
+  };
+}
+
+function commandChangesSchedule(command: FrontendProjectCommand): boolean {
+  return command.type === 'move_task'
+    || command.type === 'resize_task'
+    || command.type === 'set_task_start'
+    || command.type === 'set_task_end'
+    || command.type === 'change_duration'
+    || command.type === 'recalculate_schedule'
+    || command.type === 'reparent_task'
+    || command.type === 'reorder_tasks'
+    || command.type === 'create_dependency'
+    || command.type === 'remove_dependency'
+    || command.type === 'change_dependency_lag'
+    || (
+      command.type === 'update_task_fields'
+      && (
+        command.fields.parentId !== undefined
+        || command.fields.dependencies !== undefined
+      )
+    );
+}
+
+function resolveApplyChangesTitle(commands: FrontendProjectCommand[]): string {
+  if (commands.some(commandChangesSchedule)) {
+    return 'Пользователь — Изменил график';
+  }
+
+  return 'Пользователь — Изменил задачу';
 }
 
 export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): FrontendProjectCommand[] {
@@ -132,9 +180,17 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
 
     let latestSnapshotTasks = normalizeTasks([task]);
     const changedIds = new Set<string>();
+    const historySeed = {
+      groupId: crypto.randomUUID(),
+      requestContextId: crypto.randomUUID(),
+    };
+    const historyTitle = resolveApplyChangesTitle(commands);
 
-    for (const command of commands) {
-      const result = await commitCommand(command);
+    for (const [index, command] of commands.entries()) {
+      const result = await commitCommand(
+        command,
+        createHistoryGroup(historyTitle, index === commands.length - 1, historySeed),
+      );
       if (!result.accepted) {
         throw new Error(`Command rejected: ${result.reason}`);
       }
@@ -161,7 +217,7 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
     const result = await commitCommand({
       type: 'create_task',
       task: input,
-    });
+    }, createHistoryGroup('Пользователь — Создал задачу', true));
 
     if (!result.accepted) {
       throw new Error(`Failed to create task: ${result.reason}`);
@@ -177,7 +233,10 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
   };
 
   const deleteTask = async (id: string): Promise<boolean> => {
-    const result = await commitCommand({ type: 'delete_task', taskId: id });
+    const result = await commitCommand(
+      { type: 'delete_task', taskId: id },
+      createHistoryGroup('Пользователь — Удалил задачу', true),
+    );
     if (!result.accepted) {
       throw new Error(`Failed to delete task: ${result.reason}`);
     }

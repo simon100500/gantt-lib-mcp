@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useProjectStore } from '../stores/useProjectStore';
-import type { FrontendProjectCommand } from '../types';
+import type { FrontendHistoryGroupContext, FrontendProjectCommand } from '../types';
 import type { ProjectLoadResponse } from '../lib/apiTypes';
 
 function generateRequestId(): string {
@@ -66,7 +66,10 @@ export function useCommandCommit(accessToken: string | null) {
     return project;
   }, [accessToken, setConfirmed]);
 
-  const commitCommand = useCallback(async (command: FrontendProjectCommand) => {
+  const commitCommand = useCallback(async (
+    command: FrontendProjectCommand,
+    history?: FrontendHistoryGroupContext,
+  ) => {
     const runCommit = async () => {
       if (!accessToken) throw new Error('Not authenticated');
 
@@ -75,7 +78,7 @@ export function useCommandCommit(accessToken: string | null) {
 
       while (attempt < 2) {
         const baseVersion = useProjectStore.getState().confirmed.version;
-        console.log('[COMMIT] enqueue', { requestId, attempt, baseVersion, command });
+        console.log('[COMMIT] enqueue', { requestId, attempt, baseVersion, command, history });
 
         // Step 1: Add to pending (optimistic display)
         addPending({ requestId, baseVersion, command });
@@ -88,7 +91,7 @@ export function useCommandCommit(accessToken: string | null) {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${accessToken}`,
             },
-            body: JSON.stringify({ clientRequestId: requestId, baseVersion, command }),
+            body: JSON.stringify({ clientRequestId: requestId, baseVersion, command, history }),
           });
 
           console.log('[COMMIT] response:raw', {
@@ -159,7 +162,7 @@ export function useCommandCommit(accessToken: string | null) {
           return data;
         } catch (error) {
           clearTransientState();
-          console.error('[COMMIT] exception', { requestId, command, error });
+          console.error('[COMMIT] exception', { requestId, command, history, error });
           throw error;
         }
       }

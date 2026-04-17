@@ -43,6 +43,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
       clientRequestId: body.clientRequestId,
       baseVersion: body.baseVersion,
       command: body.command,
+      history: body.history,
     };
 
     // REST API calls are always 'user' actor type; agent calls go through MCP
@@ -60,6 +61,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
         baseVersion: request.baseVersion,
         commandType: request.command.type,
         command: request.command,
+        history: request.history,
       });
 
       const response = await commandService.commitCommand(request, actorType, actorId);
@@ -80,6 +82,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
         changedTaskIds: response.accepted ? response.result.changedTaskIds : [],
         changedDependencyIds: response.accepted ? response.result.changedDependencyIds : [],
         conflicts: response.accepted ? response.result.conflicts : [],
+        history: request.history,
       });
 
       if (response.accepted) {
@@ -100,6 +103,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
         baseVersion: request.baseVersion,
         commandType: request.command.type,
         command: request.command,
+        history: request.history,
         error: error instanceof Error ? error.message : String(error),
       });
       fastify.log.error({
