@@ -6,6 +6,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./constraints": "./dist/constraints/index.js",
+    "./debug-log": "./dist/debug-log-store.js",
     "./types": "./dist/types.js",
     "./prisma": "./dist/prisma.js",
     "./services": "./dist/services/index.js"

@@ -24,7 +24,6 @@ import { runStagedMutation } from './mutation/orchestrator.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
-const MCP_DEBUG_LOG_PATH = join(PROJECT_ROOT, '.planning/debug/mcp-agent.log');
 
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
 
@@ -337,47 +336,44 @@ export function assessMutationOutcome(
 }
 
 async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number): Promise<MutationToolCall[]> {
-  if (!existsSync(MCP_DEBUG_LOG_PATH)) {
-    return [];
-  }
-
-  const content = await readFile(MCP_DEBUG_LOG_PATH, 'utf-8');
-  const lines = content.trim().split('\n').slice(-2000);
+  const { getPrisma } = await getPrismaModule();
+  const rows = await ((getPrisma() as any).agentDebugLog.findMany({
+    where: {
+      source: 'mcp',
+      runId,
+      attempt,
+      tool: {
+        in: [...NORMALIZED_MUTATION_TOOL_NAMES],
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: 2000,
+  }) as Promise<Array<{ event: string; tool?: string | null; toolUseId?: string | null; payload?: unknown }>>);
   const toolCalls = new Map<string, MutationToolCall>();
   let syntheticIndex = 0;
 
-  for (const line of lines) {
-    let parsed: { event?: string; payload?: Record<string, unknown> } | undefined;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    const payload = parsed?.payload;
+  for (const row of rows) {
+    const payload = row.payload && typeof row.payload === 'object'
+      ? row.payload as Record<string, unknown>
+      : undefined;
     if (!payload) {
       continue;
     }
 
-    if (payload.aiRunId !== runId || String(payload.aiAttempt ?? '') !== String(attempt)) {
-      continue;
-    }
-
-    const toolName = payload.tool;
+    const toolName = row.tool ?? payload.tool;
     if (typeof toolName !== 'string' || !NORMALIZED_MUTATION_TOOL_NAMES.has(toolName as NormalizedMutationToolName)) {
       continue;
     }
 
-    const toolUseId = typeof payload.toolUseId === 'string'
-      ? payload.toolUseId
-      : `${toolName}:${syntheticIndex++}`;
+    const toolUseId = row.toolUseId
+      ?? (typeof payload.toolUseId === 'string' ? payload.toolUseId : `${toolName}:${syntheticIndex++}`);
 
     const existing = toolCalls.get(toolUseId) ?? {
       toolUseId,
       toolName: toolName as NormalizedMutationToolName,
     };
 
-    if (parsed?.event === 'tool_call_failed') {
+    if (row.event === 'tool_call_failed') {
       existing.status = 'rejected';
       existing.reason = typeof payload.error === 'string' ? payload.error : 'tool_error';
     }
@@ -630,6 +626,7 @@ async function executeAgentAttempt(
   runId: string,
   projectId: string,
   sessionId: string,
+  userId: string | undefined,
   attempt: number,
   simpleMutationRequested: boolean,
   mcpServerPath: string,
@@ -659,6 +656,7 @@ async function executeAgentAttempt(
           env: {
             DATABASE_URL: process.env.DATABASE_URL ?? '',
             PROJECT_ID: projectId,
+            AI_USER_ID: userId ?? '',
             AI_RUN_ID: runId,
             AI_SESSION_ID: sessionId,
             AI_MUTATION_SOURCE: 'agent',
@@ -861,7 +859,8 @@ async function verifyMutationAttempt(
 export async function runAgentWithHistory(
   userMessage: string,
   projectId: string,
-  sessionId: string
+  sessionId: string,
+  userId?: string,
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
@@ -1149,6 +1148,7 @@ export async function runAgentWithHistory(
           runId,
           projectId,
           sessionId,
+          userId,
           attempt,
           simpleMutationRequested,
           mcpServerPath,

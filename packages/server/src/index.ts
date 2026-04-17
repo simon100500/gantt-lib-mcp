@@ -149,7 +149,7 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireActiveSubscripti
     message,
   });
   // Fire-and-forget — streaming goes via WebSocket
-  runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId).catch((err: unknown) => {
+  runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId, req.user!.userId).catch((err: unknown) => {
     broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'agent error');
   });
@@ -175,7 +175,7 @@ onChatMessage((msg, userId, projectId, sessionId) => {
     sessionId,
     message: msg,
   });
-  runAgentWithHistory(msg, projectId, sessionId).catch((err: unknown) => {
+  runAgentWithHistory(msg, projectId, sessionId, userId).catch((err: unknown) => {
     broadcastToSession(sessionId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'agent error (ws)');
   });
