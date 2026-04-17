@@ -11,6 +11,8 @@ import {
   Rows3,
   Lock,
   LockOpen,
+  Circle,
+  CircleDot,
   Sparkles,
 } from 'lucide-react';
 
@@ -298,7 +300,7 @@ export function Toolbar({
             type="button"
             onClick={() => handleViewModeChange(nextMode)}
             className={cn(
-              'flex h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border',
+              'hidden h-8 items-center px-3 text-xs font-medium transition-colors focus-visible:outline-none border sm:flex',
               index === 0 && 'rounded-l-md',
               index === 2 && 'rounded-r-md',
               currentViewMode === nextMode
@@ -339,6 +341,19 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
+          {(['day', 'week', 'month'] as const).map((nextMode) => (
+            <DropdownMenuItem
+              key={nextMode}
+              onClick={() => handleViewModeChange(nextMode)}
+              className="flex cursor-pointer items-center gap-2 sm:hidden"
+            >
+              {currentViewMode === nextMode ? <CircleDot className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+              <span className="text-sm">
+                {nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}
+              </span>
+            </DropdownMenuItem>
+          ))}
+          <div className="mx-2 my-1 h-px bg-slate-200 sm:hidden" />
           <DropdownMenuItem
             onClick={onCollapseAll}
             className="flex cursor-pointer items-center gap-2"
@@ -535,7 +550,7 @@ export function Toolbar({
           title={isChatOpen ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
         >
           <Sparkles className={cn('h-3.5 w-3.5', isChatOpen && 'fill-primary-foreground/20')} />
-          <span className="hidden md:inline lg:inline ml-1">AI ассистент</span>
+          <span className="ml-1">Ассистент</span>
         </Button>
       )}
     </div>
