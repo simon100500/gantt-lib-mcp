@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-14
+**Last updated:** 2026-04-17
 
 ## Progress Summary
 
@@ -354,5 +354,25 @@ Plans:
 - [x] 43-02-PLAN.md — Downstream consumer migration onto shared interpretation and technical-only normalization
 - [x] 43-03-PLAN.md — Observability, fallback telemetry, and regression guards against semantic runtime heuristics
 
+### Phase 44: undo-redo
+
+**Goal:** Линейная grouped history поверх существующего authoritative command pipeline: пользователь видит понятные MutationGroup-записи и может безопасно undo/redo как ручные действия, так и целый ход агента
+**Requirements**: HIS-01, HIS-02, HIS-03, HIS-04, HIS-05
+**Depends on:** Phase 43
+**Plans:** 4 plans
+
+**Success Criteria** (what must be TRUE):
+  1. Каждый user-visible mutation commit или agent turn записывается как `MutationGroup` с корректными `baseVersion/newVersion`, порядком событий и persisted `inverseCommand`
+  2. Undo/redo работают append-only через существующий `CommandService.commitCommand`, а redo блокируется typed отказом при diverged history
+  3. `GET /api/history` возвращает paginated grouped history с `title`, `actor`, `status`, `commandCount`, `undoable`, `redoable`, а undo/redo endpoints возвращают authoritative `snapshot + version`
+  4. Один agent turn использует один shared `groupId/requestContextId` и получает human-readable history title для UI
+  5. Web UI показывает history panel и поддерживает `Ctrl+Z` / `Ctrl+Shift+Z`, после replay обновляясь от authoritative server snapshot
+
+Plans:
+- [ ] 44-01-PLAN.md — MutationGroup schema/contracts and history-aware `CommandService.commitCommand`
+- [ ] 44-02-PLAN.md — Append-only undo/redo `HistoryService` plus paginated history API
+- [ ] 44-03-PLAN.md — Agent-turn grouping and manual web commit metadata propagation
+- [ ] 44-04-PLAN.md — History panel, undo/redo hotkeys, and authoritative frontend refresh
+
 ---
-*Last updated: 2026-04-14 — Phase 43 Plan 03 completed*
+*Last updated: 2026-04-17 — Phase 44 planning created*
