@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ import { assessMutationOutcome, buildHistoryContext } from './agent.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { classifyMutationIntent } from './mutation/intent-classifier.js';
+import { runStagedMutation } from './mutation/orchestrator.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -475,5 +477,217 @@ describe('agent staged mutation lifecycle integration', () => {
     assert.match(prompt, /Do not invent task IDs/i);
     assert.match(prompt, /Do not invent dates/i);
     assert.match(prompt, /full_agent/);
+  });
+
+  it('records one agent turn as one groupId with one requestContextId and finalizes only the last command', async () => {
+    const historyRequests: Array<Record<string, unknown>> = [];
+    const runId = `run-${randomUUID()}`;
+    const groupId = `group-${randomUUID()}`;
+
+    const result = await runStagedMutation({
+      userMessage: 'распиши подробнее пункт "Инженерные системы"',
+      projectId: 'project-1',
+      projectVersion: 8,
+      sessionId: 'session-1',
+      runId,
+      groupId,
+      requestContextId: runId,
+      historyTitle: 'AI — распиши подробнее пункт "Инженерные системы"',
+      historyUndoable: true,
+      tasksBefore: [{
+        id: 'task-engineering',
+        name: 'Инженерные системы',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+        parentId: 'phase-root',
+      }],
+      env: semanticEnv,
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({
+          tasks: [
+            {
+              id: 'task-engineering',
+              name: 'Инженерные системы',
+              startDate: '2026-04-01',
+              endDate: '2026-04-03',
+              parentId: 'phase-root',
+            },
+            {
+              id: 'phase-root',
+              name: 'Проект',
+              startDate: '2026-03-20',
+              endDate: '2026-04-10',
+            },
+            {
+              id: 'task-engineering:prep',
+              name: 'Подготовка',
+              startDate: '2026-04-04',
+              endDate: '2026-04-05',
+              parentId: 'task-engineering',
+            },
+            {
+              id: 'task-engineering:core',
+              name: 'Основные работы',
+              startDate: '2026-04-06',
+              endDate: '2026-04-08',
+              parentId: 'task-engineering',
+            },
+          ],
+        }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-engineering',
+            name: 'Инженерные системы',
+            parentId: null,
+            path: ['Проект', 'Инженерные системы'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-03',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [
+          {
+            taskId: 'task-engineering',
+            name: 'Инженерные системы',
+            parentId: 'phase-root',
+            path: ['Проект', 'Инженерные системы'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-03',
+            matchType: 'exact',
+            score: 0.95,
+          },
+        ],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: Record<string, any>) => {
+          historyRequests.push(request.history ?? {});
+          const changedTaskIds = request.command.type === 'create_tasks_batch'
+            ? ['task-engineering', ...(request.command.tasks ?? []).map((task: { id: string }) => task.id)]
+            : ['task-engineering', 'task-engineering:prep', 'task-engineering:core'];
+          return {
+            accepted: true,
+            clientRequestId: request.clientRequestId,
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds,
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          };
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          intentType: 'expand_wbs',
+          confidence: 0.9,
+          entitiesMentioned: ['Инженерные системы'],
+          fragmentPlan: {
+            title: 'Инженерные системы',
+            nodes: [
+              { nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] },
+              { nodeKey: 'core', title: 'Основные работы', durationDays: 3, dependsOnNodeKeys: ['prep'] },
+            ],
+          },
+        }),
+      }),
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(historyRequests.length, 2, 'expected one agent turn to commit two grouped commands');
+    assert.equal(historyRequests[0]?.origin, 'agent_run');
+    assert.equal(historyRequests[0]?.requestContextId, runId);
+    assert.equal(historyRequests[1]?.requestContextId, runId);
+    assert.equal(historyRequests[0]?.groupId, historyRequests[1]?.groupId, 'one agent turn should reuse one groupId');
+    assert.equal(historyRequests[0]?.finalizeGroup, false);
+    assert.equal(historyRequests[1]?.finalizeGroup, true);
+    assert.equal(historyRequests[0]?.undoable, true);
+    assert.equal(historyRequests[1]?.undoable, true);
+    assert.match(String(historyRequests[0]?.title ?? ''), /^AI — /);
+  });
+
+  it('marks non-undoable agent runs explicitly instead of silently storing undoable history', async () => {
+    const historyRequests: Array<Record<string, unknown>> = [];
+    const runId = `run-${randomUUID()}`;
+    const groupId = `group-${randomUUID()}`;
+
+    const result = await runStagedMutation({
+      userMessage: 'сдвинь штукатурку на 2 дня',
+      projectId: 'project-1',
+      projectVersion: 5,
+      sessionId: 'session-1',
+      runId,
+      groupId,
+      requestContextId: runId,
+      historyTitle: 'AI — Неотменяемое действие',
+      historyUndoable: false,
+      tasksBefore: [{
+        id: 'task-plaster',
+        name: 'Штукатурка',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+      }],
+      env: semanticEnv,
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-plaster',
+            name: 'Штукатурка',
+            parentId: null,
+            path: ['Отделка', 'Штукатурка'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-03',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: Record<string, any>) => {
+          historyRequests.push(request.history ?? {});
+          return {
+            accepted: false,
+            clientRequestId: request.clientRequestId,
+            reason: 'validation_error',
+            currentVersion: request.baseVersion,
+            error: 'command is not undoable',
+          };
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.result.failureReason, 'deterministic_execution_failed');
+    assert.equal(historyRequests.length, 1);
+    assert.equal(historyRequests[0]?.origin, 'agent_run');
+    assert.equal(historyRequests[0]?.requestContextId, runId);
+    assert.equal(historyRequests[0]?.undoable, false);
+    assert.equal(historyRequests[0]?.finalizeGroup, true);
+    assert.equal(historyRequests[0]?.title, 'AI — Неотменяемое действие');
   });
 });
