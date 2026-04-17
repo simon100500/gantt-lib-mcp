@@ -20,6 +20,7 @@ import { commandService } from '@gantt/mcp/services';
 import type { CommitProjectCommandRequest, ActorType } from '@gantt/mcp/types';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
+import { writeServerDebugLog } from '../debug-log.js';
 
 export async function registerCommandRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/commands/commit', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
@@ -49,7 +50,37 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
     const actorId = req.user!.userId;
 
     try {
+      await writeServerDebugLog('user_command_received', {
+        userId: req.user!.userId,
+        projectId: req.user!.projectId,
+        sessionId: req.user!.sessionId,
+        actorType,
+        actorId,
+        clientRequestId: request.clientRequestId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        command: request.command,
+      });
+
       const response = await commandService.commitCommand(request, actorType, actorId);
+
+      await writeServerDebugLog('user_command_completed', {
+        userId: req.user!.userId,
+        projectId: req.user!.projectId,
+        sessionId: req.user!.sessionId,
+        actorType,
+        actorId,
+        clientRequestId: request.clientRequestId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        accepted: response.accepted,
+        reason: response.accepted ? undefined : response.reason,
+        newVersion: response.accepted ? response.newVersion : undefined,
+        currentVersion: response.accepted ? undefined : response.currentVersion,
+        changedTaskIds: response.accepted ? response.result.changedTaskIds : [],
+        changedDependencyIds: response.accepted ? response.result.changedDependencyIds : [],
+        conflicts: response.accepted ? response.result.conflicts : [],
+      });
 
       if (response.accepted) {
         return reply.status(200).send(response);
@@ -59,6 +90,18 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
       const statusCode = response.reason === 'version_conflict' ? 409 : 400;
       return reply.status(statusCode).send(response);
     } catch (error) {
+      await writeServerDebugLog('user_command_failed', {
+        userId: req.user!.userId,
+        projectId: req.user!.projectId,
+        sessionId: req.user!.sessionId,
+        actorType,
+        actorId,
+        clientRequestId: request.clientRequestId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        command: request.command,
+        error: error instanceof Error ? error.message : String(error),
+      });
       fastify.log.error({
         err: error,
         clientRequestId: request.clientRequestId,

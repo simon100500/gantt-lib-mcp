@@ -1177,7 +1177,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                           <div className="text-sm text-slate-400">Проектов нет.</div>
                         ) : selectedUser.projects.map((project) => (
                           <div key={project.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div className="min-w-0">
                                 <div className="font-medium text-slate-900">{project.name}</div>
                                 <div className="mt-1 flex items-center gap-2">
@@ -1204,12 +1204,12 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   <span className="text-xs text-slate-500">логов: {project.logCount ?? 0}</span>
                                 </div>
                               </div>
-                              <div className="flex shrink-0 gap-2">
+                              <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:w-auto lg:grid-cols-none lg:auto-cols-max lg:grid-flow-col">
                                 <button
                                   type="button"
                                   disabled={loadingChat && chatProjectId === project.id}
                                   onClick={() => void openProjectChat(project.id, project.name)}
-                                  className={`rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  className={`min-w-0 rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                                     chatProjectId === project.id
                                       ? 'border-primary bg-primary/[0.08] text-primary'
                                       : 'border-slate-200 text-slate-700 hover:bg-white'
@@ -1221,7 +1221,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   type="button"
                                   disabled={loadingLogs && logProjectId === project.id}
                                   onClick={() => void openProjectLogs(project.id, project.name)}
-                                  className={`rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  className={`min-w-0 rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                                     logScope === 'project' && logProjectId === project.id
                                       ? 'border-primary bg-primary/[0.08] text-primary'
                                       : 'border-slate-200 text-slate-700 hover:bg-white'
@@ -1233,7 +1233,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   type="button"
                                   disabled={openingProjectId === project.id}
                                   onClick={() => void (project.status === 'deleted' ? assumeProjectSession(project.id) : openProjectView(project.id))}
-                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {openingProjectId === project.id ? 'Открытие…' : 'Открыть'}
                                 </button>
@@ -1241,7 +1241,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   type="button"
                                   disabled={openingProjectId === project.id}
                                   onClick={() => void assumeProjectSession(project.id)}
-                                  className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="min-w-0 rounded-lg bg-slate-900 px-3 py-2 text-xs text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {openingProjectId === project.id ? 'Переключение…' : 'Редактировать'}
                                 </button>
@@ -1249,7 +1249,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   type="button"
                                   disabled={deletingProjectId === project.id}
                                   onClick={() => void deleteProject(project.id, project.name)}
-                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="min-w-0 rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {deletingProjectId === project.id ? 'Удаление…' : 'Удалить'}
                                 </button>

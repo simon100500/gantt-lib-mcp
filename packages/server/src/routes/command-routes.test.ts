@@ -24,4 +24,19 @@ describe('chat and command enforcement routes', () => {
       /fastify\.post\('\/api\/commands\/commit', \{ preHandler: \[authMiddleware, requireActiveSubscriptionForMutation\] \}, async \(req, reply\) => \{[\s\S]*commandService\.commitCommand\(request, actorType, actorId\)/,
     );
   });
+
+  it('logs manual user commands before and after commit execution', () => {
+    assert.match(
+      commandRoutesSource,
+      /writeServerDebugLog\('user_command_received'/,
+    );
+    assert.match(
+      commandRoutesSource,
+      /writeServerDebugLog\('user_command_completed'/,
+    );
+    assert.match(
+      commandRoutesSource,
+      /writeServerDebugLog\('user_command_failed'/,
+    );
+  });
 });
