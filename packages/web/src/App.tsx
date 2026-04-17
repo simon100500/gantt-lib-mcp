@@ -1310,6 +1310,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             tasks={visibleTasks}
             setTasks={setTasks}
             loading={loading}
+            accessToken={auth.accessToken}
             sharedProject={sharedProject.project}
             shareToken={sharedProject.shareToken}
             hasShareToken={hasShareToken}

@@ -7,6 +7,7 @@ import {
   FileDown,
   FlagTriangleRight,
   Funnel,
+  History,
   Link,
   Rows3,
   Lock,
@@ -71,12 +72,14 @@ export function Toolbar({
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const disableTaskDrag = externalDisableTaskDrag ?? useUIStore((state) => state.disableTaskDrag);
+  const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const setShowTaskList = useUIStore((state) => state.setShowTaskList);
   const setShowChart = useUIStore((state) => state.setShowChart);
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
   const setDisableTaskDrag = onToggleDisableTaskDrag ?? useUIStore((state) => state.setDisableTaskDrag);
+  const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
 
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
   const filterExpired = useUIStore((state) => state.filterExpired);
@@ -245,6 +248,22 @@ export function Toolbar({
         </Button>
       )}
 
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+        aria-pressed={showHistoryPanel}
+        className={cn(
+          actionButtonClassName,
+          showHistoryPanel && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
+          'hidden sm:flex',
+        )}
+        title="Показать историю изменений"
+      >
+        <History className="h-3.5 w-3.5" />
+        <span className="hidden md:inline text-xs">История</span>
+      </Button>
+
       <div className="flex-1" />
 
       <Button
@@ -397,6 +416,13 @@ export function Toolbar({
               </span>
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <History className="h-4 w-4" />
+            <span className="text-sm">История</span>
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleToggleDragLock}
             disabled={readOnly}

@@ -6,12 +6,14 @@ import type { TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
+import { HistoryPanel } from '../HistoryPanel.tsx';
 import { SplitTaskModal } from '../SplitTaskModal.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
+import { useProjectHistory } from '../../hooks/useProjectHistory.ts';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
 import { useChatStore } from '../../stores/useChatStore.ts';
 import type { SubscriptionStatus, UsageStatus } from '../../stores/useBillingStore.ts';
@@ -26,6 +28,7 @@ interface ProjectWorkspaceProps {
   tasks: Task[];
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   loading: boolean;
+  accessToken?: string | null;
   sharedProject: SharedTaskProject | null;
   shareToken: string | null;
   hasShareToken: boolean;
@@ -81,6 +84,7 @@ export function ProjectWorkspace({
   tasks,
   setTasks,
   loading,
+  accessToken = null,
   sharedProject,
   shareToken,
   hasShareToken,
@@ -120,6 +124,7 @@ export function ProjectWorkspace({
   const showChart = useUIStore((state) => state.showChart);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const searchResults = useUIStore((state) => state.searchResults);
   const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
@@ -203,6 +208,15 @@ export function ProjectWorkspace({
   }, [searchResults, tempHighlightedTaskId]);
   const previousGanttDayModeRef = useRef(ganttDayMode);
   const [splitTaskDraft, setSplitTaskDraft] = useState<Task | null>(null);
+  const {
+    items: historyItems,
+    loading: historyLoading,
+    error: historyError,
+    refreshHistory,
+    undoLatest,
+    undoGroup,
+    redoGroup,
+  } = useProjectHistory(accessToken);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
     () => getProjectWeekendPredicate(calendarDays) ?? (() => false),
@@ -258,6 +272,51 @@ export function ProjectWorkspace({
     return await Promise.resolve(onSplitTask(splitTaskDraft, details));
   }, [onSplitTask, splitTaskDraft]);
 
+  const latestRedoableItem = useMemo(
+    () => historyItems.find((item) => item.redoable) ?? null,
+    [historyItems],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!accessToken || effectiveReadOnly || event.defaultPrevented || !event.ctrlKey) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isEditable = Boolean(
+        target?.isContentEditable
+        || tagName === 'input'
+        || tagName === 'textarea',
+      );
+
+      if (isEditable || event.key.toLowerCase() !== 'z') {
+        return;
+      }
+
+      if (event.shiftKey) {
+        if (!latestRedoableItem || historyLoading) {
+          return;
+        }
+
+        event.preventDefault();
+        void redoGroup(latestRedoableItem.id);
+        return;
+      }
+
+      if (historyLoading) {
+        return;
+      }
+
+      event.preventDefault();
+      void undoLatest();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [accessToken, effectiveReadOnly, historyLoading, latestRedoableItem, redoGroup, undoLatest]);
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
@@ -284,7 +343,7 @@ export function ProjectWorkspace({
       </div>
 
       {/* Chart and Chat side by side */}
-      <div className="mt-0.5 flex min-w-0 flex-1 overflow-hidden px-3 md:px-4">
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3 md:px-4 xl:flex-row xl:overflow-hidden">
         {/* Chart card - hide on mobile when chat is open */}
         <div className={cn(
           "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
@@ -403,6 +462,18 @@ export function ProjectWorkspace({
             )}
           </div>
         </div>
+
+        {showHistoryPanel && (
+          <HistoryPanel
+            items={historyItems}
+            loading={historyLoading}
+            error={historyError}
+            disabled={effectiveReadOnly || !accessToken}
+            onRefresh={() => void refreshHistory()}
+            onUndoGroup={undoGroup}
+            onRedoGroup={redoGroup}
+          />
+        )}
 
         {/* Chat card - full width on mobile when open, side on desktop */}
         {chatSidebarVisible && !hasShareToken && onSend && (
