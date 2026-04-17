@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Sparkles, X } from "lucide-react";
+import { ArrowUp, ChartNoAxesGantt, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
@@ -20,6 +20,8 @@ interface ChatSidebarProps {
   disabledReason?: string | null;
   loading?: boolean;
   onClose?: () => void;
+  onShowChart?: () => void;
+  showChartButton?: boolean;
   isAuthenticated?: boolean;
   onLoginRequired?: () => void;
 }
@@ -41,6 +43,8 @@ export function ChatSidebar({
   disabledReason,
   loading,
   onClose,
+  onShowChart,
+  showChartButton = false,
   isAuthenticated = true,
   onLoginRequired,
 }: ChatSidebarProps) {
@@ -210,6 +214,24 @@ export function ChatSidebar({
 
         <div ref={endRef} />
       </div>
+
+      {showChartButton && onShowChart && (
+        <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 md:hidden">
+          <button
+            type="button"
+            onClick={onShowChart}
+            className={cn(
+              "flex h-10 w-full items-center justify-center gap-2 rounded-md",
+              "border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700",
+              "transition-colors hover:border-primary hover:text-primary",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            )}
+          >
+            <ChartNoAxesGantt className="h-4 w-4" />
+            <span>Показать график</span>
+          </button>
+        </div>
+      )}
 
       {isEmpty && (
         <div className="flex flex-wrap gap-1.5 pl-4 pr-3 pb-2">

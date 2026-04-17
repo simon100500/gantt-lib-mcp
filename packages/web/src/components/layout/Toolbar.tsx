@@ -360,6 +360,15 @@ export function Toolbar({
             <FlagTriangleRight className="h-4 w-4" />
             <span className="text-sm">Сегодня</span>
           </DropdownMenuItem>
+          {onExportPdf && (
+            <DropdownMenuItem
+              onClick={onExportPdf}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              <span className="text-sm">PDF / Печать</span>
+            </DropdownMenuItem>
+          )}
           {showShareButton && onCreateShareLink && (
             <DropdownMenuItem
               onClick={() => void onCreateShareLink()}
@@ -500,6 +509,15 @@ export function Toolbar({
             />
             <span className="text-sm">Рабочие дни</span>
           </DropdownMenuItem>
+          {onExportPdf && (
+            <DropdownMenuItem
+              onClick={onExportPdf}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              <span className="text-sm">PDF / Печать</span>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

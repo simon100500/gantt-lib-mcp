@@ -148,6 +148,7 @@ export function ProjectWorkspace({
   const previewRendering = previewState === 'rendering';
   const previewFailed = previewState === 'failed';
   const effectiveReadOnly = readOnly || previewRendering || previewFailed;
+  const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
@@ -295,7 +296,7 @@ export function ProjectWorkspace({
               />
             )}
 
-            {(effectiveTasks.length > 0 || effectiveReadOnly) && (
+            {hasRenderableChart && (
               <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
                 {effectiveTasks.length > 0 && (
                   <span className="font-mono text-[11px] text-slate-400">
@@ -382,6 +383,8 @@ export function ProjectWorkspace({
               disabledReason={aiThinking ? null : chatDisabledReason}
               loading={aiThinking}
               onClose={onCloseChat}
+              onShowChart={onCloseChat}
+              showChartButton={hasRenderableChart}
               isAuthenticated={isAuthenticated}
               onLoginRequired={onLoginRequired}
             />
