@@ -14,8 +14,28 @@ type MutationSuccessMessageInput = {
   changedTasks?: MutationTaskSnapshot[];
 };
 
+function looksLikeAggregatePastedWorklist(name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length < 160) {
+    return false;
+  }
+
+  const enumeratedItemMatches = trimmed.match(/(?:^|\s)\d+[.)]/g) ?? [];
+  if (enumeratedItemMatches.length >= 3) {
+    return true;
+  }
+
+  const demolitionMentions = trimmed.match(/демонтаж/gi) ?? [];
+  return demolitionMentions.length >= 3;
+}
+
+function selectDisplayTasks(tasks: MutationTaskSnapshot[]): MutationTaskSnapshot[] {
+  const concreteTasks = tasks.filter((task) => !looksLikeAggregatePastedWorklist(task.name));
+  return concreteTasks.length > 0 ? concreteTasks : tasks;
+}
+
 function formatTaskList(tasks: MutationTaskSnapshot[]): string {
-  const names = tasks
+  const names = selectDisplayTasks(tasks)
     .map((task) => task.name.trim())
     .filter((name) => name.length > 0);
 

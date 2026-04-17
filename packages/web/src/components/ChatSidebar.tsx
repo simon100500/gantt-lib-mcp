@@ -177,7 +177,7 @@ export function ChatSidebar({
           >
             <div
               className={cn(
-                "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
+                "max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
                 msg.role === "user"
                   ? "rounded-br-sm bg-[#e7f0fe] text-slate-800"
                   : "rounded-bl-sm bg-slate-50 text-slate-800",

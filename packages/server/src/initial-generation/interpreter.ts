@@ -366,7 +366,9 @@ function fallbackInterpretation(input: InterpretInitialRequestInput, fallbackRea
     || locationScope.floors.length > 0
     || locationScope.zones.length > 0;
   const projectIsEmpty = input.projectState.isEmptyProject ?? input.projectState.taskCount === 0;
-  const route: InitialRequestInterpretationRoute = projectIsEmpty ? 'initial_generation' : 'mutation';
+  const route: InitialRequestInterpretationRoute = explicitWorklistCount >= 3 || projectIsEmpty
+    ? 'initial_generation'
+    : 'mutation';
   const requestKind: InitialRequestKind = explicitWorklistCount >= 3
     ? 'explicit_worklist'
     : hasLocationScope

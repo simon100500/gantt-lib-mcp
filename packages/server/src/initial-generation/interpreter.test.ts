@@ -198,6 +198,40 @@ describe('initial-request interpreter', () => {
     assert.notEqual(result.interpretation.requestKind, 'targeted_edit');
   });
 
+  it('keeps explicit worklist on initial_generation fallback even when the project is not empty', async () => {
+    const result = await interpretInitialRequest({
+      userMessage: [
+        'виды работ:',
+        '1. Демонтаж кровли - 220 чел/час',
+        '2. Демонтаж окон - 16 чел/час',
+        '3. Демонтаж витражей - 38 чел/час',
+        '4. Демонтаж металлокаркаса - 192 чел/час',
+      ].join('\n'),
+      normalizedRequest: normalizeInitialRequest([
+        'виды работ:',
+        '1. Демонтаж кровли - 220 чел/час',
+        '2. Демонтаж окон - 16 чел/час',
+        '3. Демонтаж витражей - 38 чел/час',
+        '4. Демонтаж металлокаркаса - 192 чел/час',
+      ].join('\n')),
+      projectState: {
+        taskCount: 12,
+        hasHierarchy: true,
+        isEmptyProject: false,
+      },
+      model: 'gpt-test',
+      interpretationQuery: async () => {
+        throw new Error('model unavailable');
+      },
+    });
+
+    assert.equal(result.usedModelDecision, false);
+    assert.equal(result.fallbackReason, 'model_unavailable');
+    assert.equal(result.interpretation.route, 'initial_generation');
+    assert.equal(result.interpretation.requestKind, 'explicit_worklist');
+    assert.equal(result.interpretation.scopeMode, 'explicit_worklist');
+  });
+
   it('documents prompt constraints for strict JSON only, allowed enum values, targeted_edit, and explicit_worklist', async () => {
     let prompt = '';
 

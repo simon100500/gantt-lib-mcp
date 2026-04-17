@@ -276,6 +276,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [activeTab, setActiveTab] = useState<'billing' | 'projects'>('billing');
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
+  const [copiedLogs, setCopiedLogs] = useState(false);
 
   const loadUsers = useCallback(async (nextQuery: string, nextPage = 1) => {
     setLoading(true);
@@ -1272,21 +1273,63 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                 : 'Чат и логи'}
                         </div>
                         {(chatProjectName || logScope) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setChatProjectId(null);
-                              setChatProjectName(null);
-                              setChatMessages([]);
-                              setLogScope(null);
-                              setLogProjectId(null);
-                              setLogProjectName(null);
-                              setLogs([]);
-                            }}
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
-                          >
-                            Очистить
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {logScope && logs.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const header = logScope === 'project'
+                                    ? `Логи проекта: ${logProjectName}`
+                                    : `Логи пользователя: ${logProjectName}`;
+                                  const text = [
+                                    header,
+                                    '='.repeat(header.length),
+                                    '',
+                                    ...logs.map((log) => {
+                                      const parts = [
+                                        `[${formatDate(log.createdAt)} ${formatTime(log.createdAt)}] ${log.source} | ${log.event}`,
+                                      ];
+                                      if (log.tool) parts.push(`  tool: ${log.tool}`);
+                                      if (log.aiMutationSource) parts.push(`  aiMutationSource: ${log.aiMutationSource}`);
+                                      parts.push(`  projectId: ${log.projectId ?? '—'}`);
+                                      parts.push(`  sessionId: ${log.sessionId ?? '—'}`);
+                                      parts.push(`  runId: ${log.runId ?? '—'}`);
+                                      parts.push(`  attempt: ${log.attempt ?? '—'}`);
+                                      parts.push('');
+                                      parts.push(formatJson(log.payload));
+                                      return parts.join('\n');
+                                    }),
+                                  ].join('\n\n');
+                                  void navigator.clipboard.writeText(text).then(() => {
+                                    setCopiedLogs(true);
+                                    setTimeout(() => setCopiedLogs(false), 2000);
+                                  });
+                                }}
+                                className={`rounded-lg border px-3 py-2 text-xs transition-colors ${
+                                  copiedLogs
+                                    ? 'border-green-200 bg-green-50 text-green-700'
+                                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                {copiedLogs ? 'Скопировано' : 'Копировать логи'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setChatProjectId(null);
+                                setChatProjectName(null);
+                                setChatMessages([]);
+                                setLogScope(null);
+                                setLogProjectId(null);
+                                setLogProjectName(null);
+                                setLogs([]);
+                              }}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                            >
+                              Очистить
+                            </button>
+                          </div>
                         )}
                       </div>
                       <div className="mt-3 space-y-3">

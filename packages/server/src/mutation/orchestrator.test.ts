@@ -106,6 +106,20 @@ describe('staged mutation orchestrator', () => {
       }),
       /Штукатурк/i,
     );
+    const worklistArtifactMessage = buildMutationSuccessMessage({
+      changedTaskIds: ['aggregate', 'roof', 'windows', 'facade'],
+      changedTasks: [
+        {
+          id: 'aggregate',
+          name: '1. Демонтаж сэндвич панелей (кровля) – 110,04 м2- 220 чел/час 2. Демонтаж окон – 18,35 м2 – 16 чел/час 3. Демонтаж витражей – 47,81 м2 – 38 чел/час 4. Демонтаж металлокаркаса – 4 тн – 192 чел/час',
+        },
+        { id: 'roof', name: 'Демонтаж сэндвич панелей (кровля)' },
+        { id: 'windows', name: 'Демонтаж окон' },
+        { id: 'facade', name: 'Демонтаж витражей' },
+      ],
+    });
+    assert.doesNotMatch(worklistArtifactMessage, /220 чел\/час 2\./i);
+    assert.match(worklistArtifactMessage, /Демонтаж сэндвич панелей \(кровля\)/i);
   });
 
   it('builds and executes deterministic plans for resolved ordinary edits', async () => {
