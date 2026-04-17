@@ -235,6 +235,35 @@ describe('compileInitialProjectPlan', () => {
     assert.deepEqual(second, first);
   });
 
+  it('accepts flat worklist tasks directly under a phase', () => {
+    const structure = compileInitialProjectPlan({
+      projectId: 'project-flat',
+      baseVersion: 3,
+      serverDate: '2026-04-06',
+      plan: {
+        projectType: 'renovation',
+        assumptions: ['Плоский список работ'],
+        nodes: [
+          { nodeKey: 'phase-demo', title: 'Демонтажные работы', kind: 'phase', durationDays: 1, dependsOn: [] },
+          { nodeKey: 'task-roof', title: 'Демонтаж сэндвич панелей (кровля)', parentNodeKey: 'phase-demo', kind: 'task', durationDays: 3, dependsOn: [] },
+          { nodeKey: 'task-windows', title: 'Демонтаж окон', parentNodeKey: 'phase-demo', kind: 'task', durationDays: 2, dependsOn: [{ nodeKey: 'task-roof', type: 'FS', lagDays: 0 }] },
+        ],
+      },
+    });
+    const compiled = materializeInitialProjectPlan(structure);
+
+    assert.equal(compiled.compiledTaskCount, 2);
+    assert.equal(compiled.topLevelPhaseCount, 1);
+    assert.deepEqual(
+      compiled.command.tasks.map((task) => ({ name: task.name, parentId: task.parentId })),
+      [
+        { name: 'Демонтажные работы', parentId: undefined },
+        { name: 'Демонтаж сэндвич панелей (кровля)', parentId: compiled.nodeKeyToTaskId['phase-demo'] },
+        { name: 'Демонтаж окон', parentId: compiled.nodeKeyToTaskId['phase-demo'] },
+      ],
+    );
+  });
+
   it('uses project calendar overrides passed via scheduleOptions', () => {
     const customWeekendPredicate = (date: Date) => {
       const iso = date.toISOString().slice(0, 10);

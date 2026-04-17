@@ -133,6 +133,11 @@ function getMode(context: QualityGateContext | undefined): GenerationBrief['plan
   return context?.classification?.planningMode ?? context?.brief.planningMode;
 }
 
+function isFlatWorklistMode(context: QualityGateContext): boolean {
+  return getMode(context) === 'worklist_bootstrap'
+    && (context.normalizedRequest?.explicitWorkItems.length ?? context.brief.explicitWorkItems?.length ?? 0) >= 3;
+}
+
 function evaluateModeAwareStructure(
   structure: StructuredProjectPlan,
   context: QualityGateContext,
@@ -227,19 +232,26 @@ export function evaluateStructureQuality(
   const metrics = collectStructureMetrics(structure, brief, userMessage);
   const reasons: StructureQualityVerdict['reasons'] = [];
   const broadRequest = isBroadRequest(brief);
+  const flatWorklistMode = isFlatWorklistMode(context);
 
-  if (metrics.phaseCount < (broadRequest ? 4 : 2)) {
+  if (metrics.phaseCount < (flatWorklistMode ? 1 : broadRequest ? 4 : 2)) {
     reasons.push('too_few_phases');
   }
   if (metrics.phaseCount > MAX_TOP_LEVEL_PHASES) {
     reasons.push('missing_hierarchy');
   }
 
-  if (metrics.subphaseCount < (broadRequest ? 8 : 3) || metrics.minSubphasesPerPhase < (broadRequest ? 2 : 1)) {
+  if (
+    metrics.subphaseCount < (flatWorklistMode ? 1 : broadRequest ? 8 : 3)
+    || metrics.minSubphasesPerPhase < (flatWorklistMode ? 1 : broadRequest ? 2 : 1)
+  ) {
     reasons.push('too_few_subphases');
   }
 
-  if (metrics.taskCount < (broadRequest ? 16 : 4) || metrics.minTasksPerSubphase < (broadRequest ? 2 : 1)) {
+  if (
+    metrics.taskCount < (flatWorklistMode ? 3 : broadRequest ? 16 : 4)
+    || metrics.minTasksPerSubphase < (flatWorklistMode ? 3 : broadRequest ? 2 : 1)
+  ) {
     reasons.push('too_few_tasks');
   }
 
@@ -247,14 +259,17 @@ export function evaluateStructureQuality(
     reasons.push('placeholder_titles');
   }
 
-  if (titlesAreTooLongOrEnumerative(structure.phases.flatMap((phase) => [
-    phase.title,
-    ...phase.subphases.flatMap((subphase) => [subphase.title, ...subphase.tasks.map((task) => task.title)]),
-  ]))) {
+  const titleScope = flatWorklistMode
+    ? structure.phases.flatMap((phase) => [phase.title, ...phase.subphases.map((subphase) => subphase.title)])
+    : structure.phases.flatMap((phase) => [
+        phase.title,
+        ...phase.subphases.flatMap((subphase) => [subphase.title, ...subphase.tasks.map((task) => task.title)]),
+      ]);
+  if (titlesAreTooLongOrEnumerative(titleScope)) {
     reasons.push('oversized_titles');
   }
 
-  if (broadRequest && metrics.minSubphasesPerPhase < 2) {
+  if (broadRequest && !flatWorklistMode && metrics.minSubphasesPerPhase < 2) {
     reasons.push('weak_subphase_decomposition');
   }
 
@@ -346,7 +361,22 @@ export function evaluateSchedulingQuality(
     reasons.push('task_outside_subphase');
   }
 
-  if (plan.nodes.some((node) => node.kind === 'task' && node.parentNodeKey && nodeMap.get(node.parentNodeKey)?.kind !== 'subphase')) {
+  const allowTaskUnderPhase = context ? isFlatWorklistMode(context) : false;
+  if (plan.nodes.some((node) => {
+    if (node.kind !== 'task' || !node.parentNodeKey) {
+      return false;
+    }
+
+    const parentKind = nodeMap.get(node.parentNodeKey)?.kind;
+    if (parentKind === 'subphase') {
+      return false;
+    }
+    if (allowTaskUnderPhase && parentKind === 'phase') {
+      return false;
+    }
+
+    return true;
+  })) {
     reasons.push('task_outside_subphase');
   }
 

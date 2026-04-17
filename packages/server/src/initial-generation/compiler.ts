@@ -411,10 +411,10 @@ function collectStructuralIssues(
           nodeKey: node.nodeKey,
           relatedNodeKeys: [parent.nodeKey],
         });
-      } else if (node.kind === 'task' && parent.kind !== 'subphase') {
+      } else if (node.kind === 'task' && parent.kind !== 'subphase' && parent.kind !== 'phase') {
         issues.push({
           code: 'missing_parent',
-          message: `Task ${node.nodeKey} must be nested under a subphase container`,
+          message: `Task ${node.nodeKey} must be nested under a phase or subphase container`,
           nodeKey: node.nodeKey,
           relatedNodeKeys: [parent.nodeKey],
         });

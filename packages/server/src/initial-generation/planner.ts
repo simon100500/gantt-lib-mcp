@@ -33,6 +33,138 @@ import type {
   StructureQualityVerdict,
 } from './types.js';
 
+function slugify(value: string): string {
+  const map: Record<string, string> = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ы: 'y', э: 'e', ю: 'yu', я: 'ya', ь: '', ъ: '',
+  };
+
+  return value
+    .toLowerCase()
+    .split('')
+    .map((char) => map[char] ?? char)
+    .join('')
+    .replace(/[^a-z0-9а-яё]+/giu, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+}
+
+function buildDeterministicTaskKey(title: string, index: number, seenKeys: Set<string>): string {
+  const base = slugify(title) || `task-${index + 1}`;
+  let candidate = base;
+  let suffix = 2;
+  while (seenKeys.has(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  seenKeys.add(candidate);
+  return candidate;
+}
+
+function stripLeadingEnumeration(value: string): string {
+  return value.replace(/^\s*\d+[.)]\s*/u, '').trim();
+}
+
+function normalizeWorkItemTitle(value: string): string {
+  return stripLeadingEnumeration(value)
+    .replace(/\s*[-–—]\s*\d[\d\s.,/a-zа-я%]*(?:\([^)]*\)[\d\s.,/a-zа-я%]*)*.*$/iu, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[-–—\s]+$/u, '')
+    .trim();
+}
+
+function inferDominantWorkFamily(taskTitles: string[]): string | null {
+  const firstWords = taskTitles
+    .map((title) => title.split(/\s+/u)[0]?.toLowerCase() ?? '')
+    .filter(Boolean);
+  const counts = new Map<string, number>();
+
+  for (const word of firstWords) {
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+
+  let dominant: { word: string; count: number } | null = null;
+  for (const [word, count] of counts) {
+    if (!dominant || count > dominant.count) {
+      dominant = { word, count };
+    }
+  }
+
+  if (!dominant || dominant.count < Math.max(2, Math.ceil(taskTitles.length * 0.6))) {
+    return null;
+  }
+
+  if (dominant.word === 'демонтаж') {
+    return 'Демонтажные работы';
+  }
+  if (dominant.word === 'монтаж') {
+    return 'Монтажные работы';
+  }
+  if (dominant.word === 'ремонт') {
+    return 'Ремонтные работы';
+  }
+  if (dominant.word === 'устройство') {
+    return 'Работы по устройству';
+  }
+
+  return null;
+}
+
+function deriveWorklistPhaseTitle(taskTitles: string[]): string {
+  return inferDominantWorkFamily(taskTitles) ?? 'Основные работы';
+}
+
+function deriveWorklistSubphaseTitle(phaseTitle: string, taskTitles: string[]): string {
+  if (taskTitles.length <= 1) {
+    return phaseTitle;
+  }
+
+  const withParenthetical = taskTitles
+    .map((title) => title.match(/\(([^)]+)\)/u)?.[1]?.trim())
+    .filter((value): value is string => Boolean(value));
+  const uniqueParenthetical = [...new Set(withParenthetical)];
+
+  if (uniqueParenthetical.length === 1) {
+    return `${phaseTitle}: ${uniqueParenthetical[0]}`;
+  }
+
+  return phaseTitle;
+}
+
+function isFlatExplicitWorklist(input: PlanInitialProjectInput): boolean {
+  return (input.classification?.planningMode ?? input.brief.planningMode) === 'worklist_bootstrap'
+    && (input.normalizedRequest?.explicitWorkItems.length ?? input.brief.explicitWorkItems?.length ?? 0) >= 3;
+}
+
+function buildFlatWorklistStructure(input: PlanInitialProjectInput): StructuredProjectPlan {
+  const explicitWorkItems = input.normalizedRequest?.explicitWorkItems ?? input.brief.explicitWorkItems ?? [];
+  const taskKeys = new Set<string>();
+  const taskTitles = explicitWorkItems.map((item) => normalizeWorkItemTitle(item) || stripLeadingEnumeration(item));
+  const phaseTitle = deriveWorklistPhaseTitle(taskTitles);
+  const subphaseTitle = deriveWorklistSubphaseTitle(phaseTitle, taskTitles);
+
+  return {
+    projectType: input.classification?.projectArchetype ?? input.brief.objectType,
+    assumptions: [
+      'Пользовательский список работ является основным источником состава графика',
+      ...(input.brief.clarificationAssumptions ?? []),
+    ],
+    phases: [{
+      phaseKey: 'user-worklist',
+      title: phaseTitle,
+      subphases: [{
+        subphaseKey: 'user-work-items',
+        title: subphaseTitle,
+        tasks: taskTitles.map((item, index) => ({
+          taskKey: buildDeterministicTaskKey(item, index, taskKeys),
+          title: item,
+        })),
+      }],
+    }],
+  };
+}
+
 type PlannerQueryInput = {
   prompt: string;
   model: string;
@@ -342,8 +474,9 @@ function validateScheduled(raw: unknown, structure: StructuredProjectPlan): Sche
   };
 }
 
-function flattenScheduledPlan(plan: ScheduledProjectPlan): ExecutableProjectPlan {
+function flattenScheduledPlan(plan: ScheduledProjectPlan, options?: { collapseSingleSubphaseWorklist?: boolean }): ExecutableProjectPlan {
   const nodes: ExecutableProjectPlan['nodes'] = [];
+  const collapseSingleSubphaseWorklist = options?.collapseSingleSubphaseWorklist ?? false;
 
   for (const phase of plan.phases) {
     nodes.push({
@@ -355,20 +488,23 @@ function flattenScheduledPlan(plan: ScheduledProjectPlan): ExecutableProjectPlan
     });
 
     for (const subphase of phase.subphases) {
-      nodes.push({
-        nodeKey: subphase.subphaseKey,
-        title: subphase.title,
-        parentNodeKey: phase.phaseKey,
-        kind: 'subphase',
-        durationDays: 1,
-        dependsOn: [],
-      });
+      const collapseSubphase = collapseSingleSubphaseWorklist && phase.subphases.length === 1;
+      if (!collapseSubphase) {
+        nodes.push({
+          nodeKey: subphase.subphaseKey,
+          title: subphase.title,
+          parentNodeKey: phase.phaseKey,
+          kind: 'subphase',
+          durationDays: 1,
+          dependsOn: [],
+        });
+      }
 
       for (const task of subphase.tasks) {
         nodes.push({
           nodeKey: task.taskKey,
           title: task.title,
-          parentNodeKey: subphase.subphaseKey,
+          parentNodeKey: collapseSubphase ? phase.phaseKey : subphase.subphaseKey,
           kind: 'task',
           durationDays: task.durationDays,
           dependsOn: task.dependsOn,
@@ -417,13 +553,16 @@ async function requestScheduledProject(
 
 export async function planInitialProject(input: PlanInitialProjectInput): Promise<PlanInitialProjectResult> {
   let repairAttempted = false;
+  const flatExplicitWorklist = isFlatExplicitWorklist(input);
 
-  let structure = await requestStructuredProject(
-    buildStructurePrompt(input),
-    'structure_planning',
-    input.structureModelDecision.selectedModel,
-    input.sdkQuery,
-  );
+  let structure = flatExplicitWorklist
+    ? buildFlatWorklistStructure(input)
+    : await requestStructuredProject(
+        buildStructurePrompt(input),
+        'structure_planning',
+        input.structureModelDecision.selectedModel,
+        input.sdkQuery,
+      );
   let structureVerdict = evaluateStructureQuality(structure, {
     brief: input.brief,
     userMessage: input.userMessage,
@@ -434,12 +573,14 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
 
   if (!structureVerdict.accepted) {
     repairAttempted = true;
-    structure = await requestStructuredProject(
-      buildStructureRepairPrompt({ ...input, structure, verdict: structureVerdict }),
-      'structure_planning_repair',
-      input.structureModelDecision.selectedModel,
-      input.sdkQuery,
-    );
+    structure = flatExplicitWorklist
+      ? buildFlatWorklistStructure(input)
+      : await requestStructuredProject(
+          buildStructureRepairPrompt({ ...input, structure, verdict: structureVerdict }),
+          'structure_planning_repair',
+          input.structureModelDecision.selectedModel,
+          input.sdkQuery,
+        );
     structureVerdict = evaluateStructureQuality(structure, {
       brief: input.brief,
       userMessage: input.userMessage,
@@ -456,7 +597,9 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
     input.sdkQuery,
     structure,
   );
-  let plan = flattenScheduledPlan(scheduled);
+  let plan = flattenScheduledPlan(scheduled, {
+    collapseSingleSubphaseWorklist: flatExplicitWorklist,
+  });
   let schedulingVerdict = evaluateSchedulingQuality(structure, scheduled, plan, {
     brief: input.brief,
     userMessage: input.userMessage,
@@ -474,7 +617,9 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
       input.sdkQuery,
       structure,
     );
-    plan = flattenScheduledPlan(scheduled);
+    plan = flattenScheduledPlan(scheduled, {
+      collapseSingleSubphaseWorklist: flatExplicitWorklist,
+    });
     schedulingVerdict = evaluateSchedulingQuality(structure, scheduled, plan, {
       brief: input.brief,
       userMessage: input.userMessage,

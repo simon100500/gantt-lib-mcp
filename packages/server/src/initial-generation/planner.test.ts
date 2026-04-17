@@ -70,6 +70,64 @@ describe('initial-generation quality gate', () => {
     assert.ok(verdict.reasons.includes('placeholder_titles'));
   });
 
+  it('accepts a flat explicit worklist structure without forcing deep hierarchy', () => {
+    const userMessage = [
+      '1. Демонтаж кровли – 220 чел/час',
+      '2. Демонтаж окон – 16 чел/час',
+      '3. Демонтаж витражей – 38 чел/час',
+      '4. Демонтаж фундаментной плиты – 16 чел/час',
+    ].join('\n');
+    const normalizedRequest = normalizeInitialRequest(userMessage);
+    const interpretation = createInterpretation({
+      requestKind: 'explicit_worklist',
+      planningMode: 'worklist_bootstrap',
+      scopeMode: 'explicit_worklist',
+      projectArchetype: 'renovation',
+      worklistPolicy: 'strict_worklist',
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      interpretation,
+      classification,
+      clarificationDecision,
+    });
+    const brief = buildGenerationBrief({
+      userMessage,
+      normalizedRequest,
+      interpretation,
+      classification,
+      clarificationDecision,
+      domainSkeleton,
+    });
+
+    const verdict = evaluateStructureQuality({
+      projectType: 'renovation',
+      assumptions: [],
+      phases: [{
+        phaseKey: 'user-worklist',
+        title: 'Демонтажные работы',
+        subphases: [{
+          subphaseKey: 'user-work-items',
+          title: 'Демонтажные работы',
+          tasks: normalizedRequest.explicitWorkItems.map((item, index) => ({
+            taskKey: `task-${index + 1}`,
+            title: item.replace(/\s*–\s*\d.*$/u, '').trim(),
+          })),
+        }],
+      }],
+    }, {
+      brief,
+      userMessage,
+      normalizedRequest,
+      classification,
+      domainSkeleton,
+    });
+
+    assert.equal(verdict.accepted, true);
+  });
+
   it('keeps scheduling output from renaming or restructuring the locked hierarchy', () => {
     const structure = {
       projectType: 'private_residential_house',
@@ -240,6 +298,111 @@ describe('initial-generation json response parsing', () => {
 });
 
 describe('initial-generation planner', () => {
+  it('builds flat worklist structure with meaningful group and clean task titles', async () => {
+    const userMessage = [
+      '1. Демонтаж сэндвич панелей (кровля) – 110,04 м2- 220 чел/час',
+      '2. Демонтаж банера -2 шт – 4 чел/час',
+      '3. Демонтаж окон – 18,35 м2 – 16 чел/час',
+      '4. Демонтаж витражей- 47,81 м2 – 38 чел/час',
+    ].join('\n');
+    const normalizedRequest = normalizeInitialRequest(userMessage);
+    const interpretation = createInterpretation({
+      requestKind: 'explicit_worklist',
+      planningMode: 'worklist_bootstrap',
+      scopeMode: 'explicit_worklist',
+      projectArchetype: 'renovation',
+      worklistPolicy: 'strict_worklist',
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      interpretation,
+      classification,
+      clarificationDecision,
+    });
+
+    const calls: string[] = [];
+    const taskKeys = [
+      'demontazh-sendvich-paneley-krovlya',
+      'demontazh-banera',
+      'demontazh-okon',
+      'demontazh-vitrazhey',
+    ];
+    const result = await planInitialProject({
+      userMessage,
+      brief: buildGenerationBrief({
+        userMessage,
+        normalizedRequest,
+        interpretation,
+        classification,
+        clarificationDecision,
+        domainSkeleton,
+      }),
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+      domainSkeleton,
+      structureModelDecision: { selectedModel: 'gpt-strong' },
+      schedulingModelDecision: { selectedModel: 'gpt-cheap' },
+      sdkQuery: async ({ stage }) => {
+        calls.push(stage);
+        if (stage !== 'schedule_metadata' && stage !== 'schedule_metadata_repair') {
+          throw new Error(`unexpected stage ${stage}`);
+        }
+
+        return JSON.stringify({
+          projectType: 'renovation',
+          assumptions: ['Пользовательский список работ является основным источником состава графика'],
+          phases: [{
+            phaseKey: 'user-worklist',
+              title: 'Демонтажные работы',
+              subphases: [{
+                subphaseKey: 'user-work-items',
+              title: 'Демонтажные работы: кровля',
+              tasks: [
+                'Демонтаж сэндвич панелей (кровля)',
+                'Демонтаж банера',
+                'Демонтаж окон',
+                'Демонтаж витражей',
+              ].map((item, index) => ({
+                taskKey: taskKeys[index],
+                title: item,
+                durationDays: 1,
+                dependsOn: index === 0 ? [] : [{ taskKey: taskKeys[index - 1], type: 'FS', lagDays: 0 }],
+              })),
+            }],
+          }],
+        });
+      },
+    });
+
+    assert.equal(calls[0], 'schedule_metadata');
+    assert.equal(result.structure.phases.length, 1);
+    assert.equal(result.structure.phases[0]?.subphases.length, 1);
+    assert.equal(result.structure.phases[0]?.title, 'Демонтажные работы');
+    assert.equal(result.structure.phases[0]?.subphases[0]?.title, 'Демонтажные работы: кровля');
+    assert.deepEqual(
+      result.structure.phases[0]?.subphases[0]?.tasks.map((task) => task.title),
+      [
+        'Демонтаж сэндвич панелей (кровля)',
+        'Демонтаж банера',
+        'Демонтаж окон',
+        'Демонтаж витражей',
+      ],
+    );
+    assert.deepEqual(
+      result.plan.nodes.map((node) => ({ kind: node.kind, title: node.title, parentNodeKey: node.parentNodeKey })),
+      [
+        { kind: 'phase', title: 'Демонтажные работы', parentNodeKey: undefined },
+        { kind: 'task', title: 'Демонтаж сэндвич панелей (кровля)', parentNodeKey: 'user-worklist' },
+        { kind: 'task', title: 'Демонтаж банера', parentNodeKey: 'user-worklist' },
+        { kind: 'task', title: 'Демонтаж окон', parentNodeKey: 'user-worklist' },
+        { kind: 'task', title: 'Демонтаж витражей', parentNodeKey: 'user-worklist' },
+      ],
+    );
+  });
+
   it('adds a section-floor decomposition rule when counts are explicit in the request', () => {
     const userMessage = 'График каменной кладки внутренних и наружных стен: на 5 секциях, 3 этажа на каждой.';
     const normalizedRequest = normalizeInitialRequest(userMessage);
