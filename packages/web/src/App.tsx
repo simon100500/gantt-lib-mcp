@@ -7,6 +7,7 @@ import { CreateProjectModal } from './components/CreateProjectModal.tsx';
 import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
+import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
@@ -396,6 +397,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
@@ -1119,13 +1121,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     : auth.isAuthenticated
       ? auth.project?.name
       : (localTasks.projectName || 'Мой проект');
-  const handleExportPdf = useCallback(async () => {
-    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
-    if (proactiveExportDenial) {
-      await openLimitModal(proactiveExportDenial);
-      return;
-    }
-
+  const doExportPdf = useCallback(async () => {
     const projectName = currentProjectLabel?.trim() || 'Мой проект';
     const exportDate = new Date();
     await ganttRef.current?.exportToPdf({
@@ -1140,7 +1136,21 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         exportDate,
       },
     });
-  }, [billingStatus, currentProjectLabel, ganttRef, openLimitModal]);
+  }, [currentProjectLabel, ganttRef]);
+
+  const handleExportPdf = useCallback(async () => {
+    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
+    if (proactiveExportDenial) {
+      await openLimitModal(proactiveExportDenial);
+      return;
+    }
+
+    if (isPdfHelperDismissed()) {
+      await doExportPdf();
+    } else {
+      setShowPdfHelper(true);
+    }
+  }, [billingStatus, doExportPdf, openLimitModal]);
 
   const workspaceShell = workspace.kind === 'shared'
     ? (
@@ -1302,6 +1312,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           setPendingPostAuthAction(null);
           setShowCreateProjectModal(false);
         }}
+      />
+    )}
+
+    {showPdfHelper && (
+      <PdfHelperModal
+        onContinue={() => {
+          setShowPdfHelper(false);
+          void doExportPdf();
+        }}
+        onClose={() => setShowPdfHelper(false)}
       />
     )}
     </>
