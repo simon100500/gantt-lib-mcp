@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ArrowUp, GanttChart } from 'lucide-react';
+import { ArrowUp, GanttChart, LoaderCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface StartScreenSendResult {
@@ -41,6 +41,7 @@ const CHIPS: Array<{ label: string; prompt: string; icon?: React.ComponentType<{
 export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLoginRequired }: StartScreenProps) {
   const [inputValue, setInputValue] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
@@ -54,28 +55,49 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
     const text = inputValue.trim();
-    if (!text) return;
+    if (!text || isSubmitting) return;
     if (!isAuthenticated) {
       onLoginRequired?.();
       return;
     }
     setSubmitError(null);
-    const result = await onSend(text);
-    if (!result.accepted) {
-      setSubmitError(result.message ?? 'Не удалось отправить запрос.');
-      return;
-    }
-    setInputValue('');
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.overflowY = 'hidden';
+    setIsSubmitting(true);
+    try {
+      const result = await onSend(text);
+      if (!result.accepted) {
+        setSubmitError(result.message ?? 'Не удалось отправить запрос.');
+        return;
+      }
+      setInputValue('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.overflowY = 'hidden';
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   function handleChipClick(prompt: string) {
+    if (isSubmitting) {
+      return;
+    }
     setSubmitError(null);
     setInputValue(prompt);
     textareaRef.current?.focus();
+  }
+
+  async function handleEmptyChartClick() {
+    if (isSubmitting) {
+      return;
+    }
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      await onEmptyChart();
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -103,16 +125,18 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
               placeholder="Опишите ваш проект или выберите пример ниже"
               autoComplete="off"
               spellCheck={false}
+              disabled={isSubmitting}
               style={{ maxHeight: '12rem', overflowY: 'hidden' }}
               className={cn(
                 'w-full px-4 py-3 pr-12 text-base leading-6 bg-white resize-none',
                 'border border-slate-200 rounded-xl shadow-md',
                 'focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent focus-visible:outline-none',
+                'disabled:cursor-wait disabled:bg-slate-50 disabled:text-slate-500',
               )}
             />
             <button
               type="submit"
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isSubmitting}
               aria-label="Отправить"
               className={cn(
                 'absolute bottom-4 right-2.5 h-8 w-8 rounded-lg',
@@ -123,9 +147,18 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
                 'disabled:opacity-40 disabled:cursor-not-allowed',
               )}
             >
-              <ArrowUp className="w-4 h-4" />
+              {isSubmitting ? (
+                <LoaderCircle className="w-4 h-4 animate-spin" />
+              ) : (
+                <ArrowUp className="w-4 h-4" />
+              )}
             </button>
           </div>
+          {isSubmitting && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600" role="status" aria-live="polite">
+              Создаём проект и открываем чат...
+            </div>
+          )}
           {submitError && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
               {submitError}
@@ -138,12 +171,14 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
               <button
                 key={chip.label}
                 type="button"
-                onClick={index === CHIPS.length - 1 ? onEmptyChart : () => handleChipClick(chip.prompt)}
+                onClick={index === CHIPS.length - 1 ? () => { void handleEmptyChartClick(); } : () => handleChipClick(chip.prompt)}
+                disabled={isSubmitting}
                 className={cn(
                   'text-sm px-3 py-1.5 rounded-full border border-slate-200 text-slate-600',
                   'flex items-center gap-1.5',
                   'transition-colors hover:border-primary hover:text-primary',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                  'disabled:cursor-wait disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600',
                 )}
               >
                 {chip.icon && <chip.icon className="w-3.5 h-3.5" />}
