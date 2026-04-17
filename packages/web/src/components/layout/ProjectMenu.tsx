@@ -80,6 +80,7 @@ export function ProjectMenu({
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
   const isReadOnlyContext = hasShareToken || isArchivedProject;
   const shouldShowUpgradeButton = subscription?.plan === 'free';
+  const canUseSidebar = auth.isAuthenticated && !hasShareToken;
 
   const billingFooter = auth.isAuthenticated ? (
     <div className="border-t border-slate-200 px-3 py-3">
@@ -334,7 +335,7 @@ export function ProjectMenu({
       )}
 
       {/* Mobile sidebar overlay backdrop */}
-      {!hasShareToken && sidebarVisible && (
+      {canUseSidebar && sidebarVisible && (
         <div
           className="fixed inset-0 z-40 bg-black/20 sm:hidden"
           onClick={() => setSidebarState('closed')}
@@ -342,7 +343,7 @@ export function ProjectMenu({
       )}
 
       {/* Push sidebar (click mode) */}
-      {!hasShareToken && (
+      {canUseSidebar && (
         <aside
           className={cn(
             'flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white',
@@ -372,28 +373,26 @@ export function ProjectMenu({
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex min-h-[56px] items-center gap-2 overflow-hidden border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-2">
           {/* Toggle button: hover = overlay, click = push sidebar */}
-          <button
-            type="button"
-            onClick={handleToggleClick}
-            onMouseEnter={handleToggleMouseEnter}
-            onMouseLeave={handleToggleMouseLeave}
-            aria-pressed={sidebarState !== 'closed'}
-            aria-label={hasShareToken ? 'Режим только чтения' : sidebarState !== 'closed' ? 'Скрыть проекты' : 'Показать проекты'}
-            disabled={hasShareToken}
-            className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-              hasShareToken
-                ? 'cursor-default bg-slate-50 text-slate-300'
-                : sidebarState !== 'closed'
+          {canUseSidebar && (
+            <button
+              type="button"
+              onClick={handleToggleClick}
+              onMouseEnter={handleToggleMouseEnter}
+              onMouseLeave={handleToggleMouseLeave}
+              aria-pressed={sidebarState !== 'closed'}
+              aria-label={sidebarState !== 'closed' ? 'Скрыть проекты' : 'Показать проекты'}
+              className={cn(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                sidebarState !== 'closed'
                   ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
                   : 'text-slate-500 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700',
-              // Hide on desktop only in sidebar mode (push), not overlay
-              hideToggleOnDesktop && 'sm:hidden',
-            )}
-            title={hasShareToken ? 'Только чтение' : sidebarState !== 'closed' ? 'Скрыть проекты' : 'Показать проекты'}
-          >
-            {sidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
-          </button>
+                hideToggleOnDesktop && 'sm:hidden',
+              )}
+              title={sidebarState !== 'closed' ? 'Скрыть проекты' : 'Показать проекты'}
+            >
+              {sidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
+            </button>
+          )}
 
           {showHeaderLogo && (
             <button
@@ -402,7 +401,7 @@ export function ProjectMenu({
               className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight"
             >
               <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-              <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
+              <span className="text-[15px] font-semibold text-slate-900">ГетГант</span>
               {showProjectContext && (
                 <>
                   <span className="text-slate-300 hidden sm:inline">/</span>
@@ -578,7 +577,7 @@ export function ProjectMenu({
         </header>
 
         {/* Overlay panel (hover mode) — only rendered when overlay or closed, hidden by transform */}
-        {!hasShareToken && !sidebarVisible && (
+        {canUseSidebar && !sidebarVisible && (
           <div
             className={cn(
               'absolute top-[56px] bottom-0 left-0 z-50 w-60 flex flex-col bg-white border-r border-slate-200 shadow-lg transition-transform duration-200 ease-in-out',

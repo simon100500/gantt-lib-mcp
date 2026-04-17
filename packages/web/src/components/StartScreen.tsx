@@ -191,7 +191,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
 
       {!isAuthenticated && (
         <div className="mt-auto flex w-full max-w-[640px] flex-wrap justify-center gap-x-4 gap-y-1 px-6 pt-6 pb-6 text-sm text-slate-400">
-          <a href="https://getgantt.ru/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">О продукте</a>
+          <a href="https://getgantt.ru/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Возможности</a>
           <a href="https://ai.getgantt.ru/purchase" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Тарифы</a>
           <a href="https://getgantt.ru/privacy/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Политика конфиденциальности</a>
           <a href="https://getgantt.ru/terms/" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Условия</a>
