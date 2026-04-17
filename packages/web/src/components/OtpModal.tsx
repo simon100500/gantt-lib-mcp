@@ -218,7 +218,7 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                       setError(null);
                     }
                   }}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="mt-0.5 h-8 w-8 rounded border-slate-300 text-primary focus:ring-primary"
                 />
                 <span>
                   Я принимаю{' '}
