@@ -42,8 +42,17 @@ export type WorkspaceMode =
     activation: 'idle' | 'creating' | 'switching' | 'ready';
   };
 
+export type PendingPostAuthAction =
+  | {
+    kind: 'send_prompt';
+    prompt: string;
+    sourceProjectState: 'empty' | 'non_empty';
+  }
+  | null;
+
 interface UIState {
   workspace: WorkspaceMode;
+  pendingPostAuthAction: PendingPostAuthAction;
   showOtpModal: boolean;
   showEditProjectModal: boolean;
   showBillingPage: boolean;
@@ -70,6 +79,7 @@ interface UIState {
   searchIndex: number;
   tempHighlightedTaskId: string | null;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
+  setPendingPostAuthAction: (action: PendingPostAuthAction) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
   setShowBillingPage: (visible: boolean) => void;
@@ -103,6 +113,7 @@ const initialWorkspace: WorkspaceMode = { kind: 'guest' };
 
 export const useUIStore = create<UIState>()((set, get) => ({
   workspace: initialWorkspace,
+  pendingPostAuthAction: null,
   showOtpModal: false,
   showEditProjectModal: false,
   showBillingPage: false,
@@ -131,6 +142,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
       workspace: typeof workspace === 'function' ? workspace(state.workspace) : workspace,
     }));
   },
+  setPendingPostAuthAction: (pendingPostAuthAction) => set({ pendingPostAuthAction }),
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
   setShowBillingPage: (showBillingPage) => set({ showBillingPage }),
