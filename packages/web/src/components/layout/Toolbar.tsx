@@ -5,6 +5,7 @@ import {
   ChevronsUpDown,
   Ellipsis,
   FileDown,
+  FileSpreadsheet,
   FlagTriangleRight,
   Funnel,
   Link,
@@ -34,6 +35,7 @@ interface ToolbarProps {
   onCollapseAll: () => void;
   onExpandAll: () => void;
   onExportPdf?: () => void;
+  onExportExcel?: () => void;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
@@ -54,6 +56,7 @@ export function Toolbar({
   onCollapseAll,
   onExpandAll,
   onExportPdf,
+  onExportExcel,
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
@@ -223,6 +226,19 @@ export function Toolbar({
         </Button>
       )}
 
+      {onExportExcel && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onExportExcel}
+          className={cn(actionButtonClassName, 'hidden sm:flex')}
+          title="Экспортировать задачи в Excel"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          <span className="hidden md:inline text-xs">Excel</span>
+        </Button>
+      )}
+
       {showShareButton && onCreateShareLink && (
         <Button
           size="sm"
@@ -385,6 +401,15 @@ export function Toolbar({
               <span className="text-sm">PDF / Печать</span>
             </DropdownMenuItem>
           )}
+          {onExportExcel && (
+            <DropdownMenuItem
+              onClick={onExportExcel}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="text-sm">Excel</span>
+            </DropdownMenuItem>
+          )}
           {showShareButton && onCreateShareLink && (
             <DropdownMenuItem
               onClick={() => void onCreateShareLink()}
@@ -532,6 +557,15 @@ export function Toolbar({
             >
               <FileDown className="h-4 w-4" />
               <span className="text-sm">PDF / Печать</span>
+            </DropdownMenuItem>
+          )}
+          {onExportExcel && (
+            <DropdownMenuItem
+              onClick={onExportExcel}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="text-sm">Excel</span>
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

@@ -8,6 +8,8 @@ import { EditProjectModal } from './components/EditProjectModal.tsx';
 import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
+import { ExcelExportModal } from './components/ExcelExportModal.tsx';
+import { exportToExcel, type ExcelDetailLevel } from './lib/exportToExcel.ts';
 import { PurchasePage } from './components/PurchasePage.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
@@ -448,6 +450,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
+  const [showExcelExport, setShowExcelExport] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const refreshProjects = auth.refreshProjects;
@@ -1275,6 +1278,19 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
   }, [billingStatus, doExportPdf, openLimitModal]);
 
+  const handleExportExcel = useCallback(() => {
+    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
+    if (proactiveExportDenial) {
+      void openLimitModal(proactiveExportDenial);
+      return;
+    }
+    setShowExcelExport(true);
+  }, [billingStatus, openLimitModal]);
+
+  const doExportExcel = useCallback((exportTasks: Task[], projectName: string, detailLevel: ExcelDetailLevel) => {
+    exportToExcel({ tasks: exportTasks, projectName, detailLevel });
+  }, []);
+
   const workspaceShell = workspace.kind === 'shared'
     ? (
       <SharedWorkspace
@@ -1328,6 +1344,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
+            onExportExcel={handleExportExcel}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
@@ -1359,6 +1376,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
+            onExportExcel={handleExportExcel}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
@@ -1446,6 +1464,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           void doExportPdf();
         }}
         onClose={() => setShowPdfHelper(false)}
+      />
+    )}
+
+    {showExcelExport && (
+      <ExcelExportModal
+        tasks={visibleTasks}
+        projectName={currentProjectLabel ?? 'Мой проект'}
+        onExport={doExportExcel}
+        onClose={() => setShowExcelExport(false)}
       />
     )}
     </>
