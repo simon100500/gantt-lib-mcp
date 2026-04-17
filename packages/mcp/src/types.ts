@@ -612,6 +612,34 @@ export type Patch = {
 /** Actor type for event attribution */
 export type ActorType = 'user' | 'agent' | 'system' | 'import';
 
+export type MutationGroupOrigin = 'user_ui' | 'agent_run' | 'system' | 'undo' | 'redo';
+export type MutationGroupStatus = 'applied' | 'undone';
+export type HistoryGroupContext = {
+  groupId: string;
+  origin: MutationGroupOrigin;
+  title: string;
+  requestContextId?: string;
+  finalizeGroup: boolean;
+  redoOfGroupId?: string | null;
+  targetGroupId?: string | null;
+};
+export type ProjectEventInverseCommand = ProjectCommand | null;
+export type MutationGroupRecord = {
+  id: string;
+  projectId: string;
+  baseVersion: number;
+  newVersion: number | null;
+  actorType: ActorType;
+  actorId?: string;
+  origin: MutationGroupOrigin;
+  title: string;
+  status: MutationGroupStatus;
+  undoable: boolean;
+  undoneByGroupId?: string | null;
+  redoOfGroupId?: string | null;
+  createdAt: string;
+};
+
 /** Full execution result from scheduling core. Per D-08. */
 export type ScheduleExecutionResult = {
   snapshot: ProjectSnapshot;
@@ -627,6 +655,7 @@ export type CommitProjectCommandRequest = {
   clientRequestId: string;
   baseVersion: number;
   command: ProjectCommand;
+  history?: HistoryGroupContext;
 };
 
 /** Response from command commit — accepted or rejected. Per D-07. */
@@ -667,6 +696,11 @@ export type ProjectEventRecord = {
     conflicts: Conflict[];
   };
   patches: Patch[];
+  groupId?: string;
+  ordinal?: number;
+  inverseCommand?: ProjectEventInverseCommand;
+  metadata?: JsonValue;
+  requestContextId?: string;
   executionTimeMs: number;
   createdAt: string;
 };

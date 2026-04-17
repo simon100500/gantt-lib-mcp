@@ -77,6 +77,19 @@ enum ActorType {
   import_actor
 }
 
+enum MutationGroupOrigin {
+  user_ui
+  agent_run
+  system
+  undo
+  redo
+}
+
+enum MutationGroupStatus {
+  applied
+  undone
+}
+
 enum BillingState {
   free
   trial_active
@@ -131,12 +144,36 @@ model Project {
   messages      Message[]
   shareLinks    ShareLink[]
   projectEvents ProjectEvent[]
+  mutationGroups MutationGroup[]
   agentDebugLogs AgentDebugLog[]
 
   @@map("projects")
   @@index([userId])
   @@index([userId, status])
   @@index([calendarId])
+}
+
+model MutationGroup {
+  id              String              @id @default(uuid())
+  projectId       String              @map("project_id")
+  baseVersion     Int                 @map("base_version")
+  newVersion      Int?                @map("new_version")
+  actorType       ActorType           @map("actor_type")
+  actorId         String?             @map("actor_id")
+  origin          MutationGroupOrigin
+  title           String
+  status          MutationGroupStatus @default(applied)
+  undoable        Boolean             @default(false)
+  undoneByGroupId String?             @map("undone_by_group_id")
+  redoOfGroupId   String?             @map("redo_of_group_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events  ProjectEvent[]
+
+  @@map("mutation_groups")
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([projectId, newVersion(sort: Desc)])
 }
 
 model WorkCalendar {
@@ -362,23 +399,31 @@ model Payment {
 model ProjectEvent {
   id              String    @id @default(uuid())
   projectId       String    @map("project_id")
+  groupId         String?   @map("group_id")
   baseVersion     Int       @map("base_version")
   version         Int
+  ordinal         Int?
   applied         Boolean   @default(true)
   actorType       ActorType @map("actor_type")
   actorId         String?   @map("actor_id")
   coreVersion     String    @map("core_version")
   command         Json
+  inverseCommand  Json?     @map("inverse_command")
   result          Json
   patches         Json
+  metadata        Json?
+  requestContextId String?  @map("request_context_id")
   executionTimeMs Int       @map("execution_time_ms")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mutationGroup MutationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@map("project_events")
   @@index([projectId])
   @@index([projectId, version])
+  @@index([groupId, ordinal])
+  @@index([requestContextId])
 }
 
 model AgentDebugLog {
