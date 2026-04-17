@@ -66,6 +66,7 @@ interface UIState {
   validationErrors: DependencyError[];
   shareStatus: ShareStatus;
   savingState: SavingState;
+  showHistoryPanel: boolean;
   // Filter state
   filterWithoutDeps: boolean;
   filterExpired: boolean;
@@ -93,6 +94,7 @@ interface UIState {
   setValidationErrors: (errors: DependencyError[]) => void;
   setShareStatus: (status: ShareStatus) => void;
   setSavingState: (status: SavingState) => void;
+  setShowHistoryPanel: (visible: boolean) => void;
   // Filter actions
   setFilterWithoutDeps: (value: boolean) => void;
   setFilterExpired: (value: boolean) => void;
@@ -127,6 +129,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   validationErrors: [],
   shareStatus: 'idle',
   savingState: 'idle',
+  showHistoryPanel: false,
   filterWithoutDeps: false,
   filterExpired: false,
   filterSearchText: '',
@@ -159,6 +162,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setValidationErrors: (validationErrors) => set({ validationErrors }),
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setSavingState: (savingState) => set({ savingState }),
+  setShowHistoryPanel: (showHistoryPanel) => set({ showHistoryPanel }),
   setFilterWithoutDeps: (filterWithoutDeps) => set({ filterWithoutDeps }),
   setFilterExpired: (filterExpired) => set({ filterExpired }),
   setFilterSearchText: (filterSearchText) => set({ filterSearchText }),

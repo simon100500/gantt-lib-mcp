@@ -16,3 +16,29 @@ export interface ProjectLoadResponse {
     dependencies: ProjectDependency[];
   };
 }
+
+export interface HistoryItem {
+  id: string;
+  actorType: 'user' | 'agent' | 'system';
+  title: string;
+  status: 'applied' | 'undone';
+  baseVersion: number;
+  newVersion: number | null;
+  commandCount: number;
+  createdAt: string;
+  undoable: boolean;
+  redoable: boolean;
+}
+
+export interface HistoryListResponse {
+  items: HistoryItem[];
+  nextCursor?: string;
+}
+
+export interface HistoryMutationResponse {
+  groupId: string;
+  version: number;
+  snapshot: ProjectLoadResponse['snapshot'];
+  historyTitle: string;
+  status: 'applied' | 'undone';
+}
