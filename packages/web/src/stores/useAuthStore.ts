@@ -763,7 +763,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     let nextProjects = get().projects.filter((project) => project.id !== projectId);
 
     try {
-      nextProjects = await fetchProjects(accessToken);
+      const refreshedProjects = await fetchProjects(accessToken);
+      // Keep the client state consistent even if the follow-up list request lags behind the delete mutation.
+      nextProjects = refreshedProjects.filter((project) => project.id !== projectId);
     } catch (error) {
       console.error('Failed to refresh projects after delete:', error);
     }
