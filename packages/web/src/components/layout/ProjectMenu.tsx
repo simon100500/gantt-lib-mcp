@@ -301,7 +301,9 @@ export function ProjectMenu({
   };
 
   const handleSwitchInSidebar = async (id: string) => {
-    setSidebarState('closed');
+    if (window.innerWidth < 640) {
+      setSidebarState('closed');
+    }
     await onSwitchProject(id);
   };
 
