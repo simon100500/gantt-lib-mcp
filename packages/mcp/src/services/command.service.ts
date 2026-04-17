@@ -36,6 +36,9 @@ import type {
   Task,
   TaskDependency,
   DependencyType,
+  HistoryGroupContext,
+  JsonValue,
+  ProjectEventInverseCommand,
 } from '../types.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
@@ -389,6 +392,115 @@ async function bulkDeleteTasks(prismaClient: any, taskIds: string[]): Promise<vo
   });
 }
 
+type PersistedDependencyRow = ProjectSnapshot['dependencies'][number];
+type CommandExecutionResult = {
+  changedTasks: CoreTask[];
+  changedDependencyIds: string[];
+  conflicts: Conflict[];
+  dependencyChanges: Array<{
+    action: 'create' | 'delete' | 'update';
+    taskId: string;
+    depTaskId: string;
+    type?: DependencyType;
+    lag?: number;
+    id?: string;
+  }>;
+  taskChanges: Array<{
+    action: 'create' | 'delete' | 'update_parent' | 'update_sort';
+    taskId?: string;
+    task?: Task;
+    newParentId?: string | null;
+    sortOrder?: number;
+  }>;
+};
+type DeleteHistoryMetadata = {
+  deletedTasks: Task[];
+  deletedDependencies: PersistedDependencyRow[];
+};
+
+function toDbActorType(actorType: ActorType): 'user' | 'agent' | 'system' | 'import_actor' {
+  return actorType === 'import' ? 'import_actor' : actorType;
+}
+
+function buildHistoryContext(
+  request: CommitProjectCommandRequest,
+): HistoryGroupContext {
+  if (request.history) {
+    return request.history;
+  }
+
+  return {
+    groupId: randomUUID(),
+    origin: 'system',
+    title: request.command.type,
+    finalizeGroup: true,
+  };
+}
+
+function dependencyKey(taskId: string, depTaskId: string): string {
+  return `${taskId}::${depTaskId}`;
+}
+
+function cloneDependencies(dependencies: TaskDependency[] | undefined): TaskDependency[] | undefined {
+  return dependencies?.map((dependency) => ({ ...dependency }));
+}
+
+function buildDeleteHistoryMetadata(
+  deletedIds: string[],
+  beforeTasks: Task[],
+  beforeDependencyRows: PersistedDependencyRow[],
+): DeleteHistoryMetadata {
+  const deletedIdSet = new Set(deletedIds);
+  return {
+    deletedTasks: beforeTasks
+      .filter((task) => deletedIdSet.has(task.id))
+      .map((task) => ({
+        ...task,
+        dependencies: cloneDependencies(task.dependencies),
+      })),
+    deletedDependencies: beforeDependencyRows
+      .filter((dependency) => deletedIdSet.has(dependency.taskId) || deletedIdSet.has(dependency.depTaskId))
+      .map((dependency) => ({ ...dependency })),
+  };
+}
+
+function buildDeleteInverseCommand(
+  deletedIds: string[],
+  beforeTasks: Task[],
+): ProjectEventInverseCommand {
+  const deletedTasks = deletedIds
+    .map((taskId) => beforeTasks.find((task) => task.id === taskId))
+    .filter((task): task is Task => Boolean(task))
+    .map((task) => ({
+      id: task.id,
+      name: task.name,
+      startDate: task.startDate,
+      endDate: task.endDate,
+      type: task.type,
+      color: task.color,
+      parentId: task.parentId,
+      progress: task.progress,
+      dependencies: cloneDependencies(task.dependencies),
+      sortOrder: task.sortOrder,
+    }));
+
+  if (deletedTasks.length === 0) {
+    return null;
+  }
+
+  if (deletedTasks.length === 1) {
+    return {
+      type: 'create_task',
+      task: deletedTasks[0],
+    };
+  }
+
+  return {
+    type: 'create_tasks_batch',
+    tasks: deletedTasks,
+  };
+}
+
 export class CommandService {
   private _prisma: ReturnType<typeof getPrisma> | undefined;
 
@@ -397,6 +509,292 @@ export class CommandService {
       this._prisma = getPrisma();
     }
     return this._prisma;
+  }
+
+  private async getScheduleOptions(projectId: string, prismaClient: any): Promise<CoreOptions> {
+    return getScheduleOptions(projectId, prismaClient);
+  }
+
+  private async ensureMutationGroup(
+    tx: any,
+    projectId: string,
+    baseVersion: number,
+    history: HistoryGroupContext,
+    actorType: ActorType,
+    actorId?: string,
+  ): Promise<void> {
+    const existingGroup = await tx.mutationGroup.findUnique({
+      where: { id: history.groupId },
+      select: { id: true, projectId: true },
+    });
+
+    if (existingGroup) {
+      if (existingGroup.projectId !== projectId) {
+        throw new Error(`Mutation group ${history.groupId} belongs to a different project`);
+      }
+      return;
+    }
+
+    await tx.mutationGroup.create({
+      data: {
+        id: history.groupId,
+        projectId,
+        baseVersion,
+        newVersion: null,
+        actorType: toDbActorType(actorType),
+        actorId: actorId ?? null,
+        origin: history.origin,
+        title: history.title,
+        status: 'applied',
+        undoable: false,
+        redoOfGroupId: history.redoOfGroupId ?? null,
+        undoneByGroupId: null,
+      },
+    });
+  }
+
+  private async allocateGroupOrdinal(
+    tx: any,
+    groupId: string,
+  ): Promise<number> {
+    const aggregate = await tx.projectEvent.aggregate({
+      where: { groupId },
+      _max: { ordinal: true },
+    });
+
+    return (aggregate._max.ordinal ?? 0) + 1;
+  }
+
+  private async finalizeMutationGroup(
+    tx: any,
+    groupId: string,
+    newVersion: number,
+  ): Promise<void> {
+    const groupEvents = await tx.projectEvent.findMany({
+      where: { groupId, applied: true },
+      select: { inverseCommand: true },
+    });
+    const undoable = groupEvents.length > 0 && groupEvents.every((event: { inverseCommand: JsonValue | null }) => event.inverseCommand !== null);
+
+    await tx.mutationGroup.update({
+      where: { id: groupId },
+      data: {
+        newVersion,
+        status: 'applied',
+        undoable,
+      },
+    });
+  }
+
+  private buildInverseCommand(
+    command: ProjectCommand,
+    beforeTasks: Task[],
+    beforeDependencyRows: PersistedDependencyRow[],
+    executeResult: CommandExecutionResult,
+    opts: CoreOptions,
+  ): ProjectEventInverseCommand {
+    const beforeTaskById = new Map(beforeTasks.map((task) => [task.id, task]));
+    const beforeDependencyByKey = new Map(
+      beforeDependencyRows.map((dependency) => [dependencyKey(dependency.taskId, dependency.depTaskId), dependency]),
+    );
+
+    switch (command.type) {
+      case 'move_task': {
+        const task = beforeTaskById.get(command.taskId);
+        return task ? { type: 'move_task', taskId: command.taskId, startDate: task.startDate } : null;
+      }
+
+      case 'resize_task': {
+        const task = beforeTaskById.get(command.taskId);
+        if (!task) {
+          return null;
+        }
+
+        return {
+          type: 'resize_task',
+          taskId: command.taskId,
+          anchor: command.anchor,
+          date: command.anchor === 'start' ? task.startDate : task.endDate,
+        };
+      }
+
+      case 'set_task_start': {
+        const task = beforeTaskById.get(command.taskId);
+        return task ? { type: 'set_task_start', taskId: command.taskId, startDate: task.startDate } : null;
+      }
+
+      case 'set_task_end': {
+        const task = beforeTaskById.get(command.taskId);
+        return task ? { type: 'set_task_end', taskId: command.taskId, endDate: task.endDate } : null;
+      }
+
+      case 'change_duration': {
+        const task = beforeTaskById.get(command.taskId);
+        if (!task) {
+          return null;
+        }
+
+        return {
+          type: 'change_duration',
+          taskId: command.taskId,
+          duration: getTaskDuration(
+            task.startDate,
+            task.endDate,
+            opts.businessDays ?? false,
+            opts.weekendPredicate,
+          ),
+          anchor: command.anchor ?? 'end',
+        };
+      }
+
+      case 'update_task_fields': {
+        const task = beforeTaskById.get(command.taskId);
+        if (!task) {
+          return null;
+        }
+
+        return {
+          type: 'update_task_fields',
+          taskId: command.taskId,
+          fields: {
+            ...('name' in command.fields ? { name: task.name } : {}),
+            ...('type' in command.fields ? { type: task.type ?? 'task' } : {}),
+            ...('color' in command.fields ? { color: task.color ?? null } : {}),
+            ...('parentId' in command.fields ? { parentId: task.parentId ?? null } : {}),
+            ...('progress' in command.fields ? { progress: task.progress ?? 0 } : {}),
+            ...('dependencies' in command.fields ? { dependencies: cloneDependencies(task.dependencies) ?? [] } : {}),
+          },
+        };
+      }
+
+      case 'update_tasks_fields_batch': {
+        const updates = command.updates.map((update) => {
+          const task = beforeTaskById.get(update.taskId);
+          if (!task) {
+            return null;
+          }
+
+          return {
+            taskId: update.taskId,
+            fields: {
+              ...('name' in update.fields ? { name: task.name } : {}),
+              ...('type' in update.fields ? { type: task.type ?? 'task' } : {}),
+              ...('color' in update.fields ? { color: task.color ?? null } : {}),
+              ...('parentId' in update.fields ? { parentId: task.parentId ?? null } : {}),
+              ...('progress' in update.fields ? { progress: task.progress ?? 0 } : {}),
+              ...('dependencies' in update.fields ? { dependencies: cloneDependencies(task.dependencies) ?? [] } : {}),
+            },
+          };
+        });
+
+        if (updates.some((update) => update === null)) {
+          return null;
+        }
+
+        return {
+          type: 'update_tasks_fields_batch',
+          updates: updates as Array<{
+            taskId: string;
+            fields: {
+              name?: string;
+              type?: Task['type'];
+              color?: string | null;
+              parentId?: string | null;
+              progress?: number;
+              dependencies?: TaskDependency[];
+            };
+          }>,
+        };
+      }
+
+      case 'create_task': {
+        const createdTask = executeResult.taskChanges.find((taskChange) => taskChange.action === 'create')?.task;
+        return createdTask ? { type: 'delete_task', taskId: createdTask.id } : null;
+      }
+
+      case 'create_tasks_batch': {
+        const createdTaskIds = executeResult.taskChanges
+          .filter((taskChange) => taskChange.action === 'create' && taskChange.task)
+          .map((taskChange) => taskChange.task!.id);
+
+        return createdTaskIds.length > 0 ? { type: 'delete_tasks', taskIds: createdTaskIds } : null;
+      }
+
+      case 'delete_task':
+        return buildDeleteInverseCommand([command.taskId], beforeTasks);
+
+      case 'delete_tasks':
+        return buildDeleteInverseCommand(command.taskIds, beforeTasks);
+
+      case 'create_dependency':
+        return { type: 'remove_dependency', taskId: command.taskId, depTaskId: command.dependency.taskId };
+
+      case 'remove_dependency': {
+        const dependency = beforeDependencyByKey.get(dependencyKey(command.taskId, command.depTaskId));
+        return dependency
+          ? {
+              type: 'create_dependency',
+              taskId: command.taskId,
+              dependency: {
+                taskId: dependency.depTaskId,
+                type: dependency.type,
+                lag: dependency.lag,
+              },
+            }
+          : null;
+      }
+
+      case 'change_dependency_lag': {
+        const dependency = beforeDependencyByKey.get(dependencyKey(command.taskId, command.depTaskId));
+        return dependency
+          ? {
+              type: 'change_dependency_lag',
+              taskId: command.taskId,
+              depTaskId: command.depTaskId,
+              lag: dependency.lag,
+            }
+          : null;
+      }
+
+      case 'reparent_task': {
+        const task = beforeTaskById.get(command.taskId);
+        return task ? { type: 'reparent_task', taskId: command.taskId, newParentId: task.parentId ?? null } : null;
+      }
+
+      case 'reorder_tasks': {
+        const updates = command.updates.map((update) => {
+          const task = beforeTaskById.get(update.taskId);
+          return task ? { taskId: update.taskId, sortOrder: task.sortOrder ?? 0 } : null;
+        });
+
+        if (updates.some((update) => update === null)) {
+          return null;
+        }
+
+        return {
+          type: 'reorder_tasks',
+          updates: updates as Array<{ taskId: string; sortOrder: number }>,
+        };
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  private buildEventMetadata(
+    command: ProjectCommand,
+    beforeTasks: Task[],
+    beforeDependencyRows: PersistedDependencyRow[],
+  ): JsonValue | undefined {
+    switch (command.type) {
+      case 'delete_task':
+        return buildDeleteHistoryMetadata([command.taskId], beforeTasks, beforeDependencyRows) as unknown as JsonValue;
+      case 'delete_tasks':
+        return buildDeleteHistoryMetadata(command.taskIds, beforeTasks, beforeDependencyRows) as unknown as JsonValue;
+      default:
+        return undefined;
+    }
   }
 
   /**
@@ -417,6 +815,7 @@ export class CommandService {
   ): Promise<CommitProjectCommandResponse> {
     const startTime = Date.now();
     const { projectId, clientRequestId, baseVersion, command } = request;
+    const history = buildHistoryContext(request);
 
     try {
       const result = await this.prisma.$transaction(async (tx: any) => {
@@ -449,12 +848,24 @@ export class CommandService {
 
         // Step 3: Load current snapshot
         const beforeTasks = await loadTaskSnapshot(projectId, tx);
+        const beforeDependencyRows = await loadDependencyRows(projectId, tx);
         const coreSnapshot = normalizeSnapshot(beforeTasks);
-          const opts: CoreOptions = await getScheduleOptions(projectId, tx);
+        const opts: CoreOptions = await this.getScheduleOptions(projectId, tx);
+
+        await this.ensureMutationGroup(tx, projectId, baseVersion, history, actorType, actorId);
+        const ordinal = await this.allocateGroupOrdinal(tx, history.groupId);
 
         // Step 4: Execute command through gantt-lib
         const newVersion = baseVersion + 1;
         const executeResult = await this.executeCommand(command, coreSnapshot, opts, projectId, tx);
+        const inverseCommand = this.buildInverseCommand(
+          command,
+          beforeTasks,
+          beforeDependencyRows,
+          executeResult,
+          opts,
+        );
+        const eventMetadata = this.buildEventMetadata(command, beforeTasks, beforeDependencyRows);
 
         // Step 5: Persist dependency changes if any
         for (const depChange of executeResult.dependencyChanges) {
@@ -708,22 +1119,31 @@ export class CommandService {
           data: {
             id: randomUUID(),
             projectId,
+            groupId: history.groupId,
             baseVersion,
             version: newVersion,
+            ordinal,
             applied: true,
-            actorType: actorType === 'import' ? 'import_actor' : actorType,
+            actorType: toDbActorType(actorType),
             actorId: actorId ?? null,
             coreVersion: CORE_VERSION,
             command: command as any,
+            inverseCommand: inverseCommand === null ? Prisma.DbNull : inverseCommand as any,
             result: {
               changedTaskIds: executeResult.changedTasks.map(t => t.id),
               changedDependencyIds: executeResult.changedDependencyIds,
               conflicts: executeResult.conflicts,
             },
             patches: patches as any,
+            metadata: eventMetadata ?? Prisma.DbNull,
+            requestContextId: history.requestContextId ?? null,
             executionTimeMs,
           },
         });
+
+        if (history.finalizeGroup) {
+          await this.finalizeMutationGroup(tx, history.groupId, newVersion);
+        }
 
         // Step 12: Build final snapshot
         const snapshot = await buildProjectSnapshot(projectId, tx);
