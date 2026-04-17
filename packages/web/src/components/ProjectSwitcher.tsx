@@ -68,7 +68,7 @@ function ProjectRow({
         type="button"
         onClick={() => onSwitch(project.id)}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-1.5',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
           isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
         )}
       >
