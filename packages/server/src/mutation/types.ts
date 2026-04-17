@@ -104,6 +104,10 @@ export type MutationExecutionResult = {
   changedTaskIds: string[];
   verificationVerdict: 'not_run' | 'accepted' | 'failed';
   userFacingMessage: string;
+  groupId?: string;
+  requestContextId?: string;
+  historyTitle?: string;
+  historyUndoable?: boolean;
   failureReason?: MutationFailureReason;
 };
 
@@ -130,6 +134,13 @@ export type MutationOrchestrationResult = {
   result: MutationExecutionResult;
   assistantResponse?: string;
   tasksAfter?: MutationTaskSnapshot[];
+};
+
+export type MutationHistoryContext = {
+  groupId: string;
+  requestContextId: string;
+  historyTitle: string;
+  historyUndoable: boolean;
 };
 
 export type FragmentNode = {

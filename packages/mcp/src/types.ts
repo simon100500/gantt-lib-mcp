@@ -620,6 +620,7 @@ export type HistoryGroupContext = {
   title: string;
   requestContextId?: string;
   finalizeGroup: boolean;
+  undoable?: boolean;
   redoOfGroupId?: string | null;
   targetGroupId?: string | null;
 };

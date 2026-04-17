@@ -569,12 +569,15 @@ export class CommandService {
     tx: any,
     groupId: string,
     newVersion: number,
+    requestedUndoable?: boolean,
   ): Promise<void> {
     const groupEvents = await tx.projectEvent.findMany({
       where: { groupId, applied: true },
       select: { inverseCommand: true },
     });
-    const undoable = groupEvents.length > 0 && groupEvents.every((event: { inverseCommand: JsonValue | null }) => event.inverseCommand !== null);
+    const inferredUndoable = groupEvents.length > 0
+      && groupEvents.every((event: { inverseCommand: JsonValue | null }) => event.inverseCommand !== null);
+    const undoable = requestedUndoable === false ? false : inferredUndoable;
 
     await tx.mutationGroup.update({
       where: { id: groupId },
@@ -1142,7 +1145,7 @@ export class CommandService {
         });
 
         if (history.finalizeGroup) {
-          await this.finalizeMutationGroup(tx, history.groupId, newVersion);
+          await this.finalizeMutationGroup(tx, history.groupId, newVersion, history.undoable);
         }
 
         // Step 12: Build final snapshot

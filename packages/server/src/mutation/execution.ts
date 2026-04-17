@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import type { CommitProjectCommandResponse, ProjectCommand } from '@gantt/mcp/types';
+import type { CommitProjectCommandResponse, HistoryGroupContext, ProjectCommand } from '@gantt/mcp/types';
 import type {
+  MutationHistoryContext,
   MutationExecutionResult,
   MutationPlan,
   MutationPlanOperation,
@@ -13,14 +14,30 @@ type ExecuteMutationPlanInput = {
   projectVersion: number;
   tasksBefore: MutationTaskSnapshot[];
   plan: MutationPlan;
+  history?: MutationHistoryContext;
   commandService: {
     commitCommand(
-      request: { projectId: string; clientRequestId: string; baseVersion: number; command: ProjectCommand },
+      request: {
+        projectId: string;
+        clientRequestId: string;
+        baseVersion: number;
+        command: ProjectCommand;
+        history?: HistoryGroupContext;
+      },
       actorType: 'agent',
       actorId?: string,
     ): Promise<CommitProjectCommandResponse>;
   };
 };
+
+function resolveHistoryContext(input: ExecuteMutationPlanInput): MutationHistoryContext {
+  return input.history ?? {
+    groupId: randomUUID(),
+    requestContextId: randomUUID(),
+    historyTitle: 'AI — Изменение графика',
+    historyUndoable: true,
+  };
+}
 
 function parseDate(value?: string): Date | null {
   if (!value) {
@@ -209,38 +226,51 @@ function compileOperation(
 export async function executeMutationPlan(
   input: ExecuteMutationPlanInput,
 ): Promise<MutationExecutionResult> {
+  const historyContext = resolveHistoryContext(input);
   let baseVersion = input.projectVersion;
   const committedCommandTypes: string[] = [];
   const changedTaskIds: string[] = [];
+  const compiledCommands = input.plan.operations.flatMap((operation) => compileOperation(operation, input.tasksBefore));
+  const lastCommandIndex = compiledCommands.length - 1;
 
-  for (const operation of input.plan.operations) {
-    const commands = compileOperation(operation, input.tasksBefore);
+  for (const [index, command] of compiledCommands.entries()) {
+    const history: HistoryGroupContext = {
+      groupId: historyContext.groupId,
+      origin: 'agent_run',
+      title: historyContext.historyTitle,
+      requestContextId: historyContext.requestContextId,
+      finalizeGroup: index === lastCommandIndex,
+      undoable: historyContext.historyUndoable,
+    };
 
-    for (const command of commands) {
-      const response = await input.commandService.commitCommand({
-        projectId: input.projectId,
-        clientRequestId: randomUUID(),
-        baseVersion,
-        command,
-      }, 'agent');
+    const response = await input.commandService.commitCommand({
+      projectId: input.projectId,
+      clientRequestId: randomUUID(),
+      baseVersion,
+      command,
+      history,
+    }, 'agent');
 
-      committedCommandTypes.push(command.type);
+    committedCommandTypes.push(command.type);
 
-      if (!response.accepted) {
-        return {
-          status: 'failed',
-          executionMode: input.plan.canExecuteDeterministically ? 'deterministic' : 'hybrid',
-          committedCommandTypes,
-          changedTaskIds,
-          verificationVerdict: 'failed',
-          userFacingMessage: response.error ?? 'Команда не была принята authoritative command path.',
-          failureReason: 'deterministic_execution_failed',
-        };
-      }
-
-      changedTaskIds.push(...response.result.changedTaskIds);
-      baseVersion = response.newVersion;
+    if (!response.accepted) {
+      return {
+        status: 'failed',
+        executionMode: input.plan.canExecuteDeterministically ? 'deterministic' : 'hybrid',
+        committedCommandTypes,
+        changedTaskIds,
+        verificationVerdict: 'failed',
+        userFacingMessage: response.error ?? 'Команда не была принята authoritative command path.',
+        groupId: historyContext.groupId,
+        requestContextId: historyContext.requestContextId,
+        historyTitle: historyContext.historyTitle,
+        historyUndoable: historyContext.historyUndoable,
+        failureReason: 'deterministic_execution_failed',
+      };
     }
+
+    changedTaskIds.push(...response.result.changedTaskIds);
+    baseVersion = response.newVersion;
   }
 
   const verificationVerdict = compareChangedSet(changedTaskIds, input.plan.expectedChangedTaskIds)
@@ -256,6 +286,10 @@ export async function executeMutationPlan(
     userFacingMessage: verificationVerdict === 'accepted'
       ? 'Изменения применены.'
       : 'Authoritative changed set не совпал с ожидаемым планом.',
+    groupId: historyContext.groupId,
+    requestContextId: historyContext.requestContextId,
+    historyTitle: historyContext.historyTitle,
+    historyUndoable: historyContext.historyUndoable,
     failureReason: verificationVerdict === 'accepted' ? undefined : 'verification_failed',
   };
 }

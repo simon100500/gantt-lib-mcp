@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { classifyMutationIntent } from './intent-classifier.js';
 import { executeMutationPlan } from './execution.js';
 import { selectMutationExecutionMode } from './execution-routing.js';
@@ -9,6 +11,7 @@ import { buildMutationPlan } from './plan-builder.js';
 import { resolveMutationContext } from './resolver.js';
 import type { ServerMessage } from '../ws.js';
 import type {
+  MutationHistoryContext,
   MutationExecutionMode,
   MutationFailureReason,
   MutationOrchestrationResult,
@@ -82,7 +85,7 @@ export type RunStagedMutationInput = {
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
   logger: MutationLogger;
   semanticIntentQuery?: (input: MutationSemanticIntentQueryInput) => Promise<MutationSemanticIntentQueryResult>;
-};
+} & Partial<MutationHistoryContext>;
 
 function buildDeferredResult(executionMode: MutationExecutionMode): MutationOrchestrationResult['result'] {
   return {
@@ -92,6 +95,28 @@ function buildDeferredResult(executionMode: MutationExecutionMode): MutationOrch
     changedTaskIds: [],
     verificationVerdict: 'not_run',
     userFacingMessage: '',
+    historyUndoable: false,
+  };
+}
+
+function resolveHistoryContext(input: RunStagedMutationInput): MutationHistoryContext {
+  const requestContextId = input.requestContextId ?? input.runId;
+  const normalizedMessage = input.userMessage.trim().replace(/\s+/g, ' ');
+  return {
+    groupId: input.groupId ?? randomUUID(),
+    requestContextId,
+    historyTitle: input.historyTitle ?? (normalizedMessage.length > 0 ? `AI — ${normalizedMessage}` : 'AI — Изменение графика'),
+    historyUndoable: input.historyUndoable ?? true,
+  };
+}
+
+function buildNonUndoableHistory(input: RunStagedMutationInput): MutationHistoryContext {
+  const history = resolveHistoryContext(input);
+  return {
+    groupId: history.groupId,
+    requestContextId: history.requestContextId,
+    historyTitle: 'AI — Неотменяемое действие',
+    historyUndoable: false,
   };
 }
 
@@ -104,6 +129,7 @@ async function buildControlledFailure(
   userFacingMessage: string,
   intent: MutationOrchestrationResult['intent'],
 ): Promise<MutationOrchestrationResult> {
+  const history = buildNonUndoableHistory(input);
   const result: MutationOrchestrationResult = {
     handled: true,
     status: 'failed',
@@ -120,6 +146,7 @@ async function buildControlledFailure(
       changedTaskIds: [],
       verificationVerdict: 'not_run',
       userFacingMessage,
+      ...history,
       failureReason,
     },
     assistantResponse: userFacingMessage,
@@ -191,6 +218,7 @@ function resolveFailureReason(
 export async function runStagedMutation(
   input: RunStagedMutationInput,
 ): Promise<MutationOrchestrationResult> {
+  const history = resolveHistoryContext(input);
   const intent = await classifyMutationIntent({
     userMessage: input.userMessage,
     env: input.env,
@@ -320,6 +348,12 @@ export async function runStagedMutation(
       projectVersion: input.projectVersion,
       tasksBefore: input.tasksBefore,
       plan,
+      history: {
+        groupId: history.groupId,
+        requestContextId: history.requestContextId,
+        historyTitle: history.historyTitle,
+        historyUndoable: history.historyUndoable,
+      },
       commandService: input.commandService as Parameters<typeof executeMutationPlan>[0]['commandService'],
     });
 
@@ -357,9 +391,18 @@ export async function runStagedMutation(
           details: execution.userFacingMessage,
           resolutionContext,
         });
+    const resultHistory = execution.status === 'completed'
+      ? {
+          groupId: execution.groupId ?? history.groupId,
+          requestContextId: execution.requestContextId ?? history.requestContextId,
+          historyTitle: execution.historyTitle ?? history.historyTitle,
+          historyUndoable: execution.historyUndoable ?? history.historyUndoable,
+        }
+      : buildNonUndoableHistory({ ...input, ...history });
     const result = {
       ...execution,
       userFacingMessage,
+      ...resultHistory,
     };
 
     await input.logger.debug('final_outcome', {

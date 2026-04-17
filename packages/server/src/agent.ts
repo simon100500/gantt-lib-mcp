@@ -402,6 +402,15 @@ function buildNoMutationMessage(): string {
   return 'Изменение не применилось: модель не выполнила ни одного валидного mutation tool call, поэтому проект не изменился.';
 }
 
+function buildAgentHistoryTitle(userMessage: string, undoable: boolean): string {
+  if (!undoable) {
+    return 'AI — Неотменяемое действие';
+  }
+
+  const normalized = userMessage.trim().replace(/\s+/g, ' ');
+  return normalized.length > 0 ? `AI — ${normalized}` : 'AI — Изменение графика';
+}
+
 function buildRejectedMutationMessage(rejectedCalls: MutationToolCall[]): string {
   const first = rejectedCalls[0];
   const reason = first?.reason ? ` (${first.reason})` : '';
@@ -977,6 +986,9 @@ export async function runAgentWithHistory(
 
     if (likelyMutationRequest) {
       const projectVersion = await getProjectBaseVersion(projectId);
+      const requestContextId = runId;
+      const groupId = crypto.randomUUID();
+      const historyTitle = buildAgentHistoryTitle(userMessage, true);
 
       await writeServerDebugLog('mutation_lifecycle_started', {
         runId,
@@ -997,6 +1009,10 @@ export async function runAgentWithHistory(
         taskService,
         commandService,
         broadcastToSession,
+        groupId,
+        requestContextId,
+        historyTitle,
+        historyUndoable: true,
         logger: {
           debug: (event, payload) => writeServerDebugLog(event, payload),
         },
