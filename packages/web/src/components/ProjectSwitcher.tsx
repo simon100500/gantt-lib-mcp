@@ -68,11 +68,11 @@ function ProjectRow({
         type="button"
         onClick={() => onSwitch(project.id)}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-1.5',
           isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
         )}
       >
-        <span className={cn('flex items-center gap-1 truncate text-xs', isArchived && 'opacity-60')}>
+        <span className={cn('flex items-center gap-1 truncate text-sm sm:text-xs', isArchived && 'opacity-60')}>
           <span className="truncate">{project.name}</span>
           {isArchived && (
             <span title="Только для чтения">
@@ -170,7 +170,7 @@ function ProjectSection({
             <ChevronDown className={cn('absolute inset-0 h-4 w-4 transition-all opacity-0 group-hover:opacity-100', open && 'rotate-180')} />
           </span>
           <span className="flex items-center gap-2">
-            <span className="text-xs font-medium">{title}</span>
+            <span className="text-sm font-medium sm:text-xs">{title}</span>
             {usageLabel && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
                 {usageLabel}
@@ -268,26 +268,26 @@ export function ProjectSwitcher({
           </button>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-1">
-        <div className="flex flex-col gap-2">
-          <div className="px-1.5">
-            <Button
-              variant="default"
-              size="sm"
-              disabled={createDisabled}
-              onClick={() => {
-                if (!createDisabled) {
-                  onCreateNew();
-                }
-              }}
-              className="h-8 w-full rounded-md px-3 text-sm font-medium"
-              title={createTitle ?? 'Новый проект'}
-            >
-              <Plus className="h-4 w-4" />
-              <span>Новый проект</span>
-            </Button>
-          </div>
+      <div className="shrink-0 px-3 pt-1 pb-2">
+        <Button
+          variant="default"
+          size="sm"
+          disabled={createDisabled}
+          onClick={() => {
+            if (!createDisabled) {
+              onCreateNew();
+            }
+          }}
+          className="h-8 w-full rounded-md px-3 text-sm font-medium sm:h-8"
+          title={createTitle ?? 'Новый проект'}
+        >
+          <Plus className="h-4 w-4" />
+          <span>Новый проект</span>
+        </Button>
+      </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2">
+        <div className="flex flex-col gap-2">
           {activeProjects.length > 0 ? (
             <ProjectSection
               title={activeTitle}

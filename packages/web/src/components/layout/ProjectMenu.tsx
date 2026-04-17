@@ -65,6 +65,7 @@ export function ProjectMenu({
 }: ProjectMenuProps) {
   const auth = useAuthStore();
   const localProjectName = useTaskStore((state) => state.projectName);
+  const tasksLoading = useTaskStore((state) => state.loading);
   const workspace = useUIStore((state) => state.workspace);
   const sidebarState = useUIStore((state) => state.sidebarState);
   const setSidebarState = useUIStore((state) => state.setSidebarState);
@@ -300,8 +301,8 @@ export function ProjectMenu({
   };
 
   const handleSwitchInSidebar = async (id: string) => {
+    setSidebarState('closed');
     await onSwitchProject(id);
-    // Keep sidebar open in sidebar mode
   };
 
   const handleReadOnlyNewProject = async () => {
@@ -401,7 +402,7 @@ export function ProjectMenu({
               className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight"
             >
               <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-              <span className="text-[15px] font-semibold text-slate-900">ГетГант</span>
+              <span className="text-[15px] font-semibold text-slate-900 hidden sm:inline">ГетГант</span>
               {showProjectContext && (
                 <>
                   <span className="text-slate-300 hidden sm:inline">/</span>
@@ -435,6 +436,8 @@ export function ProjectMenu({
                     autoFocus
                     onFocus={(event) => event.target.select()}
                   />
+                ) : tasksLoading ? (
+                  <div className="h-5 w-32 animate-shimmer rounded bg-slate-200" />
                 ) : (
                   <>
                     {isArchivedProject && (
