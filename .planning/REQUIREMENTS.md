@@ -60,6 +60,14 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 - [x] **IGNR-03**: The server validates interpretation output strictly, keeps only technical parsing outside the model, and uses conservative non-semantic fallback when the model output is unavailable or invalid
 - [x] **IGNR-04**: Logs and automated regressions cover Russian and English paraphrases, ambiguity, explicit worklists, targeted-edit cases, and model-failure fallback for the initial-generation intake path
 
+### History Undo-Redo
+
+- [x] **HIS-01**: Every authoritative project mutation belongs to a grouped user-visible history record with stable base/new versions and persisted inverse commands where undo is supported
+- [x] **HIS-02**: Undo and redo replay through the existing authoritative command pipeline and append new history groups instead of rewriting prior history
+- [x] **HIS-03**: Grouped history API returns paginated mutation groups with actor, title, status, command count, undoability, redoability, and authoritative snapshot/version replay payloads
+- [x] **HIS-04**: One agent-visible turn maps to one shared mutation group with a human-readable history title
+- [x] **HIS-05**: Web UI exposes grouped history, toolbar access, and fixed Ctrl+Z / Ctrl+Shift+Z replay shortcuts while reconciling from authoritative server snapshots
+
 ## Future Requirements
 
 ### Deferred to future milestones
@@ -115,15 +123,20 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | IGNR-02 | Phase 43 | Complete |
 | IGNR-03 | Phase 43 | Complete |
 | IGNR-04 | Phase 43 | Complete |
+| HIS-01 | Phase 44 | Complete |
+| HIS-02 | Phase 44 | Complete |
+| HIS-03 | Phase 44 | Complete |
+| HIS-04 | Phase 44 | Complete |
+| HIS-05 | Phase 44 | Complete |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |
 
 **Coverage:**
-- v5.0 requirements: 28 total
-- Mapped to phases: 28
+- v5.0 requirements: 33 total
+- Mapped to phases: 33
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-04-14 after Phase 43 Plan 03 completion*
+*Last updated: 2026-04-18 after Phase 44 Plan 04 completion*

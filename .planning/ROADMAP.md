@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-18
 
 ## Progress Summary
 
@@ -359,7 +359,7 @@ Plans:
 **Goal:** Линейная grouped history поверх существующего authoritative command pipeline: пользователь видит понятные MutationGroup-записи и может безопасно undo/redo как ручные действия, так и целый ход агента
 **Requirements**: HIS-01, HIS-02, HIS-03, HIS-04, HIS-05
 **Depends on:** Phase 43
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 **Success Criteria** (what must be TRUE):
   1. Каждый user-visible mutation commit или agent turn записывается как `MutationGroup` с корректными `baseVersion/newVersion`, порядком событий и persisted `inverseCommand`
@@ -372,7 +372,7 @@ Plans:
 - [x] 44-01-PLAN.md — MutationGroup schema/contracts and history-aware `CommandService.commitCommand`
 - [x] 44-02-PLAN.md — Append-only undo/redo `HistoryService` plus paginated history API
 - [x] 44-03-PLAN.md — Agent-turn grouping and manual web commit metadata propagation
-- [ ] 44-04-PLAN.md — History panel, undo/redo hotkeys, and authoritative frontend refresh
+- [x] 44-04-PLAN.md — History panel, undo/redo hotkeys, and authoritative frontend refresh
 
 ---
-*Last updated: 2026-04-17 — Phase 44 planning created*
+*Last updated: 2026-04-18 — Phase 44 Plan 04 completed*

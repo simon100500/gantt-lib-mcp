@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: executing
-last_updated: "2026-04-17T21:23:28.726Z"
-last_activity: 2026-04-17
+status: verifying
+last_updated: "2026-04-17T21:31:18.227Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 15
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 47
-  completed_plans: 46
-  percent: 96
+  completed_plans: 47
+  percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-18
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to execute
+**Status:** Phase complete — ready for verification
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 44 — undo-redo
+**Current focus:** Phase 44 verification — undo-redo
 
 ---
 
 ## Current Position
 
-Phase: 44 (undo-redo) — EXECUTING
+Phase: 44 (undo-redo) — VERIFYING
 Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-04-17
+Status: Phase complete — ready for verification
+Last activity: 2026-04-18
 
-Progress: [██████████] 96%
+Progress: [██████████] 100%
 
 ---
 
@@ -167,6 +167,8 @@ packages/
 - [Phase 44-undo-redo]: Phase 44 Plan 02 maps history replay version_conflict to HTTP 409 while typed redo refusals stay HTTP 400 with authoritative snapshot/version payloads.
 - [Phase 44]: Phase 44 Plan 03 gives each staged agent turn one shared groupId/requestContextId and finalizes the mutation group only on the last authoritative command.
 - [Phase 44]: Phase 44 Plan 03 routes manual UI history grouping through the existing /api/commands/commit hook and Fastify route instead of adding a parallel history write API.
+- [Phase 44]: Undo/redo actions in the workspace always reconcile through useProjectStore.setConfirmed() plus clearTransientState() after successful history replay.
+- [Phase 44]: The history panel stays inside the existing workspace shell as a toggleable rail instead of introducing modal routing or a separate history page.
 
 ## Performance Metrics
 
@@ -196,12 +198,13 @@ packages/
 | Phase 44 P01 | 28min | 2 tasks | 5 files |
 | Phase 44-undo-redo P02 | 4min | 2 tasks | 7 files |
 | Phase 44 P03 | 35min | 2 tasks | 11 files |
+| Phase 44 P04 | 6min | 2 tasks | 8 files |
 
 ## Session
 
-- Last session: 2026-04-17T21:20:44Z
-- Stopped at: Completed 44-02-PLAN.md
+- Last session: 2026-04-17T21:31:18Z
+- Stopped at: Completed 44-04-PLAN.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 44 Plan 02 completed*
+*Last updated: 2026-04-18 — Phase 44 Plan 04 completed*
