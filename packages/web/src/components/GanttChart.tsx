@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, ValidationResult } from '../types.ts';
-import type { CustomDayConfig } from 'gantt-lib';
+import type { CustomDayConfig, TaskListMenuCommand } from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -53,6 +53,7 @@ export interface GanttChartProps {
   highlightedTaskIds?: Set<string>;
   filterMode?: 'highlight' | 'hide';
   businessDays?: boolean;
+  taskListMenuCommands?: TaskListMenuCommand<Task>[];
 }
 
 export interface GanttChartRef {
@@ -96,6 +97,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   highlightedTaskIds,
   filterMode,
   businessDays,
+  taskListMenuCommands,
 }, ref) => {
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
@@ -154,6 +156,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       highlightedTaskIds={highlightedTaskIds}
       filterMode={filterMode}
       businessDays={businessDays}
+      taskListMenuCommands={taskListMenuCommands}
     />
   );
 });

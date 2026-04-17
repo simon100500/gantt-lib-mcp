@@ -1,10 +1,13 @@
 import type { Ref, RefObject } from 'react';
-import { useEffect, useMemo, useCallback, useRef } from 'react';
-import { Check } from 'lucide-react';
+import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
+import { Check, ListTree } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
+import type { TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
+import { SplitTaskModal, buildSplitTaskPrompt } from '../SplitTaskModal.tsx';
+import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
@@ -32,7 +35,7 @@ interface ProjectWorkspaceProps {
   chatDisabled?: boolean;
   chatDisabledReason?: string | null;
   batchUpdate?: UseBatchTaskUpdateResult;
-  onSend?: (text: string) => void;
+  onSend?: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   onLoginRequired: () => void;
   onCloseChat?: () => void;
   onToggleChat?: () => void;
@@ -197,6 +200,7 @@ export function ProjectWorkspace({
     return ids;
   }, [searchResults, tempHighlightedTaskId]);
   const previousGanttDayModeRef = useRef(ganttDayMode);
+  const [splitTaskDraft, setSplitTaskDraft] = useState<Task | null>(null);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
     () => getProjectWeekendPredicate(calendarDays) ?? (() => false),
@@ -224,6 +228,33 @@ export function ProjectWorkspace({
 
     void batchUpdate.handleTasksChange(reflowedTasks);
   }, [batchUpdate, effectiveReadOnly, ganttDayMode, setTasks, tasks, weekendPredicate]);
+
+  const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
+    if (!onSend || effectiveReadOnly || chatDisabled) {
+      return [];
+    }
+
+    return [
+      {
+        id: 'split-task-with-ai',
+        label: 'Разбить задачу',
+        icon: <ListTree className="h-4 w-4" />,
+        scope: 'linear',
+        onSelect: (row) => setSplitTaskDraft(row),
+      },
+    ];
+  }, [chatDisabled, effectiveReadOnly, onSend]);
+
+  const handleSplitTaskSubmit = useCallback(async (details: string) => {
+    if (!splitTaskDraft || !onSend) {
+      return {
+        accepted: false,
+        message: 'Не удалось определить задачу для разбиения.',
+      };
+    }
+
+    return await Promise.resolve(onSend(buildSplitTaskPrompt(splitTaskDraft, details)));
+  }, [onSend, splitTaskDraft]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -267,6 +298,7 @@ export function ProjectWorkspace({
                 ref={ganttRef as Ref<GanttChartRef>}
                 tasks={effectiveTasks}
                 taskFilter={taskFilter}
+                taskListMenuCommands={taskListMenuCommands}
                 onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}
@@ -391,6 +423,14 @@ export function ProjectWorkspace({
           </aside>
         )}
       </div>
+
+      {splitTaskDraft && (
+        <SplitTaskModal
+          task={splitTaskDraft}
+          onClose={() => setSplitTaskDraft(null)}
+          onSubmit={handleSplitTaskSubmit}
+        />
+      )}
     </div>
   );
 }
