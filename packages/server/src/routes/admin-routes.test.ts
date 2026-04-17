@@ -142,3 +142,40 @@ describe('admin trial route import', () => {
     );
   });
 });
+
+describe('admin user pagination and destructive routes', () => {
+  it('returns pagination metadata from GET /api/admin/users', () => {
+    assert.match(
+      adminRoutesSource,
+      /pagination:\s*\{[\s\S]*page,[\s\S]*pageSize,[\s\S]*total,[\s\S]*totalPages:/,
+    );
+  });
+
+  it('supports page and pageSize query params on GET /api/admin/users', () => {
+    assert.match(
+      adminRoutesSource,
+      /const \{ query: rawQuery, page: rawPage, pageSize: rawPageSize \} = req\.query/,
+    );
+  });
+
+  it('registers DELETE /api/admin/projects/:id', () => {
+    assert.match(
+      adminRoutesSource,
+      /fastify\.delete\('\/api\/admin\/projects\/:id',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+  });
+
+  it('registers DELETE /api/admin/users/:id', () => {
+    assert.match(
+      adminRoutesSource,
+      /fastify\.delete\('\/api\/admin\/users\/:id',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+  });
+
+  it('prevents deleting the current admin user', () => {
+    assert.match(
+      adminRoutesSource,
+      /req\.user!\.userId === userId[\s\S]*You cannot delete your own admin user/,
+    );
+  });
+});

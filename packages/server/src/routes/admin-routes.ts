@@ -60,9 +60,9 @@ async function buildAdminUserSummary(user: { id: string; email: string; createdA
       planLabel: status.planMeta.label,
       isActive: status.isActive,
       periodEnd: status.periodEnd,
+      billingState: subscription?.billingState ?? 'free',
+      trialEndsAt: subscription?.trialEndsAt?.toISOString() ?? null,
     },
-    billingState: subscription?.billingState ?? 'free',
-    trialEndsAt: subscription?.trialEndsAt?.toISOString() ?? null,
     projects: {
       active: activeProjects,
       archived: archivedProjects,
@@ -191,26 +191,51 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
   });
 
   fastify.get('/api/admin/users', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
-    const query = (req.query as { query?: string }).query?.trim();
+    const { query: rawQuery, page: rawPage, pageSize: rawPageSize } = req.query as {
+      query?: string;
+      page?: string | number;
+      pageSize?: string | number;
+    };
+    const query = rawQuery?.trim();
+    const parsedPage = Number(rawPage ?? 1);
+    const parsedPageSize = Number(rawPageSize ?? 25);
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1;
+    const pageSize = Number.isFinite(parsedPageSize)
+      ? Math.min(100, Math.max(1, Math.floor(parsedPageSize)))
+      : 25;
     const prisma = getPrisma();
-    const users = await prisma.user.findMany({
-      where: query ? {
-        email: {
-          contains: query,
-          mode: 'insensitive',
-        },
-      } : undefined,
-      orderBy: { createdAt: 'desc' },
-      take: 25,
-      select: {
-        id: true,
-        email: true,
-        createdAt: true,
+    const where = query ? {
+      email: {
+        contains: query,
+        mode: 'insensitive' as const,
       },
-    });
+    } : undefined;
+
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          email: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
     const items = await Promise.all(users.map((user) => buildAdminUserSummary(user)));
-    return reply.send({ users: items });
+    return reply.send({
+      users: items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
   });
 
   fastify.get('/api/admin/users/:id/subscription', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
@@ -644,5 +669,51 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
         createdAt: message.createdAt.toISOString(),
       })),
     });
+  });
+
+  fastify.delete('/api/admin/projects/:id', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const projectId = (req.params as { id: string }).id;
+    const prisma = getPrisma();
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, userId: true },
+    });
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    await prisma.project.delete({
+      where: { id: projectId },
+    });
+
+    const details = await buildAdminUserDetails(project.userId);
+    return reply.send({
+      success: true,
+      user: details,
+    });
+  });
+
+  fastify.delete('/api/admin/users/:id', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    if (req.user!.userId === userId) {
+      return reply.status(400).send({ error: 'You cannot delete your own admin user' });
+    }
+
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+
+    return reply.send({ success: true });
   });
 }

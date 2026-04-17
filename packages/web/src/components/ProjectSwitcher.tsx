@@ -288,15 +288,15 @@ export function ProjectSwitcher({
             </Button>
           </div>
 
-          <ProjectSection
-            title={activeTitle}
-            icon={<Folder className="h-4 w-4" />}
-            open={activeOpen}
-            onToggle={() => setActiveOpen((value) => !value)}
-            usageLabel={projectsUsageLabel}
-          >
-            {activeProjects.length > 0 ? (
-              activeProjects.map((project) => (
+          {activeProjects.length > 0 ? (
+            <ProjectSection
+              title={activeTitle}
+              icon={<Folder className="h-4 w-4" />}
+              open={activeOpen}
+              onToggle={() => setActiveOpen((value) => !value)}
+              usageLabel={projectsUsageLabel}
+            >
+              {activeProjects.map((project) => (
                 <ProjectRow
                   key={project.id}
                   project={project}
@@ -309,31 +309,18 @@ export function ProjectSwitcher({
                   onMenuOpenChange={onMenuOpenChange}
                   setOpenMenuProjectId={setOpenMenuProjectId}
                 />
-              ))
-            ) : (
-              <div className="px-3 py-2">
-                <button
-                  type="button"
-                  onClick={() => void onCreateNew()}
-                  disabled={createDisabled}
-                  title={createTitle ?? 'Новый проект'}
-                  className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-50 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Новый проект</span>
-                </button>
-              </div>
-            )}
-          </ProjectSection>
+              ))}
+            </ProjectSection>
+          ) : null}
 
-          <ProjectSection
-            title={archiveTitle}
-            icon={<Archive className="h-4 w-4" />}
-            open={archiveOpen}
-            onToggle={() => setArchiveOpen((value) => !value)}
-          >
-            {archivedProjects.length > 0 ? (
-              archivedProjects.map((project) => (
+          {archivedProjects.length > 0 ? (
+            <ProjectSection
+              title={archiveTitle}
+              icon={<Archive className="h-4 w-4" />}
+              open={archiveOpen}
+              onToggle={() => setArchiveOpen((value) => !value)}
+            >
+              {archivedProjects.map((project) => (
                 <ProjectRow
                   key={project.id}
                   project={project}
@@ -346,11 +333,9 @@ export function ProjectSwitcher({
                   onMenuOpenChange={onMenuOpenChange}
                   setOpenMenuProjectId={setOpenMenuProjectId}
                 />
-              ))
-            ) : (
-              <p className="px-3 py-2 text-xs text-slate-400">Архив пуст</p>
-            )}
-          </ProjectSection>
+              ))}
+            </ProjectSection>
+          ) : null}
 
         </div>
       </div>

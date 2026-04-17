@@ -841,9 +841,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
     queuedPromptRef.current = null;
     setPendingPostAuthAction(null);
-    resetWorkspacePresentation();
-    setWorkspace({ kind: 'guest' });
-  }, [auth.isAuthenticated, hasShareToken, openCreateProjectModal, openLimitModal, proactiveProjectDenial, resetWorkspacePresentation, setPendingPostAuthAction, setWorkspace]);
+    onLoginRequired();
+  }, [auth.isAuthenticated, hasShareToken, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {

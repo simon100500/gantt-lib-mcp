@@ -126,6 +126,7 @@ export function ProjectMenu({
 
   const sidebarVisible = sidebarState === 'sidebar';
   const overlayVisible = sidebarState === 'overlay';
+  const showHeaderLogo = auth.isAuthenticated || hasShareToken || !sidebarVisible;
 
   useEffect(() => {
     if (auth.isAuthenticated) {
@@ -394,20 +395,21 @@ export function ProjectMenu({
             {sidebarVisible ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
           </button>
 
-          {/* Logo */}
-          <button
-            type="button"
-            onClick={() => void onCreateProject()}
-            className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight"
-          >
-            <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
-            <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
-            {showProjectContext && (
-              <>
-                <span className="text-slate-300 hidden sm:inline">/</span>
-              </>
-            )}
-          </button>
+          {showHeaderLogo && (
+            <button
+              type="button"
+              onClick={() => void onCreateProject()}
+              className="flex select-none items-center gap-2.5 text-base font-cascadia tracking-tight"
+            >
+              <img src="/favicon.svg" alt="GetGantt" width="18" height="18" className="h-[18px] w-[18px]" />
+              <span className="hidden text-[15px] font-semibold text-slate-900 sm:inline">ГетГант</span>
+              {showProjectContext && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">/</span>
+                </>
+              )}
+            </button>
+          )}
 
           {showProjectContext && (
             <>

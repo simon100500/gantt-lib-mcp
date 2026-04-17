@@ -108,6 +108,13 @@ interface AdminProjectMessage {
   createdAt: string;
 }
 
+interface AdminUsersPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 function daysUntil(iso: string | null): number {
   if (!iso) return 0;
   return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
@@ -221,6 +228,7 @@ function GuardState({
 export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: AdminPageProps) {
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
+  const [pagination, setPagination] = useState<AdminUsersPagination>({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
   const [aiUsedDraft, setAiUsedDraft] = useState('0');
@@ -236,8 +244,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [chatMessages, setChatMessages] = useState<AdminProjectMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
   const [activeTab, setActiveTab] = useState<'billing' | 'projects'>('billing');
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
-  const loadUsers = useCallback(async (nextQuery: string) => {
+  const loadUsers = useCallback(async (nextQuery: string, nextPage = 1) => {
     setLoading(true);
     setError(null);
 
@@ -246,6 +256,8 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       if (nextQuery.trim()) {
         search.set('query', nextQuery.trim());
       }
+      search.set('page', String(nextPage));
+      search.set('pageSize', String(pagination.pageSize));
 
       const suffix = search.toString();
       const response = await fetchAdminWithRetry(suffix ? `/api/admin/users?${suffix}` : '/api/admin/users');
@@ -258,18 +270,26 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const data = await response.json() as { users: AdminUserSummary[] };
+      const data = await response.json() as { users: AdminUserSummary[]; pagination: AdminUsersPagination };
       setForbidden(false);
       setUsers(data.users);
+      setPagination(data.pagination);
       if (data.users.length > 0) {
-        setSelectedUserId((current) => current ?? data.users[0].id);
+        setSelectedUserId((current) => (
+          current && data.users.some((user) => user.id === current)
+            ? current
+            : data.users[0].id
+        ));
+      } else {
+        setSelectedUserId(null);
+        setSelectedUser(null);
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load users');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination.pageSize]);
 
   const loadUserDetails = useCallback(async (userId: string) => {
     setLoadingUser(true);
@@ -310,7 +330,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     if (!isAuthenticated) {
       return;
     }
-    void loadUsers('');
+    void loadUsers('', 1);
   }, [isAuthenticated, loadUsers]);
 
   useEffect(() => {
@@ -354,13 +374,13 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       const data = await response.json() as AdminUserDetails;
       setForbidden(false);
       setSelectedUser(data);
-      await loadUsers(query);
+      await loadUsers(query, pagination.page);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to update subscription');
     } finally {
       setSaving(false);
     }
-  }, [loadUsers, query, selectedUserId]);
+  }, [loadUsers, pagination.page, query, selectedUserId]);
 
   const trialAction = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
     if (!selectedUserId) return;
@@ -378,13 +398,13 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       }
       const data = await response.json() as AdminUserDetails;
       setSelectedUser(data);
-      await loadUsers(query);
+      await loadUsers(query, pagination.page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Trial action failed');
     } finally {
       setSaving(false);
     }
-  }, [loadUsers, query, selectedUserId]);
+  }, [loadUsers, pagination.page, query, selectedUserId]);
 
   const openProjectView = useCallback(async (projectId: string) => {
     setOpeningProjectId(projectId);
@@ -485,6 +505,92 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     }
   }, []);
 
+  const deleteProject = useCallback(async (projectId: string, projectName: string) => {
+    if (!selectedUserId) {
+      return;
+    }
+
+    if (!window.confirm(`Удалить проект "${projectName}" без возможности восстановления?`)) {
+      return;
+    }
+
+    setDeletingProjectId(projectId);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as { success: boolean; user: AdminUserDetails | null };
+      setSelectedUser(data.user);
+      if (chatProjectId === projectId) {
+        setChatProjectId(null);
+        setChatProjectName(null);
+        setChatMessages([]);
+      }
+      await loadUsers(query, pagination.page);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete project');
+    } finally {
+      setDeletingProjectId(null);
+    }
+  }, [chatProjectId, loadUsers, pagination.page, query, selectedUserId]);
+
+  const deleteUser = useCallback(async () => {
+    if (!selectedUser) {
+      return;
+    }
+
+    if (!window.confirm(`Удалить пользователя ${selectedUser.user.email} со всеми проектами и данными без возможности восстановления?`)) {
+      return;
+    }
+
+    setDeletingUser(true);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/users/${selectedUser.user.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      setSelectedUser(null);
+      setSelectedUserId(null);
+      setChatProjectId(null);
+      setChatProjectName(null);
+      setChatMessages([]);
+
+      const nextTotalAfterDelete = Math.max(0, pagination.total - 1);
+      const nextPage = Math.min(
+        pagination.page,
+        Math.max(1, Math.ceil(nextTotalAfterDelete / pagination.pageSize)),
+      );
+      await loadUsers(query, nextPage);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete user');
+    } finally {
+      setDeletingUser(false);
+    }
+  }, [loadUsers, pagination.page, pagination.pageSize, pagination.total, query, selectedUser]);
+
   if (!isAuthenticated) {
     return <GuardState isAuthenticated={false} onLoginRequired={onLoginRequired} />;
   }
@@ -513,7 +619,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                 <h1 className="text-lg font-semibold text-slate-900">Пользователи</h1>
                 <button
                   type="button"
-                  onClick={() => void loadUsers(query)}
+                  onClick={() => void loadUsers(query, pagination.page)}
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   Обновить
@@ -526,7 +632,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
-                      void loadUsers(query);
+                      void loadUsers(query, 1);
                     }
                   }}
                   placeholder="Поиск по email"
@@ -534,7 +640,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                 />
                 <button
                   type="button"
-                  onClick={() => void loadUsers(query)}
+                  onClick={() => void loadUsers(query, 1)}
                   className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
                 >
                   Найти
@@ -586,6 +692,32 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                   })
                 )}
               </div>
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500">
+                <span>
+                  {pagination.total > 0
+                    ? `${(pagination.page - 1) * pagination.pageSize + 1}-${Math.min(pagination.page * pagination.pageSize, pagination.total)} из ${pagination.total}`
+                    : '0 пользователей'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={loading || pagination.page <= 1}
+                    onClick={() => void loadUsers(query, pagination.page - 1)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Назад
+                  </button>
+                  <span>{pagination.page}/{pagination.totalPages}</span>
+                  <button
+                    type="button"
+                    disabled={loading || pagination.page >= pagination.totalPages}
+                    onClick={() => void loadUsers(query, pagination.page + 1)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Вперёд
+                  </button>
+                </div>
+              </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -600,10 +732,20 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                       <h2 className="text-xl font-semibold text-slate-900">{selectedUser.user.email}</h2>
                       <div className="mt-2 text-sm text-slate-500">Регистрация: {formatDate(selectedUser.user.createdAt)}</div>
                     </div>
-                    <div className={`rounded-full px-3 py-1 text-sm ${
-                      selectedUser.subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                      {selectedUser.subscription.isActive ? 'Подписка активна' : 'Подписка истекла'}
+                    <div className="flex items-center gap-3">
+                      <div className={`rounded-full px-3 py-1 text-sm ${
+                        selectedUser.subscription.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {selectedUser.subscription.isActive ? 'Подписка активна' : 'Подписка истекла'}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={saving || deletingUser || userEmail === selectedUser.user.email}
+                        onClick={() => void deleteUser()}
+                        className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingUser ? 'Удаление…' : 'Удалить пользователя'}
+                      </button>
                     </div>
                   </div>
 
@@ -955,6 +1097,14 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {openingProjectId === project.id ? 'Переключение…' : 'Редактировать'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={deletingProjectId === project.id}
+                                  onClick={() => void deleteProject(project.id, project.name)}
+                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {deletingProjectId === project.id ? 'Удаление…' : 'Удалить'}
                                 </button>
                               </div>
                             </div>

@@ -59,7 +59,6 @@ export function CreateProjectModal({ onSave, onClose }: CreateProjectModalProps)
             <Plus className="w-5 h-5" />
             Новый проект
           </CardTitle>
-          <CardDescription>Введите название нового проекта</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
