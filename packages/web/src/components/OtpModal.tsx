@@ -42,6 +42,8 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
   const [step, setStep] = useState<Step>('choice');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentAttention, setConsentAttention] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
@@ -51,9 +53,23 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
     setError(null);
   }, [initialMethod]);
 
+  const ensureConsentAccepted = () => {
+    if (consentAccepted) {
+      setConsentAttention(false);
+      return true;
+    }
+
+    setConsentAttention(true);
+    return false;
+  };
+
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!ensureConsentAccepted()) {
+      return;
+    }
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
@@ -147,7 +163,11 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
             <CardTitle className="text-[28px] font-semibold tracking-[-0.03em] text-slate-950">Вход в ГетГант</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <YandexAuthButton onSuccess={onSuccess} onError={setError} />
+            <YandexAuthButton
+              onSuccess={onSuccess}
+              onError={setError}
+              onBeforeLogin={ensureConsentAccepted}
+            />
             {error && (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
                 {error}
@@ -180,6 +200,37 @@ export function OtpModal({ onSuccess, onClose, initialMethod = 'yandex' }: OtpMo
                   autoFocus={initialMethod === 'otp'}
                 />
               </div>
+              <label
+                className={cn(
+                  "flex items-start gap-3 rounded-2xl border bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600 transition-colors hover:border-slate-300",
+                  consentAttention
+                    ? "border-red-300 bg-red-50/80"
+                    : "border-slate-200",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={consentAccepted}
+                  onChange={(event) => {
+                    setConsentAccepted(event.target.checked);
+                    if (event.target.checked) {
+                      setConsentAttention(false);
+                      setError(null);
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                <span>
+                  Я принимаю{' '}
+                  <a href="https://getgantt.ru/privacy/" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                    Политику конфиденциальности
+                  </a>{' '}
+                  и{' '}
+                  <a href="https://getgantt.ru/terms/" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                    Условия использования
+                  </a>
+                </span>
+              </label>
               <Button
                 type="submit"
                 className="h-12 w-full rounded-2xl text-[15px] font-medium"

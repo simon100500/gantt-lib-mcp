@@ -28,6 +28,7 @@ type YandexCallbackMessage = {
 interface YandexAuthButtonProps {
   onSuccess: (result: AuthSuccessResponse) => void;
   onError: (message: string | null) => void;
+  onBeforeLogin?: () => boolean;
 }
 
 interface ApiErrorResponse {
@@ -240,7 +241,7 @@ function normalizeYandexError(error: unknown): { message: string; rawMessage: st
   };
 }
 
-export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) {
+export function YandexAuthButton({ onSuccess, onError, onBeforeLogin }: YandexAuthButtonProps) {
   const [loading, setLoading] = useState(false);
   const [sdkReady, setSdkReady] = useState(false);
 
@@ -254,6 +255,10 @@ export function YandexAuthButton({ onSuccess, onError }: YandexAuthButtonProps) 
   }, [onError]);
 
   const handleLogin = async () => {
+    if (onBeforeLogin && !onBeforeLogin()) {
+      return;
+    }
+
     const clientId = import.meta.env.VITE_YANDEX_CLIENT_ID?.trim();
     if (!clientId) {
       onError('VITE_YANDEX_CLIENT_ID не настроен');

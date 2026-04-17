@@ -1,0 +1,91 @@
+---
+const consentStorageKey = "getgantt_cookie_consent_v1";
+const metrikaId = "108296610";
+---
+
+<div
+  id="cookie-consent"
+  class="fixed inset-x-4 bottom-4 z-[70] hidden md:left-6 md:right-6"
+  aria-live="polite"
+  aria-hidden="true"
+>
+  <div
+    class="mx-auto flex max-w-4xl flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur sm:flex-row sm:items-center sm:justify-between"
+  >
+    <div class="min-w-0">
+      <p class="text-sm font-semibold text-slate-900">
+        Собираем куки, чтобы всё работало
+      </p>
+    </div>
+    <button
+      id="cookie-consent-accept"
+      type="button"
+      class="w-full shrink-0 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto"
+    >
+      Хорошо
+    </button>
+  </div>
+</div>
+
+<script is:inline define:vars={{ consentStorageKey, metrikaId }}>
+  const consentBanner = document.getElementById("cookie-consent");
+  const consentButton = document.getElementById("cookie-consent-accept");
+
+  function initYandexMetrika() {
+    if (window.__getganttMetrikaInitialized) return;
+    window.__getganttMetrikaInitialized = true;
+
+    (function (m, e, t, r, i, k, a) {
+      m[i] =
+        m[i] ||
+        function () {
+          (m[i].a = m[i].a || []).push(arguments);
+        };
+      m[i].l = 1 * new Date();
+      for (let j = 0; j < document.scripts.length; j += 1) {
+        if (document.scripts[j].src === r) return;
+      }
+      k = e.createElement(t);
+      a = e.getElementsByTagName(t)[0];
+      k.async = 1;
+      k.src = r;
+      a.parentNode.insertBefore(k, a);
+    })(
+      window,
+      document,
+      "script",
+      `https://mc.yandex.ru/metrika/tag.js?id=${metrikaId}`,
+      "ym",
+    );
+
+    window.ym(metrikaId, "init", {
+      ssr: true,
+      webvisor: true,
+      clickmap: true,
+      ecommerce: "dataLayer",
+      referrer: document.referrer,
+      url: location.href,
+      accurateTrackBounce: true,
+      trackLinks: true,
+    });
+  }
+
+  function setBannerVisible(visible) {
+    if (!consentBanner) return;
+    consentBanner.classList.toggle("hidden", !visible);
+    consentBanner.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
+  const consentValue = window.localStorage.getItem(consentStorageKey);
+  if (consentValue === "accepted") {
+    initYandexMetrika();
+  } else {
+    setBannerVisible(true);
+  }
+
+  consentButton?.addEventListener("click", () => {
+    window.localStorage.setItem(consentStorageKey, "accepted");
+    setBannerVisible(false);
+    initYandexMetrika();
+  });
+</script>
