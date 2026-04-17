@@ -322,14 +322,17 @@ function normalizeCreatedTask(task: Task, opts: CoreOptions): Task {
     });
   }
 
-  const duration = getTaskDuration(
-    task.startDate as string,
-    task.endDate as string,
-    opts.businessDays ?? false,
-    opts.weekendPredicate,
+  // Preserve the originally requested inclusive span, then snap it onto the
+  // active calendar. Using business-day duration here collapses weekend-only
+  // ranges before the scheduler can normalize them.
+  const startDate = parseDateOnly(task.startDate as string);
+  const endDate = parseDateOnly(task.endDate as string);
+  const duration = Math.max(
+    1,
+    Math.round((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1,
   );
   const normalizedRange = buildTaskRangeFromStart(
-    parseDateOnly(task.startDate as string),
+    startDate,
     duration,
     opts.businessDays ?? false,
     opts.weekendPredicate,
