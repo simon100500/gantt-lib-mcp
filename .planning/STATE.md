@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: completed
-last_updated: "2026-04-14T10:21:46.758Z"
-last_activity: 2026-04-14
+status: executing
+last_updated: "2026-04-17T21:09:24.891Z"
+last_activity: 2026-04-17
 progress:
-  total_phases: 14
+  total_phases: 15
   completed_phases: 12
-  total_plans: 43
-  completed_plans: 43
+  total_plans: 47
+  completed_plans: 44
   percent: 100
 ---
 
@@ -17,7 +17,7 @@ progress:
 
 **Last updated:** 2026-04-14
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Milestone complete
+**Status:** Ready to execute
 
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 43 — initial-gen-no-regexp
+**Current focus:** Phase 44 — undo-redo
 
 ---
 
 ## Current Position
 
-Phase: 43
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-14
+Phase: 44 (undo-redo) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-17
 
 Progress: [██████████] 100%
 
@@ -159,6 +159,9 @@ packages/
 - [Phase 43]: Phase 43 Plan 03 logs flattened interpretation, validation, fallback, and normalized-decision events so one intake run can be reconstructed from structured telemetry.
 - [Phase 43]: Phase 43 Plan 03 forwards interpretation evidence from agent.ts before initial-generation branching so route selection and orchestration share one trace.
 - [Phase 43]: Phase 43 Plan 03 gives interpreted location scope precedence over technical parsing in classification so paraphrases stay aligned with the shared interpretation contract.
+- [Phase 44]: Every authoritative command commit now belongs to a MutationGroup, with synthetic single-command system groups when history metadata is absent
+- [Phase 44]: Delete inverses restore tasks through typed create_task/create_tasks_batch commands while preserving full delete context in ProjectEvent.metadata
+- [Phase 44]: Group undoability is finalized from persisted inverseCommand presence across accepted ProjectEvent rows rather than from patches or caller intent
 
 ## Performance Metrics
 
@@ -185,6 +188,7 @@ packages/
 | Phase 43 P01 | 6 min | 2 tasks | 6 files |
 | Phase 43 P02 | 32min | 2 tasks | 11 files |
 | Phase 43 P03 | 6 min | 2 tasks | 9 files |
+| Phase 44 P01 | 28min | 2 tasks | 5 files |
 
 ## Session
 

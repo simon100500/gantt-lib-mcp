@@ -359,7 +359,7 @@ Plans:
 **Goal:** Линейная grouped history поверх существующего authoritative command pipeline: пользователь видит понятные MutationGroup-записи и может безопасно undo/redo как ручные действия, так и целый ход агента
 **Requirements**: HIS-01, HIS-02, HIS-03, HIS-04, HIS-05
 **Depends on:** Phase 43
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 **Success Criteria** (what must be TRUE):
   1. Каждый user-visible mutation commit или agent turn записывается как `MutationGroup` с корректными `baseVersion/newVersion`, порядком событий и persisted `inverseCommand`
@@ -369,7 +369,7 @@ Plans:
   5. Web UI показывает history panel и поддерживает `Ctrl+Z` / `Ctrl+Shift+Z`, после replay обновляясь от authoritative server snapshot
 
 Plans:
-- [ ] 44-01-PLAN.md — MutationGroup schema/contracts and history-aware `CommandService.commitCommand`
+- [x] 44-01-PLAN.md — MutationGroup schema/contracts and history-aware `CommandService.commitCommand`
 - [ ] 44-02-PLAN.md — Append-only undo/redo `HistoryService` plus paginated history API
 - [ ] 44-03-PLAN.md — Agent-turn grouping and manual web commit metadata propagation
 - [ ] 44-04-PLAN.md — History panel, undo/redo hotkeys, and authoritative frontend refresh
