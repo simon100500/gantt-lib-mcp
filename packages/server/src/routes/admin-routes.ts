@@ -18,6 +18,15 @@ interface AdminUpdateSubscriptionBody {
   aiQueriesUsed?: number;
 }
 
+function normalizePositiveLimit(value: unknown, defaultValue: number, maxValue: number): number {
+  const parsed = Number(value ?? defaultValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultValue;
+  }
+
+  return Math.min(maxValue, Math.floor(parsed));
+}
+
 function getAiPeriodBucket(plan: PlanId, now: Date): string {
   const aiLimit = PLAN_CATALOG[plan].limits.ai_queries;
   return aiLimit.period === 'lifetime' ? 'lifetime' : `day:${now.toISOString().slice(0, 10)}`;
@@ -102,6 +111,7 @@ async function buildAdminUserDetails(userId: string) {
         _count: {
           select: {
             messages: true,
+            agentDebugLogs: true,
           },
         },
       },
@@ -169,6 +179,7 @@ async function buildAdminUserDetails(userId: string) {
       archivedAt: project.archivedAt?.toISOString() ?? null,
       deletedAt: project.deletedAt?.toISOString() ?? null,
       messageCount: project._count.messages,
+      logCount: project._count.agentDebugLogs,
     })),
   };
 }
@@ -667,6 +678,101 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
         role: message.role,
         content: message.content,
         createdAt: message.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  fastify.get('/api/admin/projects/:id/logs', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const projectId = (req.params as { id: string }).id;
+    const { limit: rawLimit } = req.query as { limit?: string | number };
+    const limit = normalizePositiveLimit(rawLimit, 200, 500);
+    const prisma = getPrisma();
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const logs = await (prisma as any).agentDebugLog.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return reply.send({
+      project: {
+        id: project.id,
+        name: project.name,
+      },
+      logs: (logs as any[]).map((log: any) => ({
+        id: log.id,
+        source: log.source,
+        event: log.event,
+        userId: log.userId ?? null,
+        projectId: log.projectId ?? null,
+        sessionId: log.sessionId ?? null,
+        runId: log.runId ?? null,
+        attempt: log.attempt ?? null,
+        tool: log.tool ?? null,
+        toolUseId: log.toolUseId ?? null,
+        aiMutationSource: log.aiMutationSource ?? null,
+        createdAt: log.createdAt.toISOString(),
+        payload: log.payload,
+      })),
+    });
+  });
+
+  fastify.get('/api/admin/users/:id/logs', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const userId = (req.params as { id: string }).id;
+    const { limit: rawLimit, projectId } = req.query as { limit?: string | number; projectId?: string };
+    const limit = normalizePositiveLimit(rawLimit, 200, 500);
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    const logs = await (prisma as any).agentDebugLog.findMany({
+      where: {
+        userId,
+        ...(projectId ? { projectId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return reply.send({
+      user: {
+        id: user.id,
+        email: user.email,
+      },
+      projectId: projectId ?? null,
+      logs: (logs as any[]).map((log: any) => ({
+        id: log.id,
+        source: log.source,
+        event: log.event,
+        userId: log.userId ?? null,
+        projectId: log.projectId ?? null,
+        sessionId: log.sessionId ?? null,
+        runId: log.runId ?? null,
+        attempt: log.attempt ?? null,
+        tool: log.tool ?? null,
+        toolUseId: log.toolUseId ?? null,
+        aiMutationSource: log.aiMutationSource ?? null,
+        createdAt: log.createdAt.toISOString(),
+        payload: log.payload,
       })),
     });
   });

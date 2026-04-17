@@ -98,6 +98,7 @@ interface AdminUserDetails {
     archivedAt: string | null;
     deletedAt: string | null;
     messageCount: number;
+    logCount: number;
   }>;
 }
 
@@ -106,6 +107,22 @@ interface AdminProjectMessage {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+}
+
+interface AdminDebugLogEntry {
+  id: string;
+  source: string;
+  event: string;
+  userId: string | null;
+  projectId: string | null;
+  sessionId: string | null;
+  runId: string | null;
+  attempt: number | null;
+  tool: string | null;
+  toolUseId: string | null;
+  aiMutationSource: string | null;
+  createdAt: string;
+  payload: unknown;
 }
 
 interface AdminUsersPagination {
@@ -137,6 +154,14 @@ function formatTime(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 async function fetchAdminWithRetry(input: string, init: RequestInit = {}): Promise<Response> {
@@ -243,6 +268,11 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [chatProjectName, setChatProjectName] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<AdminProjectMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [logScope, setLogScope] = useState<'user' | 'project' | null>(null);
+  const [logProjectId, setLogProjectId] = useState<string | null>(null);
+  const [logProjectName, setLogProjectName] = useState<string | null>(null);
+  const [logs, setLogs] = useState<AdminDebugLogEntry[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [activeTab, setActiveTab] = useState<'billing' | 'projects'>('billing');
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
@@ -313,6 +343,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       setChatProjectId(null);
       setChatProjectName(null);
       setChatMessages([]);
+      setLogScope(null);
+      setLogProjectId(null);
+      setLogProjectName(null);
+      setLogs([]);
       const trackedUsage = data.subscription.usage.ai_queries.usageState === 'tracked'
         ? data.subscription.usage.ai_queries.used ?? 0
         : 0;
@@ -498,12 +532,88 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       setChatProjectId(data.project.id);
       setChatProjectName(data.project.name || projectName);
       setChatMessages(data.messages);
+      setLogScope(null);
+      setLogProjectId(null);
+      setLogProjectName(null);
+      setLogs([]);
     } catch (chatError) {
       setError(chatError instanceof Error ? chatError.message : 'Failed to load project chat');
     } finally {
       setLoadingChat(false);
     }
   }, []);
+
+  const openProjectLogs = useCallback(async (projectId: string, projectName: string) => {
+    setLoadingLogs(true);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/projects/${projectId}/logs?limit=200`);
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        project: { id: string; name: string };
+        logs: AdminDebugLogEntry[];
+      };
+      setLogScope('project');
+      setLogProjectId(data.project.id);
+      setLogProjectName(data.project.name || projectName);
+      setLogs(data.logs);
+      setChatProjectId(null);
+      setChatProjectName(null);
+      setChatMessages([]);
+    } catch (logError) {
+      setError(logError instanceof Error ? logError.message : 'Failed to load project logs');
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, []);
+
+  const openUserLogs = useCallback(async () => {
+    if (!selectedUser) {
+      return;
+    }
+
+    setLoadingLogs(true);
+    setError(null);
+
+    try {
+      const response = await fetchAdminWithRetry(`/api/admin/users/${selectedUser.user.id}/logs?limit=200`);
+
+      if (response.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        user: { id: string; email: string };
+        logs: AdminDebugLogEntry[];
+      };
+      setLogScope('user');
+      setLogProjectId(null);
+      setLogProjectName(data.user.email);
+      setLogs(data.logs);
+      setChatProjectId(null);
+      setChatProjectName(null);
+      setChatMessages([]);
+    } catch (logError) {
+      setError(logError instanceof Error ? logError.message : 'Failed to load user logs');
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, [selectedUser]);
 
   const deleteProject = useCallback(async (projectId: string, projectName: string) => {
     if (!selectedUserId) {
@@ -538,13 +648,19 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
         setChatProjectName(null);
         setChatMessages([]);
       }
+      if (logScope === 'project' && logProjectId === projectId) {
+        setLogScope(null);
+        setLogProjectId(null);
+        setLogProjectName(null);
+        setLogs([]);
+      }
       await loadUsers(query, pagination.page);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete project');
     } finally {
       setDeletingProjectId(null);
     }
-  }, [chatProjectId, loadUsers, pagination.page, query, selectedUserId]);
+  }, [chatProjectId, loadUsers, logProjectId, logScope, pagination.page, query, selectedUserId]);
 
   const deleteUser = useCallback(async () => {
     if (!selectedUser) {
@@ -577,6 +693,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       setChatProjectId(null);
       setChatProjectName(null);
       setChatMessages([]);
+      setLogScope(null);
+      setLogProjectId(null);
+      setLogProjectName(null);
+      setLogs([]);
 
       const nextTotalAfterDelete = Math.max(0, pagination.total - 1);
       const nextPage = Math.min(
@@ -1037,7 +1157,21 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                   ) : (
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
                     <div className="rounded-2xl border border-slate-200 p-4">
-                      <div className="text-sm font-medium text-slate-900">Последние проекты</div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-slate-900">Последние проекты</div>
+                        <button
+                          type="button"
+                          disabled={loadingLogs}
+                          onClick={() => void openUserLogs()}
+                          className={`rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                            logScope === 'user'
+                              ? 'border-primary bg-primary/[0.08] text-primary'
+                              : 'border-slate-200 text-slate-700 hover:bg-white'
+                          }`}
+                        >
+                          {loadingLogs && logScope === 'user' ? 'Загрузка…' : 'Логи пользователя'}
+                        </button>
+                      </div>
                       <div className="mt-3 space-y-2">
                         {selectedUser.projects.length === 0 ? (
                           <div className="text-sm text-slate-400">Проектов нет.</div>
@@ -1067,6 +1201,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   {project.deletedAt && project.status === 'deleted' && (
                                     <span className="text-xs text-slate-500">удалён: {formatDate(project.deletedAt)}</span>
                                   )}
+                                  <span className="text-xs text-slate-500">логов: {project.logCount ?? 0}</span>
                                 </div>
                               </div>
                               <div className="flex shrink-0 gap-2">
@@ -1081,6 +1216,18 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   }`}
                                 >
                                   {loadingChat && chatProjectId === project.id ? 'Загрузка…' : `Чат (${project.messageCount ?? 0})`}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={loadingLogs && logProjectId === project.id}
+                                  onClick={() => void openProjectLogs(project.id, project.name)}
+                                  className={`rounded-lg border px-3 py-2 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                    logScope === 'project' && logProjectId === project.id
+                                      ? 'border-primary bg-primary/[0.08] text-primary'
+                                      : 'border-slate-200 text-slate-700 hover:bg-white'
+                                  }`}
+                                >
+                                  {loadingLogs && logProjectId === project.id ? 'Загрузка…' : `Логи (${project.logCount ?? 0})`}
                                 </button>
                                 <button
                                   type="button"
@@ -1116,15 +1263,25 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                     <div className="rounded-2xl border border-slate-200 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium text-slate-900">
-                          {chatProjectName ? `Чат проекта: ${chatProjectName}` : 'Чат проекта'}
+                          {chatProjectId
+                            ? `Чат проекта: ${chatProjectName}`
+                            : logScope === 'project'
+                              ? `Логи проекта: ${logProjectName}`
+                              : logScope === 'user'
+                                ? `Логи пользователя: ${logProjectName}`
+                                : 'Чат и логи'}
                         </div>
-                        {chatProjectName && (
+                        {(chatProjectName || logScope) && (
                           <button
                             type="button"
                             onClick={() => {
                               setChatProjectId(null);
                               setChatProjectName(null);
                               setChatMessages([]);
+                              setLogScope(null);
+                              setLogProjectId(null);
+                              setLogProjectName(null);
+                              setLogs([]);
                             }}
                             className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
                           >
@@ -1133,14 +1290,48 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                         )}
                       </div>
                       <div className="mt-3 space-y-3">
-                        {!chatProjectId ? (
+                        {!chatProjectId && !logScope ? (
                           <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
-                            Выберите проект и нажмите «Чат».
+                            Выберите проект и нажмите «Чат» или «Логи». Для общего потока нажмите «Логи пользователя».
                           </div>
                         ) : loadingChat ? (
                           <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
                             Загрузка чата…
                           </div>
+                        ) : loadingLogs ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
+                            Загрузка логов…
+                          </div>
+                        ) : logScope ? (
+                          logs.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
+                              Логов пока нет.
+                            </div>
+                          ) : logs.map((log) => (
+                            <div key={log.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm shadow-sm">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-white">
+                                  {log.source}
+                                </span>
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                                  {log.event}
+                                </span>
+                                {log.tool && (
+                                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                                    tool: {log.tool}
+                                  </span>
+                                )}
+                                <span className="ml-auto text-xs text-slate-500">{formatDate(log.createdAt)} {formatTime(log.createdAt)}</span>
+                              </div>
+                              <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                                <div>projectId: <span className="font-mono text-slate-700">{log.projectId ?? '—'}</span></div>
+                                <div>sessionId: <span className="font-mono text-slate-700">{log.sessionId ?? '—'}</span></div>
+                                <div>runId: <span className="font-mono text-slate-700">{log.runId ?? '—'}</span></div>
+                                <div>attempt: <span className="font-mono text-slate-700">{log.attempt ?? '—'}</span></div>
+                              </div>
+                              <pre className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-700">{formatJson(log.payload)}</pre>
+                            </div>
+                          ))
                         ) : chatMessages.length === 0 ? (
                           <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">
                             В этом проекте пока нет сообщений.

@@ -172,10 +172,35 @@ describe('admin user pagination and destructive routes', () => {
     );
   });
 
+  it('registers GET /api/admin/projects/:id/logs', () => {
+    assert.match(
+      adminRoutesSource,
+      /fastify\.get\('\/api\/admin\/projects\/:id\/logs',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+  });
+
+  it('registers GET /api/admin/users/:id/logs', () => {
+    assert.match(
+      adminRoutesSource,
+      /fastify\.get\('\/api\/admin\/users\/:id\/logs',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireAdminAccess\]\s*\}/,
+    );
+  });
+
   it('prevents deleting the current admin user', () => {
     assert.match(
       adminRoutesSource,
       /req\.user!\.userId === userId[\s\S]*You cannot delete your own admin user/,
+    );
+  });
+
+  it('returns project log counts in buildAdminUserDetails', () => {
+    assert.match(
+      adminRoutesSource,
+      /agentDebugLogs:\s*true/,
+    );
+    assert.match(
+      adminRoutesSource,
+      /logCount:\s*project\._count\.agentDebugLogs/,
     );
   });
 });
