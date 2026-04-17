@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-17T21:20:44.356Z"
-last_activity: 2026-04-18
+last_updated: "2026-04-17T21:23:28.726Z"
+last_activity: 2026-04-17
 progress:
   total_phases: 15
   completed_phases: 12
   total_plans: 47
-  completed_plans: 45
+  completed_plans: 46
   percent: 96
 ---
 
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 44 (undo-redo) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
-Last activity: 2026-04-18
+Last activity: 2026-04-17
 
 Progress: [██████████] 96%
 
@@ -165,6 +165,8 @@ packages/
 - [Phase 44-undo-redo]: Phase 44 Plan 02 keeps undo and redo orchestration inside HistoryService while replay always routes through commandService.commitCommand.
 - [Phase 44-undo-redo]: Phase 44 Plan 02 derives redoable grouped history from undo linkage and later applied-group inspection instead of persisting a separate flag.
 - [Phase 44-undo-redo]: Phase 44 Plan 02 maps history replay version_conflict to HTTP 409 while typed redo refusals stay HTTP 400 with authoritative snapshot/version payloads.
+- [Phase 44]: Phase 44 Plan 03 gives each staged agent turn one shared groupId/requestContextId and finalizes the mutation group only on the last authoritative command.
+- [Phase 44]: Phase 44 Plan 03 routes manual UI history grouping through the existing /api/commands/commit hook and Fastify route instead of adding a parallel history write API.
 
 ## Performance Metrics
 
@@ -193,6 +195,7 @@ packages/
 | Phase 43 P03 | 6 min | 2 tasks | 9 files |
 | Phase 44 P01 | 28min | 2 tasks | 5 files |
 | Phase 44-undo-redo P02 | 4min | 2 tasks | 7 files |
+| Phase 44 P03 | 35min | 2 tasks | 11 files |
 
 ## Session
 
