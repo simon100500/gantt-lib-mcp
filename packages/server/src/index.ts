@@ -12,8 +12,9 @@
  */
 
 import Fastify from 'fastify';
+import { randomUUID } from 'node:crypto';
 import websocket from '@fastify/websocket';
-import { messageService } from '@gantt/mcp/services';
+import { commandService, messageService, taskService } from '@gantt/mcp/services';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import { authService } from '@gantt/mcp/services';
 import type {
@@ -33,6 +34,7 @@ import { registerBillingRoutes } from './routes/billing-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
+import { runDirectSplitTask } from './split-task.js';
 
 const fastify = Fastify({ logger: true });
 const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
@@ -154,6 +156,44 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireActiveSubscripti
     fastify.log.error(err, 'agent error');
   });
   return reply.send({ status: 'processing' });
+});
+
+fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
+  const params = req.params as { taskId?: string };
+  const body = (req.body ?? {}) as { details?: string };
+  const taskId = params.taskId?.trim();
+
+  if (!taskId) {
+    return reply.status(400).send({ error: 'taskId required' });
+  }
+
+  await incrementAiUsage(req.user!.userId);
+  const runId = randomUUID();
+
+  void runDirectSplitTask({
+    runId,
+    projectId: req.user!.projectId,
+    sessionId: req.user!.sessionId,
+    taskId,
+    details: typeof body.details === 'string' ? body.details : '',
+    env: {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
+      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
+      OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+      OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
+    },
+    services: {
+      messageService,
+      taskService,
+      commandService,
+    },
+    broadcastToSession,
+  }).catch((err: unknown) => {
+    broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
+    fastify.log.error(err, 'direct split task error');
+  });
+
+  return reply.send({ status: 'processing', runId });
 });
 
 fastify.get('/api/messages', { preHandler: [authMiddleware] }, async (req, reply) => {

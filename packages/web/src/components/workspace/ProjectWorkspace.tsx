@@ -6,7 +6,7 @@ import type { TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
-import { SplitTaskModal, buildSplitTaskPrompt } from '../SplitTaskModal.tsx';
+import { SplitTaskModal } from '../SplitTaskModal.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
@@ -54,6 +54,7 @@ interface ProjectWorkspaceProps {
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   previewState?: 'idle' | 'rendering' | 'failed';
   previewMessage?: string | null;
+  onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
 }
 
 function formatTaskCount(count: number) {
@@ -108,6 +109,7 @@ export function ProjectWorkspace({
   onGanttDayModeChange,
   previewState = 'idle',
   previewMessage = null,
+  onSplitTask,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -230,31 +232,31 @@ export function ProjectWorkspace({
   }, [batchUpdate, effectiveReadOnly, ganttDayMode, setTasks, tasks, weekendPredicate]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
-    if (!onSend || effectiveReadOnly || chatDisabled) {
+    if (!onSplitTask || effectiveReadOnly || chatDisabled) {
       return [];
     }
 
     return [
       {
         id: 'split-task-with-ai',
-        label: 'Разбить задачу',
+        label: 'Разбить задачу...',
         icon: <ListTree className="h-4 w-4" />,
         scope: 'linear',
         onSelect: (row) => setSplitTaskDraft(row),
       },
     ];
-  }, [chatDisabled, effectiveReadOnly, onSend]);
+  }, [chatDisabled, effectiveReadOnly, onSplitTask]);
 
   const handleSplitTaskSubmit = useCallback(async (details: string) => {
-    if (!splitTaskDraft || !onSend) {
+    if (!splitTaskDraft || !onSplitTask) {
       return {
         accepted: false,
         message: 'Не удалось определить задачу для разбиения.',
       };
     }
 
-    return await Promise.resolve(onSend(buildSplitTaskPrompt(splitTaskDraft, details)));
-  }, [onSend, splitTaskDraft]);
+    return await Promise.resolve(onSplitTask(splitTaskDraft, details));
+  }, [onSplitTask, splitTaskDraft]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">

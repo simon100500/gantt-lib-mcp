@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Sparkles, ListTree } from 'lucide-react';
+import { ChevronDown, ListTree } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,37 +14,31 @@ interface SplitTaskModalProps {
 }
 
 function normalizeDate(value: Task['startDate'] | Task['endDate']): string {
-  if (typeof value === 'string') {
-    return value;
-  }
+  const date = typeof value === 'string'
+    ? new Date(`${value.slice(0, 10)}T00:00:00`)
+    : value;
 
-  return value.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
 }
 
-export function buildSplitTaskPrompt(task: Task, details: string): string {
+export function buildSplitTaskTrace(task: Task, details: string): string {
   const trimmedDetails = details.trim();
-  const lines = [
-    `Разбей задачу "${task.name}" на более детальные подзадачи и сделай исходную задачу родительской.`,
-    'Это точечная операция только для этой ветки проекта.',
-    `Опорная задача: "${task.name}" (id: ${task.id}).`,
-    `Текущий диапазон задачи: ${normalizeDate(task.startDate)} - ${normalizeDate(task.endDate)}.`,
-    'Нужен результат в текущем проекте: добавь подзадачи под эту задачу, не создавай отдельную параллельную ветку рядом.',
-    'Сохрани смысл исходной задачи и детализируй её на практические шаги.',
-  ];
-
-  if (trimmedDetails) {
-    lines.push(`Дополнительные пожелания пользователя: ${trimmedDetails}`);
+  if (!trimmedDetails) {
+    return `Разбить задачу «${task.name}» на подзадачи.`;
   }
 
-  lines.push('Если уместно, используй 4-8 подзадач. Названия должны быть конкретными и рабочими.');
-
-  return lines.join('\n');
+  return `Разбить задачу «${task.name}» на подзадачи. Уточнения: ${trimmedDetails}`;
 }
 
 export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps) {
   const [details, setDetails] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const dateRange = useMemo(
     () => `${normalizeDate(task.startDate)} - ${normalizeDate(task.endDate)}`,
@@ -77,22 +71,15 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
         onClose();
       }
     }}>
-      <Card className="w-full max-w-2xl rounded-3xl border-0 shadow-[0_24px_80px_rgba(15,23,42,0.35)]" onClick={(event) => event.stopPropagation()}>
-        <CardHeader className="space-y-4 pb-4">
+      <Card className="w-full max-w-xl rounded-2xl border border-slate-200 shadow-[0_20px_60px_rgba(15,23,42,0.18)]" onClick={(event) => event.stopPropagation()}>
+        <CardHeader className="space-y-3 pb-3">
           <div className="flex items-start justify-between gap-4">
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                <Sparkles className="h-3.5 w-3.5" />
-                AI Detail Pass
-              </div>
+            <div className="space-y-2">
               <div>
-                <CardTitle className="flex items-center gap-2 text-2xl text-slate-900">
-                  <ListTree className="h-6 w-6 text-amber-600" />
+                <CardTitle className="flex items-center gap-2 text-xl text-slate-900">
+                  <ListTree className="h-5 w-5 text-slate-700" />
                   Разбить задачу
                 </CardTitle>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-                  Исходная задача останется в графике и станет родительской. AI добавит под ней более детальные подзадачи.
-                </p>
               </div>
             </div>
             <button
@@ -111,61 +98,58 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
         </CardHeader>
 
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#fff7ed,white_55%,#f8fafc)] p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Выбранная задача</div>
-              <div className="mt-2 text-lg font-semibold text-slate-900">{task.name}</div>
-              <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
-                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-slate-200">ID: {task.id}</span>
-                <span className="rounded-full bg-white/80 px-2.5 py-1 ring-1 ring-slate-200">{dateRange}</span>
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-base font-semibold text-slate-900">{task.name}</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                <span className="rounded-md bg-white px-2 py-1 ring-1 ring-slate-200">{dateRange}</span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="split-task-details" className="text-sm font-medium text-slate-800">
-                Уточнения для AI
-              </label>
-              <textarea
-                id="split-task-details"
-                value={details}
-                onChange={(event) => setDetails(event.target.value)}
-                disabled={loading}
-                rows={6}
-                placeholder="Необязательно. Например: учти проектную документацию, выдели согласование, монтаж и проверку."
-                className={cn(
-                  'flex min-h-[144px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100 disabled:cursor-not-allowed disabled:opacity-60',
-                  error && 'border-red-300 focus:border-red-300 focus:ring-red-100',
-                )}
-              />
-              <p className="text-xs leading-5 text-slate-500">
-                Поле можно оставить пустым. Тогда задача будет детализирована только по её названию и диапазону.
-              </p>
-            </div>
+            <p className="text-sm leading-6 text-slate-600">
+              Исходная задача станет родительской. Под ней появятся более детальные подзадачи.
+            </p>
 
-            <div className="space-y-2">
-              <label htmlFor="split-task-preview" className="text-sm font-medium text-slate-800">
-                Что уйдёт в запрос
-              </label>
-              <Input
-                id="split-task-preview"
-                value="Прямой one-shot prompt в /api/chat, без отдельного endpoint"
-                readOnly
-                className="h-11 rounded-xl border-slate-200 bg-slate-50 text-slate-600"
-              />
-            </div>
+            <details
+              open={detailsOpen}
+              onToggle={(event) => setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)}
+              className="group"
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-slate-500 transition hover:text-slate-800">
+                <span>Уточнить</span>
+                <ChevronDown className={cn('h-4 w-4 transition-transform', detailsOpen && 'rotate-180')} />
+              </summary>
+              <div className="pt-3">
+                <textarea
+                  id="split-task-details"
+                  value={details}
+                  onChange={(event) => setDetails(event.target.value)}
+                  disabled={loading}
+                  rows={5}
+                  placeholder="Необязательно. Например: учти проектную документацию, выдели согласование, монтаж и проверку."
+                  className={cn(
+                    'flex min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60',
+                    error && 'border-red-300 focus:border-red-300 focus:ring-red-100',
+                  )}
+                />
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Можно оставить пустым.
+                </p>
+              </div>
+            </details>
 
             {error && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
           </CardContent>
 
-          <CardFooter className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="flex-1 rounded-xl">
+          <CardFooter className="flex gap-3 pt-1">
+            <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="flex-1 rounded-lg">
               Отмена
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+            <Button type="submit" disabled={loading} className="flex-1 rounded-lg bg-slate-900 text-white hover:bg-slate-800">
               {loading ? 'Отправка...' : 'Разбить задачу'}
             </Button>
           </CardFooter>

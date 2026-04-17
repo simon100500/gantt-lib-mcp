@@ -9,6 +9,7 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
@@ -770,6 +771,79 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     return true;
   }, [auth, isArchivedProject, openLimitModal, proactiveChatDenial]);
 
+  const submitSplitTask = useCallback(async (task: Task, details: string): Promise<StartScreenSendResult> => {
+    if (hasShareToken) {
+      return { accepted: false };
+    }
+    if (isArchivedProject) {
+      return {
+        accepted: false,
+        message: 'Проект в архиве. Восстановите его, чтобы разбить задачу.',
+      };
+    }
+    if (!auth.isAuthenticated) {
+      onLoginRequired();
+      return { accepted: false };
+    }
+    if (proactiveChatDenial) {
+      await openLimitModal(proactiveChatDenial);
+      return { accepted: false };
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      return { accepted: false, message: 'Нет access token для AI-запроса.' };
+    }
+
+    useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, details) });
+    openProjectChat();
+
+    let response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/split`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ details }),
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        return { accepted: false, message: 'Сессия истекла. Войдите заново.' };
+      }
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/split`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ details }),
+      });
+    }
+
+    if (response.status === 403) {
+      try {
+        const body = await response.json() as Partial<ConstraintDenialPayload>;
+        if (isConstraintCode(body.code)) {
+          await openLimitModal(body);
+          return { accepted: false };
+        }
+      } catch {
+        // response body not JSON
+      }
+      return { accepted: false, message: 'Доступ к AI-функции ограничен.' };
+    }
+
+    if (!response.ok) {
+      return { accepted: false, message: `HTTP ${response.status}` };
+    }
+
+    return { accepted: true };
+  }, [auth, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial]);
+
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
       return { accepted: false };
@@ -1246,6 +1320,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             chatDisabledReason={chatDisabledReason}
             batchUpdate={batchUpdate}
             onSend={handleSend}
+            onSplitTask={submitSplitTask}
             onLoginRequired={onLoginRequired}
             onCloseChat={closeProjectChat}
             onToggleChat={toggleProjectChat}
