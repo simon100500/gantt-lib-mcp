@@ -44,6 +44,8 @@ interface RouteState {
 }
 
 type BillingConstraintStatus = UsageStatus | SubscriptionStatus | null;
+const SUPPORTED_APP_PATHS = new Set(['/', '/auth/yandex/callback', '/purchase', '/account', '/admin']);
+const TRANSIENT_QUERY_PARAMS = new Set(['auth']);
 
 function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
   return code === 'PROJECT_LIMIT_REACHED' || code === 'AI_LIMIT_REACHED' || code === 'SUBSCRIPTION_EXPIRED' || code === 'ARCHIVE_FEATURE_LOCKED' || code === 'EXPORT_FEATURE_LOCKED';
@@ -135,6 +137,29 @@ function normalizePathname(pathname: string): string {
   return pathname;
 }
 
+function removeTransientSearchParams(search: string): string {
+  if (!search) {
+    return '';
+  }
+
+  const params = new URLSearchParams(search);
+  let changed = false;
+
+  TRANSIENT_QUERY_PARAMS.forEach((key) => {
+    if (params.has(key)) {
+      params.delete(key);
+      changed = true;
+    }
+  });
+
+  if (!changed) {
+    return search;
+  }
+
+  const nextSearch = params.toString();
+  return nextSearch ? `?${nextSearch}` : '';
+}
+
 function buildDependencyRowsFromTasks(tasks: Task[]) {
   return tasks.flatMap((task) =>
     (task.dependencies ?? []).map((dependency, index) => ({
@@ -203,18 +228,28 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (auth.isAuthenticated) {
-      return;
-    }
-
     const params = new URLSearchParams(route.search);
     const requestedAuthMode = params.get('auth');
     if (requestedAuthMode !== 'otp' && requestedAuthMode !== 'yandex') {
       return;
     }
 
-    setShowOtpModal(true);
-  }, [auth.isAuthenticated, route.search, setShowOtpModal]);
+    if (!auth.isAuthenticated) {
+      setShowOtpModal(true);
+    }
+
+    const sanitizedSearch = removeTransientSearchParams(route.search);
+    if (sanitizedSearch === route.search) {
+      return;
+    }
+
+    const nextUrl = `${window.location.origin}${route.pathname}${sanitizedSearch}`;
+    window.history.replaceState(window.history.state, '', nextUrl);
+    setRoute({
+      pathname: route.pathname,
+      search: sanitizedSearch,
+    });
+  }, [auth.isAuthenticated, route.pathname, route.search, setShowOtpModal]);
 
   const handleAuthSuccess = useCallback(async (result: AuthSuccessResponse) => {
     auth.login(result, result.user, result.project);
@@ -299,6 +334,7 @@ export default function App() {
   }, [auth, localTasks, setShowOtpModal]);
 
   const normalizedPathname = normalizePathname(route.pathname);
+  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname);
   const authModalMethod = new URLSearchParams(route.search).get('auth') === 'otp' ? 'otp' : 'yandex';
   const isYandexCallbackRoute = normalizedPathname === '/auth/yandex/callback';
   const isPurchaseRoute = normalizedPathname === '/purchase';
@@ -308,6 +344,19 @@ export default function App() {
   const initialPurchasePlan = purchaseParams.get('plan');
   const initialPurchasePeriod = purchaseParams.get('period');
   const autoPurchaseCheckout = purchaseParams.get('checkout') === '1';
+
+  useEffect(() => {
+    if (isKnownRoute) {
+      return;
+    }
+
+    const nextUrl = `${window.location.origin}/${route.search}`;
+    window.history.replaceState(window.history.state, '', nextUrl);
+    setRoute({
+      pathname: '/',
+      search: route.search,
+    });
+  }, [isKnownRoute, route.search]);
 
   return (
     <>
