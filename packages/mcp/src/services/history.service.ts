@@ -87,6 +87,33 @@ type HistoryServiceDeps = {
   commandService?: Pick<CommandService, 'commitCommand'>;
 };
 
+function buildReplayHistory(params: {
+  replayMode: 'undo' | 'redo';
+  replayGroupId: string;
+  title: string;
+  requestContextId?: string;
+  targetGroupId: string;
+}) {
+  if (params.replayMode === 'undo') {
+    return {
+      groupId: params.replayGroupId,
+      origin: 'undo' as const,
+      title: `Undo — ${params.title}`,
+      requestContextId: params.requestContextId,
+      targetGroupId: params.targetGroupId,
+    };
+  }
+
+  return {
+    groupId: params.replayGroupId,
+    origin: 'redo' as const,
+    title: `Redo — ${params.title}`,
+    requestContextId: params.requestContextId,
+    redoOfGroupId: params.targetGroupId,
+    targetGroupId: params.targetGroupId,
+  };
+}
+
 function toActorType(value: DbMutationGroup['actorType']): ActorType {
   return value === 'import_actor' ? 'import' : value;
 }
@@ -251,6 +278,14 @@ export class HistoryService {
         };
       }
 
+      const historyBase = buildReplayHistory({
+        replayMode: params.replayMode,
+        replayGroupId,
+        title: params.targetGroup.title,
+        requestContextId: params.requestContextId,
+        targetGroupId: params.targetGroup.id,
+      });
+
       const response = await this.commandService.commitCommand(
         {
           projectId: params.projectId,
@@ -258,13 +293,8 @@ export class HistoryService {
           baseVersion,
           command: replayCommand,
           history: {
-            groupId: replayGroupId,
-            origin: params.replayMode,
-            title: `${params.replayMode === 'undo' ? 'Undo' : 'Redo'} — ${params.targetGroup.title}`,
-            requestContextId: params.requestContextId,
+            ...historyBase,
             finalizeGroup: index === params.events.length - 1,
-            redoOfGroupId: params.replayMode === 'redo' ? params.targetGroup.id : null,
-            targetGroupId: params.targetGroup.id,
           },
         },
         params.actorType,
