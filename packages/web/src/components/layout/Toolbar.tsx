@@ -11,8 +11,6 @@ import {
   Rows3,
   Lock,
   LockOpen,
-  Circle,
-  CircleDot,
   Sparkles,
 } from 'lucide-react';
 
@@ -341,18 +339,27 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          {(['day', 'week', 'month'] as const).map((nextMode) => (
-            <DropdownMenuItem
-              key={nextMode}
-              onClick={() => handleViewModeChange(nextMode)}
-              className="flex cursor-pointer items-center gap-2 sm:hidden"
-            >
-              {currentViewMode === nextMode ? <CircleDot className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
-              <span className="text-sm">
-                {nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}
-              </span>
-            </DropdownMenuItem>
-          ))}
+          <div className="px-2 py-2 sm:hidden">
+            <div className="flex flex-col rounded-md">
+              {(['day', 'week', 'month'] as const).map((nextMode, index, modes) => (
+                <button
+                  key={nextMode}
+                  type="button"
+                  onClick={() => handleViewModeChange(nextMode)}
+                  className={cn(
+                    'flex h-9 items-center px-3 text-left text-xs font-medium transition-colors focus-visible:outline-none border',
+                    index === 0 && 'rounded-t-md',
+                    index === modes.length - 1 && 'rounded-b-md',
+                    currentViewMode === nextMode
+                      ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
+                      : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+                  )}
+                >
+                  {nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="mx-2 my-1 h-px bg-slate-200 sm:hidden" />
           <DropdownMenuItem
             onClick={onCollapseAll}
