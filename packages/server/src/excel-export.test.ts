@@ -86,7 +86,7 @@ describe('buildProjectExcelExportBuffer', () => {
           endDate: toIsoDate(addDays(monthStart, 2)),
           sortOrder: 1,
           color: '#94A3B8',
-          progress: 0,
+          progress: 100,
           dependencies: [],
         },
         {
@@ -101,12 +101,45 @@ describe('buildProjectExcelExportBuffer', () => {
           dependencies: [],
         },
         {
+          id: 'child-parent',
+          name: 'Подэтап',
+          parentId: 'parent',
+          startDate: toIsoDate(addDays(monthStart, 1)),
+          endDate: toIsoDate(addDays(monthStart, 4)),
+          sortOrder: 2,
+          color: '#94A3B8',
+          progress: 35,
+          dependencies: [],
+        },
+        {
+          id: 'deep-parent',
+          name: 'Глубокий этап',
+          parentId: 'child-parent',
+          startDate: toIsoDate(addDays(monthStart, 2)),
+          endDate: toIsoDate(addDays(monthStart, 4)),
+          sortOrder: 1,
+          color: '#94A3B8',
+          progress: 15,
+          dependencies: [],
+        },
+        {
+          id: 'deep-child',
+          name: 'Вложенная задача',
+          parentId: 'deep-parent',
+          startDate: toIsoDate(addDays(monthStart, 3)),
+          endDate: toIsoDate(addDays(monthStart, 4)),
+          sortOrder: 1,
+          color: '#2563EB',
+          progress: 0,
+          dependencies: [],
+        },
+        {
           id: 'child-b',
           name: 'Монтаж очень длинного этапа с несколькими словами',
           parentId: 'parent',
           startDate: toIsoDate(addDays(monthStart, 2)),
           endDate: toIsoDate(timelineEnd),
-          sortOrder: 2,
+          sortOrder: 3,
           color: '#2563EB',
           progress: 0,
           dependencies: [
@@ -168,20 +201,33 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('A4').value, '1');
     assert.equal(sheet.getCell('B4').value, 'Этап 1');
     assert.equal(sheet.getCell('B4').font?.bold, true);
+    assert.equal(sheet.getCell('F4').value, 1);
+    assert.equal(sheet.getCell('F4').numFmt, '0%');
     assert.equal(sheet.getCell('A5').value, '1.1');
     assert.equal(sheet.getCell('B5').value, 'Подготовка');
     assert.equal(sheet.getCell('B5').alignment?.indent, 1);
     assert.equal(sheet.getCell('A6').value, '1.2');
-    assert.equal(sheet.getCell('C6').type, ExcelJS.ValueType.Date);
-    assert.equal(sheet.getCell('E6').value, Math.floor((timelineEnd.getTime() - addDays(monthStart, 2).getTime()) / 86_400_000) + 1);
-    assert.equal(sheet.getCell('F6').value, 0);
-    assert.equal(sheet.getCell('G6').value, '[1.1]ОН+2, [missing]НН');
-    assert.equal(sheet.getCell('G6').alignment?.horizontal, 'left');
-    assert.equal(sheet.getCell('I6').fill?.type, 'pattern');
-    assert.equal(sheet.getCell(`${todayColumnName}6`).fill?.type, 'pattern');
+    assert.equal(sheet.getCell('B6').value, 'Подэтап');
+    assert.equal((sheet.getCell('B6').fill as any)?.fgColor?.argb, 'FF94A3B8');
+    assert.equal((sheet.getCell('I6').fill as any)?.fgColor?.argb, 'FF6B7280');
+    assert.equal(sheet.getCell('A7').value, '1.2.1');
+    assert.equal(sheet.getCell('B7').value, 'Глубокий этап');
+    assert.equal((sheet.getCell('B7').fill as any)?.fgColor?.argb, 'FFCBD5E1');
+    assert.equal((sheet.getCell('J7').fill as any)?.fgColor?.argb, 'FF94A3B8');
+    assert.equal(sheet.getCell('A9').value, '1.3');
+    assert.equal(sheet.getCell('C9').type, ExcelJS.ValueType.Date);
+    assert.equal(sheet.getCell('E9').value, Math.floor((timelineEnd.getTime() - addDays(monthStart, 2).getTime()) / 86_400_000) + 1);
+    assert.equal(sheet.getCell('F9').value, 0);
+    assert.equal(sheet.getCell('G9').value, '[1.1]ОН+2, [missing]НН');
+    assert.equal(sheet.getCell('G9').alignment?.horizontal, 'left');
+    assert.equal(sheet.getCell('I9').fill?.type, 'pattern');
+    assert.equal(sheet.getCell(`${todayColumnName}9`).fill?.type, 'pattern');
+    assert.equal((sheet.getCell('A4').border as any)?.top?.color?.argb, 'FF4B5563');
+    assert.equal((sheet.getCell('H4').border as any)?.top?.color?.argb, 'FF4B5563');
     assert.equal((sheet.getCell('H4').border as any)?.left?.color?.argb, 'FF64748B');
-    assert.equal((sheet.getCell('H4').fill as any)?.fgColor?.argb, 'FFCBD5E1');
-    assert.ok((sheet.getRow(6).height ?? 0) > (29 / 1.333));
+    assert.equal((sheet.getCell('B4').fill as any)?.fgColor?.argb, 'FF64748B');
+    assert.equal((sheet.getCell('H4').fill as any)?.fgColor?.argb, 'FF475569');
+    assert.ok((sheet.getRow(9).height ?? 0) > (29 / 1.333));
   });
 
   it('produces an empty-state workbook when the project has no tasks', async () => {

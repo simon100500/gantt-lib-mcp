@@ -54,7 +54,9 @@ const GRID_FILL = 'FFFFFFFF';
 const GRID_BORDER = 'FFE2E8F0';
 const WEEK_BORDER = 'FF93C5FD';
 const MONTH_BORDER = 'FF64748B';
-const PARENT_FILL = 'FFCBD5E1';
+const PARENT_TASKLIST_FILLS = ['FF64748B', 'FF94A3B8', 'FFCBD5E1'] as const;
+const PARENT_TIMELINE_FILLS = ['FF475569', 'FF6B7280', 'FF94A3B8'] as const;
+const GROUP_SEPARATOR_BORDER = 'FF4B5563';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
 const STATIC_COLUMN_WIDTHS = [10, 44, 14, 14, 12, 8, 20];
@@ -107,9 +109,23 @@ function normalizeColor(color: string | null): string {
   if (!color) return DEFAULT_TASK_FILL;
   const hex = color.trim().replace('#', '').toUpperCase();
   if (!/^[0-9A-F]{6}$/.test(hex)) return DEFAULT_TASK_FILL;
-  if (hex === '94A3B8') return PARENT_FILL;
   if (hex === 'DBEAFE' || hex === '93C5FD') return DEFAULT_TASK_FILL;
   return `FF${hex}`;
+}
+
+function parentTasklistFill(depth: number): string {
+  return PARENT_TASKLIST_FILLS[Math.min(depth, PARENT_TASKLIST_FILLS.length - 1)]!;
+}
+
+function parentTimelineFill(depth: number): string {
+  return PARENT_TIMELINE_FILLS[Math.min(depth, PARENT_TIMELINE_FILLS.length - 1)]!;
+}
+
+function normalizeProgressValue(progress: number): number {
+  if (!Number.isFinite(progress)) return 0;
+  if (progress <= 0) return 0;
+  if (progress <= 1) return progress;
+  return Math.min(progress / 100, 1);
 }
 
 function buildTimelineRange(tasks: ExportTask[]): string[] {
@@ -165,7 +181,7 @@ function buildFlattenedRows(tasks: ExportTask[]): FlattenedTaskRow[] {
         outlineNumber: outline,
         linksLabel: '',
         durationDays: diffDaysInclusive(task.startDate, task.endDate),
-        progressValue: typeof task.progress === 'number' ? task.progress : 0,
+        progressValue: typeof task.progress === 'number' ? normalizeProgressValue(task.progress) : 0,
       });
       visit(task.id, depth + 1, [...prefix, index + 1]);
     }
@@ -206,6 +222,15 @@ function styleHeaderRow(row: ExcelJS.Row): void {
 function styleTimelineCell(cell: ExcelJS.Cell, fillColor: string): void {
   cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
   applyCellBorder(cell);
+}
+
+function applyGroupSeparatorTop(cell: ExcelJS.Cell): void {
+  cell.border = {
+    top: { style: 'thin', color: { argb: GROUP_SEPARATOR_BORDER } },
+    left: cell.border?.left,
+    bottom: cell.border?.bottom,
+    right: cell.border?.right,
+  };
 }
 
 function applyTimelineSeparator(
@@ -534,20 +559,26 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
 
     if (rowData.isParent) {
       for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
-        styleTimelineCell(row.getCell(columnIndex), PARENT_FILL);
+        styleTimelineCell(row.getCell(columnIndex), parentTasklistFill(rowData.depth));
       }
     }
 
     const startColumn = timelineIndexByDate.get(rowData.task.startDate);
     const endColumn = timelineIndexByDate.get(rowData.task.endDate);
     if (startColumn && endColumn) {
-      const fillColor = rowData.isParent ? PARENT_FILL : normalizeColor(rowData.task.color);
+      const fillColor = rowData.isParent ? parentTimelineFill(rowData.depth) : normalizeColor(rowData.task.color);
       for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
         styleTimelineCell(row.getCell(columnIndex), fillColor);
         applyTimelineSeparator(row.getCell(columnIndex), separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
           verticalLines: true,
           todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
         });
+      }
+    }
+
+    if (rowData.isParent && rowData.depth === 0) {
+      for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+        applyGroupSeparatorTop(row.getCell(columnIndex));
       }
     }
   }
