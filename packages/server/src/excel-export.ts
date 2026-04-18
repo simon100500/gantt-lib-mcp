@@ -40,19 +40,23 @@ type FlattenedTaskRow = {
 };
 
 const STATIC_COLUMN_COUNT = 7;
-const HEADER_ROW_COUNT = 2;
+const HEADER_ROW_COUNT = 3;
+const TITLE_ROW_INDEX = 1;
+const MONTH_ROW_INDEX = 2;
+const HEADER_LABEL_ROW_INDEX = 3;
 const HEADER_FILL = 'FFFFFFFF';
 const HEADER_FONT = 'FF1E293B';
 const WEEKEND_HEADER_FONT = 'FFDC2626';
 const GRID_FILL = 'FFFFFFFF';
 const GRID_BORDER = 'FFE2E8F0';
-const WEEK_BORDER = 'FF94A3B8';
+const WEEK_BORDER = 'FF93C5FD';
 const MONTH_BORDER = 'FF64748B';
 const PARENT_FILL = 'FFCBD5E1';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [10, 42, 14, 14, 12, 9, 34];
+const STATIC_COLUMN_WIDTHS = [10, 42, 14, 14, 12, 9, 14];
 const DAY_WIDTH = 20 / 7;
+const A4_PAPER_SIZE = 9;
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -77,6 +81,10 @@ function formatMonthLabel(value: string): string {
 
 function formatDayNumber(value: string): number {
   return Number(parseIsoDate(value).toLocaleDateString('ru-RU', { day: '2-digit' }));
+}
+
+function formatExportDate(value: Date): string {
+  return value.toLocaleDateString('ru-RU');
 }
 
 function dependencyTypeLabel(type: DependencyType): string {
@@ -204,11 +212,15 @@ function applyTimelineSeparator(
 ): void {
   const verticalLines = options.verticalLines ?? true;
   const left = !verticalLines
-    ? undefined
+    ? kind === 'month'
+      ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
+      : kind === 'week'
+        ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
+        : undefined
     : kind === 'month'
       ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
       : kind === 'week'
-        ? { style: 'medium' as const, color: { argb: WEEK_BORDER } }
+        ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
         : { style: 'thin' as const, color: { argb: GRID_BORDER } };
 
   cell.border = {
@@ -283,6 +295,19 @@ function buildNonWorkingSet(
   return result;
 }
 
+function columnNumberToName(columnNumber: number): string {
+  let current = columnNumber;
+  let label = '';
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return label;
+}
+
 export async function loadProjectExcelExportData(projectId: string): Promise<ProjectExcelExportData> {
   const prisma = getPrisma();
   const project = await prisma.project.findUnique({
@@ -334,7 +359,8 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
 export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'GetGantt';
-  workbook.created = new Date();
+  const exportDate = new Date();
+  workbook.created = exportDate;
 
   const sheet = workbook.addWorksheet('Gantt', {
     views: [{ state: 'frozen', xSplit: STATIC_COLUMN_COUNT, ySplit: HEADER_ROW_COUNT, showGridLines: false }],
@@ -346,6 +372,19 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
   const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarDays, timelineDates);
+  const approximateWidth = STATIC_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0) + timelineDates.length * DAY_WIDTH;
+  const useLandscape = approximateWidth > 170 || timelineDates.length > 32;
+
+  sheet.pageSetup = {
+    paperSize: A4_PAPER_SIZE,
+    orientation: useLandscape ? 'landscape' : 'portrait',
+    fitToPage: true,
+    fitToWidth: useLandscape ? 0 : 1,
+    fitToHeight: useLandscape ? 1 : 0,
+    horizontalCentered: false,
+    verticalCentered: false,
+  };
+  sheet.headerFooter.oddFooter = `&LGetGantt.ru&CДата экспорта: ${formatExportDate(exportDate)}&RСтраница &P из &N`;
 
   sheet.columns = [
     { width: STATIC_COLUMN_WIDTHS[0] },
@@ -369,16 +408,21 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     return 'day' as const;
   });
 
+  sheet.addRow([`ГетГант / ${data.projectName}`]);
   sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
   sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => formatDayNumber(value))]);
 
-  for (let rowIndex = 1; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
+  const titleRow = sheet.getRow(TITLE_ROW_INDEX);
+  titleRow.getCell(1).font = { bold: true, size: 12, color: { argb: HEADER_FONT } };
+  titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left', wrapText: false };
+
+  for (let rowIndex = MONTH_ROW_INDEX; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
     styleHeaderRow(sheet.getRow(rowIndex));
     for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
       cell.font = { bold: true, color: { argb: HEADER_FONT } };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.alignment = { vertical: 'middle', horizontal: rowIndex === HEADER_LABEL_ROW_INDEX ? 'center' : 'left' };
     }
 
     for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
@@ -387,14 +431,18 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
       cell.font = {
         bold: true,
-        color: { argb: rowIndex === HEADER_ROW_COUNT && timelineDate && nonWorkingDates.has(timelineDate) ? WEEKEND_HEADER_FONT : HEADER_FONT },
+        color: {
+          argb: rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
+            ? WEEKEND_HEADER_FONT
+            : HEADER_FONT,
+        },
       };
-      cell.alignment = rowIndex === 1
+      cell.alignment = rowIndex === MONTH_ROW_INDEX
         ? { vertical: 'middle', horizontal: 'left', wrapText: false }
         : { vertical: 'middle', horizontal: 'center' };
       applyCellBorder(cell);
       applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
-        verticalLines: rowIndex === HEADER_ROW_COUNT,
+        verticalLines: false,
       });
     }
   }
@@ -409,6 +457,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     }
     emptyRow.getCell(2).font = { italic: true, color: { argb: HEADER_FONT } };
     setRowHeightFromContent(emptyRow, 'Нет задач', STATIC_COLUMN_WIDTHS[1], 0);
+    sheet.pageSetup.printArea = `A1:${columnNumberToName(Math.max(STATIC_COLUMN_COUNT, totalColumnCount))}${emptyRow.number}`;
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
@@ -476,6 +525,8 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
       }
     }
   }
+
+  sheet.pageSetup.printArea = `A1:${columnNumberToName(totalColumnCount)}${sheet.rowCount}`;
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

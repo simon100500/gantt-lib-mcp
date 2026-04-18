@@ -12,7 +12,7 @@ async function loadWorkbook(data: ProjectExcelExportData) {
 }
 
 describe('buildProjectExcelExportBuffer', () => {
-  it('renders month-year header, weekend day highlight, and compact columns', async () => {
+  it('renders title, compact calendar header, print settings, and weekend day highlight', async () => {
     const workbook = await loadWorkbook({
       projectName: 'Demo',
       ganttDayMode: 'business',
@@ -45,7 +45,7 @@ describe('buildProjectExcelExportBuffer', () => {
           name: 'Монтаж очень длинного этапа с несколькими словами',
           parentId: 'parent',
           startDate: '2026-04-03',
-          endDate: '2026-04-05',
+          endDate: '2026-04-08',
           sortOrder: 2,
           color: '#2563EB',
           progress: 0,
@@ -70,44 +70,54 @@ describe('buildProjectExcelExportBuffer', () => {
     const sheet = workbook.getWorksheet('Gantt');
     assert.ok(sheet);
     assert.equal(sheet.views[0]?.showGridLines, false);
-    assert.equal(sheet.getCell('A2').value, '№');
-    assert.equal(sheet.getCell('B2').value, 'Задача');
-    assert.equal(sheet.getCell('C2').value, 'Начало');
-    assert.equal(sheet.getCell('D2').value, 'Оконч.');
-    assert.equal(sheet.getCell('E2').value, 'Длит.');
-    assert.equal(sheet.getCell('F2').value, '%');
-    assert.equal(sheet.getCell('G2').value, 'Связи');
+    assert.equal(sheet.getCell('A1').value, 'ГетГант / Demo');
+    assert.equal(sheet.pageSetup.paperSize, 9);
+    assert.equal(sheet.pageSetup.orientation, 'portrait');
+    assert.equal(sheet.pageSetup.fitToWidth, 1);
+    assert.equal(sheet.pageSetup.fitToHeight, 0);
+    assert.match(sheet.headerFooter?.oddFooter ?? '', /GetGantt\.ru/);
+    assert.match(sheet.headerFooter?.oddFooter ?? '', /Дата экспорта:/);
+    assert.match(sheet.headerFooter?.oddFooter ?? '', /Страница &P из &N/);
+    assert.equal(sheet.getCell('A3').value, '№');
+    assert.equal(sheet.getCell('B3').value, 'Задача');
+    assert.equal(sheet.getCell('C3').value, 'Начало');
+    assert.equal(sheet.getCell('D3').value, 'Оконч.');
+    assert.equal(sheet.getCell('E3').value, 'Длит.');
+    assert.equal(sheet.getCell('F3').value, '%');
+    assert.equal(sheet.getCell('G3').value, 'Связи');
     assert.ok((sheet.getColumn('G').width ?? 0) >= 20);
     assert.ok((sheet.getColumn('G').width ?? 0) > (sheet.getColumn('F').width ?? 0));
     assert.equal(sheet.getColumn('H').width, DAY_WIDTH);
-    assert.equal(sheet.getCell('H1').value, 'Апрель 2026');
-    assert.equal(sheet.getCell('I1').value, null);
-    assert.equal(sheet.getCell('H2').value, 1);
-    assert.equal((sheet.getCell('K1').font as any)?.color?.argb, 'FF1E293B');
-    assert.equal((sheet.getCell('K2').font as any)?.color?.argb, 'FFDC2626');
+    assert.equal(sheet.getCell('H2').value, 'Апрель 2026');
+    assert.equal(sheet.getCell('I2').value, null);
+    assert.equal(sheet.getCell('H3').value, 1);
+    assert.equal((sheet.getCell('K2').font as any)?.color?.argb, 'FF1E293B');
+    assert.equal((sheet.getCell('K3').font as any)?.color?.argb, 'FFDC2626');
+    assert.equal((sheet.getCell('M3').border as any)?.left?.style, 'thin');
+    assert.equal((sheet.getCell('M3').border as any)?.left?.color?.argb, 'FFCBD5E1');
     assert.deepEqual(sheet.getCell('A1').border, {});
-    assert.equal(sheet.getCell('A1').fill?.type, 'pattern');
-    assert.equal((sheet.getCell('H1').border as any)?.left, undefined);
+    assert.equal(sheet.getCell('A3').fill?.type, 'pattern');
+    assert.equal((sheet.getCell('I3').border as any)?.left, undefined);
     assert.ok((sheet.properties.defaultRowHeight ?? 0) >= 21);
 
-    assert.equal(sheet.getCell('A3').value, '1');
-    assert.equal(sheet.getCell('B3').value, 'Этап 1');
-    assert.equal(sheet.getCell('B3').font?.bold, true);
-    assert.equal(sheet.getCell('A4').value, '1.1');
-    assert.equal(sheet.getCell('B4').value, 'Подготовка');
-    assert.equal(sheet.getCell('B4').alignment?.indent, 1);
-    assert.equal(sheet.getCell('A5').value, '1.2');
-    assert.equal(sheet.getCell('C5').type, ExcelJS.ValueType.Date);
-    assert.equal(sheet.getCell('E5').value, 3);
-    assert.equal(sheet.getCell('F5').value, 0);
-    assert.equal(sheet.getCell('G5').value, '[1.1]ОН+2, [missing]НН');
-    assert.equal(sheet.getCell('G5').alignment?.wrapText, undefined);
-    assert.equal(sheet.getCell('I5').fill?.type, 'pattern');
-    assert.equal(sheet.getCell('K5').fill?.type, 'pattern');
-    assert.equal(sheet.getCell('M5').fill, undefined);
-    assert.equal((sheet.getCell('H3').border as any)?.left?.color?.argb, 'FF64748B');
-    assert.equal((sheet.getCell('H3').fill as any)?.fgColor?.argb, 'FFCBD5E1');
-    assert.ok((sheet.getRow(5).height ?? 0) > (29 / 1.333));
+    assert.equal(sheet.getCell('A4').value, '1');
+    assert.equal(sheet.getCell('B4').value, 'Этап 1');
+    assert.equal(sheet.getCell('B4').font?.bold, true);
+    assert.equal(sheet.getCell('A5').value, '1.1');
+    assert.equal(sheet.getCell('B5').value, 'Подготовка');
+    assert.equal(sheet.getCell('B5').alignment?.indent, 1);
+    assert.equal(sheet.getCell('A6').value, '1.2');
+    assert.equal(sheet.getCell('C6').type, ExcelJS.ValueType.Date);
+    assert.equal(sheet.getCell('E6').value, 6);
+    assert.equal(sheet.getCell('F6').value, 0);
+    assert.equal(sheet.getCell('G6').value, '[1.1]ОН+2, [missing]НН');
+    assert.equal(sheet.getCell('G6').alignment?.horizontal, 'left');
+    assert.equal(sheet.getCell('I6').fill?.type, 'pattern');
+    assert.equal(sheet.getCell('O6').fill?.type, 'pattern');
+    assert.equal((sheet.getCell('P6').fill as any) ?? undefined, undefined);
+    assert.equal((sheet.getCell('H4').border as any)?.left?.color?.argb, 'FF64748B');
+    assert.equal((sheet.getCell('H4').fill as any)?.fgColor?.argb, 'FFCBD5E1');
+    assert.ok((sheet.getRow(6).height ?? 0) > (29 / 1.333));
   });
 
   it('produces an empty-state workbook when the project has no tasks', async () => {
@@ -120,8 +130,8 @@ describe('buildProjectExcelExportBuffer', () => {
 
     const sheet = workbook.getWorksheet('Gantt');
     assert.ok(sheet);
-    assert.equal(sheet.getCell('B3').value, 'Нет задач');
+    assert.equal(sheet.getCell('B4').value, 'Нет задач');
   });
 });
 
-const DAY_WIDTH = 18 / 7;
+const DAY_WIDTH = 20 / 7;
