@@ -17,6 +17,7 @@ import { useProjectHistory } from '../../hooks/useProjectHistory.ts';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
 import { useChatStore } from '../../stores/useChatStore.ts';
 import type { SubscriptionStatus, UsageStatus } from '../../stores/useBillingStore.ts';
+import { useHistoryViewerStore } from '../../stores/useHistoryViewerStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
@@ -155,10 +156,14 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
-  const effectiveTasks = tasks;
+  const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const effectiveTasks = historyViewer.mode === 'preview'
+    ? historyViewer.snapshot.tasks
+    : tasks;
   const previewRendering = previewState === 'rendering';
   const previewFailed = previewState === 'failed';
-  const effectiveReadOnly = readOnly || previewRendering || previewFailed;
+  const effectiveReadOnly = readOnly || previewRendering || previewFailed || historyViewer.mode === 'preview';
+  const historyPanelDisabled = readOnly || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
 
@@ -213,8 +218,10 @@ export function ProjectWorkspace({
     items: historyItems,
     loading: historyLoading,
     error: historyError,
+    showVersion,
     refreshHistory,
-    restoreGroup,
+    restoreVersion,
+    returnToCurrentVersion,
   } = useProjectHistory(accessToken);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
@@ -299,12 +306,12 @@ export function ProjectWorkspace({
       }
 
       event.preventDefault();
-      void restoreGroup(latestRestorableItem.id);
+      void restoreVersion(latestRestorableItem.id);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreGroup]);
+  }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreVersion]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -339,6 +346,21 @@ export function ProjectWorkspace({
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {historyViewer.mode === 'preview' && (
+              <div className="flex items-center justify-between gap-3 border-b border-sky-100 bg-sky-50 px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-sky-900">Просмотр версии</p>
+                  <p className="text-xs text-sky-700">Редактирование отключено, пока открыт исторический снимок.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => returnToCurrentVersion()}
+                  className="rounded-md border border-sky-200 bg-white px-3 py-1.5 text-xs font-medium text-sky-800 transition hover:bg-sky-100"
+                >
+                  Вернуться к текущей версии
+                </button>
+              </div>
+            )}
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
@@ -457,10 +479,13 @@ export function ProjectWorkspace({
             items={historyItems}
             loading={historyLoading}
             error={historyError}
-            disabled={effectiveReadOnly || !accessToken}
+            disabled={historyPanelDisabled}
+            previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
-            onRestoreGroup={restoreGroup}
+            onShowVersion={showVersion}
+            onRestoreVersion={restoreVersion}
+            onReturnToCurrentVersion={returnToCurrentVersion}
           />
         )}
 

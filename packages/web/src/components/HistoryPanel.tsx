@@ -9,9 +9,12 @@ interface HistoryPanelProps {
   loading: boolean;
   error: string | null;
   disabled?: boolean;
+  previewGroupId?: string | null;
   onClose: () => void;
   onRefresh: () => unknown;
-  onRestoreGroup: (groupId: string) => unknown;
+  onShowVersion: (item: HistoryItem) => unknown;
+  onRestoreVersion: (groupId: string) => unknown;
+  onReturnToCurrentVersion: () => unknown;
 }
 
 const ACTOR_ICONS: Record<HistoryItem['actorType'], typeof User> = {
@@ -90,9 +93,12 @@ export function HistoryPanel({
   loading,
   error,
   disabled = false,
+  previewGroupId = null,
   onClose,
   onRefresh,
-  onRestoreGroup,
+  onShowVersion,
+  onRestoreVersion,
+  onReturnToCurrentVersion,
 }: HistoryPanelProps) {
   return (
     <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:w-[300px] xl:max-w-[300px] xl:min-w-[300px]">
@@ -129,6 +135,21 @@ export function HistoryPanel({
         </div>
       )}
 
+      {previewGroupId && (
+        <div className="flex items-center justify-between gap-2 border-b border-sky-100 bg-sky-50 px-3 py-2.5">
+          <p className="text-xs font-medium text-sky-800">Просмотр сохраненной версии</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => { void onReturnToCurrentVersion(); }}
+            className="h-7 px-2 text-[11px]"
+          >
+            Вернуться к текущей
+          </Button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         {items.length === 0 && !loading ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-slate-500">
@@ -139,9 +160,16 @@ export function HistoryPanel({
           <div className="divide-y divide-slate-200">
             {items.map((item) => {
               const ActorIcon = ACTOR_ICONS[item.actorType];
+              const isPreviewing = previewGroupId === item.id;
 
               return (
-              <article key={item.id} className="space-y-2 px-3 py-2.5">
+              <article
+                key={item.id}
+                className={cn(
+                  'space-y-2 px-3 py-2.5',
+                  isPreviewing && 'bg-sky-50/60',
+                )}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <span
@@ -172,6 +200,13 @@ export function HistoryPanel({
                       Текущая
                     </span>
                   )}
+                  {isPreviewing && (
+                    <span
+                      className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700"
+                    >
+                      Просмотр
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-0.5">
@@ -186,7 +221,17 @@ export function HistoryPanel({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => { void onRestoreGroup(item.id); }}
+                    onClick={() => { void onShowVersion(item); }}
+                    disabled={disabled || loading}
+                    className="h-7 px-2 text-[11px]"
+                  >
+                    {item.isCurrent ? 'Текущая версия' : 'Показать версию'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { void onRestoreVersion(item.id); }}
                     disabled={disabled || loading || !item.canRestore}
                     className="h-7 px-2 text-[11px]"
                   >

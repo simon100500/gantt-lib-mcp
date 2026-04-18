@@ -6,6 +6,7 @@ import type {
   HistoryRestoreResponse,
   HistorySnapshotResponse,
 } from '../lib/apiTypes.ts';
+import { useHistoryViewerStore } from '../stores/useHistoryViewerStore.ts';
 import { useProjectStore } from '../stores/useProjectStore.ts';
 
 const DEFAULT_HISTORY_LIMIT = 50;
@@ -54,6 +55,10 @@ export function useProjectHistory(accessToken: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const enterPreview = useHistoryViewerStore((state) => state.enterPreview);
+  const exitPreview = useHistoryViewerStore((state) => state.exitPreview);
+  const clearAfterRestore = useHistoryViewerStore((state) => state.clearAfterRestore);
   const setConfirmed = useProjectStore((state) => state.setConfirmed);
   const clearTransientState = useProjectStore((state) => state.clearTransientState);
 
@@ -116,7 +121,37 @@ export function useProjectHistory(accessToken: string | null) {
     return parseHistorySnapshotResponse(response);
   }, [accessToken]);
 
-  const restoreGroup = useCallback(async (groupId: string) => {
+  const showVersion = useCallback(async (item: Pick<HistoryItem, 'id' | 'isCurrent'>) => {
+    if (item.isCurrent) {
+      exitPreview();
+      return null;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchSnapshot(item.id);
+      enterPreview({
+        groupId: data.groupId,
+        snapshot: data.snapshot,
+        isCurrent: data.isCurrent,
+      });
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load history version';
+      setError(message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [enterPreview, exitPreview, fetchSnapshot]);
+
+  const returnToCurrentVersion = useCallback(() => {
+    exitPreview();
+  }, [exitPreview]);
+
+  const restoreVersion = useCallback(async (groupId: string) => {
     if (!accessToken) {
       throw new Error('Not authenticated');
     }
@@ -139,6 +174,7 @@ export function useProjectHistory(accessToken: string | null) {
       const data = await parseHistoryRestoreResponse(response);
       setConfirmed(data.version, data.snapshot);
       clearTransientState();
+      clearAfterRestore();
       await refreshHistory();
       return data;
     } catch (err) {
@@ -148,7 +184,7 @@ export function useProjectHistory(accessToken: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [accessToken, clearTransientState, refreshHistory, setConfirmed]);
+  }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed]);
 
   useEffect(() => {
     void refreshHistory();
@@ -159,8 +195,12 @@ export function useProjectHistory(accessToken: string | null) {
     loading,
     error,
     nextCursor,
+    historyViewer,
     refreshHistory,
     fetchSnapshot,
-    restoreGroup,
+    previewVersion: fetchSnapshot,
+    showVersion,
+    restoreVersion,
+    returnToCurrentVersion,
   };
 }
