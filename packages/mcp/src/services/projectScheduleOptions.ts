@@ -109,3 +109,13 @@ export async function getProjectScheduleOptionsForProject(
   const customDays = toCustomDayConfigs(project.calendarDays);
   return buildProjectScheduleOptions(project.ganttDayMode, customDays);
 }
+
+export async function getProjectScheduleOptionsForDayMode(
+  prisma: any,
+  projectId: string,
+  ganttDayMode: GanttDayMode,
+): Promise<ScheduleCommandOptions> {
+  const project = await getProjectCalendarSettings(prisma, projectId);
+  const customDays = toCustomDayConfigs(project.calendarDays);
+  return buildProjectScheduleOptions(ganttDayMode, customDays);
+}

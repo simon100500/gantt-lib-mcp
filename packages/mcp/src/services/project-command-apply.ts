@@ -6,6 +6,7 @@ import {
   parseDateOnly,
   recalculateProjectSchedule,
   recalculateTaskFromDependencies,
+  reflowTasksOnModeSwitch,
   resizeTaskWithCascade,
   type ScheduleCommandOptions as CoreOptions,
   type ScheduleCommandResult as CoreResult,
@@ -388,6 +389,29 @@ export function applyProjectCommandToSnapshot(
 
   let coreResult: CoreResult;
   switch (command.type) {
+    case 'switch_gantt_day_mode': {
+      const weekendPredicate = options.weekendPredicate ?? (() => false);
+      const reflowedTasks = reflowTasksOnModeSwitch(
+        workingSnapshot,
+        command.ganttDayMode === 'business',
+        weekendPredicate,
+      ) as CoreTask[];
+      coreResult = {
+        changedTasks: reflowedTasks.filter((task) => {
+          const before = workingSnapshot.find((candidate) => candidate.id === task.id);
+          return JSON.stringify(before) !== JSON.stringify(task);
+        }),
+        changedIds: reflowedTasks
+          .filter((task) => {
+            const before = workingSnapshot.find((candidate) => candidate.id === task.id);
+            return JSON.stringify(before) !== JSON.stringify(task);
+          })
+          .map((task) => task.id),
+      };
+      workingSnapshot = reflowedTasks;
+      break;
+    }
+
     case 'move_task':
       coreResult = moveTaskWithCascade(command.taskId, parseDateOnly(command.startDate), workingSnapshot, options);
       break;

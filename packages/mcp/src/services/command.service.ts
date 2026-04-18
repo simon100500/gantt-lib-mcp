@@ -19,6 +19,7 @@ import {
   recalculateTaskFromDependencies,
   recalculateProjectSchedule,
   parseDateOnly,
+  reflowTasksOnModeSwitch,
   type ScheduleCommandResult as CoreResult,
   type ScheduleCommandOptions as CoreOptions,
   type Task as CoreTask,
@@ -42,7 +43,7 @@ import type {
 } from '../types.js';
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
-import { getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
+import { getProjectScheduleOptionsForDayMode, getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 
 const CORE_VERSION = '0.70.0';
 const INTERACTIVE_TRANSACTION_OPTIONS = {
@@ -605,6 +606,9 @@ export class CommandService {
     );
 
     switch (command.type) {
+      case 'switch_gantt_day_mode':
+        return null;
+
       case 'move_task': {
         const task = beforeTaskById.get(command.taskId);
         return task ? { type: 'move_task', taskId: command.taskId, startDate: task.startDate } : null;
@@ -856,7 +860,9 @@ export class CommandService {
         const beforeTasks = await loadTaskSnapshot(projectId, tx);
         const beforeDependencyRows = await loadDependencyRows(projectId, tx);
         const coreSnapshot = normalizeSnapshot(beforeTasks);
-        const opts: CoreOptions = await this.getScheduleOptions(projectId, tx);
+        const opts: CoreOptions = command.type === 'switch_gantt_day_mode'
+          ? await getProjectScheduleOptionsForDayMode(tx, projectId, command.ganttDayMode)
+          : await this.getScheduleOptions(projectId, tx);
 
         await this.ensureMutationGroup(tx, projectId, baseVersion, history, actorType, actorId);
         const ordinal = await this.allocateGroupOrdinal(tx, history.groupId);
@@ -864,13 +870,15 @@ export class CommandService {
         // Step 4: Execute command through gantt-lib
         const newVersion = baseVersion + 1;
         const executeResult = await this.executeCommand(command, coreSnapshot, opts, projectId, tx);
-        const inverseCommand = this.buildInverseCommand(
-          command,
-          beforeTasks,
-          beforeDependencyRows,
-          executeResult,
-          opts,
-        );
+        const inverseCommand = command.type === 'switch_gantt_day_mode'
+          ? { type: 'switch_gantt_day_mode', ganttDayMode: project.ganttDayMode as 'business' | 'calendar' }
+          : this.buildInverseCommand(
+              command,
+              beforeTasks,
+              beforeDependencyRows,
+              executeResult,
+              opts,
+            );
         const eventMetadata = this.buildEventMetadata(command, beforeTasks, beforeDependencyRows);
 
         // Step 5: Persist dependency changes if any
@@ -1069,6 +1077,13 @@ export class CommandService {
           }
         }
 
+        if (command.type === 'switch_gantt_day_mode') {
+          await tx.project.update({
+            where: { id: projectId },
+            data: { ganttDayMode: command.ganttDayMode },
+          });
+        }
+
         // Step 7: Persist full semantic state for every changed task that still exists.
         const deletedTaskIdSet = new Set(deletedTaskIds);
 
@@ -1217,6 +1232,8 @@ export class CommandService {
   /** Extract the target task ID from a command for patch reason attribution */
   private getTargetTaskId(command: ProjectCommand): string | undefined {
     switch (command.type) {
+      case 'switch_gantt_day_mode':
+        return undefined;
       case 'move_task':
       case 'resize_task':
       case 'set_task_start':
@@ -1297,6 +1314,24 @@ export class CommandService {
     const conflicts: Conflict[] = [];
 
     switch (command.type) {
+      case 'switch_gantt_day_mode': {
+        const weekendPredicate = opts.weekendPredicate ?? (() => false);
+        const reflowedTasks = reflowTasksOnModeSwitch(
+          coreSnapshot,
+          command.ganttDayMode === 'business',
+          weekendPredicate,
+        ) as CoreTask[];
+        const changedTasks = reflowedTasks.filter((task) => {
+          const before = coreSnapshot.find((candidate) => candidate.id === task.id);
+          return JSON.stringify(before) !== JSON.stringify(task);
+        });
+        coreResult = {
+          changedTasks,
+          changedIds: changedTasks.map((task) => task.id),
+        };
+        break;
+      }
+
       case 'move_task': {
         coreResult = moveTaskWithCascade(
           command.taskId,

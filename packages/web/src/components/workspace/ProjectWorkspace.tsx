@@ -286,8 +286,6 @@ export function ProjectWorkspace({
       setTasks(reflowedTasks);
       return;
     }
-
-    void batchUpdate.handleTasksChange(reflowedTasks);
   }, [batchUpdate, effectiveReadOnly, ganttDayMode, previewModeActive, setTasks, tasks, weekendPredicate]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {

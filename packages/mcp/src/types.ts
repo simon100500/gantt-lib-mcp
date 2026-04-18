@@ -552,6 +552,7 @@ export type ProjectSnapshot = {
 /** Typed project command — discriminated union by `type` field.
  *  Per D-04: command.payload: unknown is NOT allowed. Each variant has typed fields. */
 export type ProjectCommand =
+  | { type: 'switch_gantt_day_mode'; ganttDayMode: GanttDayMode; }
   | { type: 'move_task'; taskId: string; startDate: string; }
   | { type: 'resize_task'; taskId: string; anchor: 'start' | 'end'; date: string; }
   | { type: 'set_task_start'; taskId: string; startDate: string; }

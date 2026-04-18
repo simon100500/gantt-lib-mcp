@@ -21,6 +21,7 @@ interface HistoryPanelProps {
 }
 
 const COMMAND_TITLES: Record<string, string> = {
+  switch_gantt_day_mode: 'Переключение режима дней',
   move_task: 'Перенос задачи',
   resize_task: 'Изменение длительности задачи',
   set_task_start: 'Изменение даты начала',

@@ -7,6 +7,7 @@ import {
   recalculateProjectSchedule,
   recalculateTaskFromDependencies,
   parseDateOnly,
+  reflowTasksOnModeSwitch,
   type ScheduleCommandOptions,
   type Task as CoreTask,
 } from 'gantt-lib/core/scheduling';
@@ -151,6 +152,15 @@ export function replayProjectCommand(
   const coreSnapshot = normalizeCoreSnapshot(snapshot);
 
   switch (command.type) {
+    case 'switch_gantt_day_mode': {
+      const weekendPredicate = options.weekendPredicate ?? (() => false);
+      return withTasks(reflowTasksOnModeSwitch(
+        toTaskArray(coreSnapshot),
+        command.ganttDayMode === 'business',
+        weekendPredicate,
+      ));
+    }
+
     case 'move_task':
       return withTasks(toTaskArray(
         mergeChangedTasks(coreSnapshot, moveTaskWithCascade(command.taskId, parseDateOnly(command.startDate), coreSnapshot, options).changedTasks),

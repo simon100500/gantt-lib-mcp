@@ -1065,8 +1065,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
 
-    await auth.updateProject(auth.project.id, { ganttDayMode });
-  }, [auth]);
+    await batchUpdate.handleGanttDayModeSwitch(ganttDayMode);
+  }, [auth.project, batchUpdate]);
 
   const handleCreateShareLink = useCallback(async () => {
     if (!auth.accessToken || !auth.project) {

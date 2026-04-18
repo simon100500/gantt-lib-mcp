@@ -6,6 +6,7 @@ import { useUIStore, type SavingState } from '../stores/useUIStore';
 import { useProjectCommands, type TaskCommandResult, buildCommandsFromDiff } from './useProjectCommands';
 import { useCommandCommit } from './useCommandCommit';
 import { getProjectScheduleOptions } from '../lib/projectScheduleOptions';
+import { useAuthStore } from '../stores/useAuthStore';
 
 const EMPTY_CALENDAR_DAYS: CalendarDay[] = [];
 
@@ -45,6 +46,7 @@ export interface UseBatchTaskUpdateOptions {
 
 export interface UseBatchTaskUpdateResult {
   handleTasksChange: (changedTasks: Task[]) => Promise<void>;
+  handleGanttDayModeSwitch: (ganttDayMode: 'business' | 'calendar') => Promise<void>;
   handleAdd: (task: Task) => Promise<void>;
   handleDelete: (taskId: string) => Promise<void>;
   handleInsertAfter: (taskId: string, newTask: Task) => Promise<void>;
@@ -503,6 +505,43 @@ export function useBatchTaskUpdate({
     }
   }, [applyAuthoritativeTaskResult, applyTaskChanges, areTasksPersistenceEqual, commitAuthCommands, getCurrentAuthTasks, hasScheduleDiff, isAuthenticatedMode, persistAuthoritativeCascade, setSavingStateWithReset, setTasks, tasks, toDateString]);
 
+  const handleGanttDayModeSwitch = useCallback(async (nextGanttDayMode: 'business' | 'calendar') => {
+    if (!isAuthenticatedMode) {
+      return;
+    }
+
+    const authState = useAuthStore.getState();
+    const currentProject = authState.project;
+    if (!currentProject || currentProject.ganttDayMode === nextGanttDayMode) {
+      return;
+    }
+
+    try {
+      setSavingStateWithReset('saving');
+      await commitAuthCommands([{
+        type: 'switch_gantt_day_mode',
+        ganttDayMode: nextGanttDayMode,
+      }]);
+
+      useAuthStore.setState({
+        project: authState.project?.id === currentProject.id
+          ? { ...authState.project, ganttDayMode: nextGanttDayMode }
+          : authState.project,
+        projects: authState.projects.map((project) => (
+          project.id === currentProject.id
+            ? { ...project, ganttDayMode: nextGanttDayMode }
+            : project
+        )),
+      });
+
+      setSavingStateWithReset('saved');
+    } catch (error) {
+      console.error('[useBatchTaskUpdate] Failed to switch gantt day mode:', error);
+      setSavingStateWithReset('error');
+      throw error;
+    }
+  }, [commitAuthCommands, isAuthenticatedMode, setSavingStateWithReset]);
+
   const handleAdd = useCallback(async (task: Task) => {
     if (isAuthenticatedMode) {
       try {
@@ -947,6 +986,7 @@ export function useBatchTaskUpdate({
 
   return {
     handleTasksChange,
+    handleGanttDayModeSwitch,
     handleAdd,
     handleDelete,
     handleInsertAfter,

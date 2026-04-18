@@ -72,6 +72,7 @@ export function normalizeTasks(tasks: RawTask[]): Task[] {
 // === Phase 36: Command types for frontend state model ===
 
 export type FrontendProjectCommand =
+  | { type: 'switch_gantt_day_mode'; ganttDayMode: 'business' | 'calendar'; }
   | { type: 'move_task'; taskId: string; startDate: string; }
   | { type: 'resize_task'; taskId: string; anchor: 'start' | 'end'; date: string; }
   | { type: 'set_task_start'; taskId: string; startDate: string; }
