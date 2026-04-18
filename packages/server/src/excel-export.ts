@@ -47,7 +47,7 @@ const MONTH_BORDER = 'FF64748B';
 const PARENT_FILL = 'FFCBD5E1';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [10, 36, 14, 14, 12, 12, 34];
+const STATIC_COLUMN_WIDTHS = [8, 42, 12, 12, 12, 9, 20];
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -398,7 +398,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
 
   sheet.addRow([null, null, null, null, null, null, null, ...yearHeaders.map((value) => value || null)]);
   sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
-  sheet.addRow(['№', 'Задача', 'Начало', 'Окончание', 'Длительность', 'Процент', 'Связи', ...timelineDates.map((value) => Number(formatDayLabel(value)))]);
+  sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => Number(formatDayLabel(value)))]);
 
   for (let rowIndex = 1; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
     styleHeaderRow(sheet.getRow(rowIndex));
