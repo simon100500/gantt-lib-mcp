@@ -12,7 +12,7 @@ async function loadWorkbook(data: ProjectExcelExportData) {
 }
 
 describe('buildProjectExcelExportBuffer', () => {
-  it('renders headers, hierarchy, links, and timeline fill', async () => {
+  it('renders compact period headers, white chart area, short links, and separators', async () => {
     const workbook = await loadWorkbook({
       projectName: 'Demo',
       tasks: [
@@ -64,19 +64,31 @@ describe('buildProjectExcelExportBuffer', () => {
 
     const sheet = workbook.getWorksheet('Gantt');
     assert.ok(sheet);
-    assert.equal(sheet.getCell('A1').value, 'Задача');
-    assert.equal(sheet.getCell('B1').value, 'Связи');
-    assert.equal(sheet.getCell('C1').value, 'Начало');
-    assert.equal(sheet.getCell('F1').value, '01.04');
+    assert.equal(sheet.views[0]?.showGridLines, false);
+    assert.equal(sheet.getCell('A3').value, '№');
+    assert.equal(sheet.getCell('B3').value, 'Задача');
+    assert.equal(sheet.getCell('C3').value, 'Связи');
+    assert.equal(sheet.getCell('G1').value, '2026');
+    assert.equal(sheet.getCell('H1').value, '');
+    assert.equal(sheet.getCell('G2').value, 'Апрель');
+    assert.equal(sheet.getCell('H2').value, '');
+    assert.equal(sheet.getCell('G3').value, '01');
 
-    assert.equal(sheet.getCell('A2').value, 'Этап 1');
-    assert.equal(sheet.getCell('A2').font?.bold, true);
-    assert.equal(sheet.getCell('A3').value, 'Подготовка');
-    assert.equal(sheet.getCell('A3').alignment?.indent, 1);
-    assert.equal(sheet.getCell('B4').value, 'Подготовка (FS+2), missing (SS)');
-    assert.equal(sheet.getCell('E4').value, 3);
-    assert.equal(sheet.getCell('H4').fill?.type, 'pattern');
-    assert.equal(sheet.getCell('J4').fill?.type, 'pattern');
+    assert.equal(sheet.getCell('A4').value, '1');
+    assert.equal(sheet.getCell('B4').value, 'Этап 1');
+    assert.equal(sheet.getCell('B4').font?.bold, true);
+    assert.equal(sheet.getCell('A5').value, '1.1');
+    assert.equal(sheet.getCell('B5').value, 'Подготовка');
+    assert.equal(sheet.getCell('B5').alignment?.indent, 1);
+    assert.equal(sheet.getCell('A6').value, '1.2');
+    assert.equal(sheet.getCell('C6').value, '[1.1]ОН+2, [missing]НН');
+    assert.equal(sheet.getCell('F6').value, 3);
+    assert.equal(sheet.getCell('I6').fill?.type, 'pattern');
+    assert.equal(sheet.getCell('K6').fill?.type, 'pattern');
+    assert.equal(sheet.getCell('L6').fill, undefined);
+    assert.equal((sheet.getCell('G4').border as any)?.left?.color?.argb, 'FF64748B');
+    assert.ok((sheet.getRow(6).height ?? 0) >= 20);
+    assert.equal(sheet.getCell('C6').alignment?.wrapText, true);
   });
 
   it('produces an empty-state workbook when the project has no tasks', async () => {
@@ -87,7 +99,6 @@ describe('buildProjectExcelExportBuffer', () => {
 
     const sheet = workbook.getWorksheet('Gantt');
     assert.ok(sheet);
-    assert.equal(sheet.getCell('A1').value, 'Задача');
-    assert.equal(sheet.getCell('A2').value, 'Нет задач');
+    assert.equal(sheet.getCell('B4').value, 'Нет задач');
   });
 });
