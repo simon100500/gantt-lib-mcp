@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { historyService } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 
-type HistoryFailureCode = 'version_conflict' | 'redo_not_available' | 'history_diverged' | 'target_not_undone' | 'validation_error';
+type HistoryFailureCode = 'version_conflict' | 'validation_error';
 
 function getHistoryFailureStatus(reason: HistoryFailureCode): number {
   if (reason === 'version_conflict') {
@@ -23,6 +23,28 @@ function parseLimit(rawLimit: unknown): number | undefined {
   }
 
   return parsed;
+}
+
+function getActorContext(req: { user?: { projectId: string; userId: string; sessionId: string } }) {
+  return {
+    projectId: req.user!.projectId,
+    actorType: 'user' as const,
+    actorId: req.user!.userId,
+    requestContextId: req.user!.sessionId,
+  };
+}
+
+function isHistoryFailure(error: unknown): error is { reason: HistoryFailureCode } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'reason' in error &&
+    (error.reason === 'version_conflict' || error.reason === 'validation_error')
+  );
+}
+
+function isHistoryValidationError(error: unknown): error is { code: 'validation_error'; message: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'validation_error';
 }
 
 export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<void> {
@@ -48,39 +70,18 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
         id: item.id,
         actorType: item.actorType,
         title: item.title,
-        status: item.status,
+        createdAt: item.createdAt,
         baseVersion: item.baseVersion,
         newVersion: item.newVersion,
         commandCount: item.commandCount,
-        createdAt: item.createdAt,
-        undoable: item.undoable,
-        redoable: item.redoable,
+        isCurrent: item.isCurrent,
+        canRestore: item.canRestore,
       })),
       nextCursor: response.nextCursor,
     });
   });
 
-  fastify.post('/api/history/undo', { preHandler: [authMiddleware] }, async (req, reply) => {
-    const response = await historyService.undoLatestGroup({
-      projectId: req.user!.projectId,
-      actorType: 'user',
-      actorId: req.user!.userId,
-      requestContextId: req.user!.sessionId,
-    });
-
-    if (!response.accepted) {
-      return reply.status(getHistoryFailureStatus(response.reason)).send(response);
-    }
-
-    return reply.send({
-      snapshot: response.snapshot,
-      version: response.version,
-      groupId: response.groupId,
-      targetGroupId: response.targetGroupId,
-    });
-  });
-
-  fastify.post('/api/history/:groupId/undo', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.get('/api/history/:groupId/snapshot', { preHandler: [authMiddleware] }, async (req, reply) => {
     const params = req.params as { groupId?: string };
     if (!params.groupId) {
       return reply.status(400).send({
@@ -89,27 +90,31 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
       });
     }
 
-    const response = await historyService.undoGroup({
-      projectId: req.user!.projectId,
-      groupId: params.groupId,
-      actorType: 'user',
-      actorId: req.user!.userId,
-      requestContextId: req.user!.sessionId,
-    });
+    try {
+      const response = await historyService.getHistorySnapshot({
+        projectId: req.user!.projectId,
+        groupId: params.groupId,
+      });
 
-    if (!response.accepted) {
-      return reply.status(getHistoryFailureStatus(response.reason)).send(response);
+      return reply.send({
+        groupId: response.groupId,
+        isCurrent: response.isCurrent,
+        currentVersion: response.currentVersion,
+        snapshot: response.snapshot,
+      });
+    } catch (error) {
+      if (isHistoryValidationError(error)) {
+        return reply.status(400).send({
+          reason: error.code,
+          error: error.message,
+        });
+      }
+
+      throw error;
     }
-
-    return reply.send({
-      snapshot: response.snapshot,
-      version: response.version,
-      groupId: response.groupId,
-      targetGroupId: response.targetGroupId,
-    });
   });
 
-  fastify.post('/api/history/:groupId/redo', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/history/:groupId/restore', { preHandler: [authMiddleware] }, async (req, reply) => {
     const params = req.params as { groupId?: string };
     if (!params.groupId) {
       return reply.status(400).send({
@@ -118,23 +123,31 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
       });
     }
 
-    const response = await historyService.redoGroup({
-      projectId: req.user!.projectId,
-      groupId: params.groupId,
-      actorType: 'user',
-      actorId: req.user!.userId,
-      requestContextId: req.user!.sessionId,
-    });
+    try {
+      const response = await historyService.restoreToGroup({
+        ...getActorContext(req),
+        groupId: params.groupId,
+      });
 
-    if (!response.accepted) {
-      return reply.status(getHistoryFailureStatus(response.reason)).send(response);
+      return reply.send({
+        groupId: response.groupId,
+        targetGroupId: response.targetGroupId,
+        version: response.version,
+        snapshot: response.snapshot,
+      });
+    } catch (error) {
+      if (isHistoryValidationError(error)) {
+        return reply.status(getHistoryFailureStatus(error.code)).send({
+          reason: error.code,
+          error: error.message,
+        });
+      }
+
+      if (isHistoryFailure(error)) {
+        return reply.status(getHistoryFailureStatus(error.reason)).send(error);
+      }
+
+      throw error;
     }
-
-    return reply.send({
-      snapshot: response.snapshot,
-      version: response.version,
-      groupId: response.groupId,
-      targetGroupId: response.targetGroupId,
-    });
   });
 }

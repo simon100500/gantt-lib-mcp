@@ -30,6 +30,7 @@ export { commandService } from './command.service.js';
 export { CommandService } from './command.service.js';
 export { historyService } from './history.service.js';
 export { HistoryService } from './history.service.js';
+export { HistoryValidationError } from './history.service.js';
 export { applyProjectCommandToSnapshot } from './project-command-apply.js';
 
 // MCP mutation enforcement
