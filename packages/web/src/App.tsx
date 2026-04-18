@@ -9,6 +9,7 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { ShareLinkModal } from './components/ShareLinkModal.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
@@ -573,6 +574,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
+  const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
     setTasks(nextTasks);
@@ -599,6 +601,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           }
         : current);
       useChatStore.getState().setError(msg.message ?? 'Предварительный график не был сохранён.');
+      return;
+    }
+    if (msg.type === 'history_changed') {
+      bumpHistoryRefreshRevision();
       return;
     }
     if (msg.type === 'tasks') {
@@ -631,6 +637,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPreviewState((current) => current.mode === 'failed'
         ? current
         : { tasks: [], active: false, mode: 'rendering', message: null });
+      useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
       useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
     }
@@ -638,7 +645,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, [auth.isAuthenticated, hasShareToken]);
+  }, [auth.isAuthenticated, bumpHistoryRefreshRevision, hasShareToken]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -1077,13 +1084,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         throw new Error(`HTTP ${response.status}`);
       }
       const data = await response.json() as { url: string };
-      await navigator.clipboard.writeText(data.url);
-      setShareStatus('copied');
-      window.setTimeout(() => {
-        if (useUIStore.getState().shareStatus === 'copied') {
-          useUIStore.getState().setShareStatus('idle');
-        }
-      }, 2500);
+      useUIStore.getState().setShareLinkUrl(data.url);
+      setShareStatus('idle');
     } catch (createError) {
       console.error('Failed to create share link:', createError);
       setShareStatus('error');
@@ -1256,6 +1258,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [workspace, workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
+  const shareLink = useUIStore((state) => state.shareLinkUrl);
+  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
@@ -1335,48 +1339,53 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
 
-    let response = await fetch('/api/export/excel', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        onLoginRequired();
-        return;
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch('/api/export/excel', {
+    setIsExportExcelLoading(true);
+    try {
+      let response = await fetch('/api/export/excel', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-    }
 
-    if (response.status === 403) {
-      try {
-        const body = await response.json() as Partial<ConstraintDenialPayload>;
-        if (isConstraintCode(body.code)) {
-          await openLimitModal(body);
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          onLoginRequired();
           return;
         }
-      } catch {
-        // fall through to generic error
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch('/api/export/excel', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
       }
-      throw new Error(`HTTP 403`);
-    }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+      if (response.status === 403) {
+        try {
+          const body = await response.json() as Partial<ConstraintDenialPayload>;
+          if (isConstraintCode(body.code)) {
+            await openLimitModal(body);
+            return;
+          }
+        } catch {
+          // fall through to generic error
+        }
+        throw new Error(`HTTP 403`);
+      }
 
-    const blob = await response.blob();
-    const projectName = currentProjectLabel?.trim() || 'Мой проект';
-    const fallbackFileName = `ГетГант - ${projectName} - ${formatPdfFileTimestamp(new Date())}.xlsx`;
-    const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
-    await triggerBlobDownload(blob, fileName);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const projectName = currentProjectLabel?.trim() || 'Мой проект';
+      const fallbackFileName = `ГетГант - ${projectName} - ${formatPdfFileTimestamp(new Date())}.xlsx`;
+      const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
+      await triggerBlobDownload(blob, fileName);
+    } finally {
+      setIsExportExcelLoading(false);
+    }
   }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
 
   const workspaceShell = workspace.kind === 'shared'
@@ -1434,6 +1443,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
             onExportExcel={handleExportExcel}
+            isExportExcelLoading={isExportExcelLoading}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
@@ -1465,6 +1475,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
+            isExportExcelLoading={isExportExcelLoading}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
@@ -1552,6 +1563,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           void doExportPdf();
         }}
         onClose={() => setShowPdfHelper(false)}
+      />
+    )}
+
+    {shareLink && (
+      <ShareLinkModal
+        url={shareLink}
+        onClose={() => {
+          useUIStore.getState().setShareLinkUrl(null);
+          setShareStatus('idle');
+        }}
       />
     )}
     </>

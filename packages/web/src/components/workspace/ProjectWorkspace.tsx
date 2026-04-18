@@ -48,6 +48,7 @@ interface ProjectWorkspaceProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  isExportExcelLoading?: boolean;
   onValidation: (result: ValidationResult) => void;
   onCascade?: (shiftedTasks: Task[]) => void;
   readOnly?: boolean;
@@ -90,6 +91,18 @@ function formatHistoryVersionTimestamp(value: string): string {
   });
 }
 
+function buildCheckpointLabel(groupId: string, createdAt?: string): string {
+  if (groupId === 'initial') {
+    return 'Исходная версия';
+  }
+
+  if (createdAt) {
+    return `Версия от ${formatHistoryVersionTimestamp(createdAt)}`;
+  }
+
+  return 'Версия';
+}
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -114,6 +127,7 @@ export function ProjectWorkspace({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  isExportExcelLoading = false,
   onValidation,
   onCascade,
   readOnly = false,
@@ -138,6 +152,7 @@ export function ProjectWorkspace({
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
+  const historyRefreshRevision = useUIStore((state) => state.historyRefreshRevision);
   const searchResults = useUIStore((state) => state.searchResults);
   const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
@@ -180,7 +195,7 @@ export function ProjectWorkspace({
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const effectiveChatDisabled = chatDisabled || previewModeActive;
   const effectiveChatDisabledReason = previewModeActive
-    ? 'Просмотр версии доступен только для чтения. Вернитесь к текущей версии, чтобы продолжить.'
+    ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
     : chatDisabledReason;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
@@ -237,7 +252,9 @@ export function ProjectWorkspace({
     previewingGroupId,
     restoringGroupId,
     showVersion,
+    showVersionById,
     refreshHistory,
+    refreshHistorySilently,
     restoreVersion,
     returnToCurrentVersion,
   } = useProjectHistory(accessToken);
@@ -319,8 +336,11 @@ export function ProjectWorkspace({
       const historyItem = message.historyGroupId ? historyItemsById.get(message.historyGroupId) : null;
       return {
         ...message,
-        canPreviewHistory: Boolean(message.historyGroupId),
-        canRestoreHistory: Boolean(message.historyGroupId && historyItem?.canRestore),
+        checkpointLabel: message.role === 'user' && message.historyGroupId
+          ? buildCheckpointLabel(message.historyGroupId, historyItem?.createdAt)
+          : null,
+        canPreviewHistory: message.role === 'user' && Boolean(message.historyGroupId),
+        canRestoreHistory: message.role === 'user' && Boolean(message.historyGroupId && historyItem?.canRestore),
         previewLoading: previewingGroupId === message.historyGroupId,
         restoreLoading: restoringGroupId === message.historyGroupId,
       };
@@ -359,6 +379,22 @@ export function ProjectWorkspace({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreVersion]);
 
+  useEffect(() => {
+    if (!showHistoryPanel || !accessToken) {
+      return;
+    }
+
+    void refreshHistorySilently();
+  }, [accessToken, refreshHistorySilently, showHistoryPanel]);
+
+  useEffect(() => {
+    if (!accessToken || historyRefreshRevision === 0) {
+      return;
+    }
+
+    void refreshHistorySilently();
+  }, [accessToken, historyRefreshRevision, refreshHistorySilently]);
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
@@ -372,6 +408,7 @@ export function ProjectWorkspace({
           onExpandAll={onExpandAll}
           onExportPdf={onExportPdf}
           onExportExcel={onExportExcel}
+          isExportExcelLoading={isExportExcelLoading}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
@@ -547,12 +584,11 @@ export function ProjectWorkspace({
               showChartButton={hasRenderableChart}
               isAuthenticated={isAuthenticated}
               onLoginRequired={onLoginRequired}
+              onReturnToCurrentVersion={returnToCurrentVersion}
+              showReturnToCurrentVersion={previewModeActive}
+              activePreviewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
               onPreviewHistory={(groupId) => {
-                const item = historyItemsById.get(groupId);
-                if (!item) {
-                  return;
-                }
-                void showVersion(item);
+                void showVersionById(groupId);
               }}
               onRestoreHistory={(groupId) => {
                 void restoreVersion(groupId);

@@ -21,6 +21,7 @@ import type { CommitProjectCommandRequest, ActorType } from '@gantt/mcp/types';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
 import { writeServerDebugLog } from '../debug-log.js';
+import { broadcastToSession } from '../ws.js';
 
 export async function registerCommandRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/commands/commit', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
@@ -86,6 +87,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
       });
 
       if (response.accepted) {
+        broadcastToSession(req.user!.sessionId, { type: 'history_changed' });
         return reply.status(200).send(response);
       }
 

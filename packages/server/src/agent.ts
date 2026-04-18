@@ -402,6 +402,10 @@ function buildNoMutationMessage(): string {
   return 'Изменение не применилось: модель не выполнила ни одного валидного mutation tool call, поэтому проект не изменился.';
 }
 
+function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
+  return latestVisibleGroupId ?? 'initial';
+}
+
 function buildAgentHistoryTitle(userMessage: string, undoable: boolean): string {
   if (!undoable) {
     return 'AI — Неотменяемое действие';
@@ -873,7 +877,7 @@ export async function runAgentWithHistory(
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
-    const [{ taskService, messageService, commandService, getProjectScheduleOptionsForProject }, wsModule] = await Promise.all([
+    const [{ taskService, messageService, commandService, getProjectScheduleOptionsForProject, historyService }, wsModule] = await Promise.all([
       getServicesModule(),
       getWsModule(),
     ]);
@@ -903,7 +907,14 @@ export async function runAgentWithHistory(
       tasksBeforeNames: tasksBefore.map((task) => task.name),
     });
 
-    await messageService.add('user', userMessage, projectId);
+    const checkpointGroupId = likelyMutationRequest || routeSelection.route === 'initial_generation'
+      ? resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(projectId))
+      : undefined;
+
+    await messageService.add('user', userMessage, projectId, {
+      requestContextId: runId,
+      historyGroupId: checkpointGroupId,
+    });
 
     await writeServerDebugLog('route_selection', {
       runId,
@@ -989,7 +1000,6 @@ export async function runAgentWithHistory(
       const requestContextId = runId;
       const groupId = crypto.randomUUID();
       const historyTitle = buildAgentHistoryTitle(userMessage, true);
-
       await writeServerDebugLog('mutation_lifecycle_started', {
         runId,
         projectId,
@@ -1040,7 +1050,12 @@ export async function runAgentWithHistory(
 
         if (stagedAssistantResponse) {
           broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
-          await messageService.add('assistant', stagedAssistantResponse, projectId);
+          await messageService.add('assistant', stagedAssistantResponse, projectId, {
+            requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
+            historyGroupId: stagedMutation.result.historyUndoable
+              ? checkpointGroupId
+              : undefined,
+          });
         }
 
         await writeServerDebugLog('agent_response_saved', {
@@ -1065,7 +1080,18 @@ export async function runAgentWithHistory(
           taskNames: stagedTasksAfter.map((task) => task.name),
         });
 
-        broadcastToSession(sessionId, { type: 'done' });
+        broadcastToSession(sessionId, { type: 'history_changed' });
+        broadcastToSession(sessionId, {
+          type: 'done',
+          chatMessage: stagedAssistantResponse
+            ? {
+                requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
+                historyGroupId: stagedMutation.result.historyUndoable
+                  ? checkpointGroupId
+                  : null,
+              }
+            : undefined,
+        });
         await writeServerDebugLog('agent_run_completed', {
           runId,
           projectId,
@@ -1271,7 +1297,9 @@ export async function runAgentWithHistory(
     }
 
     if (assistantResponse) {
-      await messageService.add('assistant', assistantResponse, projectId);
+      await messageService.add('assistant', assistantResponse, projectId, {
+        requestContextId: runId,
+      });
     }
     await writeServerDebugLog('agent_response_saved', {
       runId,
@@ -1295,7 +1323,16 @@ export async function runAgentWithHistory(
       taskNames: tasksAfter.map((task) => task.name),
     });
 
-    broadcastToSession(sessionId, { type: 'done' });
+    broadcastToSession(sessionId, { type: 'history_changed' });
+    broadcastToSession(sessionId, {
+      type: 'done',
+      chatMessage: assistantResponse
+        ? {
+            requestContextId: runId,
+            historyGroupId: null,
+          }
+        : undefined,
+    });
     await writeServerDebugLog('agent_run_completed', {
       runId,
       projectId,

@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
 
 import type { MessageService, TaskService, CommandService } from '@gantt/mcp/services';
 import { getPrisma } from '@gantt/mcp/prisma';
+import { historyService } from '@gantt/mcp/services';
 
 import { writeServerDebugLog } from './debug-log.js';
 import { buildMutationPlan } from './mutation/plan-builder.js';
@@ -10,7 +12,17 @@ import type { MutationTaskSnapshot, ResolvedMutationContext, StructuredFragmentP
 import type { ServerMessage } from './ws.js';
 
 type SplitTaskServices = {
-  messageService: Pick<MessageService, 'add'>;
+  messageService: {
+    add(
+      role: 'user' | 'assistant',
+      content: string,
+      projectId: string,
+      options?: {
+        requestContextId?: string;
+        historyGroupId?: string;
+      },
+    ): ReturnType<MessageService['add']>;
+  };
   taskService: Pick<TaskService, 'get' | 'list'>;
   commandService: Pick<CommandService, 'commitCommand'>;
 };
@@ -85,6 +97,10 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9а-яё]+/giu, '-')
     .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-');
+}
+
+function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
+  return latestVisibleGroupId ?? 'initial';
 }
 
 export function buildSplitTaskTrace(taskName: string, details?: string): string {
@@ -280,8 +296,13 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const endDate = normalizeIsoDate(task.endDate);
   const existingChildNames = (task.children ?? []).map((child) => child.name.trim()).filter(Boolean);
   const userTrace = buildSplitTaskTrace(taskName, input.details);
+  const historyGroupId = randomUUID();
+  const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
 
-  await input.services.messageService.add('user', userTrace, input.projectId);
+  await input.services.messageService.add('user', userTrace, input.projectId, {
+    requestContextId: input.runId,
+    historyGroupId: checkpointGroupId,
+  });
   await writeServerDebugLog('direct_split_requested', {
     runId: input.runId,
     projectId: input.projectId,
@@ -343,6 +364,12 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     projectVersion,
     tasksBefore: listed.tasks as MutationTaskSnapshot[],
     plan,
+    history: {
+      groupId: historyGroupId,
+      requestContextId: input.runId,
+      historyTitle: userTrace,
+      historyUndoable: true,
+    },
     commandService: input.services.commandService,
   });
 
@@ -353,10 +380,20 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const { tasks: tasksAfter } = await input.services.taskService.list(input.projectId);
   const assistantResponse = `Задача «${taskName}» детализирована на ${fragmentPlan.nodes.length} подзадач.`;
 
-  await input.services.messageService.add('assistant', assistantResponse, input.projectId);
+  await input.services.messageService.add('assistant', assistantResponse, input.projectId, {
+    requestContextId: input.runId,
+    historyGroupId: checkpointGroupId,
+  });
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks: tasksAfter });
-  input.broadcastToSession(input.sessionId, { type: 'done' });
+  input.broadcastToSession(input.sessionId, { type: 'history_changed' });
+  input.broadcastToSession(input.sessionId, {
+    type: 'done',
+    chatMessage: {
+      requestContextId: input.runId,
+      historyGroupId: checkpointGroupId,
+    },
+  });
 
   await writeServerDebugLog('direct_split_completed', {
     runId: input.runId,

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { historyService } from '@gantt/mcp/services';
+import { messageService } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { broadcastToSession } from '../ws.js';
 
 type HistoryFailureCode = 'version_conflict' | 'validation_error';
 
@@ -128,12 +130,18 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
         ...getActorContext(req),
         groupId: params.groupId,
       });
+      const chatCleanup = await messageService.softDeleteConversationTail(
+        req.user!.projectId,
+        response.targetGroupId,
+      );
+      broadcastToSession(req.user!.sessionId, { type: 'history_changed' });
 
       return reply.send({
         groupId: response.groupId,
         targetGroupId: response.targetGroupId,
         version: response.version,
         snapshot: response.snapshot,
+        chatCleanup,
       });
     } catch (error) {
       if (isHistoryValidationError(error)) {

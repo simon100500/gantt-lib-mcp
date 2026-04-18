@@ -1,6 +1,7 @@
 import {
   ChartNoAxesGantt,
   Check,
+  ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
   Ellipsis,
@@ -37,6 +38,7 @@ interface ToolbarProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  isExportExcelLoading?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
@@ -59,6 +61,7 @@ export function Toolbar({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  isExportExcelLoading = false,
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
@@ -102,6 +105,7 @@ export function Toolbar({
   const mutationLocked = readOnly || previewMode;
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
+  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
 
   const handleToggleDragLock = () => {
     if (mutationLocked) {
@@ -191,22 +195,22 @@ export function Toolbar({
         size="sm"
         variant="ghost"
         onClick={onCollapseAll}
+        aria-label="Свернуть все"
         title="Свернуть все родительские задачи"
         className={cn(actionButtonClassName, 'hidden lg:flex')}
       >
         <ChevronsDownUp className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline text-xs">Свернуть</span>
       </Button>
 
       <Button
         size="sm"
         variant="ghost"
         onClick={onExpandAll}
+        aria-label="Развернуть все"
         title="Развернуть все родительские задачи"
         className={cn(actionButtonClassName, 'hidden lg:flex')}
       >
         <ChevronsUpDown className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline text-xs">Развернуть</span>
       </Button>
 
       <Button
@@ -219,52 +223,78 @@ export function Toolbar({
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
 
-      {onExportPdf && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onExportPdf}
-          className={cn(actionButtonClassName, 'hidden sm:flex')}
-          title="Экспортировать график в PDF"
-        >
-          <FileDown className="h-3.5 w-3.5" />
-          <span className="hidden md:inline text-xs">PDF / Печать</span>
-        </Button>
-      )}
-
-      {onExportExcel && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onExportExcel}
-          className={cn(actionButtonClassName, 'hidden sm:flex')}
-          title="Экспортировать график в Excel"
-        >
-          <FileSpreadsheet className="h-3.5 w-3.5" />
-          <span className="hidden md:inline text-xs">Excel</span>
-        </Button>
-      )}
-
-      {showShareButton && onCreateShareLink && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void onCreateShareLink()}
-          disabled={shareStatus === 'creating'}
-          className={cn(actionButtonClassName, 'hidden lg:flex')}
-          title={
-            shareStatus === 'creating'
-              ? 'Создаём ссылку...'
-              : shareStatus === 'copied'
-                ? 'Ссылка скопирована'
-                : shareStatus === 'error'
-                  ? 'Ошибка ссылки'
-                  : 'Поделиться'
-          }
-        >
-          {shareStatus === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
-          <span className="hidden md:inline text-xs">{shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}</span>
-        </Button>
+      {hasShareMenuActions && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                actionButtonClassName,
+                'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
+              )}
+              title={
+                isExportExcelLoading
+                  ? 'Генерируем Excel...'
+                  : shareStatus === 'creating'
+                  ? 'Создаём ссылку...'
+                  : shareStatus === 'copied'
+                    ? 'Ссылка скопирована'
+                    : shareStatus === 'error'
+                      ? 'Ошибка ссылки'
+                      : 'Поделиться'
+              }
+            >
+              <span className="text-xs">
+                {isExportExcelLoading
+                  ? 'Генерируем Excel...'
+                  : shareStatus === 'creating'
+                  ? 'Создаём ссылку...'
+                  : 'Поделиться'}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            {showShareButton && onCreateShareLink && (
+              <DropdownMenuItem
+                onClick={() => void onCreateShareLink()}
+                disabled={shareStatus === 'creating'}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                <span className="text-sm">
+                  {shareStatus === 'creating'
+                    ? 'Создаём ссылку...'
+                    : shareStatus === 'copied'
+                      ? 'Скопировано'
+                    : shareStatus === 'error'
+                        ? 'Ошибка ссылки'
+                        : 'Отправить ссылку'}
+                </span>
+              </DropdownMenuItem>
+            )}
+            {onExportPdf && (
+              <DropdownMenuItem
+                onClick={onExportPdf}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <FileDown className="h-4 w-4" />
+                <span className="text-sm">PDF / Печать</span>
+              </DropdownMenuItem>
+            )}
+            {onExportExcel && (
+              <DropdownMenuItem
+                onClick={onExportExcel}
+                disabled={isExportExcelLoading}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       <div className="flex-1" />
@@ -451,7 +481,7 @@ export function Toolbar({
             >
               {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
               <span className="text-sm">
-                {shareStatus === 'copied' ? 'Скопировано' : 'Поделиться'}
+                {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку'}
               </span>
             </DropdownMenuItem>
           )}

@@ -46,4 +46,8 @@ export interface HistoryRestoreResponse {
   targetGroupId: string;
   version: number;
   snapshot: ProjectLoadResponse['snapshot'];
+  chatCleanup?: {
+    deletedCount: number;
+    deletedFromMessageId: string | null;
+  };
 }
