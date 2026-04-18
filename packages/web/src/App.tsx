@@ -9,6 +9,7 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { ShareLinkModal } from './components/ShareLinkModal.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
@@ -1083,13 +1084,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         throw new Error(`HTTP ${response.status}`);
       }
       const data = await response.json() as { url: string };
-      await navigator.clipboard.writeText(data.url);
-      setShareStatus('copied');
-      window.setTimeout(() => {
-        if (useUIStore.getState().shareStatus === 'copied') {
-          useUIStore.getState().setShareStatus('idle');
-        }
-      }, 2500);
+      useUIStore.getState().setShareLinkUrl(data.url);
+      setShareStatus('idle');
     } catch (createError) {
       console.error('Failed to create share link:', createError);
       setShareStatus('error');
@@ -1262,6 +1258,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [workspace, workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
+  const shareLink = useUIStore((state) => state.shareLinkUrl);
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
@@ -1558,6 +1555,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           void doExportPdf();
         }}
         onClose={() => setShowPdfHelper(false)}
+      />
+    )}
+
+    {shareLink && (
+      <ShareLinkModal
+        url={shareLink}
+        onClose={() => {
+          useUIStore.getState().setShareLinkUrl(null);
+          setShareStatus('idle');
+        }}
       />
     )}
     </>

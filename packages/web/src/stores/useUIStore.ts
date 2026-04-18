@@ -65,6 +65,7 @@ interface UIState {
   disableTaskDrag: boolean;
   validationErrors: DependencyError[];
   shareStatus: ShareStatus;
+  shareLinkUrl: string | null;
   savingState: SavingState;
   showHistoryPanel: boolean;
   historyRefreshRevision: number;
@@ -94,6 +95,7 @@ interface UIState {
   setDisableTaskDrag: (enabled: boolean) => void;
   setValidationErrors: (errors: DependencyError[]) => void;
   setShareStatus: (status: ShareStatus) => void;
+  setShareLinkUrl: (url: string | null) => void;
   setSavingState: (status: SavingState) => void;
   setShowHistoryPanel: (visible: boolean) => void;
   bumpHistoryRefreshRevision: () => void;
@@ -130,6 +132,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   disableTaskDrag: false,
   validationErrors: [],
   shareStatus: 'idle',
+  shareLinkUrl: null,
   savingState: 'idle',
   showHistoryPanel: false,
   historyRefreshRevision: 0,
@@ -164,6 +167,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setDisableTaskDrag: (disableTaskDrag) => set({ disableTaskDrag }),
   setValidationErrors: (validationErrors) => set({ validationErrors }),
   setShareStatus: (shareStatus) => set({ shareStatus }),
+  setShareLinkUrl: (shareLinkUrl) => set({ shareLinkUrl }),
   setSavingState: (savingState) => set({ savingState }),
   setShowHistoryPanel: (showHistoryPanel) => set({ showHistoryPanel }),
   bumpHistoryRefreshRevision: () => set((state) => ({ historyRefreshRevision: state.historyRefreshRevision + 1 })),
