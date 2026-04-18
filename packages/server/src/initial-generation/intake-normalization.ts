@@ -38,11 +38,77 @@ function normalizeItemText(value: string): string {
     .trim();
 }
 
+function normalizeTableCell(value: string): string {
+  return value
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function isExplicitWorkItemLine(line: string): boolean {
   return /^(?:[-*•]\s+|\d+[.)]\s+)/.test(line.trim());
 }
 
+function looksLikeTableHeader(cell: string): boolean {
+  const normalized = cell.toLowerCase().replace(/ё/g, 'е');
+  return /\b(?:этап|задач[аи]?|наименование|работа|вид работ)\b/u.test(normalized);
+}
+
+function looksLikeDateOrDurationCell(cell: string): boolean {
+  const normalized = cell.toLowerCase().trim();
+  return /^(\d{1,2}\.\d{1,2}(?:\.\d{2,4})?|\d{4}-\d{2}-\d{2}|\d+)$/u.test(normalized)
+    || /\b(?:дата|начал|окончан|продолжител|duration|start|end)\b/u.test(normalized);
+}
+
+function extractTabularWorkItems(rawRequest: string): string[] {
+  const lines = rawRequest
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const items: string[] = [];
+
+  for (const line of lines) {
+    if (!line.includes('\t')) {
+      continue;
+    }
+
+    const cells = line
+      .split('\t')
+      .map(normalizeTableCell)
+      .filter(Boolean);
+    if (cells.length < 2) {
+      continue;
+    }
+
+    const [firstCell, ...restCells] = cells;
+    if (!firstCell) {
+      continue;
+    }
+
+    const normalizedFirstCell = firstCell.replace(/^[^:]{0,40}:\s*/u, '').trim();
+    const headerCandidate = normalizedFirstCell || firstCell;
+    const isHeader = looksLikeTableHeader(headerCandidate)
+      && restCells.every((cell) => looksLikeDateOrDurationCell(cell) || /[а-яa-z]/iu.test(cell));
+    if (isHeader) {
+      continue;
+    }
+
+    const hasTabularMetadata = restCells.some((cell) => looksLikeDateOrDurationCell(cell));
+    if (!hasTabularMetadata) {
+      continue;
+    }
+
+    items.push(normalizedFirstCell || firstCell);
+  }
+
+  return [...new Set(items)];
+}
+
 function extractExplicitWorkItems(rawRequest: string): string[] {
+  const tabularLines = extractTabularWorkItems(rawRequest);
+  if (tabularLines.length >= 3) {
+    return tabularLines;
+  }
+
   const lines = rawRequest
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -85,11 +151,11 @@ function expandRange(start: string, end: string): string[] {
 
 function extractSections(rawRequest: string): string[] {
   const sections = new Set<string>();
-  for (const match of rawRequest.matchAll(/\b\d+\.\d+\b/g)) {
+  for (const match of rawRequest.matchAll(/\b\d+\.\d+\b(?!\.\d{2,4}\b)/g)) {
     sections.add(match[0]);
   }
 
-  for (const match of rawRequest.matchAll(/\b(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)\b/g)) {
+  for (const match of rawRequest.matchAll(/\b(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)\b(?!\.\d{2,4}\b)/g)) {
     for (const section of expandRange(match[1], match[2])) {
       sections.add(section);
     }
@@ -227,7 +293,7 @@ function inferSourceConfidence(
 
 export function normalizeInitialRequest(rawRequest: string): NormalizedInitialRequest {
   const normalizedRequest = normalizeWhitespace(rawRequest);
-  const explicitWorkItems = extractExplicitWorkItems(normalizedRequest);
+  const explicitWorkItems = extractExplicitWorkItems(rawRequest);
   const locationScope = buildLocationScope(normalizedRequest);
   const projectDateRange = extractProjectDateRange(normalizedRequest);
   const sourceConfidence = inferSourceConfidence(explicitWorkItems, locationScope);

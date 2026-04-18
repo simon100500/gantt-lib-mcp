@@ -107,6 +107,24 @@ describe('initial-generation classification', () => {
     assert.equal(normalized.explicitWorkItems.length, 5);
   });
 
+  it('extracts tabular worklists with dates without turning dates into sections', () => {
+    const normalized = normalizeInitialRequest([
+      'Добавить задачу :Этап\tДата начала\tДата окончания\tПродолжительность',
+      'Инициация проекта\t01.09.2026\t05.09.2026\t5',
+      'Планирование проекта\t06.09.2026\t15.09.2026\t10',
+      'Проектирование системы автоматизации\t16.09.2026\t27.09.2026\t12',
+      'Закупка оборудования\t28.09.2026\t05.10.2026\t8',
+    ].join('\n'));
+
+    assert.deepEqual(normalized.explicitWorkItems, [
+      'Инициация проекта',
+      'Планирование проекта',
+      'Проектирование системы автоматизации',
+      'Закупка оборудования',
+    ]);
+    assert.deepEqual(normalized.locationScope?.sections ?? [], []);
+  });
+
   it('keeps fallback-driven unknown classification deterministic for Russian and English paraphrases', () => {
     const russian = normalizeInitialRequest('Построй график только по секции 5.1');
     const english = normalizeInitialRequest('Build a starter schedule only for section 5.1');

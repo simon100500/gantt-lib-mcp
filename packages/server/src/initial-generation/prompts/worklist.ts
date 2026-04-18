@@ -6,6 +6,8 @@ export function buildWorklistStructureLines(): string[] {
     'If the user already provided a plain task list, keep one task per user-supplied work item.',
     'Do not split one user-supplied work item into multiple tasks unless the user explicitly requested decomposition.',
     'Do not invent discipline-based phases or subphases when the user only provided a flat list of work items.',
+    'If the user did not provide hierarchy, keep grouping minimal and pragmatic.',
+    'If a would-be group contains only 1-2 tasks, do not force a separate subgroup for it unless the user explicitly asked for hierarchy.',
     'Only infer supporting tasks when they are clearly necessary and keep them aligned with the stated worklist policy.',
   ];
 }
