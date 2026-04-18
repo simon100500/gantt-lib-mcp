@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import type { CommitProjectCommandResponse, ProjectCommand, ProjectSnapshot, Task } from '../types.js';
 import { HistoryService, HistoryValidationError } from './history.service.js';
+
+const historyServiceSource = readFileSync(
+  resolve(process.cwd(), 'packages/mcp/src/services/history.service.ts'),
+  'utf8',
+);
+const historyHookSource = readFileSync(
+  resolve(process.cwd(), 'packages/web/src/hooks/useProjectHistory.ts'),
+  'utf8',
+);
+const historyApiTypesSource = readFileSync(
+  resolve(process.cwd(), 'packages/web/src/lib/apiTypes.ts'),
+  'utf8',
+);
 
 function shiftInclusiveEndDate(startDate: string, currentStartDate: string, currentEndDate: string): string {
   const start = new Date(`${startDate}T00:00:00.000Z`);
@@ -455,5 +470,24 @@ describe('HistoryService version snapshots', () => {
         && error.code === 'validation_error'
         && /inverseCommand/.test(error.message),
     );
+  });
+});
+
+describe('history contract cleanup', () => {
+  it('avoids type shortcuts on the history path', () => {
+    assert.doesNotMatch(historyServiceSource, /\bas any\b/);
+    assert.doesNotMatch(historyHookSource, /\bas any\b/);
+    assert.doesNotMatch(historyApiTypesSource, /\bas any\b/);
+  });
+
+  it('keeps legacy undo and redo names out of the public web contract', () => {
+    assert.doesNotMatch(historyHookSource, /\bundoGroup\b/);
+    assert.doesNotMatch(historyHookSource, /\bredoGroup\b/);
+    assert.doesNotMatch(historyHookSource, /\bundoLatest\b/);
+    assert.doesNotMatch(historyHookSource, /\bredoable\b/);
+    assert.doesNotMatch(historyApiTypesSource, /\bundoGroup\b/);
+    assert.doesNotMatch(historyApiTypesSource, /\bredoGroup\b/);
+    assert.doesNotMatch(historyApiTypesSource, /\bundoLatest\b/);
+    assert.doesNotMatch(historyApiTypesSource, /\bredoable\b/);
   });
 });
