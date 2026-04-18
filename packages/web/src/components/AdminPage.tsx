@@ -1178,7 +1178,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                           <div className="text-sm text-slate-400">Проектов нет.</div>
                         ) : selectedUser.projects.map((project) => (
                           <div key={project.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex flex-col gap-3">
                               <div className="min-w-0">
                                 <div className="font-medium text-slate-900">{project.name}</div>
                                 <div className="mt-1 flex items-center gap-2">
@@ -1205,7 +1205,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                                   <span className="text-xs text-slate-500">логов: {project.logCount ?? 0}</span>
                                 </div>
                               </div>
-                              <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:w-auto lg:grid-cols-none lg:auto-cols-max lg:grid-flow-col">
+                              <div className="flex w-full flex-wrap gap-2">
                                 <button
                                   type="button"
                                   disabled={loadingChat && chatProjectId === project.id}
