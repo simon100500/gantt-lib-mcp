@@ -570,11 +570,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   });
   const ganttRef = useRef<GanttChartRef>(null);
   const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false, mode: 'rendering', message: null });
+  const [pendingGanttDayMode, setPendingGanttDayMode] = useState<'business' | 'calendar' | null>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
+  const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
+
+  useEffect(() => {
+    if (!pendingGanttDayMode) {
+      return;
+    }
+
+    if (auth.project?.ganttDayMode === pendingGanttDayMode) {
+      setPendingGanttDayMode(null);
+    }
+  }, [auth.project?.ganttDayMode, pendingGanttDayMode]);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
     setTasks(nextTasks);
@@ -1061,12 +1073,18 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
 
-    if (auth.project.ganttDayMode === ganttDayMode) {
+    if (effectiveAuthGanttDayMode === ganttDayMode) {
       return;
     }
 
-    await batchUpdate.handleGanttDayModeSwitch(ganttDayMode);
-  }, [auth.project, batchUpdate]);
+    setPendingGanttDayMode(ganttDayMode);
+    try {
+      await batchUpdate.handleGanttDayModeSwitch(ganttDayMode);
+    } catch (error) {
+      setPendingGanttDayMode(null);
+      throw error;
+    }
+  }, [auth.project, batchUpdate, effectiveAuthGanttDayMode]);
 
   const handleCreateShareLink = useCallback(async () => {
     if (!auth.accessToken || !auth.project) {
@@ -1448,7 +1466,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCascade={handleCascade}
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
-            ganttDayMode={auth.project?.ganttDayMode ?? 'calendar'}
+            ganttDayMode={effectiveAuthGanttDayMode}
+            displayGanttDayMode={effectiveAuthGanttDayMode}
             calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             readOnly={isArchivedProject}
             previewState={previewState.active ? previewState.mode : 'idle'}

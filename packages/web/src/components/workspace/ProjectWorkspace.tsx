@@ -56,6 +56,7 @@ interface ProjectWorkspaceProps {
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   ganttDayMode: 'business' | 'calendar';
+  displayGanttDayMode?: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   previewState?: 'idle' | 'rendering' | 'failed';
@@ -135,6 +136,7 @@ export function ProjectWorkspace({
   shareStatus = 'idle',
   onCreateShareLink,
   ganttDayMode,
+  displayGanttDayMode,
   calendarDays = [],
   onGanttDayModeChange,
   previewState = 'idle',
@@ -414,7 +416,7 @@ export function ProjectWorkspace({
           onViewModeChange={handleViewModeChange}
           disableTaskDrag={effectiveDisableTaskDrag}
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
-          ganttDayMode={ganttDayMode}
+          ganttDayMode={displayGanttDayMode ?? ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
           readOnly={readOnly}
           previewMode={previewModeActive}
