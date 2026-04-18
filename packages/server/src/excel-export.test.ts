@@ -3,6 +3,47 @@ import { describe, it } from 'node:test';
 import ExcelJS from 'exceljs';
 import type { ProjectExcelExportData } from './excel-export.js';
 
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function formatMonthLabel(date: Date): string {
+  const month = date.toLocaleDateString('ru-RU', { month: 'long', timeZone: 'UTC' });
+  return `${month.charAt(0).toUpperCase() + month.slice(1)} ${date.getUTCFullYear()}`;
+}
+
+function getWeekendDateInRange(start: Date, end: Date): Date {
+  for (let cursor = new Date(start.getTime()); cursor.getTime() <= end.getTime(); cursor = addDays(cursor, 1)) {
+    const day = cursor.getUTCDay();
+    if (day === 0 || day === 6) return cursor;
+  }
+  return start;
+}
+
+function getMondayAfterStart(start: Date, end: Date): Date | null {
+  for (let cursor = addDays(start, 1); cursor.getTime() <= end.getTime(); cursor = addDays(cursor, 1)) {
+    if (cursor.getUTCDay() === 1) return cursor;
+  }
+  return null;
+}
+
+function columnName(columnNumber: number): string {
+  let current = columnNumber;
+  let label = '';
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    current = Math.floor((current - 1) / 26);
+  }
+  return label;
+}
+
 async function loadWorkbook(data: ProjectExcelExportData) {
   const { buildProjectExcelExportBuffer } = await import(new URL('./excel-export.ts', import.meta.url).href);
   const buffer = await buildProjectExcelExportBuffer(data);
@@ -13,17 +54,36 @@ async function loadWorkbook(data: ProjectExcelExportData) {
 
 describe('buildProjectExcelExportBuffer', () => {
   it('renders title, compact calendar header, print settings, and weekend day highlight', async () => {
+    const today = new Date();
+    const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const timelineEnd = addDays(today, 2);
+    const weekendDate = getWeekendDateInRange(monthStart, timelineEnd);
+    const mondayDate = getMondayAfterStart(monthStart, timelineEnd);
+    const todayColumnName = columnName(8 + Math.floor((today.getTime() - monthStart.getTime()) / 86_400_000));
+    const weekendColumnName = columnName(8 + Math.floor((weekendDate.getTime() - monthStart.getTime()) / 86_400_000));
+    const mondayColumnName = mondayDate
+      ? columnName(8 + Math.floor((mondayDate.getTime() - monthStart.getTime()) / 86_400_000))
+      : null;
+    const timelineDays = Math.floor((timelineEnd.getTime() - monthStart.getTime()) / 86_400_000) + 1;
+    const approximateWidth = (10 + 42 + 14 + 14 + 12 + 9 + 14) + timelineDays * DAY_WIDTH;
+    const expectedLandscape = approximateWidth > 170 || timelineDays > 32;
+
     const workbook = await loadWorkbook({
       projectName: 'Demo',
       ganttDayMode: 'business',
-      calendarDays: [],
+      calendarDays: [
+        {
+          date: toIsoDate(weekendDate),
+          kind: 'non_working',
+        },
+      ],
       tasks: [
         {
           id: 'parent',
           name: 'Этап 1',
           parentId: null,
-          startDate: '2026-04-01',
-          endDate: '2026-04-03',
+          startDate: toIsoDate(monthStart),
+          endDate: toIsoDate(addDays(monthStart, 2)),
           sortOrder: 1,
           color: '#94A3B8',
           progress: 0,
@@ -33,8 +93,8 @@ describe('buildProjectExcelExportBuffer', () => {
           id: 'child-a',
           name: 'Подготовка',
           parentId: 'parent',
-          startDate: '2026-04-01',
-          endDate: '2026-04-02',
+          startDate: toIsoDate(monthStart),
+          endDate: toIsoDate(addDays(monthStart, 1)),
           sortOrder: 1,
           color: '#22C55E',
           progress: 0,
@@ -44,8 +104,8 @@ describe('buildProjectExcelExportBuffer', () => {
           id: 'child-b',
           name: 'Монтаж очень длинного этапа с несколькими словами',
           parentId: 'parent',
-          startDate: '2026-04-03',
-          endDate: '2026-04-08',
+          startDate: toIsoDate(addDays(monthStart, 2)),
+          endDate: toIsoDate(timelineEnd),
           sortOrder: 2,
           color: '#2563EB',
           progress: 0,
@@ -72,9 +132,9 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.views[0]?.showGridLines, false);
     assert.equal(sheet.getCell('A1').value, 'ГетГант / Demo');
     assert.equal(sheet.pageSetup.paperSize, 9);
-    assert.equal(sheet.pageSetup.orientation, 'portrait');
-    assert.equal(sheet.pageSetup.fitToWidth, 1);
-    assert.equal(sheet.pageSetup.fitToHeight, 0);
+    assert.equal(sheet.pageSetup.orientation, expectedLandscape ? 'landscape' : 'portrait');
+    assert.equal(sheet.pageSetup.fitToWidth, expectedLandscape ? 0 : 1);
+    assert.equal(sheet.pageSetup.fitToHeight, expectedLandscape ? 1 : 0);
     assert.match(sheet.headerFooter?.oddFooter ?? '', /GetGantt\.ru/);
     assert.match(sheet.headerFooter?.oddFooter ?? '', /Дата экспорта:/);
     assert.match(sheet.headerFooter?.oddFooter ?? '', /Страница &P из &N/);
@@ -88,13 +148,18 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.ok((sheet.getColumn('G').width ?? 0) >= 20);
     assert.ok((sheet.getColumn('G').width ?? 0) > (sheet.getColumn('F').width ?? 0));
     assert.equal(sheet.getColumn('H').width, DAY_WIDTH);
-    assert.equal(sheet.getCell('H2').value, 'Апрель 2026');
+    assert.equal(sheet.getCell('H2').value, formatMonthLabel(monthStart));
     assert.equal(sheet.getCell('I2').value, null);
     assert.equal(sheet.getCell('H3').value, 1);
-    assert.equal((sheet.getCell('K2').font as any)?.color?.argb, 'FF1E293B');
-    assert.equal((sheet.getCell('K3').font as any)?.color?.argb, 'FFDC2626');
-    assert.equal((sheet.getCell('M3').border as any)?.left?.style, 'thin');
-    assert.equal((sheet.getCell('M3').border as any)?.left?.color?.argb, 'FFCBD5E1');
+    assert.equal((sheet.getCell(`${weekendColumnName}2`).font as any)?.color?.argb, 'FF1E293B');
+    assert.equal((sheet.getCell(`${weekendColumnName}3`).font as any)?.color?.argb, 'FFDC2626');
+    assert.equal((sheet.getCell(`${todayColumnName}3`).fill as any)?.fgColor?.argb, 'FFDC2626');
+    assert.equal((sheet.getCell(`${todayColumnName}3`).font as any)?.color?.argb, 'FFFFFFFF');
+    assert.equal((sheet.getCell(`${todayColumnName}4`).border as any)?.left?.color?.argb, 'FFDC2626');
+    if (mondayColumnName) {
+      assert.equal((sheet.getCell(`${mondayColumnName}2`).border as any)?.left, undefined);
+      assert.equal((sheet.getCell(`${mondayColumnName}3`).border as any)?.left?.style, 'thin');
+    }
     assert.deepEqual(sheet.getCell('A1').border, {});
     assert.equal(sheet.getCell('A3').fill?.type, 'pattern');
     assert.equal((sheet.getCell('I3').border as any)?.left, undefined);
@@ -108,13 +173,12 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('B5').alignment?.indent, 1);
     assert.equal(sheet.getCell('A6').value, '1.2');
     assert.equal(sheet.getCell('C6').type, ExcelJS.ValueType.Date);
-    assert.equal(sheet.getCell('E6').value, 6);
+    assert.equal(sheet.getCell('E6').value, Math.floor((timelineEnd.getTime() - addDays(monthStart, 2).getTime()) / 86_400_000) + 1);
     assert.equal(sheet.getCell('F6').value, 0);
     assert.equal(sheet.getCell('G6').value, '[1.1]ОН+2, [missing]НН');
     assert.equal(sheet.getCell('G6').alignment?.horizontal, 'left');
     assert.equal(sheet.getCell('I6').fill?.type, 'pattern');
-    assert.equal(sheet.getCell('O6').fill?.type, 'pattern');
-    assert.equal((sheet.getCell('P6').fill as any) ?? undefined, undefined);
+    assert.equal(sheet.getCell(`${todayColumnName}6`).fill?.type, 'pattern');
     assert.equal((sheet.getCell('H4').border as any)?.left?.color?.argb, 'FF64748B');
     assert.equal((sheet.getCell('H4').fill as any)?.fgColor?.argb, 'FFCBD5E1');
     assert.ok((sheet.getRow(6).height ?? 0) > (29 / 1.333));

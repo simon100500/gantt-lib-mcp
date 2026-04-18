@@ -47,6 +47,9 @@ const HEADER_LABEL_ROW_INDEX = 3;
 const HEADER_FILL = 'FFFFFFFF';
 const HEADER_FONT = 'FF1E293B';
 const WEEKEND_HEADER_FONT = 'FFDC2626';
+const TODAY_FILL = 'FFDC2626';
+const TODAY_FONT = 'FFFFFFFF';
+const TODAY_BORDER = 'FFDC2626';
 const GRID_FILL = 'FFFFFFFF';
 const GRID_BORDER = 'FFE2E8F0';
 const WEEK_BORDER = 'FF93C5FD';
@@ -54,7 +57,7 @@ const MONTH_BORDER = 'FF64748B';
 const PARENT_FILL = 'FFCBD5E1';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [10, 42, 14, 14, 12, 9, 14];
+const STATIC_COLUMN_WIDTHS = [10, 44, 14, 14, 12, 8, 20];
 const DAY_WIDTH = 20 / 7;
 const A4_PAPER_SIZE = 9;
 
@@ -208,20 +211,22 @@ function styleTimelineCell(cell: ExcelJS.Cell, fillColor: string): void {
 function applyTimelineSeparator(
   cell: ExcelJS.Cell,
   kind: 'day' | 'week' | 'month',
-  options: { verticalLines?: boolean } = {},
+  options: { verticalLines?: boolean; todayLine?: boolean } = {},
 ): void {
   const verticalLines = options.verticalLines ?? true;
-  const left = !verticalLines
-    ? kind === 'month'
-      ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
-      : kind === 'week'
-        ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
-        : undefined
-    : kind === 'month'
-      ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
-      : kind === 'week'
-        ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
-        : { style: 'thin' as const, color: { argb: GRID_BORDER } };
+  const left = options.todayLine
+    ? { style: 'medium' as const, color: { argb: TODAY_BORDER } }
+    : !verticalLines
+      ? kind === 'month'
+        ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
+        : kind === 'week'
+          ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
+          : undefined
+      : kind === 'month'
+        ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
+        : kind === 'week'
+          ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
+          : { style: 'thin' as const, color: { argb: GRID_BORDER } };
 
   cell.border = {
     top: cell.border?.top ?? { style: 'thin', color: { argb: GRID_BORDER } },
@@ -360,6 +365,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'GetGantt';
   const exportDate = new Date();
+  const todayIso = toIsoDate(exportDate);
   workbook.created = exportDate;
 
   const sheet = workbook.addWorksheet('Gantt', {
@@ -383,7 +389,16 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     fitToHeight: useLandscape ? 1 : 0,
     horizontalCentered: false,
     verticalCentered: false,
+    margins: {
+      left: 0.25,
+      right: 0.25,
+      top: 0.3,
+      bottom: 0.3,
+      header: 0.12,
+      footer: 0.12,
+    },
   };
+  sheet.pageSetup.printTitlesRow = '2:3';
   sheet.headerFooter.oddFooter = `&LGetGantt.ru&CДата экспорта: ${formatExportDate(exportDate)}&RСтраница &P из &N`;
 
   sheet.columns = [
@@ -428,21 +443,30 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
       const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+      const isToday = timelineDate === todayIso;
+      const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
+      const headerSeparatorKind = rowIndex === MONTH_ROW_INDEX && separatorKind === 'week' ? 'day' : separatorKind;
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
       cell.font = {
         bold: true,
         color: {
-          argb: rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
-            ? WEEKEND_HEADER_FONT
-            : HEADER_FONT,
+          argb: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
+            ? TODAY_FONT
+            : rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
+              ? WEEKEND_HEADER_FONT
+              : HEADER_FONT,
         },
       };
+      if (rowIndex === HEADER_LABEL_ROW_INDEX && isToday) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TODAY_FILL } };
+      }
       cell.alignment = rowIndex === MONTH_ROW_INDEX
         ? { vertical: 'middle', horizontal: 'left', wrapText: false }
         : { vertical: 'middle', horizontal: 'center' };
       applyCellBorder(cell);
-      applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+      applyTimelineSeparator(cell, headerSeparatorKind, {
         verticalLines: false,
+        todayLine: isToday,
       });
     }
   }
@@ -503,6 +527,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRID_FILL } };
         applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
           verticalLines: true,
+          todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
         });
       }
     }
@@ -521,6 +546,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
         styleTimelineCell(row.getCell(columnIndex), fillColor);
         applyTimelineSeparator(row.getCell(columnIndex), separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
           verticalLines: true,
+          todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
         });
       }
     }
