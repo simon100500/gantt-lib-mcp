@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: verifying
-last_updated: "2026-04-17T21:31:18.227Z"
-last_activity: 2026-04-18
+status: executing
+last_updated: "2026-04-18T09:58:04.122Z"
+last_activity: 2026-04-18 -- Completed 45-01-PLAN.md
 progress:
-  total_phases: 15
+  total_phases: 16
   completed_phases: 13
-  total_plans: 47
-  completed_plans: 47
-  percent: 100
+  total_plans: 52
+  completed_plans: 48
+  percent: 92
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-18
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Phase complete — ready for verification
+**Status:** Ready to execute
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 44 verification — undo-redo
+**Current focus:** Phase 45 — history-refactor
 
 ---
 
 ## Current Position
 
-Phase: 44 (undo-redo) — VERIFYING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-04-18
+Phase: 45 (history-refactor) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-04-18 -- Completed 45-01-PLAN.md
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ---
 
@@ -76,6 +76,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 45 added: history-refactor
 - Phase 44 added: undo-redo
 - Phase 43 added: initial-gen-no-regexp
 - Phase 41 added: initial-gen-refactor
@@ -169,6 +170,8 @@ packages/
 - [Phase 44]: Phase 44 Plan 03 routes manual UI history grouping through the existing /api/commands/commit hook and Fastify route instead of adding a parallel history write API.
 - [Phase 44]: Undo/redo actions in the workspace always reconcile through useProjectStore.setConfirmed() plus clearTransientState() after successful history replay.
 - [Phase 44]: The history panel stays inside the existing workspace shell as a toggleable rail instead of introducing modal routing or a separate history page.
+- [Phase 45]: History preview and restore now resolve one shared rollback tail, with preview replaying inverse commands in memory and restore replaying the same sequence through commitCommand.
+- [Phase 45]: Public history rows are version-oriented visible groups with isCurrent/canRestore semantics, while technical rollback groups stay internal append-only mechanics.
 
 ## Performance Metrics
 
@@ -199,12 +202,13 @@ packages/
 | Phase 44-undo-redo P02 | 4min | 2 tasks | 7 files |
 | Phase 44 P03 | 35min | 2 tasks | 11 files |
 | Phase 44 P04 | 6min | 2 tasks | 8 files |
+| Phase 45 P01 | 8 min | 2 tasks | 6 files |
 
 ## Session
 
-- Last session: 2026-04-17T21:31:18Z
-- Stopped at: Completed 44-04-PLAN.md
+- Last session: 2026-04-18T09:58:04Z
+- Stopped at: Completed 45-01-PLAN.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 44 Plan 04 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 01 completed*
