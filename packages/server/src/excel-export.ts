@@ -59,8 +59,8 @@ const PARENT_TIMELINE_FILLS = ['FF475569', 'FF6B7280', 'FF94A3B8'] as const;
 const GROUP_SEPARATOR_BORDER = 'FF4B5563';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [10, 44, 14, 14, 12, 8, 20];
-const DAY_WIDTH = 20 / 7;
+const STATIC_COLUMN_WIDTHS = [8, 44, 14, 14, 12, 8, 14];
+const DAY_WIDTH = 21 / 7;
 const A4_PAPER_SIZE = 9;
 const GETGANTT_THEME_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="GetGantt Theme">
@@ -184,18 +184,18 @@ function cloneStyle(style: Partial<ExcelJS.Style>): Partial<ExcelJS.Style> {
     alignment: style.alignment ? { ...style.alignment } : undefined,
     border: style.border
       ? {
-          top: style.border.top ? { ...style.border.top } : undefined,
-          left: style.border.left ? { ...style.border.left } : undefined,
-          bottom: style.border.bottom ? { ...style.border.bottom } : undefined,
-          right: style.border.right ? { ...style.border.right } : undefined,
-        }
+        top: style.border.top ? { ...style.border.top } : undefined,
+        left: style.border.left ? { ...style.border.left } : undefined,
+        bottom: style.border.bottom ? { ...style.border.bottom } : undefined,
+        right: style.border.right ? { ...style.border.right } : undefined,
+      }
       : undefined,
     fill: style.fill
       ? {
-          ...style.fill,
-          fgColor: 'fgColor' in style.fill && style.fill.fgColor ? { ...style.fill.fgColor } : undefined,
-          bgColor: 'bgColor' in style.fill && style.fill.bgColor ? { ...style.fill.bgColor } : undefined,
-        } as ExcelJS.Fill
+        ...style.fill,
+        fgColor: 'fgColor' in style.fill && style.fill.fgColor ? { ...style.fill.fgColor } : undefined,
+        bgColor: 'bgColor' in style.fill && style.fill.bgColor ? { ...style.fill.bgColor } : undefined,
+      } as ExcelJS.Fill
       : undefined,
   };
 }
@@ -233,13 +233,13 @@ function createWorkbookStyles() {
     accentFill(1, 'lighter80'),
   ] as const;
   const parentTimelinePalette = [
-    accentFill(1, 'darker50'),
     accentFill(1, 'darker25'),
     accentFill(1, 'lighter40'),
+    accentFill(1, 'lighter60'),
   ] as const;
   const taskTimelinePalette = {
-    default: accentFill(2, 'lighter60'),
-    strong: accentFill(2),
+    default: accentFill(2, 'lighter40'),
+    strong: accentFill(2, 'lighter60'),
   } as const;
 
   return {
@@ -676,8 +676,17 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
       cell.style = mergeStyle(
         rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerStatic,
-        { alignment: rowIndex === HEADER_LABEL_ROW_INDEX ? workbookStyles.alignments.headerCenter : workbookStyles.alignments.headerLeft },
+        {
+          alignment: rowIndex === HEADER_LABEL_ROW_INDEX
+            ? columnIndex === 1
+              ? workbookStyles.alignments.headerLeft
+              : workbookStyles.alignments.headerCenter
+            : workbookStyles.alignments.headerLeft,
+        },
       );
+      if (rowIndex === HEADER_LABEL_ROW_INDEX) {
+        cell.font = { ...(cell.font ?? {}), bold: true };
+      }
     }
 
     for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
@@ -740,7 +749,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
 
     setRowHeightFromContent(row, rowData.task.name, STATIC_COLUMN_WIDTHS[1], rowData.depth);
 
-    row.getCell(1).alignment = baseAlignment('center');
+    row.getCell(1).alignment = baseAlignment('left');
     row.getCell(2).alignment = { ...baseAlignment('left'), indent: rowData.depth };
     row.getCell(3).alignment = baseAlignment('center');
     row.getCell(4).alignment = baseAlignment('center');

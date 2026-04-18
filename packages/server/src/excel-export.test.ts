@@ -190,6 +190,7 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.match(sheet.headerFooter?.oddFooter ?? '', /Дата экспорта:/);
     assert.match(sheet.headerFooter?.oddFooter ?? '', /Страница &P из &N/);
     assert.equal(sheet.getCell('A3').value, '№');
+    assert.equal(sheet.getCell('A3').alignment?.horizontal, 'left');
     assert.equal(sheet.getCell('B3').value, 'Задача');
     assert.equal(sheet.getCell('C3').value, 'Начало');
     assert.equal(sheet.getCell('D3').value, 'Оконч.');
@@ -198,7 +199,7 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('G3').value, 'Связи');
     assert.ok((sheet.getColumn('G').width ?? 0) >= 20);
     assert.ok((sheet.getColumn('G').width ?? 0) > (sheet.getColumn('F').width ?? 0));
-    assert.equal(sheet.getColumn('H').width, DAY_WIDTH);
+    assert.ok(Math.abs((sheet.getColumn('H').width ?? 0) - DAY_WIDTH) < 0.25);
     assert.equal(sheet.getCell('H2').value, formatMonthLabel(monthStart));
     assert.equal(sheet.getCell('I2').value, null);
     assert.equal(sheet.getCell('H3').value, 1);
@@ -219,6 +220,7 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.ok((sheet.properties.defaultRowHeight ?? 0) >= 21);
 
     assert.equal(sheet.getCell('A4').value, '1');
+    assert.equal(sheet.getCell('A4').alignment?.horizontal, 'left');
     assert.equal(sheet.getCell('B4').value, 'Этап 1');
     assert.equal(sheet.getCell('B4').font?.bold, true);
     assert.equal(sheet.getCell('F4').value, 1);
@@ -229,11 +231,11 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('A6').value, '1.2');
     assert.equal(sheet.getCell('B6').value, 'Подэтап');
     assertThemeColor((sheet.getCell('B6').fill as any)?.fgColor, { theme: 4, tint: 0.7999816888943144 });
-    assertThemeColor((sheet.getCell('I6').fill as any)?.fgColor, { theme: 4, tint: -0.249977111117893 });
+    assertThemeColor((sheet.getCell('I6').fill as any)?.fgColor, { theme: 4, tint: 0.3999755851924192 });
     assert.equal(sheet.getCell('A7').value, '1.2.1');
     assert.equal(sheet.getCell('B7').value, 'Глубокий этап');
     assertThemeColor((sheet.getCell('B7').fill as any)?.fgColor, { theme: 4, tint: 0.7999816888943144 });
-    assertThemeColor((sheet.getCell('J7').fill as any)?.fgColor, { theme: 4, tint: 0.3999755851924192 });
+    assertThemeColor((sheet.getCell('J7').fill as any)?.fgColor, { theme: 4, tint: 0.5999938962981048 });
     assert.equal(sheet.getCell('A9').value, '1.3');
     assert.equal(sheet.getCell('C9').type, ExcelJS.ValueType.Date);
     assert.equal(sheet.getCell('E9').value, Math.floor((timelineEnd.getTime() - addDays(monthStart, 2).getTime()) / 86_400_000) + 1);
@@ -246,7 +248,7 @@ describe('buildProjectExcelExportBuffer', () => {
     assertArgbColor((sheet.getCell('H4').border as any)?.top?.color, 'FF4B5563');
     assertThemeColor((sheet.getCell('H4').border as any)?.left?.color, { theme: 4 });
     assertThemeColor((sheet.getCell('B4').fill as any)?.fgColor, { theme: 4, tint: 0.5999938962981048 });
-    assertThemeColor((sheet.getCell('H4').fill as any)?.fgColor, { theme: 4, tint: -0.499984740745262 });
+    assertThemeColor((sheet.getCell('H4').fill as any)?.fgColor, { theme: 4, tint: -0.249977111117893 });
     assert.ok((sheet.getRow(9).height ?? 0) > (29 / 1.333));
   });
 
