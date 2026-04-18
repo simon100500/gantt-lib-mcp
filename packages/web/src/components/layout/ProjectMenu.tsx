@@ -128,7 +128,7 @@ export function ProjectMenu({
 
   const sidebarVisible = sidebarState === 'sidebar';
   const overlayVisible = sidebarState === 'overlay';
-  const showHeaderLogo = !sidebarVisible;
+  const showHeaderLogo = hasShareToken || !auth.isAuthenticated || !sidebarVisible;
 
   useEffect(() => {
     if (auth.isAuthenticated) {
