@@ -82,10 +82,78 @@ type DbProjectEvent = {
   inverseCommand?: ProjectCommand | null;
 };
 
+type DbTaskRow = {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  type?: string | null;
+  color?: string | null;
+  parentId?: string | null;
+  progress: number;
+  sortOrder: number;
+  dependencies?: Array<{
+    depTaskId: string;
+    type: string;
+    lag?: number;
+  }>;
+};
+
+type DbDependencyRow = {
+  id: string;
+  taskId: string;
+  depTaskId: string;
+  type: string;
+  lag?: number;
+};
+
+type HistoryScheduleOptions = {
+  businessDays?: boolean;
+  weekendPredicate?: (date: Date) => boolean;
+};
+
+type HistoryPrismaClient = {
+  project: {
+    findUnique(args: {
+      where: { id: string };
+      select: { version: true };
+    }): Promise<{ version: number } | null>;
+  };
+  task: {
+    findMany(args: {
+      where: { projectId: string };
+      include: { dependencies: true };
+      orderBy: { sortOrder: 'asc' };
+    }): Promise<DbTaskRow[]>;
+  };
+  dependency: {
+    findMany(args: {
+      where: { task: { projectId: string } };
+      select: { id: true; taskId: true; depTaskId: true; type: true; lag: true };
+    }): Promise<DbDependencyRow[]>;
+  };
+  mutationGroup: {
+    findMany(args: {
+      where: { projectId: string; status: 'applied' };
+      orderBy: Array<{ newVersion: 'desc' } | { createdAt: 'desc' }>;
+    }): Promise<DbMutationGroup[]>;
+  };
+  projectEvent: {
+    findMany(args: {
+      where: {
+        projectId?: string;
+        groupId: string | { in: string[] };
+        applied: true;
+      };
+      orderBy?: { ordinal: 'asc' | 'desc' };
+    }): Promise<DbProjectEvent[]>;
+  };
+};
+
 type HistoryServiceDeps = {
-  prisma?: ReturnType<typeof getPrisma> | any;
+  prisma?: HistoryPrismaClient;
   commandService?: Pick<CommandService, 'commitCommand'>;
-  getScheduleOptions?: (projectId: string, prismaClient: any) => Promise<{ businessDays?: boolean; weekendPredicate?: (date: Date) => boolean }>;
+  getScheduleOptions?: (projectId: string, prismaClient: HistoryPrismaClient) => Promise<HistoryScheduleOptions>;
 };
 
 type RollbackTailPlan = {
@@ -99,14 +167,14 @@ function toActorType(value: DbMutationGroup['actorType']): ActorType {
   return value === 'import_actor' ? 'import' : value;
 }
 
-async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<Task[]> {
+async function loadTaskSnapshot(projectId: string, prismaClient: HistoryPrismaClient): Promise<Task[]> {
   const tasks = await prismaClient.task.findMany({
     where: { projectId },
     include: { dependencies: true },
     orderBy: { sortOrder: 'asc' },
   });
 
-  return tasks.map((task: any) => ({
+  return tasks.map((task) => ({
     id: task.id,
     name: task.name,
     startDate: dateToDomain(task.startDate),
@@ -116,7 +184,7 @@ async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<T
     parentId: task.parentId ?? undefined,
     progress: task.progress,
     sortOrder: task.sortOrder,
-    dependencies: (task.dependencies ?? []).map((dependency: any): TaskDependency => ({
+    dependencies: (task.dependencies ?? []).map((dependency): TaskDependency => ({
       taskId: dependency.depTaskId,
       type: dependency.type as DependencyType,
       lag: dependency.lag,
@@ -124,13 +192,16 @@ async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<T
   }));
 }
 
-async function loadDependencyRows(projectId: string, prismaClient: any): Promise<ProjectSnapshot['dependencies']> {
+async function loadDependencyRows(
+  projectId: string,
+  prismaClient: HistoryPrismaClient,
+): Promise<ProjectSnapshot['dependencies']> {
   const rows = await prismaClient.dependency.findMany({
     where: { task: { projectId } },
     select: { id: true, taskId: true, depTaskId: true, type: true, lag: true },
   });
 
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
     taskId: row.taskId,
     depTaskId: row.depTaskId,
@@ -139,7 +210,7 @@ async function loadDependencyRows(projectId: string, prismaClient: any): Promise
   }));
 }
 
-async function buildProjectSnapshot(projectId: string, prismaClient: any): Promise<ProjectSnapshot> {
+async function buildProjectSnapshot(projectId: string, prismaClient: HistoryPrismaClient): Promise<ProjectSnapshot> {
   const [tasks, dependencies] = await Promise.all([
     loadTaskSnapshot(projectId, prismaClient),
     loadDependencyRows(projectId, prismaClient),
@@ -149,7 +220,7 @@ async function buildProjectSnapshot(projectId: string, prismaClient: any): Promi
 }
 
 export class HistoryService {
-  private _prisma: ReturnType<typeof getPrisma> | any;
+  private _prisma?: HistoryPrismaClient;
   private readonly commandService: Pick<CommandService, 'commitCommand'>;
   private readonly getScheduleOptions: NonNullable<HistoryServiceDeps['getScheduleOptions']>;
 
@@ -159,12 +230,12 @@ export class HistoryService {
     this.getScheduleOptions = deps.getScheduleOptions ?? getProjectScheduleOptionsForProject;
   }
 
-  private get prisma() {
+  private get prisma(): HistoryPrismaClient {
     if (!this._prisma) {
       this._prisma = getPrisma();
     }
 
-    return this._prisma as any;
+    return this._prisma;
   }
 
   private async getProjectVersion(projectId: string): Promise<number> {

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import type { CommitProjectCommandResponse, ProjectCommand, ProjectSnapshot, Task } from '../types.js';
+import type { CommandService } from './command.service.js';
 import { HistoryService, HistoryValidationError } from './history.service.js';
 
 const historyServiceSource = readFileSync(
@@ -268,7 +269,7 @@ describe('HistoryService version snapshots', () => {
             snapshot: harness.state.snapshot,
           };
         },
-      } as any,
+      } satisfies Pick<CommandService, 'commitCommand'>,
     });
   });
 
