@@ -1,4 +1,4 @@
-import { AlertCircle, Bot, Clock3, RotateCcw, RotateCw, Settings2, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, RotateCcw, Settings2, Upload, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
@@ -11,19 +11,14 @@ interface HistoryPanelProps {
   disabled?: boolean;
   onClose: () => void;
   onRefresh: () => unknown;
-  onUndoGroup: (groupId: string) => unknown;
-  onRedoGroup: (groupId: string) => unknown;
+  onRestoreGroup: (groupId: string) => unknown;
 }
 
 const ACTOR_ICONS: Record<HistoryItem['actorType'], typeof User> = {
   user: User,
   agent: Bot,
   system: Settings2,
-};
-
-const STATUS_LABELS: Record<HistoryItem['status'], string> = {
-  applied: 'Применено',
-  undone: 'Отменено',
+  import: Upload,
 };
 
 const COMMAND_TITLES: Record<string, string> = {
@@ -97,8 +92,7 @@ export function HistoryPanel({
   disabled = false,
   onClose,
   onRefresh,
-  onUndoGroup,
-  onRedoGroup,
+  onRestoreGroup,
 }: HistoryPanelProps) {
   return (
     <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:w-[300px] xl:max-w-[300px] xl:min-w-[300px]">
@@ -155,7 +149,15 @@ export function HistoryPanel({
                         'inline-flex h-4 w-4 shrink-0 items-center justify-center',
                         item.actorType === 'agent' ? 'text-violet-600' : 'text-slate-400',
                       )}
-                      title={item.actorType === 'user' ? 'Пользователь' : item.actorType === 'agent' ? 'Агент' : 'Система'}
+                      title={
+                        item.actorType === 'user'
+                          ? 'Пользователь'
+                          : item.actorType === 'agent'
+                            ? 'Агент'
+                            : item.actorType === 'import'
+                              ? 'Импорт'
+                              : 'Система'
+                      }
                     >
                       <ActorIcon className="h-4 w-4" />
                     </span>
@@ -163,11 +165,11 @@ export function HistoryPanel({
                     {formatTimestamp(item.createdAt)}
                     </span>
                   </div>
-                  {item.status === 'undone' && (
+                  {item.isCurrent && (
                     <span
-                      className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                      className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
                     >
-                      {STATUS_LABELS[item.status]}
+                      Текущая
                     </span>
                   )}
                 </div>
@@ -175,7 +177,7 @@ export function HistoryPanel({
                 <div className="space-y-0.5">
                   <p className="text-[13px] font-medium leading-4 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
                   <p className="text-[11px] text-slate-500">
-                    Версии {item.baseVersion} → {item.newVersion ?? '—'} • {formatCommandCount(item.commandCount)}
+                    Версии {item.baseVersion} → {item.newVersion} • {formatCommandCount(item.commandCount)}
                   </p>
                 </div>
 
@@ -184,23 +186,12 @@ export function HistoryPanel({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => { void onUndoGroup(item.id); }}
-                    disabled={disabled || loading || !item.undoable}
+                    onClick={() => { void onRestoreGroup(item.id); }}
+                    disabled={disabled || loading || !item.canRestore}
                     className="h-7 px-2 text-[11px]"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Отменить
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { void onRedoGroup(item.id); }}
-                    disabled={disabled || loading || !item.redoable}
-                    className="h-7 px-2 text-[11px]"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                    Повторить
+                    Восстановить версию
                   </Button>
                 </div>
               </article>

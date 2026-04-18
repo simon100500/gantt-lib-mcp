@@ -214,9 +214,7 @@ export function ProjectWorkspace({
     loading: historyLoading,
     error: historyError,
     refreshHistory,
-    undoLatest,
-    undoGroup,
-    redoGroup,
+    restoreGroup,
   } = useProjectHistory(accessToken);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
@@ -273,8 +271,8 @@ export function ProjectWorkspace({
     return await Promise.resolve(onSplitTask(splitTaskDraft, details));
   }, [onSplitTask, splitTaskDraft]);
 
-  const latestRedoableItem = useMemo(
-    () => historyItems.find((item) => item.redoable) ?? null,
+  const latestRestorableItem = useMemo(
+    () => historyItems.find((item) => item.canRestore) ?? null,
     [historyItems],
   );
 
@@ -296,27 +294,17 @@ export function ProjectWorkspace({
         return;
       }
 
-      if (event.shiftKey) {
-        if (!latestRedoableItem || historyLoading) {
-          return;
-        }
-
-        event.preventDefault();
-        void redoGroup(latestRedoableItem.id);
-        return;
-      }
-
-      if (historyLoading) {
+      if (event.shiftKey || historyLoading || !latestRestorableItem) {
         return;
       }
 
       event.preventDefault();
-      void undoLatest();
+      void restoreGroup(latestRestorableItem.id);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [accessToken, effectiveReadOnly, historyLoading, latestRedoableItem, redoGroup, undoLatest]);
+  }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreGroup]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -472,8 +460,7 @@ export function ProjectWorkspace({
             disabled={effectiveReadOnly || !accessToken}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
-            onUndoGroup={undoGroup}
-            onRedoGroup={redoGroup}
+            onRestoreGroup={restoreGroup}
           />
         )}
 

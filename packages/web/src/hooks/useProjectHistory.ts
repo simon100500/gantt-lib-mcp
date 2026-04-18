@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { HistoryItem, HistoryListResponse, HistoryMutationResponse } from '../lib/apiTypes.ts';
+import type {
+  HistoryItem,
+  HistoryListResponse,
+  HistoryRestoreResponse,
+  HistorySnapshotResponse,
+} from '../lib/apiTypes.ts';
 import { useProjectStore } from '../stores/useProjectStore.ts';
 
 const DEFAULT_HISTORY_LIMIT = 50;
@@ -22,15 +27,25 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 }
 
-async function parseHistoryMutationResponse(response: Response): Promise<HistoryMutationResponse> {
-  const data = await response.json() as Partial<HistoryMutationResponse>;
+async function parseHistoryRestoreResponse(response: Response): Promise<HistoryRestoreResponse> {
+  const data = await response.json() as Partial<HistoryRestoreResponse>;
 
   return {
     groupId: data.groupId ?? '',
+    targetGroupId: data.targetGroupId ?? '',
     version: data.version ?? 0,
     snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
-    historyTitle: data.historyTitle ?? '',
-    status: data.status ?? 'applied',
+  };
+}
+
+async function parseHistorySnapshotResponse(response: Response): Promise<HistorySnapshotResponse> {
+  const data = await response.json() as Partial<HistorySnapshotResponse>;
+
+  return {
+    groupId: data.groupId ?? '',
+    isCurrent: data.isCurrent ?? false,
+    currentVersion: data.currentVersion ?? 0,
+    snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
   };
 }
 
@@ -83,7 +98,25 @@ export function useProjectHistory(accessToken: string | null) {
     }
   }, [accessToken]);
 
-  const applyReplay = useCallback(async (path: string) => {
+  const fetchSnapshot = useCallback(async (groupId: string) => {
+    if (!accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`/api/history/${groupId}/snapshot`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    return parseHistorySnapshotResponse(response);
+  }, [accessToken]);
+
+  const restoreGroup = useCallback(async (groupId: string) => {
     if (!accessToken) {
       throw new Error('Not authenticated');
     }
@@ -92,7 +125,7 @@ export function useProjectHistory(accessToken: string | null) {
     setError(null);
 
     try {
-      const response = await fetch(path, {
+      const response = await fetch(`/api/history/${groupId}/restore`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -103,23 +136,19 @@ export function useProjectHistory(accessToken: string | null) {
         throw new Error(await readErrorMessage(response));
       }
 
-      const data = await parseHistoryMutationResponse(response);
+      const data = await parseHistoryRestoreResponse(response);
       setConfirmed(data.version, data.snapshot);
       clearTransientState();
       await refreshHistory();
       return data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to replay history';
+      const message = err instanceof Error ? err.message : 'Failed to restore history version';
       setError(message);
       throw err;
     } finally {
       setLoading(false);
     }
   }, [accessToken, clearTransientState, refreshHistory, setConfirmed]);
-
-  const undoLatest = useCallback(async () => applyReplay('/api/history/undo'), [applyReplay]);
-  const undoGroup = useCallback(async (groupId: string) => applyReplay(`/api/history/${groupId}/undo`), [applyReplay]);
-  const redoGroup = useCallback(async (groupId: string) => applyReplay(`/api/history/${groupId}/redo`), [applyReplay]);
 
   useEffect(() => {
     void refreshHistory();
@@ -131,8 +160,7 @@ export function useProjectHistory(accessToken: string | null) {
     error,
     nextCursor,
     refreshHistory,
-    undoLatest,
-    undoGroup,
-    redoGroup,
+    fetchSnapshot,
+    restoreGroup,
   };
 }
