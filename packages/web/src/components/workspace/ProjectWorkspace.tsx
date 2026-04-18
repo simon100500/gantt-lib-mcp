@@ -483,7 +483,7 @@ export function ProjectWorkspace({
             previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
-            onShowVersion={showVersion}
+            onPreviewVersion={showVersion}
             onRestoreVersion={restoreVersion}
             onReturnToCurrentVersion={returnToCurrentVersion}
           />

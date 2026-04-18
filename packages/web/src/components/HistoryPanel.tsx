@@ -12,7 +12,7 @@ interface HistoryPanelProps {
   previewGroupId?: string | null;
   onClose: () => void;
   onRefresh: () => unknown;
-  onShowVersion: (item: HistoryItem) => unknown;
+  onPreviewVersion: (item: HistoryItem) => unknown;
   onRestoreVersion: (groupId: string) => unknown;
   onReturnToCurrentVersion: () => unknown;
 }
@@ -73,12 +73,9 @@ function formatCommandCount(count: number): string {
 }
 
 function humanizeHistoryTitle(title: string): string {
-  if (title.startsWith('Undo — ')) {
-    return `Отмена — ${humanizeHistoryTitle(title.slice('Undo — '.length))}`;
-  }
-
-  if (title.startsWith('Redo — ')) {
-    return `Повтор — ${humanizeHistoryTitle(title.slice('Redo — '.length))}`;
+  if (title.startsWith('Undo — ') || title.startsWith('Redo — ')) {
+    const prefixLength = title.startsWith('Undo — ') ? 'Undo — '.length : 'Redo — '.length;
+    return humanizeHistoryTitle(title.slice(prefixLength));
   }
 
   if (title.startsWith('AI — ')) {
@@ -96,7 +93,7 @@ export function HistoryPanel({
   previewGroupId = null,
   onClose,
   onRefresh,
-  onShowVersion,
+  onPreviewVersion,
   onRestoreVersion,
   onReturnToCurrentVersion,
 }: HistoryPanelProps) {
@@ -165,8 +162,26 @@ export function HistoryPanel({
               return (
               <article
                 key={item.id}
+                role="button"
+                tabIndex={disabled || loading ? -1 : 0}
+                onClick={() => {
+                  if (disabled || loading) {
+                    return;
+                  }
+                  void onPreviewVersion(item);
+                }}
+                onKeyDown={(event) => {
+                  if (disabled || loading) {
+                    return;
+                  }
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    void onPreviewVersion(item);
+                  }
+                }}
                 className={cn(
-                  'space-y-2 px-3 py-2.5',
+                  'space-y-2 px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+                  !disabled && !loading && 'cursor-pointer hover:bg-slate-50',
                   isPreviewing && 'bg-sky-50/60',
                 )}
               >
@@ -197,7 +212,7 @@ export function HistoryPanel({
                     <span
                       className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
                     >
-                      Текущая
+                      Текущая версия
                     </span>
                   )}
                   {isPreviewing && (
@@ -221,22 +236,28 @@ export function HistoryPanel({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => { void onShowVersion(item); }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void onPreviewVersion(item);
+                    }}
                     disabled={disabled || loading}
                     className="h-7 px-2 text-[11px]"
                   >
-                    {item.isCurrent ? 'Текущая версия' : 'Показать версию'}
+                    Показать эту версию
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => { void onRestoreVersion(item.id); }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void onRestoreVersion(item.id);
+                    }}
                     disabled={disabled || loading || !item.canRestore}
                     className="h-7 px-2 text-[11px]"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Восстановить версию
+                    Восстановить эту версию
                   </Button>
                 </div>
               </article>
