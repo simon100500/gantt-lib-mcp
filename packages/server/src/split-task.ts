@@ -3,6 +3,7 @@ import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk
 
 import type { MessageService, TaskService, CommandService } from '@gantt/mcp/services';
 import { getPrisma } from '@gantt/mcp/prisma';
+import { historyService } from '@gantt/mcp/services';
 
 import { writeServerDebugLog } from './debug-log.js';
 import { buildMutationPlan } from './mutation/plan-builder.js';
@@ -96,6 +97,10 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9а-яё]+/giu, '-')
     .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-');
+}
+
+function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
+  return latestVisibleGroupId ?? 'initial';
 }
 
 export function buildSplitTaskTrace(taskName: string, details?: string): string {
@@ -292,9 +297,11 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const existingChildNames = (task.children ?? []).map((child) => child.name.trim()).filter(Boolean);
   const userTrace = buildSplitTaskTrace(taskName, input.details);
   const historyGroupId = randomUUID();
+  const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
 
   await input.services.messageService.add('user', userTrace, input.projectId, {
     requestContextId: input.runId,
+    historyGroupId: checkpointGroupId,
   });
   await writeServerDebugLog('direct_split_requested', {
     runId: input.runId,
@@ -375,7 +382,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
 
   await input.services.messageService.add('assistant', assistantResponse, input.projectId, {
     requestContextId: input.runId,
-    historyGroupId,
+    historyGroupId: checkpointGroupId,
   });
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks: tasksAfter });
@@ -383,7 +390,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     type: 'done',
     chatMessage: {
       requestContextId: input.runId,
-      historyGroupId,
+      historyGroupId: checkpointGroupId,
     },
   });
 

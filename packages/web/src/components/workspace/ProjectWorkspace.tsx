@@ -90,6 +90,18 @@ function formatHistoryVersionTimestamp(value: string): string {
   });
 }
 
+function buildCheckpointLabel(groupId: string, createdAt?: string): string {
+  if (groupId === 'initial') {
+    return 'Исходная версия';
+  }
+
+  if (createdAt) {
+    return `Версия от ${formatHistoryVersionTimestamp(createdAt)}`;
+  }
+
+  return 'Версия';
+}
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -237,6 +249,7 @@ export function ProjectWorkspace({
     previewingGroupId,
     restoringGroupId,
     showVersion,
+    showVersionById,
     refreshHistory,
     restoreVersion,
     returnToCurrentVersion,
@@ -319,8 +332,11 @@ export function ProjectWorkspace({
       const historyItem = message.historyGroupId ? historyItemsById.get(message.historyGroupId) : null;
       return {
         ...message,
-        canPreviewHistory: Boolean(message.historyGroupId),
-        canRestoreHistory: Boolean(message.historyGroupId && historyItem?.canRestore),
+        checkpointLabel: message.role === 'user' && message.historyGroupId
+          ? buildCheckpointLabel(message.historyGroupId, historyItem?.createdAt)
+          : null,
+        canPreviewHistory: message.role === 'user' && Boolean(message.historyGroupId),
+        canRestoreHistory: message.role === 'user' && Boolean(message.historyGroupId && historyItem?.canRestore),
         previewLoading: previewingGroupId === message.historyGroupId,
         restoreLoading: restoringGroupId === message.historyGroupId,
       };
@@ -547,12 +563,11 @@ export function ProjectWorkspace({
               showChartButton={hasRenderableChart}
               isAuthenticated={isAuthenticated}
               onLoginRequired={onLoginRequired}
+              onReturnToCurrentVersion={returnToCurrentVersion}
+              showReturnToCurrentVersion={previewModeActive}
+              activePreviewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
               onPreviewHistory={(groupId) => {
-                const item = historyItemsById.get(groupId);
-                if (!item) {
-                  return;
-                }
-                void showVersion(item);
+                void showVersionById(groupId);
               }}
               onRestoreHistory={(groupId) => {
                 void restoreVersion(groupId);

@@ -631,6 +631,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPreviewState((current) => current.mode === 'failed'
         ? current
         : { tasks: [], active: false, mode: 'rendering', message: null });
+      useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
       useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
     }

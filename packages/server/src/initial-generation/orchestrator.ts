@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 import type { ScheduleCommandOptions } from '@gantt/mcp/types';
+import { historyService } from '@gantt/mcp/services';
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
 import { classifyInitialRequest } from './classification.js';
@@ -202,6 +203,10 @@ async function saveAssistantMessage(
 ): Promise<void> {
   await input.services.messageService.add('assistant', assistantResponse, input.projectId, metadata);
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
+}
+
+function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
+  return latestVisibleGroupId ?? 'initial';
 }
 
 async function broadcastTasksSnapshot(
@@ -457,6 +462,7 @@ export async function runInitialGeneration(
   let repairAttempted = false;
   let previewBroadcasted = false;
   const historyGroupId = randomUUID();
+  const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
     const startedAt = Date.now();
     await input.logger.debug('planner_query_request', {
@@ -652,7 +658,7 @@ export async function runInitialGeneration(
     const assistantResponse = buildSuccessResponse();
     await saveAssistantMessage(input, assistantResponse, {
       requestContextId: input.runId,
-      historyGroupId,
+      historyGroupId: checkpointGroupId,
     });
     await input.logger.debug('initial_generation_result', {
       runId: input.runId,
@@ -665,7 +671,7 @@ export async function runInitialGeneration(
     });
     const tasksAfter = await finishSuccessfulRun(input, assistantResponse, {
       requestContextId: input.runId,
-      historyGroupId,
+      historyGroupId: checkpointGroupId,
     });
 
     return {

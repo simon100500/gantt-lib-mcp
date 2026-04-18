@@ -23,6 +23,10 @@ interface ChatState {
     requestContextId?: string | null;
     historyGroupId?: string | null;
   }) => void;
+  attachCheckpointToLatestUserMessage: (meta?: {
+    requestContextId?: string | null;
+    historyGroupId?: string | null;
+  }) => void;
   replaceMessages: (messages: ChatMessage[]) => void;
   softDeleteFromMessageId: (messageId: string) => void;
   setError: (message: string) => void;
@@ -92,6 +96,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
     }));
   },
+  attachCheckpointToLatestUserMessage: (meta) => set((state) => {
+    if (!meta?.historyGroupId && !meta?.requestContextId) {
+      return state;
+    }
+
+    const nextMessages = [...state.messages];
+    for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
+      const message = nextMessages[index];
+      if (message.role !== 'user') {
+        continue;
+      }
+
+      nextMessages[index] = {
+        ...message,
+        requestContextId: meta.requestContextId ?? message.requestContextId ?? null,
+        historyGroupId: meta.historyGroupId ?? message.historyGroupId ?? null,
+      };
+      return {
+        ...state,
+        messages: nextMessages,
+      };
+    }
+
+    return state;
+  }),
   replaceMessages: (messages) => set({
     messages,
     streamingText: '',

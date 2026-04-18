@@ -20,6 +20,7 @@ import { dateToDomain } from './types.js';
 import type { PrismaClient } from '../prisma.js';
 
 const TECHNICAL_RESTORE_ORIGIN: MutationGroupOrigin = 'undo';
+const INITIAL_CHECKPOINT_GROUP_ID = 'initial';
 
 export type HistoryGroupListItem = {
   id: string;
@@ -169,7 +170,9 @@ type HistoryServiceDeps = {
 };
 
 type RollbackTailPlan = {
-  targetGroup: DbMutationGroup;
+  targetGroup: DbMutationGroup | null;
+  targetGroupId: string;
+  targetGroupTitle: string;
   currentVersion: number;
   isCurrent: boolean;
   inverseCommands: ProjectCommand[];
@@ -365,6 +368,32 @@ export class HistoryService {
 
   private async resolveRollbackTail(projectId: string, groupId: string): Promise<RollbackTailPlan> {
     const visibleGroups = await this.getVisibleGroups(projectId);
+    if (groupId === INITIAL_CHECKPOINT_GROUP_ID) {
+      const currentVersion = await this.getProjectVersion(projectId);
+      const inverseCommands: ProjectCommand[] = [];
+
+      for (const group of visibleGroups) {
+        const events = await this.getGroupEvents(group.id, 'desc');
+        for (const event of events) {
+          if (!event.inverseCommand) {
+            throw new HistoryValidationError(
+              `Active tail event in group ${group.id} is missing inverseCommand and cannot be replayed`,
+            );
+          }
+          inverseCommands.push(event.inverseCommand);
+        }
+      }
+
+      return {
+        targetGroup: null,
+        targetGroupId: INITIAL_CHECKPOINT_GROUP_ID,
+        targetGroupTitle: 'Initial state',
+        currentVersion,
+        isCurrent: visibleGroups.length === 0,
+        inverseCommands,
+      };
+    }
+
     const targetGroup = visibleGroups.find((group) => group.id === groupId);
 
     if (!targetGroup || targetGroup.newVersion === null) {
@@ -389,10 +418,17 @@ export class HistoryService {
 
     return {
       targetGroup,
+      targetGroupId: targetGroup.id,
+      targetGroupTitle: targetGroup.title,
       currentVersion,
       isCurrent: activeTailGroups.length === 0,
       inverseCommands,
     };
+  }
+
+  async getLatestVisibleGroupId(projectId: string): Promise<string | null> {
+    const groups = await this.getVisibleGroups(projectId);
+    return groups[0]?.id ?? null;
   }
 
   async listHistoryGroups({ projectId, cursor, limit }: ListHistoryGroupsInput): Promise<{ items: HistoryGroupListItem[]; nextCursor?: string }> {
@@ -443,7 +479,7 @@ export class HistoryService {
 
     if (plan.isCurrent) {
       return {
-        groupId: plan.targetGroup.id,
+        groupId: plan.targetGroupId,
         isCurrent: true,
         currentVersion: plan.currentVersion,
         snapshot: currentSnapshot,
@@ -457,7 +493,7 @@ export class HistoryService {
     );
 
     return {
-      groupId: plan.targetGroup.id,
+      groupId: plan.targetGroupId,
       isCurrent: false,
       currentVersion: plan.currentVersion,
       snapshot,
@@ -468,8 +504,8 @@ export class HistoryService {
     const plan = await this.resolveRollbackTail(request.projectId, request.groupId);
     if (plan.isCurrent) {
       return {
-        groupId: plan.targetGroup.id,
-        targetGroupId: plan.targetGroup.id,
+        groupId: plan.targetGroupId,
+        targetGroupId: plan.targetGroupId,
         version: plan.currentVersion,
         snapshot: await buildProjectSnapshot(request.projectId, this.prisma),
       };
@@ -490,10 +526,10 @@ export class HistoryService {
           history: {
             groupId: rollbackGroupId,
             origin: TECHNICAL_RESTORE_ORIGIN,
-            title: `Restore to ${plan.targetGroup.title}`,
+            title: `Restore to ${plan.targetGroupTitle}`,
             requestContextId: request.requestContextId,
             finalizeGroup: index === plan.inverseCommands.length - 1,
-            targetGroupId: plan.targetGroup.id,
+            targetGroupId: plan.targetGroupId,
           },
         },
         request.actorType,
@@ -511,7 +547,7 @@ export class HistoryService {
 
     return {
       groupId: rollbackGroupId,
-      targetGroupId: plan.targetGroup.id,
+      targetGroupId: plan.targetGroupId,
       version,
       snapshot,
     };

@@ -188,6 +188,34 @@ export function useProjectHistory(accessToken: string | null) {
     }
   }, [enterPreview, exitPreview, fetchSnapshot]);
 
+  const showVersionById = useCallback(async (groupId: string) => {
+    setPreviewingGroupId(groupId);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchSnapshot(groupId);
+      if (data.isCurrent) {
+        exitPreview();
+        return data;
+      }
+
+      enterPreview({
+        groupId: data.groupId,
+        snapshot: data.snapshot,
+        isCurrent: data.isCurrent,
+      });
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load history version';
+      setError(message);
+      throw err;
+    } finally {
+      setPreviewingGroupId((current) => (current === groupId ? null : current));
+      setLoading(false);
+    }
+  }, [enterPreview, exitPreview, fetchSnapshot]);
+
   const returnToCurrentVersion = useCallback(() => {
     setPreviewingGroupId(null);
     exitPreview();
@@ -250,6 +278,7 @@ export function useProjectHistory(accessToken: string | null) {
     fetchSnapshot,
     previewVersion: fetchSnapshot,
     showVersion,
+    showVersionById,
     restoreVersion,
     returnToCurrentVersion,
   };
