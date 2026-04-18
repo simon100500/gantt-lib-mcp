@@ -251,15 +251,16 @@ export function Toolbar({
         </Button>
       )}
 
+      <div className="flex-1" />
+
       <Button
         size="sm"
         variant="ghost"
         onClick={() => setShowHistoryPanel(!showHistoryPanel)}
         aria-pressed={showHistoryPanel}
         className={cn(
-          actionButtonClassName,
+          'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
           showHistoryPanel && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
-          'hidden sm:flex',
         )}
         title="Показать историю изменений"
       >
@@ -269,10 +270,7 @@ export function Toolbar({
             <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
           )}
         </div>
-        <span className="hidden md:inline text-xs">История</span>
       </Button>
-
-      <div className="flex-1" />
 
       <Button
         size="sm"
