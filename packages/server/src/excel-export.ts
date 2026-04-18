@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { getPrisma } from '@gantt/mcp/prisma';
+import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import type { DependencyType } from '@gantt/mcp/types';
 
 type ExportDependency = {
@@ -23,6 +24,8 @@ type ExportTask = {
 
 export type ProjectExcelExportData = {
   projectName: string;
+  ganttDayMode: 'business' | 'calendar';
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
   tasks: ExportTask[];
 };
 
@@ -40,9 +43,10 @@ const STATIC_COLUMN_COUNT = 7;
 const HEADER_ROW_COUNT = 3;
 const HEADER_FILL = 'FFFFFFFF';
 const HEADER_FONT = 'FF1E293B';
+const WEEKEND_HEADER_FONT = 'FFDC2626';
 const GRID_FILL = 'FFFFFFFF';
 const GRID_BORDER = 'FFE2E8F0';
-const WEEK_BORDER = 'FFCBD5E1';
+const WEEK_BORDER = 'FF94A3B8';
 const MONTH_BORDER = 'FF64748B';
 const PARENT_FILL = 'FFCBD5E1';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
@@ -132,6 +136,36 @@ function buildTimelineRange(tasks: ExportTask[]): string[] {
   }
 
   return dates;
+}
+
+function isWeekendFallback(dateIso: string): boolean {
+  const day = parseIsoDate(dateIso).getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function buildNonWorkingSet(
+  ganttDayMode: 'business' | 'calendar',
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
+  timelineDates: string[],
+): Set<string> {
+  const overrides = new Map(calendarDays.map((day) => [day.date.slice(0, 10), day.kind]));
+  const result = new Set<string>();
+
+  for (const date of timelineDates) {
+    const override = overrides.get(date);
+    if (override === 'non_working') {
+      result.add(date);
+      continue;
+    }
+    if (override === 'working' || override === 'shortened') {
+      continue;
+    }
+    if (ganttDayMode === 'business' && isWeekendFallback(date)) {
+      result.add(date);
+    }
+  }
+
+  return result;
 }
 
 function suppressRepeatedLabels(values: string[]): string[] {
@@ -308,6 +342,8 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
     where: { id: projectId },
     select: {
       name: true,
+      ganttDayMode: true,
+      calendarId: true,
       tasks: {
         include: {
           dependencies: {
@@ -333,8 +369,12 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
     throw new Error(`Project not found: ${projectId}`);
   }
 
+  const projectCalendar = await getProjectCalendarSettings(prisma, projectId);
+
   return {
     projectName: project.name,
+    ganttDayMode: projectCalendar.ganttDayMode,
+    calendarDays: projectCalendar.calendarDays,
     tasks: project.tasks.map((task) => ({
       id: task.id,
       name: task.name,
@@ -369,6 +409,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
   const yearHeaders = suppressRepeatedLabels(timelineDates.map(formatYearLabel));
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
+  const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarDays, timelineDates);
 
   sheet.columns = [
     { width: STATIC_COLUMN_WIDTHS[0] },
@@ -378,7 +419,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     { width: STATIC_COLUMN_WIDTHS[4] },
     { width: STATIC_COLUMN_WIDTHS[5] },
     { width: STATIC_COLUMN_WIDTHS[6] },
-    ...timelineDates.map(() => ({ width: 24 / 7 })),
+    ...timelineDates.map(() => ({ width: 20 / 7 })),
   ];
 
   const separatorKinds = timelineDates.map((date, index) => {
@@ -398,7 +439,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
 
   sheet.addRow([null, null, null, null, null, null, null, ...yearHeaders.map((value) => value || null)]);
   sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
-  sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => Number(formatDayLabel(value)))]);
+  sheet.addRow(['№', 'Задача', 'Начало', 'Окончание', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => Number(formatDayLabel(value)))]);
 
   for (let rowIndex = 1; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
     styleHeaderRow(sheet.getRow(rowIndex));
@@ -419,7 +460,11 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
         pattern: 'solid',
         fgColor: { argb: HEADER_FILL },
       };
-      cell.font = { bold: true, color: { argb: HEADER_FONT } };
+      const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+      cell.font = {
+        bold: true,
+        color: { argb: timelineDate && nonWorkingDates.has(timelineDate) ? WEEKEND_HEADER_FONT : HEADER_FONT },
+      };
       cell.alignment = rowIndex < HEADER_ROW_COUNT
         ? { vertical: 'middle', horizontal: 'left', wrapText: false }
         : { vertical: 'middle', horizontal: 'center' };

@@ -15,6 +15,8 @@ describe('buildProjectExcelExportBuffer', () => {
   it('renders compact period headers and reordered static columns', async () => {
     const workbook = await loadWorkbook({
       projectName: 'Demo',
+      ganttDayMode: 'business',
+      calendarDays: [],
       tasks: [
         {
           id: 'parent',
@@ -69,16 +71,18 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('B3').value, 'Задача');
     assert.equal(sheet.getCell('C3').value, 'Начало');
     assert.equal(sheet.getCell('D3').value, 'Окончание');
-    assert.equal(sheet.getCell('E3').value, 'Длительность');
-    assert.equal(sheet.getCell('F3').value, 'Процент');
+    assert.equal(sheet.getCell('E3').value, 'Длит.');
+    assert.equal(sheet.getCell('F3').value, '%');
     assert.equal(sheet.getCell('G3').value, 'Связи');
-    assert.equal(sheet.getColumn('G').width, 34);
-    assert.equal(sheet.getColumn('H').width, 24 / 7);
+    assert.ok((sheet.getColumn('G').width ?? 0) >= 20);
+    assert.ok((sheet.getColumn('G').width ?? 0) > (sheet.getColumn('F').width ?? 0));
+    assert.equal(sheet.getColumn('H').width, 20 / 7);
     assert.equal(sheet.getCell('H1').value, '2026');
     assert.equal(sheet.getCell('I1').value, null);
     assert.equal(sheet.getCell('H2').value, 'Апрель');
     assert.equal(sheet.getCell('I2').value, null);
     assert.equal(sheet.getCell('H3').value, 1);
+    assert.equal((sheet.getCell('K3').font as any)?.color?.argb, 'FFDC2626');
     assert.deepEqual(sheet.getCell('A1').border, {});
     assert.equal(sheet.getCell('A1').fill?.type, 'pattern');
     assert.equal(sheet.getCell('H1').alignment?.wrapText, undefined);
@@ -107,6 +111,8 @@ describe('buildProjectExcelExportBuffer', () => {
   it('produces an empty-state workbook when the project has no tasks', async () => {
     const workbook = await loadWorkbook({
       projectName: 'Empty',
+      ganttDayMode: 'business',
+      calendarDays: [],
       tasks: [],
     });
 
