@@ -6,7 +6,7 @@ import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   requestContextId?: string | null;
   historyGroupId?: string | null;
@@ -306,23 +306,29 @@ export function ChatSidebar({
               </div>
             )}
 
-            <div
-              className={cn(
-                "flex",
-                msg.role === "user" ? "justify-end" : "justify-start",
-              )}
-            >
-              <div
-                className={cn(
-                  "max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
-                  msg.role === "user"
-                    ? "rounded-br-sm bg-[#e7f0fe] text-slate-800"
-                    : "rounded-bl-sm bg-slate-50 text-slate-800",
-                )}
-              >
+            {msg.role === "system" ? (
+              <div className="px-0 py-1 text-[12px] leading-relaxed text-slate-500">
                 {msg.content}
               </div>
-            </div>
+            ) : (
+              <div
+                className={cn(
+                  "flex",
+                  msg.role === "user" ? "justify-end" : "justify-start",
+                )}
+              >
+                <div
+                  className={cn(
+                    "max-w-[88%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed shadow-none",
+                    msg.role === "user"
+                      ? "rounded-br-sm bg-[#e7f0fe] text-slate-800"
+                      : "rounded-bl-sm bg-slate-50 text-slate-800",
+                  )}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 

@@ -92,7 +92,7 @@ export async function getProjectCalendarSettings(
     select: { ganttDayMode: true, calendarId: true },
   });
 
-  const ganttDayMode: GanttDayMode = project?.ganttDayMode ?? 'business';
+  const ganttDayMode: GanttDayMode = project?.ganttDayMode ?? 'calendar';
   const calendarDays = await loadEffectiveCalendarDays(prisma, project?.calendarId);
   return {
     ganttDayMode,

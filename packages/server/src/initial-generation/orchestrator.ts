@@ -185,6 +185,10 @@ function buildSuccessResponse(): string {
   return 'Я подготовил стартовый график проекта с фазами, подэтапами и задачами.';
 }
 
+function buildInitialGenerationSystemMessage(): string {
+  return 'Стартовый график составлен в календарных днях. Изменить режим можно в меню проекта.';
+}
+
 function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): string {
   if (stage === 'compile') {
     return 'Не удалось собрать и сохранить стартовый график полностью.';
@@ -234,6 +238,7 @@ async function finishSuccessfulRun(
   metadata?: {
     requestContextId?: string;
     historyGroupId?: string;
+    systemMessage?: string | null;
   },
 ): Promise<ListedTask[]> {
   const tasks = await broadcastTasksSnapshot(input, 'final_state');
@@ -569,7 +574,7 @@ export async function runInitialGeneration(
       plan: planning.plan,
       commandService: input.services.commandService,
       serverDate: getServerDate(input.serverDate),
-      scheduleOptions: input.scheduleOptions,
+      scheduleOptions: { businessDays: false },
       history: {
         groupId: historyGroupId,
         origin: 'agent_run',
@@ -673,6 +678,7 @@ export async function runInitialGeneration(
     const tasksAfter = await finishSuccessfulRun(input, assistantResponse, {
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
+      systemMessage: buildInitialGenerationSystemMessage(),
     });
 
     return {

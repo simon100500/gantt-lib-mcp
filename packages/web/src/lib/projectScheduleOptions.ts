@@ -42,5 +42,5 @@ export function getProjectScheduleOptions(
 }
 
 export function getDefaultProjectScheduleOptions(): ScheduleCommandOptions {
-  return getProjectScheduleOptions('business');
+  return getProjectScheduleOptions('calendar');
 }

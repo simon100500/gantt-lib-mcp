@@ -551,7 +551,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const authenticatedTasks = useTasks(
     hasShareToken ? null : auth.accessToken,
     auth.refreshAccessToken,
-    auth.project?.ganttDayMode ?? 'business',
+    auth.project?.ganttDayMode ?? 'calendar',
     auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS,
   );
   const { tasks, setTasks, loading, error } = hasShareToken
@@ -563,7 +563,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     tasks,
     setTasks,
     accessToken: hasShareToken ? null : auth.isAuthenticated ? auth.accessToken : null,
-    ganttDayMode: hasShareToken ? (sharedProject.project?.ganttDayMode ?? 'business') : (auth.project?.ganttDayMode ?? 'business'),
+    ganttDayMode: hasShareToken ? (sharedProject.project?.ganttDayMode ?? 'calendar') : (auth.project?.ganttDayMode ?? 'calendar'),
     calendarDays: hasShareToken
       ? (sharedProject.project?.calendarDays ?? EMPTY_CALENDAR_DAYS)
       : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
@@ -1134,7 +1134,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         }
         useChatStore.getState().replaceMessages(data.map((message) => ({
           id: message.id ?? crypto.randomUUID(),
-          role: message.role as 'user' | 'assistant',
+          role: message.role as 'user' | 'assistant' | 'system',
           content: message.content,
           requestContextId: message.requestContextId ?? null,
           historyGroupId: message.historyGroupId ?? null,
@@ -1402,7 +1402,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         onCollapseAll={handleCollapseAll}
         onExpandAll={handleExpandAll}
         onValidation={handleValidation}
-        ganttDayMode={sharedProject.project?.ganttDayMode ?? 'business'}
+        ganttDayMode={sharedProject.project?.ganttDayMode ?? 'calendar'}
       />
     )
     : workspace.kind === 'draft'
@@ -1448,7 +1448,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCascade={handleCascade}
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
-            ganttDayMode={auth.project?.ganttDayMode ?? 'business'}
+            ganttDayMode={auth.project?.ganttDayMode ?? 'calendar'}
             calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
             readOnly={isArchivedProject}
             previewState={previewState.active ? previewState.mode : 'idle'}
@@ -1480,7 +1480,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCascade={handleCascade}
             shareStatus={shareStatus}
             onCreateShareLink={handleCreateShareLink}
-            ganttDayMode="business"
+            ganttDayMode="calendar"
           />
         );
 

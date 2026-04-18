@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   requestContextId?: string | null;
   historyGroupId?: string | null;
@@ -14,6 +14,7 @@ interface ChatState {
   pendingAssistantMeta: {
     requestContextId?: string | null;
     historyGroupId?: string | null;
+    systemMessage?: string | null;
   } | null;
   aiThinking: boolean;
   error: string | null;
@@ -22,6 +23,7 @@ interface ChatState {
   finishStreaming: (meta?: {
     requestContextId?: string | null;
     historyGroupId?: string | null;
+    systemMessage?: string | null;
   }) => void;
   attachCheckpointToLatestUserMessage: (meta?: {
     requestContextId?: string | null;
@@ -88,6 +90,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
               requestContextId: resolvedMeta?.requestContextId ?? null,
               historyGroupId: resolvedMeta?.historyGroupId ?? null,
             },
+            ...(resolvedMeta?.systemMessage
+              ? [{
+                  id: crypto.randomUUID(),
+                  role: 'system' as const,
+                  content: resolvedMeta.systemMessage,
+                  requestContextId: resolvedMeta.requestContextId ?? null,
+                  historyGroupId: resolvedMeta.historyGroupId ?? null,
+                }]
+              : []),
           ]
         : state.messages,
       streamingText: '',

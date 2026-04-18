@@ -69,7 +69,7 @@ export function Toolbar({
   onViewModeChange,
   disableTaskDrag: externalDisableTaskDrag,
   onToggleDisableTaskDrag,
-  ganttDayMode = 'business',
+  ganttDayMode = 'calendar',
   onGanttDayModeChange,
   readOnly = false,
   previewMode = false,

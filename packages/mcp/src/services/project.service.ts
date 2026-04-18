@@ -59,7 +59,7 @@ export class ProjectService {
         id: randomUUID(),
         userId,
         name,
-        ganttDayMode: 'business',
+        ganttDayMode: 'calendar',
         calendarId,
       },
     });

@@ -41,6 +41,7 @@ export type ServerMessage =
       chatMessage?: {
         requestContextId?: string | null;
         historyGroupId?: string | null;
+        systemMessage?: string | null;
       };
     }
   | { type: 'connected' };
