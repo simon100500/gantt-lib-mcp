@@ -40,7 +40,7 @@ type FlattenedTaskRow = {
 };
 
 const STATIC_COLUMN_COUNT = 7;
-const HEADER_ROW_COUNT = 3;
+const HEADER_ROW_COUNT = 2;
 const HEADER_FILL = 'FFFFFFFF';
 const HEADER_FONT = 'FF1E293B';
 const WEEKEND_HEADER_FONT = 'FFDC2626';
@@ -51,7 +51,8 @@ const MONTH_BORDER = 'FF64748B';
 const PARENT_FILL = 'FFCBD5E1';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [8, 42, 12, 12, 8, 8, 12];
+const STATIC_COLUMN_WIDTHS = [10, 42, 14, 14, 12, 9, 34];
+const DAY_WIDTH = 20 / 7;
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -68,17 +69,14 @@ function diffDaysInclusive(startIso: string, endIso: string): number {
   return Math.max(1, Math.floor((end - start) / 86_400_000) + 1);
 }
 
-function formatYearLabel(value: string): string {
-  return String(parseIsoDate(value).getUTCFullYear());
-}
-
 function formatMonthLabel(value: string): string {
-  const formatted = parseIsoDate(value).toLocaleDateString('ru-RU', { month: 'long' });
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  const date = parseIsoDate(value);
+  const month = date.toLocaleDateString('ru-RU', { month: 'long' });
+  return `${month.charAt(0).toUpperCase() + month.slice(1)} ${date.getUTCFullYear()}`;
 }
 
-function formatDayLabel(value: string): string {
-  return parseIsoDate(value).toLocaleDateString('ru-RU', { day: '2-digit' });
+function formatDayNumber(value: string): number {
+  return Number(parseIsoDate(value).toLocaleDateString('ru-RU', { day: '2-digit' }));
 }
 
 function dependencyTypeLabel(type: DependencyType): string {
@@ -90,90 +88,37 @@ function dependencyTypeLabel(type: DependencyType): string {
 
 function formatDependencyLabel(dependency: ExportDependency, outlineNumber: string | undefined): string {
   const reference = outlineNumber ?? dependency.predecessorTaskId;
-  const lag = dependency.lag === 0
-    ? ''
-    : dependency.lag > 0
-      ? `+${dependency.lag}`
-      : `${dependency.lag}`;
+  const lag = dependency.lag === 0 ? '' : dependency.lag > 0 ? `+${dependency.lag}` : `${dependency.lag}`;
   return `[${reference}]${dependencyTypeLabel(dependency.type)}${lag}`;
 }
 
 function normalizeColor(color: string | null): string {
-  if (!color) {
-    return DEFAULT_TASK_FILL;
-  }
-
-  const hex = color.trim().replace('#', '');
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
-    return DEFAULT_TASK_FILL;
-  }
-
-  const normalized = hex.toUpperCase();
-  if (normalized === '94A3B8') {
-    return PARENT_FILL;
-  }
-  if (normalized === 'DBEAFE' || normalized === '93C5FD') {
-    return DEFAULT_TASK_FILL;
-  }
-
-  return `FF${normalized}`;
+  if (!color) return DEFAULT_TASK_FILL;
+  const hex = color.trim().replace('#', '').toUpperCase();
+  if (!/^[0-9A-F]{6}$/.test(hex)) return DEFAULT_TASK_FILL;
+  if (hex === '94A3B8') return PARENT_FILL;
+  if (hex === 'DBEAFE' || hex === '93C5FD') return DEFAULT_TASK_FILL;
+  return `FF${hex}`;
 }
 
 function buildTimelineRange(tasks: ExportTask[]): string[] {
-  if (tasks.length === 0) {
-    return [];
-  }
-
+  if (tasks.length === 0) return [];
   const minDate = tasks.reduce((min, task) => task.startDate < min ? task.startDate : min, tasks[0]!.startDate);
   const maxDate = tasks.reduce((max, task) => task.endDate > max ? task.endDate : max, tasks[0]!.endDate);
   const dates: string[] = [];
   const cursor = parseIsoDate(minDate);
   const end = parseIsoDate(maxDate);
-
   while (cursor.getTime() <= end.getTime()) {
     dates.push(toIsoDate(cursor));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-
   return dates;
-}
-
-function isWeekendFallback(dateIso: string): boolean {
-  const day = parseIsoDate(dateIso).getUTCDay();
-  return day === 0 || day === 6;
-}
-
-function buildNonWorkingSet(
-  ganttDayMode: 'business' | 'calendar',
-  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
-  timelineDates: string[],
-): Set<string> {
-  const overrides = new Map(calendarDays.map((day) => [day.date.slice(0, 10), day.kind]));
-  const result = new Set<string>();
-
-  for (const date of timelineDates) {
-    const override = overrides.get(date);
-    if (override === 'non_working') {
-      result.add(date);
-      continue;
-    }
-    if (override === 'working' || override === 'shortened') {
-      continue;
-    }
-    if (ganttDayMode === 'business' && isWeekendFallback(date)) {
-      result.add(date);
-    }
-  }
-
-  return result;
 }
 
 function suppressRepeatedLabels(values: string[]): string[] {
   let previous: string | null = null;
   return values.map((value) => {
-    if (value === previous) {
-      return '';
-    }
+    if (value === previous) return '';
     previous = value;
     return value;
   });
@@ -189,32 +134,29 @@ function buildFlattenedRows(tasks: ExportTask[]): FlattenedTaskRow[] {
 
   for (const bucket of childrenByParent.values()) {
     bucket.sort((left, right) => {
-      if (left.sortOrder !== right.sortOrder) {
-        return left.sortOrder - right.sortOrder;
-      }
+      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
       return left.name.localeCompare(right.name, 'ru');
     });
   }
 
   const rows: FlattenedTaskRow[] = [];
-  const outlineNumberByTaskId = new Map<string, string>();
+  const outlineByTaskId = new Map<string, string>();
 
   const visit = (parentId: string | null, depth: number, prefix: number[]) => {
     const children = childrenByParent.get(parentId) ?? [];
     for (const [index, task] of children.entries()) {
-      const currentPrefix = [...prefix, index + 1];
-      const outlineNumber = currentPrefix.join('.');
-      outlineNumberByTaskId.set(task.id, outlineNumber);
+      const outline = [...prefix, index + 1].join('.');
+      outlineByTaskId.set(task.id, outline);
       rows.push({
         task,
         depth,
         isParent: (childrenByParent.get(task.id)?.length ?? 0) > 0,
-        outlineNumber,
+        outlineNumber: outline,
         linksLabel: '',
         durationDays: diffDaysInclusive(task.startDate, task.endDate),
         progressValue: typeof task.progress === 'number' ? task.progress : 0,
       });
-      visit(task.id, depth + 1, currentPrefix);
+      visit(task.id, depth + 1, [...prefix, index + 1]);
     }
   };
 
@@ -222,14 +164,14 @@ function buildFlattenedRows(tasks: ExportTask[]): FlattenedTaskRow[] {
 
   for (const row of rows) {
     row.linksLabel = row.task.dependencies
-      .map((dependency) => formatDependencyLabel(dependency, outlineNumberByTaskId.get(dependency.predecessorTaskId)))
+      .map((dependency) => formatDependencyLabel(dependency, outlineByTaskId.get(dependency.predecessorTaskId)))
       .join(', ');
   }
 
   return rows;
 }
 
-function applyCellBorder(cell: ExcelJS.Cell) {
+function applyCellBorder(cell: ExcelJS.Cell): void {
   cell.border = {
     top: { style: 'thin', color: { argb: GRID_BORDER } },
     left: { style: 'thin', color: { argb: GRID_BORDER } },
@@ -239,89 +181,66 @@ function applyCellBorder(cell: ExcelJS.Cell) {
 }
 
 function baseAlignment(horizontal: ExcelJS.Alignment['horizontal'] = 'left'): Partial<ExcelJS.Alignment> {
-  return {
-    vertical: 'middle',
-    horizontal,
-    wrapText: true,
-  };
+  return { vertical: 'middle', horizontal, wrapText: true };
 }
 
-function styleHeaderRow(row: ExcelJS.Row) {
+function styleHeaderRow(row: ExcelJS.Row): void {
   row.eachCell((cell) => {
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: HEADER_FILL },
-    };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
     cell.font = { bold: true, color: { argb: HEADER_FONT } };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
   });
 }
 
-function styleTimelineCell(cell: ExcelJS.Cell, fillColor: string) {
-  cell.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: fillColor },
-  };
+function styleTimelineCell(cell: ExcelJS.Cell, fillColor: string): void {
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
   applyCellBorder(cell);
 }
 
-function applyTimelineSeparator(cell: ExcelJS.Cell, kind: 'day' | 'week' | 'month') {
-  const left = kind === 'month'
-    ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
-    : kind === 'week'
-      ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
-      : { style: 'thin' as const, color: { argb: GRID_BORDER } };
+function applyTimelineSeparator(
+  cell: ExcelJS.Cell,
+  kind: 'day' | 'week' | 'month',
+  options: { verticalLines?: boolean } = {},
+): void {
+  const verticalLines = options.verticalLines ?? true;
+  const left = !verticalLines
+    ? undefined
+    : kind === 'month'
+      ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
+      : kind === 'week'
+        ? { style: 'medium' as const, color: { argb: WEEK_BORDER } }
+        : { style: 'thin' as const, color: { argb: GRID_BORDER } };
 
   cell.border = {
     top: cell.border?.top ?? { style: 'thin', color: { argb: GRID_BORDER } },
-    right: cell.border?.right ?? { style: 'thin', color: { argb: GRID_BORDER } },
+    right: verticalLines ? (cell.border?.right ?? { style: 'thin', color: { argb: GRID_BORDER } }) : undefined,
     bottom: cell.border?.bottom ?? { style: 'thin', color: { argb: GRID_BORDER } },
     left,
   };
 }
 
 function estimateWrappedLines(value: string, columnWidth: number): number {
-  if (!value.trim()) {
-    return 1;
-  }
-
+  if (!value.trim()) return 1;
   const safeWidth = Math.max(6, Math.floor(columnWidth * 0.82) - 1);
-  const paragraphs = value.split(/\r?\n/u);
-  let lines = 0;
-
-  for (const paragraph of paragraphs) {
-    const text = paragraph.trim();
-    if (!text) {
+  const words = value.trim().split(/\s+/u);
+  let lines = 1;
+  let currentLength = 0;
+  for (const word of words) {
+    const nextLength = currentLength === 0 ? word.length : currentLength + 1 + word.length;
+    if (nextLength > safeWidth) {
       lines += 1;
-      continue;
+      currentLength = word.length;
+    } else {
+      currentLength = nextLength;
     }
-
-    const words = text.split(/\s+/u);
-    let currentLength = 0;
-    for (const word of words) {
-      const nextLength = currentLength === 0 ? word.length : currentLength + 1 + word.length;
-      if (nextLength > safeWidth) {
-        lines += 1;
-        currentLength = word.length;
-      } else {
-        currentLength = nextLength;
-      }
-    }
-    lines += 1;
   }
-
-  return Math.max(lines, 1);
+  return lines;
 }
 
 function estimateRowHeight(taskLabel: string, taskColumnWidth: number, taskDepth: number = 0): number {
   const effectiveWidth = Math.max(12, taskColumnWidth - (taskDepth * 2.5));
   const lineCount = estimateWrappedLines(taskLabel, effectiveWidth);
-  if (lineCount <= 1) {
-    return 20;
-  }
-  return 31;
+  return lineCount <= 1 ? 20 : 31;
 }
 
 function setRowHeightFromContent(row: ExcelJS.Row, taskLabel: string, taskColumnWidth: number, taskDepth: number = 0): void {
@@ -336,31 +255,49 @@ function setRowHeightFromContent(row: ExcelJS.Row, taskLabel: string, taskColumn
   });
 }
 
+function isWeekendFallback(dateIso: string): boolean {
+  const weekday = parseIsoDate(dateIso).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
+function buildNonWorkingSet(
+  ganttDayMode: 'business' | 'calendar',
+  calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>,
+  timelineDates: string[],
+): Set<string> {
+  const overrides = new Map(calendarDays.map((day) => [day.date.slice(0, 10), day.kind]));
+  const result = new Set<string>();
+  for (const date of timelineDates) {
+    const override = overrides.get(date);
+    if (override === 'non_working') {
+      result.add(date);
+      continue;
+    }
+    if (override === 'working' || override === 'shortened') {
+      continue;
+    }
+    if (ganttDayMode === 'business' && isWeekendFallback(date)) {
+      result.add(date);
+    }
+  }
+  return result;
+}
+
 export async function loadProjectExcelExportData(projectId: string): Promise<ProjectExcelExportData> {
   const prisma = getPrisma();
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
       name: true,
-      ganttDayMode: true,
-      calendarId: true,
       tasks: {
         include: {
           dependencies: {
             include: {
-              depTask: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
+              depTask: { select: { id: true, name: true } },
             },
           },
         },
-        orderBy: [
-          { sortOrder: 'asc' },
-          { name: 'asc' },
-        ],
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       },
     },
   });
@@ -406,7 +343,6 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
 
   const flattenedRows = buildFlattenedRows(data.tasks);
   const timelineDates = buildTimelineRange(data.tasks);
-  const yearHeaders = suppressRepeatedLabels(timelineDates.map(formatYearLabel));
   const monthHeaders = suppressRepeatedLabels(timelineDates.map(formatMonthLabel));
   const totalColumnCount = STATIC_COLUMN_COUNT + timelineDates.length;
   const nonWorkingDates = buildNonWorkingSet(data.ganttDayMode, data.calendarDays, timelineDates);
@@ -419,57 +355,47 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     { width: STATIC_COLUMN_WIDTHS[4] },
     { width: STATIC_COLUMN_WIDTHS[5] },
     { width: STATIC_COLUMN_WIDTHS[6] },
-    ...timelineDates.map(() => ({ width: 20 / 7 })),
+    ...timelineDates.map(() => ({ width: DAY_WIDTH })),
   ];
 
   const separatorKinds = timelineDates.map((date, index) => {
     const current = parseIsoDate(date);
     const previous = index > 0 ? parseIsoDate(timelineDates[index - 1]!) : null;
-    if (!previous) {
-      return 'month' as const;
-    }
+    if (!previous) return 'month' as const;
     if (current.getUTCMonth() !== previous.getUTCMonth() || current.getUTCFullYear() !== previous.getUTCFullYear()) {
       return 'month' as const;
     }
-    if (current.getUTCDay() === 1) {
-      return 'week' as const;
-    }
+    if (current.getUTCDay() === 1) return 'week' as const;
     return 'day' as const;
   });
 
-  sheet.addRow([null, null, null, null, null, null, null, ...yearHeaders.map((value) => value || null)]);
   sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
-  sheet.addRow(['№', 'Задача', 'Начало', 'Окончание', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => Number(formatDayLabel(value)))]);
+  sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => formatDayNumber(value))]);
 
   for (let rowIndex = 1; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
     styleHeaderRow(sheet.getRow(rowIndex));
     for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: HEADER_FILL },
-      };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
       cell.font = { bold: true, color: { argb: HEADER_FONT } };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
     }
+
     for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: HEADER_FILL },
-      };
       const timelineDate = timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1];
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
       cell.font = {
         bold: true,
-        color: { argb: timelineDate && nonWorkingDates.has(timelineDate) ? WEEKEND_HEADER_FONT : HEADER_FONT },
+        color: { argb: rowIndex === HEADER_ROW_COUNT && timelineDate && nonWorkingDates.has(timelineDate) ? WEEKEND_HEADER_FONT : HEADER_FONT },
       };
-      cell.alignment = rowIndex < HEADER_ROW_COUNT
+      cell.alignment = rowIndex === 1
         ? { vertical: 'middle', horizontal: 'left', wrapText: false }
         : { vertical: 'middle', horizontal: 'center' };
       applyCellBorder(cell);
-      applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day');
+      applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+        verticalLines: rowIndex === HEADER_ROW_COUNT,
+      });
     }
   }
 
@@ -477,11 +403,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     const emptyRow = sheet.addRow(['', 'Нет задач']);
     for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
       const cell = emptyRow.getCell(columnIndex);
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: EMPTY_STATE_FILL },
-      };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EMPTY_STATE_FILL } };
       cell.alignment = baseAlignment(columnIndex === 2 ? 'center' : 'left');
       applyCellBorder(cell);
     }
@@ -502,6 +424,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
       rowData.progressValue,
       rowData.linksLabel,
     ]);
+
     setRowHeightFromContent(row, rowData.task.name, STATIC_COLUMN_WIDTHS[1], rowData.depth);
 
     row.getCell(1).alignment = baseAlignment('center');
@@ -526,16 +449,12 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
       const cell = row.getCell(columnIndex);
       applyCellBorder(cell);
-      cell.alignment = columnIndex > STATIC_COLUMN_COUNT
-        ? baseAlignment('center')
-        : cell.alignment ?? baseAlignment('left');
+      cell.alignment = columnIndex > STATIC_COLUMN_COUNT ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
       if (columnIndex > STATIC_COLUMN_COUNT) {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: GRID_FILL },
-        };
-        applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day');
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRID_FILL } };
+        applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+          verticalLines: true,
+        });
       }
     }
 
@@ -551,7 +470,9 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
       const fillColor = rowData.isParent ? PARENT_FILL : normalizeColor(rowData.task.color);
       for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
         styleTimelineCell(row.getCell(columnIndex), fillColor);
-        applyTimelineSeparator(row.getCell(columnIndex), separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day');
+        applyTimelineSeparator(row.getCell(columnIndex), separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
+          verticalLines: true,
+        });
       }
     }
   }
