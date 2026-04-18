@@ -641,6 +641,20 @@ export type MutationGroupRecord = {
   createdAt: string;
 };
 
+export type HistoryGroupSnapshotResponse = {
+  groupId: string;
+  isCurrent: boolean;
+  currentVersion: number;
+  snapshot: ProjectSnapshot;
+};
+
+export type RestoreHistoryGroupResponse = {
+  groupId: string;
+  targetGroupId: string;
+  version: number;
+  snapshot: ProjectSnapshot;
+};
+
 /** Full execution result from scheduling core. Per D-08. */
 export type ScheduleExecutionResult = {
   snapshot: ProjectSnapshot;

@@ -17,6 +17,7 @@ import { useProjectHistory } from '../../hooks/useProjectHistory.ts';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
 import { useChatStore } from '../../stores/useChatStore.ts';
 import type { SubscriptionStatus, UsageStatus } from '../../stores/useBillingStore.ts';
+import { useHistoryViewerStore } from '../../stores/useHistoryViewerStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
@@ -77,6 +78,15 @@ function formatTaskCount(count: number) {
   }
 
   return `${count} задач`;
+}
+
+function formatHistoryVersionTimestamp(value: string): string {
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function ProjectWorkspace({
@@ -155,12 +165,21 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
-  const effectiveTasks = tasks;
+  const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const previewModeActive = historyViewer.mode === 'preview';
+  const effectiveTasks = historyViewer.mode === 'preview'
+    ? historyViewer.snapshot.tasks
+    : tasks;
   const previewRendering = previewState === 'rendering';
   const previewFailed = previewState === 'failed';
-  const effectiveReadOnly = readOnly || previewRendering || previewFailed;
+  const effectiveReadOnly = readOnly || previewRendering || previewFailed || previewModeActive;
+  const historyPanelDisabled = readOnly || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
+  const effectiveChatDisabled = chatDisabled || previewModeActive;
+  const effectiveChatDisabledReason = previewModeActive
+    ? 'Просмотр версии доступен только для чтения. Вернитесь к текущей версии, чтобы продолжить.'
+    : chatDisabledReason;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
     if (!projectId || effectiveReadOnly) return;
@@ -213,10 +232,12 @@ export function ProjectWorkspace({
     items: historyItems,
     loading: historyLoading,
     error: historyError,
+    previewingGroupId,
+    restoringGroupId,
+    showVersion,
     refreshHistory,
-    undoLatest,
-    undoGroup,
-    redoGroup,
+    restoreVersion,
+    returnToCurrentVersion,
   } = useProjectHistory(accessToken);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
@@ -232,6 +253,10 @@ export function ProjectWorkspace({
 
     previousGanttDayModeRef.current = ganttDayMode;
 
+    if (previewModeActive) {
+      return;
+    }
+
     if (tasks.length === 0) {
       return;
     }
@@ -244,7 +269,7 @@ export function ProjectWorkspace({
     }
 
     void batchUpdate.handleTasksChange(reflowedTasks);
-  }, [batchUpdate, effectiveReadOnly, ganttDayMode, setTasks, tasks, weekendPredicate]);
+  }, [batchUpdate, effectiveReadOnly, ganttDayMode, previewModeActive, setTasks, tasks, weekendPredicate]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
     if (!onSplitTask || effectiveReadOnly || chatDisabled) {
@@ -273,12 +298,19 @@ export function ProjectWorkspace({
     return await Promise.resolve(onSplitTask(splitTaskDraft, details));
   }, [onSplitTask, splitTaskDraft]);
 
-  const latestRedoableItem = useMemo(
-    () => historyItems.find((item) => item.redoable) ?? null,
+  const latestRestorableItem = useMemo(
+    () => historyItems.find((item) => item.canRestore) ?? null,
     [historyItems],
+  );
+  const previewHistoryItem = useMemo(
+    () => historyViewer.mode === 'preview'
+      ? historyItems.find((item) => item.id === historyViewer.groupId) ?? null
+      : null,
+    [historyItems, historyViewer],
   );
 
   useEffect(() => {
+    // Block Ctrl+Z / Ctrl+Shift+Z history shortcuts while preview mode is active.
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!accessToken || effectiveReadOnly || event.defaultPrevented || !event.ctrlKey) {
         return;
@@ -296,27 +328,17 @@ export function ProjectWorkspace({
         return;
       }
 
-      if (event.shiftKey) {
-        if (!latestRedoableItem || historyLoading) {
-          return;
-        }
-
-        event.preventDefault();
-        void redoGroup(latestRedoableItem.id);
-        return;
-      }
-
-      if (historyLoading) {
+      if (event.shiftKey || historyLoading || !latestRestorableItem) {
         return;
       }
 
       event.preventDefault();
-      void undoLatest();
+      void restoreVersion(latestRestorableItem.id);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [accessToken, effectiveReadOnly, historyLoading, latestRedoableItem, redoGroup, undoLatest]);
+  }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreVersion]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -340,11 +362,12 @@ export function ProjectWorkspace({
           ganttDayMode={ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
           readOnly={readOnly}
+          previewMode={previewModeActive}
         />
       </div>
 
       {/* Chart and Chat side by side */}
-      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3 md:px-4 xl:flex-row xl:overflow-hidden">
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 xl:flex-row xl:overflow-hidden">
         {/* Chart card - hide on mobile when chat is open */}
         <div className={cn(
           "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
@@ -364,7 +387,7 @@ export function ProjectWorkspace({
                 onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}
-                containerHeight="calc(100dvh - 136px)"
+                containerHeight="calc(100dvh - 132px)"
                 showTaskList={showTaskList}
                 showChart={showChart}
                 taskListWidth={650}
@@ -391,7 +414,7 @@ export function ProjectWorkspace({
             )}
 
             {hasRenderableChart && (
-              <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
+              <footer className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3">
                 {effectiveTasks.length > 0 && (
                   <span className="font-mono text-[11px] text-slate-400">
                     {formatTaskCount(effectiveTasks.length)}
@@ -401,6 +424,12 @@ export function ProjectWorkspace({
                 <span className="font-mono text-[11px] text-slate-400">
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
+
+                {previewHistoryItem && (
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-amber-700">
+                    Версия от {formatHistoryVersionTimestamp(previewHistoryItem.createdAt)}
+                  </span>
+                )}
 
                 {(previewRendering || previewFailed) && (
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">
@@ -469,11 +498,15 @@ export function ProjectWorkspace({
             items={historyItems}
             loading={historyLoading}
             error={historyError}
-            disabled={effectiveReadOnly || !accessToken}
+            disabled={historyPanelDisabled}
+            previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
+            previewingGroupId={previewingGroupId}
+            restoringGroupId={restoringGroupId}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
-            onUndoGroup={undoGroup}
-            onRedoGroup={redoGroup}
+            onPreviewVersion={showVersion}
+            onRestoreVersion={restoreVersion}
+            onReturnToCurrentVersion={returnToCurrentVersion}
           />
         )}
 
@@ -484,10 +517,10 @@ export function ProjectWorkspace({
               messages={messages}
               streaming={streaming}
               onSend={onSend}
-              disabled={aiThinking || chatDisabled}
+              disabled={aiThinking || effectiveChatDisabled}
               connected={displayConnected}
               usage={chatUsage}
-              disabledReason={aiThinking ? null : chatDisabledReason}
+              disabledReason={aiThinking ? null : effectiveChatDisabledReason}
               loading={aiThinking}
               onClose={onCloseChat}
               onShowChart={onCloseChat}

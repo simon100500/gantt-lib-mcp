@@ -1,7 +1,8 @@
-import { AlertCircle, Bot, Clock3, RotateCcw, RotateCw, Settings2, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, History, MoreHorizontal, RotateCcw, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
 
 interface HistoryPanelProps {
@@ -9,22 +10,15 @@ interface HistoryPanelProps {
   loading: boolean;
   error: string | null;
   disabled?: boolean;
+  previewGroupId?: string | null;
+  previewingGroupId?: string | null;
+  restoringGroupId?: string | null;
   onClose: () => void;
   onRefresh: () => unknown;
-  onUndoGroup: (groupId: string) => unknown;
-  onRedoGroup: (groupId: string) => unknown;
+  onPreviewVersion: (item: HistoryItem) => unknown;
+  onRestoreVersion: (groupId: string) => unknown;
+  onReturnToCurrentVersion: () => unknown;
 }
-
-const ACTOR_ICONS: Record<HistoryItem['actorType'], typeof User> = {
-  user: User,
-  agent: Bot,
-  system: Settings2,
-};
-
-const STATUS_LABELS: Record<HistoryItem['status'], string> = {
-  applied: 'Применено',
-  undone: 'Отменено',
-};
 
 const COMMAND_TITLES: Record<string, string> = {
   move_task: 'Перенос задачи',
@@ -47,40 +41,23 @@ const COMMAND_TITLES: Record<string, string> = {
 };
 
 function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString('ru-RU', {
+  const date = new Date(value);
+  const datePart = date.toLocaleDateString('ru-RU', {
     day: '2-digit',
-    month: '2-digit',
+    month: 'long',
+  });
+  const timePart = date.toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
 
-function formatCommandCount(count: number): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-
-  if (mod100 >= 11 && mod100 <= 14) {
-    return `${count} команд`;
-  }
-
-  if (mod10 === 1) {
-    return `${count} команда`;
-  }
-
-  if (mod10 >= 2 && mod10 <= 4) {
-    return `${count} команды`;
-  }
-
-  return `${count} команд`;
+  return `${datePart} в ${timePart}`;
 }
 
 function humanizeHistoryTitle(title: string): string {
-  if (title.startsWith('Undo — ')) {
-    return `Отмена — ${humanizeHistoryTitle(title.slice('Undo — '.length))}`;
-  }
-
-  if (title.startsWith('Redo — ')) {
-    return `Повтор — ${humanizeHistoryTitle(title.slice('Redo — '.length))}`;
+  if (title.startsWith('Undo — ') || title.startsWith('Redo — ')) {
+    const prefixLength = title.startsWith('Undo — ') ? 'Undo — '.length : 'Redo — '.length;
+    return humanizeHistoryTitle(title.slice(prefixLength));
   }
 
   if (title.startsWith('AI — ')) {
@@ -95,15 +72,24 @@ export function HistoryPanel({
   loading,
   error,
   disabled = false,
+  previewGroupId = null,
+  previewingGroupId = null,
+  restoringGroupId = null,
   onClose,
   onRefresh,
-  onUndoGroup,
-  onRedoGroup,
+  onPreviewVersion,
+  onRestoreVersion,
+  onReturnToCurrentVersion,
 }: HistoryPanelProps) {
   return (
-    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:w-[300px] xl:max-w-[300px] xl:min-w-[300px]">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5">
-        <p className="min-w-0 text-sm font-semibold text-slate-900">История</p>
+    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden xl:w-[320px] xl:max-w-[320px] xl:min-w-[320px]">
+      <div className="flex items-center justify-between gap-3 px-1 py-1">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <History className="h-3.5 w-3.5 text-slate-400" />
+            <p className="min-w-0 text-[13px] font-semibold text-slate-900">История версий</p>
+          </div>
+        </div>
         <div className="flex items-center gap-1.5">
           <Button
             type="button"
@@ -111,7 +97,7 @@ export function HistoryPanel({
             variant="outline"
             onClick={() => { void onRefresh(); }}
             disabled={loading}
-            className="h-7 px-2 text-[11px] text-slate-700"
+            className="h-8 rounded-md border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:bg-slate-50"
           >
             Обновить
           </Button>
@@ -120,7 +106,7 @@ export function HistoryPanel({
             size="icon"
             variant="ghost"
             onClick={onClose}
-            className="h-7 w-7 text-slate-500 hover:text-slate-700"
+            className="h-8 w-8 rounded-md text-slate-500 hover:bg-white hover:text-slate-700"
             aria-label="Закрыть историю"
           >
             <X className="h-4 w-4" />
@@ -129,79 +115,138 @@ export function HistoryPanel({
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 border-b border-rose-100 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      {previewGroupId && (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-semibold text-amber-800">Открыта сохранённая версия</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => { void onReturnToCurrentVersion(); }}
+            className="h-7 rounded-full border-amber-200 bg-white px-2.5 text-[11px] text-amber-900 hover:bg-amber-100"
+          >
+            Вернуться к текущей
+          </Button>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto pb-1 pt-3">
         {items.length === 0 && !loading ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-slate-500">
+          <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500">
             <Clock3 className="h-5 w-5 text-slate-400" />
             <p>История пока пуста.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="space-y-2">
             {items.map((item) => {
-              const ActorIcon = ACTOR_ICONS[item.actorType];
+              const ActorIcon = item.actorType === 'agent' ? Bot : User;
+              const isPreviewing = previewGroupId === item.id;
+              const isLoadingPreview = previewingGroupId === item.id;
+              const isRestoring = restoringGroupId === item.id;
+              const hasVersionSelection = Boolean(previewGroupId || previewingGroupId || restoringGroupId);
+              const isActive = hasVersionSelection
+                ? isPreviewing || isLoadingPreview || isRestoring
+                : item.isCurrent;
 
               return (
-              <article key={item.id} className="space-y-2 px-3 py-2.5">
+              <article
+                key={item.id}
+                role={disabled || loading ? undefined : 'button'}
+                tabIndex={disabled || loading ? -1 : 0}
+                onClick={() => {
+                  if (disabled || loading) {
+                    return;
+                  }
+                  void onPreviewVersion(item);
+                }}
+                onKeyDown={(event) => {
+                  if (disabled || loading) {
+                    return;
+                  }
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    void onPreviewVersion(item);
+                  }
+                }}
+                className={cn(
+                  'group space-y-0.5 rounded-2xl px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+                  !disabled && !loading && 'cursor-pointer hover:bg-white',
+                  isActive && 'bg-white',
+                )}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        'inline-flex h-4 w-4 shrink-0 items-center justify-center',
-                        item.actorType === 'agent' ? 'text-violet-600' : 'text-slate-400',
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          'inline-flex h-4 w-4 shrink-0 items-center justify-center',
+                          item.actorType === 'agent' ? 'text-violet-500' : 'text-slate-400',
+                        )}
+                        aria-hidden="true"
+                      >
+                        <ActorIcon className="h-4 w-4" />
+                      </span>
+                        <span className="truncate text-[15px] font-semibold leading-5 text-slate-900">
+                          {formatTimestamp(item.createdAt)}
+                        </span>
+                      {item.isCurrent && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
+                          Текущая
+                        </span>
                       )}
-                      title={item.actorType === 'user' ? 'Пользователь' : item.actorType === 'agent' ? 'Агент' : 'Система'}
-                    >
-                      <ActorIcon className="h-4 w-4" />
-                    </span>
-                    <span className="truncate text-[11px] font-medium uppercase tracking-[0.04em] text-slate-400">
-                    {formatTimestamp(item.createdAt)}
-                    </span>
+                      {isLoadingPreview && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                          Загрузка
+                        </span>
+                      )}
+                      {isRestoring && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Восстановление
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {item.status === 'undone' && (
-                    <span
-                      className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
-                    >
-                      {STATUS_LABELS[item.status]}
-                    </span>
+                  {!item.isCurrent && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Действия с версией"
+                          onClick={(event) => event.stopPropagation()}
+                          className={cn(
+                            'inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300',
+                            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                          )}
+                        >
+                          <MoreHorizontal className="h-4.5 w-4.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void onRestoreVersion(item.id);
+                          }}
+                          disabled={disabled || loading || !item.canRestore}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          <span>Восстановить эту версию</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
 
-                <div className="space-y-0.5">
-                  <p className="text-[13px] font-medium leading-4 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
-                  <p className="text-[11px] text-slate-500">
-                    Версии {item.baseVersion} → {item.newVersion ?? '—'} • {formatCommandCount(item.commandCount)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { void onUndoGroup(item.id); }}
-                    disabled={disabled || loading || !item.undoable}
-                    className="h-7 px-2 text-[11px]"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    Отменить
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { void onRedoGroup(item.id); }}
-                    disabled={disabled || loading || !item.redoable}
-                    className="h-7 px-2 text-[11px]"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                    Повторить
-                  </Button>
+                <div className="pl-6 pr-5">
+                  <p className="text-[13px] font-normal leading-4 text-slate-700">{humanizeHistoryTitle(item.title)}</p>
                 </div>
               </article>
             );})}

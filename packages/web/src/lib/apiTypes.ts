@@ -19,15 +19,14 @@ export interface ProjectLoadResponse {
 
 export interface HistoryItem {
   id: string;
-  actorType: 'user' | 'agent' | 'system';
+  actorType: 'user' | 'agent' | 'system' | 'import';
   title: string;
-  status: 'applied' | 'undone';
-  baseVersion: number;
-  newVersion: number | null;
-  commandCount: number;
   createdAt: string;
-  undoable: boolean;
-  redoable: boolean;
+  baseVersion: number;
+  newVersion: number;
+  commandCount: number;
+  isCurrent: boolean;
+  canRestore: boolean;
 }
 
 export interface HistoryListResponse {
@@ -35,10 +34,16 @@ export interface HistoryListResponse {
   nextCursor?: string;
 }
 
-export interface HistoryMutationResponse {
+export interface HistorySnapshotResponse {
   groupId: string;
+  isCurrent: boolean;
+  currentVersion: number;
+  snapshot: ProjectLoadResponse['snapshot'];
+}
+
+export interface HistoryRestoreResponse {
+  groupId: string;
+  targetGroupId: string;
   version: number;
   snapshot: ProjectLoadResponse['snapshot'];
-  historyTitle: string;
-  status: 'applied' | 'undone';
 }

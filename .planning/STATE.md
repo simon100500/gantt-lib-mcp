@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: verifying
-last_updated: "2026-04-17T21:31:18.227Z"
+last_updated: "2026-04-18T10:26:53.097Z"
 last_activity: 2026-04-18
 progress:
-  total_phases: 15
-  completed_phases: 13
-  total_plans: 47
-  completed_plans: 47
+  total_phases: 16
+  completed_phases: 14
+  total_plans: 52
+  completed_plans: 52
   percent: 100
 ---
 
@@ -26,16 +26,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 44 verification — undo-redo
+**Current focus:** Phase 45 — history-refactor
 
 ---
 
 ## Current Position
 
-Phase: 44 (undo-redo) — VERIFYING
-Plan: 4 of 4
+Phase: 45 (history-refactor) — EXECUTING
+Plan: 5 of 5
 Status: Phase complete — ready for verification
 Last activity: 2026-04-18
+Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
 Progress: [██████████] 100%
 
@@ -76,6 +77,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 45 added: history-refactor
 - Phase 44 added: undo-redo
 - Phase 43 added: initial-gen-no-regexp
 - Phase 41 added: initial-gen-refactor
@@ -169,6 +171,16 @@ packages/
 - [Phase 44]: Phase 44 Plan 03 routes manual UI history grouping through the existing /api/commands/commit hook and Fastify route instead of adding a parallel history write API.
 - [Phase 44]: Undo/redo actions in the workspace always reconcile through useProjectStore.setConfirmed() plus clearTransientState() after successful history replay.
 - [Phase 44]: The history panel stays inside the existing workspace shell as a toggleable rail instead of introducing modal routing or a separate history page.
+- [Phase 45]: History preview and restore now resolve one shared rollback tail, with preview replaying inverse commands in memory and restore replaying the same sequence through commitCommand.
+- [Phase 45]: Public history rows are version-oriented visible groups with isCurrent/canRestore semantics, while technical rollback groups stay internal append-only mechanics.
+- [Phase 45]: The server route layer maps history validation failures with shape guards, avoiding a runtime dependency on an internal service error class export.
+- [Phase 45]: Web history consumers now use restore-to-version semantics, with Ctrl+Z restoring the latest non-current version instead of public undo/redo endpoints.
+- [Phase 45]: History preview lives in a dedicated Zustand store so historical snapshots never enter confirmed, pending, or dragPreview editing state.
+- [Phase 45]: ProjectWorkspace overlays preview snapshots ahead of normal editing state and disables editing while still allowing version navigation and return-to-current actions.
+- [Phase 45]: History rows now preview versions on row click while restore stays an explicit secondary action.
+- [Phase 45]: Preview mode composes on top of existing read-only guards and blocks chat, hotkeys, and task-state reflow from mutating live workspace state.
+- [Phase 45]: HistoryService now uses an explicit minimal Prisma contract instead of as-any casts on the version path.
+- [Phase 45]: Contract-cleanup regressions are locked with source-level tests that reject as-any shortcuts and legacy undo/redo names in the public web surface.
 
 ## Performance Metrics
 
@@ -199,12 +211,17 @@ packages/
 | Phase 44-undo-redo P02 | 4min | 2 tasks | 7 files |
 | Phase 44 P03 | 35min | 2 tasks | 11 files |
 | Phase 44 P04 | 6min | 2 tasks | 8 files |
+| Phase 45 P01 | 8 min | 2 tasks | 6 files |
+| Phase 45 P02 | 7 min | 2 tasks | 7 files |
+| Phase 45 P03 | 3min | 2 tasks | 4 files |
+| Phase 45 P04 | 8min | 2 tasks | 3 files |
+| Phase 45 P05 | 5min | 2 tasks | 4 files |
 
 ## Session
 
-- Last session: 2026-04-17T21:31:18Z
-- Stopped at: Completed 44-04-PLAN.md
+- Last session: 2026-04-18T10:20:10Z
+- Stopped at: Completed 45-05-PLAN.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 44 Plan 04 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 05 completed*

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { HistoryItem, HistoryListResponse, HistoryMutationResponse } from '../lib/apiTypes.ts';
+import type {
+  HistoryItem,
+  HistoryListResponse,
+  HistoryRestoreResponse,
+  HistorySnapshotResponse,
+} from '../lib/apiTypes.ts';
+import { useHistoryViewerStore } from '../stores/useHistoryViewerStore.ts';
 import { useProjectStore } from '../stores/useProjectStore.ts';
 
 const DEFAULT_HISTORY_LIMIT = 50;
@@ -22,15 +28,25 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 }
 
-async function parseHistoryMutationResponse(response: Response): Promise<HistoryMutationResponse> {
-  const data = await response.json() as Partial<HistoryMutationResponse>;
+async function parseHistoryRestoreResponse(response: Response): Promise<HistoryRestoreResponse> {
+  const data = await response.json() as Partial<HistoryRestoreResponse>;
 
   return {
     groupId: data.groupId ?? '',
+    targetGroupId: data.targetGroupId ?? '',
     version: data.version ?? 0,
     snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
-    historyTitle: data.historyTitle ?? '',
-    status: data.status ?? 'applied',
+  };
+}
+
+async function parseHistorySnapshotResponse(response: Response): Promise<HistorySnapshotResponse> {
+  const data = await response.json() as Partial<HistorySnapshotResponse>;
+
+  return {
+    groupId: data.groupId ?? '',
+    isCurrent: data.isCurrent ?? false,
+    currentVersion: data.currentVersion ?? 0,
+    snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
   };
 }
 
@@ -39,6 +55,12 @@ export function useProjectHistory(accessToken: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [previewingGroupId, setPreviewingGroupId] = useState<string | null>(null);
+  const [restoringGroupId, setRestoringGroupId] = useState<string | null>(null);
+  const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const enterPreview = useHistoryViewerStore((state) => state.enterPreview);
+  const exitPreview = useHistoryViewerStore((state) => state.exitPreview);
+  const clearAfterRestore = useHistoryViewerStore((state) => state.clearAfterRestore);
   const setConfirmed = useProjectStore((state) => state.setConfirmed);
   const clearTransientState = useProjectStore((state) => state.clearTransientState);
 
@@ -83,16 +105,69 @@ export function useProjectHistory(accessToken: string | null) {
     }
   }, [accessToken]);
 
-  const applyReplay = useCallback(async (path: string) => {
+  const fetchSnapshot = useCallback(async (groupId: string) => {
     if (!accessToken) {
       throw new Error('Not authenticated');
     }
 
+    const response = await fetch(`/api/history/${groupId}/snapshot`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    return parseHistorySnapshotResponse(response);
+  }, [accessToken]);
+
+  const showVersion = useCallback(async (item: Pick<HistoryItem, 'id' | 'isCurrent'>) => {
+    if (item.isCurrent) {
+      setPreviewingGroupId(null);
+      exitPreview();
+      return null;
+    }
+
+    setPreviewingGroupId(item.id);
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(path, {
+      const data = await fetchSnapshot(item.id);
+      enterPreview({
+        groupId: data.groupId,
+        snapshot: data.snapshot,
+        isCurrent: data.isCurrent,
+      });
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load history version';
+      setError(message);
+      throw err;
+    } finally {
+      setPreviewingGroupId((current) => (current === item.id ? null : current));
+      setLoading(false);
+    }
+  }, [enterPreview, exitPreview, fetchSnapshot]);
+
+  const returnToCurrentVersion = useCallback(() => {
+    setPreviewingGroupId(null);
+    exitPreview();
+  }, [exitPreview]);
+
+  const restoreVersion = useCallback(async (groupId: string) => {
+    if (!accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    setRestoringGroupId(groupId);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/history/${groupId}/restore`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -103,23 +178,21 @@ export function useProjectHistory(accessToken: string | null) {
         throw new Error(await readErrorMessage(response));
       }
 
-      const data = await parseHistoryMutationResponse(response);
+      const data = await parseHistoryRestoreResponse(response);
       setConfirmed(data.version, data.snapshot);
       clearTransientState();
+      clearAfterRestore();
       await refreshHistory();
       return data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to replay history';
+      const message = err instanceof Error ? err.message : 'Failed to restore history version';
       setError(message);
       throw err;
     } finally {
+      setRestoringGroupId((current) => (current === groupId ? null : current));
       setLoading(false);
     }
-  }, [accessToken, clearTransientState, refreshHistory, setConfirmed]);
-
-  const undoLatest = useCallback(async () => applyReplay('/api/history/undo'), [applyReplay]);
-  const undoGroup = useCallback(async (groupId: string) => applyReplay(`/api/history/${groupId}/undo`), [applyReplay]);
-  const redoGroup = useCallback(async (groupId: string) => applyReplay(`/api/history/${groupId}/redo`), [applyReplay]);
+  }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed]);
 
   useEffect(() => {
     void refreshHistory();
@@ -130,9 +203,14 @@ export function useProjectHistory(accessToken: string | null) {
     loading,
     error,
     nextCursor,
+    previewingGroupId,
+    restoringGroupId,
+    historyViewer,
     refreshHistory,
-    undoLatest,
-    undoGroup,
-    redoGroup,
+    fetchSnapshot,
+    previewVersion: fetchSnapshot,
+    showVersion,
+    restoreVersion,
+    returnToCurrentVersion,
   };
 }

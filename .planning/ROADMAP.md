@@ -374,5 +374,19 @@ Plans:
 - [x] 44-03-PLAN.md — Agent-turn grouping and manual web commit metadata propagation
 - [x] 44-04-PLAN.md — History panel, undo/redo hotkeys, and authoritative frontend refresh
 
+### Phase 45: history-refactor
+
+**Goal:** History preview and restore share one authoritative backend rollback-tail model instead of split client/server semantics
+**Requirements**: PRD-only (`.planning/reference/history-versioning-clean-architecture-prd.md`)
+**Depends on:** Phase 44
+**Plans:** 5/5 plans complete
+
+Plans:
+- [x] 45-01-PLAN.md — Pure snapshot command replay helper plus version-oriented HistoryService preview/restore operations
+- [x] 45-02-PLAN.md — Public history version routes plus synchronized web restore contracts
+- [x] 45-03-PLAN.md — Isolated history viewer store plus preview-first workspace rendering
+- [x] 45-04-PLAN.md
+- [x] 45-05-PLAN.md
+
 ---
-*Last updated: 2026-04-18 — Phase 44 Plan 04 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 05 completed*

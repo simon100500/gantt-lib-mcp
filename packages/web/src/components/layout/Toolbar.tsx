@@ -45,6 +45,7 @@ interface ToolbarProps {
   ganttDayMode?: 'business' | 'calendar';
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   readOnly?: boolean;
+  previewMode?: boolean;
 }
 
 export function Toolbar({
@@ -65,6 +66,7 @@ export function Toolbar({
   ganttDayMode = 'business',
   onGanttDayModeChange,
   readOnly = false,
+  previewMode = false,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
@@ -94,11 +96,12 @@ export function Toolbar({
 
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
-  const effectiveDisableTaskDrag = readOnly || disableTaskDrag;
-  const canChangeGanttDayMode = !readOnly && Boolean(onGanttDayModeChange);
+  const mutationLocked = readOnly || previewMode;
+  const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
+  const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
 
   const handleToggleDragLock = () => {
-    if (readOnly) {
+    if (mutationLocked) {
       return;
     }
 
@@ -248,37 +251,48 @@ export function Toolbar({
         </Button>
       )}
 
+      <div className="flex-1" />
+
       <Button
         size="sm"
         variant="ghost"
         onClick={() => setShowHistoryPanel(!showHistoryPanel)}
         aria-pressed={showHistoryPanel}
         className={cn(
-          actionButtonClassName,
+          'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
           showHistoryPanel && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
-          'hidden sm:flex',
         )}
         title="Показать историю изменений"
       >
-        <History className="h-3.5 w-3.5" />
-        <span className="hidden md:inline text-xs">История</span>
+        <div className="relative">
+          <History className="h-3.5 w-3.5" />
+          {previewMode && (
+            <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+          )}
+        </div>
       </Button>
-
-      <div className="flex-1" />
 
       <Button
         size="sm"
         variant="ghost"
         onClick={handleToggleDragLock}
         aria-pressed={effectiveDisableTaskDrag}
-        disabled={readOnly}
+        disabled={mutationLocked}
         className={cn(
           actionButtonClassName,
           effectiveDisableTaskDrag && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-          readOnly && 'cursor-not-allowed opacity-60',
+          mutationLocked && 'cursor-not-allowed opacity-60',
           'hidden lg:flex',
         )}
-        title={readOnly ? 'Проект в архиве доступен только для чтения' : disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
+        title={
+          previewMode
+            ? 'Просмотр версии доступен только для чтения'
+            : readOnly
+              ? 'Проект в архиве доступен только для чтения'
+              : disableTaskDrag
+                ? 'Разблокировать перемещение задач'
+                : 'Заблокировать перемещение задач'
+        }
       >
         {effectiveDisableTaskDrag ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
       </Button>
@@ -420,16 +434,23 @@ export function Toolbar({
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className="flex cursor-pointer items-center gap-2"
           >
-            <History className="h-4 w-4" />
+            <div className="relative">
+              <History className="h-4 w-4" />
+              {previewMode && (
+                <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+              )}
+            </div>
             <span className="text-sm">История</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleToggleDragLock}
-            disabled={readOnly}
+            disabled={mutationLocked}
             className="flex cursor-pointer items-center gap-2"
           >
             {effectiveDisableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
-            <span className="text-sm">{readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}</span>
+            <span className="text-sm">
+              {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
+            </span>
           </DropdownMenuItem>
           <FilterPopup>
             <DropdownMenuItem
