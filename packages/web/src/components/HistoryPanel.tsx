@@ -163,16 +163,13 @@ export function HistoryPanel({
                     {formatTimestamp(item.createdAt)}
                     </span>
                   </div>
-                  <span
-                    className={cn(
-                      'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
-                      item.status === 'undone'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-emerald-100 text-emerald-700',
-                    )}
-                  >
-                    {STATUS_LABELS[item.status]}
-                  </span>
+                  {item.status === 'undone' && (
+                    <span
+                      className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                    >
+                      {STATUS_LABELS[item.status]}
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-0.5">
