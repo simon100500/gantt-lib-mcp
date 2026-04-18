@@ -1,4 +1,4 @@
-import { AlertCircle, Bot, Clock3, MoreHorizontal, RotateCcw, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, History, MoreHorizontal, RotateCcw, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
@@ -41,12 +41,17 @@ const COMMAND_TITLES: Record<string, string> = {
 };
 
 function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString('ru-RU', {
+  const date = new Date(value);
+  const datePart = date.toLocaleDateString('ru-RU', {
     day: '2-digit',
     month: 'long',
+  });
+  const timePart = date.toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  return `${datePart} в ${timePart}`;
 }
 
 function humanizeHistoryTitle(title: string): string {
@@ -78,9 +83,12 @@ export function HistoryPanel({
 }: HistoryPanelProps) {
   return (
     <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden xl:w-[320px] xl:max-w-[320px] xl:min-w-[320px]">
-      <div className="flex items-start justify-between gap-3 px-1 py-1">
+      <div className="flex items-center justify-between gap-3 px-1 py-1">
         <div className="min-w-0">
-          <p className="min-w-0 text-sm font-semibold text-slate-900">История версий</p>
+          <div className="flex items-center gap-1.5">
+            <History className="h-3.5 w-3.5 text-slate-400" />
+            <p className="min-w-0 text-[13px] font-semibold text-slate-900">История версий</p>
+          </div>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -141,7 +149,10 @@ export function HistoryPanel({
               const isPreviewing = previewGroupId === item.id;
               const isLoadingPreview = previewingGroupId === item.id;
               const isRestoring = restoringGroupId === item.id;
-              const isActive = item.isCurrent || isPreviewing || isLoadingPreview || isRestoring;
+              const hasVersionSelection = Boolean(previewGroupId || previewingGroupId || restoringGroupId);
+              const isActive = hasVersionSelection
+                ? isPreviewing || isLoadingPreview || isRestoring
+                : item.isCurrent;
 
               return (
               <article
@@ -164,11 +175,9 @@ export function HistoryPanel({
                   }
                 }}
                 className={cn(
-                  'space-y-3 rounded-2xl border px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
-                  !disabled && !loading && 'cursor-pointer bg-white hover:border-slate-300 hover:bg-slate-50/60',
-                  (disabled || loading) && 'bg-white',
-                  isActive && 'border-sky-300 bg-white ring-1 ring-sky-100',
-                  !isActive && 'border-slate-200',
+                  'group space-y-0.5 rounded-2xl px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+                  !disabled && !loading && 'cursor-pointer hover:bg-white',
+                  isActive && 'bg-white',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -183,12 +192,24 @@ export function HistoryPanel({
                       >
                         <ActorIcon className="h-4 w-4" />
                       </span>
-                      <span className="truncate text-base font-semibold leading-5 text-slate-900">
-                        {formatTimestamp(item.createdAt)}
-                      </span>
+                        <span className="truncate text-[15px] font-semibold leading-5 text-slate-900">
+                          {formatTimestamp(item.createdAt)}
+                        </span>
                       {item.isCurrent && (
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
                           Текущая
+                        </span>
+                      )}
+                      {isLoadingPreview && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                          Загрузка
+                        </span>
+                      )}
+                      {isRestoring && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Восстановление
                         </span>
                       )}
                     </div>
@@ -200,9 +221,12 @@ export function HistoryPanel({
                           type="button"
                           aria-label="Действия с версией"
                           onClick={(event) => event.stopPropagation()}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                          className={cn(
+                            'inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300',
+                            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                          )}
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <MoreHorizontal className="h-4.5 w-4.5" />
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
@@ -221,25 +245,8 @@ export function HistoryPanel({
                   )}
                 </div>
 
-                <div className="space-y-1 pr-6">
-                  <p className="text-[14px] font-medium leading-5 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-500">
-                    {isLoadingPreview && (
-                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">
-                        Загрузка версии...
-                      </span>
-                    )}
-                    {isPreviewing && !isLoadingPreview && (
-                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">
-                        Открыта
-                      </span>
-                    )}
-                    {isRestoring && (
-                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
-                        Восстановление...
-                      </span>
-                    )}
-                  </div>
+                <div className="pl-6 pr-5">
+                  <p className="text-[13px] font-normal leading-4 text-slate-700">{humanizeHistoryTitle(item.title)}</p>
                 </div>
               </article>
             );})}
