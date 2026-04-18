@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-18T09:58:04.122Z"
-last_activity: 2026-04-18 -- Completed 45-01-PLAN.md
+last_updated: "2026-04-18T10:08:33.374Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 16
   completed_phases: 13
   total_plans: 52
-  completed_plans: 48
+  completed_plans: 49
   percent: 92
 ---
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 45 (history-refactor) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
-Last activity: 2026-04-18 -- Completed 45-01-PLAN.md
+Last activity: 2026-04-18 -- Completed 45-02-PLAN.md
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ---
 
@@ -172,6 +172,8 @@ packages/
 - [Phase 44]: The history panel stays inside the existing workspace shell as a toggleable rail instead of introducing modal routing or a separate history page.
 - [Phase 45]: History preview and restore now resolve one shared rollback tail, with preview replaying inverse commands in memory and restore replaying the same sequence through commitCommand.
 - [Phase 45]: Public history rows are version-oriented visible groups with isCurrent/canRestore semantics, while technical rollback groups stay internal append-only mechanics.
+- [Phase 45]: The server route layer maps history validation failures with shape guards, avoiding a runtime dependency on an internal service error class export.
+- [Phase 45]: Web history consumers now use restore-to-version semantics, with Ctrl+Z restoring the latest non-current version instead of public undo/redo endpoints.
 
 ## Performance Metrics
 
@@ -203,12 +205,13 @@ packages/
 | Phase 44 P03 | 35min | 2 tasks | 11 files |
 | Phase 44 P04 | 6min | 2 tasks | 8 files |
 | Phase 45 P01 | 8 min | 2 tasks | 6 files |
+| Phase 45 P02 | 7 min | 2 tasks | 7 files |
 
 ## Session
 
-- Last session: 2026-04-18T09:58:04Z
-- Stopped at: Completed 45-01-PLAN.md
+- Last session: 2026-04-18T10:08:33Z
+- Stopped at: Completed 45-02-PLAN.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 45 Plan 01 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 02 completed*
