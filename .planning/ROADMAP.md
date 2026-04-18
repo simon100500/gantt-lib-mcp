@@ -379,14 +379,14 @@ Plans:
 **Goal:** History preview and restore share one authoritative backend rollback-tail model instead of split client/server semantics
 **Requirements**: PRD-only (`.planning/reference/history-versioning-clean-architecture-prd.md`)
 **Depends on:** Phase 44
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 - [x] 45-01-PLAN.md — Pure snapshot command replay helper plus version-oriented HistoryService preview/restore operations
 - [x] 45-02-PLAN.md — Public history version routes plus synchronized web restore contracts
 - [x] 45-03-PLAN.md — Isolated history viewer store plus preview-first workspace rendering
-- [ ] 45-04-PLAN.md
+- [x] 45-04-PLAN.md
 - [ ] 45-05-PLAN.md
 
 ---
-*Last updated: 2026-04-18 — Phase 45 Plan 03 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 04 completed*

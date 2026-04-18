@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-18T10:13:23.912Z"
+last_updated: "2026-04-18T10:20:10.539Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 16
   completed_phases: 13
   total_plans: 52
-  completed_plans: 50
-  percent: 94
+  completed_plans: 51
+  percent: 98
 ---
 
 # Project State: gantt-lib MCP Server
@@ -33,11 +33,12 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 45 (history-refactor) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
-Last activity: 2026-04-18 -- Completed 45-03-PLAN.md
+Last activity: 2026-04-18
+Last activity: 2026-04-18 -- Completed 45-04-PLAN.md
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ---
 
@@ -176,6 +177,8 @@ packages/
 - [Phase 45]: Web history consumers now use restore-to-version semantics, with Ctrl+Z restoring the latest non-current version instead of public undo/redo endpoints.
 - [Phase 45]: History preview lives in a dedicated Zustand store so historical snapshots never enter confirmed, pending, or dragPreview editing state.
 - [Phase 45]: ProjectWorkspace overlays preview snapshots ahead of normal editing state and disables editing while still allowing version navigation and return-to-current actions.
+- [Phase 45]: History rows now preview versions on row click while restore stays an explicit secondary action.
+- [Phase 45]: Preview mode composes on top of existing read-only guards and blocks chat, hotkeys, and task-state reflow from mutating live workspace state.
 
 ## Performance Metrics
 
@@ -209,12 +212,13 @@ packages/
 | Phase 45 P01 | 8 min | 2 tasks | 6 files |
 | Phase 45 P02 | 7 min | 2 tasks | 7 files |
 | Phase 45 P03 | 3min | 2 tasks | 4 files |
+| Phase 45 P04 | 8min | 2 tasks | 3 files |
 
 ## Session
 
-- Last session: 2026-04-18T10:13:23Z
-- Stopped at: Completed 45-03-PLAN.md
+- Last session: 2026-04-18T10:20:10Z
+- Stopped at: Completed 45-04-PLAN.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 45 Plan 03 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 04 completed*
