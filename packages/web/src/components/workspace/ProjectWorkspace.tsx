@@ -47,6 +47,7 @@ interface ProjectWorkspaceProps {
   onCollapseAll: () => void;
   onExpandAll: () => void;
   onExportPdf?: () => void;
+  onExportExcel?: () => void;
   onValidation: (result: ValidationResult) => void;
   onCascade?: (shiftedTasks: Task[]) => void;
   readOnly?: boolean;
@@ -112,6 +113,7 @@ export function ProjectWorkspace({
   onCollapseAll,
   onExpandAll,
   onExportPdf,
+  onExportExcel,
   onValidation,
   onCascade,
   readOnly = false,
@@ -308,6 +310,23 @@ export function ProjectWorkspace({
       : null,
     [historyItems, historyViewer],
   );
+  const historyItemsById = useMemo(
+    () => new Map(historyItems.map((item) => [item.id, item])),
+    [historyItems],
+  );
+  const chatMessages = useMemo(
+    () => messages.map((message) => {
+      const historyItem = message.historyGroupId ? historyItemsById.get(message.historyGroupId) : null;
+      return {
+        ...message,
+        canPreviewHistory: Boolean(message.historyGroupId),
+        canRestoreHistory: Boolean(message.historyGroupId && historyItem?.canRestore),
+        previewLoading: previewingGroupId === message.historyGroupId,
+        restoreLoading: restoringGroupId === message.historyGroupId,
+      };
+    }),
+    [historyItemsById, messages, previewingGroupId, restoringGroupId],
+  );
 
   useEffect(() => {
     // Block Ctrl+Z / Ctrl+Shift+Z history shortcuts while preview mode is active.
@@ -352,6 +371,7 @@ export function ProjectWorkspace({
           onCollapseAll={onCollapseAll}
           onExpandAll={onExpandAll}
           onExportPdf={onExportPdf}
+          onExportExcel={onExportExcel}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
@@ -514,7 +534,7 @@ export function ProjectWorkspace({
         {chatSidebarVisible && !hasShareToken && onSend && (
           <aside className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] md:ml-3 md:w-[360px] md:flex-1 md:max-w-md xl:max-w-[320px]">
             <ChatSidebar
-              messages={messages}
+              messages={chatMessages}
               streaming={streaming}
               onSend={onSend}
               disabled={aiThinking || effectiveChatDisabled}
@@ -527,6 +547,16 @@ export function ProjectWorkspace({
               showChartButton={hasRenderableChart}
               isAuthenticated={isAuthenticated}
               onLoginRequired={onLoginRequired}
+              onPreviewHistory={(groupId) => {
+                const item = historyItemsById.get(groupId);
+                if (!item) {
+                  return;
+                }
+                void showVersion(item);
+              }}
+              onRestoreHistory={(groupId) => {
+                void restoreVersion(groupId);
+              }}
             />
           </aside>
         )}

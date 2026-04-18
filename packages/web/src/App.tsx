@@ -197,6 +197,35 @@ function formatPdfFileTimestamp(value: Date): string {
   return `${year}-${month}-${day} ${hours}-${minutes}`;
 }
 
+function getAttachmentFileName(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) {
+    return fallback;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const asciiMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  if (asciiMatch?.[1]) {
+    return asciiMatch[1];
+  }
+
+  return fallback;
+}
+
+async function triggerBlobDownload(blob: Blob, fileName: string): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 type PreviewState = {
   tasks: Task[];
   active: boolean;
@@ -602,7 +631,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPreviewState((current) => current.mode === 'failed'
         ? current
         : { tasks: [], active: false, mode: 'rendering', message: null });
-      useChatStore.getState().finishStreaming();
+      useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
     }
     if (msg.type === 'error') {
@@ -1089,22 +1118,25 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       headers: { Authorization: `Bearer ${auth.accessToken}` },
     })
       .then((response) => response.ok
-        ? response.json() as Promise<Array<{ role: string; content: string }>>
+        ? response.json() as Promise<Array<{
+            id: string;
+            role: string;
+            content: string;
+            requestContextId?: string | null;
+            historyGroupId?: string | null;
+          }>>
         : Promise.resolve([]))
       .then((data) => {
         if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
-        useChatStore.setState({
-          messages: data.map((message) => ({
-            id: crypto.randomUUID(),
-            role: message.role as 'user' | 'assistant',
-            content: message.content,
-          })),
-          streamingText: '',
-          aiThinking: false,
-          error: null,
-        });
+        useChatStore.getState().replaceMessages(data.map((message) => ({
+          id: message.id ?? crypto.randomUUID(),
+          role: message.role as 'user' | 'assistant',
+          content: message.content,
+          requestContextId: message.requestContextId ?? null,
+          historyGroupId: message.historyGroupId ?? null,
+        })));
       })
       .catch(() => {});
   }, [auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, workspace.kind]);
@@ -1275,6 +1307,78 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
   }, [billingStatus, doExportPdf, openLimitModal]);
 
+  const handleExportExcel = useCallback(async () => {
+    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
+    if (proactiveExportDenial) {
+      await openLimitModal(proactiveExportDenial);
+      return;
+    }
+
+    const exportAccessLevel = getExportAccessLevel(billingStatus);
+    if (exportAccessLevel !== 'pdf_excel' && exportAccessLevel !== 'pdf_excel_api') {
+      await openLimitModal({
+        code: 'EXPORT_FEATURE_LOCKED',
+        limitKey: 'export',
+        reasonCode: 'feature_disabled',
+        remaining: null,
+        plan: ((billingStatus?.plan as PlanId | undefined) ?? 'free'),
+        planLabel: billingStatus?.planMeta.label ?? PLAN_LABELS[((billingStatus?.plan as PlanId | undefined) ?? 'free')],
+        upgradeHint: 'Экспорт PDF + Excel доступен на тарифе Команда и выше.',
+      });
+      return;
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      onLoginRequired();
+      return;
+    }
+
+    let response = await fetch('/api/export/excel', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        onLoginRequired();
+        return;
+      }
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch('/api/export/excel', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+
+    if (response.status === 403) {
+      try {
+        const body = await response.json() as Partial<ConstraintDenialPayload>;
+        if (isConstraintCode(body.code)) {
+          await openLimitModal(body);
+          return;
+        }
+      } catch {
+        // fall through to generic error
+      }
+      throw new Error(`HTTP 403`);
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const projectName = currentProjectLabel?.trim() || 'Мой проект';
+    const fallbackFileName = `ГетГант - ${projectName} - ${formatPdfFileTimestamp(new Date())}.xlsx`;
+    const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
+    await triggerBlobDownload(blob, fileName);
+  }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
+
   const workspaceShell = workspace.kind === 'shared'
     ? (
       <SharedWorkspace
@@ -1329,6 +1433,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
+            onExportExcel={handleExportExcel}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
