@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: executing
-last_updated: "2026-04-18T10:20:10.539Z"
+status: verifying
+last_updated: "2026-04-18T10:26:53.097Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 16
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 52
-  completed_plans: 51
-  percent: 98
+  completed_plans: 52
+  percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-18
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Ready to execute
+**Status:** Phase complete — ready for verification
 
 ---
 
@@ -34,11 +34,11 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 
 Phase: 45 (history-refactor) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-18
-Last activity: 2026-04-18 -- Completed 45-04-PLAN.md
+Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ---
 
@@ -179,6 +179,8 @@ packages/
 - [Phase 45]: ProjectWorkspace overlays preview snapshots ahead of normal editing state and disables editing while still allowing version navigation and return-to-current actions.
 - [Phase 45]: History rows now preview versions on row click while restore stays an explicit secondary action.
 - [Phase 45]: Preview mode composes on top of existing read-only guards and blocks chat, hotkeys, and task-state reflow from mutating live workspace state.
+- [Phase 45]: HistoryService now uses an explicit minimal Prisma contract instead of as-any casts on the version path.
+- [Phase 45]: Contract-cleanup regressions are locked with source-level tests that reject as-any shortcuts and legacy undo/redo names in the public web surface.
 
 ## Performance Metrics
 
@@ -213,12 +215,13 @@ packages/
 | Phase 45 P02 | 7 min | 2 tasks | 7 files |
 | Phase 45 P03 | 3min | 2 tasks | 4 files |
 | Phase 45 P04 | 8min | 2 tasks | 3 files |
+| Phase 45 P05 | 5min | 2 tasks | 4 files |
 
 ## Session
 
 - Last session: 2026-04-18T10:20:10Z
-- Stopped at: Completed 45-04-PLAN.md
+- Stopped at: Completed 45-05-PLAN.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 45 Plan 04 completed*
+*Last updated: 2026-04-18 — Phase 45 Plan 05 completed*
