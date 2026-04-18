@@ -6,6 +6,10 @@ export interface ServerMessage {
   tasks?: unknown[];
   message?: string;
   provisional?: boolean;
+  chatMessage?: {
+    requestContextId?: string | null;
+    historyGroupId?: string | null;
+  };
 }
 
 export interface ClientMessage {

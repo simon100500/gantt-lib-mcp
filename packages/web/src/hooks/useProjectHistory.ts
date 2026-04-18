@@ -7,6 +7,7 @@ import type {
   HistorySnapshotResponse,
 } from '../lib/apiTypes.ts';
 import { useHistoryViewerStore } from '../stores/useHistoryViewerStore.ts';
+import { useChatStore } from '../stores/useChatStore.ts';
 import { useProjectStore } from '../stores/useProjectStore.ts';
 
 const DEFAULT_HISTORY_LIMIT = 50;
@@ -36,6 +37,10 @@ async function parseHistoryRestoreResponse(response: Response): Promise<HistoryR
     targetGroupId: data.targetGroupId ?? '',
     version: data.version ?? 0,
     snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
+    chatCleanup: data.chatCleanup ?? {
+      deletedCount: 0,
+      deletedFromMessageId: null,
+    },
   };
 }
 
@@ -63,6 +68,37 @@ export function useProjectHistory(accessToken: string | null) {
   const clearAfterRestore = useHistoryViewerStore((state) => state.clearAfterRestore);
   const setConfirmed = useProjectStore((state) => state.setConfirmed);
   const clearTransientState = useProjectStore((state) => state.clearTransientState);
+  const syncChatMessages = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    const response = await fetch('/api/messages', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const messages = await response.json() as Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+    }>;
+
+    useChatStore.getState().replaceMessages(messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      requestContextId: message.requestContextId ?? null,
+      historyGroupId: message.historyGroupId ?? null,
+    })));
+  }, [accessToken]);
 
   const refreshHistory = useCallback(async (cursor?: string) => {
     if (!accessToken) {
@@ -182,6 +218,10 @@ export function useProjectHistory(accessToken: string | null) {
       setConfirmed(data.version, data.snapshot);
       clearTransientState();
       clearAfterRestore();
+      if (data.chatCleanup?.deletedFromMessageId) {
+        useChatStore.getState().softDeleteFromMessageId(data.chatCleanup.deletedFromMessageId);
+      }
+      await syncChatMessages();
       await refreshHistory();
       return data;
     } catch (err) {
@@ -192,7 +232,7 @@ export function useProjectHistory(accessToken: string | null) {
       setRestoringGroupId((current) => (current === groupId ? null : current));
       setLoading(false);
     }
-  }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed]);
+  }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed, syncChatMessages]);
 
   useEffect(() => {
     void refreshHistory();

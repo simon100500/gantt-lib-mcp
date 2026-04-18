@@ -58,7 +58,15 @@ export type InitialGenerationServices = {
     ): Promise<CommitProjectCommandResponse>;
   };
   messageService: {
-    add(role: 'user' | 'assistant', content: string, projectId: string): Promise<unknown>;
+    add(
+      role: 'user' | 'assistant',
+      content: string,
+      projectId: string,
+      options?: {
+        requestContextId?: string;
+        historyGroupId?: string;
+      },
+    ): Promise<unknown>;
   };
   taskService: {
     list(projectId: string): Promise<{ tasks: ListedTask[] }>;
@@ -187,8 +195,12 @@ function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): 
 async function saveAssistantMessage(
   input: RunInitialGenerationInput,
   assistantResponse: string,
+  metadata?: {
+    requestContextId?: string;
+    historyGroupId?: string;
+  },
 ): Promise<void> {
-  await input.services.messageService.add('assistant', assistantResponse, input.projectId);
+  await input.services.messageService.add('assistant', assistantResponse, input.projectId, metadata);
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
 }
 
@@ -214,9 +226,16 @@ async function broadcastTasksSnapshot(
 async function finishSuccessfulRun(
   input: RunInitialGenerationInput,
   assistantResponse: string,
+  metadata?: {
+    requestContextId?: string;
+    historyGroupId?: string;
+  },
 ): Promise<ListedTask[]> {
   const tasks = await broadcastTasksSnapshot(input, 'final_state');
-  input.broadcastToSession(input.sessionId, { type: 'done' });
+  input.broadcastToSession(input.sessionId, {
+    type: 'done',
+    chatMessage: metadata,
+  });
   await input.logger.debug('agent_run_completed', {
     runId: input.runId,
     projectId: input.projectId,
@@ -230,8 +249,15 @@ async function finishSuccessfulRun(
 async function finishFailedRun(
   input: RunInitialGenerationInput,
   assistantResponse: string,
+  metadata?: {
+    requestContextId?: string;
+    historyGroupId?: string;
+  },
 ): Promise<void> {
-  input.broadcastToSession(input.sessionId, { type: 'done' });
+  input.broadcastToSession(input.sessionId, {
+    type: 'done',
+    chatMessage: metadata,
+  });
   await input.logger.debug('agent_run_completed', {
     runId: input.runId,
     projectId: input.projectId,
@@ -430,6 +456,7 @@ export async function runInitialGeneration(
 
   let repairAttempted = false;
   let previewBroadcasted = false;
+  const historyGroupId = randomUUID();
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
     const startedAt = Date.now();
     await input.logger.debug('planner_query_request', {
@@ -536,6 +563,13 @@ export async function runInitialGeneration(
       commandService: input.services.commandService,
       serverDate: getServerDate(input.serverDate),
       scheduleOptions: input.scheduleOptions,
+      history: {
+        groupId: historyGroupId,
+        origin: 'agent_run',
+        title: `AI — ${input.userMessage.trim().replace(/\s+/g, ' ') || 'Стартовый график'}`,
+        requestContextId: input.runId,
+        finalizeGroup: true,
+      },
       onCompiled: async (compiledSchedule) => {
         const previewTasks = compiledSchedule.command.tasks.map((task) => ({
           id: task.id,
@@ -591,7 +625,9 @@ export async function runInitialGeneration(
           message: 'Предварительный график не был сохранён. Проверьте ошибку и повторите запуск.',
         });
       }
-      await saveAssistantMessage(input, assistantResponse);
+      await saveAssistantMessage(input, assistantResponse, {
+        requestContextId: input.runId,
+      });
       await input.logger.debug('initial_generation_result', {
         runId: input.runId,
         projectId: input.projectId,
@@ -601,7 +637,9 @@ export async function runInitialGeneration(
         repairAttempted,
         assistantResponse,
       });
-      await finishFailedRun(input, assistantResponse);
+      await finishFailedRun(input, assistantResponse, {
+        requestContextId: input.runId,
+      });
 
       return {
         ok: false,
@@ -612,7 +650,10 @@ export async function runInitialGeneration(
     }
 
     const assistantResponse = buildSuccessResponse();
-    await saveAssistantMessage(input, assistantResponse);
+    await saveAssistantMessage(input, assistantResponse, {
+      requestContextId: input.runId,
+      historyGroupId,
+    });
     await input.logger.debug('initial_generation_result', {
       runId: input.runId,
       projectId: input.projectId,
@@ -622,7 +663,10 @@ export async function runInitialGeneration(
       repairAttempted,
       assistantResponse,
     });
-    const tasksAfter = await finishSuccessfulRun(input, assistantResponse);
+    const tasksAfter = await finishSuccessfulRun(input, assistantResponse, {
+      requestContextId: input.runId,
+      historyGroupId,
+    });
 
     return {
       ok: true,
@@ -633,7 +677,9 @@ export async function runInitialGeneration(
     };
   } catch (error) {
     const assistantResponse = buildFailureResponse('planning');
-    await saveAssistantMessage(input, assistantResponse);
+    await saveAssistantMessage(input, assistantResponse, {
+      requestContextId: input.runId,
+    });
     await input.logger.debug('initial_generation_result', {
       runId: input.runId,
       projectId: input.projectId,
@@ -644,7 +690,9 @@ export async function runInitialGeneration(
       assistantResponse,
       error: error instanceof Error ? error.message : String(error),
     });
-    await finishFailedRun(input, assistantResponse);
+    await finishFailedRun(input, assistantResponse, {
+      requestContextId: input.runId,
+    });
 
     return {
       ok: false,

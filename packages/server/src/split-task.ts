@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
 
 import type { MessageService, TaskService, CommandService } from '@gantt/mcp/services';
@@ -10,7 +11,17 @@ import type { MutationTaskSnapshot, ResolvedMutationContext, StructuredFragmentP
 import type { ServerMessage } from './ws.js';
 
 type SplitTaskServices = {
-  messageService: Pick<MessageService, 'add'>;
+  messageService: {
+    add(
+      role: 'user' | 'assistant',
+      content: string,
+      projectId: string,
+      options?: {
+        requestContextId?: string;
+        historyGroupId?: string;
+      },
+    ): ReturnType<MessageService['add']>;
+  };
   taskService: Pick<TaskService, 'get' | 'list'>;
   commandService: Pick<CommandService, 'commitCommand'>;
 };
@@ -280,8 +291,11 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const endDate = normalizeIsoDate(task.endDate);
   const existingChildNames = (task.children ?? []).map((child) => child.name.trim()).filter(Boolean);
   const userTrace = buildSplitTaskTrace(taskName, input.details);
+  const historyGroupId = randomUUID();
 
-  await input.services.messageService.add('user', userTrace, input.projectId);
+  await input.services.messageService.add('user', userTrace, input.projectId, {
+    requestContextId: input.runId,
+  });
   await writeServerDebugLog('direct_split_requested', {
     runId: input.runId,
     projectId: input.projectId,
@@ -343,6 +357,12 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     projectVersion,
     tasksBefore: listed.tasks as MutationTaskSnapshot[],
     plan,
+    history: {
+      groupId: historyGroupId,
+      requestContextId: input.runId,
+      historyTitle: userTrace,
+      historyUndoable: true,
+    },
     commandService: input.services.commandService,
   });
 
@@ -353,10 +373,19 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const { tasks: tasksAfter } = await input.services.taskService.list(input.projectId);
   const assistantResponse = `Задача «${taskName}» детализирована на ${fragmentPlan.nodes.length} подзадач.`;
 
-  await input.services.messageService.add('assistant', assistantResponse, input.projectId);
+  await input.services.messageService.add('assistant', assistantResponse, input.projectId, {
+    requestContextId: input.runId,
+    historyGroupId,
+  });
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks: tasksAfter });
-  input.broadcastToSession(input.sessionId, { type: 'done' });
+  input.broadcastToSession(input.sessionId, {
+    type: 'done',
+    chatMessage: {
+      requestContextId: input.runId,
+      historyGroupId,
+    },
+  });
 
   await writeServerDebugLog('direct_split_completed', {
     runId: input.runId,

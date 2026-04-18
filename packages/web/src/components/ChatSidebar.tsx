@@ -8,6 +8,12 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  requestContextId?: string | null;
+  historyGroupId?: string | null;
+  canPreviewHistory?: boolean;
+  canRestoreHistory?: boolean;
+  previewLoading?: boolean;
+  restoreLoading?: boolean;
 }
 
 interface ChatSidebarProps {
@@ -24,6 +30,8 @@ interface ChatSidebarProps {
   showChartButton?: boolean;
   isAuthenticated?: boolean;
   onLoginRequired?: () => void;
+  onPreviewHistory?: (groupId: string) => void;
+  onRestoreHistory?: (groupId: string) => void;
 }
 
 const QUICK_CHIPS = [
@@ -47,6 +55,8 @@ export function ChatSidebar({
   showChartButton = false,
   isAuthenticated = true,
   onLoginRequired,
+  onPreviewHistory,
+  onRestoreHistory,
 }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
   const [currentPhrase, setCurrentPhrase] = useState("");
@@ -113,6 +123,19 @@ export function ChatSidebar({
       e.preventDefault();
       handleSubmit(e as unknown as React.FormEvent);
     }
+  }
+
+  function handleRestoreMessageHistory(message: ChatMessage) {
+    if (!message.historyGroupId || !onRestoreHistory) {
+      return;
+    }
+
+    const confirmed = window.confirm("Откат вернет проект к этой версии и скроет это и более поздние сообщения в чате. Продолжить?");
+    if (!confirmed) {
+      return;
+    }
+
+    onRestoreHistory(message.historyGroupId);
   }
 
   return (
@@ -184,6 +207,30 @@ export function ChatSidebar({
               )}
             >
               {msg.content}
+              {msg.role === "assistant" && msg.historyGroupId && (msg.canPreviewHistory || msg.canRestoreHistory) && (
+                <div className="mt-2 flex items-center gap-3 border-t border-slate-200/80 pt-2 text-[12px]">
+                  {msg.canPreviewHistory && (
+                    <button
+                      type="button"
+                      onClick={() => onPreviewHistory?.(msg.historyGroupId!)}
+                      disabled={msg.previewLoading || msg.restoreLoading}
+                      className="text-slate-500 transition-colors hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {msg.previewLoading ? "Загрузка версии..." : "Посмотреть версию"}
+                    </button>
+                  )}
+                  {msg.canRestoreHistory && (
+                    <button
+                      type="button"
+                      onClick={() => handleRestoreMessageHistory(msg)}
+                      disabled={msg.restoreLoading || msg.previewLoading}
+                      className="text-amber-700 transition-colors hover:text-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {msg.restoreLoading ? "Откат..." : "Откатить"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}

@@ -28,6 +28,9 @@ export class MessageService {
       projectId: message.projectId, // Required in Prisma schema
       role: message.role as Message['role'],
       content: message.content,
+      requestContextId: message.requestContextId ?? null,
+      historyGroupId: message.historyGroupId ?? null,
+      deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
       createdAt: message.createdAt.toISOString(),
     };
   }
@@ -39,13 +42,23 @@ export class MessageService {
    * @param projectId - Project ID to associate the message with (required)
    * @returns The created message
    */
-  async add(role: 'user' | 'assistant', content: string, projectId: string): Promise<Message> {
+  async add(
+    role: 'user' | 'assistant',
+    content: string,
+    projectId: string,
+    options?: {
+      requestContextId?: string;
+      historyGroupId?: string;
+    },
+  ): Promise<Message> {
     const message = await this.prisma.message.create({
       data: {
         id: randomUUID(),
         projectId,
         role,
         content,
+        requestContextId: options?.requestContextId,
+        historyGroupId: options?.historyGroupId,
       },
     });
 
@@ -61,7 +74,10 @@ export class MessageService {
   async list(projectId: string, limit: number = 20): Promise<Message[]> {
     // Fetch last N messages ordered by creation time (most recent first)
     const messages = await this.prisma.message.findMany({
-      where: { projectId },
+      where: {
+        projectId,
+        deletedAt: null,
+      },
       orderBy: { createdAt: 'desc' }, // Changed to desc to get most recent first
       take: limit, // Take only the last N messages
     });
@@ -81,6 +97,73 @@ export class MessageService {
     });
 
     return result.count;
+  }
+
+  async softDeleteConversationTail(projectId: string, historyGroupId: string): Promise<{
+    deletedCount: number;
+    deletedFromMessageId: string | null;
+  }> {
+    const anchorAssistantMessage = await this.prisma.message.findFirst({
+      where: {
+        projectId,
+        historyGroupId,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        createdAt: true,
+        requestContextId: true,
+      },
+    });
+
+    if (!anchorAssistantMessage) {
+      return {
+        deletedCount: 0,
+        deletedFromMessageId: null,
+      };
+    }
+
+    let deletedFromMessageId = anchorAssistantMessage.id;
+    let cutoffCreatedAt = anchorAssistantMessage.createdAt;
+
+    if (anchorAssistantMessage.requestContextId) {
+      const firstTurnMessage = await this.prisma.message.findFirst({
+        where: {
+          projectId,
+          requestContextId: anchorAssistantMessage.requestContextId,
+          deletedAt: null,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      });
+
+      if (firstTurnMessage) {
+        deletedFromMessageId = firstTurnMessage.id;
+        cutoffCreatedAt = firstTurnMessage.createdAt;
+      }
+    }
+
+    const result = await this.prisma.message.updateMany({
+      where: {
+        projectId,
+        deletedAt: null,
+        createdAt: {
+          gte: cutoffCreatedAt,
+        },
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    return {
+      deletedCount: result.count,
+      deletedFromMessageId,
+    };
   }
 }
 

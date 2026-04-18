@@ -177,6 +177,12 @@ export interface Message {
   role: 'user' | 'assistant';
   /** Message content */
   content: string;
+  /** Shared request context for one agent turn */
+  requestContextId?: string | null;
+  /** Linked version-history group when the message produced undoable changes */
+  historyGroupId?: string | null;
+  /** ISO timestamp when the message was soft-deleted from chat history */
+  deletedAt?: string | null;
   /** ISO timestamp of creation */
   createdAt: string;
 }

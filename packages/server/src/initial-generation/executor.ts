@@ -26,6 +26,7 @@ export type ExecuteInitialProjectPlanInput = {
   serverDate: string;
   scheduleOptions?: Pick<ScheduleCommandOptions, 'businessDays' | 'weekendPredicate'>;
   onCompiled?: (compiledSchedule: CompiledInitialSchedule) => Promise<void> | void;
+  history?: CommitProjectCommandRequest['history'];
 };
 
 export type ExecuteInitialProjectPlanResult =
@@ -104,6 +105,7 @@ export async function executeInitialProjectPlan(
     clientRequestId: input.clientRequestId,
     baseVersion: input.baseVersion,
     command: compiledSchedule.command,
+    history: input.history,
   }, 'agent', input.actorId);
 
   if (!commitResponse.accepted) {

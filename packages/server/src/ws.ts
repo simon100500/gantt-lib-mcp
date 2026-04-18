@@ -35,7 +35,13 @@ export type ServerMessage =
   | { type: 'preview_tasks'; tasks: unknown[]; provisional: true }
   | { type: 'preview_failed'; message: string }
   | { type: 'error'; message: string }
-  | { type: 'done' }
+  | {
+      type: 'done';
+      chatMessage?: {
+        requestContextId?: string | null;
+        historyGroupId?: string | null;
+      };
+    }
   | { type: 'connected' };
 
 export type WsClientMessage =
