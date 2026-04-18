@@ -3,6 +3,23 @@ import { describe, it } from 'node:test';
 import ExcelJS from 'exceljs';
 import type { ProjectExcelExportData } from './excel-export.js';
 
+function assertThemeColor(
+  color: { theme?: number; tint?: number; argb?: string } | undefined,
+  expected: { theme: number; tint?: number },
+) {
+  assert.ok(color);
+  assert.equal(color.theme, expected.theme);
+  assert.equal(color.tint, expected.tint);
+}
+
+function assertArgbColor(
+  color: { theme?: number; tint?: number; argb?: string } | undefined,
+  expectedArgb: string,
+) {
+  assert.ok(color);
+  assert.equal(color.argb, expectedArgb);
+}
+
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -162,6 +179,7 @@ describe('buildProjectExcelExportBuffer', () => {
 
     const sheet = workbook.getWorksheet('Gantt');
     assert.ok(sheet);
+    assert.match(((workbook.model.themes as unknown as Record<string, string> | undefined)?.theme1) ?? '', /GetGantt Theme/);
     assert.equal(sheet.views[0]?.showGridLines, false);
     assert.equal(sheet.getCell('A1').value, 'ГетГант / Demo');
     assert.equal(sheet.pageSetup.paperSize, 9);
@@ -184,11 +202,13 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('H2').value, formatMonthLabel(monthStart));
     assert.equal(sheet.getCell('I2').value, null);
     assert.equal(sheet.getCell('H3').value, 1);
-    assert.equal((sheet.getCell(`${weekendColumnName}2`).font as any)?.color?.argb, 'FF1E293B');
-    assert.equal((sheet.getCell(`${weekendColumnName}3`).font as any)?.color?.argb, 'FFDC2626');
-    assert.equal((sheet.getCell(`${todayColumnName}3`).fill as any)?.fgColor?.argb, 'FFDC2626');
-    assert.equal((sheet.getCell(`${todayColumnName}3`).font as any)?.color?.argb, 'FFFFFFFF');
-    assert.equal((sheet.getCell(`${todayColumnName}4`).border as any)?.left?.color?.argb, 'FFDC2626');
+    assertThemeColor((sheet.getCell('H2').fill as any)?.fgColor, { theme: 4, tint: 0.7999816888943144 });
+    assertThemeColor((sheet.getCell('H3').fill as any)?.fgColor, { theme: 4, tint: 0.5999938962981048 });
+    assertThemeColor((sheet.getCell(`${weekendColumnName}2`).font as any)?.color, { theme: 1 });
+    assertArgbColor((sheet.getCell(`${weekendColumnName}3`).font as any)?.color, 'FFDC2626');
+    assertArgbColor((sheet.getCell(`${todayColumnName}3`).fill as any)?.fgColor, 'FFDC2626');
+    assertThemeColor((sheet.getCell(`${todayColumnName}3`).font as any)?.color, { theme: 0 });
+    assertArgbColor((sheet.getCell(`${todayColumnName}4`).border as any)?.left?.color, 'FFDC2626');
     if (mondayColumnName) {
       assert.equal((sheet.getCell(`${mondayColumnName}2`).border as any)?.left, undefined);
       assert.equal((sheet.getCell(`${mondayColumnName}3`).border as any)?.left?.style, 'thin');
@@ -208,12 +228,12 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('B5').alignment?.indent, 1);
     assert.equal(sheet.getCell('A6').value, '1.2');
     assert.equal(sheet.getCell('B6').value, 'Подэтап');
-    assert.equal((sheet.getCell('B6').fill as any)?.fgColor?.argb, 'FF94A3B8');
-    assert.equal((sheet.getCell('I6').fill as any)?.fgColor?.argb, 'FF6B7280');
+    assertThemeColor((sheet.getCell('B6').fill as any)?.fgColor, { theme: 4 });
+    assertThemeColor((sheet.getCell('I6').fill as any)?.fgColor, { theme: 4, tint: -0.249977111117893 });
     assert.equal(sheet.getCell('A7').value, '1.2.1');
     assert.equal(sheet.getCell('B7').value, 'Глубокий этап');
-    assert.equal((sheet.getCell('B7').fill as any)?.fgColor?.argb, 'FFCBD5E1');
-    assert.equal((sheet.getCell('J7').fill as any)?.fgColor?.argb, 'FF94A3B8');
+    assertThemeColor((sheet.getCell('B7').fill as any)?.fgColor, { theme: 4, tint: 0.7999816888943144 });
+    assertThemeColor((sheet.getCell('J7').fill as any)?.fgColor, { theme: 4, tint: 0.3999755851924192 });
     assert.equal(sheet.getCell('A9').value, '1.3');
     assert.equal(sheet.getCell('C9').type, ExcelJS.ValueType.Date);
     assert.equal(sheet.getCell('E9').value, Math.floor((timelineEnd.getTime() - addDays(monthStart, 2).getTime()) / 86_400_000) + 1);
@@ -222,11 +242,11 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('G9').alignment?.horizontal, 'left');
     assert.equal(sheet.getCell('I9').fill?.type, 'pattern');
     assert.equal(sheet.getCell(`${todayColumnName}9`).fill?.type, 'pattern');
-    assert.equal((sheet.getCell('A4').border as any)?.top?.color?.argb, 'FF4B5563');
-    assert.equal((sheet.getCell('H4').border as any)?.top?.color?.argb, 'FF4B5563');
-    assert.equal((sheet.getCell('H4').border as any)?.left?.color?.argb, 'FF64748B');
-    assert.equal((sheet.getCell('B4').fill as any)?.fgColor?.argb, 'FF64748B');
-    assert.equal((sheet.getCell('H4').fill as any)?.fgColor?.argb, 'FF475569');
+    assertArgbColor((sheet.getCell('A4').border as any)?.top?.color, 'FF4B5563');
+    assertArgbColor((sheet.getCell('H4').border as any)?.top?.color, 'FF4B5563');
+    assertThemeColor((sheet.getCell('H4').border as any)?.left?.color, { theme: 4 });
+    assertThemeColor((sheet.getCell('B4').fill as any)?.fgColor, { theme: 4, tint: 0.3999755851924192 });
+    assertThemeColor((sheet.getCell('H4').fill as any)?.fgColor, { theme: 4, tint: -0.499984740745262 });
     assert.ok((sheet.getRow(9).height ?? 0) > (29 / 1.333));
   });
 

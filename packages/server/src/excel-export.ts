@@ -62,6 +62,219 @@ const EMPTY_STATE_FILL = 'FFF8FAFC';
 const STATIC_COLUMN_WIDTHS = [10, 44, 14, 14, 12, 8, 20];
 const DAY_WIDTH = 20 / 7;
 const A4_PAPER_SIZE = 9;
+const GETGANTT_THEME_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="GetGantt Theme">
+  <a:themeElements>
+    <a:clrScheme name="GetGantt">
+      <a:dk1><a:srgbClr val="1E293B"/></a:dk1>
+      <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="475569"/></a:dk2>
+      <a:lt2><a:srgbClr val="F8FAFC"/></a:lt2>
+      <a:accent1><a:srgbClr val="64748B"/></a:accent1>
+      <a:accent2><a:srgbClr val="2563EB"/></a:accent2>
+      <a:accent3><a:srgbClr val="DC2626"/></a:accent3>
+      <a:accent4><a:srgbClr val="22C55E"/></a:accent4>
+      <a:accent5><a:srgbClr val="475569"/></a:accent5>
+      <a:accent6><a:srgbClr val="CBD5E1"/></a:accent6>
+      <a:hlink><a:srgbClr val="2563EB"/></a:hlink>
+      <a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink>
+    </a:clrScheme>
+    <a:fontScheme name="Office">
+      <a:majorFont><a:latin typeface="Cambria"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
+      <a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>
+    </a:fontScheme>
+    <a:fmtScheme name="Office">
+      <a:fillStyleLst>
+        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+        <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="50000"/><a:satMod val="300000"/></a:schemeClr></a:gs><a:gs pos="35000"><a:schemeClr val="phClr"><a:tint val="37000"/><a:satMod val="300000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="15000"/><a:satMod val="350000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="16200000" scaled="1"/></a:gradFill>
+        <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="100000"/><a:shade val="100000"/><a:satMod val="130000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="50000"/><a:shade val="100000"/><a:satMod val="350000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="16200000" scaled="0"/></a:gradFill>
+      </a:fillStyleLst>
+      <a:lnStyleLst>
+        <a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"><a:shade val="95000"/><a:satMod val="105000"/></a:schemeClr></a:solidFill><a:prstDash val="solid"/></a:ln>
+        <a:ln w="25400" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>
+        <a:ln w="38100" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>
+      </a:lnStyleLst>
+      <a:effectStyleLst>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="40000" dist="20000" dir="5400000" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="38000"/></a:srgbClr></a:outerShdw></a:effectLst></a:effectStyle>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr></a:outerShdw></a:effectLst></a:effectStyle>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="40000" dist="23000" dir="5400000" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr></a:outerShdw></a:effectLst></a:effectStyle>
+      </a:effectStyleLst>
+      <a:bgFillStyleLst>
+        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+        <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="40000"/><a:satMod val="350000"/></a:schemeClr></a:gs><a:gs pos="40000"><a:schemeClr val="phClr"><a:tint val="45000"/><a:shade val="99000"/><a:satMod val="350000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="20000"/><a:satMod val="255000"/></a:schemeClr></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="-80000" r="50000" b="180000"/></a:path></a:gradFill>
+        <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="80000"/><a:satMod val="300000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="30000"/><a:satMod val="200000"/></a:schemeClr></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>
+      </a:bgFillStyleLst>
+    </a:fmtScheme>
+  </a:themeElements>
+  <a:objectDefaults/>
+  <a:extraClrSchemeLst/>
+</a:theme>`;
+
+const THEME = {
+  light1: 0,
+  dark1: 1,
+  light2: 2,
+  dark2: 3,
+  accent1: 4,
+  accent2: 5,
+} as const;
+
+type ThemeColor = Partial<ExcelJS.Color> & { tint?: number };
+type AccentVariant = 'base' | 'lighter80' | 'lighter60' | 'lighter40' | 'darker25' | 'darker50';
+
+const ACCENT_TINT = {
+  base: undefined,
+  lighter80: 0.7999816888943144,
+  lighter60: 0.5999938962981048,
+  lighter40: 0.3999755851924192,
+  darker25: -0.249977111117893,
+  darker50: -0.499984740745262,
+} as const;
+
+function themeColor(theme: number, tint?: number): ThemeColor {
+  return tint === undefined ? { theme } : { theme, tint };
+}
+
+function solidFill(color: Partial<ExcelJS.Color>): ExcelJS.FillPattern {
+  return { type: 'pattern', pattern: 'solid', fgColor: color };
+}
+
+function accentColor(accent: 1 | 2, variant: AccentVariant = 'base'): ThemeColor {
+  return themeColor(accent === 1 ? THEME.accent1 : THEME.accent2, ACCENT_TINT[variant]);
+}
+
+function accentFill(accent: 1 | 2, variant: AccentVariant = 'base'): ExcelJS.FillPattern {
+  return solidFill(accentColor(accent, variant));
+}
+
+function themeFillForArgb(argb: string): ExcelJS.FillPattern | null {
+  switch (argb) {
+    case 'FF64748B':
+      return accentFill(1);
+    case 'FF94A3B8':
+      return accentFill(1, 'lighter40');
+    case 'FFCBD5E1':
+      return accentFill(1, 'lighter80');
+    case 'FF475569':
+      return accentFill(1, 'darker25');
+    case 'FF6B7280':
+      return accentFill(1, 'darker50');
+    case 'FF2563EB':
+      return accentFill(2);
+    case 'FF93C5FD':
+      return accentFill(2, 'lighter60');
+    default:
+      return null;
+  }
+}
+
+function boxBorder(style: ExcelJS.BorderStyle, color: Partial<ExcelJS.Color>): Partial<ExcelJS.Borders> {
+  return {
+    top: { style, color },
+    left: { style, color },
+    bottom: { style, color },
+    right: { style, color },
+  };
+}
+
+function cloneStyle(style: Partial<ExcelJS.Style>): Partial<ExcelJS.Style> {
+  return {
+    ...style,
+    font: style.font ? { ...style.font } : undefined,
+    alignment: style.alignment ? { ...style.alignment } : undefined,
+    border: style.border
+      ? {
+          top: style.border.top ? { ...style.border.top } : undefined,
+          left: style.border.left ? { ...style.border.left } : undefined,
+          bottom: style.border.bottom ? { ...style.border.bottom } : undefined,
+          right: style.border.right ? { ...style.border.right } : undefined,
+        }
+      : undefined,
+    fill: style.fill
+      ? {
+          ...style.fill,
+          fgColor: 'fgColor' in style.fill && style.fill.fgColor ? { ...style.fill.fgColor } : undefined,
+          bgColor: 'bgColor' in style.fill && style.fill.bgColor ? { ...style.fill.bgColor } : undefined,
+        } as ExcelJS.Fill
+      : undefined,
+  };
+}
+
+function mergeStyle(base: Partial<ExcelJS.Style>, extra: Partial<ExcelJS.Style>): Partial<ExcelJS.Style> {
+  return {
+    ...cloneStyle(base),
+    ...cloneStyle(extra),
+  };
+}
+
+function createWorkbookStyles() {
+  const textPrimary = themeColor(THEME.dark1);
+  const sheetBase = themeColor(THEME.light1);
+  const gridBorder = { argb: GRID_BORDER };
+  const monthBorder = accentColor(1);
+  const weekBorder = { argb: WEEK_BORDER };
+  const separatorBorder = { argb: GROUP_SEPARATOR_BORDER };
+
+  const alignLeft: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'left', wrapText: true };
+  const alignCenter: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'center', wrapText: true };
+  const alignHeaderLeft: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'left', wrapText: false };
+  const alignHeaderCenter: Partial<ExcelJS.Alignment> = { vertical: 'middle', horizontal: 'center' };
+
+  const borderGrid = boxBorder('thin', gridBorder);
+  const baseHeaderFont: Partial<ExcelJS.Font> = { bold: true, color: textPrimary };
+  const headerFill = solidFill(sheetBase);
+  const headerLevel2Fill = accentFill(1, 'lighter80');
+  const headerLevel3Fill = accentFill(1, 'lighter60');
+  const timelineBaseFill = solidFill(sheetBase);
+
+  const parentTasklistPalette = [
+    accentFill(1, 'lighter40'),
+    accentFill(1),
+    accentFill(1, 'lighter80'),
+  ] as const;
+  const parentTimelinePalette = [
+    accentFill(1, 'darker50'),
+    accentFill(1, 'darker25'),
+    accentFill(1, 'lighter40'),
+  ] as const;
+  const taskTimelinePalette = {
+    default: accentFill(2, 'lighter60'),
+    strong: accentFill(2),
+  } as const;
+
+  return {
+    colors: {
+      gridBorder,
+      monthBorder,
+      weekBorder,
+      separatorBorder,
+      textPrimary,
+      weekendHeader: { argb: WEEKEND_HEADER_FONT },
+      today: { argb: TODAY_FILL },
+      todayFont: themeColor(THEME.light1),
+    },
+    alignments: {
+      left: alignLeft,
+      center: alignCenter,
+      headerLeft: alignHeaderLeft,
+      headerCenter: alignHeaderCenter,
+    },
+    styles: {
+      headerStatic: { fill: headerFill, font: baseHeaderFont, alignment: alignHeaderCenter },
+      headerTimeline: { fill: headerLevel3Fill, font: baseHeaderFont, alignment: alignHeaderCenter, border: borderGrid },
+      headerTimelineLevel2: { fill: headerLevel2Fill, font: baseHeaderFont, alignment: alignHeaderCenter, border: borderGrid },
+      title: {
+        font: { bold: true, size: 12, color: textPrimary },
+        alignment: { vertical: 'middle', horizontal: 'left', wrapText: false } as Partial<ExcelJS.Alignment>,
+      },
+      emptyState: { fill: solidFill(themeColor(THEME.light2)), border: borderGrid },
+      timelineBase: { fill: timelineBaseFill, border: borderGrid, alignment: alignCenter },
+      parentTasklist: parentTasklistPalette,
+      parentTimeline: parentTimelinePalette,
+      taskTimeline: taskTimelinePalette,
+    },
+  };
+}
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -213,14 +426,14 @@ function baseAlignment(horizontal: ExcelJS.Alignment['horizontal'] = 'left'): Pa
 
 function styleHeaderRow(row: ExcelJS.Row): void {
   row.eachCell((cell) => {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
-    cell.font = { bold: true, color: { argb: HEADER_FONT } };
+    cell.fill = solidFill(themeColor(THEME.light1));
+    cell.font = { bold: true, color: themeColor(THEME.dark1) };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
   });
 }
 
 function styleTimelineCell(cell: ExcelJS.Cell, fillColor: string): void {
-  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } };
+  cell.fill = solidFill(fillColor.startsWith('FF') ? { argb: fillColor } : { argb: fillColor });
   applyCellBorder(cell);
 }
 
@@ -243,12 +456,12 @@ function applyTimelineSeparator(
     ? { style: 'medium' as const, color: { argb: TODAY_BORDER } }
     : !verticalLines
       ? kind === 'month'
-        ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
+        ? { style: 'medium' as const, color: themeColor(THEME.accent1) }
         : kind === 'week'
           ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
           : undefined
       : kind === 'month'
-        ? { style: 'medium' as const, color: { argb: MONTH_BORDER } }
+        ? { style: 'medium' as const, color: themeColor(THEME.accent1) }
         : kind === 'week'
           ? { style: 'thin' as const, color: { argb: WEEK_BORDER } }
           : { style: 'thin' as const, color: { argb: GRID_BORDER } };
@@ -388,10 +601,12 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
 
 export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
+  (workbook as ExcelJS.Workbook & { _themes?: Record<string, string> })._themes = { theme1: GETGANTT_THEME_XML };
   workbook.creator = 'GetGantt';
   const exportDate = new Date();
   const todayIso = toIsoDate(exportDate);
   workbook.created = exportDate;
+  const workbookStyles = createWorkbookStyles();
 
   const sheet = workbook.addWorksheet('Gantt', {
     views: [{ state: 'frozen', xSplit: STATIC_COLUMN_COUNT, ySplit: HEADER_ROW_COUNT, showGridLines: false }],
@@ -453,16 +668,16 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
   sheet.addRow(['№', 'Задача', 'Начало', 'Оконч.', 'Длит.', '%', 'Связи', ...timelineDates.map((value) => formatDayNumber(value))]);
 
   const titleRow = sheet.getRow(TITLE_ROW_INDEX);
-  titleRow.getCell(1).font = { bold: true, size: 12, color: { argb: HEADER_FONT } };
-  titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left', wrapText: false };
+  titleRow.getCell(1).style = cloneStyle(workbookStyles.styles.title);
 
   for (let rowIndex = MONTH_ROW_INDEX; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
     styleHeaderRow(sheet.getRow(rowIndex));
     for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
       const cell = sheet.getRow(rowIndex).getCell(columnIndex);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
-      cell.font = { bold: true, color: { argb: HEADER_FONT } };
-      cell.alignment = { vertical: 'middle', horizontal: rowIndex === HEADER_LABEL_ROW_INDEX ? 'center' : 'left' };
+      cell.style = mergeStyle(
+        rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerStatic,
+        { alignment: rowIndex === HEADER_LABEL_ROW_INDEX ? workbookStyles.alignments.headerCenter : workbookStyles.alignments.headerLeft },
+      );
     }
 
     for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
@@ -471,24 +686,23 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
       const isToday = timelineDate === todayIso;
       const separatorKind = separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day';
       const headerSeparatorKind = rowIndex === MONTH_ROW_INDEX && separatorKind === 'week' ? 'day' : separatorKind;
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } };
+      cell.style = cloneStyle(
+        rowIndex === MONTH_ROW_INDEX ? workbookStyles.styles.headerTimelineLevel2 : workbookStyles.styles.headerTimeline,
+      );
       cell.font = {
         bold: true,
-        color: {
-          argb: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
-            ? TODAY_FONT
-            : rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
-              ? WEEKEND_HEADER_FONT
-              : HEADER_FONT,
-        },
+        color: rowIndex === HEADER_LABEL_ROW_INDEX && isToday
+          ? workbookStyles.colors.todayFont
+          : rowIndex === HEADER_LABEL_ROW_INDEX && timelineDate && nonWorkingDates.has(timelineDate)
+            ? workbookStyles.colors.weekendHeader
+            : workbookStyles.colors.textPrimary,
       };
       if (rowIndex === HEADER_LABEL_ROW_INDEX && isToday) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TODAY_FILL } };
+        cell.fill = solidFill(workbookStyles.colors.today);
       }
       cell.alignment = rowIndex === MONTH_ROW_INDEX
-        ? { vertical: 'middle', horizontal: 'left', wrapText: false }
-        : { vertical: 'middle', horizontal: 'center' };
-      applyCellBorder(cell);
+        ? workbookStyles.alignments.headerLeft
+        : workbookStyles.alignments.headerCenter;
       applyTimelineSeparator(cell, headerSeparatorKind, {
         verticalLines: false,
         todayLine: isToday,
@@ -500,11 +714,12 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     const emptyRow = sheet.addRow(['', 'Нет задач']);
     for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
       const cell = emptyRow.getCell(columnIndex);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EMPTY_STATE_FILL } };
-      cell.alignment = baseAlignment(columnIndex === 2 ? 'center' : 'left');
-      applyCellBorder(cell);
+      cell.style = mergeStyle(
+        workbookStyles.styles.emptyState,
+        { alignment: baseAlignment(columnIndex === 2 ? 'center' : 'left') },
+      );
     }
-    emptyRow.getCell(2).font = { italic: true, color: { argb: HEADER_FONT } };
+    emptyRow.getCell(2).font = { italic: true, color: workbookStyles.colors.textPrimary };
     setRowHeightFromContent(emptyRow, 'Нет задач', STATIC_COLUMN_WIDTHS[1], 0);
     sheet.pageSetup.printArea = `A1:${columnNumberToName(Math.max(STATIC_COLUMN_COUNT, totalColumnCount))}${emptyRow.number}`;
     return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -534,7 +749,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     row.getCell(7).alignment = { vertical: 'middle', horizontal: 'left', wrapText: false };
 
     if (rowData.isParent) {
-      row.getCell(2).font = { bold: true, color: { argb: HEADER_FONT } };
+      row.getCell(2).font = { bold: true, color: workbookStyles.colors.textPrimary };
     }
 
     row.getCell(3).numFmt = 'dd.mm.yyyy';
@@ -546,29 +761,41 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
 
     for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
       const cell = row.getCell(columnIndex);
-      applyCellBorder(cell);
       cell.alignment = columnIndex > STATIC_COLUMN_COUNT ? baseAlignment('center') : cell.alignment ?? baseAlignment('left');
       if (columnIndex > STATIC_COLUMN_COUNT) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRID_FILL } };
+        cell.style = mergeStyle(workbookStyles.styles.timelineBase, { alignment: baseAlignment('center') });
         applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
           verticalLines: true,
           todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
         });
+      } else {
+        applyCellBorder(cell);
       }
     }
 
     if (rowData.isParent) {
       for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
-        styleTimelineCell(row.getCell(columnIndex), parentTasklistFill(rowData.depth));
+        const paletteIndex = Math.min(rowData.depth, workbookStyles.styles.parentTasklist.length - 1);
+        const cell = row.getCell(columnIndex);
+        cell.border = boxBorder('thin', workbookStyles.colors.gridBorder);
+        cell.fill = workbookStyles.styles.parentTasklist[paletteIndex];
       }
     }
 
     const startColumn = timelineIndexByDate.get(rowData.task.startDate);
     const endColumn = timelineIndexByDate.get(rowData.task.endDate);
     if (startColumn && endColumn) {
-      const fillColor = rowData.isParent ? parentTimelineFill(rowData.depth) : normalizeColor(rowData.task.color);
+      const normalizedTaskColor = normalizeColor(rowData.task.color);
+      const fillColor = rowData.isParent
+        ? workbookStyles.styles.parentTimeline[Math.min(rowData.depth, workbookStyles.styles.parentTimeline.length - 1)]
+        : normalizedTaskColor === DEFAULT_TASK_FILL
+          ? workbookStyles.styles.taskTimeline.default
+          : (themeFillForArgb(normalizedTaskColor) ?? solidFill({ argb: normalizedTaskColor }));
       for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
-        styleTimelineCell(row.getCell(columnIndex), fillColor);
+        row.getCell(columnIndex).style = mergeStyle(
+          workbookStyles.styles.timelineBase,
+          { fill: fillColor, alignment: baseAlignment('center') },
+        );
         applyTimelineSeparator(row.getCell(columnIndex), separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day', {
           verticalLines: true,
           todayLine: timelineDates[columnIndex - STATIC_COLUMN_COUNT - 1] === todayIso,
