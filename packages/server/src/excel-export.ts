@@ -51,7 +51,7 @@ const MONTH_BORDER = 'FF64748B';
 const PARENT_FILL = 'FFCBD5E1';
 const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [8, 42, 12, 12, 12, 9, 20];
+const STATIC_COLUMN_WIDTHS = [8, 42, 12, 12, 8, 8, 12];
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
