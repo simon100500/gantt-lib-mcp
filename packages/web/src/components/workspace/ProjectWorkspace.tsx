@@ -157,15 +157,20 @@ export function ProjectWorkspace({
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
     ? historyViewer.snapshot.tasks
     : tasks;
   const previewRendering = previewState === 'rendering';
   const previewFailed = previewState === 'failed';
-  const effectiveReadOnly = readOnly || previewRendering || previewFailed || historyViewer.mode === 'preview';
+  const effectiveReadOnly = readOnly || previewRendering || previewFailed || previewModeActive;
   const historyPanelDisabled = readOnly || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
+  const effectiveChatDisabled = chatDisabled || previewModeActive;
+  const effectiveChatDisabledReason = previewModeActive
+    ? 'Просмотр версии доступен только для чтения. Вернитесь к текущей версии, чтобы продолжить.'
+    : chatDisabledReason;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
     if (!projectId || effectiveReadOnly) return;
@@ -237,6 +242,10 @@ export function ProjectWorkspace({
 
     previousGanttDayModeRef.current = ganttDayMode;
 
+    if (previewModeActive) {
+      return;
+    }
+
     if (tasks.length === 0) {
       return;
     }
@@ -249,7 +258,7 @@ export function ProjectWorkspace({
     }
 
     void batchUpdate.handleTasksChange(reflowedTasks);
-  }, [batchUpdate, effectiveReadOnly, ganttDayMode, setTasks, tasks, weekendPredicate]);
+  }, [batchUpdate, effectiveReadOnly, ganttDayMode, previewModeActive, setTasks, tasks, weekendPredicate]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
     if (!onSplitTask || effectiveReadOnly || chatDisabled) {
@@ -284,6 +293,7 @@ export function ProjectWorkspace({
   );
 
   useEffect(() => {
+    // Block Ctrl+Z / Ctrl+Shift+Z history shortcuts while preview mode is active.
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!accessToken || effectiveReadOnly || event.defaultPrevented || !event.ctrlKey) {
         return;
@@ -335,6 +345,8 @@ export function ProjectWorkspace({
           ganttDayMode={ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
           readOnly={readOnly}
+          previewMode={previewModeActive}
+          onReturnToCurrentVersion={returnToCurrentVersion}
         />
       </div>
 
@@ -346,7 +358,7 @@ export function ProjectWorkspace({
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-            {historyViewer.mode === 'preview' && (
+            {previewModeActive && (
               <div className="flex items-center justify-between gap-3 border-b border-sky-100 bg-sky-50 px-4 py-2.5">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-sky-900">Просмотр версии</p>
@@ -354,7 +366,7 @@ export function ProjectWorkspace({
                 </div>
                 <button
                   type="button"
-                  onClick={() => returnToCurrentVersion()}
+                  onClick={returnToCurrentVersion}
                   className="rounded-md border border-sky-200 bg-white px-3 py-1.5 text-xs font-medium text-sky-800 transition hover:bg-sky-100"
                 >
                   Вернуться к текущей версии
@@ -496,10 +508,10 @@ export function ProjectWorkspace({
               messages={messages}
               streaming={streaming}
               onSend={onSend}
-              disabled={aiThinking || chatDisabled}
+              disabled={aiThinking || effectiveChatDisabled}
               connected={displayConnected}
               usage={chatUsage}
-              disabledReason={aiThinking ? null : chatDisabledReason}
+              disabledReason={aiThinking ? null : effectiveChatDisabledReason}
               loading={aiThinking}
               onClose={onCloseChat}
               onShowChart={onCloseChat}

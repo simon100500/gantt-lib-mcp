@@ -45,6 +45,8 @@ interface ToolbarProps {
   ganttDayMode?: 'business' | 'calendar';
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   readOnly?: boolean;
+  previewMode?: boolean;
+  onReturnToCurrentVersion?: () => void;
 }
 
 export function Toolbar({
@@ -65,6 +67,8 @@ export function Toolbar({
   ganttDayMode = 'business',
   onGanttDayModeChange,
   readOnly = false,
+  previewMode = false,
+  onReturnToCurrentVersion,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
@@ -94,11 +98,12 @@ export function Toolbar({
 
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
-  const effectiveDisableTaskDrag = readOnly || disableTaskDrag;
-  const canChangeGanttDayMode = !readOnly && Boolean(onGanttDayModeChange);
+  const mutationLocked = readOnly || previewMode;
+  const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
+  const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
 
   const handleToggleDragLock = () => {
-    if (readOnly) {
+    if (mutationLocked) {
       return;
     }
 
@@ -152,6 +157,20 @@ export function Toolbar({
 
   return (
     <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
+      {previewMode && onReturnToCurrentVersion && (
+        <div className="mr-1 inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5">
+          <span className="text-xs font-semibold text-sky-900">Просмотр версии</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onReturnToCurrentVersion}
+            className="h-7 border-sky-200 bg-white px-2 text-[11px] text-sky-800 hover:bg-sky-100"
+          >
+            Вернуться к текущей версии
+          </Button>
+        </div>
+      )}
+
       <div className="inline-flex rounded-md">
         <button
           type="button"
@@ -271,14 +290,22 @@ export function Toolbar({
         variant="ghost"
         onClick={handleToggleDragLock}
         aria-pressed={effectiveDisableTaskDrag}
-        disabled={readOnly}
+        disabled={mutationLocked}
         className={cn(
           actionButtonClassName,
           effectiveDisableTaskDrag && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-          readOnly && 'cursor-not-allowed opacity-60',
+          mutationLocked && 'cursor-not-allowed opacity-60',
           'hidden lg:flex',
         )}
-        title={readOnly ? 'Проект в архиве доступен только для чтения' : disableTaskDrag ? 'Разблокировать перемещение задач' : 'Заблокировать перемещение задач'}
+        title={
+          previewMode
+            ? 'Просмотр версии доступен только для чтения'
+            : readOnly
+              ? 'Проект в архиве доступен только для чтения'
+              : disableTaskDrag
+                ? 'Разблокировать перемещение задач'
+                : 'Заблокировать перемещение задач'
+        }
       >
         {effectiveDisableTaskDrag ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
       </Button>
@@ -425,11 +452,13 @@ export function Toolbar({
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleToggleDragLock}
-            disabled={readOnly}
+            disabled={mutationLocked}
             className="flex cursor-pointer items-center gap-2"
           >
             {effectiveDisableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
-            <span className="text-sm">{readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}</span>
+            <span className="text-sm">
+              {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
+            </span>
           </DropdownMenuItem>
           <FilterPopup>
             <DropdownMenuItem
