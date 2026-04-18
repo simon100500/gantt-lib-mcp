@@ -11,11 +11,13 @@ import type {
   RestoreHistoryGroupResponse,
   Task,
   TaskDependency,
+  TaskType,
 } from '../types.js';
 import { applyProjectCommandToSnapshot } from './project-command-apply.js';
 import { getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 import { commandService, type CommandService } from './command.service.js';
 import { dateToDomain } from './types.js';
+import type { PrismaClient } from '../prisma.js';
 
 const TECHNICAL_RESTORE_ORIGIN: MutationGroupOrigin = 'undo';
 
@@ -112,12 +114,16 @@ type HistoryScheduleOptions = {
   weekendPredicate?: (date: Date) => boolean;
 };
 
+type RawProjectEventRow = {
+  groupId?: string | null;
+  ordinal?: number | null;
+  command: unknown;
+  inverseCommand?: unknown;
+};
+
 type HistoryPrismaClient = {
   project: {
-    findUnique(args: {
-      where: { id: string };
-      select: { version: true };
-    }): Promise<{ version: number } | null>;
+    findUnique(args: unknown): Promise<unknown>;
   };
   task: {
     findMany(args: {
@@ -148,6 +154,12 @@ type HistoryPrismaClient = {
       orderBy?: { ordinal: 'asc' | 'desc' };
     }): Promise<DbProjectEvent[]>;
   };
+  workCalendar: {
+    findUnique(args: unknown): Promise<unknown>;
+  };
+  calendarDay: {
+    findMany(args: unknown): Promise<Array<{ date: Date | string; kind: string }>>;
+  };
 };
 
 type HistoryServiceDeps = {
@@ -167,6 +179,85 @@ function toActorType(value: DbMutationGroup['actorType']): ActorType {
   return value === 'import_actor' ? 'import' : value;
 }
 
+function toTaskType(value: string | null | undefined): TaskType {
+  return value === 'milestone' ? 'milestone' : 'task';
+}
+
+function toDependencyType(value: string): DependencyType {
+  switch (value) {
+    case 'FS':
+    case 'SS':
+    case 'FF':
+    case 'SF':
+      return value;
+    default:
+      throw new HistoryValidationError(`Unsupported dependency type "${value}" in history snapshot`);
+  }
+}
+
+function toLag(value: number | null | undefined): number {
+  return value ?? 0;
+}
+
+function isProjectCommand(value: unknown): value is ProjectCommand {
+  return typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string';
+}
+
+function normalizeProjectEvent(row: RawProjectEventRow): DbProjectEvent {
+  if (!isProjectCommand(row.command)) {
+    throw new HistoryValidationError('History event command is missing or invalid');
+  }
+
+  if (row.inverseCommand !== undefined && row.inverseCommand !== null && !isProjectCommand(row.inverseCommand)) {
+    throw new HistoryValidationError('History event inverseCommand is invalid');
+  }
+
+  return {
+    groupId: row.groupId,
+    ordinal: row.ordinal,
+    command: row.command,
+    inverseCommand: row.inverseCommand ?? null,
+  };
+}
+
+function readProjectVersion(row: unknown): number | null {
+  if (typeof row !== 'object' || row === null || !('version' in row)) {
+    return null;
+  }
+
+  const { version } = row as { version?: unknown };
+  return typeof version === 'number' ? version : null;
+}
+
+function adaptPrismaClient(prisma: PrismaClient): HistoryPrismaClient {
+  return {
+    project: {
+      findUnique: (args) => prisma.project.findUnique(args as never),
+    },
+    task: {
+      findMany: async (args) => prisma.task.findMany(args),
+    },
+    dependency: {
+      findMany: async (args) => prisma.dependency.findMany(args),
+    },
+    mutationGroup: {
+      findMany: async (args) => prisma.mutationGroup.findMany(args),
+    },
+    projectEvent: {
+      findMany: async (args) => {
+        const rows = await prisma.projectEvent.findMany(args);
+        return rows.map((row) => normalizeProjectEvent(row));
+      },
+    },
+    workCalendar: {
+      findUnique: (args) => prisma.workCalendar.findUnique(args as never),
+    },
+    calendarDay: {
+      findMany: async (args) => prisma.calendarDay.findMany(args as never),
+    },
+  };
+}
+
 async function loadTaskSnapshot(projectId: string, prismaClient: HistoryPrismaClient): Promise<Task[]> {
   const tasks = await prismaClient.task.findMany({
     where: { projectId },
@@ -179,15 +270,15 @@ async function loadTaskSnapshot(projectId: string, prismaClient: HistoryPrismaCl
     name: task.name,
     startDate: dateToDomain(task.startDate),
     endDate: dateToDomain(task.endDate),
-    type: task.type ?? 'task',
+    type: toTaskType(task.type),
     color: task.color ?? undefined,
     parentId: task.parentId ?? undefined,
     progress: task.progress,
     sortOrder: task.sortOrder,
     dependencies: (task.dependencies ?? []).map((dependency): TaskDependency => ({
       taskId: dependency.depTaskId,
-      type: dependency.type as DependencyType,
-      lag: dependency.lag,
+      type: toDependencyType(dependency.type),
+      lag: dependency.lag ?? undefined,
     })),
   }));
 }
@@ -205,8 +296,8 @@ async function loadDependencyRows(
     id: row.id,
     taskId: row.taskId,
     depTaskId: row.depTaskId,
-    type: row.type as DependencyType,
-    lag: row.lag,
+    type: toDependencyType(row.type),
+    lag: toLag(row.lag),
   }));
 }
 
@@ -227,12 +318,13 @@ export class HistoryService {
   constructor(deps: HistoryServiceDeps = {}) {
     this._prisma = deps.prisma;
     this.commandService = deps.commandService ?? commandService;
-    this.getScheduleOptions = deps.getScheduleOptions ?? getProjectScheduleOptionsForProject;
+    this.getScheduleOptions = deps.getScheduleOptions
+      ?? ((projectId, prismaClient) => getProjectScheduleOptionsForProject(prismaClient, projectId));
   }
 
   private get prisma(): HistoryPrismaClient {
     if (!this._prisma) {
-      this._prisma = getPrisma();
+      this._prisma = adaptPrismaClient(getPrisma());
     }
 
     return this._prisma;
@@ -244,7 +336,7 @@ export class HistoryService {
       select: { version: true },
     });
 
-    return project?.version ?? -1;
+    return readProjectVersion(project) ?? -1;
   }
 
   private async getVisibleGroups(projectId: string): Promise<DbMutationGroup[]> {
@@ -256,7 +348,7 @@ export class HistoryService {
       orderBy: [{ newVersion: 'desc' }, { createdAt: 'desc' }],
     });
 
-    return (groups as DbMutationGroup[]).filter(
+    return groups.filter(
       (group) => group.newVersion !== null && group.origin !== 'undo' && group.origin !== 'redo',
     );
   }
@@ -322,7 +414,7 @@ export class HistoryService {
         });
 
     const commandCountByGroupId = new Map<string, number>();
-    for (const event of events as DbProjectEvent[]) {
+    for (const event of events) {
       if (!event.groupId) {
         continue;
       }

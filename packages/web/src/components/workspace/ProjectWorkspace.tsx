@@ -80,6 +80,15 @@ function formatTaskCount(count: number) {
   return `${count} задач`;
 }
 
+function formatHistoryVersionTimestamp(value: string): string {
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -291,6 +300,12 @@ export function ProjectWorkspace({
     () => historyItems.find((item) => item.canRestore) ?? null,
     [historyItems],
   );
+  const previewHistoryItem = useMemo(
+    () => historyViewer.mode === 'preview'
+      ? historyItems.find((item) => item.id === historyViewer.groupId) ?? null
+      : null,
+    [historyItems, historyViewer],
+  );
 
   useEffect(() => {
     // Block Ctrl+Z / Ctrl+Shift+Z history shortcuts while preview mode is active.
@@ -346,33 +361,17 @@ export function ProjectWorkspace({
           onGanttDayModeChange={onGanttDayModeChange}
           readOnly={readOnly}
           previewMode={previewModeActive}
-          onReturnToCurrentVersion={returnToCurrentVersion}
         />
       </div>
 
       {/* Chart and Chat side by side */}
-      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3 md:px-4 xl:flex-row xl:overflow-hidden">
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 xl:flex-row xl:overflow-hidden">
         {/* Chart card - hide on mobile when chat is open */}
         <div className={cn(
           "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-            {previewModeActive && (
-              <div className="flex items-center justify-between gap-3 border-b border-sky-100 bg-sky-50 px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-sky-900">Просмотр версии</p>
-                  <p className="text-xs text-sky-700">Редактирование отключено, пока открыт исторический снимок.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={returnToCurrentVersion}
-                  className="rounded-md border border-sky-200 bg-white px-3 py-1.5 text-xs font-medium text-sky-800 transition hover:bg-sky-100"
-                >
-                  Вернуться к текущей версии
-                </button>
-              </div>
-            )}
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
@@ -423,6 +422,12 @@ export function ProjectWorkspace({
                 <span className="font-mono text-[11px] text-slate-400">
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
+
+                {previewHistoryItem && (
+                  <span className="font-mono text-[11px] text-amber-600">
+                    Версия от {formatHistoryVersionTimestamp(previewHistoryItem.createdAt)}
+                  </span>
+                )}
 
                 {(previewRendering || previewFailed) && (
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">

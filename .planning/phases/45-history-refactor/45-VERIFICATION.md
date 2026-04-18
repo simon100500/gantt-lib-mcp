@@ -1,112 +1,119 @@
 ---
 phase: 45-history-refactor
-plan: 05
-verified: 2026-04-18T00:00:00Z
-status: human_needed
-score: 9/9 success criteria verified in code and test review
-human_verification:
-  - test: "Version preview and restore flow"
-    expected: "Users can open the version list, preview an older version, return to current, restore an older version, and see preview mode block edits."
-    why_human: "This requires runtime UI confirmation in the browser, including visible labels and read-only behavior."
+verified: 2026-04-18T13:30:29+03:00
+status: gaps_found
+score: 5/6 must-haves verified
+gaps:
+  - truth: "The version-oriented history path builds cleanly across affected backend packages"
+    status: failed
+    reason: "The core history service implementation in packages/mcp is present and behaviorally tested, but it does not type-check, which blocks MCP/server build integrity."
+    artifacts:
+      - path: "packages/mcp/src/services/history.service.ts"
+        issue: "TypeScript errors at loadTaskSnapshot/loadDependencyRows/getScheduleOptions/getPrisma boundaries break MCP compilation."
+    missing:
+      - "Narrow `type` to `TaskType` and normalize dependency `lag` to a required number in snapshot loaders."
+      - "Fix the default `getProjectScheduleOptionsForProject` adapter signature used by `HistoryService`."
+      - "Align `HistoryPrismaClient` typing with the real Prisma client or introduce a safe adapter so `getPrisma()` satisfies the contract."
+      - "Re-run `npx tsc -p packages/mcp/tsconfig.json --pretty false` and then `npm run build -w packages/server` successfully."
 ---
 
 # Phase 45: history-refactor Verification Report
 
-**Phase Goal:** Перевести history UX с публичного undo/redo на version preview + version restore, сохранив append-only authoritative restore path и изоляцию preview state.
-**Verified:** 2026-04-18
-**Status:** human_needed
+**Phase Goal:** Refactor history around version preview and version restore, replacing public undo/redo semantics with a version-oriented backend, API, and UI contract.
+**Verified:** 2026-04-18T13:30:29+03:00
+**Status:** gaps_found
+**Re-verification:** No — fresh verification because the previous report had no `gaps:` section
 
-## Success Criteria Traceability
+## Goal Achievement
 
-### 1. `GET /api/history` returns a user-visible version timeline
+### Observable Truths
 
-Status: `VERIFIED`
+| # | Truth | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Preview and restore share one backend rollback-tail model, with preview side-effect-free and restore authoritative | ✓ VERIFIED | [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L274), [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L348), [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L375), [project-command-apply.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/project-command-apply.ts#L379), [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L362) |
+| 2 | The public HTTP surface describes versions, snapshots, and restore actions instead of public undo/redo mechanics | ✓ VERIFIED | [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L51), [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L84), [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L117), [history-routes.test.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.test.ts#L8) |
+| 3 | The frontend fetches authoritative preview snapshots and restore responses from the server and keeps preview isolated from editing state | ✓ VERIFIED | [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L65), [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L106), [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L124), [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L154), [useHistoryViewerStore.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/stores/useHistoryViewerStore.ts#L8), [useProjectStore.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/stores/useProjectStore.ts#L20), [useTasks.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useTasks.ts#L45) |
+| 4 | The workspace behaves like a version browser, with explicit preview/restore actions and read-only preview mode | ✓ VERIFIED | [HistoryPanel.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/HistoryPanel.tsx#L137), [HistoryPanel.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/HistoryPanel.tsx#L246), [HistoryPanel.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/HistoryPanel.tsx#L260), [ProjectWorkspace.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/workspace/ProjectWorkspace.tsx#L160), [ProjectWorkspace.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/workspace/ProjectWorkspace.tsx#L296), [ProjectWorkspace.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/workspace/ProjectWorkspace.tsx#L364), [Toolbar.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/components/layout/Toolbar.tsx#L160) |
+| 5 | The public history path is cleaned up for version semantics and guarded against `as any` and legacy undo/redo leakage | ✓ VERIFIED | [apiTypes.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/lib/apiTypes.ts#L20), [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L478), [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L485) |
+| 6 | The affected backend packages build cleanly enough for the refactor to be considered complete | ✗ FAILED | `npx tsc -p packages/mcp/tsconfig.json --pretty false` fails on [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L177), [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L204), [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L230), [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L235), [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L238); `npm run build -w packages/server` fails because it builds `packages/mcp` first |
 
-Evidence:
-- Route surface returns version rows from `GET /api/history` in [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L46).
-- Returned fields are version-oriented: `commandCount`, `isCurrent`, `canRestore`, `nextCursor` in [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L63).
-- Route contract tests assert the list endpoint and visible row fields in [history-routes.test.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.test.ts#L30).
+**Score:** 5/6 truths verified
 
-### 2. Clicking a history row previews the selected version
+### Required Artifacts
 
-Status: `VERIFIED`
+| Artifact | Expected | Status | Details |
+| --- | --- | --- | --- |
+| `packages/mcp/src/services/project-command-apply.ts` | Pure typed command application for memory-only preview replay | ✓ VERIFIED | Export exists and is used by history preview; no persistence path inside the helper. |
+| `packages/mcp/src/services/history.service.ts` | Shared version-list, snapshot-preview, and restore domain service | ✗ FAILED | Exists, substantive, and wired, but it currently fails TypeScript compilation at the loader and dependency-typing boundaries. |
+| `packages/mcp/src/types.ts` | Shared history snapshot/restore contracts | ✓ VERIFIED | `HistoryGroupSnapshotResponse` and `RestoreHistoryGroupResponse` exist and match the intended product model. |
+| `packages/server/src/routes/history-routes.ts` | Authenticated version list, snapshot, and restore routes | ✓ VERIFIED | New routes are present and public undo/redo endpoints are absent. |
+| `packages/web/src/lib/apiTypes.ts` | Web-facing version history contracts | ✓ VERIFIED | Version row, snapshot, and restore response types exist with version-oriented fields only. |
+| `packages/web/src/stores/useHistoryViewerStore.ts` | Dedicated history viewer state machine | ✓ VERIFIED | Isolated preview state exists outside the editing store. |
+| `packages/web/src/stores/useProjectStore.ts` | Current editing state without embedded history preview | ✓ VERIFIED | Store remains focused on `confirmed`, `pending`, `dragPreview`, and schedule options. |
+| `packages/web/src/hooks/useProjectHistory.ts` | History list/preview/restore orchestration | ✓ VERIFIED | Fetches list, snapshot, and restore endpoints and updates the correct stores. |
+| `packages/web/src/components/HistoryPanel.tsx` | Version-browser UI with preview and restore actions | ✓ VERIFIED | Version-oriented row actions and current/preview labels are present. |
+| `packages/web/src/components/workspace/ProjectWorkspace.tsx` | Preview-first rendering and edit lockout in history mode | ✓ VERIFIED | Preview snapshot takes priority and mutation surfaces are disabled while previewing. |
+| `.planning/phases/45-history-refactor/45-HUMAN-UAT.md` | Manual verification flows for preview/restore UX | ✓ VERIFIED | Artifact exists and covers open, preview, return, restore, and edit-blocking flows. |
 
-Evidence:
-- The web hook exposes `showVersion(...)` and loads `GET /api/history/:groupId/snapshot` for non-current rows in [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L124).
-- Preview data enters the dedicated history viewer store rather than the confirmed project state in [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L136).
-- Manual flow is documented in [45-HUMAN-UAT.md](/D:/Projects/gantt-lib-mcp/.planning/phases/45-history-refactor/45-HUMAN-UAT.md#L15).
+### Key Link Verification
 
-### 3. Preview snapshot comes from the server
+| From | To | Via | Status | Details |
+| --- | --- | --- | --- | --- |
+| `packages/mcp/src/services/history.service.ts` | `packages/mcp/src/services/project-command-apply.ts` | memory-only inverse-command application for historical preview | WIRED | `getHistorySnapshot()` reduces `inverseCommands` through `applyProjectCommandToSnapshot(...)`. |
+| `packages/mcp/src/services/history.service.ts` | `packages/mcp/src/services/command.service.ts` | persisted restore through authoritative command commits | WIRED | `restoreToGroup()` replays each inverse command through `this.commandService.commitCommand(...)`. |
+| `packages/mcp/src/services/history.service.ts` | `packages/mcp/src/services/projectScheduleOptions.ts` | default schedule-option resolver for preview replay | PARTIAL | Behavior is intended, but the fallback assignment at [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L230) has a signature mismatch that breaks compilation. |
+| `packages/server/src/routes/history-routes.ts` | `packages/mcp/src/services/history.service.ts` | route handlers for list, snapshot, and restore | WIRED | Each public route delegates to `historyService` methods under `authMiddleware`. |
+| `packages/web/src/hooks/useProjectHistory.ts` | `packages/web/src/stores/useHistoryViewerStore.ts` | preview enter/exit orchestration | WIRED | Non-current snapshots call `enterPreview(...)`; current selection and return action call `exitPreview()`. |
+| `packages/web/src/hooks/useTasks.ts` | `packages/web/src/stores/useProjectStore.ts` | visible snapshot derivation for current editing state | WIRED | `deriveVisibleSnapshot(...)` produces `visibleTasks`, which [App.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/App.tsx#L1310) passes into `ProjectWorkspace`. |
+| `packages/web/src/components/workspace/ProjectWorkspace.tsx` | `packages/web/src/stores/useHistoryViewerStore.ts` | preview-first overlay and editing lockout | WIRED | `historyViewer.mode === 'preview'` controls rendered tasks, read-only behavior, and banner state. |
 
-Status: `VERIFIED`
+### Data-Flow Trace (Level 4)
 
-Evidence:
-- `GET /api/history/:groupId/snapshot` delegates to `historyService.getHistorySnapshot(...)` in [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L84).
-- Snapshot responses return `{ groupId, isCurrent, currentVersion, snapshot }` in [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L100).
-- Service tests cover current-version and historical preview snapshots in [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L378).
+| Artifact | Data Variable | Source | Produces Real Data | Status |
+| --- | --- | --- | --- | --- |
+| `packages/mcp/src/services/history.service.ts` | `inverseCommands` | Visible groups + `projectEvent.findMany(...)` tail replay | Yes | ✓ FLOWING |
+| `packages/web/src/hooks/useProjectHistory.ts` | `items` | `GET /api/history` -> `HistoryListResponse` | Yes | ✓ FLOWING |
+| `packages/web/src/hooks/useProjectHistory.ts` | preview snapshot | `GET /api/history/:groupId/snapshot` -> `enterPreview(...)` | Yes | ✓ FLOWING |
+| `packages/web/src/components/workspace/ProjectWorkspace.tsx` | `effectiveTasks` | `historyViewer.snapshot.tasks` or [App.tsx](/D:/Projects/gantt-lib-mcp/packages/web/src/App.tsx#L1227) `visibleTasks` from [useTasks.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useTasks.ts#L45) | Yes | ✓ FLOWING |
 
-### 4. Frontend does not replay inverse commands for preview
+### Behavioral Spot-Checks
 
-Status: `VERIFIED`
+| Behavior | Command | Result | Status |
+| --- | --- | --- | --- |
+| History service preview/restore semantics | `npx tsx --test packages/mcp/src/services/history.service.test.ts` | 8 tests passed, including preview parity, restore parity, and no-`as any` cleanup checks | ✓ PASS |
+| History route contract | `npx tsx --test packages/server/src/routes/history-routes.test.ts` | 4 tests passed, including route registration, auth guards, and version-only endpoints | ✓ PASS |
+| Web package compile/build | `npm run build -w packages/web` | Passed; Vite built production assets successfully | ✓ PASS |
+| MCP package type-check | `npx tsc -p packages/mcp/tsconfig.json --pretty false` | Failed with TS2322 errors in `history.service.ts` at lines 177, 204, 230, 235, 238 | ✗ FAIL |
+| Server package build chain | `npm run build -w packages/server` | Failed because `packages/mcp` does not compile cleanly; transient Prisma lock may also appear on Windows | ✗ FAIL |
 
-Evidence:
-- The frontend only fetches a server snapshot and stores it; it does not replay commands locally in [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L95).
-- Preview-mode semantics are locked by the PRD at [history-versioning-clean-architecture-prd.md](/D:/Projects/gantt-lib-mcp/.planning/reference/history-versioning-clean-architecture-prd.md#L118).
+### Requirements Coverage
 
-### 5. Restore remains distinct from preview
+| Requirement | Source Plan | Description | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| None declared | `45-01` through `45-05` | All phase plans declare `requirements: []` | ✓ SATISFIED | No requirement IDs were claimed in plan frontmatter. |
+| PRD-only | [ROADMAP.md](/D:/Projects/gantt-lib-mcp/.planning/ROADMAP.md#L377) | Phase 45 is tracked against [history-versioning-clean-architecture-prd.md](/D:/Projects/gantt-lib-mcp/.planning/reference/history-versioning-clean-architecture-prd.md) rather than `REQUIREMENTS.md` IDs | ✓ SATISFIED | Roadmap marks Phase 45 requirements as PRD-only. |
+| Orphaned requirement IDs | `REQUIREMENTS.md` | Additional requirement IDs mapped to Phase 45 | ✓ SATISFIED | No `REQUIREMENTS.md` entries map to Phase 45; `HIS-*` remains mapped to Phase 44 only. |
 
-Status: `VERIFIED`
+### Anti-Patterns Found
 
-Evidence:
-- Preview calls `fetchSnapshot(...)`, while restore calls `POST /api/history/:groupId/restore` and updates confirmed state in [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L154).
-- Service tests explicitly compare preview vs restore semantics and assert that restore replays the tail through `commitCommand(...)` in [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L404).
+| File | Line | Pattern | Severity | Impact |
+| --- | --- | --- | --- | --- |
+| [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L177) | 177 | Type mismatch in `Task[]` snapshot loader | 🛑 Blocker | Prevents MCP type-check and blocks phase closure. |
+| [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L204) | 204 | Type mismatch in dependency snapshot loader (`lag` may be undefined) | 🛑 Blocker | Prevents MCP type-check and blocks phase closure. |
+| [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L230) | 230 | Default schedule-option resolver signature mismatch | 🛑 Blocker | Breaks `HistoryService` compilation. |
+| [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L235) | 235 | `getPrisma()` result does not satisfy `HistoryPrismaClient` | 🛑 Blocker | Breaks `HistoryService` compilation and downstream server build. |
 
-### 6. Preview mode is isolated from editing state
+### Human Verification Required
 
-Status: `VERIFIED`
+Manual UI verification is still relevant for preview UX and edit lockout, but it is secondary until the build blocker above is fixed. The existing checklist remains in [45-HUMAN-UAT.md](/D:/Projects/gantt-lib-mcp/.planning/phases/45-history-refactor/45-HUMAN-UAT.md).
 
-Evidence:
-- Preview writes to the history viewer store via `enterPreview(...)`, while restore is the only path that updates `setConfirmed(...)` in [useProjectHistory.ts](/D:/Projects/gantt-lib-mcp/packages/web/src/hooks/useProjectHistory.ts#L136).
-- Human verification flow explicitly checks that editing is blocked during preview in [45-HUMAN-UAT.md](/D:/Projects/gantt-lib-mcp/.planning/phases/45-history-refactor/45-HUMAN-UAT.md#L45).
+### Gaps Summary
 
-### 7. Restore rolls back only the active tail
+The refactor is mostly real: the backend rollback-tail semantics exist, the HTTP contract is version-oriented, the frontend uses server-driven preview/restore with an isolated history viewer store, and the UI presents read-only version browsing instead of public undo/redo controls.
 
-Status: `VERIFIED`
+The phase still fails goal-backward verification because the core backend artifact that anchors the refactor, [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts), does not type-check in the current codebase. That means the version-oriented history path is not in a clean, shippable backend state, and `packages/server` inherits the failure through its dependency on `packages/mcp`. The earlier Prisma `EPERM` is platform noise, but the direct TypeScript compile shows a real phase-local defect that must be fixed before the goal can be considered achieved.
 
-Evidence:
-- `resolveRollbackTail(...)` computes inverse commands only from groups newer than the target version in [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L242).
-- Service tests assert preview/restore parity for the same rollback tail in [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L429).
+---
 
-### 8. Restore uses the authoritative command path
-
-Status: `VERIFIED`
-
-Evidence:
-- `restoreToGroup(...)` replays each inverse command through `this.commandService.commitCommand(...)` in [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L334).
-- Route-level restore is exposed only through `POST /api/history/:groupId/restore` in [history-routes.ts](/D:/Projects/gantt-lib-mcp/packages/server/src/routes/history-routes.ts#L117).
-
-### 9. No `as any` or hidden type workarounds remain on the history path
-
-Status: `VERIFIED`
-
-Evidence:
-- Regression tests assert that `packages/mcp/src/services/history.service.ts`, `packages/web/src/hooks/useProjectHistory.ts`, and `packages/web/src/lib/apiTypes.ts` contain no `as any` shortcuts in [history.service.test.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.test.ts#L478).
-- The history service now uses explicit Prisma-side contract types instead of `as any` in [history.service.ts](/D:/Projects/gantt-lib-mcp/packages/mcp/src/services/history.service.ts#L85).
-- Manual grep check: `rg -n "as any" packages/web/src/lib/apiTypes.ts packages/web/src/hooks/useProjectHistory.ts packages/server/src/routes/history-routes.ts packages/mcp/src/services/history.service.ts` returned no matches on 2026-04-18.
-- This requirement explicitly covers the "no `as any` or hidden type workarounds" rule from the PRD success criteria in [history-versioning-clean-architecture-prd.md](/D:/Projects/gantt-lib-mcp/.planning/reference/history-versioning-clean-architecture-prd.md#L136).
-
-## Automated Evidence
-
-- `npx tsx --test packages/mcp/src/services/history.service.test.ts` — passed
-- `npx tsx --test packages/server/src/routes/history-routes.test.ts` — passed
-- `npm run build -w packages/web` — passed
-
-## Verification Limits
-
-- `npm run build -w packages/mcp` was blocked by `EPERM` during `prisma generate` when Windows failed to rename `packages/mcp/dist/prisma-client/query_engine-windows.dll.node.tmp*` to `query_engine-windows.dll.node`.
-- `npm run build -w packages/server` inherits the same blocker because its prebuild runs the MCP build first.
-- This appears to be parallel executor file-lock contention in generated Prisma artifacts, not a TypeScript or history-contract regression in the changed code.
-
-## Human Verification Required
-
-Run the flows in [45-HUMAN-UAT.md](/D:/Projects/gantt-lib-mcp/.planning/phases/45-history-refactor/45-HUMAN-UAT.md) against a project with at least three versions, including one restored older version.
+_Verified: 2026-04-18T13:30:29+03:00_  
+_Verifier: Codex (gsd-verifier)_

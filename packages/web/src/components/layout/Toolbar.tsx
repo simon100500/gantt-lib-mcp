@@ -46,7 +46,6 @@ interface ToolbarProps {
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   readOnly?: boolean;
   previewMode?: boolean;
-  onReturnToCurrentVersion?: () => void;
 }
 
 export function Toolbar({
@@ -68,7 +67,6 @@ export function Toolbar({
   onGanttDayModeChange,
   readOnly = false,
   previewMode = false,
-  onReturnToCurrentVersion,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
@@ -157,20 +155,6 @@ export function Toolbar({
 
   return (
     <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] px-0 py-2">
-      {previewMode && onReturnToCurrentVersion && (
-        <div className="mr-1 inline-flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5">
-          <span className="text-xs font-semibold text-sky-900">Просмотр версии</span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onReturnToCurrentVersion}
-            className="h-7 border-sky-200 bg-white px-2 text-[11px] text-sky-800 hover:bg-sky-100"
-          >
-            Вернуться к текущей версии
-          </Button>
-        </div>
-      )}
-
       <div className="inline-flex rounded-md">
         <button
           type="button"
@@ -279,7 +263,12 @@ export function Toolbar({
         )}
         title="Показать историю изменений"
       >
-        <History className="h-3.5 w-3.5" />
+        <div className="relative">
+          <History className="h-3.5 w-3.5" />
+          {previewMode && (
+            <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+          )}
+        </div>
         <span className="hidden md:inline text-xs">История</span>
       </Button>
 
@@ -447,7 +436,12 @@ export function Toolbar({
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className="flex cursor-pointer items-center gap-2"
           >
-            <History className="h-4 w-4" />
+            <div className="relative">
+              <History className="h-4 w-4" />
+              {previewMode && (
+                <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+              )}
+            </div>
             <span className="text-sm">История</span>
           </DropdownMenuItem>
           <DropdownMenuItem
