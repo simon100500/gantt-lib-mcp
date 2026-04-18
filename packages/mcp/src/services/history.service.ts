@@ -4,19 +4,31 @@ import type {
   ActorType,
   CommitProjectCommandResponse,
   DependencyType,
-  MutationGroupRecord,
+  HistoryGroupSnapshotResponse,
+  MutationGroupOrigin,
   ProjectCommand,
   ProjectSnapshot,
+  RestoreHistoryGroupResponse,
   Task,
   TaskDependency,
 } from '../types.js';
-import { dateToDomain } from './types.js';
+import { applyProjectCommandToSnapshot } from './project-command-apply.js';
+import { getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
 import { commandService, type CommandService } from './command.service.js';
+import { dateToDomain } from './types.js';
 
-export type HistoryGroupListItem = MutationGroupRecord & {
-  commandCount: number;
+const TECHNICAL_RESTORE_ORIGIN: MutationGroupOrigin = 'undo';
+
+export type HistoryGroupListItem = {
+  id: string;
+  actorType: ActorType;
+  title: string;
   createdAt: string;
-  redoable: boolean;
+  baseVersion: number;
+  newVersion: number;
+  commandCount: number;
+  isCurrent: boolean;
+  canRestore: boolean;
 };
 
 export type ListHistoryGroupsInput = {
@@ -25,39 +37,27 @@ export type ListHistoryGroupsInput = {
   limit?: number;
 };
 
-export type HistoryMutationRequest = {
+export type GetHistorySnapshotInput = {
   projectId: string;
+  groupId: string;
+};
+
+export type RestoreHistoryGroupInput = {
+  projectId: string;
+  groupId: string;
   actorType: ActorType;
   actorId?: string;
   requestContextId?: string;
 };
 
-export type UndoGroupRequest = HistoryMutationRequest & {
-  groupId: string;
-};
+export class HistoryValidationError extends Error {
+  readonly code = 'validation_error';
 
-export type HistoryMutationFailureReason =
-  | 'version_conflict'
-  | 'validation_error'
-  | 'redo_not_available'
-  | 'history_diverged'
-  | 'target_not_undone';
-
-export type HistoryMutationResponse =
-  | {
-      accepted: true;
-      version: number;
-      snapshot: ProjectSnapshot;
-      groupId: string;
-      targetGroupId: string;
-    }
-  | {
-      accepted: false;
-      reason: HistoryMutationFailureReason;
-      currentVersion: number;
-      snapshot?: ProjectSnapshot;
-      error?: string;
-    };
+  constructor(message: string) {
+    super(message);
+    this.name = 'HistoryValidationError';
+  }
+}
 
 type DbMutationGroup = {
   id: string;
@@ -85,34 +85,15 @@ type DbProjectEvent = {
 type HistoryServiceDeps = {
   prisma?: ReturnType<typeof getPrisma> | any;
   commandService?: Pick<CommandService, 'commitCommand'>;
+  getScheduleOptions?: (projectId: string, prismaClient: any) => Promise<{ businessDays?: boolean; weekendPredicate?: (date: Date) => boolean }>;
 };
 
-function buildReplayHistory(params: {
-  replayMode: 'undo' | 'redo';
-  replayGroupId: string;
-  title: string;
-  requestContextId?: string;
-  targetGroupId: string;
-}) {
-  if (params.replayMode === 'undo') {
-    return {
-      groupId: params.replayGroupId,
-      origin: 'undo' as const,
-      title: `Undo — ${params.title}`,
-      requestContextId: params.requestContextId,
-      targetGroupId: params.targetGroupId,
-    };
-  }
-
-  return {
-    groupId: params.replayGroupId,
-    origin: 'redo' as const,
-    title: `Redo — ${params.title}`,
-    requestContextId: params.requestContextId,
-    redoOfGroupId: params.targetGroupId,
-    targetGroupId: params.targetGroupId,
-  };
-}
+type RollbackTailPlan = {
+  targetGroup: DbMutationGroup;
+  currentVersion: number;
+  isCurrent: boolean;
+  inverseCommands: ProjectCommand[];
+};
 
 function toActorType(value: DbMutationGroup['actorType']): ActorType {
   return value === 'import_actor' ? 'import' : value;
@@ -167,31 +148,15 @@ async function buildProjectSnapshot(projectId: string, prismaClient: any): Promi
   return { tasks, dependencies };
 }
 
-function normalizeMutationGroup(group: DbMutationGroup): MutationGroupRecord {
-  return {
-    id: group.id,
-    projectId: group.projectId,
-    baseVersion: group.baseVersion,
-    newVersion: group.newVersion,
-    actorType: toActorType(group.actorType),
-    actorId: group.actorId ?? undefined,
-    origin: group.origin,
-    title: group.title,
-    status: group.status,
-    undoable: group.undoable,
-    undoneByGroupId: group.undoneByGroupId ?? undefined,
-    redoOfGroupId: group.redoOfGroupId ?? undefined,
-    createdAt: group.createdAt.toISOString(),
-  };
-}
-
 export class HistoryService {
   private _prisma: ReturnType<typeof getPrisma> | any;
   private readonly commandService: Pick<CommandService, 'commitCommand'>;
+  private readonly getScheduleOptions: NonNullable<HistoryServiceDeps['getScheduleOptions']>;
 
   constructor(deps: HistoryServiceDeps = {}) {
     this._prisma = deps.prisma;
     this.commandService = deps.commandService ?? commandService;
+    this.getScheduleOptions = deps.getScheduleOptions ?? getProjectScheduleOptionsForProject;
   }
 
   private get prisma() {
@@ -211,17 +176,18 @@ export class HistoryService {
     return project?.version ?? -1;
   }
 
-  private async getGroup(groupId: string): Promise<DbMutationGroup | null> {
-    return this.prisma.mutationGroup.findUnique({
-      where: { id: groupId },
+  private async getVisibleGroups(projectId: string): Promise<DbMutationGroup[]> {
+    const groups = await this.prisma.mutationGroup.findMany({
+      where: {
+        projectId,
+        status: 'applied',
+      },
+      orderBy: [{ newVersion: 'desc' }, { createdAt: 'desc' }],
     });
-  }
 
-  private async getProjectGroups(projectId: string): Promise<DbMutationGroup[]> {
-    return this.prisma.mutationGroup.findMany({
-      where: { projectId },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
+    return (groups as DbMutationGroup[]).filter(
+      (group) => group.newVersion !== null && group.origin !== 'undo' && group.origin !== 'redo',
+    );
   }
 
   private async getGroupEvents(groupId: string, order: 'asc' | 'desc'): Promise<DbProjectEvent[]> {
@@ -234,110 +200,42 @@ export class HistoryService {
     });
   }
 
-  private async hasDivergedHistory(projectId: string, targetGroup: DbMutationGroup, undoGroup: DbMutationGroup): Promise<HistoryMutationFailureReason | null> {
-    const groups = await this.prisma.mutationGroup.findMany({
-      where: { projectId, status: 'applied' },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
+  private async resolveRollbackTail(projectId: string, groupId: string): Promise<RollbackTailPlan> {
+    const visibleGroups = await this.getVisibleGroups(projectId);
+    const targetGroup = visibleGroups.find((group) => group.id === groupId);
 
-    const laterGroups = groups.filter((group: DbMutationGroup) => (group.newVersion ?? -1) > (undoGroup.newVersion ?? -1));
-
-    if (laterGroups.some((group: DbMutationGroup) => group.origin !== 'redo')) {
-      return 'history_diverged';
+    if (!targetGroup || targetGroup.newVersion === null) {
+      throw new HistoryValidationError(`Visible history group ${groupId} was not found`);
     }
 
-    if (laterGroups.some((group: DbMutationGroup) => group.origin === 'redo' && group.redoOfGroupId === targetGroup.id)) {
-      return 'redo_not_available';
-    }
+    const currentVersion = await this.getProjectVersion(projectId);
+    const activeTailGroups = visibleGroups.filter((group) => (group.newVersion ?? -1) > targetGroup.newVersion!);
+    const inverseCommands: ProjectCommand[] = [];
 
-    return null;
-  }
-
-  private async replayGroup(params: {
-    projectId: string;
-    targetGroup: DbMutationGroup;
-    actorType: ActorType;
-    actorId?: string;
-    requestContextId?: string;
-    replayMode: 'undo' | 'redo';
-    events: DbProjectEvent[];
-  }): Promise<HistoryMutationResponse> {
-    const replayGroupId = randomUUID();
-    let baseVersion = await this.getProjectVersion(params.projectId);
-    let snapshot: ProjectSnapshot | undefined;
-    let version = baseVersion;
-
-    for (const [index, event] of params.events.entries()) {
-      const replayCommand = params.replayMode === 'undo' ? event.inverseCommand : event.command;
-      if (!replayCommand) {
-        return {
-          accepted: false,
-          reason: 'validation_error',
-          currentVersion: baseVersion,
-          error: 'Missing replay command',
-        };
-      }
-
-      const historyBase = buildReplayHistory({
-        replayMode: params.replayMode,
-        replayGroupId,
-        title: params.targetGroup.title,
-        requestContextId: params.requestContextId,
-        targetGroupId: params.targetGroup.id,
-      });
-
-      const response = await this.commandService.commitCommand(
-        {
-          projectId: params.projectId,
-          clientRequestId: `${params.replayMode}-${replayGroupId}-${index + 1}`,
-          baseVersion,
-          command: replayCommand,
-          history: {
-            ...historyBase,
-            finalizeGroup: index === params.events.length - 1,
-          },
-        },
-        params.actorType,
-        params.actorId,
-      );
-
-      if (!response.accepted) {
-        if (response.reason === 'version_conflict') {
-          return {
-            accepted: false,
-            reason: 'version_conflict',
-            currentVersion: response.currentVersion,
-            snapshot: response.snapshot,
-            error: response.error,
-          };
+    for (const group of activeTailGroups) {
+      const events = await this.getGroupEvents(group.id, 'desc');
+      for (const event of events) {
+        if (!event.inverseCommand) {
+          throw new HistoryValidationError(
+            `Active tail event in group ${group.id} is missing inverseCommand and cannot be replayed`,
+          );
         }
-
-        return {
-          accepted: false,
-          reason: 'validation_error',
-          currentVersion: response.currentVersion,
-          snapshot: response.snapshot,
-          error: response.error,
-        };
+        inverseCommands.push(event.inverseCommand);
       }
-
-      baseVersion = response.newVersion;
-      version = response.newVersion;
-      snapshot = response.snapshot;
     }
 
     return {
-      accepted: true,
-      version,
-      snapshot: snapshot ?? await buildProjectSnapshot(params.projectId, this.prisma),
-      groupId: replayGroupId,
-      targetGroupId: params.targetGroup.id,
+      targetGroup,
+      currentVersion,
+      isCurrent: activeTailGroups.length === 0,
+      inverseCommands,
     };
   }
 
   async listHistoryGroups({ projectId, cursor, limit }: ListHistoryGroupsInput): Promise<{ items: HistoryGroupListItem[]; nextCursor?: string }> {
     const safeLimit = Math.min(Math.max(limit ?? 20, 1), 100);
-    const allGroups = await this.getProjectGroups(projectId);
+    const allGroups = await this.getVisibleGroups(projectId);
+    const currentGroupId = allGroups[0]?.id;
     const startIndex = cursor ? allGroups.findIndex((group) => group.id === cursor) + 1 : 0;
     const pageGroups = allGroups.slice(Math.max(startIndex, 0), Math.max(startIndex, 0) + safeLimit + 1);
     const selectedGroups = pageGroups.slice(0, safeLimit);
@@ -352,166 +250,116 @@ export class HistoryService {
           },
         });
 
-    const eventCountByGroupId = new Map<string, number>();
+    const commandCountByGroupId = new Map<string, number>();
     for (const event of events as DbProjectEvent[]) {
       if (!event.groupId) {
         continue;
       }
-      eventCountByGroupId.set(event.groupId, (eventCountByGroupId.get(event.groupId) ?? 0) + 1);
+      commandCountByGroupId.set(event.groupId, (commandCountByGroupId.get(event.groupId) ?? 0) + 1);
     }
 
-    const groupById = new Map(allGroups.map((group) => [group.id, group]));
-    const items = selectedGroups.map((group) => {
-      const undoGroup = group.undoneByGroupId ? groupById.get(group.undoneByGroupId) : null;
-      const laterAppliedGroups = allGroups.filter((candidate) => (
-        candidate.projectId === projectId &&
-        candidate.status === 'applied' &&
-        (candidate.newVersion ?? -1) > (undoGroup?.newVersion ?? -1)
-      ));
-      const redoable = group.status === 'undone'
-        && Boolean(group.undoneByGroupId)
-        && Boolean(undoGroup?.newVersion)
-        && laterAppliedGroups.every((candidate) => candidate.origin === 'redo')
-        && !laterAppliedGroups.some((candidate) => candidate.origin === 'redo' && candidate.redoOfGroupId === group.id);
-
-      return {
-        ...normalizeMutationGroup(group),
-        commandCount: eventCountByGroupId.get(group.id) ?? 0,
-        undoable: group.status === 'applied' && group.undoable,
-        redoable,
-        createdAt: group.createdAt.toISOString(),
-      };
-    });
-
     return {
-      items,
+      items: selectedGroups.map((group) => ({
+        id: group.id,
+        actorType: toActorType(group.actorType),
+        title: group.title,
+        createdAt: group.createdAt.toISOString(),
+        baseVersion: group.baseVersion,
+        newVersion: group.newVersion!,
+        commandCount: commandCountByGroupId.get(group.id) ?? 0,
+        isCurrent: group.id === currentGroupId,
+        canRestore: group.id !== currentGroupId,
+      })),
       nextCursor: pageGroups.length > safeLimit ? selectedGroups[selectedGroups.length - 1]?.id : undefined,
     };
   }
 
-  async undoLatestGroup(request: HistoryMutationRequest): Promise<HistoryMutationResponse> {
-    const targetGroup = await this.prisma.mutationGroup.findFirst({
-      where: {
-        projectId: request.projectId,
-        status: 'applied',
-        undoable: true,
-      },
-      orderBy: { newVersion: 'desc' },
-    });
+  async getHistorySnapshot({ projectId, groupId }: GetHistorySnapshotInput): Promise<HistoryGroupSnapshotResponse> {
+    const plan = await this.resolveRollbackTail(projectId, groupId);
+    const currentSnapshot = await buildProjectSnapshot(projectId, this.prisma);
 
-    if (!targetGroup) {
+    if (plan.isCurrent) {
       return {
-        accepted: false,
-        reason: 'validation_error',
-        currentVersion: await this.getProjectVersion(request.projectId),
-        error: 'No undoable group found',
+        groupId: plan.targetGroup.id,
+        isCurrent: true,
+        currentVersion: plan.currentVersion,
+        snapshot: currentSnapshot,
       };
     }
 
-    return this.undoGroup({
-      ...request,
-      groupId: targetGroup.id,
-    });
+    const scheduleOptions = await this.getScheduleOptions(projectId, this.prisma);
+    const snapshot = plan.inverseCommands.reduce(
+      (workingSnapshot, command) => applyProjectCommandToSnapshot(workingSnapshot, command, scheduleOptions).snapshot,
+      currentSnapshot,
+    );
+
+    return {
+      groupId: plan.targetGroup.id,
+      isCurrent: false,
+      currentVersion: plan.currentVersion,
+      snapshot,
+    };
   }
 
-  async undoGroup(request: UndoGroupRequest): Promise<HistoryMutationResponse> {
-    const targetGroup = await this.getGroup(request.groupId);
-    if (!targetGroup || targetGroup.projectId !== request.projectId || targetGroup.status !== 'applied' || !targetGroup.undoable) {
+  async restoreToGroup(request: RestoreHistoryGroupInput): Promise<RestoreHistoryGroupResponse> {
+    const plan = await this.resolveRollbackTail(request.projectId, request.groupId);
+    if (plan.isCurrent) {
       return {
-        accepted: false,
-        reason: 'validation_error',
-        currentVersion: await this.getProjectVersion(request.projectId),
-        error: 'Target group is not undoable',
+        groupId: plan.targetGroup.id,
+        targetGroupId: plan.targetGroup.id,
+        version: plan.currentVersion,
+        snapshot: await buildProjectSnapshot(request.projectId, this.prisma),
       };
     }
 
-    const events = await this.getGroupEvents(targetGroup.id, 'desc');
-    const response = await this.replayGroup({
-      projectId: request.projectId,
-      targetGroup,
-      actorType: request.actorType,
-      actorId: request.actorId,
-      requestContextId: request.requestContextId,
-      replayMode: 'undo',
-      events,
-    });
+    const rollbackGroupId = randomUUID();
+    let baseVersion = plan.currentVersion;
+    let snapshot = await buildProjectSnapshot(request.projectId, this.prisma);
+    let version = baseVersion;
 
-    if (!response.accepted) {
-      return response;
+    for (const [index, inverseCommand] of plan.inverseCommands.entries()) {
+      const response = await this.commandService.commitCommand(
+        {
+          projectId: request.projectId,
+          clientRequestId: `restore-${rollbackGroupId}-${index + 1}`,
+          baseVersion,
+          command: inverseCommand,
+          history: {
+            groupId: rollbackGroupId,
+            origin: TECHNICAL_RESTORE_ORIGIN,
+            title: `Restore to ${plan.targetGroup.title}`,
+            requestContextId: request.requestContextId,
+            finalizeGroup: index === plan.inverseCommands.length - 1,
+            targetGroupId: plan.targetGroup.id,
+          },
+        },
+        request.actorType,
+        request.actorId,
+      );
+
+      if (!response.accepted) {
+        throw this.mapCommitFailure(response);
+      }
+
+      baseVersion = response.newVersion;
+      version = response.newVersion;
+      snapshot = response.snapshot;
     }
 
-    await this.prisma.mutationGroup.update({
-      where: { id: targetGroup.id },
-      data: {
-        status: 'undone',
-        undoneByGroupId: response.groupId,
-      },
-    });
-
-    return response;
+    return {
+      groupId: rollbackGroupId,
+      targetGroupId: plan.targetGroup.id,
+      version,
+      snapshot,
+    };
   }
 
-  async redoGroup(request: UndoGroupRequest): Promise<HistoryMutationResponse> {
-    const targetGroup = await this.getGroup(request.groupId);
-    if (!targetGroup || targetGroup.projectId !== request.projectId) {
-      return {
-        accepted: false,
-        reason: 'validation_error',
-        currentVersion: await this.getProjectVersion(request.projectId),
-        error: 'Target group not found',
-      };
+  private mapCommitFailure(response: Extract<CommitProjectCommandResponse, { accepted: false }>): Error {
+    if (response.reason === 'validation_error') {
+      return new HistoryValidationError(response.error ?? 'History restore failed validation');
     }
 
-    if (targetGroup.status !== 'undone' || !targetGroup.undoneByGroupId) {
-      return {
-        accepted: false,
-        reason: 'target_not_undone',
-        currentVersion: await this.getProjectVersion(request.projectId),
-      };
-    }
-
-    const undoGroup = await this.getGroup(targetGroup.undoneByGroupId);
-    if (!undoGroup || undoGroup.newVersion === null) {
-      return {
-        accepted: false,
-        reason: 'redo_not_available',
-        currentVersion: await this.getProjectVersion(request.projectId),
-      };
-    }
-
-    const divergenceReason = await this.hasDivergedHistory(request.projectId, targetGroup, undoGroup);
-    if (divergenceReason) {
-      return {
-        accepted: false,
-        reason: divergenceReason,
-        currentVersion: await this.getProjectVersion(request.projectId),
-      };
-    }
-
-    const events = await this.getGroupEvents(targetGroup.id, 'asc');
-    const response = await this.replayGroup({
-      projectId: request.projectId,
-      targetGroup,
-      actorType: request.actorType,
-      actorId: request.actorId,
-      requestContextId: request.requestContextId,
-      replayMode: 'redo',
-      events,
-    });
-
-    if (!response.accepted) {
-      return response;
-    }
-
-    await this.prisma.mutationGroup.update({
-      where: { id: targetGroup.id },
-      data: {
-        status: 'applied',
-        undoneByGroupId: null,
-      },
-    });
-
-    return response;
+    return new Error(response.error ?? `History restore failed: ${response.reason}`);
   }
 }
 

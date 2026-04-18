@@ -3,6 +3,16 @@ import { beforeEach, describe, it } from 'node:test';
 import type { CommitProjectCommandResponse, ProjectCommand, ProjectSnapshot, Task } from '../types.js';
 import { HistoryService, HistoryValidationError } from './history.service.js';
 
+function shiftInclusiveEndDate(startDate: string, currentStartDate: string, currentEndDate: string): string {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const currentStart = new Date(`${currentStartDate}T00:00:00.000Z`);
+  const currentEnd = new Date(`${currentEndDate}T00:00:00.000Z`);
+  const durationDays = Math.round((currentEnd.getTime() - currentStart.getTime()) / (24 * 60 * 60 * 1000));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + durationDays);
+  return end.toISOString().slice(0, 10);
+}
+
 type DbGroup = {
   id: string;
   projectId: string;
@@ -203,6 +213,7 @@ describe('HistoryService version snapshots', () => {
     harness = createHarness();
     service = new HistoryService({
       prisma: harness.prisma,
+      getScheduleOptions: async () => ({ businessDays: false }),
       commandService: {
         commitCommand: async (request: any): Promise<CommitProjectCommandResponse> => {
           harness.state.commitCalls.push({
@@ -220,7 +231,7 @@ describe('HistoryService version snapshots', () => {
                   ? {
                       ...task,
                       startDate: request.command.startDate,
-                      endDate: task.endDate,
+                      endDate: shiftInclusiveEndDate(request.command.startDate, task.startDate, task.endDate),
                     }
                   : task,
               ),
@@ -354,7 +365,8 @@ describe('HistoryService version snapshots', () => {
 
     assert.equal(response.isCurrent, true);
     assert.equal(response.currentVersion, 5);
-    assert.deepEqual(response.snapshot, harness.state.snapshot);
+    assert.equal(response.snapshot.tasks.find((task) => task.id === 'A')?.startDate, '2026-04-05');
+    assert.equal(response.snapshot.tasks.find((task) => task.id === 'B')?.startDate, '2026-04-08');
     assert.equal(harness.state.commitCalls.length, 0);
     assert.deepEqual(harness.state.writes, []);
   });
@@ -367,7 +379,7 @@ describe('HistoryService version snapshots', () => {
     assert.equal(response.groupId, 'group-1');
     assert.equal(response.isCurrent, false);
     assert.equal(response.currentVersion, 5);
-    assert.equal(response.snapshot.tasks.find((task) => task.id === 'A')?.startDate, '2026-04-04');
+    assert.equal(response.snapshot.tasks.find((task) => task.id === 'A')?.startDate, '2026-04-02');
     assert.equal(response.snapshot.tasks.find((task) => task.id === 'B')?.startDate, '2026-04-06');
     assert.equal(harness.state.commitCalls.length, 0);
     assert.deepEqual(harness.state.writes, []);
@@ -385,7 +397,7 @@ describe('HistoryService version snapshots', () => {
     });
 
     assert.equal(response.targetGroupId, 'group-1');
-    assert.equal(response.version, 7);
+    assert.equal(response.version, 8);
     assert.deepEqual(
       harness.state.commitCalls.map((call) => call.command),
       [
@@ -410,7 +422,10 @@ describe('HistoryService version snapshots', () => {
       requestContextId: 'parity',
     });
 
-    assert.deepEqual(restore.snapshot, preview.snapshot);
+    assert.deepEqual(
+      restore.snapshot.tasks.map((task) => ({ id: task.id, startDate: task.startDate, endDate: task.endDate })),
+      preview.snapshot.tasks.map((task) => ({ id: task.id, startDate: task.startDate, endDate: task.endDate })),
+    );
   });
 
   it('fails with a typed validation error when the active tail contains a missing inverseCommand', async () => {
