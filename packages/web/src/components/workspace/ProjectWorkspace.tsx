@@ -251,6 +251,7 @@ export function ProjectWorkspace({
     showVersion,
     showVersionById,
     refreshHistory,
+    refreshHistorySilently,
     restoreVersion,
     returnToCurrentVersion,
   } = useProjectHistory(accessToken);
@@ -374,6 +375,20 @@ export function ProjectWorkspace({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreVersion]);
+
+  useEffect(() => {
+    if (!showHistoryPanel || !accessToken) {
+      return;
+    }
+
+    void refreshHistorySilently();
+
+    const intervalId = window.setInterval(() => {
+      void refreshHistorySilently();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [accessToken, refreshHistorySilently, showHistoryPanel]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">

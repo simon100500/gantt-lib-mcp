@@ -100,7 +100,7 @@ export function useProjectHistory(accessToken: string | null) {
     })));
   }, [accessToken]);
 
-  const refreshHistory = useCallback(async (cursor?: string) => {
+  const loadHistory = useCallback(async (cursor?: string, options?: { silent?: boolean }) => {
     if (!accessToken) {
       setItems([]);
       setNextCursor(undefined);
@@ -108,8 +108,10 @@ export function useProjectHistory(accessToken: string | null) {
       return { items: [], nextCursor: undefined };
     }
 
-    setLoading(true);
-    setError(null);
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const searchParams = new URLSearchParams();
@@ -137,9 +139,19 @@ export function useProjectHistory(accessToken: string | null) {
       setError(message);
       throw err;
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, [accessToken]);
+
+  const refreshHistory = useCallback(async (cursor?: string) => {
+    return loadHistory(cursor);
+  }, [loadHistory]);
+
+  const refreshHistorySilently = useCallback(async () => {
+    return loadHistory(undefined, { silent: true });
+  }, [loadHistory]);
 
   const fetchSnapshot = useCallback(async (groupId: string) => {
     if (!accessToken) {
@@ -177,6 +189,7 @@ export function useProjectHistory(accessToken: string | null) {
         snapshot: data.snapshot,
         isCurrent: data.isCurrent,
       });
+      void refreshHistorySilently();
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load history version';
@@ -186,7 +199,7 @@ export function useProjectHistory(accessToken: string | null) {
       setPreviewingGroupId((current) => (current === item.id ? null : current));
       setLoading(false);
     }
-  }, [enterPreview, exitPreview, fetchSnapshot]);
+  }, [enterPreview, exitPreview, fetchSnapshot, refreshHistorySilently]);
 
   const showVersionById = useCallback(async (groupId: string) => {
     setPreviewingGroupId(groupId);
@@ -197,6 +210,7 @@ export function useProjectHistory(accessToken: string | null) {
       const data = await fetchSnapshot(groupId);
       if (data.isCurrent) {
         exitPreview();
+        void refreshHistorySilently();
         return data;
       }
 
@@ -205,6 +219,7 @@ export function useProjectHistory(accessToken: string | null) {
         snapshot: data.snapshot,
         isCurrent: data.isCurrent,
       });
+      void refreshHistorySilently();
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load history version';
@@ -214,12 +229,13 @@ export function useProjectHistory(accessToken: string | null) {
       setPreviewingGroupId((current) => (current === groupId ? null : current));
       setLoading(false);
     }
-  }, [enterPreview, exitPreview, fetchSnapshot]);
+  }, [enterPreview, exitPreview, fetchSnapshot, refreshHistorySilently]);
 
   const returnToCurrentVersion = useCallback(() => {
     setPreviewingGroupId(null);
     exitPreview();
-  }, [exitPreview]);
+    void refreshHistorySilently();
+  }, [exitPreview, refreshHistorySilently]);
 
   const restoreVersion = useCallback(async (groupId: string) => {
     if (!accessToken) {
@@ -275,6 +291,7 @@ export function useProjectHistory(accessToken: string | null) {
     restoringGroupId,
     historyViewer,
     refreshHistory,
+    refreshHistorySilently,
     fetchSnapshot,
     previewVersion: fetchSnapshot,
     showVersion,
