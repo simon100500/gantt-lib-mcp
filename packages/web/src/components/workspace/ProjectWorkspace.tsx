@@ -232,6 +232,8 @@ export function ProjectWorkspace({
     items: historyItems,
     loading: historyLoading,
     error: historyError,
+    previewingGroupId,
+    restoringGroupId,
     showVersion,
     refreshHistory,
     restoreVersion,
@@ -385,7 +387,7 @@ export function ProjectWorkspace({
                 onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}
-                containerHeight="calc(100dvh - 136px)"
+                containerHeight="calc(100dvh - 132px)"
                 showTaskList={showTaskList}
                 showChart={showChart}
                 taskListWidth={650}
@@ -498,6 +500,8 @@ export function ProjectWorkspace({
             error={historyError}
             disabled={historyPanelDisabled}
             previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
+            previewingGroupId={previewingGroupId}
+            restoringGroupId={restoringGroupId}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
             onPreviewVersion={showVersion}

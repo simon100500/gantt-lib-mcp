@@ -55,6 +55,8 @@ export function useProjectHistory(accessToken: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [previewingGroupId, setPreviewingGroupId] = useState<string | null>(null);
+  const [restoringGroupId, setRestoringGroupId] = useState<string | null>(null);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const enterPreview = useHistoryViewerStore((state) => state.enterPreview);
   const exitPreview = useHistoryViewerStore((state) => state.exitPreview);
@@ -123,10 +125,12 @@ export function useProjectHistory(accessToken: string | null) {
 
   const showVersion = useCallback(async (item: Pick<HistoryItem, 'id' | 'isCurrent'>) => {
     if (item.isCurrent) {
+      setPreviewingGroupId(null);
       exitPreview();
       return null;
     }
 
+    setPreviewingGroupId(item.id);
     setLoading(true);
     setError(null);
 
@@ -143,11 +147,13 @@ export function useProjectHistory(accessToken: string | null) {
       setError(message);
       throw err;
     } finally {
+      setPreviewingGroupId((current) => (current === item.id ? null : current));
       setLoading(false);
     }
   }, [enterPreview, exitPreview, fetchSnapshot]);
 
   const returnToCurrentVersion = useCallback(() => {
+    setPreviewingGroupId(null);
     exitPreview();
   }, [exitPreview]);
 
@@ -156,6 +162,7 @@ export function useProjectHistory(accessToken: string | null) {
       throw new Error('Not authenticated');
     }
 
+    setRestoringGroupId(groupId);
     setLoading(true);
     setError(null);
 
@@ -182,6 +189,7 @@ export function useProjectHistory(accessToken: string | null) {
       setError(message);
       throw err;
     } finally {
+      setRestoringGroupId((current) => (current === groupId ? null : current));
       setLoading(false);
     }
   }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed]);
@@ -195,6 +203,8 @@ export function useProjectHistory(accessToken: string | null) {
     loading,
     error,
     nextCursor,
+    previewingGroupId,
+    restoringGroupId,
     historyViewer,
     refreshHistory,
     fetchSnapshot,

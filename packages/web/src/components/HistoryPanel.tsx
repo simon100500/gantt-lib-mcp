@@ -1,4 +1,4 @@
-import { AlertCircle, Bot, Clock3, MoreHorizontal, RotateCcw, Settings2, Upload, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, MoreHorizontal, RotateCcw, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
@@ -11,19 +11,14 @@ interface HistoryPanelProps {
   error: string | null;
   disabled?: boolean;
   previewGroupId?: string | null;
+  previewingGroupId?: string | null;
+  restoringGroupId?: string | null;
   onClose: () => void;
   onRefresh: () => unknown;
   onPreviewVersion: (item: HistoryItem) => unknown;
   onRestoreVersion: (groupId: string) => unknown;
   onReturnToCurrentVersion: () => unknown;
 }
-
-const ACTOR_ICONS: Record<HistoryItem['actorType'], typeof User> = {
-  user: User,
-  agent: Bot,
-  system: Settings2,
-  import: Upload,
-};
 
 const COMMAND_TITLES: Record<string, string> = {
   move_task: 'Перенос задачи',
@@ -48,7 +43,7 @@ const COMMAND_TITLES: Record<string, string> = {
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString('ru-RU', {
     day: '2-digit',
-    month: '2-digit',
+    month: 'long',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -73,6 +68,8 @@ export function HistoryPanel({
   error,
   disabled = false,
   previewGroupId = null,
+  previewingGroupId = null,
+  restoringGroupId = null,
   onClose,
   onRefresh,
   onPreviewVersion,
@@ -80,9 +77,11 @@ export function HistoryPanel({
   onReturnToCurrentVersion,
 }: HistoryPanelProps) {
   return (
-    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:w-[300px] xl:max-w-[300px] xl:min-w-[300px]">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5">
-        <p className="min-w-0 text-sm font-semibold text-slate-900">История</p>
+    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden xl:w-[320px] xl:max-w-[320px] xl:min-w-[320px]">
+      <div className="flex items-start justify-between gap-3 px-1 py-1">
+        <div className="min-w-0">
+          <p className="min-w-0 text-sm font-semibold text-slate-900">История версий</p>
+        </div>
         <div className="flex items-center gap-1.5">
           <Button
             type="button"
@@ -90,7 +89,7 @@ export function HistoryPanel({
             variant="outline"
             onClick={() => { void onRefresh(); }}
             disabled={loading}
-            className="h-7 px-2 text-[11px] text-slate-700"
+            className="h-8 rounded-md border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:bg-slate-50"
           >
             Обновить
           </Button>
@@ -99,7 +98,7 @@ export function HistoryPanel({
             size="icon"
             variant="ghost"
             onClick={onClose}
-            className="h-7 w-7 text-slate-500 hover:text-slate-700"
+            className="h-8 w-8 rounded-md text-slate-500 hover:bg-white hover:text-slate-700"
             aria-label="Закрыть историю"
           >
             <X className="h-4 w-4" />
@@ -108,15 +107,15 @@ export function HistoryPanel({
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 border-b border-rose-100 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {previewGroupId && (
-        <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2.5">
-          <p className="text-xs font-semibold text-amber-800">Открыта сохраненная версия</p>
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-semibold text-amber-800">Открыта сохранённая версия</p>
           <Button
             type="button"
             size="sm"
@@ -129,22 +128,25 @@ export function HistoryPanel({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-1 pt-3">
         {items.length === 0 && !loading ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-slate-500">
+          <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500">
             <Clock3 className="h-5 w-5 text-slate-400" />
             <p>История пока пуста.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="space-y-2">
             {items.map((item) => {
-              const ActorIcon = ACTOR_ICONS[item.actorType];
+              const ActorIcon = item.actorType === 'agent' ? Bot : User;
               const isPreviewing = previewGroupId === item.id;
+              const isLoadingPreview = previewingGroupId === item.id;
+              const isRestoring = restoringGroupId === item.id;
+              const isActive = item.isCurrent || isPreviewing || isLoadingPreview || isRestoring;
 
               return (
               <article
                 key={item.id}
-                role="button"
+                role={disabled || loading ? undefined : 'button'}
                 tabIndex={disabled || loading ? -1 : 0}
                 onClick={() => {
                   if (disabled || loading) {
@@ -162,41 +164,35 @@ export function HistoryPanel({
                   }
                 }}
                 className={cn(
-                  'space-y-1.5 px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
-                  !disabled && !loading && 'cursor-pointer hover:bg-slate-50',
-                  isPreviewing && 'bg-slate-50',
+                  'space-y-3 rounded-2xl border px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+                  !disabled && !loading && 'cursor-pointer bg-white hover:border-slate-300 hover:bg-slate-50/60',
+                  (disabled || loading) && 'bg-white',
+                  isActive && 'border-sky-300 bg-white ring-1 ring-sky-100',
+                  !isActive && 'border-slate-200',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        'inline-flex h-4 w-4 shrink-0 items-center justify-center',
-                        item.actorType === 'agent' ? 'text-violet-600' : 'text-slate-400',
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          'inline-flex h-4 w-4 shrink-0 items-center justify-center',
+                          item.actorType === 'agent' ? 'text-violet-500' : 'text-slate-400',
+                        )}
+                        aria-hidden="true"
+                      >
+                        <ActorIcon className="h-4 w-4" />
+                      </span>
+                      <span className="truncate text-base font-semibold leading-5 text-slate-900">
+                        {formatTimestamp(item.createdAt)}
+                      </span>
+                      {item.isCurrent && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
+                          Текущая
+                        </span>
                       )}
-                      title={
-                        item.actorType === 'user'
-                          ? 'Пользователь'
-                          : item.actorType === 'agent'
-                            ? 'Агент'
-                            : item.actorType === 'import'
-                              ? 'Импорт'
-                              : 'Система'
-                      }
-                    >
-                      <ActorIcon className="h-4 w-4" />
-                    </span>
-                    <span className="truncate text-[11px] font-medium uppercase tracking-[0.04em] text-slate-400">
-                    {formatTimestamp(item.createdAt)}
-                    </span>
+                    </div>
                   </div>
-                  {item.isCurrent && (
-                    <span
-                      className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
-                    >
-                      Текущая
-                    </span>
-                  )}
                   {!item.isCurrent && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -204,7 +200,7 @@ export function HistoryPanel({
                           type="button"
                           aria-label="Действия с версией"
                           onClick={(event) => event.stopPropagation()}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
@@ -225,8 +221,25 @@ export function HistoryPanel({
                   )}
                 </div>
 
-                <div className="space-y-0.5 pr-6">
-                  <p className="text-[13px] font-medium leading-4 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
+                <div className="space-y-1 pr-6">
+                  <p className="text-[14px] font-medium leading-5 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-500">
+                    {isLoadingPreview && (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">
+                        Загрузка версии...
+                      </span>
+                    )}
+                    {isPreviewing && !isLoadingPreview && (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">
+                        Открыта
+                      </span>
+                    )}
+                    {isRestoring && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                        Восстановление...
+                      </span>
+                    )}
+                  </div>
                 </div>
               </article>
             );})}
