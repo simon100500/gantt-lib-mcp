@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
@@ -240,15 +240,15 @@ export function ChatSidebar({
               <div className="mb-2 w-full">
                 <div
                   className={cn(
-                    "w-full rounded-md",
-                    msg.historyGroupId === activePreviewGroupId && "border border-amber-300",
+                    "w-full",
+                    msg.historyGroupId === activePreviewGroupId && "border-t-2 border-primary",
                   )}
                 >
                   <div
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12px] text-slate-500 transition-colors",
+                      "flex w-full items-center gap-2 px-2 py-1 text-[12px] text-slate-500 transition-colors",
                       msg.canPreviewHistory && "cursor-pointer hover:bg-slate-100 hover:text-slate-700",
-                      msg.historyGroupId === activePreviewGroupId && "text-amber-900",
+                      msg.historyGroupId === activePreviewGroupId && "text-slate-900",
                       (msg.previewLoading || msg.restoreLoading) && "opacity-70",
                     )}
                     onClick={() => {
@@ -273,19 +273,20 @@ export function ChatSidebar({
                     <span>{msg.checkpointLabel}</span>
                   </div>
                   {msg.previewLoading && (
-                    <div className="mt-1 px-2 pb-2 pl-[2.25rem] text-[11px] text-slate-500">
+                    <div className="mt-1 px-2 pb-2 text-[11px] text-slate-500">
                       Загрузка версии...
                     </div>
                   )}
                   {msg.historyGroupId === activePreviewGroupId && (
-                    <div className="flex items-center gap-2 px-2 pb-2 pl-[2.25rem]">
+                    <div className="flex items-center gap-2 px-2 pb-2">
                       {msg.canRestoreHistory && (
                         <button
                           type="button"
                           onClick={() => setPendingApplyMessage(msg)}
                           disabled={msg.restoreLoading || msg.previewLoading}
-                          className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-red-600 px-3 text-[12px] font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                         >
+                          <RotateCcw className="h-3.5 w-3.5 shrink-0" />
                           {msg.restoreLoading ? "Откат..." : "Откатиться"}
                         </button>
                       )}
