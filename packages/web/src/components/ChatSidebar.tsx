@@ -203,7 +203,7 @@ export function ChatSidebar({
               <button
                 type="button"
                 onClick={() => handleApplyHistory(pendingApplyMessage)}
-                className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Откатиться
               </button>
@@ -241,7 +241,7 @@ export function ChatSidebar({
                 <div
                   className={cn(
                     "w-full",
-                    msg.historyGroupId === activePreviewGroupId && "border-t-2 border-primary",
+                    msg.historyGroupId === activePreviewGroupId && "rounded-b-md border-t-2 border-primary bg-slate-50",
                   )}
                 >
                   <div
@@ -402,7 +402,7 @@ export function ChatSidebar({
                 onClick={onReturnToCurrentVersion}
                 className="shrink-0 rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               >
-                Вернуться к актуальной
+                Вернуться к текущей
               </button>
             )}
           </div>

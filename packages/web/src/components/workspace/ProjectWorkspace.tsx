@@ -192,7 +192,7 @@ export function ProjectWorkspace({
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const effectiveChatDisabled = chatDisabled || previewModeActive;
   const effectiveChatDisabledReason = previewModeActive
-    ? 'Просмотр версии доступен только для чтения. Вернитесь к текущей версии, чтобы продолжить.'
+    ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
     : chatDisabledReason;
 
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
