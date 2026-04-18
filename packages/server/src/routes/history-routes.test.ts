@@ -19,33 +19,31 @@ describe('history routes', () => {
     );
     assert.match(
       historyRoutesSource,
-      /fastify\.post\('\/api\/history\/undo', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+      /fastify\.get\('\/api\/history\/:groupId\/snapshot', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
     );
     assert.match(
       historyRoutesSource,
-      /fastify\.post\('\/api\/history\/:groupId\/undo', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
-    );
-    assert.match(
-      historyRoutesSource,
-      /fastify\.post\('\/api\/history\/:groupId\/redo', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+      /fastify\.post\('\/api\/history\/:groupId\/restore', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
     );
   });
 
-  it('defines the GET and POST history endpoints with typed failure handling', () => {
+  it('defines the version-oriented history endpoints with typed failure handling', () => {
     assert.match(historyRoutesSource, /fastify\.get\('\/api\/history'/);
-    assert.match(historyRoutesSource, /fastify\.post\('\/api\/history\/undo'/);
-    assert.match(historyRoutesSource, /fastify\.post\('\/api\/history\/:groupId\/undo'/);
-    assert.match(historyRoutesSource, /fastify\.post\('\/api\/history\/:groupId\/redo'/);
+    assert.match(historyRoutesSource, /fastify\.get\('\/api\/history\/:groupId\/snapshot'/);
+    assert.match(historyRoutesSource, /fastify\.post\('\/api\/history\/:groupId\/restore'/);
     assert.match(historyRoutesSource, /version_conflict/);
-    assert.match(historyRoutesSource, /redo_not_available/);
-    assert.match(historyRoutesSource, /history_diverged/);
-    assert.match(historyRoutesSource, /target_not_undone/);
+    assert.match(historyRoutesSource, /validation_error/);
+    assert.doesNotMatch(historyRoutesSource, /\/api\/history\/undo/);
+    assert.doesNotMatch(historyRoutesSource, /\/api\/history\/:groupId\/undo/);
+    assert.doesNotMatch(historyRoutesSource, /\/api\/history\/:groupId\/redo/);
   });
 
-  it('returns grouped history contract fields and authoritative replay payloads', () => {
+  it('returns version rows, snapshots, and restore payload fields', () => {
     assert.match(historyRoutesSource, /commandCount/);
-    assert.match(historyRoutesSource, /undoable/);
-    assert.match(historyRoutesSource, /redoable/);
+    assert.match(historyRoutesSource, /isCurrent/);
+    assert.match(historyRoutesSource, /canRestore/);
+    assert.match(historyRoutesSource, /currentVersion/);
+    assert.match(historyRoutesSource, /targetGroupId/);
     assert.match(historyRoutesSource, /snapshot/);
     assert.match(historyRoutesSource, /version/);
     assert.match(historyRoutesSource, /nextCursor/);
