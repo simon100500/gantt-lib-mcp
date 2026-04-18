@@ -312,6 +312,20 @@ function normalizeNode(node: ProjectPlanNode, index: number, duplicateGuard: Set
   const dependencies = Array.isArray(node.dependsOn)
     ? node.dependsOn.map((dependency, dependencyIndex) => normalizeDependency(nodeKey, dependency, dependencyIndex))
     : [];
+  const startDate = typeof node.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(node.startDate)
+    ? node.startDate
+    : undefined;
+  const endDate = typeof node.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(node.endDate)
+    ? node.endDate
+    : undefined;
+
+  if ((startDate && !endDate) || (!startDate && endDate) || (startDate && endDate && startDate > endDate)) {
+    throw new InitialPlanCompileError('Project plan contains an invalid explicit date range', [{
+      code: 'invalid_plan',
+      message: `Node ${nodeKey} must provide a valid startDate/endDate pair when explicit dates are used`,
+      nodeKey,
+    }]);
+  }
 
   return {
     ...node,
@@ -322,6 +336,8 @@ function normalizeNode(node: ProjectPlanNode, index: number, duplicateGuard: Set
       ? node.parentNodeKey.trim()
       : undefined,
     dependsOn: dependencies,
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
     dependencies,
     index,
   };
@@ -531,17 +547,22 @@ function scheduleTasks(
     : undefined;
 
   for (const node of orderedTasks) {
-    const anchorRange = buildTaskRangeFromStart(
-      anchorDate,
-      node.durationDays,
-      businessDays,
-      weekendPredicate,
-    );
+    const explicitDates = node.startDate && node.endDate
+      ? { startDate: node.startDate, endDate: node.endDate }
+      : null;
+    const anchorRange = explicitDates
+      ? null
+      : buildTaskRangeFromStart(
+          anchorDate,
+          node.durationDays,
+          businessDays,
+          weekendPredicate,
+        );
     const seedTask: CoreTask = {
       id: node.nodeKey,
       name: node.title,
-      startDate: formatDateOnly(anchorRange.start),
-      endDate: formatDateOnly(anchorRange.end),
+      startDate: explicitDates?.startDate ?? formatDateOnly(anchorRange!.start),
+      endDate: explicitDates?.endDate ?? formatDateOnly(anchorRange!.end),
       parentId: node.parentNodeKey,
       dependencies: node.dependencies.map((dependency) => ({
         taskId: dependency.nodeKey,
@@ -552,7 +573,7 @@ function scheduleTasks(
 
     workingSnapshot = [...workingSnapshot, seedTask];
 
-    const changedTask = node.dependencies.length > 0
+    const changedTask = node.dependencies.length > 0 && !explicitDates
       ? recalculateTaskFromDependencies(
           node.nodeKey,
           workingSnapshot,

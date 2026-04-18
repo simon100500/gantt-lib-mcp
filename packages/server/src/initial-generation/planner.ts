@@ -403,6 +403,22 @@ function dedupeDependencies(dependencies: ProjectPlanDependency[]): ProjectPlanD
   return result;
 }
 
+function normalizeExplicitDateRange(record: Record<string, unknown>): { startDate: string; endDate: string } | undefined {
+  const startDate = typeof record.startDate === 'string' ? record.startDate.trim() : '';
+  const endDate = typeof record.endDate === 'string' ? record.endDate.trim() : '';
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (!startDate && !endDate) {
+    return undefined;
+  }
+
+  if (!isoDatePattern.test(startDate) || !isoDatePattern.test(endDate) || startDate > endDate) {
+    return undefined;
+  }
+
+  return { startDate, endDate };
+}
+
 function normalizeScheduledTask(
   input: unknown,
   fallbackTask: StructuredTask,
@@ -411,6 +427,7 @@ function normalizeScheduledTask(
   const record = asObject(input) ?? {};
   const durationDays = record.durationDays;
   const dependsOnInput = Array.isArray(record.dependsOn) ? record.dependsOn : [];
+  const explicitDateRange = normalizeExplicitDateRange(record);
 
   return {
     taskKey: fallbackTask.taskKey,
@@ -422,6 +439,7 @@ function normalizeScheduledTask(
         .filter((dependency): dependency is ProjectPlanDependency => dependency !== null)
         .filter((dependency) => dependency.nodeKey !== fallbackTask.taskKey),
     ),
+    ...(explicitDateRange ?? {}),
   };
 }
 
@@ -505,12 +523,14 @@ function flattenScheduledPlan(plan: ScheduledProjectPlan, options?: { collapseSi
           nodeKey: task.taskKey,
           title: task.title,
           parentNodeKey: collapseSubphase ? phase.phaseKey : subphase.subphaseKey,
-          kind: 'task',
-          durationDays: task.durationDays,
-          dependsOn: task.dependsOn,
-        });
-      }
+        kind: 'task',
+        durationDays: task.durationDays,
+        dependsOn: task.dependsOn,
+        ...(task.startDate ? { startDate: task.startDate } : {}),
+        ...(task.endDate ? { endDate: task.endDate } : {}),
+      });
     }
+  }
   }
 
   return {

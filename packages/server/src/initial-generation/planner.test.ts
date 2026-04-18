@@ -8,7 +8,7 @@ import { assembleDomainSkeleton } from './domain/assembly.js';
 import { normalizeInitialRequest } from './intake-normalization.js';
 import { parseModelJson } from './json-response.js';
 import { planInitialProject } from './planner.js';
-import { buildStructurePrompt } from './prompts/index.js';
+import { buildSchedulingPrompt, buildStructurePrompt } from './prompts/index.js';
 import type { InitialRequestInterpretation } from './types.js';
 import {
   evaluateSchedulingQuality,
@@ -442,6 +442,75 @@ describe('initial-generation planner', () => {
     assert.match(prompt, /do not create grouped range containers such as "Секции 1-2"/i);
     assert.match(prompt, /do not assume crew packaging or execution batching across entities/i);
     assert.match(prompt, /when the request gives counts but not labels, enumerate coherent per-entity labels/i);
+  });
+
+  it('tells scheduling prompt to preserve explicit user dates and dependency facts', () => {
+    const userMessage = [
+      '1) Определить цели и бюджет',
+      '1-4 мая (зависимости: нет)',
+      '2) Пригласить ключевых спикеров',
+      '5-12 мая (зависит: от п.1)',
+      '3) Запустить регистрацию участников',
+      '10-18 мая',
+    ].join('\n');
+    const normalizedRequest = normalizeInitialRequest(userMessage);
+    const interpretation = createInterpretation({
+      requestKind: 'explicit_worklist',
+      planningMode: 'worklist_bootstrap',
+      scopeMode: 'explicit_worklist',
+      projectArchetype: 'renovation',
+      worklistPolicy: 'strict_worklist',
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      interpretation,
+      classification,
+      clarificationDecision,
+    });
+    const prompt = buildSchedulingPrompt({
+      userMessage,
+      brief: buildGenerationBrief({
+        userMessage,
+        normalizedRequest,
+        interpretation,
+        classification,
+        clarificationDecision,
+        domainSkeleton,
+      }),
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+      domainSkeleton,
+      structure: {
+        projectType: 'renovation',
+        assumptions: [],
+        phases: [{
+          phaseKey: 'phase-1',
+          title: 'Подготовка',
+          subphases: [{
+            subphaseKey: 'subphase-1',
+            title: 'Подготовка',
+            tasks: [
+              { taskKey: 'task-1', title: 'Определить цели и бюджет' },
+              { taskKey: 'task-2', title: 'Пригласить ключевых спикеров' },
+              { taskKey: 'task-3', title: 'Запустить регистрацию участников' },
+            ],
+          }],
+        }],
+      },
+    });
+
+    assert.match(prompt, /explicit user-provided schedule facts as the primary source of truth/i);
+    assert.match(prompt, /if the user already gave concrete dates, date ranges, months, sequencing notes, dependency notes/i);
+    assert.match(prompt, /if the user explicitly states that an item has no dependency, keep it independent/i);
+    assert.match(prompt, /if the user explicitly names a predecessor or successor, preserve that relationship/i);
+    assert.match(prompt, /overlapping user-provided windows are evidence that tasks may run in parallel/i);
+    assert.match(prompt, /do not linearize a user-provided dated worklist into a chain/i);
+    assert.match(prompt, /you may add only durationDays, dependsOn, startDate, and endDate to leaf tasks/i);
+    assert.match(prompt, /if you output explicit task dates, output both startDate and endDate in yyyy-mm-dd format/i);
+    assert.match(prompt, /fit the schedule inside that user-provided window instead of anchoring from today or the server date/i);
   });
 
   it('builds a two-step whole-project plan and forbids structural edits in scheduling prompt', async () => {

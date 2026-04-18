@@ -127,6 +127,16 @@ describe('agent system prompt hierarchy guidance', () => {
     assert.match(prompt, /Do not invent task IDs/i);
     assert.doesNotMatch(prompt, /`set_dependency`|`remove_dependency`|`resize_task`|`recalculate_schedule`/);
   });
+
+  it('tells the agent to preserve explicit user dates and dependencies', () => {
+    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
+    const prompt = readFileSync(promptPath, 'utf-8');
+
+    assert.match(prompt, /If the user already provided concrete dates, date ranges, month windows, or recurring cadence labels, treat them as authoritative input/i);
+    assert.match(prompt, /If the user explicitly provided dependency information/i);
+    assert.match(prompt, /Overlapping user-provided date windows are evidence of parallel work/i);
+    assert.match(prompt, /Do not replace explicit user schedule facts with generic planner defaults/i);
+  });
 });
 
 describe('initial-generation route selection', () => {

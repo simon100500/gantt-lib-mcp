@@ -20,6 +20,10 @@ export function buildPlanningContextLines(input: PlannerPromptContext): string[]
     lines.push(`Location scope: ${JSON.stringify(normalized.locationScope)}`);
   }
 
+  if (normalized?.projectDateRange) {
+    lines.push(`Explicit project date range: ${JSON.stringify(normalized.projectDateRange)}`);
+  }
+
   if (normalized?.explicitWorkItems.length) {
     lines.push(`Explicit work items: ${JSON.stringify(normalized.explicitWorkItems)}`);
   }
@@ -46,6 +50,14 @@ export function buildPlanningContextLines(input: PlannerPromptContext): string[]
     lines.push(`Rule pack parallelism: ${JSON.stringify(domainSkeleton.rulePack.allowableParallelismPatterns)}`);
     lines.push(`Skeleton assumptions: ${JSON.stringify(domainSkeleton.assumptions)}`);
   }
+
+  lines.push('Treat explicit user-provided schedule facts as the primary source of truth when they are present.');
+  lines.push('If the user already gave concrete dates, date ranges, months, sequencing notes, dependency notes, milestones, or cadence labels such as "постоянно" or "по необходимости", preserve that intent instead of replacing it with generic inferred timing.');
+  lines.push('If the user explicitly states that an item has no dependency, keep it independent unless another user-provided fact makes that impossible.');
+  lines.push('If the user explicitly names a predecessor or successor, preserve that relationship and do not invent extra dependencies around it unless they are strictly required for logical consistency.');
+  lines.push('When explicit dates or ranges are given for multiple items, use them to infer parallelism first; overlapping user-provided windows are evidence that tasks may run in parallel.');
+  lines.push('Do not linearize a user-provided dated worklist into a chain just to increase dependency density.');
+  lines.push('When the request contains concrete schedule detail, prefer preserving the user timeline over domain-default sequencing heuristics.');
 
   return lines;
 }

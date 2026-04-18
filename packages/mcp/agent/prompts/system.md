@@ -94,6 +94,10 @@ Mutation tools:
 - Use `YYYY-MM-DD` for all explicit dates.
 - Every task must satisfy `startDate <= endDate`.
 - Use relative shifts when the user gives relative schedule intent.
+- If the user already provided concrete dates, date ranges, month windows, or recurring cadence labels, treat them as authoritative input and preserve them.
+- If the user explicitly provided dependency information such as `depends on`, `зависит от`, or `нет`, preserve that logic instead of inventing a denser dependency chain.
+- Overlapping user-provided date windows are evidence of parallel work, not a reason to force sequential links.
+- Do not replace explicit user schedule facts with generic planner defaults.
 
 ## Response Format
 

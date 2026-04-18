@@ -301,6 +301,60 @@ describe('compileInitialProjectPlan', () => {
       'working Saturday from project calendar should be respected by the core scheduler',
     );
   });
+
+  it('preserves explicit task dates instead of anchoring from serverDate', () => {
+    const structure = compileInitialProjectPlan({
+      projectId: 'project-trip',
+      baseVersion: 1,
+      serverDate: '2026-04-18',
+      plan: {
+        projectType: 'trip',
+        assumptions: ['User provided fixed trip window'],
+        nodes: [
+          { nodeKey: 'phase-trip', title: 'Поездка', kind: 'phase', durationDays: 1, dependsOn: [] },
+          { nodeKey: 'subphase-outbound', title: 'Выезд', parentNodeKey: 'phase-trip', kind: 'subphase', durationDays: 1, dependsOn: [] },
+          {
+            nodeKey: 'task-drive',
+            title: 'Переезд',
+            parentNodeKey: 'subphase-outbound',
+            kind: 'task',
+            durationDays: 2,
+            dependsOn: [],
+            startDate: '2026-06-16',
+            endDate: '2026-06-17',
+          },
+          {
+            nodeKey: 'task-camp',
+            title: 'Лагерь',
+            parentNodeKey: 'subphase-outbound',
+            kind: 'task',
+            durationDays: 3,
+            dependsOn: [{ nodeKey: 'task-drive', type: 'FS', lagDays: 0 }],
+            startDate: '2026-06-18',
+            endDate: '2026-06-20',
+          },
+        ],
+      },
+    });
+    const compiled = materializeInitialProjectPlan(structure);
+
+    const drive = taskByName('Переезд', compiled.command.tasks);
+    const camp = taskByName('Лагерь', compiled.command.tasks);
+    const trip = taskByName('Поездка', compiled.command.tasks);
+
+    assert.deepEqual(
+      { startDate: drive.startDate, endDate: drive.endDate },
+      { startDate: '2026-06-16', endDate: '2026-06-17' },
+    );
+    assert.deepEqual(
+      { startDate: camp.startDate, endDate: camp.endDate },
+      { startDate: '2026-06-18', endDate: '2026-06-20' },
+    );
+    assert.deepEqual(
+      { startDate: trip.startDate, endDate: trip.endDate },
+      { startDate: '2026-06-16', endDate: '2026-06-20' },
+    );
+  });
 });
 
 describe('executeInitialProjectPlan', () => {

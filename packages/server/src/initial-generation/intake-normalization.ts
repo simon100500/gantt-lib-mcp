@@ -12,6 +12,21 @@ const ZONE_PATTERNS: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /секци(?:я|и|ю|ях)/i, value: 'секции' },
 ];
 
+const MONTH_MAP: Record<string, number> = {
+  январ: 1,
+  феврал: 2,
+  март: 3,
+  апрел: 4,
+  ма: 5,
+  июн: 6,
+  июл: 7,
+  август: 8,
+  сентябр: 9,
+  октябр: 10,
+  ноябр: 11,
+  декабр: 12,
+};
+
 function normalizeWhitespace(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
@@ -129,6 +144,68 @@ function buildLocationScope(rawRequest: string): LocationScope | undefined {
   };
 }
 
+function toIsoDate(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function resolveMonthToken(token: string): number | null {
+  const normalized = token.toLowerCase().replace(/ё/g, 'е');
+  for (const [prefix, month] of Object.entries(MONTH_MAP)) {
+    if (normalized.startsWith(prefix)) {
+      return month;
+    }
+  }
+  return null;
+}
+
+function extractProjectDateRange(rawRequest: string): { startDate: string; endDate: string } | undefined {
+  const isoRange = rawRequest.match(/\b(\d{4}-\d{2}-\d{2})\b\s*(?:до|по|[-–—])\s*\b(\d{4}-\d{2}-\d{2})\b/i);
+  if (isoRange) {
+    return {
+      startDate: isoRange[1],
+      endDate: isoRange[2],
+    };
+  }
+
+  const russianRange = rawRequest.match(
+    /\bс\s+(\d{1,2})\s+([а-яё]+)\s+(?:(\d{4})\s+г(?:ода|\.?)?\s*)?(?:по|до|-|–|—)\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})\s+г(?:ода|\.?)?/iu,
+  );
+  if (!russianRange) {
+    return undefined;
+  }
+
+  const startDay = Number.parseInt(russianRange[1] ?? '', 10);
+  const startMonth = resolveMonthToken(russianRange[2] ?? '');
+  const explicitStartYear = russianRange[3] ? Number.parseInt(russianRange[3], 10) : null;
+  const endDay = Number.parseInt(russianRange[4] ?? '', 10);
+  const endMonth = resolveMonthToken(russianRange[5] ?? '');
+  const endYear = Number.parseInt(russianRange[6] ?? '', 10);
+
+  if (!startMonth || !endMonth || !Number.isInteger(endYear)) {
+    return undefined;
+  }
+
+  const startYear = explicitStartYear ?? endYear;
+  const startDate = toIsoDate(startYear, startMonth, startDay);
+  const endDate = toIsoDate(endYear, endMonth, endDay);
+  if (!startDate || !endDate) {
+    return undefined;
+  }
+
+  return {
+    startDate,
+    endDate,
+  };
+}
+
 function inferSourceConfidence(
   explicitWorkItems: string[],
   locationScope: LocationScope | undefined,
@@ -152,6 +229,7 @@ export function normalizeInitialRequest(rawRequest: string): NormalizedInitialRe
   const normalizedRequest = normalizeWhitespace(rawRequest);
   const explicitWorkItems = extractExplicitWorkItems(normalizedRequest);
   const locationScope = buildLocationScope(normalizedRequest);
+  const projectDateRange = extractProjectDateRange(normalizedRequest);
   const sourceConfidence = inferSourceConfidence(explicitWorkItems, locationScope);
 
   return {
@@ -159,6 +237,7 @@ export function normalizeInitialRequest(rawRequest: string): NormalizedInitialRe
     normalizedRequest,
     explicitWorkItems,
     ...(locationScope ? { locationScope } : {}),
+    ...(projectDateRange ? { projectDateRange } : {}),
     sourceConfidence,
   };
 }

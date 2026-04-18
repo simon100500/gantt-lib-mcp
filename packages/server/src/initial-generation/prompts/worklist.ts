@@ -15,7 +15,9 @@ export function buildWorklistSchedulingLines(): string[] {
     'Sequence the explicit worklist credibly with no cycles.',
     'Treat each preserved work item as atomic during scheduling.',
     'Do not split one work item into multiple scheduled tasks.',
-    'Prefer a simple sequential or near-sequential chain unless explicit parallelism is obvious from the user input.',
+    'Do not default to a simple sequential chain when the user supplied concrete calendar facts.',
+    'If the user supplied fixed dates, date ranges, stay lengths, or itinerary order, preserve that calendar logic as the primary source of sequencing.',
+    'When the request contains an explicit overall trip or project window, place tasks inside that window instead of anchoring them to an arbitrary current date.',
     'Keep any inferred supporting dependencies aligned with the user-supplied scope.',
   ];
 }

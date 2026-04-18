@@ -76,6 +76,10 @@ export type NormalizedInitialRequest = {
   normalizedRequest: string;
   explicitWorkItems: string[];
   locationScope?: LocationScope;
+  projectDateRange?: {
+    startDate: string;
+    endDate: string;
+  };
   sourceConfidence: SourceConfidence;
 };
 
@@ -164,6 +168,8 @@ export type StructuredProjectPlan = {
 export type ScheduledTask = StructuredTask & {
   durationDays: number;
   dependsOn: ProjectPlanDependency[];
+  startDate?: string;
+  endDate?: string;
 };
 
 export type ScheduledSubphase = {
@@ -191,6 +197,8 @@ export type ProjectPlanNode = {
   kind: ProjectPlanNodeKind;
   durationDays: number;
   dependsOn: ProjectPlanDependency[];
+  startDate?: string;
+  endDate?: string;
 };
 
 export type ExecutableProjectPlan = {
