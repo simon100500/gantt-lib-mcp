@@ -1259,6 +1259,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const shareLink = useUIStore((state) => state.shareLinkUrl);
+  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
@@ -1338,48 +1339,53 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
 
-    let response = await fetch('/api/export/excel', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 401) {
-      const refreshedToken = await auth.refreshAccessToken();
-      if (!refreshedToken) {
-        onLoginRequired();
-        return;
-      }
-      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-      response = await fetch('/api/export/excel', {
+    setIsExportExcelLoading(true);
+    try {
+      let response = await fetch('/api/export/excel', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-    }
 
-    if (response.status === 403) {
-      try {
-        const body = await response.json() as Partial<ConstraintDenialPayload>;
-        if (isConstraintCode(body.code)) {
-          await openLimitModal(body);
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          onLoginRequired();
           return;
         }
-      } catch {
-        // fall through to generic error
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch('/api/export/excel', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
       }
-      throw new Error(`HTTP 403`);
-    }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+      if (response.status === 403) {
+        try {
+          const body = await response.json() as Partial<ConstraintDenialPayload>;
+          if (isConstraintCode(body.code)) {
+            await openLimitModal(body);
+            return;
+          }
+        } catch {
+          // fall through to generic error
+        }
+        throw new Error(`HTTP 403`);
+      }
 
-    const blob = await response.blob();
-    const projectName = currentProjectLabel?.trim() || 'Мой проект';
-    const fallbackFileName = `ГетГант - ${projectName} - ${formatPdfFileTimestamp(new Date())}.xlsx`;
-    const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
-    await triggerBlobDownload(blob, fileName);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const projectName = currentProjectLabel?.trim() || 'Мой проект';
+      const fallbackFileName = `ГетГант - ${projectName} - ${formatPdfFileTimestamp(new Date())}.xlsx`;
+      const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
+      await triggerBlobDownload(blob, fileName);
+    } finally {
+      setIsExportExcelLoading(false);
+    }
   }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
 
   const workspaceShell = workspace.kind === 'shared'
@@ -1437,6 +1443,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
             onExportExcel={handleExportExcel}
+            isExportExcelLoading={isExportExcelLoading}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}
@@ -1468,6 +1475,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             onCollapseAll={handleCollapseAll}
             onExpandAll={handleExpandAll}
             onExportPdf={handleExportPdf}
+            isExportExcelLoading={isExportExcelLoading}
             onValidation={handleValidation}
             onCascade={handleCascade}
             shareStatus={shareStatus}

@@ -12,7 +12,7 @@ async function loadWorkbook(data: ProjectExcelExportData) {
 }
 
 describe('buildProjectExcelExportBuffer', () => {
-  it('renders compact period headers, white chart area, short links, and separators', async () => {
+  it('renders compact period headers and reordered static columns', async () => {
     const workbook = await loadWorkbook({
       projectName: 'Demo',
       tasks: [
@@ -38,7 +38,7 @@ describe('buildProjectExcelExportBuffer', () => {
         },
         {
           id: 'child-b',
-          name: 'Монтаж',
+          name: 'Монтаж очень длинного этапа с несколькими словами',
           parentId: 'parent',
           startDate: '2026-04-03',
           endDate: '2026-04-05',
@@ -67,12 +67,22 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.views[0]?.showGridLines, false);
     assert.equal(sheet.getCell('A3').value, '№');
     assert.equal(sheet.getCell('B3').value, 'Задача');
-    assert.equal(sheet.getCell('C3').value, 'Связи');
-    assert.equal(sheet.getCell('G1').value, '2026');
-    assert.equal(sheet.getCell('H1').value, '');
-    assert.equal(sheet.getCell('G2').value, 'Апрель');
-    assert.equal(sheet.getCell('H2').value, '');
-    assert.equal(sheet.getCell('G3').value, '01');
+    assert.equal(sheet.getCell('C3').value, 'Начало');
+    assert.equal(sheet.getCell('D3').value, 'Окончание');
+    assert.equal(sheet.getCell('E3').value, 'Длительность');
+    assert.equal(sheet.getCell('F3').value, 'Процент');
+    assert.equal(sheet.getCell('G3').value, 'Связи');
+    assert.equal(sheet.getColumn('G').width, 34);
+    assert.equal(sheet.getColumn('H').width, 24 / 7);
+    assert.equal(sheet.getCell('H1').value, '2026');
+    assert.equal(sheet.getCell('I1').value, null);
+    assert.equal(sheet.getCell('H2').value, 'Апрель');
+    assert.equal(sheet.getCell('I2').value, null);
+    assert.equal(sheet.getCell('H3').value, 1);
+    assert.deepEqual(sheet.getCell('A1').border, {});
+    assert.equal(sheet.getCell('A1').fill?.type, 'pattern');
+    assert.equal(sheet.getCell('H1').alignment?.wrapText, undefined);
+    assert.ok((sheet.properties.defaultRowHeight ?? 0) >= 21);
 
     assert.equal(sheet.getCell('A4').value, '1');
     assert.equal(sheet.getCell('B4').value, 'Этап 1');
@@ -81,14 +91,17 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('B5').value, 'Подготовка');
     assert.equal(sheet.getCell('B5').alignment?.indent, 1);
     assert.equal(sheet.getCell('A6').value, '1.2');
-    assert.equal(sheet.getCell('C6').value, '[1.1]ОН+2, [missing]НН');
-    assert.equal(sheet.getCell('F6').value, 3);
+    assert.equal(sheet.getCell('C6').type, ExcelJS.ValueType.Date);
+    assert.equal(sheet.getCell('E6').value, 3);
+    assert.equal(sheet.getCell('F6').value, 0);
+    assert.equal(sheet.getCell('G6').value, '[1.1]ОН+2, [missing]НН');
+    assert.equal(sheet.getCell('G6').alignment?.wrapText, undefined);
     assert.equal(sheet.getCell('I6').fill?.type, 'pattern');
     assert.equal(sheet.getCell('K6').fill?.type, 'pattern');
-    assert.equal(sheet.getCell('L6').fill, undefined);
-    assert.equal((sheet.getCell('G4').border as any)?.left?.color?.argb, 'FF64748B');
-    assert.ok((sheet.getRow(6).height ?? 0) >= 20);
-    assert.equal(sheet.getCell('C6').alignment?.wrapText, true);
+    assert.equal(sheet.getCell('M6').fill, undefined);
+    assert.equal((sheet.getCell('H4').border as any)?.left?.color?.argb, 'FF64748B');
+    assert.equal((sheet.getCell('H4').fill as any)?.fgColor?.argb, 'FFCBD5E1');
+    assert.ok((sheet.getRow(6).height ?? 0) > (29 / 1.333));
   });
 
   it('produces an empty-state workbook when the project has no tasks', async () => {

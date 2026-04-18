@@ -38,6 +38,7 @@ interface ToolbarProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  isExportExcelLoading?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
@@ -60,6 +61,7 @@ export function Toolbar({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  isExportExcelLoading = false,
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
@@ -232,7 +234,9 @@ export function Toolbar({
                 'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
               )}
               title={
-                shareStatus === 'creating'
+                isExportExcelLoading
+                  ? 'Генерируем Excel...'
+                  : shareStatus === 'creating'
                   ? 'Создаём ссылку...'
                   : shareStatus === 'copied'
                     ? 'Ссылка скопирована'
@@ -242,7 +246,9 @@ export function Toolbar({
               }
             >
               <span className="text-xs">
-                {shareStatus === 'creating'
+                {isExportExcelLoading
+                  ? 'Генерируем Excel...'
+                  : shareStatus === 'creating'
                   ? 'Создаём ссылку...'
                   : 'Поделиться'}
               </span>
@@ -280,10 +286,11 @@ export function Toolbar({
             {onExportExcel && (
               <DropdownMenuItem
                 onClick={onExportExcel}
+                disabled={isExportExcelLoading}
                 className="flex cursor-pointer items-center gap-2"
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                <span className="text-sm">Excel</span>
+                <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

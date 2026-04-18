@@ -17,6 +17,7 @@ type ExportTask = {
   endDate: string;
   sortOrder: number;
   color: string | null;
+  progress?: number;
   dependencies: ExportDependency[];
 };
 
@@ -32,20 +33,21 @@ type FlattenedTaskRow = {
   outlineNumber: string;
   linksLabel: string;
   durationDays: number;
+  progressValue: number;
 };
 
-const STATIC_COLUMN_COUNT = 6;
+const STATIC_COLUMN_COUNT = 7;
 const HEADER_ROW_COUNT = 3;
-const HEADER_FILL = 'FFEEF2FF';
+const HEADER_FILL = 'FFFFFFFF';
 const HEADER_FONT = 'FF1E293B';
 const GRID_FILL = 'FFFFFFFF';
 const GRID_BORDER = 'FFE2E8F0';
 const WEEK_BORDER = 'FFCBD5E1';
 const MONTH_BORDER = 'FF64748B';
-const PARENT_FILL = 'FFE2E8F0';
-const DEFAULT_TASK_FILL = 'FFDBEAFE';
+const PARENT_FILL = 'FFCBD5E1';
+const DEFAULT_TASK_FILL = 'FF93C5FD';
 const EMPTY_STATE_FILL = 'FFF8FAFC';
-const STATIC_COLUMN_WIDTHS = [10, 36, 24, 14, 14, 12];
+const STATIC_COLUMN_WIDTHS = [10, 36, 14, 14, 12, 12, 34];
 
 function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -102,7 +104,15 @@ function normalizeColor(color: string | null): string {
     return DEFAULT_TASK_FILL;
   }
 
-  return `FF${hex.toUpperCase()}`;
+  const normalized = hex.toUpperCase();
+  if (normalized === '94A3B8') {
+    return PARENT_FILL;
+  }
+  if (normalized === 'DBEAFE' || normalized === '93C5FD') {
+    return DEFAULT_TASK_FILL;
+  }
+
+  return `FF${normalized}`;
 }
 
 function buildTimelineRange(tasks: ExportTask[]): string[] {
@@ -168,6 +178,7 @@ function buildFlattenedRows(tasks: ExportTask[]): FlattenedTaskRow[] {
         outlineNumber,
         linksLabel: '',
         durationDays: diffDaysInclusive(task.startDate, task.endDate),
+        progressValue: typeof task.progress === 'number' ? task.progress : 0,
       });
       visit(task.id, depth + 1, currentPrefix);
     }
@@ -202,7 +213,6 @@ function baseAlignment(horizontal: ExcelJS.Alignment['horizontal'] = 'left'): Pa
 }
 
 function styleHeaderRow(row: ExcelJS.Row) {
-  row.height = 22;
   row.eachCell((cell) => {
     cell.fill = {
       type: 'pattern',
@@ -210,8 +220,7 @@ function styleHeaderRow(row: ExcelJS.Row) {
       fgColor: { argb: HEADER_FILL },
     };
     cell.font = { bold: true, color: { argb: HEADER_FONT } };
-    cell.alignment = baseAlignment('center');
-    applyCellBorder(cell);
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
   });
 }
 
@@ -244,7 +253,7 @@ function estimateWrappedLines(value: string, columnWidth: number): number {
     return 1;
   }
 
-  const safeWidth = Math.max(6, Math.floor(columnWidth) - 1);
+  const safeWidth = Math.max(6, Math.floor(columnWidth * 0.82) - 1);
   const paragraphs = value.split(/\r?\n/u);
   let lines = 0;
 
@@ -272,12 +281,25 @@ function estimateWrappedLines(value: string, columnWidth: number): number {
   return Math.max(lines, 1);
 }
 
-function estimateRowHeight(values: string[], widths: number[]): number {
-  let maxLines = 1;
-  for (let index = 0; index < values.length; index += 1) {
-    maxLines = Math.max(maxLines, estimateWrappedLines(values[index] ?? '', widths[index] ?? 12));
+function estimateRowHeight(taskLabel: string, taskColumnWidth: number, taskDepth: number = 0): number {
+  const effectiveWidth = Math.max(12, taskColumnWidth - (taskDepth * 2.5));
+  const lineCount = estimateWrappedLines(taskLabel, effectiveWidth);
+  if (lineCount <= 1) {
+    return 20;
   }
-  return Math.max(20, Math.min(120, maxLines * 16));
+  return 31;
+}
+
+function setRowHeightFromContent(row: ExcelJS.Row, taskLabel: string, taskColumnWidth: number, taskDepth: number = 0): void {
+  row.height = estimateRowHeight(taskLabel, taskColumnWidth, taskDepth);
+  row.eachCell((cell) => {
+    cell.alignment = {
+      ...(cell.alignment ?? {}),
+      shrinkToFit: false,
+      wrapText: true,
+      vertical: 'middle',
+    };
+  });
 }
 
 export async function loadProjectExcelExportData(projectId: string): Promise<ProjectExcelExportData> {
@@ -321,6 +343,7 @@ export async function loadProjectExcelExportData(projectId: string): Promise<Pro
       endDate: toIsoDate(task.endDate),
       sortOrder: task.sortOrder,
       color: task.color,
+      progress: task.progress,
       dependencies: task.dependencies.map((dependency) => ({
         predecessorTaskId: dependency.depTaskId,
         predecessorTaskName: dependency.depTask?.name ?? null,
@@ -339,7 +362,7 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
   const sheet = workbook.addWorksheet('Gantt', {
     views: [{ state: 'frozen', xSplit: STATIC_COLUMN_COUNT, ySplit: HEADER_ROW_COUNT, showGridLines: false }],
   });
-  sheet.properties.defaultRowHeight = 20;
+  sheet.properties.defaultRowHeight = 29 / 1.333;
 
   const flattenedRows = buildFlattenedRows(data.tasks);
   const timelineDates = buildTimelineRange(data.tasks);
@@ -354,46 +377,10 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     { width: STATIC_COLUMN_WIDTHS[3] },
     { width: STATIC_COLUMN_WIDTHS[4] },
     { width: STATIC_COLUMN_WIDTHS[5] },
-    ...timelineDates.map(() => ({ width: 4 })),
+    { width: STATIC_COLUMN_WIDTHS[6] },
+    ...timelineDates.map(() => ({ width: 24 / 7 })),
   ];
 
-  sheet.addRow(['', '', '', '', '', '', ...yearHeaders]);
-  sheet.addRow(['', '', '', '', '', '', ...monthHeaders]);
-  sheet.addRow(['№', 'Задача', 'Связи', 'Начало', 'Окончание', 'Длительность', ...timelineDates.map(formatDayLabel)]);
-
-  for (let rowIndex = 1; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
-    styleHeaderRow(sheet.getRow(rowIndex));
-    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
-      const cell = sheet.getRow(rowIndex).getCell(columnIndex);
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: HEADER_FILL },
-      };
-      cell.font = { bold: true, color: { argb: HEADER_FONT } };
-      cell.alignment = baseAlignment('center');
-      applyCellBorder(cell);
-    }
-  }
-
-  if (flattenedRows.length === 0) {
-    const emptyRow = sheet.addRow(['', 'Нет задач']);
-    emptyRow.height = 20;
-    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
-      const cell = emptyRow.getCell(columnIndex);
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: EMPTY_STATE_FILL },
-      };
-      cell.alignment = baseAlignment(columnIndex === 2 ? 'center' : 'left');
-      applyCellBorder(cell);
-    }
-    emptyRow.getCell(2).font = { italic: true, color: { argb: HEADER_FONT } };
-    return Buffer.from(await workbook.xlsx.writeBuffer());
-  }
-
-  const timelineIndexByDate = new Map(timelineDates.map((date, index) => [date, STATIC_COLUMN_COUNT + 1 + index]));
   const separatorKinds = timelineDates.map((date, index) => {
     const current = parseIsoDate(date);
     const previous = index > 0 ? parseIsoDate(timelineDates[index - 1]!) : null;
@@ -409,43 +396,87 @@ export async function buildProjectExcelExportBuffer(data: ProjectExcelExportData
     return 'day' as const;
   });
 
+  sheet.addRow([null, null, null, null, null, null, null, ...yearHeaders.map((value) => value || null)]);
+  sheet.addRow([null, null, null, null, null, null, null, ...monthHeaders.map((value) => value || null)]);
+  sheet.addRow(['№', 'Задача', 'Начало', 'Окончание', 'Длительность', 'Процент', 'Связи', ...timelineDates.map((value) => Number(formatDayLabel(value)))]);
+
+  for (let rowIndex = 1; rowIndex <= HEADER_ROW_COUNT; rowIndex += 1) {
+    styleHeaderRow(sheet.getRow(rowIndex));
+    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+      const cell = sheet.getRow(rowIndex).getCell(columnIndex);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: HEADER_FILL },
+      };
+      cell.font = { bold: true, color: { argb: HEADER_FONT } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    }
+    for (let columnIndex = STATIC_COLUMN_COUNT + 1; columnIndex <= totalColumnCount; columnIndex += 1) {
+      const cell = sheet.getRow(rowIndex).getCell(columnIndex);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: HEADER_FILL },
+      };
+      cell.font = { bold: true, color: { argb: HEADER_FONT } };
+      cell.alignment = rowIndex < HEADER_ROW_COUNT
+        ? { vertical: 'middle', horizontal: 'left', wrapText: false }
+        : { vertical: 'middle', horizontal: 'center' };
+      applyCellBorder(cell);
+      applyTimelineSeparator(cell, separatorKinds[columnIndex - STATIC_COLUMN_COUNT - 1] ?? 'day');
+    }
+  }
+
+  if (flattenedRows.length === 0) {
+    const emptyRow = sheet.addRow(['', 'Нет задач']);
+    for (let columnIndex = 1; columnIndex <= STATIC_COLUMN_COUNT; columnIndex += 1) {
+      const cell = emptyRow.getCell(columnIndex);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: EMPTY_STATE_FILL },
+      };
+      cell.alignment = baseAlignment(columnIndex === 2 ? 'center' : 'left');
+      applyCellBorder(cell);
+    }
+    emptyRow.getCell(2).font = { italic: true, color: { argb: HEADER_FONT } };
+    setRowHeightFromContent(emptyRow, 'Нет задач', STATIC_COLUMN_WIDTHS[1], 0);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  const timelineIndexByDate = new Map(timelineDates.map((date, index) => [date, STATIC_COLUMN_COUNT + 1 + index]));
+
   for (const rowData of flattenedRows) {
     const row = sheet.addRow([
       rowData.outlineNumber,
       rowData.task.name,
-      rowData.linksLabel,
       rowData.task.startDate,
       rowData.task.endDate,
       rowData.durationDays,
+      rowData.progressValue,
+      rowData.linksLabel,
     ]);
-
-    row.height = estimateRowHeight(
-      [
-        rowData.outlineNumber,
-        `${' '.repeat(rowData.depth * 2)}${rowData.task.name}`,
-        rowData.linksLabel,
-        rowData.task.startDate,
-        rowData.task.endDate,
-        String(rowData.durationDays),
-      ],
-      STATIC_COLUMN_WIDTHS,
-    );
+    setRowHeightFromContent(row, rowData.task.name, STATIC_COLUMN_WIDTHS[1], rowData.depth);
 
     row.getCell(1).alignment = baseAlignment('center');
     row.getCell(2).alignment = { ...baseAlignment('left'), indent: rowData.depth };
-    row.getCell(3).alignment = baseAlignment('left');
+    row.getCell(3).alignment = baseAlignment('center');
     row.getCell(4).alignment = baseAlignment('center');
     row.getCell(5).alignment = baseAlignment('center');
     row.getCell(6).alignment = baseAlignment('center');
+    row.getCell(7).alignment = { vertical: 'middle', horizontal: 'left', wrapText: false };
 
     if (rowData.isParent) {
       row.getCell(2).font = { bold: true, color: { argb: HEADER_FONT } };
     }
 
+    row.getCell(3).numFmt = 'dd.mm.yyyy';
     row.getCell(4).numFmt = 'dd.mm.yyyy';
-    row.getCell(5).numFmt = 'dd.mm.yyyy';
-    row.getCell(4).value = parseIsoDate(rowData.task.startDate);
-    row.getCell(5).value = parseIsoDate(rowData.task.endDate);
+    row.getCell(3).value = parseIsoDate(rowData.task.startDate);
+    row.getCell(4).value = parseIsoDate(rowData.task.endDate);
+    row.getCell(6).numFmt = '0%';
+    row.getCell(6).value = rowData.progressValue;
 
     for (let columnIndex = 1; columnIndex <= totalColumnCount; columnIndex += 1) {
       const cell = row.getCell(columnIndex);
