@@ -125,6 +125,7 @@ export function ProjectWorkspace({
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
+  const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
   const searchResults = useUIStore((state) => state.searchResults);
   const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
@@ -469,6 +470,7 @@ export function ProjectWorkspace({
             loading={historyLoading}
             error={historyError}
             disabled={effectiveReadOnly || !accessToken}
+            onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
             onUndoGroup={undoGroup}
             onRedoGroup={redoGroup}

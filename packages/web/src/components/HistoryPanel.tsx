@@ -1,4 +1,4 @@
-import { AlertCircle, Clock3, RotateCcw, RotateCw } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, RotateCcw, RotateCw, Settings2, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
@@ -9,20 +9,41 @@ interface HistoryPanelProps {
   loading: boolean;
   error: string | null;
   disabled?: boolean;
+  onClose: () => void;
   onRefresh: () => unknown;
   onUndoGroup: (groupId: string) => unknown;
   onRedoGroup: (groupId: string) => unknown;
 }
 
-const ACTOR_LABELS: Record<HistoryItem['actorType'], string> = {
-  user: 'Пользователь',
-  agent: 'AI',
-  system: 'Система',
+const ACTOR_ICONS: Record<HistoryItem['actorType'], typeof User> = {
+  user: User,
+  agent: Bot,
+  system: Settings2,
 };
 
 const STATUS_LABELS: Record<HistoryItem['status'], string> = {
   applied: 'Применено',
   undone: 'Отменено',
+};
+
+const COMMAND_TITLES: Record<string, string> = {
+  move_task: 'Перенос задачи',
+  resize_task: 'Изменение длительности задачи',
+  set_task_start: 'Изменение даты начала',
+  set_task_end: 'Изменение даты окончания',
+  change_duration: 'Изменение длительности',
+  update_task_fields: 'Изменение задачи',
+  update_tasks_fields_batch: 'Массовое изменение задач',
+  create_task: 'Создание задачи',
+  create_tasks_batch: 'Массовое создание задач',
+  delete_task: 'Удаление задачи',
+  delete_tasks: 'Массовое удаление задач',
+  create_dependency: 'Создание зависимости',
+  remove_dependency: 'Удаление зависимости',
+  change_dependency_lag: 'Изменение лага зависимости',
+  recalculate_schedule: 'Пересчёт расписания',
+  reparent_task: 'Перемещение в иерархии',
+  reorder_tasks: 'Изменение порядка задач',
 };
 
 function formatTimestamp(value: string): string {
@@ -34,36 +55,81 @@ function formatTimestamp(value: string): string {
   });
 }
 
+function formatCommandCount(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod100 >= 11 && mod100 <= 14) {
+    return `${count} команд`;
+  }
+
+  if (mod10 === 1) {
+    return `${count} команда`;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4) {
+    return `${count} команды`;
+  }
+
+  return `${count} команд`;
+}
+
+function humanizeHistoryTitle(title: string): string {
+  if (title.startsWith('Undo — ')) {
+    return `Отмена — ${humanizeHistoryTitle(title.slice('Undo — '.length))}`;
+  }
+
+  if (title.startsWith('Redo — ')) {
+    return `Повтор — ${humanizeHistoryTitle(title.slice('Redo — '.length))}`;
+  }
+
+  if (title.startsWith('AI — ')) {
+    return `AI — ${humanizeHistoryTitle(title.slice('AI — '.length))}`;
+  }
+
+  return COMMAND_TITLES[title] ?? title.split('_').join(' ');
+}
+
 export function HistoryPanel({
   items,
   loading,
   error,
   disabled = false,
+  onClose,
   onRefresh,
   onUndoGroup,
   onRedoGroup,
 }: HistoryPanelProps) {
   return (
-    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:w-[320px] xl:max-w-[320px] xl:min-w-[320px]">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900">История</p>
-          <p className="text-xs text-slate-500">Группы изменений и replay</p>
+    <aside className="flex h-full min-h-[260px] w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] xl:w-[300px] xl:max-w-[300px] xl:min-w-[300px]">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5">
+        <p className="min-w-0 text-sm font-semibold text-slate-900">История</p>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => { void onRefresh(); }}
+            disabled={loading}
+            className="h-7 px-2 text-[11px] text-slate-700"
+          >
+            Обновить
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={onClose}
+            className="h-7 w-7 text-slate-500 hover:text-slate-700"
+            aria-label="Закрыть историю"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => { void onRefresh(); }}
-          disabled={loading}
-          className="h-8 px-2 text-xs text-slate-600"
-        >
-          Обновить
-        </Button>
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+        <div className="flex items-start gap-2 border-b border-rose-100 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -77,43 +143,56 @@ export function HistoryPanel({
           </div>
         ) : (
           <div className="divide-y divide-slate-200">
-            {items.map((item) => (
-              <article key={item.id} className="space-y-3 px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-slate-400">
+            {items.map((item) => {
+              const ActorIcon = ACTOR_ICONS[item.actorType];
+
+              return (
+              <article key={item.id} className="space-y-2 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        'inline-flex h-4 w-4 shrink-0 items-center justify-center',
+                        item.actorType === 'agent' ? 'text-violet-600' : 'text-slate-400',
+                      )}
+                      title={item.actorType === 'user' ? 'Пользователь' : item.actorType === 'agent' ? 'Агент' : 'Система'}
+                    >
+                      <ActorIcon className="h-4 w-4" />
+                    </span>
+                    <span className="truncate text-[11px] font-medium uppercase tracking-[0.04em] text-slate-400">
                     {formatTimestamp(item.createdAt)}
-                  </span>
+                    </span>
+                  </div>
                   <span
                     className={cn(
-                      'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                      'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                       item.status === 'undone'
                         ? 'bg-amber-100 text-amber-700'
                         : 'bg-emerald-100 text-emerald-700',
                     )}
                   >
-                    {item.status} {STATUS_LABELS[item.status]}
+                    {STATUS_LABELS[item.status]}
                   </span>
                 </div>
 
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-slate-500">{item.actorType} {ACTOR_LABELS[item.actorType]}</p>
-                  <p className="text-sm font-medium leading-5 text-slate-900">{item.title}</p>
-                  <p className="text-xs text-slate-500">
-                    Версии {item.baseVersion} → {item.newVersion ?? '—'} • {item.commandCount} команд
+                <div className="space-y-0.5">
+                  <p className="text-[13px] font-medium leading-4 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
+                  <p className="text-[11px] text-slate-500">
+                    Версии {item.baseVersion} → {item.newVersion ?? '—'} • {formatCommandCount(item.commandCount)}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => { void onUndoGroup(item.id); }}
                     disabled={disabled || loading || !item.undoable}
-                    className="h-8 px-2 text-xs"
+                    className="h-7 px-2 text-[11px]"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Undo
+                    Отменить
                   </Button>
                   <Button
                     type="button"
@@ -121,14 +200,14 @@ export function HistoryPanel({
                     variant="outline"
                     onClick={() => { void onRedoGroup(item.id); }}
                     disabled={disabled || loading || !item.redoable}
-                    className="h-8 px-2 text-xs"
+                    className="h-7 px-2 text-[11px]"
                   >
                     <RotateCw className="h-3.5 w-3.5" />
-                    Redo
+                    Повторить
                   </Button>
                 </div>
               </article>
-            ))}
+            );})}
           </div>
         )}
       </div>
