@@ -144,6 +144,13 @@ type HistoryPrismaClient = {
       where: { projectId: string; status: 'applied' };
       orderBy: Array<{ newVersion: 'desc' } | { createdAt: 'desc' }>;
     }): Promise<DbMutationGroup[]>;
+    update(args: {
+      where: { id: string };
+      data: {
+        status?: 'applied' | 'undone';
+        undoneByGroupId?: string | null;
+      };
+    }): Promise<DbMutationGroup>;
   };
   projectEvent: {
     findMany(args: {
@@ -175,6 +182,7 @@ type RollbackTailPlan = {
   targetGroupTitle: string;
   currentVersion: number;
   isCurrent: boolean;
+  activeTailGroupIds: string[];
   inverseCommands: ProjectCommand[];
 };
 
@@ -245,6 +253,7 @@ function adaptPrismaClient(prisma: PrismaClient): HistoryPrismaClient {
     },
     mutationGroup: {
       findMany: async (args) => prisma.mutationGroup.findMany(args),
+      update: async (args) => prisma.mutationGroup.update(args),
     },
     projectEvent: {
       findMany: async (args) => {
@@ -390,6 +399,7 @@ export class HistoryService {
         targetGroupTitle: 'Initial state',
         currentVersion,
         isCurrent: visibleGroups.length === 0,
+        activeTailGroupIds: visibleGroups.map((group) => group.id),
         inverseCommands,
       };
     }
@@ -422,8 +432,21 @@ export class HistoryService {
       targetGroupTitle: targetGroup.title,
       currentVersion,
       isCurrent: activeTailGroups.length === 0,
+      activeTailGroupIds: activeTailGroups.map((group) => group.id),
       inverseCommands,
     };
+  }
+
+  private async markGroupsUndone(groupIds: string[], rollbackGroupId: string): Promise<void> {
+    for (const groupId of groupIds) {
+      await this.prisma.mutationGroup.update({
+        where: { id: groupId },
+        data: {
+          status: 'undone',
+          undoneByGroupId: rollbackGroupId,
+        },
+      } as never);
+    }
   }
 
   async getLatestVisibleGroupId(projectId: string): Promise<string | null> {
@@ -544,6 +567,8 @@ export class HistoryService {
       version = response.newVersion;
       snapshot = response.snapshot;
     }
+
+    await this.markGroupsUndone(plan.activeTailGroupIds, rollbackGroupId);
 
     return {
       groupId: rollbackGroupId,

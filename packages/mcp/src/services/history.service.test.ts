@@ -424,6 +424,28 @@ describe('HistoryService version snapshots', () => {
     );
     assert.equal(harness.state.commitCalls[2]?.history.finalizeGroup, true);
     assert.equal(response.snapshot.tasks.find((task) => task.id === 'A')?.startDate, '2026-04-02');
+    assert.equal(harness.state.mutationGroups.find((group) => group.id === 'group-2')?.status, 'undone');
+    assert.equal(harness.state.mutationGroups.find((group) => group.id === 'group-3')?.status, 'undone');
+    assert.ok(harness.state.mutationGroups.find((group) => group.id === 'group-2')?.undoneByGroupId);
+    assert.ok(harness.state.mutationGroups.find((group) => group.id === 'group-3')?.undoneByGroupId);
+  });
+
+  it('listHistoryGroups hides reverted tail groups after restore', async () => {
+    seedVisibleHistory();
+
+    await service.restoreToGroup({
+      projectId: 'project-1',
+      groupId: 'group-1',
+      actorType: 'user',
+      actorId: 'user-1',
+      requestContextId: 'restore visibility',
+    });
+
+    const response = await service.listHistoryGroups({ projectId: 'project-1', limit: 10 });
+
+    assert.deepEqual(response.items.map((item) => item.id), ['group-1']);
+    assert.equal(response.items[0]?.isCurrent, true);
+    assert.equal(response.items[0]?.canRestore, false);
   });
 
   it('preview and restore resolve the same active tail and land on the same target snapshot', async () => {
