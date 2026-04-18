@@ -386,6 +386,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   });
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks: tasksAfter });
+  input.broadcastToSession(input.sessionId, { type: 'history_changed' });
   input.broadcastToSession(input.sessionId, {
     type: 'done',
     chatMessage: {

@@ -237,6 +237,7 @@ async function finishSuccessfulRun(
   },
 ): Promise<ListedTask[]> {
   const tasks = await broadcastTasksSnapshot(input, 'final_state');
+  input.broadcastToSession(input.sessionId, { type: 'history_changed' });
   input.broadcastToSession(input.sessionId, {
     type: 'done',
     chatMessage: metadata,

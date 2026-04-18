@@ -34,6 +34,7 @@ export type ServerMessage =
   | { type: 'tasks'; tasks: unknown[] }
   | { type: 'preview_tasks'; tasks: unknown[]; provisional: true }
   | { type: 'preview_failed'; message: string }
+  | { type: 'history_changed' }
   | { type: 'error'; message: string }
   | {
       type: 'done';

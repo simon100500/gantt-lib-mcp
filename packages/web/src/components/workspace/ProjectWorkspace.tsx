@@ -150,6 +150,7 @@ export function ProjectWorkspace({
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
   const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
+  const historyRefreshRevision = useUIStore((state) => state.historyRefreshRevision);
   const searchResults = useUIStore((state) => state.searchResults);
   const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
@@ -382,13 +383,15 @@ export function ProjectWorkspace({
     }
 
     void refreshHistorySilently();
-
-    const intervalId = window.setInterval(() => {
-      void refreshHistorySilently();
-    }, 5000);
-
-    return () => window.clearInterval(intervalId);
   }, [accessToken, refreshHistorySilently, showHistoryPanel]);
+
+  useEffect(() => {
+    if (!accessToken || historyRefreshRevision === 0) {
+      return;
+    }
+
+    void refreshHistorySilently();
+  }, [accessToken, historyRefreshRevision, refreshHistorySilently]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">

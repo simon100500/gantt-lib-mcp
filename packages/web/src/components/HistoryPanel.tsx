@@ -138,7 +138,7 @@ export function HistoryPanel({
 
       <div className="flex-1 overflow-y-auto pb-1 pt-3">
         {items.length === 0 && !loading ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500">
+          <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl px-6 py-12 text-center text-sm text-slate-500">
             <Clock3 className="h-5 w-5 text-slate-400" />
             <p>История пока пуста.</p>
           </div>
@@ -155,101 +155,102 @@ export function HistoryPanel({
                 : item.isCurrent;
 
               return (
-              <article
-                key={item.id}
-                role={disabled || loading ? undefined : 'button'}
-                tabIndex={disabled || loading ? -1 : 0}
-                onClick={() => {
-                  if (disabled || loading) {
-                    return;
-                  }
-                  void onPreviewVersion(item);
-                }}
-                onKeyDown={(event) => {
-                  if (disabled || loading) {
-                    return;
-                  }
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
+                <article
+                  key={item.id}
+                  role={disabled || loading ? undefined : 'button'}
+                  tabIndex={disabled || loading ? -1 : 0}
+                  onClick={() => {
+                    if (disabled || loading) {
+                      return;
+                    }
                     void onPreviewVersion(item);
-                  }
-                }}
-                className={cn(
-                  'group space-y-0.5 rounded-2xl px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
-                  !disabled && !loading && 'cursor-pointer hover:bg-white',
-                  isActive && 'bg-white',
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={cn(
-                          'inline-flex h-4 w-4 shrink-0 items-center justify-center',
-                          item.actorType === 'agent' ? 'text-violet-500' : 'text-slate-400',
-                        )}
-                        aria-hidden="true"
-                      >
-                        <ActorIcon className="h-4 w-4" />
-                      </span>
+                  }}
+                  onKeyDown={(event) => {
+                    if (disabled || loading) {
+                      return;
+                    }
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      void onPreviewVersion(item);
+                    }
+                  }}
+                  className={cn(
+                    'group space-y-0.5 rounded-2xl px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+                    !disabled && !loading && 'cursor-pointer hover:bg-white',
+                    isActive && 'bg-white',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={cn(
+                            'inline-flex h-4 w-4 shrink-0 items-center justify-center',
+                            item.actorType === 'agent' ? 'text-violet-500' : 'text-slate-400',
+                          )}
+                          aria-hidden="true"
+                        >
+                          <ActorIcon className="h-4 w-4" />
+                        </span>
                         <span className="truncate text-[15px] font-semibold leading-5 text-slate-900">
                           {formatTimestamp(item.createdAt)}
                         </span>
-                      {item.isCurrent && (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
-                          Текущая
-                        </span>
-                      )}
-                      {isLoadingPreview && (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-primary">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                          Загрузка
-                        </span>
-                      )}
-                      {isRestoring && (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          Восстановление
-                        </span>
-                      )}
+                        {item.isCurrent && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
+                            Текущая
+                          </span>
+                        )}
+                        {isLoadingPreview && (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                            Загрузка
+                          </span>
+                        )}
+                        {isRestoring && (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Восстановление
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    {!item.isCurrent && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Действия с версией"
+                            onClick={(event) => event.stopPropagation()}
+                            className={cn(
+                              'inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300',
+                              isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                            )}
+                          >
+                            <MoreHorizontal className="h-4.5 w-4.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onRestoreVersion(item.id);
+                            }}
+                            disabled={disabled || loading || !item.canRestore}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            <span>Восстановить эту версию</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
-                  {!item.isCurrent && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="Действия с версией"
-                          onClick={(event) => event.stopPropagation()}
-                          className={cn(
-                            'inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300',
-                            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-                          )}
-                        >
-                          <MoreHorizontal className="h-4.5 w-4.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void onRestoreVersion(item.id);
-                          }}
-                          disabled={disabled || loading || !item.canRestore}
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                          <span>Восстановить эту версию</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
 
-                <div className="pl-6 pr-5">
-                  <p className="text-[13px] font-normal leading-4 text-slate-700">{humanizeHistoryTitle(item.title)}</p>
-                </div>
-              </article>
-            );})}
+                  <div className="pl-6 pr-5">
+                    <p className="text-[13px] font-normal leading-4 text-slate-700">{humanizeHistoryTitle(item.title)}</p>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </div>

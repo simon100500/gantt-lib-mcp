@@ -1080,6 +1080,7 @@ export async function runAgentWithHistory(
           taskNames: stagedTasksAfter.map((task) => task.name),
         });
 
+        broadcastToSession(sessionId, { type: 'history_changed' });
         broadcastToSession(sessionId, {
           type: 'done',
           chatMessage: stagedAssistantResponse
@@ -1322,6 +1323,7 @@ export async function runAgentWithHistory(
       taskNames: tasksAfter.map((task) => task.name),
     });
 
+    broadcastToSession(sessionId, { type: 'history_changed' });
     broadcastToSession(sessionId, {
       type: 'done',
       chatMessage: assistantResponse

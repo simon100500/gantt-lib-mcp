@@ -573,6 +573,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
+  const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
 
   const replaceTasksFromSystem = useCallback((nextTasks: Task[]) => {
     setTasks(nextTasks);
@@ -599,6 +600,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           }
         : current);
       useChatStore.getState().setError(msg.message ?? 'Предварительный график не был сохранён.');
+      return;
+    }
+    if (msg.type === 'history_changed') {
+      bumpHistoryRefreshRevision();
       return;
     }
     if (msg.type === 'tasks') {
@@ -639,7 +644,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, [auth.isAuthenticated, hasShareToken]);
+  }, [auth.isAuthenticated, bumpHistoryRefreshRevision, hasShareToken]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
