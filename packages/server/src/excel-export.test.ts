@@ -202,8 +202,8 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('H2').value, formatMonthLabel(monthStart));
     assert.equal(sheet.getCell('I2').value, null);
     assert.equal(sheet.getCell('H3').value, 1);
-    assertThemeColor((sheet.getCell('H2').fill as any)?.fgColor, { theme: 4, tint: 0.7999816888943144 });
-    assertThemeColor((sheet.getCell('H3').fill as any)?.fgColor, { theme: 4, tint: 0.5999938962981048 });
+    assertThemeColor((sheet.getCell('H2').fill as any)?.fgColor, { theme: 0 });
+    assertThemeColor((sheet.getCell('H3').fill as any)?.fgColor, { theme: 0 });
     assertThemeColor((sheet.getCell(`${weekendColumnName}2`).font as any)?.color, { theme: 1 });
     assertArgbColor((sheet.getCell(`${weekendColumnName}3`).font as any)?.color, 'FFDC2626');
     assertArgbColor((sheet.getCell(`${todayColumnName}3`).fill as any)?.fgColor, 'FFDC2626');
@@ -228,7 +228,7 @@ describe('buildProjectExcelExportBuffer', () => {
     assert.equal(sheet.getCell('B5').alignment?.indent, 1);
     assert.equal(sheet.getCell('A6').value, '1.2');
     assert.equal(sheet.getCell('B6').value, 'Подэтап');
-    assertThemeColor((sheet.getCell('B6').fill as any)?.fgColor, { theme: 4 });
+    assertThemeColor((sheet.getCell('B6').fill as any)?.fgColor, { theme: 4, tint: 0.7999816888943144 });
     assertThemeColor((sheet.getCell('I6').fill as any)?.fgColor, { theme: 4, tint: -0.249977111117893 });
     assert.equal(sheet.getCell('A7').value, '1.2.1');
     assert.equal(sheet.getCell('B7').value, 'Глубокий этап');
@@ -245,7 +245,7 @@ describe('buildProjectExcelExportBuffer', () => {
     assertArgbColor((sheet.getCell('A4').border as any)?.top?.color, 'FF4B5563');
     assertArgbColor((sheet.getCell('H4').border as any)?.top?.color, 'FF4B5563');
     assertThemeColor((sheet.getCell('H4').border as any)?.left?.color, { theme: 4 });
-    assertThemeColor((sheet.getCell('B4').fill as any)?.fgColor, { theme: 4, tint: 0.3999755851924192 });
+    assertThemeColor((sheet.getCell('B4').fill as any)?.fgColor, { theme: 4, tint: 0.5999938962981048 });
     assertThemeColor((sheet.getCell('H4').fill as any)?.fgColor, { theme: 4, tint: -0.499984740745262 });
     assert.ok((sheet.getRow(9).height ?? 0) > (29 / 1.333));
   });

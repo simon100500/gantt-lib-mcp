@@ -223,13 +223,13 @@ function createWorkbookStyles() {
   const borderGrid = boxBorder('thin', gridBorder);
   const baseHeaderFont: Partial<ExcelJS.Font> = { bold: true, color: textPrimary };
   const headerFill = solidFill(sheetBase);
-  const headerLevel2Fill = accentFill(1, 'lighter80');
-  const headerLevel3Fill = accentFill(1, 'lighter60');
+  const headerLevel2Fill = solidFill(sheetBase);
+  const headerLevel3Fill = solidFill(sheetBase);
   const timelineBaseFill = solidFill(sheetBase);
 
   const parentTasklistPalette = [
-    accentFill(1, 'lighter40'),
-    accentFill(1),
+    accentFill(1, 'lighter60'),
+    accentFill(1, 'lighter80'),
     accentFill(1, 'lighter80'),
   ] as const;
   const parentTimelinePalette = [
