@@ -412,7 +412,7 @@ export function ProjectWorkspace({
             )}
 
             {hasRenderableChart && (
-              <footer className="flex h-6 shrink-0 select-none items-center gap-4 border-t border-slate-200 bg-white px-4">
+              <footer className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3">
                 {effectiveTasks.length > 0 && (
                   <span className="font-mono text-[11px] text-slate-400">
                     {formatTaskCount(effectiveTasks.length)}
@@ -424,7 +424,7 @@ export function ProjectWorkspace({
                 </span>
 
                 {previewHistoryItem && (
-                  <span className="font-mono text-[11px] text-amber-600">
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-amber-700">
                     Версия от {formatHistoryVersionTimestamp(previewHistoryItem.createdAt)}
                   </span>
                 )}

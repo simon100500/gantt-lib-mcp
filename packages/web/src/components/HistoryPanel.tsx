@@ -1,7 +1,8 @@
-import { AlertCircle, Bot, Clock3, RotateCcw, Settings2, Upload, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, MoreHorizontal, RotateCcw, Settings2, Upload, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
 
 interface HistoryPanelProps {
@@ -51,25 +52,6 @@ function formatTimestamp(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatCommandCount(count: number): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-
-  if (mod100 >= 11 && mod100 <= 14) {
-    return `${count} команд`;
-  }
-
-  if (mod10 === 1) {
-    return `${count} команда`;
-  }
-
-  if (mod10 >= 2 && mod10 <= 4) {
-    return `${count} команды`;
-  }
-
-  return `${count} команд`;
 }
 
 function humanizeHistoryTitle(title: string): string {
@@ -133,14 +115,14 @@ export function HistoryPanel({
       )}
 
       {previewGroupId && (
-        <div className="flex items-center justify-between gap-2 border-b border-sky-100 bg-sky-50 px-3 py-2.5">
-          <p className="text-xs font-medium text-sky-800">Просмотр сохраненной версии</p>
+        <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-semibold text-amber-800">Открыта сохраненная версия</p>
           <Button
             type="button"
             size="sm"
             variant="outline"
             onClick={() => { void onReturnToCurrentVersion(); }}
-            className="h-7 px-2 text-[11px]"
+            className="h-7 rounded-full border-amber-200 bg-white px-2.5 text-[11px] text-amber-900 hover:bg-amber-100"
           >
             Вернуться к текущей
           </Button>
@@ -180,9 +162,9 @@ export function HistoryPanel({
                   }
                 }}
                 className={cn(
-                  'space-y-2 px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
+                  'space-y-1.5 px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300',
                   !disabled && !loading && 'cursor-pointer hover:bg-slate-50',
-                  isPreviewing && 'bg-sky-50/60',
+                  isPreviewing && 'bg-slate-50',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -210,55 +192,41 @@ export function HistoryPanel({
                   </div>
                   {item.isCurrent && (
                     <span
-                      className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+                      className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
                     >
-                      Текущая версия
+                      Текущая
                     </span>
                   )}
-                  {isPreviewing && (
-                    <span
-                      className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700"
-                    >
-                      Просмотр
-                    </span>
+                  {!item.isCurrent && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Действия с версией"
+                          onClick={(event) => event.stopPropagation()}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void onRestoreVersion(item.id);
+                          }}
+                          disabled={disabled || loading || !item.canRestore}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          <span>Восстановить эту версию</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
 
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 pr-6">
                   <p className="text-[13px] font-medium leading-4 text-slate-900">{humanizeHistoryTitle(item.title)}</p>
-                  <p className="text-[11px] text-slate-500">
-                    Версии {item.baseVersion} → {item.newVersion} • {formatCommandCount(item.commandCount)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onPreviewVersion(item);
-                    }}
-                    disabled={disabled || loading}
-                    className="h-7 px-2 text-[11px]"
-                  >
-                    Показать эту версию
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onRestoreVersion(item.id);
-                    }}
-                    disabled={disabled || loading || !item.canRestore}
-                    className="h-7 px-2 text-[11px]"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    Восстановить эту версию
-                  </Button>
                 </div>
               </article>
             );})}
