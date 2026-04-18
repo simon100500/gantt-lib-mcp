@@ -1,7 +1,7 @@
-import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { beforeEach, describe, it } from 'node:test';
 import type { CommitProjectCommandResponse, ProjectCommand, ProjectSnapshot, Task } from '../types.js';
-import { HistoryService } from './history.service.js';
+import { HistoryService, HistoryValidationError } from './history.service.js';
 
 type DbGroup = {
   id: string;
@@ -39,40 +39,43 @@ type HarnessState = {
   commitCalls: Array<{
     baseVersion: number;
     command: ProjectCommand;
-    history: CommitRequestHistory;
+    history: {
+      groupId: string;
+      origin: 'undo';
+      title: string;
+      requestContextId?: string;
+      finalizeGroup: boolean;
+      targetGroupId?: string | null;
+    };
   }>;
+  writes: string[];
 };
 
-type CommitRequestHistory = {
-  groupId: string;
-  origin: 'undo' | 'redo';
-  title: string;
-  requestContextId?: string;
-  finalizeGroup: boolean;
-  redoOfGroupId?: string | null;
-  targetGroupId?: string | null;
-};
-
-function createTask(id: string, name = id): Task {
+function createTask(id: string, startDate: string, endDate: string): Task {
   return {
     id,
-    name,
-    startDate: '2026-04-01',
-    endDate: '2026-04-03',
+    name: id,
+    startDate,
+    endDate,
     dependencies: [],
+    sortOrder: id === 'A' ? 0 : 1,
   };
 }
 
 function createHarness(): { prisma: any; state: HarnessState } {
   const state: HarnessState = {
-    version: 4,
+    version: 5,
     snapshot: {
-      tasks: [createTask('A'), createTask('B')],
+      tasks: [
+        createTask('A', '2026-04-05', '2026-04-07'),
+        createTask('B', '2026-04-08', '2026-04-10'),
+      ],
       dependencies: [],
     },
     mutationGroups: [],
     projectEvents: [],
     commitCalls: [],
+    writes: [],
   };
 
   const prisma = {
@@ -81,7 +84,6 @@ function createHarness(): { prisma: any; state: HarnessState } {
         if (where.id !== 'project-1') {
           return null;
         }
-
         return { id: 'project-1', version: state.version };
       },
     },
@@ -90,7 +92,6 @@ function createHarness(): { prisma: any; state: HarnessState } {
         if (where.projectId !== 'project-1') {
           return [];
         }
-
         return state.snapshot.tasks.map((task) => ({
           ...task,
           type: task.type ?? 'task',
@@ -108,44 +109,29 @@ function createHarness(): { prisma: any; state: HarnessState } {
       findMany: async () => [],
     },
     mutationGroup: {
-      findUnique: async ({ where }: any) => {
-        return state.mutationGroups.find((group) => group.id === where.id) ?? null;
-      },
-      findFirst: async ({ where, orderBy }: any) => {
-        let groups = state.mutationGroups.filter((group) => {
-          if (where.projectId && group.projectId !== where.projectId) {
-            return false;
-          }
-          if (where.status && group.status !== where.status) {
-            return false;
-          }
-          if (where.undoable !== undefined && group.undoable !== where.undoable) {
-            return false;
-          }
-          return true;
-        });
-
-        if (orderBy?.newVersion === 'desc') {
-          groups = groups.sort((left, right) => (right.newVersion ?? -1) - (left.newVersion ?? -1));
-        }
-
-        return groups[0] ?? null;
-      },
+      findUnique: async ({ where }: any) => state.mutationGroups.find((group) => group.id === where.id) ?? null,
       findMany: async ({ where, orderBy }: any = {}) => {
         let groups = [...state.mutationGroups];
         if (where?.projectId) {
           groups = groups.filter((group) => group.projectId === where.projectId);
         }
-        if (where?.id?.in) {
-          groups = groups.filter((group) => where.id.in.includes(group.id));
-        }
         if (where?.status) {
           groups = groups.filter((group) => group.status === where.status);
         }
-
+        if (where?.id?.in) {
+          groups = groups.filter((group) => where.id.in.includes(group.id));
+        }
         if (orderBy) {
           groups.sort((left, right) => {
             for (const clause of orderBy) {
+              if (clause.newVersion) {
+                const value = clause.newVersion === 'desc'
+                  ? (right.newVersion ?? -1) - (left.newVersion ?? -1)
+                  : (left.newVersion ?? -1) - (right.newVersion ?? -1);
+                if (value !== 0) {
+                  return value;
+                }
+              }
               if (clause.createdAt) {
                 const value = clause.createdAt === 'desc'
                   ? right.createdAt.getTime() - left.createdAt.getTime()
@@ -154,28 +140,25 @@ function createHarness(): { prisma: any; state: HarnessState } {
                   return value;
                 }
               }
-              if (clause.id) {
-                const value = clause.id === 'desc'
-                  ? right.id.localeCompare(left.id)
-                  : left.id.localeCompare(right.id);
-                if (value !== 0) {
-                  return value;
-                }
-              }
             }
             return 0;
           });
         }
-
         return groups;
       },
       update: async ({ where, data }: any) => {
+        state.writes.push(`mutationGroup.update:${where.id}`);
         const group = state.mutationGroups.find((candidate) => candidate.id === where.id);
         if (!group) {
           throw new Error(`group ${where.id} not found`);
         }
         Object.assign(group, data);
         return group;
+      },
+      create: async ({ data }: any) => {
+        state.writes.push(`mutationGroup.create:${data.id}`);
+        state.mutationGroups.push(data);
+        return data;
       },
     },
     projectEvent: {
@@ -192,7 +175,6 @@ function createHarness(): { prisma: any; state: HarnessState } {
         if (where?.applied !== undefined) {
           events = events.filter((event) => event.applied === where.applied);
         }
-
         if (orderBy?.ordinal) {
           events.sort((left, right) => {
             const leftOrdinal = left.ordinal ?? 0;
@@ -200,8 +182,12 @@ function createHarness(): { prisma: any; state: HarnessState } {
             return orderBy.ordinal === 'desc' ? rightOrdinal - leftOrdinal : leftOrdinal - rightOrdinal;
           });
         }
-
         return events;
+      },
+      create: async ({ data }: any) => {
+        state.writes.push(`projectEvent.create:${data.id}`);
+        state.projectEvents.push(data);
+        return data;
       },
     },
   };
@@ -209,7 +195,7 @@ function createHarness(): { prisma: any; state: HarnessState } {
   return { prisma, state };
 }
 
-describe('HistoryService', () => {
+describe('HistoryService version snapshots', () => {
   let harness: { prisma: any; state: HarnessState };
   let service: HistoryService;
 
@@ -226,6 +212,21 @@ describe('HistoryService', () => {
           });
 
           harness.state.version += 1;
+          if (request.command.type === 'move_task') {
+            harness.state.snapshot = {
+              ...harness.state.snapshot,
+              tasks: harness.state.snapshot.tasks.map((task) =>
+                task.id === request.command.taskId
+                  ? {
+                      ...task,
+                      startDate: request.command.startDate,
+                      endDate: task.endDate,
+                    }
+                  : task,
+              ),
+            };
+          }
+
           return {
             clientRequestId: 'commit',
             accepted: true,
@@ -233,7 +234,7 @@ describe('HistoryService', () => {
             newVersion: harness.state.version,
             result: {
               snapshot: harness.state.snapshot,
-              changedTaskIds: [],
+              changedTaskIds: request.command.type === 'move_task' ? [request.command.taskId] : [],
               changedDependencyIds: [],
               conflicts: [],
               patches: [],
@@ -245,250 +246,17 @@ describe('HistoryService', () => {
     });
   });
 
-  it('undo latest replays inverse commands in reverse order for ordinals 2 then 1', async () => {
-    harness.state.mutationGroups.push({
-      id: 'group-apply',
-      projectId: 'project-1',
-      baseVersion: 1,
-      newVersion: 3,
-      actorType: 'user',
-      actorId: 'user-1',
-      origin: 'user_ui',
-      title: 'Manual edit',
-      status: 'applied',
-      undoable: true,
-      undoneByGroupId: null,
-      redoOfGroupId: null,
-      createdAt: new Date('2026-04-18T10:00:00.000Z'),
-    });
-    harness.state.projectEvents.push(
-      {
-        id: 'event-1',
-        projectId: 'project-1',
-        groupId: 'group-apply',
-        ordinal: 1,
-        version: 2,
-        applied: true,
-        command: { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
-        inverseCommand: { type: 'move_task', taskId: 'A', startDate: '2026-04-01' },
-        createdAt: new Date('2026-04-18T10:00:00.000Z'),
-      },
-      {
-        id: 'event-2',
-        projectId: 'project-1',
-        groupId: 'group-apply',
-        ordinal: 2,
-        version: 3,
-        applied: true,
-        command: { type: 'move_task', taskId: 'B', startDate: '2026-04-04' },
-        inverseCommand: { type: 'move_task', taskId: 'B', startDate: '2026-04-03' },
-        createdAt: new Date('2026-04-18T10:00:02.000Z'),
-      },
-    );
-
-    const response = await service.undoLatestGroup({
-      projectId: 'project-1',
-      actorType: 'user',
-      actorId: 'user-1',
-      requestContextId: 'undo latest',
-    });
-
-    assert.equal(response.accepted, true);
-    assert.deepEqual(
-      harness.state.commitCalls.map((call) => call.command),
-      [
-        { type: 'move_task', taskId: 'B', startDate: '2026-04-03' },
-        { type: 'move_task', taskId: 'A', startDate: '2026-04-01' },
-      ],
-      'undo latest should replay inverse commands in reverse order',
-    );
-    assert.equal(harness.state.commitCalls[1]?.history.finalizeGroup, true);
-    assert.equal(harness.state.mutationGroups[0]?.status, 'undone');
-    assert.equal(harness.state.mutationGroups[0]?.undoneByGroupId, harness.state.commitCalls[0]?.history.groupId);
-  });
-
-  it('redo specific replays original commands in forward order for ordinals 1 then 2', async () => {
-    harness.state.mutationGroups.push(
-      {
-        id: 'group-apply',
-        projectId: 'project-1',
-        baseVersion: 1,
-        newVersion: 3,
-        actorType: 'user',
-        actorId: 'user-1',
-        origin: 'user_ui',
-        title: 'Manual edit',
-        status: 'undone',
-        undoable: true,
-        undoneByGroupId: 'group-undo',
-        redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:00:00.000Z'),
-      },
-      {
-        id: 'group-undo',
-        projectId: 'project-1',
-        baseVersion: 3,
-        newVersion: 5,
-        actorType: 'user',
-        actorId: 'user-1',
-        origin: 'undo',
-        title: 'Undo — Manual edit',
-        status: 'applied',
-        undoable: true,
-        undoneByGroupId: null,
-        redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:01:00.000Z'),
-      },
-    );
-    harness.state.projectEvents.push(
-      {
-        id: 'event-1',
-        projectId: 'project-1',
-        groupId: 'group-apply',
-        ordinal: 1,
-        version: 2,
-        applied: true,
-        command: { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
-        inverseCommand: { type: 'move_task', taskId: 'A', startDate: '2026-04-01' },
-        createdAt: new Date('2026-04-18T10:00:00.000Z'),
-      },
-      {
-        id: 'event-2',
-        projectId: 'project-1',
-        groupId: 'group-apply',
-        ordinal: 2,
-        version: 3,
-        applied: true,
-        command: { type: 'move_task', taskId: 'B', startDate: '2026-04-04' },
-        inverseCommand: { type: 'move_task', taskId: 'B', startDate: '2026-04-03' },
-        createdAt: new Date('2026-04-18T10:00:02.000Z'),
-      },
-    );
-
-    const response = await service.redoGroup({
-      projectId: 'project-1',
-      groupId: 'group-apply',
-      actorType: 'user',
-      actorId: 'user-1',
-      requestContextId: 'redo specific',
-    });
-
-    assert.equal(response.accepted, true);
-    assert.deepEqual(
-      harness.state.commitCalls.map((call) => call.command),
-      [
-        { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
-        { type: 'move_task', taskId: 'B', startDate: '2026-04-04' },
-      ],
-      'redo specific should replay commands in forward order',
-    );
-    assert.equal(harness.state.commitCalls[1]?.history.finalizeGroup, true);
-    assert.equal(harness.state.mutationGroups[0]?.status, 'applied');
-    assert.equal(harness.state.mutationGroups[0]?.undoneByGroupId, null);
-  });
-
-  it('returns history_diverged when a post-undo normal edit exists after the undo group', async () => {
-    harness.state.mutationGroups.push(
-      {
-        id: 'group-apply',
-        projectId: 'project-1',
-        baseVersion: 1,
-        newVersion: 3,
-        actorType: 'user',
-        actorId: 'user-1',
-        origin: 'user_ui',
-        title: 'Manual edit',
-        status: 'undone',
-        undoable: true,
-        undoneByGroupId: 'group-undo',
-        redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:00:00.000Z'),
-      },
-      {
-        id: 'group-undo',
-        projectId: 'project-1',
-        baseVersion: 3,
-        newVersion: 5,
-        actorType: 'user',
-        actorId: 'user-1',
-        origin: 'undo',
-        title: 'Undo — Manual edit',
-        status: 'applied',
-        undoable: true,
-        undoneByGroupId: null,
-        redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:01:00.000Z'),
-      },
-      {
-        id: 'group-diverged',
-        projectId: 'project-1',
-        baseVersion: 5,
-        newVersion: 6,
-        actorType: 'user',
-        actorId: 'user-1',
-        origin: 'user_ui',
-        title: 'New edit',
-        status: 'applied',
-        undoable: true,
-        undoneByGroupId: null,
-        redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:02:00.000Z'),
-      },
-    );
-
-    const response = await service.redoGroup({
-      projectId: 'project-1',
-      groupId: 'group-apply',
-      actorType: 'user',
-      actorId: 'user-1',
-      requestContextId: 'redo diverged',
-    });
-
-    assert.equal(response.accepted, false);
-    assert.equal(response.reason, 'history_diverged');
-    assert.equal(harness.state.commitCalls.length, 0);
-  });
-
-  it('returns target_not_undone when redo is requested for an already-applied target', async () => {
-    harness.state.mutationGroups.push({
-      id: 'group-apply',
-      projectId: 'project-1',
-      baseVersion: 1,
-      newVersion: 3,
-      actorType: 'user',
-      actorId: 'user-1',
-      origin: 'user_ui',
-      title: 'Manual edit',
-      status: 'applied',
-      undoable: true,
-      undoneByGroupId: null,
-      redoOfGroupId: null,
-      createdAt: new Date('2026-04-18T10:00:00.000Z'),
-    });
-
-    const response = await service.redoGroup({
-      projectId: 'project-1',
-      groupId: 'group-apply',
-      actorType: 'user',
-      actorId: 'user-1',
-      requestContextId: 'redo specific',
-    });
-
-    assert.equal(response.accepted, false);
-    assert.equal(response.reason, 'target_not_undone');
-  });
-
-  it('list pagination returns grouped rows with commandCount, undoable, redoable, status, and createdAt', async () => {
+  function seedVisibleHistory() {
     harness.state.mutationGroups.push(
       {
         id: 'group-1',
         projectId: 'project-1',
         baseVersion: 0,
-        newVersion: 1,
+        newVersion: 2,
         actorType: 'user',
         actorId: 'user-1',
         origin: 'user_ui',
-        title: 'Group one',
+        title: 'Initial move',
         status: 'applied',
         undoable: true,
         undoneByGroupId: null,
@@ -498,93 +266,179 @@ describe('HistoryService', () => {
       {
         id: 'group-2',
         projectId: 'project-1',
-        baseVersion: 1,
-        newVersion: 2,
+        baseVersion: 2,
+        newVersion: 4,
         actorType: 'user',
         actorId: 'user-1',
         origin: 'user_ui',
-        title: 'Group two',
-        status: 'undone',
-        undoable: true,
-        undoneByGroupId: 'group-undo',
-        redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:01:00.000Z'),
-      },
-      {
-        id: 'group-undo',
-        projectId: 'project-1',
-        baseVersion: 2,
-        newVersion: 3,
-        actorType: 'user',
-        actorId: 'user-1',
-        origin: 'undo',
-        title: 'Undo — Group two',
+        title: 'Second move',
         status: 'applied',
         undoable: true,
         undoneByGroupId: null,
         redoOfGroupId: null,
-        createdAt: new Date('2026-04-18T10:02:00.000Z'),
+        createdAt: new Date('2026-04-18T10:10:00.000Z'),
+      },
+      {
+        id: 'group-3',
+        projectId: 'project-1',
+        baseVersion: 4,
+        newVersion: 5,
+        actorType: 'agent',
+        actorId: 'agent-1',
+        origin: 'agent_run',
+        title: 'Latest move',
+        status: 'applied',
+        undoable: true,
+        undoneByGroupId: null,
+        redoOfGroupId: null,
+        createdAt: new Date('2026-04-18T10:20:00.000Z'),
       },
     );
+
     harness.state.projectEvents.push(
       {
-        id: 'event-1',
-        projectId: 'project-1',
-        groupId: 'group-1',
-        ordinal: 1,
-        version: 1,
-        applied: true,
-        command: { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
-        inverseCommand: { type: 'move_task', taskId: 'A', startDate: '2026-04-01' },
-        createdAt: new Date('2026-04-18T10:00:00.000Z'),
-      },
-      {
-        id: 'event-2',
+        id: 'event-2a',
         projectId: 'project-1',
         groupId: 'group-2',
         ordinal: 1,
-        version: 2,
+        version: 3,
         applied: true,
-        command: { type: 'move_task', taskId: 'B', startDate: '2026-04-04' },
-        inverseCommand: { type: 'move_task', taskId: 'B', startDate: '2026-04-03' },
-        createdAt: new Date('2026-04-18T10:01:00.000Z'),
+        command: { type: 'move_task', taskId: 'A', startDate: '2026-04-03' },
+        inverseCommand: { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
+        createdAt: new Date('2026-04-18T10:10:00.000Z'),
       },
       {
-        id: 'event-3',
+        id: 'event-2b',
         projectId: 'project-1',
         groupId: 'group-2',
         ordinal: 2,
-        version: 2,
+        version: 4,
         applied: true,
-        command: { type: 'move_task', taskId: 'A', startDate: '2026-04-04' },
-        inverseCommand: { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
-        createdAt: new Date('2026-04-18T10:01:01.000Z'),
+        command: { type: 'move_task', taskId: 'B', startDate: '2026-04-07' },
+        inverseCommand: { type: 'move_task', taskId: 'B', startDate: '2026-04-06' },
+        createdAt: new Date('2026-04-18T10:10:01.000Z'),
+      },
+      {
+        id: 'event-3a',
+        projectId: 'project-1',
+        groupId: 'group-3',
+        ordinal: 1,
+        version: 5,
+        applied: true,
+        command: { type: 'move_task', taskId: 'A', startDate: '2026-04-05' },
+        inverseCommand: { type: 'move_task', taskId: 'A', startDate: '2026-04-04' },
+        createdAt: new Date('2026-04-18T10:20:00.000Z'),
       },
     );
+  }
 
-    const firstPage = await service.listHistoryGroups({
+  it('listHistoryGroups returns visible version rows with current version and restore flags', async () => {
+    seedVisibleHistory();
+
+    const response = await service.listHistoryGroups({ projectId: 'project-1', limit: 10 });
+
+    assert.equal(response.items.length, 3);
+    assert.equal(response.items[0]?.id, 'group-3');
+    assert.equal(response.items[0]?.isCurrent, true);
+    assert.equal(response.items[0]?.canRestore, false);
+    assert.equal(response.items[1]?.baseVersion, 2);
+    assert.equal(response.items[1]?.newVersion, 4);
+    assert.equal(response.items[1]?.commandCount, 2);
+    assert.equal(response.items[1]?.canRestore, true);
+  });
+
+  it('getHistorySnapshot returns the current version unchanged for the active row', async () => {
+    seedVisibleHistory();
+
+    const response = await service.getHistorySnapshot({ projectId: 'project-1', groupId: 'group-3' });
+
+    assert.equal(response.isCurrent, true);
+    assert.equal(response.currentVersion, 5);
+    assert.deepEqual(response.snapshot, harness.state.snapshot);
+    assert.equal(harness.state.commitCalls.length, 0);
+    assert.deepEqual(harness.state.writes, []);
+  });
+
+  it('getHistorySnapshot applies the active tail in memory-only reverse ordinal order without Prisma writes', async () => {
+    seedVisibleHistory();
+
+    const response = await service.getHistorySnapshot({ projectId: 'project-1', groupId: 'group-1' });
+
+    assert.equal(response.groupId, 'group-1');
+    assert.equal(response.isCurrent, false);
+    assert.equal(response.currentVersion, 5);
+    assert.equal(response.snapshot.tasks.find((task) => task.id === 'A')?.startDate, '2026-04-04');
+    assert.equal(response.snapshot.tasks.find((task) => task.id === 'B')?.startDate, '2026-04-06');
+    assert.equal(harness.state.commitCalls.length, 0);
+    assert.deepEqual(harness.state.writes, []);
+  });
+
+  it('restoreToGroup replays the same tail through commitCommand and returns the authoritative snapshot/version', async () => {
+    seedVisibleHistory();
+
+    const response = await service.restoreToGroup({
       projectId: 'project-1',
-      limit: 2,
+      groupId: 'group-1',
+      actorType: 'user',
+      actorId: 'user-1',
+      requestContextId: 'restore group-1',
     });
 
-    assert.equal(firstPage.items.length, 2);
-    assert.equal(firstPage.items[0]?.id, 'group-undo');
-    assert.equal(firstPage.items[1]?.id, 'group-2');
-    assert.equal(firstPage.items[1]?.commandCount, 2);
-    assert.equal(firstPage.items[1]?.undoable, false);
-    assert.equal(firstPage.items[1]?.redoable, true);
-    assert.equal(typeof firstPage.items[1]?.createdAt, 'string');
-    assert.equal(firstPage.nextCursor, 'group-2');
+    assert.equal(response.targetGroupId, 'group-1');
+    assert.equal(response.version, 7);
+    assert.deepEqual(
+      harness.state.commitCalls.map((call) => call.command),
+      [
+        { type: 'move_task', taskId: 'A', startDate: '2026-04-04' },
+        { type: 'move_task', taskId: 'B', startDate: '2026-04-06' },
+        { type: 'move_task', taskId: 'A', startDate: '2026-04-02' },
+      ],
+    );
+    assert.equal(harness.state.commitCalls[2]?.history.finalizeGroup, true);
+    assert.equal(response.snapshot.tasks.find((task) => task.id === 'A')?.startDate, '2026-04-02');
+  });
 
-    const secondPage = await service.listHistoryGroups({
+  it('preview and restore resolve the same active tail and land on the same target snapshot', async () => {
+    seedVisibleHistory();
+
+    const preview = await service.getHistorySnapshot({ projectId: 'project-1', groupId: 'group-1' });
+    const restore = await service.restoreToGroup({
       projectId: 'project-1',
-      cursor: firstPage.nextCursor,
-      limit: 2,
+      groupId: 'group-1',
+      actorType: 'user',
+      actorId: 'user-1',
+      requestContextId: 'parity',
     });
 
-    assert.equal(secondPage.items.length, 1);
-    assert.equal(secondPage.items[0]?.id, 'group-1');
-    assert.equal(secondPage.items[0]?.status, 'applied');
-    assert.equal(secondPage.items[0]?.commandCount, 1);
+    assert.deepEqual(restore.snapshot, preview.snapshot);
+  });
+
+  it('fails with a typed validation error when the active tail contains a missing inverseCommand', async () => {
+    seedVisibleHistory();
+    harness.state.projectEvents[1] = {
+      ...harness.state.projectEvents[1]!,
+      inverseCommand: null,
+    };
+
+    await assert.rejects(
+      () => service.getHistorySnapshot({ projectId: 'project-1', groupId: 'group-1' }),
+      (error: unknown) =>
+        error instanceof HistoryValidationError
+        && error.code === 'validation_error'
+        && /inverseCommand/.test(error.message),
+    );
+
+    await assert.rejects(
+      () => service.restoreToGroup({
+        projectId: 'project-1',
+        groupId: 'group-1',
+        actorType: 'user',
+        actorId: 'user-1',
+      }),
+      (error: unknown) =>
+        error instanceof HistoryValidationError
+        && error.code === 'validation_error'
+        && /inverseCommand/.test(error.message),
+    );
   });
 });
