@@ -53,6 +53,7 @@ export interface UseBatchTaskUpdateResult {
   handleReorder: (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => Promise<void>;
   handlePromoteTask: (taskId: string) => Promise<void>;
   handleDemoteTask: (taskId: string, newParentId: string) => Promise<void>;
+  handleUngroupTask: (taskId: string) => Promise<void>;
   savingState: SavingState;
 }
 
@@ -984,6 +985,79 @@ export function useBatchTaskUpdate({
     }
   }, [applyAuthoritativeTaskResult, applyTaskChanges, commitAuthCommands, isAuthenticatedMode, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
 
+  const handleUngroupTask = useCallback(async (taskId: string) => {
+    const parentTask = tasks.find((task) => task.id === taskId);
+    if (!parentTask) {
+      return;
+    }
+
+    const changedTasks = tasks.flatMap((task) => {
+      if (task.id === taskId) {
+        return [];
+      }
+
+      const nextParentId = task.parentId === taskId ? parentTask.parentId : task.parentId;
+      const nextDependencies = task.dependencies?.filter((dependency) => dependency.taskId !== taskId);
+      const parentChanged = (nextParentId ?? null) !== (task.parentId ?? null);
+      const dependenciesChanged = JSON.stringify(nextDependencies ?? []) !== JSON.stringify(task.dependencies ?? []);
+
+      if (!parentChanged && !dependenciesChanged) {
+        return [];
+      }
+
+      return [{
+        ...task,
+        parentId: nextParentId,
+        dependencies: nextDependencies,
+      }];
+    });
+
+    if (changedTasks.length === 0) {
+      return;
+    }
+
+    if (isAuthenticatedMode) {
+      const updateCommands = changedTasks.map((task) => ({
+        type: 'update_task_fields' as const,
+        taskId: task.id,
+        fields: {
+          parentId: task.parentId ?? null,
+          dependencies: task.dependencies ?? [],
+        },
+      }));
+      const commands: FrontendProjectCommand[] = updateCommands.length > 1
+        ? [{
+            type: 'update_tasks_fields_batch',
+            updates: updateCommands.map((command) => ({
+              taskId: command.taskId,
+              fields: command.fields,
+            })),
+          }, {
+            type: 'delete_task',
+            taskId,
+          }]
+        : [
+            updateCommands[0],
+            { type: 'delete_task', taskId },
+          ];
+
+      try {
+        setSavingStateWithReset('saving');
+        await commitAuthCommands(commands);
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to ungroup task:', error);
+        setSavingStateWithReset('error');
+      }
+      return;
+    }
+
+    const changedTaskMap = new Map(changedTasks.map((task) => [task.id, task]));
+    setTasks((currentTasks) => currentTasks
+      .filter((task) => task.id !== taskId)
+      .map((task) => changedTaskMap.get(task.id) ?? task));
+  }, [commitAuthCommands, isAuthenticatedMode, setSavingStateWithReset, setTasks, tasks]);
+
   return {
     handleTasksChange,
     handleGanttDayModeSwitch,
@@ -993,6 +1067,7 @@ export function useBatchTaskUpdate({
     handleReorder,
     handlePromoteTask,
     handleDemoteTask,
+    handleUngroupTask,
     savingState,
   };
 }

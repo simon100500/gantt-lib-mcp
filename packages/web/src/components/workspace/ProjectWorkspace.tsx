@@ -463,6 +463,7 @@ export function ProjectWorkspace({
                 onDelete={effectiveReadOnly ? undefined : batchUpdate?.handleDelete}
                 onInsertAfter={effectiveReadOnly ? undefined : batchUpdate?.handleInsertAfter}
                 onReorder={effectiveReadOnly ? undefined : batchUpdate?.handleReorder}
+                onUngroupTask={effectiveReadOnly ? undefined : batchUpdate?.handleUngroupTask}
                 customDays={customDays}
                 highlightedTaskIds={highlightedSearchTaskIds}
                 filterMode={filterMode}

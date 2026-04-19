@@ -49,6 +49,7 @@ export interface GanttChartProps {
   onReorder?: (tasks: Task[], movedTaskId?: string, inferredParentId?: string) => void;
   onPromoteTask?: (taskId: string) => void;
   onDemoteTask?: (taskId: string, newParentId: string) => void;
+  onUngroupTask?: (taskId: string) => void;
   taskFilter?: import('gantt-lib').TaskPredicate;
   highlightedTaskIds?: Set<string>;
   filterMode?: 'highlight' | 'hide';
@@ -93,6 +94,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onReorder,
   onPromoteTask,
   onDemoteTask,
+  onUngroupTask,
   taskFilter,
   highlightedTaskIds,
   filterMode,
@@ -151,6 +153,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onReorder={onReorder}
       onPromoteTask={onPromoteTask}
       onDemoteTask={onDemoteTask}
+      onUngroupTask={onUngroupTask}
       customDays={customDays}
       taskFilter={taskFilter}
       highlightedTaskIds={highlightedTaskIds}
