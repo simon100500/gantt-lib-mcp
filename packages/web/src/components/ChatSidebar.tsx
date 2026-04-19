@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
@@ -72,13 +72,6 @@ export function ChatSidebar({
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
-  const aiUsage = usage?.usage.ai_queries;
-  const aiRemaining = usage?.remaining.ai_queries;
-  const aiUsageLabel = aiUsage?.usageState === "tracked"
-    ? `${aiUsage.used}/${aiUsage.limit === "unlimited" ? "∞" : aiUsage.limit} AI`
-    : aiRemaining?.remainingState === "unlimited"
-      ? "AI без лимита"
-      : null;
   const resolvedDisabledReason = disabledReason ?? (disabled ? "Assistant думает…" : null);
 
   useEffect(() => {
@@ -153,22 +146,27 @@ export function ChatSidebar({
           title={connected ? "Подключено" : "Переподключение..."}
         />
         <span className="text-[12px] font-medium tracking-tight text-slate-600">
-          AI ассистент
+          Ассистент
         </span>
-        {aiUsageLabel && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-            {aiUsageLabel}
-          </span>
-        )}
         <span className="flex-1" />
         {onClose && (
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            aria-label="Закрыть"
-          >
-            <X className="h-4 w-4 text-slate-500" />
-          </button>
+          <>
+            <button
+              onClick={onClose}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:hidden"
+              aria-label="К графику"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>К графику</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="hidden rounded-md p-1 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:inline-flex"
+              aria-label="Закрыть"
+            >
+              <X className="h-4 w-4 text-slate-500" />
+            </button>
+          </>
         )}
       </header>
 
@@ -358,24 +356,6 @@ export function ChatSidebar({
 
         <div ref={endRef} />
       </div>
-
-      {showChartButton && onShowChart && (
-        <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 md:hidden">
-          <button
-            type="button"
-            onClick={onShowChart}
-            className={cn(
-              "flex h-10 w-full items-center justify-center gap-2 rounded-md",
-              "border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700",
-              "transition-colors hover:border-primary hover:text-primary",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-            )}
-          >
-            <ChartNoAxesGantt className="h-4 w-4" />
-            <span>Показать график</span>
-          </button>
-        </div>
-      )}
 
       {isEmpty && (
         <div className="flex flex-wrap gap-1.5 pl-4 pr-3 pb-2">
