@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUp, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, ArrowUp, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
@@ -156,8 +156,8 @@ export function ChatSidebar({
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:hidden"
               aria-label="К графику"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
               <span>К графику</span>
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={onClose}
