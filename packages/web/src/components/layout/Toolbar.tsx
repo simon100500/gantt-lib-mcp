@@ -15,6 +15,7 @@ import {
   Rows3,
   Lock,
   LockOpen,
+  X,
 } from 'lucide-react';
 import { useEffect } from 'react';
 
@@ -674,14 +675,19 @@ export function Toolbar({
           onClick={onToggleChat}
           aria-pressed={isChatOpen}
           className={cn(
-            'h-8 rounded-md px-2 text-xs font-medium transition-all focus-visible:outline-none',
+            'h-8 rounded-md px-2 text-xs font-medium focus-visible:outline-none',
             isChatOpen
               ? 'bg-primary border-2 border-primary/30 text-primary-foreground shadow-inner'
               : 'bg-primary border-2 border-transparent text-primary-foreground shadow-sm hover:bg-primary/90',
           )}
           title={isChatOpen ? 'Скрыть Ассистент' : 'Показать Ассистент'}
         >
-          <Bot className={cn('h-3.5 w-3.5')} />
+          <Bot className="h-3.5 w-3.5 sm:hidden" />
+          {isChatOpen ? (
+            <X className="hidden h-3.5 w-3.5 sm:block" />
+          ) : (
+            <Bot className="hidden h-3.5 w-3.5 sm:block" />
+          )}
           <span className="ml-1 hidden sm:inline">Ассистент</span>
         </Button>
       )}
