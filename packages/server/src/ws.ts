@@ -181,13 +181,7 @@ export function registerWsRoutes(fastify: FastifyInstance): void {
                 sessionConnections.set(currentSessionId, new Set());
               }
               sessionConnections.get(currentSessionId)!.add(socket);
-
               socket.send(JSON.stringify({ type: 'connected' }));
-              void writeServerDebugLog('ws_authenticated', {
-                sessionId: currentSessionId,
-                userId: payload.sub,
-                projectId: resolvedProjectId,
-              });
               } catch (err) {
               socket.send(JSON.stringify({
                 type: 'error',
