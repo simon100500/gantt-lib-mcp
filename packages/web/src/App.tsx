@@ -21,6 +21,7 @@ import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
+import { useAppUpdateCheck } from './hooks/useAppUpdateCheck.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
 import { useTasks } from './hooks/useTasks.ts';
@@ -1277,6 +1278,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const shareLink = useUIStore((state) => state.shareLinkUrl);
+  const { updateAvailable, reloadApp } = useAppUpdateCheck();
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const currentProjectTaskCount = workspace.kind === 'project'
@@ -1505,6 +1507,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   return (
     <>
+    {updateAvailable && (
+      <div className="fixed inset-x-0 top-0 z-[90] flex justify-center px-3 pt-3">
+        <div className="flex w-full max-w-xl items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-[0_12px_32px_rgba(15,23,42,0.14)]">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-900">Доступно обновление</p>
+            <p className="text-xs text-slate-500">Откройте новую версию приложения, когда будет удобно.</p>
+          </div>
+          <button
+            type="button"
+            onClick={reloadApp}
+            className="shrink-0 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+          >
+            Обновить
+          </button>
+        </div>
+      </div>
+    )}
     <ProjectMenu
       error={error}
       hasShareToken={hasShareToken}
