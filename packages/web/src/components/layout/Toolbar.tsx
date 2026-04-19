@@ -1,4 +1,5 @@
 import {
+  Bot,
   ChartNoAxesGantt,
   Check,
   ChevronDown,
@@ -14,7 +15,6 @@ import {
   Rows3,
   Lock,
   LockOpen,
-  Sparkles,
 } from 'lucide-react';
 import { useEffect } from 'react';
 
@@ -654,7 +654,7 @@ export function Toolbar({
           size="sm"
           variant={hasActiveFilters ? 'secondary' : 'ghost'}
           className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary lg:hidden',
+            'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary lg:hidden',
             hasActiveFilters && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
           )}
           title="Показать фильтры задач"
@@ -679,10 +679,10 @@ export function Toolbar({
               ? 'bg-primary border-2 border-primary/30 text-primary-foreground shadow-inner'
               : 'bg-primary border-2 border-transparent text-primary-foreground shadow-sm hover:bg-primary/90',
           )}
-          title={isChatOpen ? 'Скрыть AI ассистента' : 'Показать AI ассистента'}
+          title={isChatOpen ? 'Скрыть Ассистент' : 'Показать Ассистент'}
         >
-          <Sparkles className={cn('h-3.5 w-3.5', isChatOpen && 'fill-primary-foreground/20')} />
-          <span className="ml-1">Ассистент</span>
+          <Bot className={cn('h-3.5 w-3.5')} />
+          <span className="ml-1 hidden sm:inline">Ассистент</span>
         </Button>
       )}
     </div>
