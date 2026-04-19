@@ -108,7 +108,6 @@ export function Toolbar({
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
-  const hasExportActions = Boolean(onExportPdf || onExportExcel);
 
   const handleToggleDragLock = () => {
     if (mutationLocked) {
@@ -628,25 +627,6 @@ export function Toolbar({
             />
             <span className="text-sm">Рабочие дни</span>
           </DropdownMenuItem>
-          {onExportPdf && (
-            <DropdownMenuItem
-              onClick={onExportPdf}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <FileDown className="h-4 w-4" />
-              <span className="text-sm">PDF / Печать</span>
-            </DropdownMenuItem>
-          )}
-          {onExportExcel && (
-            <DropdownMenuItem
-              onClick={onExportExcel}
-              disabled={isExportExcelLoading}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
-            </DropdownMenuItem>
-          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

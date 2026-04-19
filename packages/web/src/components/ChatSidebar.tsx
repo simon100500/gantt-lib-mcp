@@ -137,7 +137,7 @@ export function ChatSidebar({
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <header className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0">
+      <header className="flex min-h-12 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0 md:min-h-10">
         <span className="text-[12px] font-semibold tracking-tight text-slate-700">
           AI ассистент
         </span>
@@ -146,7 +146,7 @@ export function ChatSidebar({
           <>
             <button
               onClick={onClose}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:hidden"
+              className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:hidden"
               aria-label="К графику"
             >
               <ChartNoAxesGantt className="h-3.5 w-3.5" />
