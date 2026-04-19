@@ -736,19 +736,6 @@ async function executeAgentAttempt(
               text: event.event.delta.text,
             });
           }
-          if (
-            event.event.type === 'content_block_delta'
-            && event.event.delta.type === 'thinking_delta'
-            && event.event.delta.thinking
-          ) {
-            await writeServerDebugLog('sdk_thinking_delta', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              thinking: event.event.delta.thinking,
-            });
-          }
           continue;
         }
 
