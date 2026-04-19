@@ -106,6 +106,7 @@ export function Toolbar({
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
+  const hasExportActions = Boolean(onExportPdf || onExportExcel);
 
   const handleToggleDragLock = () => {
     if (mutationLocked) {
@@ -257,22 +258,24 @@ export function Toolbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
             {showShareButton && onCreateShareLink && (
-              <DropdownMenuItem
-                onClick={() => void onCreateShareLink()}
-                disabled={shareStatus === 'creating'}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
-                <span className="text-sm">
-                  {shareStatus === 'creating'
-                    ? 'Создаём ссылку...'
-                    : shareStatus === 'copied'
-                      ? 'Скопировано'
-                    : shareStatus === 'error'
-                        ? 'Ошибка ссылки'
-                        : 'Отправить ссылку'}
-                </span>
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem
+                  onClick={() => void onCreateShareLink()}
+                  disabled={shareStatus === 'creating'}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                  <span className="text-sm">
+                    {shareStatus === 'creating'
+                      ? 'Создаём ссылку...'
+                      : shareStatus === 'copied'
+                        ? 'Скопировано'
+                      : shareStatus === 'error'
+                          ? 'Ошибка ссылки'
+                          : 'Отправить ссылку'}
+                  </span>
+                </DropdownMenuItem>
+              </>
             )}
             {onExportPdf && (
               <DropdownMenuItem
@@ -401,7 +404,34 @@ export function Toolbar({
         ))}
       </div>
 
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none sm:hidden"
+            title="Масштаб"
+          >
+            <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Нед.' : 'Мес.'}</span>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40 sm:hidden">
+          {(['day', 'week', 'month'] as const).map((nextMode) => (
+            <DropdownMenuItem
+              key={nextMode}
+              onClick={() => handleViewModeChange(nextMode)}
+              className={cn(
+                'flex cursor-pointer items-center gap-2',
+                currentViewMode === nextMode && 'bg-primary/5 text-primary',
+              )}
+            >
+              <span className="text-sm">{nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
@@ -412,28 +442,6 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <div className="px-2 py-2 sm:hidden">
-            <div className="flex flex-col rounded-md">
-              {(['day', 'week', 'month'] as const).map((nextMode, index, modes) => (
-                <button
-                  key={nextMode}
-                  type="button"
-                  onClick={() => handleViewModeChange(nextMode)}
-                  className={cn(
-                    'flex h-9 items-center px-3 text-left text-xs font-medium transition-colors focus-visible:outline-none border',
-                    index === 0 && 'rounded-t-md',
-                    index === modes.length - 1 && 'rounded-b-md',
-                    currentViewMode === nextMode
-                      ? 'border-primary text-primary bg-primary/5 hover:bg-primary/10'
-                      : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
-                  )}
-                >
-                  {nextMode === 'day' ? 'День' : nextMode === 'week' ? 'Неделя' : 'Месяц'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mx-2 my-1 h-px bg-slate-200 sm:hidden" />
           <DropdownMenuItem
             onClick={onCollapseAll}
             className="flex cursor-pointer items-center gap-2"
@@ -467,23 +475,26 @@ export function Toolbar({
           {onExportExcel && (
             <DropdownMenuItem
               onClick={onExportExcel}
+              disabled={isExportExcelLoading}
               className="flex cursor-pointer items-center gap-2"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              <span className="text-sm">Excel</span>
+              <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
             </DropdownMenuItem>
           )}
           {showShareButton && onCreateShareLink && (
-            <DropdownMenuItem
-              onClick={() => void onCreateShareLink()}
-              disabled={shareStatus === 'creating'}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
-              <span className="text-sm">
-                {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку'}
-              </span>
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem
+                onClick={() => void onCreateShareLink()}
+                disabled={shareStatus === 'creating'}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                <span className="text-sm">
+                  {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку'}
+                </span>
+              </DropdownMenuItem>
+            </>
           )}
           <DropdownMenuItem
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
@@ -507,20 +518,6 @@ export function Toolbar({
               {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
             </span>
           </DropdownMenuItem>
-          <FilterPopup>
-            <DropdownMenuItem
-              onSelect={(e) => e.preventDefault()}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <div className="relative">
-                <Funnel className="h-4 w-4" />
-                {hasActiveFilters && (
-                  <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
-                )}
-              </div>
-              <span className="text-sm">Фильтры</span>
-            </DropdownMenuItem>
-          </FilterPopup>
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
@@ -570,7 +567,7 @@ export function Toolbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
@@ -639,14 +636,34 @@ export function Toolbar({
           {onExportExcel && (
             <DropdownMenuItem
               onClick={onExportExcel}
+              disabled={isExportExcelLoading}
               className="flex cursor-pointer items-center gap-2"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              <span className="text-sm">Excel</span>
+              <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <FilterPopup>
+        <Button
+          size="sm"
+          variant={hasActiveFilters ? 'secondary' : 'ghost'}
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary lg:hidden',
+            hasActiveFilters && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
+          )}
+          title="Показать фильтры задач"
+        >
+          <div className="relative">
+            <Funnel className="h-3.5 w-3.5" />
+            {hasActiveFilters && (
+              <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+            )}
+          </div>
+        </Button>
+      </FilterPopup>
 
       {showChatToggle && onToggleChat && (
         <Button
