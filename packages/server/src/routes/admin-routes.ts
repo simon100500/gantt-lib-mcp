@@ -44,7 +44,7 @@ function normalizePeriod(value: unknown): BillingPeriod | null {
   return value === 'monthly' || value === 'yearly' ? value : null;
 }
 
-async function buildAdminUserSummary(user: { id: string; email: string; createdAt: Date }) {
+async function buildAdminUserSummary(user: { id: string; email: string; createdAt: Date; lastActiveAt?: Date | null }) {
   const prisma = getPrisma();
   const billingService = new BillingService();
   const [status, activeProjects, archivedProjects] = await Promise.all([
@@ -64,6 +64,7 @@ async function buildAdminUserSummary(user: { id: string; email: string; createdA
     id: user.id,
     email: user.email,
     createdAt: user.createdAt.toISOString(),
+    lastActiveAt: (user.lastActiveAt ?? user.createdAt).toISOString(),
     subscription: {
       plan: status.plan,
       planLabel: status.planMeta.label,
@@ -80,6 +81,85 @@ async function buildAdminUserSummary(user: { id: string; email: string; createdA
       aiQueriesUsed: status.usage.ai_queries.usageState === 'tracked' ? status.usage.ai_queries.used : 0,
       aiQueriesLimit: status.usage.ai_queries.usageState === 'tracked' ? status.usage.ai_queries.limit : null,
     },
+  };
+}
+
+async function getAdminUsersPage(params: {
+  query?: string;
+  page: number;
+  pageSize: number;
+}): Promise<{
+  total: number;
+  users: Array<{ id: string; email: string; createdAt: Date; lastActiveAt: Date | null }>;
+}> {
+  const prisma = getPrisma();
+  const trimmedQuery = params.query?.trim();
+  const querySql = trimmedQuery ? `%${trimmedQuery}%` : null;
+
+  const totalRows = await prisma.$queryRaw<Array<{ count: bigint | number }>>`
+    SELECT COUNT(*)::bigint AS count
+    FROM users u
+    WHERE ${querySql}::text IS NULL OR u.email ILIKE ${querySql}
+  `;
+
+  const users = await prisma.$queryRaw<Array<{
+    id: string;
+    email: string;
+    created_at: Date;
+    last_active_at: Date | null;
+  }>>`
+    WITH ranked_users AS (
+      SELECT
+        u.id,
+        u.email,
+        u.created_at,
+        GREATEST(
+          u.created_at,
+          COALESCE(s.latest_session_at, u.created_at),
+          COALESCE(p.latest_project_at, u.created_at),
+          COALESCE(m.latest_message_at, u.created_at),
+          COALESCE(l.latest_log_at, u.created_at)
+        ) AS last_active_at
+      FROM users u
+      LEFT JOIN (
+        SELECT user_id, MAX(created_at) AS latest_session_at
+        FROM sessions
+        GROUP BY user_id
+      ) s ON s.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, MAX(created_at) AS latest_project_at
+        FROM projects
+        GROUP BY user_id
+      ) p ON p.user_id = u.id
+      LEFT JOIN (
+        SELECT p.user_id, MAX(m.created_at) AS latest_message_at
+        FROM messages m
+        INNER JOIN projects p ON p.id = m.project_id
+        GROUP BY p.user_id
+      ) m ON m.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, MAX(created_at) AS latest_log_at
+        FROM agent_debug_logs
+        WHERE user_id IS NOT NULL
+        GROUP BY user_id
+      ) l ON l.user_id = u.id
+      WHERE ${querySql}::text IS NULL OR u.email ILIKE ${querySql}
+    )
+    SELECT id, email, created_at, last_active_at
+    FROM ranked_users
+    ORDER BY last_active_at DESC, created_at DESC, email ASC
+    OFFSET ${(params.page - 1) * params.pageSize}
+    LIMIT ${params.pageSize}
+  `;
+
+  return {
+    total: Number(totalRows[0]?.count ?? 0),
+    users: users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      createdAt: new Date(user.created_at),
+      lastActiveAt: user.last_active_at ? new Date(user.last_active_at) : null,
+    })),
   };
 }
 
@@ -207,36 +287,17 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
       page?: string | number;
       pageSize?: string | number;
     };
-    const query = rawQuery?.trim();
     const parsedPage = Number(rawPage ?? 1);
     const parsedPageSize = Number(rawPageSize ?? 25);
     const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1;
     const pageSize = Number.isFinite(parsedPageSize)
       ? Math.min(100, Math.max(1, Math.floor(parsedPageSize)))
       : 25;
-    const prisma = getPrisma();
-    const where = query ? {
-      email: {
-        contains: query,
-        mode: 'insensitive' as const,
-      },
-    } : undefined;
-
-    const [total, users] = await Promise.all([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        select: {
-          id: true,
-          email: true,
-          createdAt: true,
-        },
-      }),
-    ]);
-
+    const { total, users } = await getAdminUsersPage({
+      query: rawQuery,
+      page,
+      pageSize,
+    });
     const items = await Promise.all(users.map((user) => buildAdminUserSummary(user)));
     return reply.send({
       users: items,

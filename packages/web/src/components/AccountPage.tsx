@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { LoginButton } from './LoginButton';
+import { AccountProjectsPage } from './AccountProjectsPage';
 import { AccountBillingPage } from './AccountBillingPage';
 
 interface AccountPageProps {
@@ -33,6 +35,8 @@ function PageHeader({ children }: { children: React.ReactNode }) {
 }
 
 export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: AccountPageProps) {
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing'>('projects');
+
   if (!isAuthenticated) {
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-[#f4f5f7]">
@@ -62,7 +66,33 @@ export function AccountPage({ isAuthenticated, userEmail, onLoginRequired }: Acc
       <PageHeader>
         <span className="ml-auto hidden text-sm text-slate-500 sm:inline">{userEmail}</span>
       </PageHeader>
-      <AccountBillingPage />
+      <div className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-5xl flex-wrap gap-2 px-4 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setActiveTab('projects')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'projects'
+                ? 'bg-slate-900 text-white'
+                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Проекты
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('billing')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'billing'
+                ? 'bg-slate-900 text-white'
+                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Биллинг
+          </button>
+        </div>
+      </div>
+      {activeTab === 'projects' ? <AccountProjectsPage /> : <AccountBillingPage />}
     </div>
   );
 }

@@ -13,6 +13,7 @@ interface AdminUserSummary {
   id: string;
   email: string;
   createdAt: string;
+  lastActiveAt: string;
   subscription: {
     plan: PlanId;
     planLabel: string;
@@ -273,7 +274,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
   const [logProjectName, setLogProjectName] = useState<string | null>(null);
   const [logs, setLogs] = useState<AdminDebugLogEntry[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [activeTab, setActiveTab] = useState<'billing' | 'projects'>('billing');
+  const [activeTab, setActiveTab] = useState<'billing' | 'projects'>('projects');
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
@@ -340,7 +341,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
       const data = await response.json() as AdminUserDetails;
       setForbidden(false);
       setSelectedUser(data);
-      setActiveTab('billing');
+      setActiveTab('projects');
       setChatProjectId(null);
       setChatProjectName(null);
       setChatMessages([]);
@@ -807,6 +808,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                             </span>
                           )}
                           <span className="text-slate-500">{user.projects.active} пр.</span>
+                          <span className="text-slate-500">активность: {formatDate(user.lastActiveAt)}</span>
                         </div>
                       </button>
                     );
@@ -852,6 +854,9 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                     <div>
                       <h2 className="text-xl font-semibold text-slate-900">{selectedUser.user.email}</h2>
                       <div className="mt-2 text-sm text-slate-500">Регистрация: {formatDate(selectedUser.user.createdAt)}</div>
+                      {selectedSummary?.lastActiveAt && (
+                        <div className="mt-1 text-sm text-slate-500">Последняя активность: {formatDate(selectedSummary.lastActiveAt)}</div>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className={`rounded-full px-3 py-1 text-sm ${
@@ -873,17 +878,6 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setActiveTab('billing')}
-                      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-                        activeTab === 'billing'
-                          ? 'bg-slate-900 text-white'
-                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      Биллинг
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setActiveTab('projects')}
                       className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
                         activeTab === 'projects'
@@ -892,6 +886,17 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
                       }`}
                     >
                       Проекты ({selectedUser.projects.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('billing')}
+                      className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                        activeTab === 'billing'
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Биллинг
                     </button>
                   </div>
 
