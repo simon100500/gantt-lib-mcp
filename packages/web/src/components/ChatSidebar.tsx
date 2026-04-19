@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUp, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
@@ -138,24 +138,18 @@ export function ChatSidebar({
   return (
     <div className="flex h-full flex-col bg-white">
       <header className="flex min-h-10 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0">
-        <span
-          className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
-            connected ? "bg-emerald-500" : "bg-amber-400",
-          )}
-          title={connected ? "Подключено" : "Переподключение..."}
-        />
-        <span className="text-[12px] font-medium tracking-tight text-slate-600">
-          Ассистент
+        <span className="text-[12px] font-semibold tracking-tight text-slate-700">
+          AI ассистент
         </span>
         <span className="flex-1" />
         {onClose && (
           <>
             <button
               onClick={onClose}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:hidden"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 md:hidden"
               aria-label="К графику"
             >
+              <ChartNoAxesGantt className="h-3.5 w-3.5" />
               <span>К графику</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>

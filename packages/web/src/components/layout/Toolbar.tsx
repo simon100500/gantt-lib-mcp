@@ -413,7 +413,7 @@ export function Toolbar({
             className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none sm:hidden"
             title="Масштаб"
           >
-            <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Нед.' : 'Мес.'}</span>
+            <span>{currentViewMode === 'day' ? 'День' : currentViewMode === 'week' ? 'Неделя' : 'Месяц'}</span>
             <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
           </button>
         </DropdownMenuTrigger>
