@@ -23,6 +23,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
@@ -463,6 +464,21 @@ export function Toolbar({
             <FlagTriangleRight className="h-4 w-4" />
             <span className="text-sm">Сегодня</span>
           </DropdownMenuItem>
+          <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+          {showShareButton && onCreateShareLink && (
+            <>
+              <DropdownMenuItem
+                onClick={() => void onCreateShareLink()}
+                disabled={shareStatus === 'creating'}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                <span className="text-sm">
+                  {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку'}
+                </span>
+              </DropdownMenuItem>
+            </>
+          )}
           {onExportPdf && (
             <DropdownMenuItem
               onClick={onExportPdf}
@@ -482,20 +498,7 @@ export function Toolbar({
               <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
             </DropdownMenuItem>
           )}
-          {showShareButton && onCreateShareLink && (
-            <>
-              <DropdownMenuItem
-                onClick={() => void onCreateShareLink()}
-                disabled={shareStatus === 'creating'}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
-                <span className="text-sm">
-                  {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку'}
-                </span>
-              </DropdownMenuItem>
-            </>
-          )}
+          <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
           <DropdownMenuItem
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className="flex cursor-pointer items-center gap-2"
