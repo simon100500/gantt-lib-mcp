@@ -32,7 +32,7 @@ import { useAuthStore } from './stores/useAuthStore.ts';
 import { getExportAccessLevel, useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
-import { useUIStore } from './stores/useUIStore.ts';
+import { readProjectChatOpenState, useUIStore } from './stores/useUIStore.ts';
 import { useProjectUIStore } from './stores/useProjectUIStore.ts';
 import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
@@ -683,7 +683,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       if (current.kind === 'project' && current.projectId === projectId) {
         return current;
       }
-      return { kind: 'project', projectId, chatOpen: false };
+      return { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
     });
   }, [auth.isAuthenticated, auth.project?.id, hasShareToken, setWorkspace]);
 
@@ -749,7 +749,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setWorkspace({
         kind: 'project',
         projectId: newProject.id,
-        chatOpen: Boolean(options.firstPrompt),
+        chatOpen: options.firstPrompt ? true : readProjectChatOpenState(),
       });
       setPendingProjectCreation(null);
       setPendingPostAuthAction(null);
@@ -995,7 +995,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     useTaskStore.setState({ loading: true, error: null });
     useProjectStore.getState().clearTransientState();
     await auth.switchProject(projectId);
-    setWorkspace({ kind: 'project', projectId, chatOpen: false });
+    setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
   }, [auth, setWorkspace]);
 
   const handleCreateProject = useCallback(async () => {

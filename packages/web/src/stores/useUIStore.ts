@@ -7,6 +7,7 @@ export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 export type ShareStatus = 'idle' | 'creating' | 'copied' | 'error';
 export type ViewMode = 'day' | 'week' | 'month';
 const SIDEBAR_STATE_KEY = 'gantt_sidebar_state';
+const PROJECT_CHAT_OPEN_KEY = 'gantt_project_chat_open';
 
 function canUseDOM(): boolean {
   return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
@@ -29,6 +30,22 @@ function persistSidebarState(sidebarState: SidebarMode): void {
   }
 
   window.localStorage.setItem(SIDEBAR_STATE_KEY, sidebarState);
+}
+
+export function readProjectChatOpenState(): boolean {
+  if (!canUseDOM()) {
+    return false;
+  }
+
+  return window.localStorage.getItem(PROJECT_CHAT_OPEN_KEY) === 'true';
+}
+
+function persistProjectChatOpenState(chatOpen: boolean): void {
+  if (!canUseDOM()) {
+    return;
+  }
+
+  window.localStorage.setItem(PROJECT_CHAT_OPEN_KEY, String(chatOpen));
 }
 
 export type WorkspaceMode =
@@ -147,9 +164,15 @@ export const useUIStore = create<UIState>()((set, get) => ({
   searchIndex: -1,
   tempHighlightedTaskId: null,
   setWorkspace: (workspace) => {
-    set((state) => ({
-      workspace: typeof workspace === 'function' ? workspace(state.workspace) : workspace,
-    }));
+    set((state) => {
+      const nextWorkspace = typeof workspace === 'function' ? workspace(state.workspace) : workspace;
+
+      if (nextWorkspace.kind === 'project') {
+        persistProjectChatOpenState(nextWorkspace.chatOpen);
+      }
+
+      return { workspace: nextWorkspace };
+    });
   },
   setPendingPostAuthAction: (pendingPostAuthAction) => set({ pendingPostAuthAction }),
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
