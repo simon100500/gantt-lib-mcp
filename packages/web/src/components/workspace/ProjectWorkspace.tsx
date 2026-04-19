@@ -570,7 +570,7 @@ export function ProjectWorkspace({
 
         {/* Chat card - full width on mobile when open, side on desktop */}
         {chatSidebarVisible && !hasShareToken && onSend && (
-          <aside className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:ml-3 lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]">
+          <aside className="mb-3 flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:w-[360px] lg:flex-none lg:max-w-md xl:max-w-[320px]">
             <ChatSidebar
               messages={chatMessages}
               streaming={streaming}
