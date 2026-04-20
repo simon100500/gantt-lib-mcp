@@ -115,10 +115,23 @@ export type OrdinaryAgentPathTelemetry = {
 const ORDINARY_AGENT_PATH_CONTRACT =
   'Ordinary conversational mutations use the direct path by default with no external MCP subprocess; compatibility fallback remains explicit and bounded.';
 const ENABLE_STAGED_MUTATION_FALLBACK = false;
+const COMPACT_MUTATION_SYSTEM_PROMPT = [
+  'You edit a Gantt project through normalized tools.',
+  'For read-only requests, answer directly.',
+  'For mutation requests, act quickly and use as few tool calls as possible.',
+  'If the requested change is obvious, perform it immediately.',
+  'Use reads only when you truly need IDs, hierarchy, dates, or dependency context.',
+  'For simple additions, prefer one direct create_tasks call.',
+  'If parent is unspecified, choose the most reasonable placement and proceed; top-level is acceptable.',
+  'Use only normalized tools: get_project_summary, get_task_context, get_schedule_slice, create_tasks, update_tasks, move_tasks, delete_tasks, link_tasks, unlink_tasks, shift_tasks, recalculate_project.',
+  'Never invent task IDs.',
+  'Reply briefly with only what changed.',
+  'Respond in the user language.',
+].join(' ');
 
-const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
+const MUTATION_HISTORY_MESSAGE_LIMIT = 2;
 const READONLY_HISTORY_MESSAGE_LIMIT = 12;
-const MUTATION_HISTORY_CHAR_LIMIT = 1_500;
+const MUTATION_HISTORY_CHAR_LIMIT = 300;
 const READONLY_HISTORY_CHAR_LIMIT = 4_000;
 const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
 const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
@@ -1068,11 +1081,11 @@ export async function runAgentWithHistory(
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
       ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
       : join(PROJECT_ROOT, 'packages/mcp/agent/prompts/system.md');
-    const systemPrompt = existsSync(systemPromptPath)
+    const verboseSystemPrompt = existsSync(systemPromptPath)
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
-
-    const historyContext = buildHistoryContext(messages.slice(0, -1), false);
+    const systemPrompt = likelyMutationRequest ? COMPACT_MUTATION_SYSTEM_PROMPT : verboseSystemPrompt;
+    const historyContext = buildHistoryContext(messages.slice(0, -1), likelyMutationRequest);
 
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
