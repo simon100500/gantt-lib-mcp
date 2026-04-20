@@ -135,6 +135,7 @@ const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
   'shift_tasks',
   'recalculate_project',
 ]);
+const NORMALIZED_MUTATION_TOOL_NAME_LIST = [...NORMALIZED_MUTATION_TOOL_NAMES];
 
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
@@ -143,6 +144,23 @@ type PrismaModule = typeof import('@gantt/runtime-core/prisma');
 let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
 let prismaModulePromise: Promise<PrismaModule> | undefined;
+
+function resolveNormalizedMutationToolName(name: unknown): NormalizedMutationToolName | undefined {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return undefined;
+  }
+
+  const trimmed = name.trim();
+  if (NORMALIZED_MUTATION_TOOL_NAMES.has(trimmed as NormalizedMutationToolName)) {
+    return trimmed as NormalizedMutationToolName;
+  }
+
+  return NORMALIZED_MUTATION_TOOL_NAME_LIST.find((candidate) => (
+    trimmed.endsWith(`__${candidate}`)
+    || trimmed.endsWith(`.${candidate}`)
+    || trimmed.endsWith(`/${candidate}`)
+  ));
+}
 
 function resolveEnv(): {
   OPENAI_API_KEY: string;
@@ -422,8 +440,8 @@ async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number
       continue;
     }
 
-    const toolName = row.tool ?? payload.tool;
-    if (typeof toolName !== 'string' || !NORMALIZED_MUTATION_TOOL_NAMES.has(toolName as NormalizedMutationToolName)) {
+    const toolName = resolveNormalizedMutationToolName(row.tool ?? payload.tool);
+    if (!toolName) {
       continue;
     }
 
@@ -432,7 +450,7 @@ async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number
 
     const existing = toolCalls.get(toolUseId) ?? {
       toolUseId,
-      toolName: toolName as NormalizedMutationToolName,
+      toolName,
     };
 
     if (row.event === 'tool_call_failed') {
@@ -623,10 +641,13 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
   const toolUseById = new Map<string, MutationToolCall>();
 
   for (const block of blocks) {
-    if (block.type === 'tool_use' && NORMALIZED_MUTATION_TOOL_NAMES.has(block.name as NormalizedMutationToolName)) {
+    const toolName = block.type === 'tool_use'
+      ? resolveNormalizedMutationToolName(block.name)
+      : undefined;
+    if (block.type === 'tool_use' && toolName) {
       toolUseById.set(block.id, {
         toolUseId: block.id,
-        toolName: block.name as NormalizedMutationToolName,
+        toolName,
       });
     }
   }
@@ -760,10 +781,11 @@ async function executeAgentAttempt(
             && event.event.content_block.type === 'tool_use'
           ) {
             observedToolUseIds.add(event.event.content_block.id);
-            if (NORMALIZED_MUTATION_TOOL_NAMES.has(event.event.content_block.name as NormalizedMutationToolName)) {
+            const toolName = resolveNormalizedMutationToolName(event.event.content_block.name);
+            if (toolName) {
               mutationToolCalls.set(event.event.content_block.id, {
                 toolUseId: event.event.content_block.id,
-                toolName: event.event.content_block.name as NormalizedMutationToolName,
+                toolName,
               });
             }
           }
