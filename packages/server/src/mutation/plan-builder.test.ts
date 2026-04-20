@@ -92,6 +92,31 @@ describe('buildMutationPlan', () => {
     assert.equal(plan.operations[0]?.title, 'Пусконаладка насосной станции');
   });
 
+  it('expects container rollup changes for append-after plans inside a container', async () => {
+    const plan = await buildMutationPlan({
+      intent: buildIntent({
+        rawRequest: 'добавь сдачу гасн в конце работ',
+        normalizedRequest: 'добавь сдачу гасн в конце работ',
+        entitiesMentioned: ['сдача гасн'],
+        taskTitle: 'Сдача ГАСН',
+        taskType: 'milestone',
+      }),
+      resolutionContext: buildContext({
+        selectedContainerId: 'container-closeout',
+        selectedPredecessorTaskId: 'task-permit',
+        placementPolicy: 'after_predecessor',
+      }),
+      userMessage: 'добавь сдачу ГАСН в конце работ',
+      tasksBefore: [],
+    });
+
+    assert.equal(plan.operations[0]?.kind, 'append_task_after');
+    assert.deepEqual(plan.expectedChangedTaskIds, [
+      'task-permit:sdacha-gasn',
+      'container-closeout',
+    ]);
+  });
+
   it('maps date moves and metadata edits to deterministic semantic operations', async () => {
     const movePlan = await buildMutationPlan({
       intent: buildIntent({
@@ -211,6 +236,7 @@ describe('buildMutationPlan', () => {
         rawRequest: 'на каждом этаже добавь работу (веху) Сдача технадзору',
         normalizedRequest: 'на каждом этаже добавь работу (веху) сдача технадзору',
         entitiesMentioned: ['Сдача технадзору'],
+        executionMode: 'hybrid',
         groupScopeHint: 'этаж',
       }),
       resolutionContext: buildContext({

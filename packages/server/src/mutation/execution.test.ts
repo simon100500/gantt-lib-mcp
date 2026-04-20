@@ -14,7 +14,10 @@ describe('executeMutationPlan', () => {
     const result = await executeMutationPlan({
       projectId: 'project-1',
       projectVersion: 12,
-      tasksBefore: [buildTask('task-tech-supervision', 'Технадзор', '2026-05-01', '2026-05-01')],
+      tasksBefore: [
+        buildTask('task-tech-supervision', 'Технадзор', '2026-05-01', '2026-05-01'),
+        buildTask('container-closeout', 'Сдача', '2026-05-01', '2026-05-10'),
+      ],
       plan: {
         planType: 'add_single_task',
         operations: [{
@@ -22,11 +25,11 @@ describe('executeMutationPlan', () => {
           taskId: 'new-closeout',
           title: 'Сдача',
           predecessorTaskId: 'task-tech-supervision',
-          parentId: null,
+          parentId: 'container-closeout',
           durationDays: 1,
         }],
         why: 'closeout append',
-        expectedChangedTaskIds: ['new-closeout', 'task-tech-supervision'],
+        expectedChangedTaskIds: ['new-closeout', 'container-closeout'],
         canExecuteDeterministically: true,
         needsAgentExecution: false,
       } satisfies MutationPlan,
@@ -58,7 +61,7 @@ describe('executeMutationPlan', () => {
             newVersion: request.baseVersion + 1,
             result: {
               snapshot: { tasks: [], dependencies: [] },
-              changedTaskIds: ['task-tech-supervision'],
+              changedTaskIds: ['container-closeout'],
               changedDependencyIds: ['dep-1'],
               conflicts: [],
               patches: [],
@@ -76,7 +79,7 @@ describe('executeMutationPlan', () => {
     assert.equal(result.status, 'completed');
     assert.equal(result.verificationVerdict, 'accepted');
     assert.deepEqual(result.committedCommandTypes, ['create_task', 'create_dependency']);
-    assert.deepEqual(result.changedTaskIds, ['new-closeout', 'task-tech-supervision']);
+    assert.deepEqual(result.changedTaskIds, ['new-closeout', 'container-closeout']);
   });
 
   it('fails verification when authoritative changed ids do not match the plan expectation', async () => {

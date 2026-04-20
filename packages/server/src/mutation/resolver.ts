@@ -98,6 +98,39 @@ function pickBestTaskMatch(matches: TaskSearchMatch[]): TaskSearchMatch | null {
   return exact ?? matches[0] ?? null;
 }
 
+function pickTailTaskWithinContainer(
+  containerId: string,
+  branchMatches: TaskSearchMatch[],
+): TaskSearchMatch | null {
+  const descendants = branchMatches.filter((match) => match.taskId !== containerId);
+  if (descendants.length === 0) {
+    return null;
+  }
+
+  const parentIds = new Set(
+    descendants
+      .map((match) => match.parentId)
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  const leafCandidates = descendants.filter((match) => !parentIds.has(match.taskId));
+  const rankingPool = leafCandidates.length > 0 ? leafCandidates : descendants;
+
+  return [...rankingPool].sort((left, right) => {
+    const endDiff = parseComparableDate(right.endDate) - parseComparableDate(left.endDate);
+    if (endDiff !== 0) {
+      return endDiff;
+    }
+
+    const startDiff = parseComparableDate(right.startDate) - parseComparableDate(left.startDate);
+    if (startDiff !== 0) {
+      return startDiff;
+    }
+
+    return left.name.localeCompare(right.name);
+  })[0] ?? null;
+}
+
 function uniqueById(entities: MutationResolutionEntity[]): MutationResolutionEntity[] {
   const seen = new Set<string>();
   const result: MutationResolutionEntity[] = [];
@@ -235,9 +268,17 @@ export async function resolveMutationContext(
     }
 
     const bestContainer = pickBestTaskMatch(containerMatches);
+    const branchMatches = bestContainer
+      ? await input.taskService.listBranchTasks(input.projectId, bestContainer.taskId)
+      : [];
+    const tailTask = bestContainer
+      ? pickTailTaskWithinContainer(bestContainer.taskId, branchMatches)
+      : null;
 
     context.containers = containerMatches.map(toResolutionEntity);
+    context.predecessors = tailTask ? [toResolutionEntity(tailTask)] : [];
     context.selectedContainerId = bestContainer?.taskId ?? null;
+    context.selectedPredecessorTaskId = tailTask?.taskId ?? null;
     context.placementPolicy = bestContainer ? resolvePlacementPolicy(context) : 'unresolved';
     context.confidence = bestContainer?.score ?? 0;
     return context;
