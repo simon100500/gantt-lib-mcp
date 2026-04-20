@@ -141,7 +141,7 @@ function compileOperation(
         type: 'change_duration',
         taskId: operation.taskId,
         duration: operation.durationDays,
-        anchor: operation.anchor ?? 'start',
+        anchor: operation.anchor ?? 'end',
       }];
 
     case 'move_task_to_date':

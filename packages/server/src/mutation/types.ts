@@ -40,6 +40,7 @@ export type MutationIntent = {
   taskTitle?: string;
   taskType?: 'task' | 'milestone';
   durationDays?: number;
+  durationDeltaDays?: number;
   durationMultiplier?: number;
   deltaDays?: number;
   targetDate?: string;

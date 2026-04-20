@@ -32,6 +32,17 @@ liveDescribe('live LLM mutation integration', () => {
     assert.ok((intent.durationMultiplier ?? 0) > 1);
   });
 
+  it('classifies additive duration language as a duration delta, not an absolute duration', { timeout: 45_000 }, async () => {
+    const intent = await classifyMutationIntent({
+      userMessage: 'увеличь Покраска стен в МОП на 20 дней',
+      env: liveEnv,
+    });
+
+    assert.equal(intent.intentType, 'change_duration');
+    assert.equal(intent.durationDeltaDays, 20);
+    assert.equal(intent.durationDays, undefined);
+  });
+
   it('uses the live LLM and staged path to create a closeout task with dependency semantics', { timeout: 45_000 }, async () => {
     const committedCommands: Array<Record<string, unknown>> = [];
 

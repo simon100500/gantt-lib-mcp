@@ -23,6 +23,7 @@ type RawMutationIntentPayload = {
   taskTitle?: unknown;
   taskType?: unknown;
   durationDays?: unknown;
+  durationDeltaDays?: unknown;
   durationMultiplier?: unknown;
   deltaDays?: unknown;
   targetDate?: unknown;
@@ -140,11 +141,11 @@ function buildPrompt(userMessage: string): string {
     'The server will execute only deterministic operations after your extraction.',
     'Allowed intentType values: "add_single_task", "add_repeated_fragment", "change_duration", "shift_relative", "move_to_date", "move_in_hierarchy", "link_tasks", "unlink_tasks", "delete_task", "rename_task", "update_metadata", "expand_wbs", "restructure_branch", "validate_only", "unsupported_or_ambiguous".',
     'Schema:',
-    '{"intentType":"...","confidence":0.0-1.0,"entitiesMentioned":["..."],"taskTitle":"optional","taskType":"task|milestone","durationDays":1,"durationMultiplier":2,"deltaDays":0,"targetDate":"YYYY-MM-DD","renamedTitle":"optional","metadataFields":{"color":"#RRGGBB","progress":0,"parentId":null},"groupScopeHint":"optional","dependency":{"taskId":"optional","type":"FS|SS|FF|SF","lag":0},"fragmentPlan":{"title":"...","nodes":[{"nodeKey":"stable-key","title":"...","taskType":"task|milestone","durationDays":1,"dependsOnNodeKeys":["..."]}]}}',
+    '{"intentType":"...","confidence":0.0-1.0,"entitiesMentioned":["..."],"taskTitle":"optional","taskType":"task|milestone","durationDays":1,"durationDeltaDays":5,"durationMultiplier":2,"deltaDays":0,"targetDate":"YYYY-MM-DD","renamedTitle":"optional","metadataFields":{"color":"#RRGGBB","progress":0,"parentId":null},"groupScopeHint":"optional","dependency":{"taskId":"optional","type":"FS|SS|FF|SF","lag":0},"fragmentPlan":{"title":"...","nodes":[{"nodeKey":"stable-key","title":"...","taskType":"task|milestone","durationDays":1,"dependsOnNodeKeys":["..."]}]}}',
     'Rules:',
     '1. Put entity names that the server must resolve into entitiesMentioned.',
     '2. For add_single_task, provide taskTitle and preferably durationDays.',
-    '3. For change_duration, provide durationMultiplier for relative phrases like "в 2 раза", "в 1.5 раза", "на 50%" and/or durationDays for explicit absolute duration like "до 10 дней".',
+    '3. For change_duration, provide exactly one duration shape: durationMultiplier for relative scaling like "в 2 раза", "в 1.5 раза", "на 50%"; durationDeltaDays for additive/subtractive phrases like "на 20 дней", "еще на 5 дней", "уменьши на 3 дня"; durationDays only for explicit absolute target duration like "до 10 дней" or "сделай 10 дней".',
     '4. For shift_relative, provide deltaDays.',
     '5. For move_to_date, provide targetDate in ISO format.',
     '6. For rename_task, provide renamedTitle.',
@@ -288,6 +289,7 @@ function parseIntentPayload(userMessage: string, payload: string): MutationInten
     taskTitle: typeof parsed.taskTitle === 'string' ? parsed.taskTitle.trim() : undefined,
     taskType: parsed.taskType === 'task' || parsed.taskType === 'milestone' ? parsed.taskType : undefined,
     durationDays: typeof parsed.durationDays === 'number' ? Math.max(1, Math.round(parsed.durationDays)) : undefined,
+    durationDeltaDays: typeof parsed.durationDeltaDays === 'number' ? Math.round(parsed.durationDeltaDays) : undefined,
     durationMultiplier: typeof parsed.durationMultiplier === 'number' && Number.isFinite(parsed.durationMultiplier)
       ? Math.max(parsed.durationMultiplier, 0.1)
       : undefined,

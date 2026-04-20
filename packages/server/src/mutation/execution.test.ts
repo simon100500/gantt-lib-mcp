@@ -124,7 +124,7 @@ describe('executeMutationPlan', () => {
           kind: 'change_task_duration',
           taskId: 'task-foundation',
           durationDays: 10,
-          anchor: 'start',
+          anchor: 'end',
         }],
         why: 'increase duration',
         expectedChangedTaskIds: ['task-foundation'],
@@ -157,7 +157,7 @@ describe('executeMutationPlan', () => {
       type: 'change_duration',
       taskId: 'task-foundation',
       duration: 10,
-      anchor: 'start',
+      anchor: 'end',
     }]);
   });
 

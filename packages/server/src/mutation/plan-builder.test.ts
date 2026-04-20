@@ -141,6 +141,7 @@ describe('buildMutationPlan', () => {
 
     assert.equal(durationPlan.operations[0]?.kind, 'change_task_duration');
     assert.equal(durationPlan.operations[0]?.durationDays, 6);
+    assert.equal(durationPlan.operations[0]?.anchor, 'end');
     assert.deepEqual(durationPlan.expectedChangedTaskIds, ['task-foundation']);
 
     const absoluteDurationPlan = await buildMutationPlan({
@@ -168,6 +169,35 @@ describe('buildMutationPlan', () => {
 
     assert.equal(absoluteDurationPlan.operations[0]?.kind, 'change_task_duration');
     assert.equal(absoluteDurationPlan.operations[0]?.durationDays, 10);
+    assert.equal(absoluteDurationPlan.operations[0]?.anchor, 'end');
+
+    const deltaDurationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь срок фундамента на 20 дней',
+        normalizedRequest: 'увеличь срок фундамента на 20 дней',
+        entitiesMentioned: ['фундамент'],
+        requiresSchedulingPlacement: false,
+        durationDays: undefined,
+        durationDeltaDays: 20,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-foundation',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь срок фундамента на 20 дней',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }],
+    });
+
+    assert.equal(deltaDurationPlan.operations[0]?.kind, 'change_task_duration');
+    assert.equal(deltaDurationPlan.operations[0]?.durationDays, 23);
+    assert.equal(deltaDurationPlan.operations[0]?.anchor, 'end');
 
     const movePlan = await buildMutationPlan({
       intent: buildIntent({

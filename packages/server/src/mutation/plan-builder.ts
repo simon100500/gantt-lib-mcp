@@ -178,15 +178,17 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       const targetTask = input.tasksBefore.find((task) => task.id === targetTaskId);
       const currentDurationDays = getInclusiveDurationDays(targetTask) ?? 1;
       const requestedDurationDays = intent.durationDays
-        ?? (intent.durationMultiplier
-          ? Math.max(1, Math.round(currentDurationDays * intent.durationMultiplier))
-          : currentDurationDays);
+        ?? (typeof intent.durationDeltaDays === 'number'
+          ? Math.max(1, currentDurationDays + intent.durationDeltaDays)
+          : (intent.durationMultiplier
+            ? Math.max(1, Math.round(currentDurationDays * intent.durationMultiplier))
+            : currentDurationDays));
 
       operations = [{
         kind: 'change_task_duration',
         taskId: targetTaskId,
         durationDays: requestedDurationDays,
-        anchor: 'start',
+        anchor: 'end',
       }];
       why = `Длительность задачи "${targetTaskId}" изменяется через typed change_duration command.`;
       expectedChangedTaskIds = [targetTaskId];

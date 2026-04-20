@@ -78,6 +78,19 @@ describe('mutation intent classification', () => {
     assert.equal(absoluteDurationIntent.intentType, 'change_duration');
     assert.equal(absoluteDurationIntent.durationDays, 10);
 
+    const deltaDurationIntent = await classifyMutationIntent({
+      userMessage: 'увеличь срок штукатурки на 20 дней',
+      env,
+      semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
+        intentType: 'change_duration',
+        confidence: 0.9,
+        entitiesMentioned: ['штукатурка'],
+        durationDeltaDays: 20,
+      })),
+    });
+    assert.equal(deltaDurationIntent.intentType, 'change_duration');
+    assert.equal(deltaDurationIntent.durationDeltaDays, 20);
+
     const repeatedIntent = await classifyMutationIntent({
       userMessage: 'добавь покраску обоев на каждый этаж',
       env,
