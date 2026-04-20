@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: verifying
-last_updated: "2026-04-18T10:26:53.097Z"
-last_activity: 2026-04-18
+status: executing
+last_updated: "2026-04-20T05:24:54.732Z"
+last_activity: 2026-04-20 -- Completed 46-01-PLAN.md
 progress:
-  total_phases: 16
+  total_phases: 17
   completed_phases: 14
-  total_plans: 52
+  total_plans: 57
   completed_plans: 52
   percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-20
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Phase complete — ready for verification
+**Status:** Executing Phase 46
 
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 45 — history-refactor
+**Current focus:** Phase 46 — mcp-replace
 
 ---
 
 ## Current Position
 
-Phase: 45 (history-refactor) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-04-18
+Phase: 46 (mcp-replace) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 46
+Last activity: 2026-04-20 -- Completed 46-01-PLAN.md
 Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
 Progress: [██████████] 100%
