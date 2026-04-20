@@ -77,6 +77,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 46 added: mcp-replace
 - Phase 45 added: history-refactor
 - Phase 44 added: undo-redo
 - Phase 43 added: initial-gen-no-regexp
