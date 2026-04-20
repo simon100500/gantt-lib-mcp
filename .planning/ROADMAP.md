@@ -393,14 +393,14 @@ Plans:
 **Goal:** Replace the ordinary app-path MCP subprocess with direct in-process tool execution backed by one shared transport-neutral runtime core
 **Requirements**: PRD-only (`.planning/reference/46-DIRECT-TOOLS-REPLAN.md`, `.planning/reference/mcp-mutation-refactor-prd.md`)
 **Depends on:** Phase 45
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [x] 46-01-PLAN.md — Extract transport-neutral runtime core package from MCP-owned services and types
 - [x] 46-02-PLAN.md — Create shared normalized tool catalog and in-process handler core
 - [x] 46-03-PLAN.md — Switch the server agent path to SDK-embedded in-process tools
 - [x] 46-04-PLAN.md — Thin MCP into an adapter over the shared tool core and lock parity
-- [ ] 46-05-PLAN.md — Add telemetry, regression coverage, and verification artifacts for the direct-path cutover
+- [x] 46-05-PLAN.md — Add telemetry, regression coverage, and verification artifacts for the direct-path cutover
 
 ---
-*Last updated: 2026-04-20 — Phase 46 Plan 03 completed*
+*Last updated: 2026-04-20 — Phase 46 Plan 05 completed*
