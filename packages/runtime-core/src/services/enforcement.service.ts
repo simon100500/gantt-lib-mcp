@@ -1,4 +1,4 @@
-import { PLAN_CATALOG, type LimitKey, type PlanId } from '@gantt/mcp/constraints';
+import { PLAN_CATALOG, type LimitKey, type PlanId } from '../constraints/index.js';
 import { getPrisma } from '../prisma.js';
 import type { MutationEnforcementPayload, NormalizedMutationResult } from '../types.js';
 
