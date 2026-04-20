@@ -51,13 +51,13 @@ describe('MCP adapter surface', () => {
     const normalizedExpectedNames = NORMALIZED_TOOL_CATALOG.map((tool) => tool.name);
     const normalizedActualNames = result.tools
       .map((tool) => tool.name as string)
-      .filter((toolName) => normalizedExpectedNames.includes(toolName));
+      .filter((toolName) => normalizedExpectedNames.includes(toolName as typeof normalizedExpectedNames[number]));
 
     assert.deepEqual(normalizedActualNames, normalizedExpectedNames);
     assert.equal(PUBLIC_MCP_TOOLS.find((tool) => tool.name === 'find_tasks')?.description, NORMALIZED_TOOL_CATALOG.find((tool) => tool.name === 'find_tasks')?.description);
 
     for (const legacyName of LEGACY_SCHEDULING_TOOL_NAMES) {
-      assert.ok(!normalizedActualNames.includes(legacyName), `legacy tool leaked into runtime list handler: ${legacyName}`);
+      assert.ok(!normalizedActualNames.includes(legacyName as typeof normalizedActualNames[number]), `legacy tool leaked into runtime list handler: ${legacyName}`);
     }
   });
 
