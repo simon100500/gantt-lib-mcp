@@ -91,7 +91,7 @@ describe('tool-core handlers', () => {
 
     assert.equal(result.data.projectId, 'project-7');
     assert.equal(result.data.version, 11);
-    assert.ok(!('content' in (result.data as Record<string, unknown>)));
+    assert.ok(!('content' in (result.data as unknown as Record<string, unknown>)));
   });
 
   it('find_tasks returns deterministic compact ranked matches', async () => {
@@ -128,7 +128,7 @@ describe('tool-core handlers', () => {
 
     assert.equal(result.status, 'accepted');
     assert.equal(result.newVersion, 5);
-    assert.ok(!('content' in (result as Record<string, unknown>)));
+    assert.ok(!('content' in (result as unknown as Record<string, unknown>)));
   });
 
   it('create_tasks preserves accepted normalized mutation semantics', async () => {
