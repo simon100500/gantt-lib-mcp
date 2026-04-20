@@ -82,6 +82,170 @@ function semanticIntentQueryFor(userMessage: string) {
 }
 
 describe('staged mutation orchestrator', () => {
+  it('uses the semantic planner path under feature flag and skips changed-set verification as a separate stage', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const committedCommands: Array<{ type: string; task?: { dependencies?: Array<{ taskId: string; type: string }> } }> = [];
+    const result = await runStagedMutation({
+      userMessage: 'Добавь сдачу ГАСН в конце работ',
+      projectId: 'project-1',
+      projectVersion: 8,
+      sessionId: 'session-1',
+      runId: 'run-semantic-1',
+      tasksBefore: [
+        {
+          id: 'container-closeout',
+          name: 'Благоустройство и сдача',
+          startDate: '2027-04-01',
+          endDate: '2027-05-04',
+        },
+        {
+          id: 'task-permit',
+          name: 'Получение разрешения на ввод объекта в эксплуатацию',
+          parentId: 'container-closeout',
+          startDate: '2027-04-29',
+          endDate: '2027-05-04',
+        },
+      ],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+        USE_SEMANTIC_PLANNER: 'true',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({
+          tasks: [
+            {
+              id: 'container-closeout',
+              name: 'Благоустройство и сдача',
+              startDate: '2027-04-01',
+              endDate: '2027-05-05',
+            },
+            {
+              id: 'task-permit',
+              name: 'Получение разрешения на ввод объекта в эксплуатацию',
+              parentId: 'container-closeout',
+              startDate: '2027-04-29',
+              endDate: '2027-05-04',
+            },
+            {
+              id: 'task-permit:sdacha-gasn',
+              name: 'Сдача ГАСН',
+              parentId: 'container-closeout',
+              startDate: '2027-05-05',
+              endDate: '2027-05-05',
+              type: 'milestone',
+              dependencies: [{ taskId: 'task-permit', type: 'FS' }],
+            },
+          ],
+        }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-permit',
+            name: 'Получение разрешения на ввод объекта в эксплуатацию',
+            parentId: 'container-closeout',
+            path: ['Благоустройство и сдача', 'Получение разрешения на ввод объекта в эксплуатацию'],
+            startDate: '2027-04-29',
+            endDate: '2027-05-04',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findContainerCandidates: async () => ([
+          {
+            taskId: 'container-closeout',
+            name: 'Благоустройство и сдача',
+            parentId: null,
+            path: ['Благоустройство и сдача'],
+            startDate: '2027-04-01',
+            endDate: '2027-05-04',
+            matchType: 'exact',
+            score: 0.9,
+          },
+        ]),
+        listBranchTasks: async () => ([
+          {
+            taskId: 'container-closeout',
+            name: 'Благоустройство и сдача',
+            parentId: null,
+            path: ['Благоустройство и сдача'],
+            startDate: '2027-04-01',
+            endDate: '2027-05-04',
+            matchType: 'exact',
+            score: 1,
+          },
+          {
+            taskId: 'task-permit',
+            name: 'Получение разрешения на ввод объекта в эксплуатацию',
+            parentId: 'container-closeout',
+            path: ['Благоустройство и сдача', 'Получение разрешения на ввод объекта в эксплуатацию'],
+            startDate: '2027-04-29',
+            endDate: '2027-05-04',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string; task?: { dependencies?: Array<{ taskId: string; type: string }> } } }) => {
+          committedCommands.push(request.command);
+          return {
+            accepted: true,
+            clientRequestId: 'req-1',
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds: ['task-permit:sdacha-gasn'],
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          };
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
+      },
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          ambiguity: 'none',
+          operations: [{
+            action: 'add_task',
+            title: 'Сдача ГАСН',
+            taskType: 'milestone',
+            durationDays: 1,
+            placement: {
+              mode: 'inside_tail',
+              parentHint: 'Благоустройство и сдача',
+            },
+          }],
+        }),
+      }),
+    });
+
+    assert.equal(result.handled, true);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.result.verificationVerdict, 'accepted');
+    assert.equal(committedCommands[0]?.type, 'create_task');
+    assert.deepEqual(committedCommands[0]?.task?.dependencies, [{ taskId: 'task-permit', type: 'FS' }]);
+    assert.deepEqual(loggedEvents.map((entry) => entry.event), [
+      'semantic_plan_created',
+      'semantic_resolution_started',
+      'semantic_resolution_result',
+      'semantic_compile_result',
+      'final_outcome',
+    ]);
+  });
+
   it('maps typed user-facing failure and success messages', () => {
     assert.match(
       buildMutationFailureMessage('anchor_not_found'),

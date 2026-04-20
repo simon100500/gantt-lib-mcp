@@ -265,9 +265,11 @@ export async function executeMutationPlan(
     baseVersion = response.newVersion;
   }
 
-  const verificationVerdict = compareChangedSet(changedTaskIds, input.plan.expectedChangedTaskIds)
+  const verificationVerdict = input.plan.skipChangedSetVerification
     ? 'accepted'
-    : 'failed';
+    : compareChangedSet(changedTaskIds, input.plan.expectedChangedTaskIds)
+      ? 'accepted'
+      : 'failed';
 
   return {
     status: verificationVerdict === 'accepted' ? 'completed' : 'failed',

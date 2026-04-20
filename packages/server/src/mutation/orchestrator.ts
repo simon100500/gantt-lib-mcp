@@ -3,12 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { classifyMutationIntent } from './intent-classifier.js';
 import { executeMutationPlan } from './execution.js';
 import { selectMutationExecutionMode } from './execution-routing.js';
+import { compileSemanticMutationPlan } from './semantic-compiler.js';
 import {
   buildMutationFailureMessage,
   buildMutationSuccessMessage,
 } from './messages.js';
 import { buildMutationPlan } from './plan-builder.js';
 import { resolveMutationContext } from './resolver.js';
+import { planSemanticMutation } from './semantic-planner.js';
+import { resolveSemanticMutationPlan } from './semantic-resolver.js';
 import type { ServerMessage } from '../ws.js';
 import type {
   MutationHistoryContext,
@@ -61,7 +64,7 @@ type MutationLogger = {
 type MutationSemanticIntentQueryInput = {
   prompt: string;
   model: string;
-  stage: 'mutation_semantic_extraction';
+  stage: 'mutation_semantic_extraction' | 'mutation_semantic_planner';
 };
 
 type MutationSemanticIntentQueryResult = string | { content?: string };
@@ -78,6 +81,7 @@ export type RunStagedMutationInput = {
     OPENAI_BASE_URL: string;
     OPENAI_MODEL: string;
     OPENAI_CHEAP_MODEL?: string;
+    USE_SEMANTIC_PLANNER?: string;
   };
   messageService: MutationServices['messageService'];
   taskService: MutationServices['taskService'];
@@ -86,6 +90,11 @@ export type RunStagedMutationInput = {
   logger: MutationLogger;
   semanticIntentQuery?: (input: MutationSemanticIntentQueryInput) => Promise<MutationSemanticIntentQueryResult>;
 } & Partial<MutationHistoryContext>;
+
+function useSemanticPlanner(input: RunStagedMutationInput): boolean {
+  const flag = input.env.USE_SEMANTIC_PLANNER ?? process.env.USE_SEMANTIC_PLANNER ?? 'false';
+  return flag !== 'false';
+}
 
 function buildDeferredResult(executionMode: MutationExecutionMode): MutationOrchestrationResult['result'] {
   return {
@@ -216,9 +225,216 @@ function resolveFailureReason(
   return 'unsupported_mutation_shape';
 }
 
+function mapSemanticActionToIntentType(
+  operation: { action: string; moveMode?: string } | undefined,
+): MutationOrchestrationResult['intent']['intentType'] {
+  switch (operation?.action) {
+    case 'add_task':
+      return 'add_single_task';
+    case 'change_duration':
+      return 'change_duration';
+    case 'move_task':
+      if (operation.moveMode === 'relative_delta') {
+        return 'shift_relative';
+      }
+      if (operation.moveMode === 'to_parent') {
+        return 'move_in_hierarchy';
+      }
+      return 'move_to_date';
+    case 'rename_task':
+      return 'rename_task';
+    case 'delete_task':
+      return 'delete_task';
+    case 'link_tasks':
+      return 'link_tasks';
+    case 'unlink_tasks':
+      return 'unlink_tasks';
+    case 'move_in_hierarchy':
+      return 'move_in_hierarchy';
+    default:
+      return 'unsupported_or_ambiguous';
+  }
+}
+
+function buildSemanticCompatIntent(
+  input: RunStagedMutationInput,
+  operation: { action: string; moveMode?: string } | undefined,
+  executionMode: MutationExecutionMode,
+): MutationOrchestrationResult['intent'] {
+  return {
+    intentType: mapSemanticActionToIntentType(operation),
+    confidence: 1,
+    rawRequest: input.userMessage.trim(),
+    normalizedRequest: input.userMessage.trim().replace(/\s+/g, ' ').toLowerCase(),
+    entitiesMentioned: [],
+    requiresResolution: true,
+    requiresSchedulingPlacement: operation?.action === 'add_task',
+    executionMode,
+  };
+}
+
 export async function runStagedMutation(
   input: RunStagedMutationInput,
 ): Promise<MutationOrchestrationResult> {
+  if (useSemanticPlanner(input)) {
+    const semanticPlan = await planSemanticMutation({
+      userMessage: input.userMessage,
+      env: input.env,
+      semanticPlannerQuery: input.semanticIntentQuery
+        ? (queryInput) => input.semanticIntentQuery?.({
+            prompt: queryInput.prompt,
+            model: queryInput.model,
+            stage: 'mutation_semantic_planner',
+          }) ?? Promise.resolve('')
+        : undefined,
+    });
+    const executionMode: MutationExecutionMode = 'deterministic';
+    const semanticIntent = buildSemanticCompatIntent(input, semanticPlan.operations[0], executionMode);
+
+    await input.logger.debug('semantic_plan_created', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      semanticPlan,
+    });
+
+    if (semanticPlan.ambiguity !== 'none') {
+      return {
+        handled: false,
+        status: 'deferred_to_legacy',
+        legacyFallbackAllowed: true,
+        failureReason: undefined,
+        intent: semanticIntent,
+        executionMode: 'full_agent',
+        resolutionContext: null,
+        plan: null,
+        result: buildDeferredResult('full_agent'),
+      };
+    }
+
+    await input.logger.debug('semantic_resolution_started', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      operationCount: semanticPlan.operations.length,
+    });
+
+    const resolvedSemanticPlan = await resolveSemanticMutationPlan({
+      projectId: input.projectId,
+      plan: semanticPlan,
+      taskService: input.taskService,
+    });
+
+    await input.logger.debug('semantic_resolution_result', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      resolvedSemanticPlan,
+    });
+
+    if (resolvedSemanticPlan.ambiguity !== 'none') {
+      return {
+        handled: false,
+        status: 'deferred_to_legacy',
+        legacyFallbackAllowed: true,
+        failureReason: undefined,
+        intent: semanticIntent,
+        executionMode: 'full_agent',
+        resolutionContext: null,
+        plan: null,
+        result: buildDeferredResult('full_agent'),
+      };
+    }
+
+    const compiledSemanticPlan = compileSemanticMutationPlan({
+      projectId: input.projectId,
+      tasksBefore: input.tasksBefore,
+      resolvedPlan: resolvedSemanticPlan,
+    });
+
+    await input.logger.debug('semantic_compile_result', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      compiledSemanticPlan,
+    });
+
+    if (compiledSemanticPlan.ambiguity !== 'none') {
+      return {
+        handled: false,
+        status: 'deferred_to_legacy',
+        legacyFallbackAllowed: true,
+        failureReason: undefined,
+        intent: semanticIntent,
+        executionMode: 'full_agent',
+        resolutionContext: null,
+        plan: null,
+        result: buildDeferredResult('full_agent'),
+      };
+    }
+
+    const history = resolveHistoryContext(input);
+    const execution = await executeMutationPlan({
+      projectId: input.projectId,
+      projectVersion: input.projectVersion,
+      tasksBefore: input.tasksBefore,
+      plan: compiledSemanticPlan.plan,
+      history: {
+        groupId: history.groupId,
+        requestContextId: history.requestContextId,
+        historyTitle: history.historyTitle,
+        historyUndoable: history.historyUndoable,
+      },
+      commandService: input.commandService as Parameters<typeof executeMutationPlan>[0]['commandService'],
+    });
+
+    const tasksAfter = execution.status === 'completed'
+      ? (await input.taskService.list(input.projectId)).tasks
+      : input.tasksBefore;
+    const knownChangedTasks = Array.from(
+      new Map(
+        [...tasksAfter, ...input.tasksBefore].map((task) => [task.id, task]),
+      ).values(),
+    );
+    const userFacingMessage = execution.status === 'completed'
+      ? buildMutationSuccessMessage({
+          changedTaskIds: execution.changedTaskIds,
+          changedTasks: knownChangedTasks,
+        })
+      : buildMutationFailureMessage(execution.failureReason ?? 'deterministic_execution_failed', {
+          details: execution.userFacingMessage,
+        });
+    const result = {
+      ...execution,
+      userFacingMessage,
+    };
+
+    await input.logger.debug('final_outcome', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      status: execution.status,
+      executionMode,
+      failureReason: execution.failureReason,
+      changedTaskIds: execution.changedTaskIds,
+      verificationVerdict: execution.verificationVerdict,
+    });
+
+    return {
+      handled: true,
+      status: execution.status,
+      legacyFallbackAllowed: false,
+      failureReason: execution.failureReason,
+      intent: semanticIntent,
+      executionMode,
+      resolutionContext: null,
+      plan: compiledSemanticPlan.plan,
+      result,
+      assistantResponse: result.userFacingMessage,
+      tasksAfter,
+    };
+  }
+
   const history = resolveHistoryContext(input);
   const intent = await classifyMutationIntent({
     userMessage: input.userMessage,

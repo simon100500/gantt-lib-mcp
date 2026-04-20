@@ -192,12 +192,14 @@ function resolveEnv(): {
   OPENAI_BASE_URL: string;
   OPENAI_MODEL: string;
   OPENAI_CHEAP_MODEL?: string;
+  USE_SEMANTIC_PLANNER?: string;
 } {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
     OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
     OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
+    USE_SEMANTIC_PLANNER: process.env.USE_SEMANTIC_PLANNER ?? 'true',
   };
 }
 

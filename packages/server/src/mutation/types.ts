@@ -96,6 +96,7 @@ export type MutationPlan = {
   expectedChangedTaskIds: string[];
   canExecuteDeterministically: boolean;
   needsAgentExecution: boolean;
+  skipChangedSetVerification?: boolean;
 };
 
 export type MutationExecutionStatus = 'completed' | 'failed' | 'deferred_to_legacy';
