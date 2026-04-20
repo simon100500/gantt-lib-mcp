@@ -17,6 +17,14 @@ type ToolContextOptions = {
   actorType?: ToolCallContext['actorType'];
   actorId?: string;
   defaultProjectId?: string;
+  history?: {
+    groupId: string;
+    requestContextId?: string;
+    title: string;
+    origin?: 'agent_run' | 'system';
+    finalizeGroup?: boolean;
+    undoable?: boolean;
+  };
   prisma?: PrismaClient;
   commandService?: Pick<CommandService, 'commitCommand'>;
   taskService?: Pick<TaskService, 'list' | 'get'>;
@@ -129,6 +137,7 @@ async function commitCommand(
   prisma: PrismaClient,
   actorType: ToolCallContext['actorType'],
   actorId: string | undefined,
+  history: ToolContextOptions['history'] | undefined,
   projectId: string,
   command: Parameters<ToolCallContext['commitCommand']>[1],
 ): Promise<{ baseVersion: number; response: CommitProjectCommandResponse }> {
@@ -139,6 +148,18 @@ async function commitCommand(
       clientRequestId: `tool-core-${randomUUID()}`,
       baseVersion: summary.version,
       command,
+      ...(history
+        ? {
+            history: {
+              groupId: history.groupId,
+              requestContextId: history.requestContextId,
+              title: history.title,
+              origin: history.origin ?? 'agent_run',
+              finalizeGroup: history.finalizeGroup ?? true,
+              undoable: history.undoable ?? true,
+            },
+          }
+        : {}),
     },
     actorType,
     actorId,
@@ -163,7 +184,15 @@ export function createToolContext(options: ToolContextOptions = {}): ToolCallCon
     listAllProjectTasks: async (projectId) => listAllProjectTasks(taskApi, projectId),
     getTask: async (_projectId, taskId) => taskApi.get(taskId),
     getProjectScheduleOptions: async (projectId) => getProjectScheduleOptionsForProject(prisma, projectId),
-    commitCommand: async (projectId, command) => commitCommand(commandApi, prisma, options.actorType ?? 'agent', options.actorId, projectId, command),
+    commitCommand: async (projectId, command) => commitCommand(
+      commandApi,
+      prisma,
+      options.actorType ?? 'agent',
+      options.actorId,
+      options.history,
+      projectId,
+      command,
+    ),
     resolveProjectId: (projectId) => resolveProjectId(options.defaultProjectId, projectId),
   };
 }

@@ -29,6 +29,9 @@ export type BuildDirectToolDefinitionsInput = {
   runId: string;
   sessionId: string;
   attempt: number;
+  historyGroupId?: string;
+  requestContextId?: string;
+  historyTitle?: string;
   userId?: string;
 };
 
@@ -109,6 +112,16 @@ export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInpu
         actorType: 'agent',
         actorId: input.userId,
         defaultProjectId: input.projectId,
+        history: input.historyGroupId
+          ? {
+              groupId: input.historyGroupId,
+              requestContextId: input.requestContextId ?? input.runId,
+              title: input.historyTitle ?? 'AI mutation',
+              origin: 'agent_run',
+              finalizeGroup: true,
+              undoable: true,
+            }
+          : undefined,
       });
       const result = await executeToolCall(
         definition.name as NormalizedToolName,

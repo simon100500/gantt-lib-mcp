@@ -716,6 +716,9 @@ async function executeAgentAttempt(
   runId: string,
   projectId: string,
   sessionId: string,
+  historyGroupId: string,
+  requestContextId: string,
+  historyTitle: string,
   userId: string | undefined,
   attempt: number,
   simpleMutationRequested: boolean,
@@ -731,6 +734,9 @@ async function executeAgentAttempt(
     runId,
     sessionId,
     attempt,
+    historyGroupId,
+    requestContextId,
+    historyTitle,
     userId,
     compatibilityMode,
     projectRoot: PROJECT_ROOT,
@@ -1109,6 +1115,9 @@ export async function runAgentWithHistory(
     let tasksAfter: ComparableTask[] = tasksBefore;
     let ordinaryToolCallCount = 0;
     let firstDirectPassAccepted = false;
+    const directHistoryGroupId = crypto.randomUUID();
+    const directRequestContextId = runId;
+    const directHistoryTitle = buildAgentHistoryTitle(userMessage, true);
     let finalVerification: VerificationResult = {
       tasksAfter: tasksBefore,
       tasksChanged: false,
@@ -1148,6 +1157,9 @@ export async function runAgentWithHistory(
           runId,
           projectId,
           sessionId,
+          directHistoryGroupId,
+          directRequestContextId,
+          directHistoryTitle,
           userId,
           attempt,
           simpleMutationRequested,
@@ -1368,7 +1380,8 @@ export async function runAgentWithHistory(
 
     if (assistantResponse) {
       await messageService.add('assistant', assistantResponse, projectId, {
-        requestContextId: runId,
+        requestContextId: directRequestContextId,
+        historyGroupId: checkpointGroupId,
       });
     }
     await writeServerDebugLog('agent_response_saved', {
@@ -1398,8 +1411,8 @@ export async function runAgentWithHistory(
       type: 'done',
       chatMessage: assistantResponse
         ? {
-            requestContextId: runId,
-            historyGroupId: null,
+            requestContextId: directRequestContextId,
+            historyGroupId: checkpointGroupId ?? null,
           }
         : undefined,
     });
