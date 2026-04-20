@@ -66,6 +66,21 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function getInclusiveDurationDays(task: MutationTaskSnapshot | undefined): number | undefined {
+  if (!task?.startDate || !task?.endDate) {
+    return undefined;
+  }
+
+  const start = new Date(`${task.startDate}T00:00:00Z`);
+  const end = new Date(`${task.endDate}T00:00:00Z`);
+  const diffMs = end.getTime() - start.getTime();
+  if (Number.isNaN(diffMs) || diffMs < 0) {
+    return undefined;
+  }
+
+  return Math.floor(diffMs / 86_400_000) + 1;
+}
+
 function inferTaskType(input: Pick<BuildMutationPlanInput, 'userMessage' | 'intent'>): 'task' | 'milestone' | undefined {
   if (input.intent.taskType) {
     return input.intent.taskType;
@@ -158,6 +173,25 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       why = `Сдвиг задачи "${targetTaskId}" вычислен как server-side relative delta.`;
       expectedChangedTaskIds = [targetTaskId];
       break;
+
+    case 'change_duration': {
+      const targetTask = input.tasksBefore.find((task) => task.id === targetTaskId);
+      const currentDurationDays = getInclusiveDurationDays(targetTask) ?? 1;
+      const requestedDurationDays = intent.durationDays
+        ?? (intent.durationMultiplier
+          ? Math.max(1, Math.round(currentDurationDays * intent.durationMultiplier))
+          : currentDurationDays);
+
+      operations = [{
+        kind: 'change_task_duration',
+        taskId: targetTaskId,
+        durationDays: requestedDurationDays,
+        anchor: 'start',
+      }];
+      why = `Длительность задачи "${targetTaskId}" изменяется через typed change_duration command.`;
+      expectedChangedTaskIds = [targetTaskId];
+      break;
+    }
 
     case 'move_to_date':
       operations = [{

@@ -194,6 +194,7 @@ export async function resolveMutationContext(
 
   if (
     input.intent.intentType === 'shift_relative'
+    || input.intent.intentType === 'change_duration'
     || input.intent.intentType === 'move_to_date'
     || input.intent.intentType === 'rename_task'
     || input.intent.intentType === 'update_metadata'

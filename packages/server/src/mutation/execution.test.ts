@@ -112,6 +112,55 @@ describe('executeMutationPlan', () => {
     assert.deepEqual(result.changedTaskIds, ['unexpected-task']);
   });
 
+  it('compiles duration changes to authoritative change_duration commands instead of move_task', async () => {
+    const committedCommands: Array<{ type: string; duration?: number; anchor?: string }> = [];
+    const result = await executeMutationPlan({
+      projectId: 'project-1',
+      projectVersion: 4,
+      tasksBefore: [buildTask('task-foundation', 'Фундамент', '2026-04-01', '2026-04-05')],
+      plan: {
+        planType: 'change_duration',
+        operations: [{
+          kind: 'change_task_duration',
+          taskId: 'task-foundation',
+          durationDays: 10,
+          anchor: 'start',
+        }],
+        why: 'increase duration',
+        expectedChangedTaskIds: ['task-foundation'],
+        canExecuteDeterministically: true,
+        needsAgentExecution: false,
+      } satisfies MutationPlan,
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string; duration?: number; anchor?: string } }) => {
+          committedCommands.push(request.command);
+          return {
+            accepted: true,
+            clientRequestId: 'req-1',
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds: ['task-foundation'],
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          };
+        },
+      },
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(committedCommands, [{
+      type: 'change_duration',
+      taskId: 'task-foundation',
+      duration: 10,
+      anchor: 'start',
+    }]);
+  });
+
   it('preserves milestone type when compiling repeated fragment fan-out', async () => {
     const committedCommands: Array<{ type: string; tasks?: Array<{ id?: string; type?: string }> }> = [];
     const result = await executeMutationPlan({

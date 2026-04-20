@@ -131,10 +131,10 @@ const COMPACT_MUTATION_SYSTEM_PROMPT = [
   'You edit a Gantt project through normalized tools.',
   'For read-only requests, answer directly.',
   'For mutation requests, act quickly and use as few tool calls as possible.',
-  'If the requested change is obvious, perform it immediately.',
   'Use reads only when you truly need IDs, hierarchy, dates, or dependency context.',
-  'For simple additions, prefer one direct create_tasks call.',
-  'If parent is unspecified, choose the most reasonable placement and proceed; top-level is acceptable.',
+  'Never guess placement or dependencies for schedule edits.',
+  'Do not create standalone tasks when the request implies sequence, parent container, or semantic placement.',
+  'If placement or dependency semantics are unclear, gather the minimum context first.',
   'Use only normalized tools: get_project_summary, get_task_context, get_schedule_slice, create_tasks, update_tasks, move_tasks, delete_tasks, link_tasks, unlink_tasks, shift_tasks, recalculate_project.',
   'Never invent task IDs.',
   'Reply briefly with only what changed.',
@@ -162,9 +162,6 @@ const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
   'recalculate_project',
 ]);
 const NORMALIZED_MUTATION_TOOL_NAME_LIST = [...NORMALIZED_MUTATION_TOOL_NAMES];
-const STAGED_MUTATION_PLACEMENT_HINT_RE =
-  /\b(after|before|append|prepend|between|following|at the end|end of)\b|в\s+конце|в\s+конец|после|перед|между|следом\s+за|последн/iu;
-
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
 type PrismaModule = typeof import('@gantt/runtime-core/prisma');
@@ -601,7 +598,7 @@ export function shouldPreferStagedMutation(userMessage: string): boolean {
     return false;
   }
 
-  return STAGED_MUTATION_PLACEMENT_HINT_RE.test(normalized);
+  return true;
 }
 
 function sanitizeAssistantResponse(userMessage: string, response: string): string {

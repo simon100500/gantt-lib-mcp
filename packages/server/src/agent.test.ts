@@ -379,20 +379,17 @@ describe('agent history context', () => {
     assert.ok(history.length <= 1700, `expected compact history, got ${history.length} chars`);
     assert.doesNotMatch(history, /message-0-/);
     assert.doesNotMatch(history, /message-3-/);
-    assert.match(history, /message-4-/);
+    assert.match(history, /message-9-/);
   });
 });
 
 describe('agent staged-mutation preference', () => {
-  it('prefers staged mutation for placement-sensitive additions', () => {
+  it('prefers staged mutation for targeted mutation requests broadly', () => {
     assert.equal(shouldPreferStagedMutation('Добавь сдачу ГАСН в конце работ'), true);
     assert.equal(shouldPreferStagedMutation('Добавь акт приемки после фасадных работ'), true);
     assert.equal(shouldPreferStagedMutation('Insert handover before commissioning'), true);
-  });
-
-  it('does not force staged mutation for plain standalone additions', () => {
-    assert.equal(shouldPreferStagedMutation('Добавь мобилизацию'), false);
-    assert.equal(shouldPreferStagedMutation('Create milestone ГАСН'), false);
+    assert.equal(shouldPreferStagedMutation('Добавь мобилизацию'), true);
+    assert.equal(shouldPreferStagedMutation('Create milestone ГАСН'), true);
   });
 });
 

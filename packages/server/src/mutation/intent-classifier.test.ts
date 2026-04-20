@@ -52,6 +52,32 @@ describe('mutation intent classification', () => {
     assert.equal(shiftIntent.intentType, 'shift_relative');
     assert.equal(shiftIntent.deltaDays, 2);
 
+    const durationIntent = await classifyMutationIntent({
+      userMessage: 'увеличь срок штукатурки в 2 раза',
+      env,
+      semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
+        intentType: 'change_duration',
+        confidence: 0.91,
+        entitiesMentioned: ['штукатурка'],
+        durationMultiplier: 2,
+      })),
+    });
+    assert.equal(durationIntent.intentType, 'change_duration');
+    assert.equal(durationIntent.durationMultiplier, 2);
+
+    const absoluteDurationIntent = await classifyMutationIntent({
+      userMessage: 'увеличь срок штукатурки до 10 дней',
+      env,
+      semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
+        intentType: 'change_duration',
+        confidence: 0.89,
+        entitiesMentioned: ['штукатурка'],
+        durationDays: 10,
+      })),
+    });
+    assert.equal(absoluteDurationIntent.intentType, 'change_duration');
+    assert.equal(absoluteDurationIntent.durationDays, 10);
+
     const repeatedIntent = await classifyMutationIntent({
       userMessage: 'добавь покраску обоев на каждый этаж',
       env,
@@ -114,6 +140,19 @@ describe('mutation execution routing', () => {
         entitiesMentioned: ['x'],
         requiresResolution: true,
         requiresSchedulingPlacement: true,
+        executionMode: 'deterministic',
+      }),
+      'deterministic',
+    );
+    assert.equal(
+      selectMutationExecutionMode({
+        intentType: 'change_duration',
+        confidence: 0.9,
+        rawRequest: 'x',
+        normalizedRequest: 'x',
+        entitiesMentioned: ['x'],
+        requiresResolution: true,
+        requiresSchedulingPlacement: false,
         executionMode: 'deterministic',
       }),
       'deterministic',

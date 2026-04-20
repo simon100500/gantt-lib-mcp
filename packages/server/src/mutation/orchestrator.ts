@@ -187,6 +187,7 @@ function resolveFailureReason(
 
   if (
     intentType === 'shift_relative'
+    || intentType === 'change_duration'
     || intentType === 'move_to_date'
     || intentType === 'rename_task'
     || intentType === 'update_metadata'

@@ -115,6 +115,60 @@ describe('buildMutationPlan', () => {
   });
 
   it('maps date moves and metadata edits to deterministic semantic operations', async () => {
+    const durationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь срок фундамента в 2 раза',
+        normalizedRequest: 'увеличь срок фундамента в 2 раза',
+        entitiesMentioned: ['фундамент'],
+        requiresSchedulingPlacement: false,
+        durationDays: undefined,
+        durationMultiplier: 2,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-foundation',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь срок фундамента в 2 раза',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }],
+    });
+
+    assert.equal(durationPlan.operations[0]?.kind, 'change_task_duration');
+    assert.equal(durationPlan.operations[0]?.durationDays, 6);
+    assert.deepEqual(durationPlan.expectedChangedTaskIds, ['task-foundation']);
+
+    const absoluteDurationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь срок фундамента до 10 дней',
+        normalizedRequest: 'увеличь срок фундамента до 10 дней',
+        entitiesMentioned: ['фундамент'],
+        requiresSchedulingPlacement: false,
+        durationDays: 10,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-foundation',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь срок фундамента до 10 дней',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }],
+    });
+
+    assert.equal(absoluteDurationPlan.operations[0]?.kind, 'change_task_duration');
+    assert.equal(absoluteDurationPlan.operations[0]?.durationDays, 10);
+
     const movePlan = await buildMutationPlan({
       intent: buildIntent({
         intentType: 'move_to_date',

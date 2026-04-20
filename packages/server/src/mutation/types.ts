@@ -1,6 +1,7 @@
 export type MutationIntentType =
   | 'add_single_task'
   | 'add_repeated_fragment'
+  | 'change_duration'
   | 'shift_relative'
   | 'move_to_date'
   | 'move_in_hierarchy'
@@ -39,6 +40,7 @@ export type MutationIntent = {
   taskTitle?: string;
   taskType?: 'task' | 'milestone';
   durationDays?: number;
+  durationMultiplier?: number;
   deltaDays?: number;
   targetDate?: string;
   renamedTitle?: string;
@@ -183,6 +185,12 @@ export type MutationPlanOperation =
       taskType?: 'task' | 'milestone';
       containerId: string;
       durationDays: number;
+    }
+  | {
+      kind: 'change_task_duration';
+      taskId: string;
+      durationDays: number;
+      anchor?: 'start' | 'end';
     }
   | {
       kind: 'shift_task_by_delta';

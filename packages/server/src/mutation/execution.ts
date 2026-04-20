@@ -136,6 +136,14 @@ function compileOperation(
       return [{ type: 'move_task', taskId: operation.taskId, startDate }];
     }
 
+    case 'change_task_duration':
+      return [{
+        type: 'change_duration',
+        taskId: operation.taskId,
+        duration: operation.durationDays,
+        anchor: operation.anchor ?? 'start',
+      }];
+
     case 'move_task_to_date':
       return [{ type: 'move_task', taskId: operation.taskId, startDate: operation.targetDate }];
 
