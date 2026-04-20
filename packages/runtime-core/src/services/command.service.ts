@@ -192,6 +192,72 @@ function computePatches(
   return patches;
 }
 
+function cloneTaskForSnapshot(task: Task): Task {
+  return {
+    ...task,
+    dependencies: task.dependencies?.map((dependency) => ({ ...dependency })),
+  };
+}
+
+function buildAfterTasksSnapshot(
+  beforeTasks: Task[],
+  executeResult: CommandExecutionResult,
+): Task[] {
+  const taskMap = new Map(beforeTasks.map((task) => [task.id, cloneTaskForSnapshot(task)]));
+  const deletedTaskIds = new Set(
+    executeResult.taskChanges
+      .filter((taskChange) => taskChange.action === 'delete' && taskChange.taskId)
+      .map((taskChange) => taskChange.taskId as string),
+  );
+
+  for (const taskId of deletedTaskIds) {
+    taskMap.delete(taskId);
+  }
+
+  for (const task of executeResult.changedTasks) {
+    if (!deletedTaskIds.has(task.id)) {
+      taskMap.set(task.id, cloneTaskForSnapshot(task as Task));
+    }
+  }
+
+  for (const taskChange of executeResult.taskChanges) {
+    if (taskChange.action === 'create' && taskChange.task) {
+      taskMap.set(taskChange.task.id, cloneTaskForSnapshot(taskChange.task));
+    }
+  }
+
+  for (const taskChange of executeResult.taskChanges) {
+    if (taskChange.action === 'update_parent' && taskChange.taskId) {
+      const task = taskMap.get(taskChange.taskId);
+      if (task) {
+        taskMap.set(taskChange.taskId, {
+          ...task,
+          parentId: taskChange.newParentId ?? undefined,
+        });
+      }
+    }
+
+    if (taskChange.action === 'update_sort' && taskChange.taskId && taskChange.sortOrder !== undefined) {
+      const task = taskMap.get(taskChange.taskId);
+      if (task) {
+        taskMap.set(taskChange.taskId, {
+          ...task,
+          sortOrder: taskChange.sortOrder,
+        });
+      }
+    }
+  }
+
+  return [...taskMap.values()].sort((left, right) => {
+    const leftSort = left.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const rightSort = right.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (leftSort !== rightSort) {
+      return leftSort - rightSort;
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
 async function syncTaskDependencies(prismaClient: any, taskId: string, dependencies: TaskDependency[] | undefined): Promise<void> {
   await prismaClient.dependency.deleteMany({
     where: { taskId },
@@ -1144,8 +1210,8 @@ export class CommandService {
           }
         }
 
-        // Step 8: Load after-snapshot for patch computation
-        const afterTasks = await loadTaskSnapshot(projectId, tx);
+        // Step 8: Build after-snapshot tasks in memory for patch computation
+        const afterTasks = buildAfterTasksSnapshot(beforeTasks, executeResult);
 
         // Step 9: Compute patches
         const patches = computePatches(
@@ -1193,8 +1259,11 @@ export class CommandService {
           await this.finalizeMutationGroup(tx, history.groupId, newVersion, history.undoable);
         }
 
-        // Step 12: Build final snapshot
-        const snapshot = await buildProjectSnapshot(projectId, tx);
+        // Step 12: Build final snapshot with in-memory tasks plus authoritative dependency rows
+        const snapshot = {
+          tasks: afterTasks,
+          dependencies: await loadDependencyRows(projectId, tx),
+        };
 
         return {
           clientRequestId,
