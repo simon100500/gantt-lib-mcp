@@ -4,7 +4,7 @@ milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
 last_updated: "2026-04-20T05:24:54.732Z"
-last_activity: 2026-04-20 -- Completed 46-01-PLAN.md
+last_activity: 2026-04-20 -- Completed 46-02-PLAN.md
 progress:
   total_phases: 17
   completed_phases: 14
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 46 (mcp-replace) — EXECUTING
-Plan: 1 of 5
+Plan: 2 of 5
 Status: Executing Phase 46
-Last activity: 2026-04-20 -- Completed 46-01-PLAN.md
+Last activity: 2026-04-20 -- Completed 46-02-PLAN.md
 Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
 Progress: [██████████] 100%
