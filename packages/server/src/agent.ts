@@ -46,6 +46,7 @@ type AgentAttemptResult = {
   assistantResponse: string;
   streamedContent: boolean;
   mutationToolCalls: MutationToolCall[];
+  toolCallCount: number;
 };
 
 type VerificationResult = {
@@ -96,6 +97,23 @@ export type MutationOutcomeAssessment = {
   acceptedChangedTaskIds: string[];
   acceptedChangedTaskIdMismatch: boolean;
 };
+
+export type OrdinaryAgentPathTelemetry = {
+  direct_tool_path: boolean;
+  legacy_subprocess_fallback: boolean;
+  embedded_tool_call: boolean;
+  tool_calls_per_request: number;
+  fallback_rate: number;
+  first_direct_pass_accepted: boolean;
+  authoritative_verification_accepted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  acceptedChangedTaskIds: string[];
+  actualChangedTaskIds: string[];
+  accepted_changed_task_id_mismatch: boolean;
+};
+
+const ORDINARY_AGENT_PATH_CONTRACT =
+  'Ordinary conversational mutations use the direct path by default with no external MCP subprocess; compatibility fallback remains explicit and bounded.';
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
 const READONLY_HISTORY_MESSAGE_LIMIT = 12;
@@ -298,6 +316,44 @@ function getChangedTaskIds(before: ComparableTask[], after: ComparableTask[]): s
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+export function summarizeOrdinaryAgentPathTelemetry(input: {
+  initialCompatibilityMode: OrdinaryAgentCompatibilityMode;
+  finalCompatibilityMode?: OrdinaryAgentCompatibilityMode;
+  toolCallCount: number;
+  firstDirectPassAccepted: boolean;
+  authoritativeVerificationAccepted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  actualChangedTaskIds: string[];
+}): OrdinaryAgentPathTelemetry {
+  const finalCompatibilityMode = input.finalCompatibilityMode ?? input.initialCompatibilityMode;
+  const acceptedChangedTaskIds = uniqueSorted(
+    input.acceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
+  );
+  const actualChangedTaskIds = uniqueSorted(input.actualChangedTaskIds);
+  const acceptedChangedTaskIdMismatch =
+    acceptedChangedTaskIds.length !== actualChangedTaskIds.length
+    || acceptedChangedTaskIds.some((taskId, index) => taskId !== actualChangedTaskIds[index]);
+  const legacySubprocessFallback =
+    input.initialCompatibilityMode === 'embedded-direct'
+    && finalCompatibilityMode === 'legacy-subprocess'
+    && !input.firstDirectPassAccepted;
+  const directToolPath = finalCompatibilityMode === 'embedded-direct';
+
+  return {
+    direct_tool_path: directToolPath,
+    legacy_subprocess_fallback: legacySubprocessFallback,
+    embedded_tool_call: directToolPath && input.toolCallCount > 0,
+    tool_calls_per_request: input.toolCallCount,
+    fallback_rate: legacySubprocessFallback ? 1 : 0,
+    first_direct_pass_accepted: input.firstDirectPassAccepted,
+    authoritative_verification_accepted: input.authoritativeVerificationAccepted,
+    acceptedMutationCalls: input.acceptedMutationCalls,
+    acceptedChangedTaskIds,
+    actualChangedTaskIds,
+    accepted_changed_task_id_mismatch: acceptedChangedTaskIdMismatch,
+  };
 }
 
 function normalizeName(value: string): string {
@@ -601,6 +657,12 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
   return [...toolUseById.values()];
 }
 
+function collectToolUseIds(blocks: ContentBlock[]): string[] {
+  return blocks
+    .filter((block): block is Extract<ContentBlock, { type: 'tool_use'; id: string }> => block.type === 'tool_use')
+    .map((block) => block.id);
+}
+
 async function getServicesModule(): Promise<TaskServiceModule> {
   if (!servicesModulePromise) {
     servicesModulePromise = import('@gantt/mcp/services');
@@ -686,6 +748,7 @@ async function executeAgentAttempt(
   let capturedPartialContent = false;
   let timeoutHandle: NodeJS.Timeout | undefined;
   const mutationToolCalls = new Map<string, MutationToolCall>();
+  const observedToolUseIds = new Set<string>();
 
   try {
     const sessionPromise = (async () => {
@@ -694,12 +757,14 @@ async function executeAgentAttempt(
           if (
             event.event.type === 'content_block_start'
             && event.event.content_block.type === 'tool_use'
-            && NORMALIZED_MUTATION_TOOL_NAMES.has(event.event.content_block.name as NormalizedMutationToolName)
           ) {
-            mutationToolCalls.set(event.event.content_block.id, {
-              toolUseId: event.event.content_block.id,
-              toolName: event.event.content_block.name as NormalizedMutationToolName,
-            });
+            observedToolUseIds.add(event.event.content_block.id);
+            if (NORMALIZED_MUTATION_TOOL_NAMES.has(event.event.content_block.name as NormalizedMutationToolName)) {
+              mutationToolCalls.set(event.event.content_block.id, {
+                toolUseId: event.event.content_block.id,
+                toolName: event.event.content_block.name as NormalizedMutationToolName,
+              });
+            }
           }
 
           if (
@@ -741,6 +806,9 @@ async function executeAgentAttempt(
         }
 
         if (isSDKAssistantMessage(event)) {
+          for (const toolUseId of collectToolUseIds(event.message.content)) {
+            observedToolUseIds.add(toolUseId);
+          }
           for (const toolCall of collectMutationToolCalls(event.message.content)) {
             const existing = mutationToolCalls.get(toolCall.toolUseId);
             mutationToolCalls.set(toolCall.toolUseId, {
@@ -808,6 +876,7 @@ async function executeAgentAttempt(
     assistantResponse,
     streamedContent,
     mutationToolCalls: [...mutationToolCalls.values()],
+    toolCallCount: observedToolUseIds.size,
   };
 }
 
@@ -1136,6 +1205,8 @@ export async function runAgentWithHistory(
     let assistantResponse = '';
     let streamedContent = false;
     let tasksAfter: ComparableTask[] = tasksBefore;
+    let ordinaryToolCallCount = 0;
+    let firstDirectPassAccepted = false;
     let finalVerification: VerificationResult = {
       tasksAfter: tasksBefore,
       tasksChanged: false,
@@ -1204,6 +1275,7 @@ export async function runAgentWithHistory(
       }
       assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);
       streamedContent = streamedContent || attemptResult.streamedContent;
+      ordinaryToolCallCount += attemptResult.toolCallCount;
 
       finalVerification = await verifyMutationAttempt(
         runId,
@@ -1216,6 +1288,11 @@ export async function runAgentWithHistory(
         taskService,
       );
       tasksAfter = finalVerification.tasksAfter as ComparableTask[];
+      if (attempt === 1 && ordinaryCompatibilityMode === 'embedded-direct') {
+        firstDirectPassAccepted = finalVerification.tasksChanged
+          && finalVerification.acceptedMutationCalls.length > 0
+          && !finalVerification.acceptedChangedTaskIdMismatch;
+      }
 
       const mutationObserved = finalVerification.mutationAttempted || finalVerification.tasksChanged;
 
@@ -1277,6 +1354,23 @@ export async function runAgentWithHistory(
     }
 
     assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
+    const ordinaryPathTelemetry = summarizeOrdinaryAgentPathTelemetry({
+      initialCompatibilityMode: ordinaryCompatibilityMode,
+      toolCallCount: ordinaryToolCallCount,
+      firstDirectPassAccepted,
+      authoritativeVerificationAccepted: finalVerification.tasksChanged
+        && finalVerification.acceptedMutationCalls.length > 0
+        && !finalVerification.acceptedChangedTaskIdMismatch,
+      acceptedMutationCalls: finalVerification.acceptedMutationCalls,
+      actualChangedTaskIds: finalVerification.actualChangedTaskIds,
+    });
+    await writeServerDebugLog('ordinary_agent_path_telemetry', {
+      runId,
+      projectId,
+      sessionId,
+      path_contract: ORDINARY_AGENT_PATH_CONTRACT,
+      ...ordinaryPathTelemetry,
+    });
 
       if (assistantResponse) {
       broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
