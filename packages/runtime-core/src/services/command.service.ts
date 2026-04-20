@@ -212,6 +212,23 @@ async function syncTaskDependencies(prismaClient: any, taskId: string, dependenc
   });
 }
 
+function normalizeDependencySet(dependencies: TaskDependency[] | undefined): string[] {
+  return (dependencies ?? [])
+    .map((dependency) => `${dependency.taskId}|${dependency.type}|${dependency.lag ?? 0}`)
+    .sort();
+}
+
+function dependenciesChanged(before: TaskDependency[] | undefined, after: TaskDependency[] | undefined): boolean {
+  const beforeSet = normalizeDependencySet(before);
+  const afterSet = normalizeDependencySet(after);
+
+  if (beforeSet.length !== afterSet.length) {
+    return true;
+  }
+
+  return beforeSet.some((value, index) => value !== afterSet[index]);
+}
+
 async function bulkUpdateTaskSortOrders(
   prismaClient: any,
   projectId: string,
@@ -1092,6 +1109,7 @@ export class CommandService {
 
         // Step 7: Persist full semantic state for every changed task that still exists.
         const deletedTaskIdSet = new Set(deletedTaskIds);
+        const beforeTaskById = new Map(beforeTasks.map((task) => [task.id, task]));
 
         for (const task of executeResult.changedTasks) {
           if (deletedTaskIdSet.has(task.id)) {
@@ -1120,7 +1138,10 @@ export class CommandService {
             },
           });
 
-          await syncTaskDependencies(tx, task.id, task.dependencies);
+          const beforeTask = beforeTaskById.get(task.id);
+          if (dependenciesChanged(beforeTask?.dependencies, task.dependencies)) {
+            await syncTaskDependencies(tx, task.id, task.dependencies);
+          }
         }
 
         // Step 8: Load after-snapshot for patch computation

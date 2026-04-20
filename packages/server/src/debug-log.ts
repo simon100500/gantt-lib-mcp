@@ -1,5 +1,7 @@
 import { writeDebugLog } from '@gantt/mcp/debug-log';
 
+const ENABLE_RAW_SDK_DEBUG_LOGS = process.env.GANTT_DEBUG_RAW_SDK === 'true';
+
 const SUPPRESSED_SERVER_DEBUG_EVENTS = new Set([
   'ws_authenticated',
   'ws_broadcast',
@@ -14,7 +16,7 @@ const SUPPRESSED_SERVER_DEBUG_EVENTS = new Set([
 ]);
 
 export async function writeServerDebugLog(event: string, payload: Record<string, unknown> = {}): Promise<void> {
-  if (SUPPRESSED_SERVER_DEBUG_EVENTS.has(event)) {
+  if (!ENABLE_RAW_SDK_DEBUG_LOGS && SUPPRESSED_SERVER_DEBUG_EVENTS.has(event)) {
     return;
   }
 
