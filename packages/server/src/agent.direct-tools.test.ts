@@ -1,12 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { NORMALIZED_TOOL_CATALOG } from '@gantt/runtime-core/tool-core';
+import { NORMALIZED_TOOL_CATALOG } from '@gantt/runtime-core/tool-core/catalog';
 
 import {
   buildDirectToolDefinitions,
   resolveOrdinaryAgentMcpServers,
-} from './agent.js';
+} from './agent/direct-tools.js';
+
+function isSdkServerConfig(server: unknown): server is { type: 'sdk'; name: string } {
+  return typeof server === 'object' && server !== null && 'type' in server && (server as { type?: unknown }).type === 'sdk';
+}
+
+function isStdioServerConfig(server: unknown): server is { type?: undefined; command: string; args: string[] } {
+  return typeof server === 'object' && server !== null && 'command' in server;
+}
 
 describe('agent direct tool path', () => {
   it('builds embedded SDK tools from the shared normalized catalog', () => {
@@ -30,8 +38,10 @@ describe('agent direct tool path', () => {
       runId: 'run-1',
       sessionId: 'session-1',
       attempt: 1,
+      projectRoot: process.cwd(),
     });
 
+    assert.ok(isSdkServerConfig(servers.gantt));
     assert.equal(servers.gantt.type, 'sdk');
     assert.equal(servers.gantt.name, 'gantt');
     assert.ok(!('command' in servers.gantt));
@@ -43,11 +53,12 @@ describe('agent direct tool path', () => {
       runId: 'run-1',
       sessionId: 'session-1',
       attempt: 2,
+      projectRoot: process.cwd(),
       compatibilityMode: 'legacy-subprocess',
       mcpServerPath: 'packages/mcp/dist/index.js',
     });
 
-    assert.equal(servers.gantt.type, 'stdio');
+    assert.ok(isStdioServerConfig(servers.gantt));
     assert.equal(servers.gantt.command, 'node');
     assert.deepEqual(servers.gantt.args, ['packages/mcp/dist/index.js']);
   });

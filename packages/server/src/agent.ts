@@ -16,6 +16,11 @@ import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
 import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
+import {
+  resolveOrdinaryAgentCompatibilityMode,
+  resolveOrdinaryAgentMcpServers,
+  type OrdinaryAgentCompatibilityMode,
+} from './agent/direct-tools.js';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
@@ -642,13 +647,23 @@ async function executeAgentAttempt(
   userId: string | undefined,
   attempt: number,
   simpleMutationRequested: boolean,
-  mcpServerPath: string,
+  compatibilityMode: OrdinaryAgentCompatibilityMode | undefined,
   env: ReturnType<typeof resolveEnv>,
   model: string,
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
   const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
+  const mcpServers = resolveOrdinaryAgentMcpServers({
+    projectId,
+    runId,
+    sessionId,
+    attempt,
+    userId,
+    compatibilityMode,
+    projectRoot: PROJECT_ROOT,
+    databaseUrl: process.env.DATABASE_URL,
+  });
 
   const session = query({
     prompt,
@@ -662,21 +677,7 @@ async function executeAgentAttempt(
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: buildSdkEnv(env),
-      mcpServers: {
-        gantt: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            DATABASE_URL: process.env.DATABASE_URL ?? '',
-            PROJECT_ID: projectId,
-            AI_USER_ID: userId ?? '',
-            AI_RUN_ID: runId,
-            AI_SESSION_ID: sessionId,
-            AI_MUTATION_SOURCE: 'agent',
-            AI_ATTEMPT: String(attempt),
-          },
-        },
-      },
+      mcpServers,
     },
   });
 
@@ -1130,8 +1131,7 @@ export async function runAgentWithHistory(
       ...modelRoutingDecision,
     });
 
-    const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
-      ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
+    const ordinaryCompatibilityMode = resolveOrdinaryAgentCompatibilityMode();
 
     let assistantResponse = '';
     let streamedContent = false;
@@ -1180,7 +1180,7 @@ export async function runAgentWithHistory(
           userId,
           attempt,
           simpleMutationRequested,
-          mcpServerPath,
+          ordinaryCompatibilityMode,
           env,
           modelRoutingDecision.selectedModel,
           broadcastToSession,

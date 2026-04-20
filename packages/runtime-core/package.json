@@ -10,7 +10,8 @@
     "./prisma": "./dist/prisma.js",
     "./services": "./dist/services/index.js",
     "./services/*": "./dist/services/*.js",
-    "./tool-core": "./dist/tool-core/index.js"
+    "./tool-core": "./dist/tool-core/index.js",
+    "./tool-core/*": "./dist/tool-core/*.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

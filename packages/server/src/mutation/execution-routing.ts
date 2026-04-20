@@ -22,3 +22,10 @@ export function selectMutationExecutionMode(intent: MutationIntent): MutationExe
   }
 }
 
+export function prefersEmbeddedDirectToolPath(intent: MutationIntent): boolean {
+  return selectMutationExecutionMode(intent) !== 'full_agent';
+}
+
+export function isCompatibilityFallbackExecutionMode(mode: MutationExecutionMode): boolean {
+  return mode === 'full_agent';
+}

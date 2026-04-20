@@ -19,7 +19,9 @@
       "@gantt/runtime-core/types": ["../runtime-core/dist/types.d.ts"],
       "@gantt/runtime-core/prisma": ["../runtime-core/dist/prisma.d.ts"],
       "@gantt/runtime-core/services": ["../runtime-core/dist/services/index.d.ts"],
-      "@gantt/runtime-core/services/*": ["../runtime-core/dist/services/*.d.ts"]
+      "@gantt/runtime-core/services/*": ["../runtime-core/dist/services/*.d.ts"],
+      "@gantt/runtime-core/tool-core": ["../runtime-core/dist/tool-core/index.d.ts"],
+      "@gantt/runtime-core/tool-core/*": ["../runtime-core/dist/tool-core/*.d.ts"]
     },
     "esModuleInterop": true
   },
