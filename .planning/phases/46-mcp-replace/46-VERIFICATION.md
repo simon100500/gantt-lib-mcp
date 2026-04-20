@@ -1,9 +1,12 @@
 ---
 phase: 46-mcp-replace
-verified: pending
-status: ready_for_manual_closeout
-score: pending
-gaps: []
+verified: 2026-04-20
+status: gaps_found
+score: 4/6 acceptance criteria met
+gaps:
+  - The direct in-process tool loop is not the primary ordinary path yet; staged mutation still runs first and can return before direct tools execute.
+  - Staged mutation is not fallback-only in the current control flow.
+  - Human UAT evidence and real automatic fallback telemetry are still missing.
 ---
 
 # Phase 46 Verification Report
@@ -19,87 +22,69 @@ Prove the Phase 46 replan shipped the direct-tooling architecture:
 5. staged mutation is fallback-only
 6. tests and live checks prove direct-path behavior, parity, and telemetry quality
 
-## Acceptance Criteria Traceability
+## Verdict
 
-| # | Acceptance Criteria | Evidence Target | Current Evidence |
+`gaps_found`
+
+Phase 46 made substantial architectural progress and completed all planned implementation work, but it does not yet satisfy the core replan contract that the direct in-process tool loop is the primary ordinary path and staged mutation is fallback-only.
+
+## Acceptance Criteria Review
+
+| # | Acceptance Criteria | Verdict | Evidence |
 | --- | --- | --- | --- |
-| 1 | ordinary conversational mutation requests no longer require `packages/mcp/dist/index.js` | [packages/server/src/agent/direct-tools.ts](../../../packages/server/src/agent/direct-tools.ts), [packages/server/src/agent.direct-tools.test.ts](../../../packages/server/src/agent.direct-tools.test.ts) | `resolveOrdinaryAgentMcpServers()` defaults to `createSdkMcpServer(...)`; explicit legacy subprocess path remains opt-in only. |
-| 2 | the primary app path uses shared in-process handlers | [packages/server/src/agent/direct-tools.ts](../../../packages/server/src/agent/direct-tools.ts), [packages/runtime-core/src/tool-core/handlers.ts](../../../packages/runtime-core/src/tool-core/handlers.ts) | direct tool definitions are built from `@gantt/runtime-core` catalog and execute through shared handlers in-process. |
-| 3 | Prisma-backed authoritative services are no longer MCP-owned | [packages/runtime-core](../../../packages/runtime-core), [packages/server/src/agent.ts](../../../packages/server/src/agent.ts) | server direct path consumes shared runtime ownership through `@gantt/runtime-core`; MCP is no longer the primary ownership boundary for the ordinary path. |
-| 4 | MCP still works as an adapter over the same normalized contracts | [packages/mcp/src/index.ts](../../../packages/mcp/src/index.ts), [packages/mcp/src/public-tools.ts](../../../packages/mcp/src/public-tools.ts), [packages/runtime-core/src/tool-core/adapter-parity.test.ts](../../../packages/runtime-core/src/tool-core/adapter-parity.test.ts) | Phase 46 Plan 04 locked adapter parity and shared-catalog delegation. |
-| 5 | staged mutation is fallback-only | [packages/server/src/agent.ts](../../../packages/server/src/agent.ts), [packages/server/src/mutation/orchestrator.ts](../../../packages/server/src/mutation/orchestrator.ts) | ordinary-path telemetry now records `direct_tool_path`, `legacy_subprocess_fallback`, and first-pass verification acceptance; deferred legacy execution stays explicit. |
-| 6 | tests and live checks prove direct-path behavior, parity, and telemetry quality | [packages/server/src/agent.direct-tools.test.ts](../../../packages/server/src/agent.direct-tools.test.ts), [46-HUMAN-UAT.md](./46-HUMAN-UAT.md) | automated assertions lock direct path by default, fallback-only semantics, and accepted mutation verification synchronization; manual UAT covers live direct path and MCP adapter checks. |
+| 1 | ordinary conversational mutation requests no longer require `packages/mcp/dist/index.js` | PASS | [packages/server/src/agent/direct-tools.ts](../../../packages/server/src/agent/direct-tools.ts) defaults to `createSdkMcpServer(...)`; the subprocess path is explicit opt-in only. |
+| 2 | the primary app path uses shared in-process handlers | FAIL | [packages/server/src/agent.ts](../../../packages/server/src/agent.ts) still invokes `runStagedMutation()` before the ordinary direct tool loop and can return early on staged success. |
+| 3 | Prisma-backed authoritative services are no longer MCP-owned | PASS | Shared ownership now lives in `@gantt/runtime-core`, while MCP re-exports runtime-core modules through [packages/mcp/src/services/index.ts](../../../packages/mcp/src/services/index.ts), [packages/mcp/src/types.ts](../../../packages/mcp/src/types.ts), and [packages/mcp/src/prisma.ts](../../../packages/mcp/src/prisma.ts). |
+| 4 | MCP still works as an adapter over the same normalized contracts | PASS | [packages/mcp/src/index.ts](../../../packages/mcp/src/index.ts) delegates through shared `executeToolCall()`, and [packages/mcp/src/public-tools.ts](../../../packages/mcp/src/public-tools.ts) derives the list from `NORMALIZED_TOOL_CATALOG`. |
+| 5 | staged mutation is fallback-only | FAIL | Current control flow still makes staged mutation the first path for likely mutations instead of a post-direct fallback. |
+| 6 | tests and live checks prove direct-path behavior, parity, and telemetry quality | PARTIAL | Automated tests and builds passed, but [46-HUMAN-UAT.md](./46-HUMAN-UAT.md) has no executed run log yet, and telemetry does not yet evidence a real automatic direct-to-legacy runtime fallback. |
 
-## Architecture Evidence
+## What Passed
 
-### Direct path implementation
+- Direct server tooling no longer requires the ordinary path to spawn `packages/mcp/dist/index.js`.
+- Shared runtime ownership is no longer MCP-owned; runtime-core is the transport-neutral boundary.
+- MCP is now an adapter over the shared catalog and handlers rather than a separate business-logic owner.
+- Automated parity and direct-path regression coverage passed:
+  - `npx tsx --test packages/mcp/src/index.test.ts`
+  - `npx tsx --test packages/runtime-core/src/tool-core/adapter-parity.test.ts`
+  - `npx tsx --test packages/server/src/agent.direct-tools.test.ts`
+  - `npm run build -w packages/mcp`
+  - `npm run build -w packages/runtime-core`
+  - `npm run build -w packages/server`
 
-- `packages/server/src/agent/direct-tools.ts`
-  - `createSdkMcpServer`
-  - `buildDirectToolDefinitions`
-  - `executeToolCall`
-- `packages/server/src/agent.ts`
-  - `ordinary_agent_path_telemetry`
-  - `direct_tool_path`
-  - `legacy_subprocess_fallback`
-  - `embedded_tool_call`
-  - `fallback_rate`
+## Gaps Found
 
-### Shared runtime ownership
+### 1. Direct path is not yet the primary ordinary path
 
-- `@gantt/runtime-core`
-  - normalized tool catalog
-  - shared handlers
-  - transport-neutral runtime ownership
+In [packages/server/src/agent.ts](../../../packages/server/src/agent.ts), likely mutation requests still go through `runStagedMutation()` before the ordinary direct tool loop. When staged handling succeeds, the request returns before the direct in-process shared handler path executes.
 
-### MCP adapter parity
+Impact:
+- The main architectural goal of the replan is not fully achieved.
+- The direct tool loop is present, but it is not the default first execution path for ordinary conversational mutations.
 
-- `packages/mcp/src/index.ts`
-- `packages/mcp/src/public-tools.ts`
-- `find_tasks` remains on the normalized shared surface
+### 2. Staged mutation is not fallback-only
 
-## Automated Verification
+The replan required staged mutation compatibility to become a bounded fallback. The current flow still treats staged mutation as the first-line path rather than a fallback entered after direct-path insufficiency or verification failure.
 
-### Commands executed
+Impact:
+- Acceptance criterion 5 is not met.
+- Telemetry describing fallback remains conceptually ahead of the runtime behavior it is supposed to prove.
 
-- `npx tsx --test packages/server/src/agent.direct-tools.test.ts`
-- `npm run build -w packages/server`
+### 3. Manual and telemetry evidence is incomplete
 
-### Current status
+[46-HUMAN-UAT.md](./46-HUMAN-UAT.md) exists, but the run log is still unfilled. In addition, `ordinary_agent_path_telemetry` currently summarizes the initial compatibility mode at the call site, so the repository does not yet contain evidence of a real automatic direct-to-legacy fallback run.
 
-- PASS: direct-path regression suite
-- PASS: server build, including dependent runtime-core and MCP builds
+Impact:
+- The closeout evidence is incomplete.
+- Live proof of direct-path behavior, bounded fallback, and MCP adapter continuity is still pending.
 
-### Commit evidence
+## Recommended Gap Closure
 
-- `177ed11` `feat(46-05): add direct-path telemetry evidence`
-- `9e5a534` `test(46-05): add failing direct-path telemetry coverage`
-- `6c2596a` `feat(46-04): thin MCP into runtime-core transport adapter`
-- `4e2f0d5` `test(46-04): lock MCP adapter parity with direct handlers`
+1. Change `packages/server/src/agent.ts` so ordinary conversational mutations attempt the shared direct in-process tool loop first.
+2. Move staged mutation behind a true fallback decision based on direct-path insufficiency, verification failure, or explicit safety gating.
+3. Extend telemetry so it records final compatibility mode and can prove automatic fallback, not just env-forced legacy mode.
+4. Execute the manual flows in [46-HUMAN-UAT.md](./46-HUMAN-UAT.md) and record the run log.
 
-## Telemetry Review Points
+## Next Action
 
-Inspect `ordinary_agent_path_telemetry` for:
-
-- `fallback rate`
-- `tool calls per request`
-- `verification failure rate`
-- `direct_tool_path`
-- `legacy_subprocess_fallback`
-- `first_direct_pass_accepted`
-- `authoritative_verification_accepted`
-
-## Manual Closeout Checklist
-
-- Run the flows in [46-HUMAN-UAT.md](./46-HUMAN-UAT.md).
-- Capture one successful ordinary conversational mutation request on the direct in-process tool path.
-- Capture one controlled fallback case.
-- Capture one MCP adapter proof against the shared normalized surface.
-- Record run IDs, requests, and outcomes in the UAT table.
-
-## Final Phase Evidence To Attach
-
-- log excerpt for `ordinary_agent_path_telemetry`
-- screenshot or exported task diff from the direct-path run
-- MCP adapter tool-list or invocation proof showing `find_tasks`
-- any measured telemetry deltas for fallback rate, tool calls per request, and verification failure rate
+Use gap-closure planning for Phase 46.
