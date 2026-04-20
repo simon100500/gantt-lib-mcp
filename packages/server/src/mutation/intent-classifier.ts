@@ -1,9 +1,3 @@
-import {
-  query,
-  isSDKAssistantMessage,
-  isSDKResultMessage,
-} from '@qwen-code/sdk';
-
 import { selectMutationExecutionMode } from './execution-routing.js';
 import type { FragmentNode, MutationIntent, MutationIntentType, StructuredFragmentPlan } from './types.js';
 
@@ -61,26 +55,7 @@ const VALID_INTENT_TYPES = new Set<MutationIntentType>([
   'unsupported_or_ambiguous',
 ]);
 
-function buildSdkEnv(env: SemanticExtractionEnv): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-  };
-
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
-  }
-
-  return sdkEnv;
-}
-
-function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
-  return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
-    .map((block) => block.text ?? '')
-    .join('');
-}
+const MUTATION_INTENT_HTTP_TIMEOUT_MS = 8_000;
 
 async function executeMutationSemanticQuery(
   input: MutationIntentQueryInput,
@@ -90,45 +65,66 @@ async function executeMutationSemanticQuery(
     throw new Error('API key not configured for mutation semantic extraction.');
   }
 
-  const session = query({
-    prompt: input.prompt,
-    options: {
-      authType: 'openai',
-      model: input.model,
-      cwd: process.cwd(),
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: 2,
-    },
-  });
+  const abortController = new AbortController();
+  const timeoutHandle = setTimeout(() => abortController.abort(), MUTATION_INTENT_HTTP_TIMEOUT_MS);
 
-  let content = '';
+  try {
+    const baseUrl = env.OPENAI_BASE_URL.endsWith('/')
+      ? env.OPENAI_BASE_URL
+      : `${env.OPENAI_BASE_URL}/`;
+    const response = await fetch(new URL('chat/completions', baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: input.model,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: 'Return strict JSON only. No markdown, no prose, no code fences.',
+          },
+          {
+            role: 'user',
+            content: input.prompt,
+          },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+      signal: abortController.signal,
+    });
 
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
+    if (!response.ok) {
+      throw new Error(`Mutation semantic extraction HTTP ${response.status}`);
     }
 
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Mutation semantic extraction failed');
-      }
+    const payload = await response.json() as {
+      choices?: Array<{
+        message?: {
+          content?: string | Array<{ type?: string; text?: string }>;
+        };
+      }>;
+    };
+    const rawContent = payload.choices?.[0]?.message?.content;
+    const content = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent
+          .filter((block) => block.type === 'text' && typeof block.text === 'string')
+          .map((block) => block.text ?? '')
+          .join('')
+        : '';
 
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
+    if (content.trim().length === 0) {
+      throw new Error('Mutation semantic extraction returned an empty response');
     }
-  }
 
-  if (content.trim().length === 0) {
-    throw new Error('Mutation semantic extraction returned an empty response');
+    return { content };
+  } finally {
+    clearTimeout(timeoutHandle);
   }
-
-  return { content };
 }
 
 function normalizeRequest(userMessage: string): string {
@@ -137,7 +133,6 @@ function normalizeRequest(userMessage: string): string {
 
 function buildPrompt(userMessage: string): string {
   return [
-    'Return strict JSON only. No markdown, no prose, no code fences.',
     'Interpret the user request for a Gantt mutation pipeline.',
     'Do not rely on fixed trigger words. Infer semantics from the request meaning.',
     'The server will execute only deterministic operations after your extraction.',
