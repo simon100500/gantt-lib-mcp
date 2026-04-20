@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "prebuild": "npm run build -w ../mcp",
+    "prebuild": "npm run build -w ../runtime-core && npm run build -w ../mcp",
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && node --watch dist/bootstrap.js",
     "dev:watch": "concurrently \"tsc -p tsconfig.json --watch\" \"node --watch dist/bootstrap.js\"",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
     "@gantt/mcp": "^0.1.0",
+    "@gantt/runtime-core": "^0.1.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^7.0.11",
     "exceljs": "^4.4.0",
