@@ -398,9 +398,9 @@ Plans:
 Plans:
 - [x] 46-01-PLAN.md — Extract transport-neutral runtime core package from MCP-owned services and types
 - [x] 46-02-PLAN.md — Create shared normalized tool catalog and in-process handler core
-- [ ] 46-03-PLAN.md — Switch the server agent path to SDK-embedded in-process tools
+- [x] 46-03-PLAN.md — Switch the server agent path to SDK-embedded in-process tools
 - [ ] 46-04-PLAN.md — Thin MCP into an adapter over the shared tool core and lock parity
 - [ ] 46-05-PLAN.md — Add telemetry, regression coverage, and verification artifacts for the direct-path cutover
 
 ---
-*Last updated: 2026-04-20 — Phase 46 Plan 02 completed*
+*Last updated: 2026-04-20 — Phase 46 Plan 03 completed*
