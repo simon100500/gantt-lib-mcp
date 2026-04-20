@@ -5,8 +5,8 @@
  * convertTrialToPaid, checkTrialEligibility.
  */
 
-import { Prisma } from '@gantt/mcp/prisma';
-import type { PrismaClient } from '@gantt/mcp/prisma';
+import { Prisma } from '@gantt/runtime-core/prisma';
+import type { PrismaClient } from '@gantt/runtime-core/prisma';
 import { computeNextPeriodEnd } from './billing-service.js';
 
 /** Mirrors the Prisma BillingState enum values. Keep in sync with schema.prisma. */
@@ -78,7 +78,7 @@ interface BillingEventData {
   previousState: string | null;
   newState: string;
   reason?: string;
-  metadata?: unknown;
+  metadata?: Prisma.InputJsonValue;
 }
 
 interface TrialServiceDeps {
@@ -362,6 +362,6 @@ export class TrialService {
 }
 
 async function getDefaultPrisma(): Promise<TrialServicePrisma> {
-  const { getPrisma } = await import('@gantt/mcp/prisma');
+  const { getPrisma } = await import('@gantt/runtime-core/prisma');
   return getPrisma();
 }

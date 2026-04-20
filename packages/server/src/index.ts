@@ -65,7 +65,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
   };
 }> {
-  const { getPrisma } = await import('@gantt/mcp/prisma');
+  const { getPrisma } = await import('@gantt/runtime-core/prisma');
   const prisma = getPrisma();
   const accessibleProject = await authService.findProjectById(projectId);
   const deletedProject = !accessibleProject && isAdminEmail(requesterEmail)

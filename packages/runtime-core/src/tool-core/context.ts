@@ -68,6 +68,7 @@ async function getProjectSummary(prisma: PrismaClient, projectId: string): Promi
 
   const tasks = project.tasks.map((task) => ({
     id: task.id,
+    name: '',
     startDate: formatDateOnly(task.startDate),
     endDate: formatDateOnly(task.endDate),
     parentId: task.parentId ?? undefined,

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
 
 import type { MessageService, TaskService, CommandService } from '@gantt/mcp/services';
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { historyService } from '@gantt/mcp/services';
 
 import { writeServerDebugLog } from './debug-log.js';

@@ -14,6 +14,7 @@
     "./tool-core/*": "./dist/tool-core/*.js"
   },
   "scripts": {
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {

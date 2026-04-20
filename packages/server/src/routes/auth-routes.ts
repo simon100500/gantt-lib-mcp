@@ -194,7 +194,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     let resolvedProjectId = session.projectId;
     const sessionProject = await authService.findProjectById(session.projectId);
     if (!sessionProject) {
-      const { getPrisma } = await import('@gantt/mcp/prisma');
+      const { getPrisma } = await import('@gantt/runtime-core/prisma');
       const prisma = getPrisma();
       const sessionUser = await authService.findUserById(session.userId);
       const deletedProject = isAdminEmail(sessionUser?.email)

@@ -138,7 +138,7 @@ const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
 
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
-type PrismaModule = typeof import('@gantt/mcp/prisma');
+type PrismaModule = typeof import('@gantt/runtime-core/prisma');
 
 let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
@@ -682,7 +682,7 @@ async function getWsModule(): Promise<WsModule> {
 
 async function getPrismaModule(): Promise<PrismaModule> {
   if (!prismaModulePromise) {
-    prismaModulePromise = import('@gantt/mcp/prisma');
+    prismaModulePromise = import('@gantt/runtime-core/prisma');
   }
 
   return prismaModulePromise;

@@ -1,4 +1,4 @@
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import {
   getLimitCatalog,
   getPlanDefinition,

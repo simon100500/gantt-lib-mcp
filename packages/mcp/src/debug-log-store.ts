@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import type { Prisma } from '../dist/prisma-client/index.js';
+import type { Prisma } from '@gantt/runtime-core/prisma';
 import { getPrisma } from './prisma.js';
 
 const __filename = fileURLToPath(import.meta.url);

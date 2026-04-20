@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import type { DependencyType } from '@gantt/mcp/types';
 
