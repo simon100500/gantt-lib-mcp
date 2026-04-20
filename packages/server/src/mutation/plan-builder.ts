@@ -122,10 +122,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           parentId: resolutionContext.selectedContainerId,
           durationDays,
         }];
-        expectedChangedTaskIds = unique([
-          taskId,
-          resolutionContext.selectedContainerId ?? resolutionContext.selectedPredecessorTaskId,
-        ]);
+        expectedChangedTaskIds = [taskId];
       } else if (resolutionContext.selectedSuccessorTaskId) {
         operations = [{
           kind: 'append_task_before',
@@ -136,10 +133,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           parentId: resolutionContext.selectedContainerId,
           durationDays,
         }];
-        expectedChangedTaskIds = unique([
-          taskId,
-          resolutionContext.selectedContainerId ?? resolutionContext.selectedSuccessorTaskId,
-        ]);
+        expectedChangedTaskIds = [taskId];
       } else {
         operations = [{
           kind: 'append_task_to_container',

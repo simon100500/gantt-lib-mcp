@@ -92,7 +92,7 @@ describe('buildMutationPlan', () => {
     assert.equal(plan.operations[0]?.title, 'Пусконаладка насосной станции');
   });
 
-  it('expects container rollup changes for append-after plans inside a container', async () => {
+  it('expects only the created task for append-after plans inside a container', async () => {
     const plan = await buildMutationPlan({
       intent: buildIntent({
         rawRequest: 'добавь сдачу гасн в конце работ',
@@ -111,10 +111,7 @@ describe('buildMutationPlan', () => {
     });
 
     assert.equal(plan.operations[0]?.kind, 'append_task_after');
-    assert.deepEqual(plan.expectedChangedTaskIds, [
-      'task-permit:sdacha-gasn',
-      'container-closeout',
-    ]);
+    assert.deepEqual(plan.expectedChangedTaskIds, ['task-permit:sdacha-gasn']);
   });
 
   it('maps date moves and metadata edits to deterministic semantic operations', async () => {

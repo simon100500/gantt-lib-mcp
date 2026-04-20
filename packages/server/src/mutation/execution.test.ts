@@ -10,7 +10,7 @@ function buildTask(id: string, name: string, startDate: string, endDate: string)
 
 describe('executeMutationPlan', () => {
   it('commits deterministic add plans through commandService and verifies authoritative changed ids', async () => {
-    const commitRequests: Array<{ commandType: string; baseVersion: number }> = [];
+    const commitRequests: Array<{ commandType: string; baseVersion: number; dependencies?: Array<{ taskId: string; type: string }> }> = [];
     const result = await executeMutationPlan({
       projectId: 'project-1',
       projectVersion: 12,
@@ -34,34 +34,20 @@ describe('executeMutationPlan', () => {
         needsAgentExecution: false,
       } satisfies MutationPlan,
       commandService: {
-        commitCommand: async (request: { baseVersion: number; command: { type: string } }) => {
-          commitRequests.push({ commandType: request.command.type, baseVersion: request.baseVersion });
-
-          if (request.command.type === 'create_task') {
-            return {
-              accepted: true,
-              clientRequestId: 'req-1',
-              baseVersion: request.baseVersion,
-              newVersion: request.baseVersion + 1,
-              result: {
-                snapshot: { tasks: [], dependencies: [] },
-                changedTaskIds: ['new-closeout'],
-                changedDependencyIds: [],
-                conflicts: [],
-                patches: [],
-              },
-              snapshot: { tasks: [], dependencies: [] },
-            };
-          }
-
+        commitCommand: async (request: { baseVersion: number; command: { type: string; task?: { dependencies?: Array<{ taskId: string; type: string }> } } }) => {
+          commitRequests.push({
+            commandType: request.command.type,
+            baseVersion: request.baseVersion,
+            dependencies: request.command.task?.dependencies,
+          });
           return {
             accepted: true,
-            clientRequestId: 'req-2',
+            clientRequestId: 'req-1',
             baseVersion: request.baseVersion,
             newVersion: request.baseVersion + 1,
             result: {
               snapshot: { tasks: [], dependencies: [] },
-              changedTaskIds: ['container-closeout'],
+              changedTaskIds: ['new-closeout', 'container-closeout'],
               changedDependencyIds: ['dep-1'],
               conflicts: [],
               patches: [],
@@ -73,12 +59,15 @@ describe('executeMutationPlan', () => {
     });
 
     assert.deepEqual(commitRequests, [
-      { commandType: 'create_task', baseVersion: 12 },
-      { commandType: 'create_dependency', baseVersion: 13 },
+      {
+        commandType: 'create_task',
+        baseVersion: 12,
+        dependencies: [{ taskId: 'task-tech-supervision', type: 'FS' }],
+      },
     ]);
     assert.equal(result.status, 'completed');
     assert.equal(result.verificationVerdict, 'accepted');
-    assert.deepEqual(result.committedCommandTypes, ['create_task', 'create_dependency']);
+    assert.deepEqual(result.committedCommandTypes, ['create_task']);
     assert.deepEqual(result.changedTaskIds, ['new-closeout', 'container-closeout']);
   });
 

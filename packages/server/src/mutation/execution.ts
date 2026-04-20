@@ -80,54 +80,38 @@ function compileOperation(
     case 'append_task_after': {
       const predecessor = findTask(tasksBefore, operation.predecessorTaskId);
       const startDate = addDays(predecessor?.endDate ?? predecessor?.startDate ?? '2026-01-01', 1);
-      return [
-        {
-          type: 'create_task',
-          task: {
-            id: operation.taskId,
-            name: operation.title,
-            type: operation.taskType,
-            startDate,
-            endDate: toEndDate(startDate, operation.durationDays),
-            parentId: operation.parentId ?? undefined,
-          },
-        },
-        {
-          type: 'create_dependency',
-          taskId: operation.taskId,
-          dependency: {
+      return [{
+        type: 'create_task',
+        task: {
+          id: operation.taskId,
+          name: operation.title,
+          type: operation.taskType,
+          startDate,
+          endDate: toEndDate(startDate, operation.durationDays),
+          parentId: operation.parentId ?? undefined,
+          dependencies: [{
             taskId: operation.predecessorTaskId,
             type: 'FS',
-          },
+          }],
         },
-      ];
+      }];
     }
 
     case 'append_task_before': {
       const successor = findTask(tasksBefore, operation.successorTaskId);
       const endDate = addDays(successor?.startDate ?? '2026-01-02', -1);
       const startDate = addDays(endDate, -(Math.max(operation.durationDays, 1) - 1));
-      return [
-        {
-          type: 'create_task',
-          task: {
-            id: operation.taskId,
-            name: operation.title,
-            type: operation.taskType,
-            startDate,
-            endDate,
-            parentId: operation.parentId ?? undefined,
-          },
+      return [{
+        type: 'create_task',
+        task: {
+          id: operation.taskId,
+          name: operation.title,
+          type: operation.taskType,
+          startDate,
+          endDate,
+          parentId: operation.parentId ?? undefined,
         },
-        {
-          type: 'create_dependency',
-          taskId: operation.successorTaskId,
-          dependency: {
-            taskId: operation.taskId,
-            type: 'FS',
-          },
-        },
-      ];
+      }];
     }
 
     case 'append_task_to_container': {
