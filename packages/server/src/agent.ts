@@ -122,8 +122,8 @@ const MUTATION_HISTORY_CHAR_LIMIT = 1_500;
 const READONLY_HISTORY_CHAR_LIMIT = 4_000;
 const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
 const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
-const SIMPLE_MUTATION_MAX_SESSION_TURNS = 8;
-const DEFAULT_MUTATION_MAX_SESSION_TURNS = 16;
+const SIMPLE_MUTATION_MAX_SESSION_TURNS = 4;
+const DEFAULT_MUTATION_MAX_SESSION_TURNS = 6;
 const READONLY_MAX_SESSION_TURNS = 12;
 const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
   'create_tasks',
@@ -573,39 +573,27 @@ function sanitizeAssistantResponse(userMessage: string, response: string): strin
 function buildPrompt(
   systemPrompt: string,
   projectId: string,
-  simpleMutationRequested: boolean,
+  _simpleMutationRequested: boolean,
   historyContext: string,
   userMessage: string,
-  retryInstruction?: string,
+  _retryInstruction?: string,
 ): string {
   return [
     systemPrompt,
-    `\n\n## State metadata:\n- projectId: ${projectId}\n- executionMode: unified`,
+    `\n\n## Project context:\n- projectId: ${projectId}`,
     [
-      '\n\n## Mutation execution protocol:',
-      '- First decide whether the latest user request is read-only or requires a project change.',
-      '- If the request is read-only, answer directly and do not call mutation tools.',
-      '- If the request changes project state, you must use one or more normalized mutation tools before giving a success answer.',
-      '- Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
-      simpleMutationRequested
-        ? '- Prefer one compact targeted read. Do not expand to broader context unless the first read is insufficient.'
-        : '- Use targeted context first and avoid broad reads unless dependencies or hierarchy really require them.',
-      '- Make the smallest valid change that satisfies the request.',
-      '- If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
+      '\n\n## How to work:',
+      '- Decide quickly: either answer directly for read-only requests, or change the project immediately for mutation requests.',
+      '- Use as few tool calls as possible.',
+      '- If the requested change is obvious, perform it immediately instead of exploring.',
+      '- Use reads only when you truly need task IDs, current dates, hierarchy context, or dependency context.',
+      '- For simple additions, prefer one direct `create_tasks` call.',
+      '- If parent/container is not specified, choose the most reasonable placement and proceed. Top-level placement is acceptable.',
       '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
-      '- Use `update_tasks` only for metadata and non-scheduling field edits.',
-      '- Use `move_tasks` for hierarchy and structural placement.',
-      '- Use `link_tasks` / `unlink_tasks` for dependency changes.',
-      '- Use `shift_tasks` for relative date changes instead of computing absolute dates manually.',
-      '- Never guess, synthesize, or paraphrase task IDs.',
-      simpleMutationRequested
-        ? '- For a small standalone block, keep the reasoning path minimal and create only the smallest coherent fragment.'
-        : '- For structured additions, prefer a small coherent fragment over one vague generic task.',
-      '- Do not spend extra turns on optional restructuring.',
-      '- Treat the mutation tool result as authoritative. If the tool rejects the request, say so.',
+      '- Never invent task IDs. If you need an ID, get it from a tool result or a read.',
+      '- Keep the final answer short and state what changed.',
     ].join('\n'),
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
-    retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
     `\n\nUser: ${userMessage}`,
   ].join('');
 }
@@ -1131,8 +1119,7 @@ export async function runAgentWithHistory(
       acceptedChangedTaskIdMismatch: false,
     };
 
-    const maxAttempts = 2;
-    let retryInstruction: string | undefined;
+    const maxAttempts = 1;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const attemptPrompt = buildPrompt(
@@ -1141,7 +1128,6 @@ export async function runAgentWithHistory(
         simpleMutationRequested,
         historyContext,
         userMessage,
-        retryInstruction,
       );
 
       await writeServerDebugLog('agent_prompt_built', {
@@ -1179,11 +1165,6 @@ export async function runAgentWithHistory(
           error: errorMessage,
         });
 
-        if (attempt < maxAttempts && /timed out/i.test(errorMessage)) {
-          retryInstruction = buildTimeoutRetryInstruction();
-          continue;
-        }
-
         throw error;
       }
       assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);
@@ -1203,14 +1184,7 @@ export async function runAgentWithHistory(
       tasksAfter = finalVerification.tasksAfter as ComparableTask[];
       if (attempt === 1 && ordinaryCompatibilityMode === 'embedded-direct') {
         firstDirectPassAccepted = finalVerification.tasksChanged
-          && finalVerification.acceptedMutationCalls.length > 0
           && !finalVerification.acceptedChangedTaskIdMismatch;
-      }
-
-      const mutationObserved = finalVerification.mutationAttempted || finalVerification.tasksChanged;
-
-      if (!mutationObserved) {
-        break;
       }
 
       if (finalVerification.rejectedMutationCalls.length > 0) {
@@ -1218,10 +1192,17 @@ export async function runAgentWithHistory(
         break;
       }
 
-      if (finalVerification.tasksChanged && finalVerification.acceptedMutationCalls.length > 0) {
+      if (finalVerification.tasksChanged) {
         if (finalVerification.acceptedChangedTaskIdMismatch) {
-          assistantResponse = buildInconsistentMutationMessage();
-          break;
+          await writeServerDebugLog('mutation_verification_warning', {
+            runId,
+            attempt,
+            projectId,
+            sessionId,
+            warning: 'accepted_changed_task_id_mismatch',
+            acceptedChangedTaskIds: finalVerification.acceptedChangedTaskIds,
+            actualChangedTaskIds: finalVerification.actualChangedTaskIds,
+          });
         }
         assistantResponse = sanitizeAssistantResponse(
           userMessage,
@@ -1230,40 +1211,10 @@ export async function runAgentWithHistory(
         break;
       }
 
-      if (finalVerification.acceptedMutationCalls.length > 0 && (!finalVerification.tasksChanged || finalVerification.acceptedChangedTaskIdMismatch)) {
-        assistantResponse = buildInconsistentMutationMessage();
-        break;
-      }
-
       if (attempt >= maxAttempts) {
         assistantResponse = buildNoMutationMessage();
         break;
       }
-
-      retryInstruction = [
-        'The previous attempt did not perform a successful normalized mutation tool call.',
-        'Start this retry with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
-        'Identify the correct parent/container before mutating.',
-        'Then call one or more normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, or `recalculate_project`.',
-        'Use `move_tasks` for structural placement, `link_tasks` / `unlink_tasks` for dependency edits, and `shift_tasks` for relative date changes.',
-        'Reuse only real task IDs returned by tool results or reads. Never invent an ID.',
-        'Treat `changedTaskIds` and `changedTasks` as the authoritative success footprint.',
-        'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
-        'The final user-visible answer must contain only the completed result, without analysis or narration.',
-        'Do not output English text if the user wrote in Russian.',
-        'A text-only success answer is invalid if no accepted mutation tool changed the project.',
-        'If the request cannot be completed with available tools, say that explicitly and do not claim success.',
-        assistantResponse.trim().length > 0 ? `Previous invalid answer: ${assistantResponse.trim()}` : '',
-      ].filter(Boolean).join('\n');
-
-      await writeServerDebugLog('mutation_retry_scheduled', {
-        runId,
-        attempt,
-        projectId,
-        sessionId,
-        reason: mutationObserved ? 'mutation_not_confirmed' : 'no_valid_mutation_observed',
-        previousAssistantResponse: assistantResponse,
-      });
     }
 
     if (
@@ -1397,7 +1348,6 @@ export async function runAgentWithHistory(
       toolCallCount: ordinaryToolCallCount,
       firstDirectPassAccepted,
       authoritativeVerificationAccepted: finalVerification.tasksChanged
-        && finalVerification.acceptedMutationCalls.length > 0
         && !finalVerification.acceptedChangedTaskIdMismatch,
       acceptedMutationCalls: finalVerification.acceptedMutationCalls,
       actualChangedTaskIds: finalVerification.actualChangedTaskIds,
