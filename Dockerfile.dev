@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/runtime-core/package.json ./packages/runtime-core/
 COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
 

@@ -9,6 +9,7 @@ ENV VITE_YANDEX_CLIENT_ID=${VITE_YANDEX_CLIENT_ID}
 COPY package.json package-lock.json ./
 COPY packages/web/package.json ./packages/web/
 COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/runtime-core/package.json ./packages/runtime-core/
 COPY packages/server/package.json ./packages/server/
 COPY packages/site/package.json ./packages/site/
 
@@ -31,6 +32,7 @@ WORKDIR /build
 # Copy all workspace package manifests (npm ci validates the full workspace structure)
 COPY package.json package-lock.json ./
 COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/runtime-core/package.json ./packages/runtime-core/
 COPY packages/server/package.json ./packages/server/
 COPY packages/web/package.json ./packages/web/
 COPY packages/site/package.json ./packages/site/
@@ -38,12 +40,14 @@ COPY packages/site/package.json ./packages/site/
 RUN npm ci --ignore-scripts
 
 COPY packages/mcp ./packages/mcp
+COPY packages/runtime-core ./packages/runtime-core
 COPY packages/server ./packages/server
 
 # Generate Prisma client for linux-musl (the Alpine runtime target)
-RUN npx prisma generate --schema=packages/mcp/prisma/schema.prisma
+RUN npx prisma generate --schema=packages/runtime-core/prisma/schema.prisma
 
-# Build mcp first (server depends on it)
+# Build shared runtime package first, then MCP, then server
+RUN npm run build -w packages/runtime-core
 RUN npm run build:mcp
 RUN npm run build:server
 
@@ -68,6 +72,10 @@ COPY --from=build-server /build/packages/server/dist ./server/dist
 COPY --from=build-server /build/packages/mcp/dist ./mcp/dist
 COPY --from=build-server /build/packages/mcp/dist ./packages/mcp/dist
 COPY --from=build-server /build/packages/mcp/package.json ./packages/mcp/package.json
+
+# Copy runtime-core workspace target required by server and MCP runtime imports
+COPY --from=build-server /build/packages/runtime-core/dist ./packages/runtime-core/dist
+COPY --from=build-server /build/packages/runtime-core/package.json ./packages/runtime-core/package.json
 
 # Copy production node_modules (all hoisted to root by npm workspaces)
 COPY --from=build-server /build/node_modules ./node_modules
