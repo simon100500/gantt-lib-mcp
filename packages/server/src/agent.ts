@@ -114,6 +114,7 @@ export type OrdinaryAgentPathTelemetry = {
 
 const ORDINARY_AGENT_PATH_CONTRACT =
   'Ordinary conversational mutations use the direct path by default with no external MCP subprocess; compatibility fallback remains explicit and bounded.';
+const ENABLE_STAGED_MUTATION_FALLBACK = false;
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
 const READONLY_HISTORY_MESSAGE_LIMIT = 12;
@@ -1052,117 +1053,6 @@ export async function runAgentWithHistory(
       return;
     }
 
-    if (likelyMutationRequest) {
-      const projectVersion = await getProjectBaseVersion(projectId);
-      const requestContextId = runId;
-      const groupId = crypto.randomUUID();
-      const historyTitle = buildAgentHistoryTitle(userMessage, true);
-      await writeServerDebugLog('mutation_lifecycle_started', {
-        runId,
-        projectId,
-        sessionId,
-        userMessage,
-      });
-
-      const stagedMutation = await runStagedMutation({
-        userMessage,
-        projectId,
-        projectVersion,
-        sessionId,
-        runId,
-        tasksBefore,
-        env,
-        messageService,
-        taskService,
-        commandService,
-        broadcastToSession,
-        groupId,
-        requestContextId,
-        historyTitle,
-        historyUndoable: true,
-        logger: {
-          debug: (event, payload) => writeServerDebugLog(event, payload),
-        },
-      });
-
-      await writeServerDebugLog('intent_classified', {
-        runId,
-        projectId,
-        sessionId,
-        intent: stagedMutation.intent,
-      });
-      await writeServerDebugLog('execution_mode_selected', {
-        runId,
-        projectId,
-        sessionId,
-        executionMode: stagedMutation.executionMode,
-      });
-
-      if (stagedMutation.handled) {
-        const stagedAssistantResponse = sanitizeAssistantResponse(
-          userMessage,
-          stagedMutation.assistantResponse ?? stagedMutation.result.userFacingMessage,
-        );
-        const stagedTasksAfter = stagedMutation.tasksAfter ?? tasksBefore;
-
-        if (stagedAssistantResponse) {
-          broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
-          await messageService.add('assistant', stagedAssistantResponse, projectId, {
-            requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-            historyGroupId: stagedMutation.result.historyUndoable
-              ? checkpointGroupId
-              : undefined,
-          });
-        }
-
-        await writeServerDebugLog('agent_response_saved', {
-          runId,
-          projectId,
-          sessionId,
-          assistantResponse: stagedAssistantResponse,
-          streamedContent: Boolean(stagedAssistantResponse),
-          finalTasksChanged: stagedMutation.result.changedTaskIds.length > 0,
-          finalChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIdMismatch: false,
-        });
-
-        broadcastToSession(sessionId, { type: 'tasks', tasks: stagedTasksAfter });
-        await writeServerDebugLog('tasks_broadcast', {
-          runId,
-          projectId,
-          sessionId,
-          taskCount: stagedTasksAfter.length,
-          taskIds: stagedTasksAfter.map((task) => task.id),
-          taskNames: stagedTasksAfter.map((task) => task.name),
-        });
-
-        broadcastToSession(sessionId, { type: 'history_changed' });
-        broadcastToSession(sessionId, {
-          type: 'done',
-          chatMessage: stagedAssistantResponse
-            ? {
-                requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-                historyGroupId: stagedMutation.result.historyUndoable
-                  ? checkpointGroupId
-                  : null,
-              }
-            : undefined,
-        });
-        await writeServerDebugLog('agent_run_completed', {
-          runId,
-          projectId,
-          sessionId,
-          stagedMutationHandled: true,
-        });
-        return;
-      }
-
-      if (stagedMutation.status !== 'deferred_to_legacy' || !stagedMutation.legacyFallbackAllowed) {
-        throw new Error('Staged mutation shell returned an unhandled non-legacy outcome.');
-      }
-    }
-
     const messages = await messageService.list(projectId, 20);
 
     const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
@@ -1201,6 +1091,7 @@ export async function runAgentWithHistory(
     });
 
     const ordinaryCompatibilityMode = resolveOrdinaryAgentCompatibilityMode();
+    let finalCompatibilityMode = ordinaryCompatibilityMode;
 
     let assistantResponse = '';
     let streamedContent = false;
@@ -1353,9 +1244,134 @@ export async function runAgentWithHistory(
       });
     }
 
+    if (
+      likelyMutationRequest
+      && ENABLE_STAGED_MUTATION_FALLBACK
+      && ordinaryCompatibilityMode === 'embedded-direct'
+      && !firstDirectPassAccepted
+    ) {
+      const projectVersion = await getProjectBaseVersion(projectId);
+      const requestContextId = runId;
+      const groupId = crypto.randomUUID();
+      const historyTitle = buildAgentHistoryTitle(userMessage, true);
+      await writeServerDebugLog('mutation_staged_fallback_started', {
+        runId,
+        projectId,
+        sessionId,
+        userMessage,
+      });
+
+      const stagedMutation = await runStagedMutation({
+        userMessage,
+        projectId,
+        projectVersion,
+        sessionId,
+        runId,
+        tasksBefore,
+        env,
+        messageService,
+        taskService,
+        commandService,
+        broadcastToSession,
+        groupId,
+        requestContextId,
+        historyTitle,
+        historyUndoable: true,
+        logger: {
+          debug: (event, payload) => writeServerDebugLog(event, payload),
+        },
+      });
+
+      await writeServerDebugLog('intent_classified', {
+        runId,
+        projectId,
+        sessionId,
+        intent: stagedMutation.intent,
+      });
+      await writeServerDebugLog('execution_mode_selected', {
+        runId,
+        projectId,
+        sessionId,
+        executionMode: stagedMutation.executionMode,
+      });
+
+      if (stagedMutation.handled) {
+        finalCompatibilityMode = 'legacy-subprocess';
+        const stagedAssistantResponse = sanitizeAssistantResponse(
+          userMessage,
+          stagedMutation.assistantResponse ?? stagedMutation.result.userFacingMessage,
+        );
+        const stagedTasksAfter = stagedMutation.tasksAfter ?? tasksBefore;
+
+        if (stagedAssistantResponse) {
+          broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
+          await messageService.add('assistant', stagedAssistantResponse, projectId, {
+            requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
+            historyGroupId: stagedMutation.result.historyUndoable
+              ? checkpointGroupId
+              : undefined,
+          });
+        }
+
+        await writeServerDebugLog('agent_response_saved', {
+          runId,
+          projectId,
+          sessionId,
+          assistantResponse: stagedAssistantResponse,
+          streamedContent: Boolean(stagedAssistantResponse),
+          finalTasksChanged: stagedMutation.result.changedTaskIds.length > 0,
+          finalChangedTaskIds: stagedMutation.result.changedTaskIds,
+          finalAcceptedChangedTaskIds: stagedMutation.result.changedTaskIds,
+          finalAcceptedChangedTaskIdMismatch: false,
+        });
+
+        broadcastToSession(sessionId, { type: 'tasks', tasks: stagedTasksAfter });
+        await writeServerDebugLog('tasks_broadcast', {
+          runId,
+          projectId,
+          sessionId,
+          taskCount: stagedTasksAfter.length,
+          taskIds: stagedTasksAfter.map((task) => task.id),
+          taskNames: stagedTasksAfter.map((task) => task.name),
+        });
+
+        broadcastToSession(sessionId, { type: 'history_changed' });
+        broadcastToSession(sessionId, {
+          type: 'done',
+          chatMessage: stagedAssistantResponse
+            ? {
+                requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
+                historyGroupId: stagedMutation.result.historyUndoable
+                  ? checkpointGroupId
+                  : null,
+              }
+            : undefined,
+        });
+        await writeServerDebugLog('agent_run_completed', {
+          runId,
+          projectId,
+          sessionId,
+          stagedMutationHandled: true,
+        });
+        return;
+      }
+
+      if (stagedMutation.status !== 'deferred_to_legacy' || !stagedMutation.legacyFallbackAllowed) {
+        throw new Error('Staged mutation shell returned an unhandled non-legacy outcome.');
+      }
+    } else if (likelyMutationRequest && !ENABLE_STAGED_MUTATION_FALLBACK) {
+      await writeServerDebugLog('mutation_staged_fallback_disabled', {
+        runId,
+        projectId,
+        sessionId,
+        directPathAccepted: firstDirectPassAccepted,
+      });
+    }
+
     assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
     const ordinaryPathTelemetry = summarizeOrdinaryAgentPathTelemetry({
       initialCompatibilityMode: ordinaryCompatibilityMode,
+      finalCompatibilityMode,
       toolCallCount: ordinaryToolCallCount,
       firstDirectPassAccepted,
       authoritativeVerificationAccepted: finalVerification.tasksChanged
