@@ -6,6 +6,21 @@
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
+    "noImplicitAny": false,
+    "baseUrl": ".",
+    "paths": {
+      "@gantt/mcp/constraints": ["../mcp/dist/constraints/index.d.ts"],
+      "@gantt/mcp/debug-log": ["../mcp/dist/debug-log-store.d.ts"],
+      "@gantt/mcp/types": ["../mcp/dist/types.d.ts"],
+      "@gantt/mcp/prisma": ["../mcp/dist/prisma.d.ts"],
+      "@gantt/mcp/services": ["../mcp/dist/services/index.d.ts"],
+      "@gantt/mcp/services/*": ["../mcp/dist/services/*.d.ts"],
+      "@gantt/runtime-core": ["../runtime-core/dist/index.d.ts"],
+      "@gantt/runtime-core/types": ["../runtime-core/dist/types.d.ts"],
+      "@gantt/runtime-core/prisma": ["../runtime-core/dist/prisma.d.ts"],
+      "@gantt/runtime-core/services": ["../runtime-core/dist/services/index.d.ts"],
+      "@gantt/runtime-core/services/*": ["../runtime-core/dist/services/*.d.ts"]
+    },
     "esModuleInterop": true
   },
   "include": ["src/**/*.ts"],

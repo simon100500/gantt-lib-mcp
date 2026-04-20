@@ -78,7 +78,7 @@ interface BillingEventData {
   previousState: string | null;
   newState: string;
   reason?: string;
-  metadata?: Prisma.InputJsonValue;
+  metadata?: unknown;
 }
 
 interface TrialServiceDeps {
