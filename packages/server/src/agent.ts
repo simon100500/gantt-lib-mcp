@@ -584,7 +584,6 @@ function sanitizeAssistantResponse(userMessage: string, response: string): strin
 }
 
 function buildPrompt(
-  systemPrompt: string,
   projectId: string,
   _simpleMutationRequested: boolean,
   historyContext: string,
@@ -592,22 +591,9 @@ function buildPrompt(
   _retryInstruction?: string,
 ): string {
   return [
-    systemPrompt,
-    `\n\n## Project context:\n- projectId: ${projectId}`,
-    [
-      '\n\n## How to work:',
-      '- Decide quickly: either answer directly for read-only requests, or change the project immediately for mutation requests.',
-      '- Use as few tool calls as possible.',
-      '- If the requested change is obvious, perform it immediately instead of exploring.',
-      '- Use reads only when you truly need task IDs, current dates, hierarchy context, or dependency context.',
-      '- For simple additions, prefer one direct `create_tasks` call.',
-      '- If parent/container is not specified, choose the most reasonable placement and proceed. Top-level placement is acceptable.',
-      '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
-      '- Never invent task IDs. If you need an ID, get it from a tool result or a read.',
-      '- Keep the final answer short and state what changed.',
-    ].join('\n'),
+    `## Project context:\n- projectId: ${projectId}`,
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
-    `\n\nUser: ${userMessage}`,
+    `\n\n## User request:\n${userMessage}`,
   ].join('');
 }
 
@@ -726,6 +712,7 @@ async function getProjectBaseVersion(projectId: string): Promise<number> {
 
 async function executeAgentAttempt(
   prompt: string,
+  systemPrompt: string,
   runId: string,
   projectId: string,
   sessionId: string,
@@ -755,6 +742,7 @@ async function executeAgentAttempt(
     options: {
       authType: 'openai',
       model,
+      systemPrompt,
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
@@ -1136,7 +1124,6 @@ export async function runAgentWithHistory(
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const attemptPrompt = buildPrompt(
-        systemPrompt,
         projectId,
         simpleMutationRequested,
         historyContext,
@@ -1157,6 +1144,7 @@ export async function runAgentWithHistory(
       try {
         attemptResult = await executeAgentAttempt(
           attemptPrompt,
+          systemPrompt,
           runId,
           projectId,
           sessionId,
