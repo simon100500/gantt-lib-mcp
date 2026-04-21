@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle } from 'lucide-react';
+import { Check, ListTree, LoaderCircle, MessageSquare } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskListMenuCommand } from 'gantt-lib';
 
@@ -193,6 +193,7 @@ export function ProjectWorkspace({
   const previewRendering = previewState === 'rendering';
   const previewFailed = previewState === 'failed';
   const aiMutationLocked = aiMutationLock.active;
+  const canOpenChatFromLoader = showChat && !chatSidebarVisible && !hasShareToken && Boolean(onToggleChat);
   const effectiveReadOnly = readOnly || aiMutationLocked || previewRendering || previewFailed || previewModeActive;
   const historyPanelDisabled = readOnly || aiMutationLocked || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
@@ -474,11 +475,21 @@ export function ProjectWorkspace({
 
             {aiMutationLocked && (
               <div className="pointer-events-none absolute bottom-9 left-1/2 z-20 -translate-x-1/2">
-                <div className="flex max-w-sm items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
-                  <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-primary" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-900">AI готовит график. Подождите</p>
+                <div className="pointer-events-auto flex min-h-14 max-w-sm items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
+                  <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">AI готовит график. Подождите</p>
                   </div>
+                  {canOpenChatFromLoader && (
+                    <button
+                      type="button"
+                      onClick={onToggleChat}
+                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Открыть чат
+                    </button>
+                  )}
                 </div>
               </div>
             )}
