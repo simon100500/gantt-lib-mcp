@@ -40,6 +40,8 @@ import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
+const AI_DONE_GRACE_PERIOD_MS = 10000;
+const AI_MUTATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 interface RouteState {
   pathname: string;
@@ -575,6 +577,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
+  const aiDoneGraceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const aiMutationWatchdogRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
@@ -595,10 +599,49 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setTasks(nextTasks);
   }, [setTasks]);
 
+  const clearAiDoneGraceTimer = useCallback(() => {
+    if (aiDoneGraceTimerRef.current) {
+      window.clearTimeout(aiDoneGraceTimerRef.current);
+      aiDoneGraceTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleAiDoneGraceExit = useCallback(() => {
+    clearAiDoneGraceTimer();
+    aiDoneGraceTimerRef.current = window.setTimeout(() => {
+      aiDoneGraceTimerRef.current = null;
+      useChatStore.getState().finishStreaming();
+    }, AI_DONE_GRACE_PERIOD_MS);
+  }, [clearAiDoneGraceTimer]);
+
+  const armAiMutationWatchdog = useCallback(() => {
+    if (aiMutationWatchdogRef.current) {
+      window.clearTimeout(aiMutationWatchdogRef.current);
+    }
+
+    aiMutationWatchdogRef.current = window.setTimeout(() => {
+      aiMutationWatchdogRef.current = null;
+      clearAiMutationLock();
+      setPreviewState((current) => current.mode === 'failed'
+        ? current
+        : { tasks: [], active: false, mode: 'rendering', message: null });
+      useChatStore.getState().finishStreaming();
+    }, AI_MUTATION_LOCK_TIMEOUT_MS);
+  }, [clearAiMutationLock]);
+
+  const releaseAiMutationLock = useCallback(() => {
+    if (aiMutationWatchdogRef.current) {
+      window.clearTimeout(aiMutationWatchdogRef.current);
+      aiMutationWatchdogRef.current = null;
+    }
+    clearAiMutationLock();
+  }, [clearAiMutationLock]);
+
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     console.log('[WS] message', msg);
     if (msg.type === 'preview_tasks') {
       const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
+      armAiMutationWatchdog();
       setAiMutationLock({
         active: true,
         stage: 'preview',
@@ -613,6 +656,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'preview_failed') {
+      armAiMutationWatchdog();
       setAiMutationLock({
         active: true,
         stage: 'failed',
@@ -638,6 +682,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         taskCount: normalizedTasks.length,
         tasks: summarizeTasksForLog(normalizedTasks),
       });
+      releaseAiMutationLock();
+      scheduleAiDoneGraceExit();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
@@ -655,11 +701,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'token') {
+      armAiMutationWatchdog();
       useChatStore.getState().appendToken(msg.content ?? '');
       return;
     }
     if (msg.type === 'done') {
-      clearAiMutationLock();
+      clearAiDoneGraceTimer();
+      releaseAiMutationLock();
       setPreviewState((current) => current.mode === 'failed'
         ? current
         : { tasks: [], active: false, mode: 'rendering', message: null });
@@ -668,11 +716,21 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'error') {
-      clearAiMutationLock();
+      clearAiDoneGraceTimer();
+      releaseAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, [auth.isAuthenticated, bumpHistoryRefreshRevision, clearAiMutationLock, hasShareToken, setAiMutationLock]);
+  }, [
+    armAiMutationWatchdog,
+    auth.isAuthenticated,
+    bumpHistoryRefreshRevision,
+    clearAiDoneGraceTimer,
+    hasShareToken,
+    releaseAiMutationLock,
+    scheduleAiDoneGraceExit,
+    setAiMutationLock,
+  ]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -719,12 +777,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setWorkspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
-    clearAiMutationLock();
+    clearAiDoneGraceTimer();
+    releaseAiMutationLock();
     setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
-  }, [clearAiMutationLock, replaceTasksFromSystem]);
+  }, [clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
 
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
     setPendingProjectCreation(nextIntent);
@@ -788,10 +847,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
     let token = getLatestAccessToken();
     if (!token) {
-      clearAiMutationLock();
+      releaseAiMutationLock();
       return false;
     }
 
+    armAiMutationWatchdog();
     setAiMutationLock({
       active: true,
       stage: 'thinking',
@@ -810,7 +870,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (response.status === 401) {
       const refreshedToken = await auth.refreshAccessToken();
       if (!refreshedToken) {
-        clearAiMutationLock();
+        releaseAiMutationLock();
         return false;
       }
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
@@ -828,23 +888,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       try {
         const body = await response.json() as Partial<ConstraintDenialPayload>;
         if (isConstraintCode(body.code)) {
-          clearAiMutationLock();
+          releaseAiMutationLock();
           await openLimitModal(body);
           return false;
         }
       } catch {
         // response body not JSON — fall through to generic error
       }
-      clearAiMutationLock();
+      releaseAiMutationLock();
       throw new Error(`HTTP 403`);
     }
 
     if (!response.ok) {
-      clearAiMutationLock();
+      releaseAiMutationLock();
       throw new Error(`HTTP ${response.status}`);
     }
     return true;
-  }, [auth, clearAiMutationLock, isArchivedProject, openLimitModal, proactiveChatDenial, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, isArchivedProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
   const submitSplitTask = useCallback(async (task: Task, details: string): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
@@ -873,6 +933,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
     useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, details) });
     openProjectChat();
+    armAiMutationWatchdog();
     setAiMutationLock({
       active: true,
       stage: 'thinking',
@@ -891,7 +952,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (response.status === 401) {
       const refreshedToken = await auth.refreshAccessToken();
       if (!refreshedToken) {
-        clearAiMutationLock();
+        releaseAiMutationLock();
         return { accepted: false, message: 'Сессия истекла. Войдите заново.' };
       }
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
@@ -909,24 +970,24 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       try {
         const body = await response.json() as Partial<ConstraintDenialPayload>;
         if (isConstraintCode(body.code)) {
-          clearAiMutationLock();
+          releaseAiMutationLock();
           await openLimitModal(body);
           return { accepted: false };
         }
       } catch {
         // response body not JSON
       }
-      clearAiMutationLock();
+      releaseAiMutationLock();
       return { accepted: false, message: 'Доступ к AI-функции ограничен.' };
     }
 
     if (!response.ok) {
-      clearAiMutationLock();
+      releaseAiMutationLock();
       return { accepted: false, message: `HTTP ${response.status}` };
     }
 
     return { accepted: true };
-  }, [auth, clearAiMutationLock, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
@@ -1156,8 +1217,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     useProjectStore.getState().clearTransientState();
-    clearAiMutationLock();
-  }, [auth.isAuthenticated, auth.project?.id, clearAiMutationLock, hasShareToken]);
+    clearAiDoneGraceTimer();
+    releaseAiMutationLock();
+  }, [auth.isAuthenticated, auth.project?.id, clearAiDoneGraceTimer, hasShareToken, releaseAiMutationLock]);
+
+  useEffect(() => () => {
+    clearAiDoneGraceTimer();
+    releaseAiMutationLock();
+  }, [clearAiDoneGraceTimer, releaseAiMutationLock]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
