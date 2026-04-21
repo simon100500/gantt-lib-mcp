@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useProjectStore } from '../stores/useProjectStore';
+import { useUIStore } from '../stores/useUIStore';
 import type { FrontendHistoryGroupContext, FrontendProjectCommand } from '../types';
 import type { ProjectLoadResponse } from '../lib/apiTypes';
 
@@ -71,6 +72,11 @@ export function useCommandCommit(accessToken: string | null) {
     history?: FrontendHistoryGroupContext,
   ) => {
     const runCommit = async () => {
+      const aiMutationLock = useUIStore.getState().aiMutationLock;
+      if (aiMutationLock.active) {
+        throw new Error(aiMutationLock.message ?? 'График временно заблокирован, пока AI применяет изменения.');
+      }
+
       if (!accessToken) throw new Error('Not authenticated');
 
       const requestId = generateRequestId();

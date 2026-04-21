@@ -577,6 +577,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const queuedPromptRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
+  const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
+  const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
 
   useEffect(() => {
@@ -597,6 +599,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     console.log('[WS] message', msg);
     if (msg.type === 'preview_tasks') {
       const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
+      setAiMutationLock({
+        active: true,
+        stage: 'preview',
+        message: 'AI формирует стартовый график и сохраняет его в проект.',
+      });
       setPreviewState({
         tasks: normalizedPreviewTasks,
         active: true,
@@ -606,6 +613,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'preview_failed') {
+      setAiMutationLock({
+        active: true,
+        stage: 'failed',
+        message: msg.message ?? 'Предварительный график не был сохранён.',
+      });
       setPreviewState((current) => current.active
         ? {
             ...current,
@@ -647,6 +659,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'done') {
+      clearAiMutationLock();
       setPreviewState((current) => current.mode === 'failed'
         ? current
         : { tasks: [], active: false, mode: 'rendering', message: null });
@@ -655,10 +668,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'error') {
+      clearAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, [auth.isAuthenticated, bumpHistoryRefreshRevision, hasShareToken]);
+  }, [auth.isAuthenticated, bumpHistoryRefreshRevision, clearAiMutationLock, hasShareToken, setAiMutationLock]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -705,11 +719,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setWorkspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
+    clearAiMutationLock();
     setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
-  }, [replaceTasksFromSystem]);
+  }, [clearAiMutationLock, replaceTasksFromSystem]);
 
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
     setPendingProjectCreation(nextIntent);
@@ -773,8 +788,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
     let token = getLatestAccessToken();
     if (!token) {
+      clearAiMutationLock();
       return false;
     }
+
+    setAiMutationLock({
+      active: true,
+      stage: 'thinking',
+      message: 'AI готовит изменения графика. Редактирование временно заблокировано.',
+    });
 
     let response = await fetch('/api/chat', {
       method: 'POST',
@@ -788,6 +810,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (response.status === 401) {
       const refreshedToken = await auth.refreshAccessToken();
       if (!refreshedToken) {
+        clearAiMutationLock();
         return false;
       }
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
@@ -805,20 +828,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       try {
         const body = await response.json() as Partial<ConstraintDenialPayload>;
         if (isConstraintCode(body.code)) {
+          clearAiMutationLock();
           await openLimitModal(body);
           return false;
         }
       } catch {
         // response body not JSON — fall through to generic error
       }
+      clearAiMutationLock();
       throw new Error(`HTTP 403`);
     }
 
     if (!response.ok) {
+      clearAiMutationLock();
       throw new Error(`HTTP ${response.status}`);
     }
     return true;
-  }, [auth, isArchivedProject, openLimitModal, proactiveChatDenial]);
+  }, [auth, clearAiMutationLock, isArchivedProject, openLimitModal, proactiveChatDenial, setAiMutationLock]);
 
   const submitSplitTask = useCallback(async (task: Task, details: string): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
@@ -847,6 +873,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
     useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, details) });
     openProjectChat();
+    setAiMutationLock({
+      active: true,
+      stage: 'thinking',
+      message: 'AI обрабатывает задачу. Редактирование графика временно заблокировано.',
+    });
 
     let response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/split`, {
       method: 'POST',
@@ -860,6 +891,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (response.status === 401) {
       const refreshedToken = await auth.refreshAccessToken();
       if (!refreshedToken) {
+        clearAiMutationLock();
         return { accepted: false, message: 'Сессия истекла. Войдите заново.' };
       }
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
@@ -877,21 +909,24 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       try {
         const body = await response.json() as Partial<ConstraintDenialPayload>;
         if (isConstraintCode(body.code)) {
+          clearAiMutationLock();
           await openLimitModal(body);
           return { accepted: false };
         }
       } catch {
         // response body not JSON
       }
+      clearAiMutationLock();
       return { accepted: false, message: 'Доступ к AI-функции ограничен.' };
     }
 
     if (!response.ok) {
+      clearAiMutationLock();
       return { accepted: false, message: `HTTP ${response.status}` };
     }
 
     return { accepted: true };
-  }, [auth, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial]);
+  }, [auth, clearAiMutationLock, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, setAiMutationLock]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
@@ -1121,7 +1156,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     useProjectStore.getState().clearTransientState();
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
+    clearAiMutationLock();
+  }, [auth.isAuthenticated, auth.project?.id, clearAiMutationLock, hasShareToken]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {

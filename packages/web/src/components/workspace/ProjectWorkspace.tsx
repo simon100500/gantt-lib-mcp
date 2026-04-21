@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree } from 'lucide-react';
+import { Check, ListTree, LoaderCircle } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskListMenuCommand } from 'gantt-lib';
 
@@ -155,6 +155,7 @@ export function ProjectWorkspace({
   const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
   const historyRefreshRevision = useUIStore((state) => state.historyRefreshRevision);
+  const aiMutationLock = useUIStore((state) => state.aiMutationLock);
   const searchResults = useUIStore((state) => state.searchResults);
   const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
@@ -191,15 +192,15 @@ export function ProjectWorkspace({
     : tasks;
   const previewRendering = previewState === 'rendering';
   const previewFailed = previewState === 'failed';
-  const effectiveReadOnly = readOnly || previewRendering || previewFailed || previewModeActive;
-  const historyPanelDisabled = readOnly || previewRendering || previewFailed || !accessToken;
+  const aiMutationLocked = aiMutationLock.active;
+  const effectiveReadOnly = readOnly || aiMutationLocked || previewRendering || previewFailed || previewModeActive;
+  const historyPanelDisabled = readOnly || aiMutationLocked || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const effectiveChatDisabled = chatDisabled || previewModeActive;
   const effectiveChatDisabledReason = previewModeActive
     ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
     : chatDisabledReason;
-
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
     if (!projectId || effectiveReadOnly) return;
     setProjectState(projectId, { disableTaskDrag: enabled });
@@ -418,7 +419,7 @@ export function ProjectWorkspace({
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
           ganttDayMode={displayGanttDayMode ?? ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
-          readOnly={readOnly}
+          readOnly={readOnly || aiMutationLocked}
           previewMode={previewModeActive}
         />
       </div>
@@ -430,7 +431,7 @@ export function ProjectWorkspace({
           "flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]",
           chatSidebarVisible && "hidden md:flex"
         )}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
@@ -471,6 +472,17 @@ export function ProjectWorkspace({
               />
             )}
 
+            {aiMutationLocked && (
+              <div className="pointer-events-none absolute bottom-9 left-1/2 z-20 -translate-x-1/2">
+                <div className="flex max-w-sm items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
+                  <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-900">AI готовит график. Подождите</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {hasRenderableChart && (
               <footer className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3">
                 {effectiveTasks.length > 0 && (
@@ -492,6 +504,13 @@ export function ProjectWorkspace({
                 {(previewRendering || previewFailed) && (
                   <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-600">
                     {previewRendering ? 'Предпросмотр' : 'Не сохранено'}
+                  </span>
+                )}
+
+                {aiMutationLocked && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-primary">
+                    <LoaderCircle className="h-3 w-3 animate-spin" />
+                    AI занят
                   </span>
                 )}
 

@@ -6,6 +6,7 @@ export type SidebarMode = 'closed' | 'overlay' | 'sidebar';
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 export type ShareStatus = 'idle' | 'creating' | 'copied' | 'error';
 export type ViewMode = 'day' | 'week' | 'month';
+export type AiMutationStage = 'thinking' | 'preview' | 'failed';
 const SIDEBAR_STATE_KEY = 'gantt_sidebar_state';
 const PROJECT_CHAT_OPEN_KEY = 'gantt_project_chat_open';
 
@@ -84,6 +85,11 @@ interface UIState {
   shareStatus: ShareStatus;
   shareLinkUrl: string | null;
   savingState: SavingState;
+  aiMutationLock: {
+    active: boolean;
+    stage: AiMutationStage;
+    message: string | null;
+  };
   showHistoryPanel: boolean;
   historyRefreshRevision: number;
   // Filter state
@@ -114,6 +120,12 @@ interface UIState {
   setShareStatus: (status: ShareStatus) => void;
   setShareLinkUrl: (url: string | null) => void;
   setSavingState: (status: SavingState) => void;
+  setAiMutationLock: (lock: {
+    active: boolean;
+    stage?: AiMutationStage;
+    message?: string | null;
+  }) => void;
+  clearAiMutationLock: () => void;
   setShowHistoryPanel: (visible: boolean) => void;
   bumpHistoryRefreshRevision: () => void;
   // Filter actions
@@ -151,6 +163,11 @@ export const useUIStore = create<UIState>()((set, get) => ({
   shareStatus: 'idle',
   shareLinkUrl: null,
   savingState: 'idle',
+  aiMutationLock: {
+    active: false,
+    stage: 'thinking',
+    message: null,
+  },
   showHistoryPanel: false,
   historyRefreshRevision: 0,
   filterWithoutDeps: false,
@@ -192,6 +209,20 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setShareLinkUrl: (shareLinkUrl) => set({ shareLinkUrl }),
   setSavingState: (savingState) => set({ savingState }),
+  setAiMutationLock: (lock) => set((state) => ({
+    aiMutationLock: {
+      active: lock.active,
+      stage: lock.stage ?? state.aiMutationLock.stage,
+      message: lock.message ?? null,
+    },
+  })),
+  clearAiMutationLock: () => set({
+    aiMutationLock: {
+      active: false,
+      stage: 'thinking',
+      message: null,
+    },
+  }),
   setShowHistoryPanel: (showHistoryPanel) => set({ showHistoryPanel }),
   bumpHistoryRefreshRevision: () => set((state) => ({ historyRefreshRevision: state.historyRefreshRevision + 1 })),
   setFilterWithoutDeps: (filterWithoutDeps) => set({ filterWithoutDeps }),
