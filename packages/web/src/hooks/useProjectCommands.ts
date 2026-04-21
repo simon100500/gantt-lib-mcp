@@ -24,6 +24,7 @@ export interface CreateTaskInput {
 export interface UseProjectCommandsResult {
   applyTaskChanges: (task: Task, originalTask?: Task) => Promise<TaskCommandResult>;
   createTask: (input: CreateTaskInput) => Promise<Task>;
+  createTasks: (inputs: CreateTaskInput[]) => Promise<Task[]>;
   deleteTask: (id: string) => Promise<boolean>;
   fetchProjectSnapshot: () => Promise<Task[]>;
 }
@@ -232,6 +233,49 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
     return createdTask;
   };
 
+  const createTasks = async (inputs: CreateTaskInput[]): Promise<Task[]> => {
+    if (inputs.length === 0) {
+      return [];
+    }
+
+    if (inputs.length === 1) {
+      return [await createTask(inputs[0])];
+    }
+
+    const result = await commitCommand({
+      type: 'create_tasks_batch',
+      tasks: inputs,
+    }, createHistoryGroup('Пользователь — Создал задачи', true));
+
+    if (!result.accepted) {
+      throw new Error(`Failed to create tasks: ${result.reason}`);
+    }
+
+    const normalizedTasks = normalizeTasks(result.snapshot.tasks);
+    const createdIds = new Set(result.result.changedTaskIds as string[]);
+    const unmatchedCreatedTasks = normalizedTasks.filter((task) => createdIds.has(task.id));
+    const usedCreatedIds = new Set<string>();
+
+    return inputs
+      .map((input) => {
+        const matchedById = input.id
+          ? normalizedTasks.find((task) => task.id === input.id)
+          : undefined;
+
+        if (matchedById) {
+          usedCreatedIds.add(matchedById.id);
+          return matchedById;
+        }
+
+        const fallback = unmatchedCreatedTasks.find((task) => !usedCreatedIds.has(task.id));
+        if (fallback) {
+          usedCreatedIds.add(fallback.id);
+        }
+        return fallback;
+      })
+      .filter((task): task is Task => Boolean(task));
+  };
+
   const deleteTask = async (id: string): Promise<boolean> => {
     const result = await commitCommand(
       { type: 'delete_task', taskId: id },
@@ -243,5 +287,5 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
     return true;
   };
 
-  return { applyTaskChanges, createTask, deleteTask, fetchProjectSnapshot };
+  return { applyTaskChanges, createTask, createTasks, deleteTask, fetchProjectSnapshot };
 }

@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, X, Search, CornerDownLeft } from 'lucide-react';
 
-import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { useUIStore } from '../stores/useUIStore';
 import { useTaskStore } from '../stores/useTaskStore';
@@ -9,6 +8,7 @@ import { deriveVisibleSnapshot, useProjectStore } from '../stores/useProjectStor
 import { useAuthStore } from '../stores/useAuthStore';
 import { useProjectCommands } from '../hooks/useProjectCommands';
 import type { Task } from '../types';
+import { extractTaskNames, isMultilineTaskInput } from '../lib/taskSearchInput';
 
 interface TaskSearchProps {
   onTaskNavigate?: (taskId: string) => void;
@@ -16,7 +16,8 @@ interface TaskSearchProps {
 }
 
 export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastAutoNavigatedRef = useRef<string>('');
 
   const searchQuery = useUIStore((state) => state.searchQuery);
   const searchResults = useUIStore((state) => state.searchResults);
@@ -35,12 +36,63 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
   const pendingCommands = useProjectStore((state) => state.pending);
   const dragPreview = useProjectStore((state) => state.dragPreview);
   const scheduleOptions = useProjectStore((state) => state.scheduleOptions);
+  const [inputValue, setInputValue] = useState(searchQuery);
   const tasks = useMemo(() => (
     activeSource === 'auth'
       ? deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions).tasks
       : taskStoreTasks
   ), [activeSource, confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions, taskStoreTasks]);
-  const { createTask } = useProjectCommands(accessToken);
+  const { createTasks } = useProjectCommands(accessToken);
+
+  const multilineMode = isMultilineTaskInput(inputValue);
+  const parsedTaskNames = useMemo(() => extractTaskNames(inputValue), [inputValue]);
+  const taskCountToCreate = parsedTaskNames.length;
+
+  useEffect(() => {
+    if (multilineMode) {
+      if (searchQuery || searchResults.length > 0) {
+        clearSearch();
+      }
+      return;
+    }
+
+    setSearchQuery(inputValue, tasks);
+  }, [clearSearch, inputValue, multilineMode, searchQuery, searchResults.length, setSearchQuery, tasks]);
+
+  useEffect(() => {
+    const element = inputRef.current;
+    if (!element) {
+      return;
+    }
+
+    element.style.height = '36px';
+    const nextHeight = Math.min(element.scrollHeight, 144);
+    element.style.height = `${Math.max(nextHeight, 36)}px`;
+  }, [inputValue]);
+
+  useEffect(() => {
+    if (multilineMode || !onTaskNavigate) {
+      return;
+    }
+
+    const trimmedQuery = inputValue.trim();
+    const firstResultId = searchResults[0];
+
+    if (!trimmedQuery || !firstResultId) {
+      lastAutoNavigatedRef.current = '';
+      return;
+    }
+
+    const signature = `${trimmedQuery}::${firstResultId}`;
+    if (lastAutoNavigatedRef.current === signature) {
+      return;
+    }
+
+    lastAutoNavigatedRef.current = signature;
+    requestAnimationFrame(() => {
+      onTaskNavigate(firstResultId);
+    });
+  }, [inputValue, multilineMode, onTaskNavigate, searchResults]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -66,10 +118,6 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleInputChange = (value: string) => {
-    setSearchQuery(value, tasks);
-  };
-
   const handleNavigateToIndex = (index: number) => {
     const taskId = searchResults[index];
     if (taskId && onTaskNavigate) {
@@ -93,75 +141,77 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
 
   const handleClear = () => {
     clearSearch();
+    setInputValue('');
     inputRef.current?.focus();
   };
 
-  const handleCreateTask = async () => {
+  const handleCreateTasks = async () => {
     if (readOnly) {
       return;
     }
 
-    const taskName = searchQuery.trim() || 'Новая задача';
+    const taskNames = parsedTaskNames.length > 0 ? parsedTaskNames : ['Новая задача'];
     const today = new Date().toISOString().split('T')[0];
-
-    const tempId = crypto.randomUUID();
-    const newTask: Task = {
-      id: tempId,
+    const newTasks: Task[] = taskNames.map((taskName) => ({
+      id: crypto.randomUUID(),
       name: taskName,
       startDate: today,
       endDate: today,
-    };
+    }));
 
     if (activeSource !== 'auth') {
-      setTasks(prev => [...prev, newTask]);
+      setTasks(prev => [...prev, ...newTasks]);
     }
 
-    // Clear search input
     clearSearch();
+    setInputValue('');
 
-    // Navigate to the new task (wait for React render)
+    const lastTempTaskId = newTasks[newTasks.length - 1]?.id;
+
     requestAnimationFrame(() => {
-      if (onTaskNavigate) {
-        onTaskNavigate(tempId);
+      if (lastTempTaskId && onTaskNavigate) {
+        onTaskNavigate(lastTempTaskId);
       }
     });
 
-    // Highlight the new task temporarily
-    setTempHighlightedTaskId(tempId);
+    setTempHighlightedTaskId(lastTempTaskId ?? null);
     setTimeout(() => {
       setTempHighlightedTaskId(null);
     }, 2000);
 
-    // Server update for authenticated users
     if (accessToken) {
       try {
-        const created = await createTask({
-          id: tempId,
-          name: taskName,
-          startDate: today,
-          endDate: today,
-        });
+        const createdTasks = await createTasks(newTasks.map((task) => ({
+          id: task.id,
+          name: task.name,
+          startDate: task.startDate as string,
+          endDate: task.endDate as string,
+        })));
+
         if (activeSource !== 'auth') {
-          setTasks(prev => prev.map(t => t.id === tempId ? created : t));
+          const tempToCreated = new Map(
+            newTasks.map((task, index) => [task.id, createdTasks[index]] as const).filter((entry) => Boolean(entry[1])),
+          );
+          setTasks(prev => prev.map((task) => tempToCreated.get(task.id) ?? task));
         }
-        // Update highlight with real ID
-        if (created.id !== tempId) {
-          setTempHighlightedTaskId(created.id);
+
+        const lastCreatedTask = createdTasks[createdTasks.length - 1];
+        if (lastCreatedTask && lastCreatedTask.id !== lastTempTaskId) {
+          setTempHighlightedTaskId(lastCreatedTask.id);
           setTimeout(() => {
             setTempHighlightedTaskId(null);
           }, 2000);
-          // Scroll to the real ID
           requestAnimationFrame(() => {
             if (onTaskNavigate) {
-              onTaskNavigate(created.id);
+              onTaskNavigate(lastCreatedTask.id);
             }
           });
         }
       } catch (error) {
-        console.error('Failed to create task:', error);
-        // Revert on error
+        console.error('Failed to create tasks:', error);
         if (activeSource !== 'auth') {
-          setTasks(prev => prev.filter(t => t.id !== tempId));
+          const tempIds = new Set(newTasks.map((task) => task.id));
+          setTasks(prev => prev.filter((task) => !tempIds.has(task.id)));
         }
         setTempHighlightedTaskId(null);
       }
@@ -169,114 +219,119 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
   };
 
   const hasResults = searchResults.length > 0;
-  const showCounter = searchQuery.trim().length > 0;
+  const showCounter = inputValue.trim().length > 0 && !multilineMode;
+  const createHintVisible = inputValue.trim().length > 0 && !hasResults && !readOnly;
+  const createButtonLabel = taskCountToCreate > 1 ? `+ ${taskCountToCreate} задач` : '+ Задача';
+  const createButtonTitle = taskCountToCreate > 1 ? `Создать ${taskCountToCreate} задач` : 'Создать задачу';
 
   return (
-    <div className="flex min-w-0 w-full max-w-[43rem] shrink items-center gap-2">
-      <div className="relative flex min-w-0 flex-1 items-center group">
-        {/* Иконка лупы слева */}
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors pointer-events-none">
-          <Search size={16} strokeWidth={2.2} />
-        </div>
+    <div className="relative flex min-w-0 w-full max-w-[43rem] shrink items-start gap-2 overflow-visible">
+      <div className="relative flex h-9 min-w-0 flex-1 items-start overflow-visible">
+        <div className="absolute inset-x-0 top-0 z-20 min-w-0 group">
+          <div className="absolute left-3 top-[18px] z-10 -translate-y-1/2 text-slate-400 transition-colors pointer-events-none group-focus-within:text-indigo-500">
+            <Search size={16} strokeWidth={2.2} />
+          </div>
 
-        <Input
-          ref={inputRef}
-          type="text"
-          value={searchQuery}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onKeyDown={(event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-              event.preventDefault();
-              void handleCreateTask();
-            } else if (event.key === 'ArrowDown' || (event.key === 'Enter' && !event.shiftKey)) {
-              event.preventDefault();
-              handleNavNext();
-            } else if (event.key === 'ArrowUp' || (event.key === 'Enter' && event.shiftKey)) {
-              event.preventDefault();
-              handleNavPrev();
-            } else if (event.key === 'Escape') {
-              event.preventDefault();
-              if (searchQuery) {
-                handleClear();
-              } else {
-                inputRef.current?.blur();
+          <textarea
+            ref={inputRef}
+            value={inputValue}
+            rows={1}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                void handleCreateTasks();
+              } else if (!multilineMode && event.key === 'ArrowDown') {
+                event.preventDefault();
+                handleNavNext();
+              } else if (!multilineMode && event.key === 'ArrowUp') {
+                event.preventDefault();
+                handleNavPrev();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                if (inputValue) {
+                  handleClear();
+                } else {
+                  inputRef.current?.blur();
+                }
               }
-            }
-          }}
-          placeholder={readOnly ? 'Поиск...' : 'Поиск или новая задача...'}
-          className="h-8 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
-          aria-label="Поиск задач"
-          title="Ctrl+K или +"
-        />
-        <div className="absolute right-1 flex items-center gap-0.5">
-          {showCounter && hasResults && (
-            <span className="mr-1 shrink-0 text-xs font-medium tabular-nums text-slate-500">
-              {searchIndex + 1}/{searchResults.length}
-            </span>
-          )}
-          {showCounter && !hasResults && (
-            <div className="mr-1 flex items-center gap-1 text-xs text-slate-400">
-              {!readOnly && (
-                <>
-                  <kbd className="pointer-events-none select-none inline-flex h-4.5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 font-sans text-[11px] font-medium">
-                    Ctrl
-                  </kbd>
-                  <CornerDownLeft className="h-3 w-3" />
-                  <span>создать</span>
-                </>
-              )}
-            </div>
-          )}
-          {hasResults && (
-            <>
+            }}
+            placeholder={readOnly ? 'Поиск...' : 'Поиск или новые задачи...'}
+            className={`block h-9 w-full resize-none rounded-lg border border-slate-200 bg-white pl-10 pr-36 py-2 text-sm leading-5 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 ${multilineMode ? 'overflow-y-auto' : 'overflow-hidden'}`}
+            aria-label="Поиск задач"
+            title="Ctrl+K или +. Enter добавляет строку, Ctrl+Enter создаёт задачи"
+          />
+          <div className="absolute right-1 top-1 flex items-center gap-0.5">
+            {showCounter && hasResults && (
+              <span className="mr-1 shrink-0 text-xs font-medium tabular-nums text-slate-500">
+                {searchIndex + 1}/{searchResults.length}
+              </span>
+            )}
+            {createHintVisible && (
+              <div className="mr-1 flex items-center gap-1 text-xs text-slate-400">
+                {multilineMode ? (
+                  <span>Ctrl+Enter создать {taskCountToCreate || 1}</span>
+                ) : (
+                  <>
+                    <kbd className="pointer-events-none select-none inline-flex h-4.5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 font-sans text-[11px] font-medium">
+                      Ctrl
+                    </kbd>
+                    <CornerDownLeft className="h-3 w-3" />
+                    <span>создать</span>
+                  </>
+                )}
+              </div>
+            )}
+            {hasResults && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNavPrev}
+                  className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
+                  title="Предыдущий результат"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNavNext}
+                  className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
+                  title="Следующий результат"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+            {inputValue && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleNavPrev}
-                className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
-                title="Предыдущий результат"
+                onClick={handleClear}
+                className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+                title="Очистить поиск"
               >
-                <ChevronUp className="h-3.5 w-3.5" />
+                <X className="h-3.5 w-3.5" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNavNext}
-                className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
-                title="Следующий результат"
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          )}
-          {searchQuery && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClear}
-              className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
-              title="Очистить поиск"
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {/* Индикатор горячей клавиши */}
-          {!searchQuery && (
-            <kbd className="select-none hidden sm:inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 font-sans text-[12px] font-medium text-slate-400 group-focus-within:hidden mr-1.5" title="Нажмите клавишу &quot;+&quot;">
-              +
-            </kbd>
-          )}
+            )}
+            {!inputValue && (
+              <kbd className="relative top-1 select-none hidden sm:inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 font-sans text-[12px] font-medium text-slate-400 group-focus-within:hidden mr-1.5" title="Нажмите клавишу &quot;+&quot;">
+                +
+              </kbd>
+            )}
+          </div>
         </div>
       </div>
       {!readOnly && (
         <Button
           variant="default"
           size="sm"
-          onClick={handleCreateTask}
-          title="Создать задачу"
-          className="h-7 shrink-0 px-2.5 py-2.5 text-xs font-medium"
+          onClick={handleCreateTasks}
+          title={createButtonTitle}
+          className="h-8 shrink-0 px-2.5 text-xs font-medium shadow-none"
         >
-          + Задача
+          {createButtonLabel}
         </Button>
       )}
     </div>
