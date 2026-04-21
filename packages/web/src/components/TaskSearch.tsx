@@ -329,7 +329,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
           size="sm"
           onClick={handleCreateTasks}
           title={createButtonTitle}
-          className="h-8 shrink-0 px-2.5 text-xs font-medium shadow-none"
+          className="mt-0.5 h-8 shrink-0 px-2.5 text-xs font-medium shadow-none"
         >
           {createButtonLabel}
         </Button>
