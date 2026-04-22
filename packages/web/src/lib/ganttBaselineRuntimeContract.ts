@@ -131,7 +131,6 @@ function baselinePayloadFor(candidateId: BaselineCandidateId, startDate: string,
     }
   }
 }
-}
 
 export function applyBaselineCandidate(tasks: Task[], candidateId: BaselineCandidateId, options?: { nonMatchingTaskId?: string }): ProbeTask[] {
   return tasks.map((task, index) => {
