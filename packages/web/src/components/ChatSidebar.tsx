@@ -108,11 +108,14 @@ export function ChatSidebar({
   activePreviewGroupId = null,
 }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [preferButtonSend, setPreferButtonSend] = useState(false);
   const chatComposerDraft = useUIStore((state) => state.chatComposerDraft);
   const clearChatComposerDraft = useUIStore((state) => state.clearChatComposerDraft);
   const [currentPhrase, setCurrentPhrase] = useState("");
   const [pendingApplyMessage, setPendingApplyMessage] = useState<ChatMessage | null>(null);
   const phraseIteratorRef = useRef(createPhraseIterator());
+  const rootRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
@@ -184,6 +187,49 @@ export function ChatSidebar({
     return () => window.clearInterval(timer);
   }, [loading, streaming]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) {
+      return;
+    }
+
+    const syncKeyboardInset = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) {
+        return;
+      }
+
+      const nextInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setKeyboardInset(nextInset);
+
+      if (document.activeElement === inputRef.current) {
+        window.requestAnimationFrame(() => {
+          inputRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        });
+      }
+    };
+
+    syncKeyboardInset();
+    window.visualViewport.addEventListener("resize", syncKeyboardInset);
+    window.visualViewport.addEventListener("scroll", syncKeyboardInset);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", syncKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", syncKeyboardInset);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const hasTouch =
+      typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+
+    setPreferButtonSend(hasTouch || coarsePointer);
+  }, []);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = inputValue.trim();
@@ -208,6 +254,10 @@ export function ChatSidebar({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (preferButtonSend) {
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e as unknown as React.FormEvent);
@@ -224,7 +274,11 @@ export function ChatSidebar({
   }
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div
+      ref={rootRef}
+      className="flex h-full flex-col overflow-x-hidden bg-white"
+      style={{ paddingBottom: keyboardInset > 0 ? `${keyboardInset}px` : undefined }}
+    >
       <header className="flex min-h-12 items-center gap-2 border-b border-slate-200 bg-white pl-4 pr-3 shrink-0 md:min-h-10">
         <span className="text-[12px] font-semibold tracking-tight text-slate-700">
           AI ассистент
@@ -296,7 +350,7 @@ export function ChatSidebar({
         role="region"
         aria-label="Сообщения AI ассистента"
         aria-live="polite"
-        className="flex flex-1 flex-col gap-2 overflow-y-auto pl-4 pr-3 py-3"
+        className="flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pl-4 pr-3 py-3"
       >
         {isEmpty && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
@@ -479,7 +533,7 @@ export function ChatSidebar({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-3 pr-3 py-2"
+        className="flex shrink-0 items-end gap-2 border-t border-slate-200 bg-white pl-3 pr-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
         <textarea
           ref={inputRef}
