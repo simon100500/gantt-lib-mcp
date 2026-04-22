@@ -338,8 +338,19 @@ describe('staged mutation orchestrator', () => {
       buildMutationSuccessMessage({
         changedTaskIds: ['task-plaster'],
         changedTasks: [{ id: 'task-plaster', name: 'Штукатурка' }],
+        route: 'fast_path',
+        intentType: 'shift_relative',
       }),
       /Штукатурк/i,
+    );
+    assert.match(
+      buildMutationSuccessMessage({
+        changedTaskIds: ['task-plaster'],
+        changedTasks: [{ id: 'task-plaster', name: 'Штукатурка' }],
+        route: 'fast_path',
+        intentType: 'shift_relative',
+      }),
+      /распознано/i,
     );
     const worklistArtifactMessage = buildMutationSuccessMessage({
       changedTaskIds: ['aggregate', 'roof', 'windows', 'facade'],
@@ -352,9 +363,34 @@ describe('staged mutation orchestrator', () => {
         { id: 'windows', name: 'Демонтаж окон' },
         { id: 'facade', name: 'Демонтаж витражей' },
       ],
+      route: 'fast_path',
+      intentType: 'add_repeated_fragment',
     });
     assert.doesNotMatch(worklistArtifactMessage, /220 чел\/час 2\./i);
     assert.match(worklistArtifactMessage, /Демонтаж сэндвич панелей \(кровля\)/i);
+    assert.match(
+      buildMutationSuccessMessage({
+        changedTaskIds: ['task-slab:12', 'task-slab:13', 'task-slab'],
+        changedTasks: [
+          { id: 'task-slab', name: 'Бетонирование перекрытий 12-17 этажей' },
+          { id: 'task-slab:12', name: '12 этаж' },
+          { id: 'task-slab:13', name: '13 этаж' },
+        ],
+        route: 'specialized_fast_path',
+        intentType: 'decompose_task',
+        warnings: ['Проверьте зависимости между новыми этапами.'],
+        specializedTargetName: 'Бетонирование перекрытий 12-17 этажей',
+      }),
+      /детализир/i,
+    );
+    assert.match(
+      buildMutationFailureMessage('anchor_not_found', {
+        route: 'specialized_fast_path',
+        intentType: 'decompose_task',
+        failedStep: 'resolution',
+      }),
+      /specialized_fast_path/i,
+    );
   });
 
   it('builds and executes deterministic plans for resolved ordinary edits', async () => {
@@ -1101,6 +1137,7 @@ describe('staged mutation orchestrator', () => {
   });
 
   it('hands high-confidence decompose_task routes to the direct split-task executor', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
     const directSplitCalls: Array<{ taskId: string; details?: string; mode?: string; rangeFrom?: number; rangeTo?: number }> = [];
     const result = await runStagedMutation({
       userMessage: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
@@ -1145,7 +1182,9 @@ describe('staged mutation orchestrator', () => {
       },
       broadcastToSession: () => undefined,
       logger: {
-        debug: () => undefined,
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
       },
       directSplitTaskRunner: async (input) => {
         directSplitCalls.push({
@@ -1198,6 +1237,72 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.result.userFacingMessage, 'Задача «Бетонирование перекрытий 12-17 этажей» детализирована на 6 подзадач.');
     assert.deepEqual(result.result.changedTaskIds, ['task-slab:12']);
     assert.equal(result.assistantResponse, 'Задача «Бетонирование перекрытий 12-17 этажей» детализирована на 6 подзадач.');
+    assert.deepEqual(loggedEvents.map((entry) => entry.event), [
+      'intent_classified',
+      'route_selected',
+      'resolution_started',
+      'resolution_result',
+      'specialized_executor_started',
+      'specialized_executor_completed',
+      'final_outcome',
+    ]);
+    assert.equal(loggedEvents[4]?.payload.route, 'specialized_fast_path');
+    assert.equal(loggedEvents[4]?.payload.intentType, 'decompose_task');
+    assert.equal(loggedEvents[4]?.payload.riskLevel, 'S2');
+  });
+
+  it('emits agent_escalation_selected for explicit S3 agent-path routing', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const result = await runStagedMutation({
+      userMessage: 'Полностью переразложи весь график по двум бригадам и критическому пути',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-agent-path-1',
+      tasksBefore: [],
+      env,
+      messageService: { add: async () => undefined },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
+      },
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          route: 'agent_path',
+          intentFamily: 'planning',
+          intentType: 'restructure_branch',
+          confidence: 0.41,
+          riskLevel: 'S3',
+          params: {
+            scope: 'whole_project',
+          },
+          ambiguities: ['resource_constraints'],
+          entitiesMentioned: [],
+        }),
+      }),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.intent.routeEnvelope.route, 'agent_path');
+    assert.equal(loggedEvents.some((entry) => entry.event === 'agent_escalation_selected'), true);
+    const escalationEvent = loggedEvents.find((entry) => entry.event === 'agent_escalation_selected');
+    assert.equal(escalationEvent?.payload.route, 'agent_path');
+    assert.equal(escalationEvent?.payload.intentType, 'restructure_branch');
+    assert.equal(escalationEvent?.payload.riskLevel, 'S3');
   });
 
   it('keeps decompose_task out of low-level mutation plan operations', () => {
