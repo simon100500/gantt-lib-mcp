@@ -22,7 +22,9 @@ import { useHistoryViewerStore } from '../../stores/useHistoryViewerStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils.ts';
+import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
+import type { BaselineSnapshotResponse } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
 
 interface ProjectWorkspaceProps {

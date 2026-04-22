@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { FilterPopup } from '../FilterPopup';
 
