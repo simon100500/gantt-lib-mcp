@@ -3,21 +3,21 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: executing
-last_updated: "2026-04-20T10:37:46.5061705+03:00"
-last_activity: 2026-04-20 -- Completed 46-05-PLAN.md
+last_updated: "2026-04-22T10:58:00+03:00"
+last_activity: 2026-04-22 -- Completed 47-01-PLAN.md
 progress:
-  total_phases: 17
-  completed_phases: 14
-  total_plans: 57
-  completed_plans: 55
-  percent: 96
+  total_phases: 18
+  completed_phases: 15
+  total_plans: 60
+  completed_plans: 58
+  percent: 97
 ---
 
 # Project State: gantt-lib MCP Server
 
 **Last updated:** 2026-04-20
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Executing Phase 46
+**Status:** Ready to execute
 
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 46 — mcp-replace
+**Current focus:** Phase 47 — agent-routing-fast-path
 
 ---
 
 ## Current Position
 
-Phase: 46 (mcp-replace) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete - ready for verification
-Last activity: 2026-04-20 -- Completed 46-05-PLAN.md
+Phase: 47 (agent-routing-fast-path) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-22 -- Completed 47-01-PLAN.md
 Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
 Progress: [██████████] 100%
@@ -77,6 +77,7 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 47 added: agent-routing-fast-path
 - Phase 46 added: mcp-replace
 - Phase 45 added: history-refactor
 - Phase 44 added: undo-redo
