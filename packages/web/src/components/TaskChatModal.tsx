@@ -119,7 +119,7 @@ export function TaskChatModal({
               </div>
             )}
             <p className="text-sm leading-6 text-slate-500">
-              Оставьте поле пустым, чтобы просто добавить работу в чат.
+              Оставьте поле пустым, чтобы просто добавить имя задачи в чат.
             </p>
           </CardContent>
 
