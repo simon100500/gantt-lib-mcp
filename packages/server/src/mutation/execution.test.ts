@@ -242,6 +242,7 @@ describe('executeMutationPlan', () => {
 
     assert.match(splitTaskSource, /buildMutationPlan/);
     assert.match(splitTaskSource, /executeMutationPlan/);
+    assert.match(splitTaskSource, /intentType:\s*'decompose_task'/);
     assert.doesNotMatch(splitTaskSource, /type:\s*['"]decompose_task['"]/);
   });
 });
