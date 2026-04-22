@@ -25,6 +25,15 @@ type GroupScope = {
 
 function buildIntent(overrides: Partial<MutationIntent> = {}): MutationIntent {
   return {
+    routeEnvelope: {
+      route: 'fast_path',
+      intentFamily: 'task_edit',
+      intentType: 'add_single_task',
+      confidence: 0.9,
+      riskLevel: 'S1',
+      params: {},
+      ambiguities: [],
+    },
     intentType: 'add_single_task',
     confidence: 0.9,
     rawRequest: 'добавь сдачу технадзору',

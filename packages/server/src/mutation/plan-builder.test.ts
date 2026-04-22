@@ -6,6 +6,15 @@ import type { MutationIntent, ResolvedMutationContext } from './types.js';
 
 function buildIntent(overrides: Partial<MutationIntent> = {}): MutationIntent {
   return {
+    routeEnvelope: {
+      route: 'fast_path',
+      intentFamily: 'task_edit',
+      intentType: 'add_single_task',
+      confidence: 0.92,
+      riskLevel: 'S1',
+      params: {},
+      ambiguities: [],
+    },
     intentType: 'add_single_task',
     confidence: 0.92,
     rawRequest: 'добавь сдачу технадзору',
@@ -35,6 +44,7 @@ function buildContext(overrides: Partial<ResolvedMutationContext> = {}): Resolve
     selectedSuccessorTaskId: null,
     placementPolicy: 'tail_of_container',
     confidence: 0.91,
+    ambiguities: [],
     ...overrides,
   };
 }

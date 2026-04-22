@@ -340,10 +340,22 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     selectedSuccessorTaskId: null,
     placementPolicy: 'no_placement_required',
     confidence: 1,
+    ambiguities: [],
   };
 
   const plan = await buildMutationPlan({
     intent: {
+      routeEnvelope: {
+        route: 'specialized_fast_path',
+        intentFamily: 'structure',
+        intentType: 'expand_wbs',
+        confidence: 1,
+        riskLevel: 'S2',
+        params: {
+          executor: 'split_task',
+        },
+        ambiguities: [],
+      },
       intentType: 'expand_wbs',
       confidence: 1,
       rawRequest: userTrace,
