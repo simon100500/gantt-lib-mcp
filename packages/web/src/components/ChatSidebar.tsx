@@ -157,7 +157,14 @@ export function ChatSidebar({
       return;
     }
 
-    setInputValue(chatComposerDraft);
+    setInputValue((current) => {
+      if (!current.trim()) {
+        return chatComposerDraft;
+      }
+
+      const separator = current.endsWith('\n') ? '\n' : '\n\n';
+      return `${current}${separator}${chatComposerDraft}`;
+    });
     window.requestAnimationFrame(() => {
       if (!inputRef.current) {
         return;

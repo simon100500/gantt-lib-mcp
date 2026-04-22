@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle, MessageSquare, Send } from 'lucide-react';
+import { Check, ListTree, LoaderCircle, MessageSquare, WandSparkles } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskListMenuCommand } from 'gantt-lib';
 
@@ -8,6 +8,7 @@ import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { HistoryPanel } from '../HistoryPanel.tsx';
 import { SplitTaskModal } from '../SplitTaskModal.tsx';
+import { TaskChatModal } from '../TaskChatModal.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
@@ -255,6 +256,7 @@ export function ProjectWorkspace({
   }, [searchResults, tempHighlightedTaskId]);
   const previousGanttDayModeRef = useRef(ganttDayMode);
   const [splitTaskDraft, setSplitTaskDraft] = useState<Task | null>(null);
+  const [taskChatDraft, setTaskChatDraft] = useState<Task | null>(null);
   const {
     items: historyItems,
     loading: historyLoading,
@@ -306,12 +308,9 @@ export function ProjectWorkspace({
     const commands: TaskListMenuCommand<Task>[] = [
       {
         id: 'send-task-to-chat',
-        label: 'В чат',
-        icon: <Send className="h-4 w-4" />,
-        onSelect: (row) => {
-          setChatComposerDraft(buildTaskChatMention(row));
-          setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
-        },
+        label: 'Действие...',
+        icon: <WandSparkles className="h-4 w-4" />,
+        onSelect: (row) => setTaskChatDraft(row),
       },
     ];
 
@@ -326,7 +325,12 @@ export function ProjectWorkspace({
     }
 
     return commands;
-  }, [chatDisabled, effectiveReadOnly, onSplitTask, setChatComposerDraft, setWorkspace, showChat]);
+  }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat]);
+
+  const handleAppendTaskToChat = useCallback((task: Task) => {
+    setChatComposerDraft(buildTaskChatMention(task));
+    setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
+  }, [setChatComposerDraft, setWorkspace]);
 
   const handleSplitTaskSubmit = useCallback(async (details: string) => {
     if (!splitTaskDraft || !onSplitTask) {
@@ -654,6 +658,15 @@ export function ProjectWorkspace({
           task={splitTaskDraft}
           onClose={() => setSplitTaskDraft(null)}
           onSubmit={handleSplitTaskSubmit}
+        />
+      )}
+
+      {taskChatDraft && (
+        <TaskChatModal
+          task={taskChatDraft}
+          onClose={() => setTaskChatDraft(null)}
+          onAppendToChat={handleAppendTaskToChat}
+          onSendNow={onSend}
         />
       )}
     </div>
