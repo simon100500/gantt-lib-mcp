@@ -929,6 +929,56 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.intent.routeEnvelope.route, 'clarify');
   });
 
+  it('keeps low-confidence structural decomposition prompts on typed clarify failure instead of legacy fallback', async () => {
+    const result = await runStagedMutation({
+      userMessage: 'Разбей это по этажам как лучше',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-clarify-structural-1',
+      tasksBefore: [],
+      env,
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          route: 'clarify',
+          intentFamily: 'structure',
+          intentType: 'unsupported_or_ambiguous',
+          confidence: 0.28,
+          riskLevel: 'S2',
+          params: {
+            requestedExecutor: 'split_task',
+          },
+          ambiguities: ['target_task', 'decomposition_mode'],
+          entitiesMentioned: [],
+        }),
+      }),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.equal(result.intent.routeEnvelope.route, 'clarify');
+    assert.equal(result.result.failureReason, 'unsupported_mutation_shape');
+  });
+
   it('logs route_selected before resolution and execution', async () => {
     const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
 

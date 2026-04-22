@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { executeMutationPlan } from './execution.js';
 import type { MutationPlan, MutationPlanOperation, MutationTaskSnapshot } from './types.js';
@@ -234,5 +235,13 @@ describe('executeMutationPlan', () => {
     ]);
 
     assert.equal(allowedOperationKinds.has('decompose_task' as MutationPlanOperation['kind']), false);
+  });
+
+  it('keeps split-task execution wired through authoritative plan helpers', () => {
+    const splitTaskSource = readFileSync(new URL('../split-task.ts', import.meta.url), 'utf8');
+
+    assert.match(splitTaskSource, /buildMutationPlan/);
+    assert.match(splitTaskSource, /executeMutationPlan/);
+    assert.doesNotMatch(splitTaskSource, /type:\s*['"]decompose_task['"]/);
   });
 });

@@ -120,6 +120,26 @@ describe('mutation intent classification', () => {
 
     assert.equal(agentIntent.routeEnvelope.route, 'agent_path');
     assert.notEqual(agentIntent.executionMode, 'deterministic');
+
+    const optimizationIntent = await classifyMutationIntent({
+      userMessage: 'Оптимизируй график под две бригады и критический путь',
+      env,
+      semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
+        route: 'agent_path',
+        intentFamily: 'planning',
+        intentType: 'restructure_branch',
+        confidence: 0.56,
+        riskLevel: 'S3',
+        params: {
+          optimizationGoal: 'critical_path_and_crews',
+        },
+        ambiguities: [],
+      })),
+    });
+
+    assert.equal(optimizationIntent.routeEnvelope.route, 'agent_path');
+    assert.equal(optimizationIntent.routeEnvelope.riskLevel, 'S3');
+    assert.equal(optimizationIntent.executionMode, 'full_agent');
   });
 });
 
