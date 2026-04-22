@@ -187,6 +187,10 @@ function extractPrimaryEntity(intent: MutationIntent, userMessage: string): stri
   return intent.entitiesMentioned[0] ?? userMessage.trim();
 }
 
+function readNumericParam(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 export async function resolveMutationContext(
   input: ResolveMutationContextInput,
 ): Promise<ResolvedMutationContext> {
@@ -231,6 +235,7 @@ export async function resolveMutationContext(
     context.confidence = bestTask?.score ?? 0;
     context.specializedExecutor = {
       executor: 'expand_wbs',
+      confidence: context.confidence,
       ready: Boolean(bestTask && context.confidence >= 0.7),
       reason: bestTask ? undefined : 'anchor_not_resolved',
     };
@@ -240,6 +245,10 @@ export async function resolveMutationContext(
   if (input.intent.intentType === 'decompose_task') {
     const taskMatches = await input.taskService.findTasksByName(input.projectId, anchorQuery, 8);
     const bestTask = pickBestTaskMatch(taskMatches);
+    const executorParams = input.intent.routeEnvelope.params;
+    const range = executorParams.range && typeof executorParams.range === 'object'
+      ? executorParams.range as Record<string, unknown>
+      : null;
 
     context.tasks = taskMatches.map(toResolutionEntity);
     context.predecessors = bestTask ? [toResolutionEntity(bestTask)] : [];
@@ -247,9 +256,13 @@ export async function resolveMutationContext(
     context.placementPolicy = 'no_placement_required';
     context.confidence = bestTask?.score ?? 0;
     context.specializedExecutor = {
-      executor: typeof input.intent.routeEnvelope.params.executor === 'string'
-        ? input.intent.routeEnvelope.params.executor
-        : 'split_task',
+      executor: 'split_task',
+      targetTaskId: bestTask?.taskId ?? '',
+      targetTaskName: bestTask?.name ?? anchorQuery,
+      mode: typeof executorParams.mode === 'string' ? executorParams.mode : 'by_floor',
+      rangeFrom: readNumericParam(range?.from),
+      rangeTo: readNumericParam(range?.to),
+      confidence: context.confidence,
       ready: Boolean(bestTask && context.confidence >= 0.85),
       reason: bestTask ? undefined : 'target_task_not_resolved',
     };

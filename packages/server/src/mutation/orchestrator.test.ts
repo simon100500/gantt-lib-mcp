@@ -6,6 +6,7 @@ import {
   buildMutationSuccessMessage,
 } from './messages.js';
 import { runStagedMutation } from './orchestrator.js';
+import type { MutationPlanOperation } from './types.js';
 
 function semanticPayloadFor(userMessage: string): string {
   switch (userMessage) {
@@ -996,6 +997,128 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.legacyFallbackAllowed, false);
     assert.notEqual(result.result.failureReason, undefined);
     assert.equal(loggedEvents.some((entry) => entry.event === 'route_selected'), true);
+  });
+
+  it('resolves decompose_task into explicit split-task executor metadata', async () => {
+    const result = await runStagedMutation({
+      userMessage: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-decompose-2',
+      tasksBefore: [],
+      env,
+      messageService: { add: async () => undefined },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-slab',
+            name: 'Бетонирование перекрытий 12-17 этажей',
+            parentId: null,
+            path: ['Бетонирование перекрытий 12-17 этажей'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-12',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: semanticIntentQueryFor('Разбей Бетонирование перекрытий 12-17 этажей поэтажно'),
+    });
+
+    assert.equal(result.intent.intentType, 'decompose_task');
+    assert.equal(result.resolutionContext?.specializedExecutor?.executor, 'split_task');
+    assert.equal(result.resolutionContext?.specializedExecutor?.targetTaskId, 'task-slab');
+    assert.equal(result.resolutionContext?.specializedExecutor?.targetTaskName, 'Бетонирование перекрытий 12-17 этажей');
+    assert.equal(result.resolutionContext?.specializedExecutor?.mode, 'by_floor');
+    assert.equal(result.resolutionContext?.specializedExecutor?.rangeFrom, 12);
+    assert.equal(result.resolutionContext?.specializedExecutor?.rangeTo, 17);
+    assert.equal(result.resolutionContext?.specializedExecutor?.confidence, 0.96);
+  });
+
+  it('fails low-confidence decompose_task resolution without legacy fallback', async () => {
+    const result = await runStagedMutation({
+      userMessage: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-decompose-3',
+      tasksBefore: [],
+      env,
+      messageService: { add: async () => undefined },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-slab',
+            name: 'Бетонирование перекрытий 12-17 этажей',
+            parentId: null,
+            path: ['Бетонирование перекрытий 12-17 этажей'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-12',
+            matchType: 'includes',
+            score: 0.61,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: semanticIntentQueryFor('Разбей Бетонирование перекрытий 12-17 этажей поэтажно'),
+    });
+
+    assert.equal(result.intent.intentType, 'decompose_task');
+    assert.equal(result.status, 'failed');
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.notEqual(result.result.failureReason, undefined);
+    assert.ok(
+      result.result.failureReason === 'multiple_low_confidence_targets'
+        || result.result.failureReason === 'unsupported_mutation_shape'
+        || result.result.failureReason === 'anchor_not_found',
+    );
+  });
+
+  it('keeps decompose_task out of low-level mutation plan operations', () => {
+    const operationKinds = new Set<MutationPlanOperation['kind']>([
+      'append_task_after',
+      'append_task_before',
+      'append_task_to_container',
+      'change_task_duration',
+      'shift_task_by_delta',
+      'move_task_to_date',
+      'move_task_in_hierarchy',
+      'link_tasks',
+      'unlink_tasks',
+      'delete_task',
+      'rename_task',
+      'update_task_metadata',
+      'fanout_fragment_to_groups',
+      'expand_branch_from_plan',
+    ]);
+
+    assert.equal(operationKinds.has('decompose_task' as MutationPlanOperation['kind']), false);
   });
 
   it('returns multiple_low_confidence_targets for ambiguous equal-score anchors', async () => {

@@ -104,12 +104,27 @@ export type ResolvedMutationContext = {
   placementPolicy: PlacementPolicy;
   confidence: number;
   ambiguities: string[];
-  specializedExecutor?: {
-    executor: string;
-    ready: boolean;
-    reason?: string;
-  };
+  specializedExecutor?: SpecializedExecutorResolution;
 };
+
+export type SpecializedExecutorResolution =
+  | {
+      executor: 'split_task';
+      targetTaskId: string;
+      targetTaskName: string;
+      mode: string;
+      rangeFrom?: number;
+      rangeTo?: number;
+      confidence: number;
+      ready: boolean;
+      reason?: string;
+    }
+  | {
+      executor: 'expand_wbs';
+      confidence: number;
+      ready: boolean;
+      reason?: string;
+    };
 
 export type MutationPlan = {
   planType: MutationIntentType;
