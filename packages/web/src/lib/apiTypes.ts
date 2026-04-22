@@ -51,3 +51,24 @@ export interface HistoryRestoreResponse {
     deletedFromMessageId: string | null;
   };
 }
+
+export type BaselineSource = 'current' | 'history';
+
+export interface BaselineItem {
+  id: string;
+  projectId: string;
+  name: string;
+  source: BaselineSource;
+  sourceHistoryGroupId: string | null;
+  createdAt: string;
+}
+
+export interface BaselineListResponse {
+  baselines: BaselineItem[];
+}
+
+export interface BaselineSnapshotResponse extends BaselineItem {
+  snapshot: ProjectLoadResponse['snapshot'];
+}
+
+export type BaselineCreateResponse = BaselineSnapshotResponse;
