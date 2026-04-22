@@ -13,6 +13,7 @@ test('runtime-core service barrel exports authoritative services', () => {
   const source = readFile('packages/runtime-core/src/services/index.ts');
 
   assert.match(source, /commandService/);
+  assert.match(source, /baselineService/);
   assert.match(source, /historyService/);
   assert.match(source, /taskService/);
   assert.match(source, /projectService/);

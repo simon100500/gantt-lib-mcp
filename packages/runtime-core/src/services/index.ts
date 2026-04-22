@@ -1,5 +1,7 @@
 export { commandService } from './command.service.js';
 export { CommandService } from './command.service.js';
+export { baselineService } from './baseline.service.js';
+export { BaselineService, BaselineValidationError } from './baseline.service.js';
 export { historyService } from './history.service.js';
 export { HistoryService, HistoryValidationError } from './history.service.js';
 export { taskService } from './task.service.js';

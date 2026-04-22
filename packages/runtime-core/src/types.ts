@@ -397,6 +397,45 @@ export type ProjectSnapshot = {
   dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number }>;
 };
 
+export type BaselineSource = 'current' | 'history';
+
+export type BaselineMetadata = {
+  id: string;
+  projectId: string;
+  name: string;
+  source: BaselineSource;
+  sourceHistoryGroupId: string | null;
+  createdAt: string;
+};
+
+export type BaselineSnapshot = BaselineMetadata & {
+  snapshot: ProjectSnapshot;
+};
+
+export type ListBaselinesInput = {
+  projectId: string;
+};
+
+export type ListBaselinesResponse = {
+  baselines: BaselineMetadata[];
+};
+
+export type GetBaselineInput = {
+  projectId: string;
+  baselineId: string;
+};
+
+export type CreateBaselineFromCurrentInput = {
+  projectId: string;
+  name: string;
+};
+
+export type CreateBaselineFromHistoryInput = {
+  projectId: string;
+  historyGroupId: string;
+  name: string;
+};
+
 export type ProjectCommand =
   | { type: 'switch_gantt_day_mode'; ganttDayMode: GanttDayMode }
   | { type: 'move_task'; taskId: string; startDate: string }

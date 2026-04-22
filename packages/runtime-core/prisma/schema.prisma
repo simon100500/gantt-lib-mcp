@@ -89,6 +89,11 @@ enum MutationGroupStatus {
   undone
 }
 
+enum BaselineSource {
+  current
+  history
+}
+
 enum BillingState {
   free
   trial_active
@@ -144,6 +149,7 @@ model Project {
   shareLinks    ShareLink[]
   projectEvents ProjectEvent[]
   mutationGroups MutationGroup[]
+  baselines     Baseline[]
   agentDebugLogs AgentDebugLog[]
 
   @@map("projects")
@@ -173,6 +179,62 @@ model MutationGroup {
   @@map("mutation_groups")
   @@index([projectId, createdAt(sort: Desc)])
   @@index([projectId, newVersion(sort: Desc)])
+}
+
+model Baseline {
+  id                   String         @id @default(uuid())
+  projectId            String         @map("project_id")
+  name                 String
+  source               BaselineSource
+  sourceHistoryGroupId String?        @map("source_history_group_id")
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks        BaselineTask[]
+  dependencies BaselineDependency[]
+
+  @@map("baselines")
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([projectId, source])
+  @@index([sourceHistoryGroupId])
+}
+
+model BaselineTask {
+  id          String    @id @default(uuid())
+  baselineId  String    @map("baseline_id")
+  taskId      String    @map("task_id")
+  name        String
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime  @map("end_date")
+  type        TaskType  @default(task)
+  color       String?
+  progress    Float     @default(0)
+  parentId    String?   @map("parent_id")
+  sortOrder   Int       @default(0) @map("sort_order")
+
+  baseline Baseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+
+  @@map("baseline_tasks")
+  @@unique([baselineId, taskId])
+  @@index([baselineId, sortOrder])
+  @@index([baselineId, parentId])
+}
+
+model BaselineDependency {
+  id         String         @id @default(uuid())
+  baselineId String         @map("baseline_id")
+  dependencyId String       @map("dependency_id")
+  taskId     String         @map("task_id")
+  depTaskId  String         @map("dep_task_id")
+  type       DependencyType
+  lag        Float          @default(0)
+
+  baseline Baseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+
+  @@map("baseline_dependencies")
+  @@unique([baselineId, dependencyId])
+  @@index([baselineId, taskId])
+  @@index([baselineId, depTaskId])
 }
 
 model WorkCalendar {
