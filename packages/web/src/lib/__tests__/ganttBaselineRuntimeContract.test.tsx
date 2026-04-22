@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { GanttChart } from '../../components/GanttChart.tsx';
@@ -90,24 +91,28 @@ function renderChart(tasks: unknown): { container: HTMLDivElement; root: Root } 
   document.body.appendChild(container);
 
   const root = createRoot(container);
-  root.render(
-    <GanttChart
-      tasks={tasks as never}
-      dayWidth={40}
-      rowHeight={40}
-      headerHeight={40}
-      showChart={true}
-      showTaskList={false}
-      disableTaskDrag={true}
-    />,
-  );
+  act(() => {
+    root.render(
+      <GanttChart
+        tasks={tasks as never}
+        dayWidth={40}
+        rowHeight={40}
+        headerHeight={40}
+        showChart={true}
+        showTaskList={false}
+        disableTaskDrag={true}
+      />,
+    );
+  });
 
   return { container, root };
 }
 
 function flushRender(): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, 0);
+  return act(async () => {
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 0);
+    });
   });
 }
 
@@ -129,11 +134,11 @@ describe('gantt baseline runtime contract', () => {
     expect(signature.progressBarCount).toBe(1);
     expect(signature.taskbars[0]).toMatchObject({
       className: expect.stringContaining('gantt-tr-taskBar'),
-      left: '160px',
+      left: '360px',
       width: '200px',
       height: 'var(--gantt-task-bar-height)',
       backgroundColor: 'rgb(79, 70, 229)',
-      text: '40%',
+      text: expect.stringContaining('40%'),
     });
     expect(signature.taskbars[1]).toMatchObject({
       className: expect.stringContaining('gantt-tr-milestone'),

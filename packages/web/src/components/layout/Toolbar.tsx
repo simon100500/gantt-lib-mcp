@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   Bot,
   ChartNoAxesGantt,
   Check,
@@ -6,15 +7,18 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Ellipsis,
+  EyeOff,
   FileDown,
   FileSpreadsheet,
   FlagTriangleRight,
   Funnel,
   History,
+  Layers3,
   Link,
-  Rows3,
   Lock,
   LockOpen,
+  RefreshCw,
+  Rows3,
   X,
 } from 'lucide-react';
 import { useEffect } from 'react';
@@ -24,12 +28,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { FilterPopup } from '../FilterPopup';
+
+export interface ToolbarBaselineRow {
+  id: string;
+  label: string;
+  selected?: boolean;
+}
 
 interface ToolbarProps {
   showChatToggle?: boolean;
@@ -52,6 +63,125 @@ interface ToolbarProps {
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   readOnly?: boolean;
   previewMode?: boolean;
+  baselineMenuOpen?: boolean;
+  onBaselineMenuOpenChange?: (open: boolean) => void;
+  baselineActiveLabel?: string | null;
+  baselineRows?: ToolbarBaselineRow[] | null;
+  baselineLoading?: boolean | null;
+  baselineError?: string | null;
+  baselineEmptyLabel?: string | null;
+  onSelectBaseline?: (baselineId: string) => void;
+  onHideBaseline?: () => void;
+  onRefreshBaselines?: () => void;
+}
+
+interface BaselineMenuSectionProps {
+  activeLabel: string | null;
+  rows: ToolbarBaselineRow[];
+  loading: boolean;
+  error: string | null;
+  emptyLabel: string;
+  onSelectBaseline?: (baselineId: string) => void;
+  onHideBaseline?: () => void;
+  onRefreshBaselines?: () => void;
+}
+
+function renderBaselineMenuSection({
+  activeLabel,
+  rows,
+  loading,
+  error,
+  emptyLabel,
+  onSelectBaseline,
+  onHideBaseline,
+  onRefreshBaselines,
+}: BaselineMenuSectionProps) {
+  const hasActiveBaseline = Boolean(activeLabel?.trim());
+  const hasRows = rows.length > 0;
+
+  return (
+    <>
+      <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+        Baselines
+      </DropdownMenuLabel>
+
+      {hasActiveBaseline ? (
+        <div className="px-2 pb-1.5">
+          <div className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-xs text-primary">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.04em] text-primary/80">
+              Активный baseline
+            </span>
+            <span className="mt-1 block truncate font-medium text-primary">{activeLabel}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="px-2 pb-1">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+            Загрузка baseline-ов…
+          </div>
+        </div>
+      ) : error ? (
+        <div className="px-2 pb-1">
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs text-rose-700">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0">{error}</span>
+            </div>
+          </div>
+        </div>
+      ) : hasRows ? (
+        <>
+          {rows.map((row) => (
+            <DropdownMenuItem
+              key={row.id}
+              onClick={() => onSelectBaseline?.(row.id)}
+              disabled={!onSelectBaseline}
+              className={cn(
+                'flex cursor-pointer items-center gap-2 text-slate-700',
+                row.selected && 'bg-primary/5 text-primary focus:bg-primary/10 focus:text-primary',
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-200',
+                  row.selected && 'border-primary/30 bg-primary/10 text-primary',
+                )}
+                aria-hidden="true"
+              >
+                {row.selected ? <Check className="h-3 w-3" /> : null}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm">{row.label || 'Без названия'}</span>
+              {row.selected ? <span className="text-[11px] font-medium">Активный</span> : null}
+            </DropdownMenuItem>
+          ))}
+        </>
+      ) : (
+        <div className="px-2 pb-1">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+            {emptyLabel}
+          </div>
+        </div>
+      )}
+
+      {(onRefreshBaselines || hasActiveBaseline) && <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />}
+
+      {onRefreshBaselines ? (
+        <DropdownMenuItem onClick={() => void onRefreshBaselines()} className="flex cursor-pointer items-center gap-2 text-slate-700">
+          <RefreshCw className="h-4 w-4" />
+          <span className="text-sm">Обновить baseline-ы</span>
+        </DropdownMenuItem>
+      ) : null}
+
+      {hasActiveBaseline ? (
+        <DropdownMenuItem onClick={() => void onHideBaseline?.()} disabled={!onHideBaseline} className="flex cursor-pointer items-center gap-2 text-slate-700">
+          <EyeOff className="h-4 w-4" />
+          <span className="text-sm">Скрыть baseline</span>
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  );
 }
 
 export function Toolbar({
@@ -75,6 +205,16 @@ export function Toolbar({
   onGanttDayModeChange,
   readOnly = false,
   previewMode = false,
+  baselineMenuOpen,
+  onBaselineMenuOpenChange,
+  baselineActiveLabel = null,
+  baselineRows = [],
+  baselineLoading = false,
+  baselineError = null,
+  baselineEmptyLabel = 'Сохранённые baseline-ы пока не появились.',
+  onSelectBaseline,
+  onHideBaseline,
+  onRefreshBaselines,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
@@ -101,6 +241,23 @@ export function Toolbar({
     filterExpired ||
     filterSearchText.trim().length > 0 ||
     (filterDateFrom && filterDateTo);
+
+  const normalizedBaselineRows = Array.isArray(baselineRows)
+    ? baselineRows.map((row) => ({
+        id: typeof row?.id === 'string' ? row.id : '',
+        label: typeof row?.label === 'string' ? row.label : '',
+        selected: Boolean(row?.selected),
+      }))
+    : [];
+  const normalizedBaselineError = typeof baselineError === 'string' && baselineError.trim().length > 0
+    ? baselineError
+    : null;
+  const normalizedBaselineEmptyLabel = typeof baselineEmptyLabel === 'string' && baselineEmptyLabel.trim().length > 0
+    ? baselineEmptyLabel
+    : 'Сохранённые baseline-ы пока не появились.';
+  const normalizedBaselineActiveLabel = typeof baselineActiveLabel === 'string' && baselineActiveLabel.trim().length > 0
+    ? baselineActiveLabel
+    : null;
 
   const currentViewMode = externalViewMode ?? viewMode;
   const handleViewModeChange = onViewModeChange ?? setViewMode;
@@ -225,6 +382,39 @@ export function Toolbar({
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
 
+      <DropdownMenu open={baselineMenuOpen} onOpenChange={onBaselineMenuOpenChange} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              actionButtonClassName,
+              'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
+            )}
+            title={normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Выбрать baseline'}
+            aria-label={normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Baseline menu'}
+          >
+            <Layers3 className="h-3.5 w-3.5" />
+            <span className="max-w-[180px] truncate text-xs">
+              {normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Baseline'}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+          {renderBaselineMenuSection({
+            activeLabel: normalizedBaselineActiveLabel,
+            rows: normalizedBaselineRows,
+            loading: Boolean(baselineLoading),
+            error: normalizedBaselineError,
+            emptyLabel: normalizedBaselineEmptyLabel,
+            onSelectBaseline,
+            onHideBaseline,
+            onRefreshBaselines,
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {hasShareMenuActions && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -271,7 +461,7 @@ export function Toolbar({
                       ? 'Создаём ссылку...'
                       : shareStatus === 'copied'
                         ? 'Скопировано'
-                      : shareStatus === 'error'
+                        : shareStatus === 'error'
                           ? 'Ошибка ссылки'
                           : 'Отправить ссылку'}
                   </span>
@@ -438,11 +628,12 @@ export function Toolbar({
             type="button"
             className="flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none lg:hidden"
             title="Ещё"
+            aria-label="Ещё"
           >
             <Ellipsis className="h-4 w-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem
             onClick={onCollapseAll}
             className="flex cursor-pointer items-center gap-2"
@@ -464,6 +655,19 @@ export function Toolbar({
             <FlagTriangleRight className="h-4 w-4" />
             <span className="text-sm">Сегодня</span>
           </DropdownMenuItem>
+          <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+
+          {renderBaselineMenuSection({
+            activeLabel: normalizedBaselineActiveLabel,
+            rows: normalizedBaselineRows,
+            loading: Boolean(baselineLoading),
+            error: normalizedBaselineError,
+            emptyLabel: normalizedBaselineEmptyLabel,
+            onSelectBaseline,
+            onHideBaseline,
+            onRefreshBaselines,
+          })}
+
           <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
           {showShareButton && onCreateShareLink && (
             <>
