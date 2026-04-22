@@ -352,6 +352,19 @@ describe('staged mutation orchestrator', () => {
       }),
       /распознано/i,
     );
+    assert.match(
+      buildMutationSuccessMessage({
+        changedTaskIds: ['container-facade:cleaning', 'container-facade'],
+        changedTasks: [
+          { id: 'container-facade', name: 'Фасадные системы' },
+          { id: 'container-facade:cleaning', name: 'Клининг' },
+        ],
+        createdTasks: [{ id: 'container-facade:cleaning', name: 'Клининг' }],
+        route: 'fast_path',
+        intentType: 'add_single_task',
+      }),
+      /добавлена задача «Клининг»/i,
+    );
     const worklistArtifactMessage = buildMutationSuccessMessage({
       changedTaskIds: ['aggregate', 'roof', 'windows', 'facade'],
       changedTasks: [
@@ -479,6 +492,113 @@ describe('staged mutation orchestrator', () => {
     assert.equal(finalOutcome.verificationVerdict, 'accepted');
     assert.equal(finalOutcome.failureReason, undefined);
     assert.match(result.assistantResponse ?? '', /Штукатурк/i);
+  });
+
+  it('loads all task pages after add_single_task so the created task appears in the response and broadcast snapshot', async () => {
+    const tasksBefore = Array.from({ length: 100 }, (_, index) => ({
+      id: `task-${index + 1}`,
+      name: index === 40 ? 'Фасадные системы' : `Задача ${index + 1}`,
+      startDate: '2026-04-01',
+      endDate: '2026-04-02',
+      parentId: index === 40 ? 'phase-facade' : undefined,
+    }));
+    const tasksAfter = [
+      ...tasksBefore,
+      {
+        id: 'task-41:klining',
+        name: 'Клининг',
+        startDate: '2026-04-03',
+        endDate: '2026-04-03',
+        parentId: 'task-41',
+      },
+    ];
+    const listCalls: Array<{ limit?: number; offset?: number }> = [];
+
+    const result = await runStagedMutation({
+      userMessage: 'Добавь клининг в фасадные системы',
+      projectId: 'project-1',
+      projectVersion: 8,
+      sessionId: 'session-1',
+      runId: 'run-pagination-1',
+      tasksBefore,
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+        USE_SEMANTIC_PLANNER: 'true',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async (_projectId, _parentId, limit = 100, offset = 0) => {
+          listCalls.push({ limit, offset });
+          const pageTasks = tasksAfter.slice(offset, offset + limit);
+          return {
+            tasks: pageTasks,
+            hasMore: offset + pageTasks.length < tasksAfter.length,
+            total: tasksAfter.length,
+          };
+        },
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => ([
+          {
+            taskId: 'task-41',
+            name: 'Фасадные системы',
+            parentId: 'phase-facade',
+            path: ['Контур и фасады', 'Фасадные системы'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-02',
+            matchType: 'exact',
+            score: 1,
+          },
+        ]),
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number }) => ({
+          accepted: true,
+          clientRequestId: 'req-pagination-1',
+          baseVersion: request.baseVersion,
+          newVersion: request.baseVersion + 1,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: ['task-41:klining', 'task-41'],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        }),
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          ambiguity: 'none',
+          operations: [{
+            action: 'add_task',
+            title: 'клининг',
+            taskType: 'task',
+            durationDays: 1,
+            placement: {
+              mode: 'inside_tail',
+              parentHint: 'фасадные системы',
+            },
+          }],
+        }),
+      }),
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.equal(result.tasksAfter?.length, 101);
+    assert.match(result.assistantResponse ?? '', /добавлена задача «Клининг»/i);
+    assert.deepEqual(listCalls, [
+      { limit: 1000, offset: 0 },
+    ]);
   });
 
   it('returns a typed controlled failure when add intents cannot resolve a container', async () => {

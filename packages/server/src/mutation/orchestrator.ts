@@ -120,6 +120,27 @@ export type RunStagedMutationInput = {
   directSplitTaskRunner?: (input: RunDirectSplitTaskInput) => Promise<RunDirectSplitTaskResult>;
 } & Partial<MutationHistoryContext>;
 
+async function loadAllProjectTasks(
+  taskService: MutationServices['taskService'],
+  projectId: string,
+): Promise<MutationTaskSnapshot[]> {
+  const pageSize = 1000;
+  let offset = 0;
+  const allTasks: MutationTaskSnapshot[] = [];
+
+  while (true) {
+    const page = await taskService.list(projectId, undefined, pageSize, offset);
+    allTasks.push(...page.tasks);
+    if (!page.hasMore) {
+      return allTasks;
+    }
+    offset += page.tasks.length;
+    if (page.tasks.length === 0) {
+      return allTasks;
+    }
+  }
+}
+
 function useSemanticPlanner(input: RunStagedMutationInput): boolean {
   const flag = input.env.USE_SEMANTIC_PLANNER ?? process.env.USE_SEMANTIC_PLANNER ?? 'false';
   return flag !== 'false';
@@ -435,8 +456,10 @@ export async function runStagedMutation(
     });
 
     const tasksAfter = execution.status === 'completed'
-      ? (await input.taskService.list(input.projectId)).tasks
+      ? await loadAllProjectTasks(input.taskService, input.projectId)
       : input.tasksBefore;
+    const tasksBeforeIds = new Set(input.tasksBefore.map((task) => task.id));
+    const createdTasks = tasksAfter.filter((task) => !tasksBeforeIds.has(task.id));
     const knownChangedTasks = Array.from(
       new Map(
         [...tasksAfter, ...input.tasksBefore].map((task) => [task.id, task]),
@@ -446,6 +469,7 @@ export async function runStagedMutation(
       ? buildMutationSuccessMessage({
           changedTaskIds: execution.changedTaskIds,
           changedTasks: knownChangedTasks,
+          createdTasks,
           route: semanticIntent.routeEnvelope.route,
           intentType: semanticIntent.intentType,
         })
@@ -862,8 +886,10 @@ export async function runStagedMutation(
     });
 
     const tasksAfter = execution.status === 'completed'
-      ? (await input.taskService.list(input.projectId)).tasks
+      ? await loadAllProjectTasks(input.taskService, input.projectId)
       : input.tasksBefore;
+    const tasksBeforeIds = new Set(input.tasksBefore.map((task) => task.id));
+    const createdTasks = tasksAfter.filter((task) => !tasksBeforeIds.has(task.id));
     const knownChangedTasks = Array.from(
       new Map(
         [...tasksAfter, ...input.tasksBefore].map((task) => [task.id, task]),
@@ -873,6 +899,7 @@ export async function runStagedMutation(
       ? buildMutationSuccessMessage({
           changedTaskIds: execution.changedTaskIds,
           changedTasks: knownChangedTasks,
+          createdTasks,
           route: intent.routeEnvelope.route,
           intentType: intent.intentType,
         })

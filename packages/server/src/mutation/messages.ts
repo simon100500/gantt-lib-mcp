@@ -17,6 +17,7 @@ type MutationFailureMessageContext = {
 type MutationSuccessMessageInput = {
   changedTaskIds: string[];
   changedTasks?: MutationTaskSnapshot[];
+  createdTasks?: MutationTaskSnapshot[];
   route?: MutationRoute;
   intentType?: MutationIntentType;
   warnings?: string[];
@@ -109,6 +110,7 @@ export function buildMutationFailureMessage(
 export function buildMutationSuccessMessage(input: MutationSuccessMessageInput): string {
   const changedTaskSet = new Set(input.changedTaskIds);
   const changedTasks = (input.changedTasks ?? []).filter((task) => changedTaskSet.has(task.id));
+  const createdTasks = input.createdTasks ?? [];
   const warningsSuffix = input.warnings && input.warnings.length > 0
     ? ` Предупреждения: ${input.warnings.join('; ')}`
     : '';
@@ -118,6 +120,13 @@ export function buildMutationSuccessMessage(input: MutationSuccessMessageInput):
     const targetName = input.specializedTargetName ?? changedTasks[0]?.name ?? 'выбранная задача';
     const childCount = childTasks.length > 0 ? childTasks.length : changedTaskSet.size;
     return `Специализированный маршрут распознан: задача «${targetName}» детализирована, изменено ${childCount} подзадач.${warningsSuffix}`.trim();
+  }
+
+  if (input.intentType === 'add_single_task' && createdTasks.length > 0) {
+    if (createdTasks.length === 1) {
+      return `Распознано изменение по маршруту ${input.route ?? 'fast_path'}: добавлена задача${formatTaskList(createdTasks)}.${warningsSuffix}`.trim();
+    }
+    return `Распознано изменение по маршруту ${input.route ?? 'fast_path'}: добавлены задачи${formatTaskList(createdTasks)}.${warningsSuffix}`.trim();
   }
 
   if (changedTasks.length > 0) {

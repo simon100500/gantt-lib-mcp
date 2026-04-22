@@ -83,6 +83,27 @@ type DirectSplitPayload = {
   nodes?: unknown;
 };
 
+async function loadAllProjectTasks(
+  taskService: SplitTaskServices['taskService'],
+  projectId: string,
+): Promise<MutationTaskSnapshot[]> {
+  const pageSize = 1000;
+  let offset = 0;
+  const allTasks: MutationTaskSnapshot[] = [];
+
+  while (true) {
+    const page = await taskService.list(projectId, undefined, pageSize, offset);
+    allTasks.push(...page.tasks);
+    if (!page.hasMore) {
+      return allTasks;
+    }
+    offset += page.tasks.length;
+    if (page.tasks.length === 0) {
+      return allTasks;
+    }
+  }
+}
+
 function buildSdkEnv(env: SplitTaskEnv): Record<string, string> {
   const sdkEnv: Record<string, string> = {
     OPENAI_API_KEY: env.OPENAI_API_KEY,
@@ -322,8 +343,8 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const debugLog = input.writeDebugLog ?? writeServerDebugLog;
   const resolveLatestVisibleGroupId = input.getLatestVisibleGroupId
     ?? getLatestVisibleHistoryGroupId;
-  const listed = await input.services.taskService.list(input.projectId);
-  const taskBefore = listed.tasks.find((task) => task.id === input.taskId);
+  const tasksBefore = await loadAllProjectTasks(input.services.taskService, input.projectId);
+  const taskBefore = tasksBefore.find((task) => task.id === input.taskId);
   if (!taskBefore) {
     throw new Error('Task not found in current project');
   }
@@ -416,13 +437,13 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     },
     resolutionContext,
     userMessage: userTrace,
-    tasksBefore: listed.tasks as MutationTaskSnapshot[],
+    tasksBefore,
   });
 
   const execution = await executeMutationPlan({
     projectId: input.projectId,
     projectVersion,
-    tasksBefore: listed.tasks as MutationTaskSnapshot[],
+    tasksBefore,
     plan,
     history: {
       groupId: historyGroupId,
@@ -437,7 +458,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     throw new Error(execution.userFacingMessage || 'Direct split task execution failed');
   }
 
-  const { tasks: tasksAfter } = await input.services.taskService.list(input.projectId);
+  const tasksAfter = await loadAllProjectTasks(input.services.taskService, input.projectId);
   const assistantResponse = `Задача «${taskName}» детализирована на ${fragmentPlan.nodes.length} подзадач.`;
 
   await input.services.messageService.add('assistant', assistantResponse, input.projectId, {
