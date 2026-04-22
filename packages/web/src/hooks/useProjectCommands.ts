@@ -46,7 +46,7 @@ function normalizeDependencies(dependencies: TaskDependency[] | undefined): Task
   }));
 }
 
-function createHistoryGroup(title: string, finalizeGroup: boolean, seed?: {
+export function createHistoryGroup(title: string, finalizeGroup: boolean, seed?: {
   groupId: string;
   requestContextId: string;
 }): FrontendHistoryGroupContext {
@@ -59,7 +59,7 @@ function createHistoryGroup(title: string, finalizeGroup: boolean, seed?: {
   };
 }
 
-function commandChangesSchedule(command: FrontendProjectCommand): boolean {
+export function commandChangesSchedule(command: FrontendProjectCommand): boolean {
   return command.type === 'move_task'
     || command.type === 'resize_task'
     || command.type === 'set_task_start'
@@ -80,7 +80,7 @@ function commandChangesSchedule(command: FrontendProjectCommand): boolean {
     );
 }
 
-function resolveApplyChangesTitle(commands: FrontendProjectCommand[]): string {
+export function resolveApplyChangesTitle(commands: FrontendProjectCommand[]): string {
   if (commands.some(commandChangesSchedule)) {
     return 'Пользователь — Изменил график';
   }

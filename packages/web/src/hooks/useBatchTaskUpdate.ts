@@ -7,6 +7,7 @@ import { useProjectCommands, type TaskCommandResult, buildCommandsFromDiff } fro
 import { useCommandCommit } from './useCommandCommit';
 import { getProjectScheduleOptions } from '../lib/projectScheduleOptions';
 import { useAuthStore } from '../stores/useAuthStore';
+import { createHistoryGroup, resolveApplyChangesTitle } from './useProjectCommands';
 
 const EMPTY_CALENDAR_DAYS: CalendarDay[] = [];
 
@@ -33,6 +34,32 @@ function dedupeTasksById(tasks: Task[]): Task[] {
     byId.set(task.id, task);
   }
   return Array.from(byId.values());
+}
+
+function resolveBatchHistoryTitle(commands: FrontendProjectCommand[]): string {
+  if (
+    commands.length === 2
+    && commands[0]?.type === 'create_tasks_batch'
+    && commands[1]?.type === 'reorder_tasks'
+  ) {
+    return 'Пользователь — Дублировал задачу';
+  }
+
+  if (
+    commands.length === 1
+    && commands[0]?.type === 'create_tasks_batch'
+  ) {
+    return 'Пользователь — Создал задачи';
+  }
+
+  if (
+    commands.length === 1
+    && commands[0]?.type === 'delete_tasks'
+  ) {
+    return 'Пользователь — Удалил задачи';
+  }
+
+  return resolveApplyChangesTitle(commands);
 }
 
 export interface UseBatchTaskUpdateOptions {
@@ -175,11 +202,23 @@ export function useBatchTaskUpdate({
   }, [commitCommand]);
 
   const commitCommandsOrThrow = useCallback(async (commands: FrontendProjectCommand[]) => {
-    for (const command of commands) {
+    const historySeed = {
+      groupId: crypto.randomUUID(),
+      requestContextId: crypto.randomUUID(),
+    };
+    const historyTitle = resolveBatchHistoryTitle(commands);
+
+    for (const [index, command] of commands.entries()) {
       console.log('[UI->COMMIT] command', command);
-      await commitOrThrow(command);
+      const result = await commitCommand(
+        command,
+        createHistoryGroup(historyTitle, index === commands.length - 1, historySeed),
+      );
+      if (!result.accepted) {
+        throw new Error(`Command rejected: ${result.reason}`);
+      }
     }
-  }, [commitOrThrow]);
+  }, [commitCommand]);
 
   const setProtocolPreview = useCallback((commands: FrontendProjectCommand[]) => {
     if (!isAuthenticatedMode || commands.length === 0) {
