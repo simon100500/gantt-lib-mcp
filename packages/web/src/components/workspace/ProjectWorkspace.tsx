@@ -166,6 +166,7 @@ export function ProjectWorkspace({
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setWorkspace = useUIStore((state) => state.setWorkspace);
   const setChatComposerDraft = useUIStore((state) => state.setChatComposerDraft);
+  const setTempHighlightedTaskId = useUIStore((state) => state.setTempHighlightedTaskId);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
 
@@ -257,6 +258,7 @@ export function ProjectWorkspace({
   const previousGanttDayModeRef = useRef(ganttDayMode);
   const [splitTaskDraft, setSplitTaskDraft] = useState<Task | null>(null);
   const [taskChatDraft, setTaskChatDraft] = useState<Task | null>(null);
+  const taskReferenceHighlightTimeoutRef = useRef<number | null>(null);
   const {
     items: historyItems,
     loading: historyLoading,
@@ -308,7 +310,7 @@ export function ProjectWorkspace({
     const commands: TaskListMenuCommand<Task>[] = [
       {
         id: 'send-task-to-chat',
-        label: 'Действие...',
+        label: 'Выполнить...',
         icon: <WandSparkles className="h-4 w-4" />,
         onSelect: (row) => setTaskChatDraft(row),
       },
@@ -331,6 +333,26 @@ export function ProjectWorkspace({
     setChatComposerDraft(buildTaskChatMention(task));
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
   }, [setChatComposerDraft, setWorkspace]);
+
+  const handleTaskReferenceClick = useCallback((taskId: string) => {
+    ganttRef.current?.scrollToRow(taskId);
+    setTempHighlightedTaskId(taskId);
+
+    if (taskReferenceHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
+    }
+
+    taskReferenceHighlightTimeoutRef.current = window.setTimeout(() => {
+      setTempHighlightedTaskId(null);
+      taskReferenceHighlightTimeoutRef.current = null;
+    }, 2000);
+  }, [ganttRef, setTempHighlightedTaskId]);
+
+  useEffect(() => () => {
+    if (taskReferenceHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
+    }
+  }, []);
 
   const handleSplitTaskSubmit = useCallback(async (details: string) => {
     if (!splitTaskDraft || !onSplitTask) {
@@ -629,6 +651,7 @@ export function ProjectWorkspace({
               messages={chatMessages}
               streaming={streaming}
               onSend={onSend}
+              onTaskReferenceClick={handleTaskReferenceClick}
               disabled={aiThinking || effectiveChatDisabled}
               connected={displayConnected}
               usage={chatUsage}

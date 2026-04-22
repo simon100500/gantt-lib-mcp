@@ -22,6 +22,7 @@ interface ChatSidebarProps {
   messages: ChatMessage[];
   streaming: string;
   onSend: (text: string) => void;
+  onTaskReferenceClick?: (taskId: string) => void;
   disabled: boolean;
   connected: boolean;
   usage?: UsageStatus | SubscriptionStatus | null;
@@ -48,7 +49,7 @@ const QUICK_CHIPS = [
 
 const TASK_REFERENCE_PATTERN = /\[task:([^|\]]+)\|([^\]]+)\]/g;
 
-function renderMessageContent(content: string) {
+function renderMessageContent(content: string, onTaskReferenceClick?: (taskId: string) => void) {
   const parts: React.ReactNode[] = [];
   let cursor = 0;
 
@@ -63,14 +64,19 @@ function renderMessageContent(content: string) {
     }
 
     parts.push(
-      <span
+      <button
         key={`${taskId}-${start}`}
-        className="mx-0.5 inline-flex max-w-full items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 align-middle text-[12px] font-medium text-sky-800 whitespace-normal break-words"
+        type="button"
+        onClick={() => onTaskReferenceClick?.(taskId)}
+        className={cn(
+          "mx-0.5 inline-flex max-w-full items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 align-middle text-left text-[12px] font-medium text-sky-800 whitespace-normal break-words transition-colors",
+          onTaskReferenceClick && "cursor-pointer hover:border-sky-300 hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-1",
+        )}
         title={`${taskName} (${taskId})`}
       >
         <span className="sr-only">{`${taskName} ${taskId}`}</span>
         <span>{taskName}</span>
-      </span>,
+      </button>,
     );
 
     cursor = start + fullMatch.length;
@@ -91,6 +97,7 @@ export function ChatSidebar({
   messages,
   streaming,
   onSend,
+  onTaskReferenceClick,
   disabled,
   connected,
   usage,
@@ -466,7 +473,7 @@ export function ChatSidebar({
                       : "rounded-bl-sm bg-slate-50 text-slate-800",
                   )}
                 >
-                  {renderMessageContent(msg.content)}
+                  {renderMessageContent(msg.content, onTaskReferenceClick)}
                 </div>
               </div>
             )}
