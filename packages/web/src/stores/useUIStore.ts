@@ -85,6 +85,7 @@ interface UIState {
   shareStatus: ShareStatus;
   shareLinkUrl: string | null;
   savingState: SavingState;
+  chatComposerDraft: string;
   aiMutationLock: {
     active: boolean;
     stage: AiMutationStage;
@@ -120,6 +121,8 @@ interface UIState {
   setShareStatus: (status: ShareStatus) => void;
   setShareLinkUrl: (url: string | null) => void;
   setSavingState: (status: SavingState) => void;
+  setChatComposerDraft: (value: string) => void;
+  clearChatComposerDraft: () => void;
   setAiMutationLock: (lock: {
     active: boolean;
     stage?: AiMutationStage;
@@ -163,6 +166,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   shareStatus: 'idle',
   shareLinkUrl: null,
   savingState: 'idle',
+  chatComposerDraft: '',
   aiMutationLock: {
     active: false,
     stage: 'thinking',
@@ -209,6 +213,8 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setShareLinkUrl: (shareLinkUrl) => set({ shareLinkUrl }),
   setSavingState: (savingState) => set({ savingState }),
+  setChatComposerDraft: (chatComposerDraft) => set({ chatComposerDraft }),
+  clearChatComposerDraft: () => set({ chatComposerDraft: '' }),
   setAiMutationLock: (lock) => set((state) => ({
     aiMutationLock: {
       active: lock.active,

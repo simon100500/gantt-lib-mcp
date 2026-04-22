@@ -3,6 +3,7 @@ import { ArrowRight, ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, RotateCcw, 
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
+import { useUIStore } from "../stores/useUIStore.ts";
 
 export interface ChatMessage {
   id: string;
@@ -45,6 +46,47 @@ const QUICK_CHIPS = [
   "Показать сводку",
 ];
 
+const TASK_REFERENCE_PATTERN = /\[task:([^|\]]+)\|([^\]]+)\]/g;
+
+function renderMessageContent(content: string) {
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(TASK_REFERENCE_PATTERN)) {
+    const fullMatch = match[0];
+    const taskId = match[1];
+    const taskName = match[2];
+    const start = match.index ?? 0;
+
+    if (start > cursor) {
+      parts.push(content.slice(cursor, start));
+    }
+
+    parts.push(
+      <span
+        key={`${taskId}-${start}`}
+        className="mx-0.5 inline-flex max-w-full items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 align-middle text-[12px] font-medium text-sky-800 whitespace-normal break-words"
+        title={`${taskName} (${taskId})`}
+      >
+        <span className="sr-only">{`${taskName} ${taskId}`}</span>
+        <span>{taskName}</span>
+      </span>,
+    );
+
+    cursor = start + fullMatch.length;
+  }
+
+  if (cursor === 0) {
+    return content;
+  }
+
+  if (cursor < content.length) {
+    parts.push(content.slice(cursor));
+  }
+
+  return parts;
+}
+
 export function ChatSidebar({
   messages,
   streaming,
@@ -66,6 +108,8 @@ export function ChatSidebar({
   activePreviewGroupId = null,
 }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
+  const chatComposerDraft = useUIStore((state) => state.chatComposerDraft);
+  const clearChatComposerDraft = useUIStore((state) => state.clearChatComposerDraft);
   const [currentPhrase, setCurrentPhrase] = useState("");
   const [pendingApplyMessage, setPendingApplyMessage] = useState<ChatMessage | null>(null);
   const phraseIteratorRef = useRef(createPhraseIterator());
@@ -74,9 +118,57 @@ export function ChatSidebar({
   const isEmpty = messages.length === 0 && !streaming && !loading;
   const resolvedDisabledReason = disabledReason ?? (disabled ? "Assistant думает…" : null);
 
+  function resizeTextarea() {
+    if (!inputRef.current) {
+      return;
+    }
+
+    inputRef.current.style.height = "auto";
+    const newHeight = inputRef.current.scrollHeight;
+    inputRef.current.style.height = `${newHeight}px`;
+    inputRef.current.style.overflowY = newHeight > 224 ? "auto" : "hidden";
+  }
+
+  function focusComposer(moveCursorToEnd = false) {
+    if (!inputRef.current) {
+      return;
+    }
+
+    inputRef.current.focus({ preventScroll: true });
+    if (moveCursorToEnd) {
+      const valueLength = inputRef.current.value.length;
+      inputRef.current.setSelectionRange(valueLength, valueLength);
+    }
+  }
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages, streaming]);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [inputValue]);
+
+  useEffect(() => {
+    if (!chatComposerDraft) {
+      return;
+    }
+
+    setInputValue(chatComposerDraft);
+    window.requestAnimationFrame(() => {
+      if (!inputRef.current) {
+        return;
+      }
+
+      resizeTextarea();
+      focusComposer(true);
+      window.setTimeout(() => {
+        resizeTextarea();
+        focusComposer(true);
+      }, 0);
+    });
+    clearChatComposerDraft();
+  }, [chatComposerDraft, clearChatComposerDraft]);
 
   useEffect(() => {
     if (!loading || streaming) {
@@ -102,21 +194,17 @@ export function ChatSidebar({
     }
     onSend(text);
     setInputValue("");
-    if (inputRef.current) inputRef.current.style.height = "auto";
-    if (inputRef.current) inputRef.current.style.overflowY = "hidden";
+    clearChatComposerDraft();
   }
 
   function handleChip(chip: string) {
     setInputValue(chip + " ");
+    clearChatComposerDraft();
     inputRef.current?.focus();
   }
 
   function handleTextareaInput(e: React.FormEvent<HTMLTextAreaElement>) {
-    const el = e.currentTarget;
-    el.style.height = "auto";
-    const newHeight = el.scrollHeight;
-    el.style.height = `${newHeight}px`;
-    el.style.overflowY = newHeight > 120 ? "auto" : "hidden";
+    resizeTextarea();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -317,7 +405,7 @@ export function ChatSidebar({
                       : "rounded-bl-sm bg-slate-50 text-slate-800",
                   )}
                 >
-                  {msg.content}
+                  {renderMessageContent(msg.content)}
                 </div>
               </div>
             )}
@@ -398,7 +486,12 @@ export function ChatSidebar({
           name="message"
           rows={1}
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            if (chatComposerDraft) {
+              clearChatComposerDraft();
+            }
+          }}
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
           placeholder={resolvedDisabledReason ?? "Что хотите сделать?"}
@@ -406,7 +499,7 @@ export function ChatSidebar({
           title={resolvedDisabledReason ?? undefined}
           autoComplete="off"
           spellCheck={false}
-          style={{ maxHeight: "7.5rem" }}
+          style={{ maxHeight: "14rem" }}
           className={cn(
             "flex-1 resize-none overflow-y-auto rounded-md px-3 py-2 text-sm leading-relaxed",
             "border border-slate-200 bg-slate-50 placeholder:text-slate-400",

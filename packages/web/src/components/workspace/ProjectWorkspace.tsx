@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle, MessageSquare } from 'lucide-react';
+import { Check, ListTree, LoaderCircle, MessageSquare, Send } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskListMenuCommand } from 'gantt-lib';
 
@@ -104,6 +104,10 @@ function buildCheckpointLabel(groupId: string, createdAt?: string): string {
   return 'Версия';
 }
 
+function buildTaskChatMention(task: Task): string {
+  return `[task:${task.id}|${task.name}]\n\n`;
+}
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -159,6 +163,8 @@ export function ProjectWorkspace({
   const searchResults = useUIStore((state) => state.searchResults);
   const filterMode = useUIStore((state) => state.filterMode);
   const setViewMode = useUIStore((state) => state.setViewMode);
+  const setWorkspace = useUIStore((state) => state.setWorkspace);
+  const setChatComposerDraft = useUIStore((state) => state.setChatComposerDraft);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
 
@@ -293,20 +299,34 @@ export function ProjectWorkspace({
   }, [batchUpdate, effectiveReadOnly, ganttDayMode, previewModeActive, setTasks, tasks, weekendPredicate]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
-    if (!onSplitTask || effectiveReadOnly || chatDisabled) {
+    if (effectiveReadOnly || chatDisabled || !showChat) {
       return [];
     }
 
-    return [
+    const commands: TaskListMenuCommand<Task>[] = [
       {
+        id: 'send-task-to-chat',
+        label: 'В чат',
+        icon: <Send className="h-4 w-4" />,
+        onSelect: (row) => {
+          setChatComposerDraft(buildTaskChatMention(row));
+          setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
+        },
+      },
+    ];
+
+    if (onSplitTask) {
+      commands.push({
         id: 'split-task-with-ai',
         label: 'Разбить задачу...',
         icon: <ListTree className="h-4 w-4" />,
         scope: 'linear',
         onSelect: (row) => setSplitTaskDraft(row),
-      },
-    ];
-  }, [chatDisabled, effectiveReadOnly, onSplitTask]);
+      });
+    }
+
+    return commands;
+  }, [chatDisabled, effectiveReadOnly, onSplitTask, setChatComposerDraft, setWorkspace, showChat]);
 
   const handleSplitTaskSubmit = useCallback(async (details: string) => {
     if (!splitTaskDraft || !onSplitTask) {
