@@ -396,7 +396,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
       routeEnvelope: {
         route: 'specialized_fast_path',
         intentFamily: 'structure',
-        intentType: 'expand_wbs',
+        intentType: 'decompose_task',
         confidence: 1,
         riskLevel: 'S2',
         params: {
@@ -404,7 +404,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
         },
         ambiguities: [],
       },
-      intentType: 'expand_wbs',
+      intentType: 'decompose_task',
       confidence: 1,
       rawRequest: userTrace,
       normalizedRequest: userTrace.toLowerCase(),

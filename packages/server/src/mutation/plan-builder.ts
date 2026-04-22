@@ -312,6 +312,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       break;
     }
 
+    case 'decompose_task':
     case 'expand_wbs': {
       const anchorTaskId = targetTaskId;
       const fragmentPlan = intent.fragmentPlan;
