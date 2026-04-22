@@ -103,6 +103,12 @@ export type ResolvedMutationContext = {
   selectedSuccessorTaskId: string | null;
   placementPolicy: PlacementPolicy;
   confidence: number;
+  ambiguities: string[];
+  specializedExecutor?: {
+    executor: string;
+    ready: boolean;
+    reason?: string;
+  };
 };
 
 export type MutationPlan = {

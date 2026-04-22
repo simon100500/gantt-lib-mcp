@@ -3,6 +3,12 @@ import type { MutationExecutionMode, MutationIntent } from './types.js';
 export function selectMutationExecutionMode(intent: MutationIntent): MutationExecutionMode {
   switch (intent.routeEnvelope.route) {
     case 'fast_path':
+      if (
+        intent.intentType === 'add_repeated_fragment'
+        || intent.intentType === 'expand_wbs'
+      ) {
+        return 'hybrid';
+      }
       return 'deterministic';
     case 'specialized_fast_path':
       return 'hybrid';

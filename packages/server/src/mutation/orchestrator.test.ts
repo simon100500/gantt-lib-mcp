@@ -11,23 +11,43 @@ function semanticPayloadFor(userMessage: string): string {
   switch (userMessage) {
     case 'сдвинь штукатурку на 2 дня':
       return JSON.stringify({
+        route: 'fast_path',
+        intentFamily: 'task_edit',
         intentType: 'shift_relative',
         confidence: 0.92,
+        riskLevel: 'S1',
+        params: { deltaDays: 2 },
+        ambiguities: [],
         entitiesMentioned: ['штукатурка'],
         deltaDays: 2,
       });
     case 'добавь сдачу технадзору':
       return JSON.stringify({
+        route: 'fast_path',
+        intentFamily: 'task_edit',
         intentType: 'add_single_task',
         confidence: 0.93,
+        riskLevel: 'S1',
+        params: {
+          taskTitle: 'Сдача технадзору',
+          durationDays: 1,
+        },
+        ambiguities: [],
         entitiesMentioned: ['сдача технадзору'],
         taskTitle: 'Сдача технадзору',
         durationDays: 1,
       });
     case 'добавь покраску обоев на каждый этаж':
       return JSON.stringify({
+        route: 'fast_path',
+        intentFamily: 'task_edit',
         intentType: 'add_repeated_fragment',
         confidence: 0.9,
+        riskLevel: 'S1',
+        params: {
+          groupScopeHint: 'этаж',
+        },
+        ambiguities: [],
         entitiesMentioned: ['покраска обоев'],
         groupScopeHint: 'этаж',
         fragmentPlan: {
@@ -37,15 +57,27 @@ function semanticPayloadFor(userMessage: string): string {
       });
     case 'на каждом этаже добавь работу (веху) сдача технадзору':
       return JSON.stringify({
+        route: 'fast_path',
+        intentFamily: 'task_edit',
         intentType: 'add_repeated_fragment',
         confidence: 0.94,
+        riskLevel: 'S1',
+        params: {
+          groupScopeHint: 'этаж',
+        },
+        ambiguities: [],
         entitiesMentioned: ['Сдача технадзору'],
         groupScopeHint: 'этаж',
       });
     case 'распиши подробнее пункт "Инженерные системы"':
       return JSON.stringify({
+        route: 'specialized_fast_path',
+        intentFamily: 'structure',
         intentType: 'expand_wbs',
         confidence: 0.91,
+        riskLevel: 'S2',
+        params: {},
+        ambiguities: [],
         entitiesMentioned: ['Инженерные системы'],
         fragmentPlan: {
           title: 'Инженерные системы',
@@ -57,21 +89,53 @@ function semanticPayloadFor(userMessage: string): string {
       });
     case 'перенеси фундамент на 2026-05-10':
       return JSON.stringify({
+        route: 'fast_path',
+        intentFamily: 'task_edit',
         intentType: 'move_to_date',
         confidence: 0.94,
+        riskLevel: 'S1',
+        params: {
+          targetDate: '2026-05-10',
+        },
+        ambiguities: [],
         entitiesMentioned: ['фундамент'],
         targetDate: '2026-05-10',
       });
+    case 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно':
+      return JSON.stringify({
+        route: 'specialized_fast_path',
+        intentFamily: 'structure',
+        intentType: 'decompose_task',
+        confidence: 0.94,
+        riskLevel: 'S2',
+        params: {
+          executor: 'split_task',
+          mode: 'by_floor',
+          range: { from: 12, to: 17 },
+        },
+        ambiguities: [],
+        entitiesMentioned: ['Бетонирование перекрытий 12-17 этажей'],
+      });
     case 'сделай что-нибудь получше':
       return JSON.stringify({
+        route: 'clarify',
+        intentFamily: 'clarification',
         intentType: 'unsupported_or_ambiguous',
         confidence: 0.25,
+        riskLevel: 'S2',
+        params: {},
+        ambiguities: ['request_goal'],
         entitiesMentioned: [],
       });
     default:
       return JSON.stringify({
+        route: 'clarify',
+        intentFamily: 'clarification',
         intentType: 'unsupported_or_ambiguous',
         confidence: 0.2,
+        riskLevel: 'S2',
+        params: {},
+        ambiguities: ['request_goal'],
         entitiesMentioned: [],
       });
   }
@@ -80,6 +144,12 @@ function semanticPayloadFor(userMessage: string): string {
 function semanticIntentQueryFor(userMessage: string) {
   return async () => ({ content: semanticPayloadFor(userMessage) });
 }
+
+const env = {
+  OPENAI_API_KEY: '',
+  OPENAI_BASE_URL: 'https://example.test',
+  OPENAI_MODEL: 'gpt-main',
+};
 
 describe('staged mutation orchestrator', () => {
   it('uses the semantic planner path under feature flag and skips changed-set verification as a separate stage', async () => {
@@ -356,7 +426,7 @@ describe('staged mutation orchestrator', () => {
     assert.equal(result.result.verificationVerdict, 'accepted');
     assert.deepEqual(loggedEvents.map((entry) => entry.event), [
       'intent_classified',
-      'execution_mode_selected',
+      'route_selected',
       'resolution_started',
       'resolution_result',
       'mutation_plan_built',
@@ -422,7 +492,7 @@ describe('staged mutation orchestrator', () => {
     assert.match(result.assistantResponse ?? '', /раздел графика/i);
     assert.deepEqual(loggedEvents.map((entry) => entry.event), [
       'intent_classified',
-      'execution_mode_selected',
+      'route_selected',
       'resolution_started',
       'resolution_result',
       'final_outcome',
@@ -779,7 +849,7 @@ describe('staged mutation orchestrator', () => {
     assert.match(result.assistantResponse ?? '', /не подтверд/i);
   });
 
-  it('keeps unsupported intents on the legacy fallback path', async () => {
+  it('stops ambiguous intents at the clarify gate instead of silently deferring to legacy', async () => {
     const result = await runStagedMutation({
       userMessage: 'сделай что-нибудь получше',
       projectId: 'project-1',
@@ -814,11 +884,118 @@ describe('staged mutation orchestrator', () => {
       semanticIntentQuery: semanticIntentQueryFor('сделай что-нибудь получше'),
     });
 
-    assert.equal(result.handled, false);
-    assert.equal(result.status, 'deferred_to_legacy');
-    assert.equal(result.legacyFallbackAllowed, true);
+    assert.equal(result.handled, true);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.legacyFallbackAllowed, false);
     assert.equal(result.intent.intentType, 'unsupported_or_ambiguous');
     assert.equal(result.executionMode, 'full_agent');
+    assert.equal(result.intent.routeEnvelope.route, 'clarify');
+  });
+
+  it('logs route_selected before resolution and execution', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+
+    await runStagedMutation({
+      userMessage: 'сдвинь штукатурку на 2 дня',
+      projectId: 'project-1',
+      projectVersion: 5,
+      sessionId: 'session-1',
+      runId: 'run-route-1',
+      tasksBefore: [{
+        id: 'task-plaster',
+        name: 'Штукатурка',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+      }],
+      env,
+      messageService: { add: async () => undefined },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => ([{
+          taskId: 'task-plaster',
+          name: 'Штукатурка',
+          parentId: null,
+          path: ['Отделка', 'Штукатурка'],
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+          matchType: 'exact',
+          score: 0.96,
+        }]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string } }) => ({
+          accepted: true,
+          clientRequestId: 'req-1',
+          baseVersion: request.baseVersion,
+          newVersion: request.baseVersion + 1,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: ['task-plaster'],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        }),
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
+      },
+      semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня'),
+    });
+
+    assert.equal(loggedEvents[0]?.event, 'intent_classified');
+    assert.equal(loggedEvents[1]?.event, 'route_selected');
+    assert.equal(loggedEvents[1]?.payload.route, 'fast_path');
+    assert.equal(loggedEvents[1]?.payload.executionMode, 'deterministic');
+    assert.equal(loggedEvents[2]?.event, 'resolution_started');
+  });
+
+  it('blocks specialized decompose_task routes behind typed gating instead of deferring to legacy', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+
+    const result = await runStagedMutation({
+      userMessage: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-decompose-1',
+      tasksBefore: [],
+      env,
+      messageService: { add: async () => undefined },
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
+      },
+      semanticIntentQuery: semanticIntentQueryFor('Разбей Бетонирование перекрытий 12-17 этажей поэтажно'),
+    });
+
+    assert.equal(result.intent.intentType, 'decompose_task');
+    assert.equal(result.intent.routeEnvelope.route, 'specialized_fast_path');
+    assert.notEqual(result.status, 'deferred_to_legacy');
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.notEqual(result.result.failureReason, undefined);
+    assert.equal(loggedEvents.some((entry) => entry.event === 'route_selected'), true);
   });
 
   it('returns multiple_low_confidence_targets for ambiguous equal-score anchors', async () => {

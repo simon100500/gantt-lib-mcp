@@ -166,6 +166,7 @@ function buildBaseContext(input: ResolveMutationContextInput): ResolvedMutationC
     selectedSuccessorTaskId: null,
     placementPolicy: 'unresolved',
     confidence: 0,
+    ambiguities: [],
   };
 }
 
@@ -228,6 +229,37 @@ export async function resolveMutationContext(
     context.selectedPredecessorTaskId = bestTask?.taskId ?? null;
     context.placementPolicy = 'no_placement_required';
     context.confidence = bestTask?.score ?? 0;
+    context.specializedExecutor = {
+      executor: 'expand_wbs',
+      ready: Boolean(bestTask && context.confidence >= 0.7),
+      reason: bestTask ? undefined : 'anchor_not_resolved',
+    };
+    return context;
+  }
+
+  if (input.intent.intentType === 'decompose_task') {
+    const taskMatches = await input.taskService.findTasksByName(input.projectId, anchorQuery, 8);
+    const bestTask = pickBestTaskMatch(taskMatches);
+
+    context.tasks = taskMatches.map(toResolutionEntity);
+    context.predecessors = bestTask ? [toResolutionEntity(bestTask)] : [];
+    context.selectedPredecessorTaskId = bestTask?.taskId ?? null;
+    context.placementPolicy = 'no_placement_required';
+    context.confidence = bestTask?.score ?? 0;
+    context.specializedExecutor = {
+      executor: typeof input.intent.routeEnvelope.params.executor === 'string'
+        ? input.intent.routeEnvelope.params.executor
+        : 'split_task',
+      ready: Boolean(bestTask && context.confidence >= 0.85),
+      reason: bestTask ? undefined : 'target_task_not_resolved',
+    };
+
+    if (!bestTask) {
+      context.ambiguities = input.intent.routeEnvelope.ambiguities.length > 0
+        ? [...input.intent.routeEnvelope.ambiguities]
+        : ['target_task'];
+    }
+
     return context;
   }
 

@@ -19,6 +19,7 @@ import type {
   MutationFailureReason,
   MutationOrchestrationResult,
   MutationTaskSnapshot,
+  MutationRouteEnvelope,
   ResolvedMutationContext,
 } from './types.js';
 
@@ -215,6 +216,10 @@ function resolveFailureReason(
     return 'expansion_anchor_not_resolved';
   }
 
+  if (intentType === 'decompose_task') {
+    return 'anchor_not_found';
+  }
+
   if (intentType === 'add_single_task') {
     if (resolutionContext.selectedContainerId && resolutionContext.placementPolicy === 'unresolved') {
       return 'placement_not_resolved';
@@ -261,8 +266,20 @@ function buildSemanticCompatIntent(
   operation: { action: string; moveMode?: string } | undefined,
   executionMode: MutationExecutionMode,
 ): MutationOrchestrationResult['intent'] {
+  const intentType = mapSemanticActionToIntentType(operation);
+  const routeEnvelope: MutationRouteEnvelope = {
+    route: executionMode === 'full_agent' ? 'agent_path' : 'fast_path',
+    intentFamily: 'semantic_planner',
+    intentType,
+    confidence: 1,
+    riskLevel: executionMode === 'full_agent' ? 'S3' : 'S1',
+    params: {},
+    ambiguities: [],
+  };
+
   return {
-    intentType: mapSemanticActionToIntentType(operation),
+    routeEnvelope,
+    intentType,
     confidence: 1,
     rawRequest: input.userMessage.trim(),
     normalizedRequest: input.userMessage.trim().replace(/\s+/g, ' ').toLowerCase(),
@@ -449,15 +466,19 @@ export async function runStagedMutation(
   });
 
   const executionMode = selectMutationExecutionMode(intent);
-  await input.logger.debug('execution_mode_selected', {
+  await input.logger.debug('route_selected', {
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
+    route: intent.routeEnvelope.route,
+    intentType: intent.intentType,
+    riskLevel: intent.routeEnvelope.riskLevel,
+    routeConfidence: intent.routeEnvelope.confidence,
     executionMode,
   });
 
   let resolutionContext: ResolvedMutationContext | null = null;
-  if (intent.requiresResolution) {
+  if (intent.requiresResolution && intent.routeEnvelope.route !== 'clarify') {
     await input.logger.debug('resolution_started', {
       runId: input.runId,
       projectId: input.projectId,
@@ -482,6 +503,94 @@ export async function runStagedMutation(
       sessionId: input.sessionId,
       resolutionContext,
     });
+  }
+
+  if (intent.routeEnvelope.route === 'clarify') {
+    return buildControlledFailure(
+      input,
+      executionMode,
+      'unsupported_mutation_shape',
+      resolutionContext,
+      null,
+      buildMutationFailureMessage('unsupported_mutation_shape', {
+        details: intent.routeEnvelope.ambiguities.join(', '),
+        resolutionContext,
+      }),
+      {
+        ...intent,
+        executionMode,
+      },
+    );
+  }
+
+  if (intent.routeEnvelope.route === 'agent_path') {
+    return buildControlledFailure(
+      input,
+      executionMode,
+      'unsupported_mutation_shape',
+      resolutionContext,
+      null,
+      buildMutationFailureMessage('unsupported_mutation_shape', {
+        details: 'Требуется расширенный агентный маршрут для этой операции.',
+        resolutionContext,
+      }),
+      {
+        ...intent,
+        executionMode,
+      },
+    );
+  }
+
+  if (intent.routeEnvelope.route === 'specialized_fast_path' && intent.intentType === 'decompose_task') {
+    if (!resolutionContext?.specializedExecutor?.ready) {
+      const failureReason = resolveFailureReason(
+        intent.intentType,
+        resolutionContext ?? {
+          projectId: input.projectId,
+          projectVersion: input.projectVersion,
+          resolutionQuery: intent.normalizedRequest,
+          containers: [],
+          groupMemberIds: [],
+          tasks: [],
+          predecessors: [],
+          successors: [],
+          selectedContainerId: null,
+          selectedPredecessorTaskId: null,
+          selectedSuccessorTaskId: null,
+          placementPolicy: 'unresolved',
+          confidence: 0,
+          ambiguities: intent.routeEnvelope.ambiguities,
+        },
+      );
+      return buildControlledFailure(
+        input,
+        executionMode,
+        failureReason,
+        resolutionContext,
+        null,
+        buildMutationFailureMessage(failureReason, { resolutionContext }),
+        {
+          ...intent,
+          executionMode,
+        },
+      );
+    }
+
+    return buildControlledFailure(
+      input,
+      executionMode,
+      'unsupported_mutation_shape',
+      resolutionContext,
+      null,
+      buildMutationFailureMessage('unsupported_mutation_shape', {
+        details: 'Специализированный split-task handoff будет подключен в следующем плане.',
+        resolutionContext,
+      }),
+      {
+        ...intent,
+        executionMode,
+      },
+    );
   }
 
   if (executionMode === 'full_agent' || intent.intentType === 'unsupported_or_ambiguous') {
