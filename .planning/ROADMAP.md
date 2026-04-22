@@ -407,7 +407,7 @@ Plans:
 **Goal:** Conversational mutation requests are routed early into strict `fast_path`, `specialized_fast_path`, `agent_path`, or `clarify` classes so simple edits stay deterministic, decomposition routes into the isolated split executor, and generic mutation-loop failures become rare for valid intents
 **Requirements**: [ARFP-01, ARFP-02, ARFP-03, ARFP-04, ARFP-05, ARFP-06]
 **Depends on:** Phase 46
-**Plans:** 4/3 plans complete
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 47-01-PLAN.md — Introduce the strict route envelope, risk bands, and route-first orchestration gate

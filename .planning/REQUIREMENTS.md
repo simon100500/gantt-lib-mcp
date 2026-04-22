@@ -68,6 +68,15 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 - [x] **HIS-04**: One agent-visible turn maps to one shared mutation group with a human-readable history title
 - [x] **HIS-05**: Web UI exposes grouped history, toolbar access, and fixed Ctrl+Z / Ctrl+Shift+Z replay shortcuts while reconciling from authoritative server snapshots
 
+### Agent Routing Fast Path
+
+- [x] **ARFP-01**: Conversational mutation intake classifies each request into one strict route envelope with `fast_path`, `specialized_fast_path`, `agent_path`, or `clarify` before execution begins
+- [x] **ARFP-02**: Route selection carries explicit confidence, risk band, and ambiguity data so unsafe or low-confidence structural requests are blocked from silent ordinary-loop fallback
+- [x] **ARFP-03**: High-confidence `decompose_task` requests hand off into a dedicated specialized executor contract instead of introducing a new low-level mutation command
+- [x] **ARFP-04**: Agent escalation is reserved for unresolved, broad, or high-risk work; natural-language phrasing alone does not force ordinary edits onto the agent path
+- [x] **ARFP-05**: Fast and specialized routes return route-aware operational messages that describe what was recognized, what changed, and any warnings
+- [x] **ARFP-06**: Telemetry and regression coverage make route choice, specialized execution, escalation boundaries, and isolation rules inspectable end to end
+
 ## Future Requirements
 
 ### Deferred to future milestones
@@ -128,15 +137,21 @@ Requirements for Plan Constraints milestone. Each maps to roadmap phases.
 | HIS-03 | Phase 44 | Complete |
 | HIS-04 | Phase 44 | Complete |
 | HIS-05 | Phase 44 | Complete |
+| ARFP-01 | Phase 47 | Complete |
+| ARFP-02 | Phase 47 | Complete |
+| ARFP-03 | Phase 47 | Complete |
+| ARFP-04 | Phase 47 | Complete |
+| ARFP-05 | Phase 47 | Complete |
+| ARFP-06 | Phase 47 | Complete |
 | OVR-01 | Phase 38 | Pending |
 | OVR-02 | Phase 38 | Pending |
 | OVR-03 | Phase 38 | Pending |
 
 **Coverage:**
-- v5.0 requirements: 33 total
-- Mapped to phases: 33
+- v5.0 requirements: 39 total
+- Mapped to phases: 39
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-04-18 after Phase 44 Plan 04 completion*
+*Last updated: 2026-04-22 after Phase 47 execution verification traceability update*
