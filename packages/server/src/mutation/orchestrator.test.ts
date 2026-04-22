@@ -458,6 +458,21 @@ describe('staged mutation orchestrator', () => {
       }),
       /распознано/i,
     );
+    const durationCascadeMessage = buildMutationSuccessMessage({
+      changedTaskIds: ['task-plaster-summary', 'task-beacons', 'task-layer'],
+      changedTasks: [
+        { id: 'task-plaster-summary', name: 'Штукатурные работы' },
+        { id: 'task-beacons', name: 'Установка штукатурных маяков' },
+        { id: 'task-layer', name: 'Нанесение штукатурного слоя' },
+      ],
+      targetTaskIds: ['task-beacons', 'task-layer'],
+      route: 'fast_path',
+      intentType: 'change_duration',
+    });
+    assert.match(durationCascadeMessage, /изменена длительность задач/i);
+    assert.match(durationCascadeMessage, /Установка штукатурных маяков/i);
+    assert.match(durationCascadeMessage, /Пересчитана ещё 1 связанная задача/i);
+    assert.doesNotMatch(durationCascadeMessage, /Штукатурные работы/i);
     assert.match(
       buildMutationSuccessMessage({
         changedTaskIds: ['container-facade:cleaning', 'container-facade'],

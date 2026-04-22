@@ -66,6 +66,49 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function collectLeafDescendantTaskIds(
+  tasks: MutationTaskSnapshot[],
+  rootTaskId: string,
+): string[] {
+  const childrenByParent = new Map<string, MutationTaskSnapshot[]>();
+
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+
+    const siblings = childrenByParent.get(task.parentId) ?? [];
+    siblings.push(task);
+    childrenByParent.set(task.parentId, siblings);
+  }
+
+  const directChildren = childrenByParent.get(rootTaskId) ?? [];
+  if (directChildren.length === 0) {
+    return [rootTaskId];
+  }
+
+  const leafIds: string[] = [];
+  const stack = [...directChildren];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+
+    const children = childrenByParent.get(current.id) ?? [];
+    if (children.length === 0) {
+      leafIds.push(current.id);
+      continue;
+    }
+
+    stack.push(...children);
+  }
+
+  const taskOrder = new Map(tasks.map((task, index) => [task.id, index]));
+  return unique(leafIds).sort((left, right) => (taskOrder.get(left) ?? 0) - (taskOrder.get(right) ?? 0));
+}
+
 function getInclusiveDurationDays(task: MutationTaskSnapshot | undefined): number | undefined {
   if (!task?.startDate || !task?.endDate) {
     return undefined;
@@ -175,23 +218,28 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       break;
 
     case 'change_duration': {
-      const targetTask = input.tasksBefore.find((task) => task.id === targetTaskId);
-      const currentDurationDays = getInclusiveDurationDays(targetTask) ?? 1;
-      const requestedDurationDays = intent.durationDays
-        ?? (typeof intent.durationDeltaDays === 'number'
-          ? Math.max(1, currentDurationDays + intent.durationDeltaDays)
-          : (intent.durationMultiplier
-            ? Math.max(1, Math.round(currentDurationDays * intent.durationMultiplier))
-            : currentDurationDays));
+      const durationTargetIds = collectLeafDescendantTaskIds(input.tasksBefore, targetTaskId);
+      operations = durationTargetIds.map((durationTargetId) => {
+        const targetTask = input.tasksBefore.find((task) => task.id === durationTargetId);
+        const currentDurationDays = getInclusiveDurationDays(targetTask) ?? 1;
+        const requestedDurationDays = intent.durationDays
+          ?? (typeof intent.durationDeltaDays === 'number'
+            ? Math.max(1, currentDurationDays + intent.durationDeltaDays)
+            : (intent.durationMultiplier
+              ? Math.max(1, Math.round(currentDurationDays * intent.durationMultiplier))
+              : currentDurationDays));
 
-      operations = [{
-        kind: 'change_task_duration',
-        taskId: targetTaskId,
-        durationDays: requestedDurationDays,
-        anchor: 'end',
-      }];
-      why = `Длительность задачи "${targetTaskId}" изменяется через typed change_duration command.`;
-      expectedChangedTaskIds = [targetTaskId];
+        return {
+          kind: 'change_task_duration' as const,
+          taskId: durationTargetId,
+          durationDays: requestedDurationDays,
+          anchor: 'end' as const,
+        };
+      });
+      why = durationTargetIds.length === 1
+        ? `Длительность задачи "${durationTargetIds[0]}" изменяется через typed change_duration command.`
+        : `Длительность сводной задачи "${targetTaskId}" раскладывается на ${durationTargetIds.length} листовых дочерних задач через typed change_duration command.`;
+      expectedChangedTaskIds = durationTargetIds;
       break;
     }
 

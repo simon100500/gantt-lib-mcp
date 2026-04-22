@@ -254,6 +254,62 @@ describe('buildMutationPlan', () => {
     assert.deepEqual(metadataPlan.expectedChangedTaskIds, ['task-cleaning']);
   });
 
+  it('expands summary duration changes to leaf child tasks', async () => {
+    const durationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь штукатурные работы в 2 раза',
+        normalizedRequest: 'увеличь штукатурные работы в 2 раза',
+        entitiesMentioned: ['штукатурные работы'],
+        requiresSchedulingPlacement: false,
+        durationDays: undefined,
+        durationMultiplier: 2,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-plaster-summary', name: 'Штукатурные работы', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-plaster-summary',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь штукатурные работы в 2 раза',
+      tasksBefore: [
+        {
+          id: 'task-plaster-summary',
+          name: 'Штукатурные работы',
+          startDate: '2026-05-01',
+          endDate: '2026-05-07',
+        },
+        {
+          id: 'task-beacons',
+          name: 'Установка штукатурных маяков',
+          parentId: 'task-plaster-summary',
+          startDate: '2026-05-01',
+          endDate: '2026-05-02',
+        },
+        {
+          id: 'task-layer',
+          name: 'Нанесение штукатурного слоя',
+          parentId: 'task-plaster-summary',
+          startDate: '2026-05-03',
+          endDate: '2026-05-05',
+        },
+        {
+          id: 'task-dry',
+          name: 'Технологическая сушка',
+          parentId: 'task-plaster-summary',
+          startDate: '2026-05-06',
+          endDate: '2026-05-07',
+        },
+      ],
+    });
+
+    assert.deepEqual(durationPlan.operations, [
+      { kind: 'change_task_duration', taskId: 'task-beacons', durationDays: 4, anchor: 'end' },
+      { kind: 'change_task_duration', taskId: 'task-layer', durationDays: 6, anchor: 'end' },
+      { kind: 'change_task_duration', taskId: 'task-dry', durationDays: 4, anchor: 'end' },
+    ]);
+    assert.deepEqual(durationPlan.expectedChangedTaskIds, ['task-beacons', 'task-layer', 'task-dry']);
+  });
+
   it('uses structured fragment plans for hybrid fan-out and WBS expansion', async () => {
     const fanoutPlan = await buildMutationPlan({
       intent: buildIntent({

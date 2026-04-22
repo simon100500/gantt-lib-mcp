@@ -459,6 +459,7 @@ export async function runStagedMutation(
                 changedTaskIds: execution.changedTaskIds,
                 changedTasks: knownChangedTasks,
                 createdTasks,
+                targetTaskIds: compiledSemanticPlan.plan.expectedChangedTaskIds,
                 route: semanticIntent.routeEnvelope.route,
                 intentType: semanticIntent.intentType,
               })
@@ -892,6 +893,7 @@ export async function runStagedMutation(
           changedTaskIds: execution.changedTaskIds,
           changedTasks: knownChangedTasks,
           createdTasks,
+          targetTaskIds: plan.expectedChangedTaskIds,
           route: intent.routeEnvelope.route,
           intentType: intent.intentType,
         })

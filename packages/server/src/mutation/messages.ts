@@ -18,6 +18,7 @@ type MutationSuccessMessageInput = {
   changedTaskIds: string[];
   changedTasks?: MutationTaskSnapshot[];
   createdTasks?: MutationTaskSnapshot[];
+  targetTaskIds?: string[];
   route?: MutationRoute;
   intentType?: MutationIntentType;
   warnings?: string[];
@@ -66,6 +67,21 @@ function formatTaskList(tasks: MutationTaskSnapshot[]): string {
   return remaining > 0 ? ` ${preview} и ещё ${remaining}` : ` ${preview}`;
 }
 
+function formatCascadeCount(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (count === 1) {
+    return 'Пересчитана ещё 1 связанная задача.';
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return `Пересчитаны ещё ${count} связанные задачи.`;
+  }
+
+  return `Пересчитано ещё ${count} связанных задач.`;
+}
+
 export function buildMutationFailureMessage(
   reason: MutationFailureReason,
   context: MutationFailureMessageContext = {},
@@ -111,6 +127,10 @@ export function buildMutationSuccessMessage(input: MutationSuccessMessageInput):
   const changedTaskSet = new Set(input.changedTaskIds);
   const changedTasks = (input.changedTasks ?? []).filter((task) => changedTaskSet.has(task.id));
   const createdTasks = input.createdTasks ?? [];
+  const targetTaskSet = new Set(input.targetTaskIds ?? []);
+  const targetTasks = targetTaskSet.size > 0
+    ? changedTasks.filter((task) => targetTaskSet.has(task.id))
+    : changedTasks;
   const warningsSuffix = input.warnings && input.warnings.length > 0
     ? ` Предупреждения: ${input.warnings.join('; ')}`
     : '';
@@ -127,6 +147,15 @@ export function buildMutationSuccessMessage(input: MutationSuccessMessageInput):
       return `Распознано изменение по маршруту ${input.route ?? 'fast_path'}: добавлена задача${formatTaskList(createdTasks)}.${warningsSuffix}`.trim();
     }
     return `Распознано изменение по маршруту ${input.route ?? 'fast_path'}: добавлены задачи${formatTaskList(createdTasks)}.${warningsSuffix}`.trim();
+  }
+
+  if (input.intentType === 'change_duration' && targetTasks.length > 0) {
+    const subject = targetTasks.length === 1 ? 'задачи' : 'задач';
+    const cascadeCount = changedTaskSet.size - targetTaskSet.size;
+    const cascadeSuffix = cascadeCount > 0
+      ? ` ${formatCascadeCount(cascadeCount)}`
+      : '';
+    return `Распознано изменение по маршруту ${input.route ?? 'fast_path'}: изменена длительность ${subject}${formatTaskList(targetTasks)}.${cascadeSuffix}${warningsSuffix}`.trim();
   }
 
   if (changedTasks.length > 0) {

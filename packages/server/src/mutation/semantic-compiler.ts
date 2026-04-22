@@ -81,6 +81,49 @@ function findTask(tasks: MutationTaskSnapshot[], taskId: string): MutationTaskSn
   return tasks.find((task) => task.id === taskId);
 }
 
+function collectLeafDescendantTaskIds(
+  tasks: MutationTaskSnapshot[],
+  rootTaskId: string,
+): string[] {
+  const childrenByParent = new Map<string, MutationTaskSnapshot[]>();
+
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+
+    const siblings = childrenByParent.get(task.parentId) ?? [];
+    siblings.push(task);
+    childrenByParent.set(task.parentId, siblings);
+  }
+
+  const directChildren = childrenByParent.get(rootTaskId) ?? [];
+  if (directChildren.length === 0) {
+    return [rootTaskId];
+  }
+
+  const leafIds: string[] = [];
+  const stack = [...directChildren];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+
+    const children = childrenByParent.get(current.id) ?? [];
+    if (children.length === 0) {
+      leafIds.push(current.id);
+      continue;
+    }
+
+    stack.push(...children);
+  }
+
+  const taskOrder = new Map(tasks.map((task, index) => [task.id, index]));
+  return unique(leafIds).sort((left, right) => (taskOrder.get(left) ?? 0) - (taskOrder.get(right) ?? 0));
+}
+
 function mapActionToPlanType(operation: ResolvedSemanticMutationPlan['operations'][number]): MutationPlan['planType'] {
   switch (operation.action) {
     case 'add_task':
@@ -125,20 +168,23 @@ export function compileSemanticMutationPlan(
   for (const operation of input.resolvedPlan.operations) {
     switch (operation.action) {
       case 'change_duration': {
-        const task = findTask(input.tasksBefore, operation.targetId);
-        const currentDurationDays = getInclusiveDurationDays(task) ?? 1;
-        const durationDays = operation.durationMode === 'absolute_days'
-          ? Math.max(1, Math.round(operation.durationValue))
-          : operation.durationMode === 'delta_days'
-            ? Math.max(1, currentDurationDays + Math.round(operation.durationValue))
-            : Math.max(1, Math.round(currentDurationDays * operation.durationValue));
-        operations.push({
-          kind: 'change_task_duration',
-          taskId: operation.targetId,
-          durationDays,
-          anchor: operation.anchor,
-        });
-        expectedChangedTaskIds.push(operation.targetId);
+        const durationTargetIds = collectLeafDescendantTaskIds(input.tasksBefore, operation.targetId);
+        for (const durationTargetId of durationTargetIds) {
+          const task = findTask(input.tasksBefore, durationTargetId);
+          const currentDurationDays = getInclusiveDurationDays(task) ?? 1;
+          const durationDays = operation.durationMode === 'absolute_days'
+            ? Math.max(1, Math.round(operation.durationValue))
+            : operation.durationMode === 'delta_days'
+              ? Math.max(1, currentDurationDays + Math.round(operation.durationValue))
+              : Math.max(1, Math.round(currentDurationDays * operation.durationValue));
+          operations.push({
+            kind: 'change_task_duration',
+            taskId: durationTargetId,
+            durationDays,
+            anchor: operation.anchor,
+          });
+          expectedChangedTaskIds.push(durationTargetId);
+        }
         break;
       }
 
@@ -276,4 +322,3 @@ export function compileSemanticMutationPlan(
     },
   };
 }
-
