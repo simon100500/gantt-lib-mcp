@@ -56,3 +56,23 @@ packages/server/gantt.db
 .venv
 packages/dashboard
 *.dump
+
+# ── GSD baseline (auto-generated) ──
+.gsd-id
+.mcp.json
+.bg-shell/
+*.code-workspace
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+target/
+vendor/
+.cache/
+tmp/
