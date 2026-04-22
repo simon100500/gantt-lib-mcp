@@ -10,12 +10,27 @@ export type MutationIntentType =
   | 'delete_task'
   | 'rename_task'
   | 'update_metadata'
+  | 'decompose_task'
   | 'expand_wbs'
   | 'restructure_branch'
   | 'validate_only'
   | 'unsupported_or_ambiguous';
 
+export type MutationRoute = 'fast_path' | 'specialized_fast_path' | 'agent_path' | 'clarify';
+
+export type MutationRiskLevel = 'S0' | 'S1' | 'S2' | 'S3';
+
 export type MutationExecutionMode = 'deterministic' | 'hybrid' | 'full_agent';
+
+export type MutationRouteEnvelope = {
+  route: MutationRoute;
+  intentFamily: string;
+  intentType: MutationIntentType;
+  confidence: number;
+  riskLevel: MutationRiskLevel;
+  params: Record<string, unknown>;
+  ambiguities: string[];
+};
 
 export type MutationFailureReason =
   | 'anchor_not_found'
@@ -29,6 +44,7 @@ export type MutationFailureReason =
   | 'expansion_anchor_not_resolved';
 
 export type MutationIntent = {
+  routeEnvelope: MutationRouteEnvelope;
   intentType: MutationIntentType;
   confidence: number;
   rawRequest: string;

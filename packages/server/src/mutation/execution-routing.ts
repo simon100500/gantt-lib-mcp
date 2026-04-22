@@ -1,24 +1,13 @@
 import type { MutationExecutionMode, MutationIntent } from './types.js';
 
 export function selectMutationExecutionMode(intent: MutationIntent): MutationExecutionMode {
-  switch (intent.intentType) {
-    case 'add_single_task':
-    case 'change_duration':
-    case 'shift_relative':
-    case 'move_to_date':
-    case 'move_in_hierarchy':
-    case 'link_tasks':
-    case 'unlink_tasks':
-    case 'delete_task':
-    case 'rename_task':
-    case 'update_metadata':
-    case 'validate_only':
+  switch (intent.routeEnvelope.route) {
+    case 'fast_path':
       return 'deterministic';
-    case 'add_repeated_fragment':
-    case 'expand_wbs':
+    case 'specialized_fast_path':
       return 'hybrid';
-    case 'restructure_branch':
-    case 'unsupported_or_ambiguous':
+    case 'agent_path':
+    case 'clarify':
       return 'full_agent';
   }
 }
