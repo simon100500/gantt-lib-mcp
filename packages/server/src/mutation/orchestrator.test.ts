@@ -317,6 +317,112 @@ describe('staged mutation orchestrator', () => {
     ]);
   });
 
+  it('falls back from semantic planner failure into the classifier path instead of deferring to legacy CLI', async () => {
+    const loggedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+
+    const result = await runStagedMutation({
+      userMessage: 'Увелись длительность штукатурки в 2 раза',
+      projectId: 'project-1',
+      projectVersion: 5,
+      sessionId: 'session-1',
+      runId: 'run-semantic-fallback-1',
+      tasksBefore: [{
+        id: 'task-plaster',
+        name: 'Штукатурка',
+        startDate: '2026-04-01',
+        endDate: '2026-04-03',
+      }],
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+        USE_SEMANTIC_PLANNER: 'true',
+      },
+      messageService: {
+        add: async () => undefined,
+      },
+      taskService: {
+        list: async () => ({
+          tasks: [{
+            id: 'task-plaster',
+            name: 'Штукатурка',
+            startDate: '2026-04-01',
+            endDate: '2026-04-06',
+          }],
+          hasMore: false,
+          total: 1,
+        }),
+        findTasksByName: async () => ([{
+          taskId: 'task-plaster',
+          name: 'Штукатурка',
+          parentId: null,
+          path: ['Отделка', 'Штукатурка'],
+          startDate: '2026-04-01',
+          endDate: '2026-04-03',
+          matchType: 'exact',
+          score: 0.96,
+        }]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string; duration?: number } }) => ({
+          accepted: true,
+          clientRequestId: 'req-semantic-fallback-1',
+          baseVersion: request.baseVersion,
+          newVersion: request.baseVersion + 1,
+          result: {
+            snapshot: { tasks: [], dependencies: [] },
+            changedTaskIds: ['task-plaster'],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          snapshot: { tasks: [], dependencies: [] },
+        }),
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: (event, payload) => {
+          loggedEvents.push({ event, payload });
+        },
+      },
+      semanticPlannerQuery: async () => ({
+        content: JSON.stringify({
+          ambiguity: 'unsupported',
+          operations: [],
+        }),
+      }),
+      semanticIntentQuery: async () => ({
+        content: JSON.stringify({
+          route: 'fast_path',
+          intentFamily: 'task_edit',
+          intentType: 'change_duration',
+          confidence: 0.82,
+          riskLevel: 'S1',
+          params: {},
+          ambiguities: [],
+          entitiesMentioned: ['штукатурка'],
+          durationMultiplier: 2,
+        }),
+      }),
+    });
+
+    assert.equal(result.handled, true);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.equal(result.intent.intentType, 'change_duration');
+    assert.equal(result.executionMode, 'deterministic');
+    assert.equal(loggedEvents.some((entry) => entry.event === 'semantic_planner_fallback_to_classifier'), true);
+    assert.equal(loggedEvents.some((entry) => entry.event === 'intent_classified'), true);
+    assert.equal(loggedEvents.some((entry) => entry.event === 'route_selected'), true);
+    assert.equal(loggedEvents.some((entry) => entry.event === 'resolution_started'), true);
+    assert.equal(loggedEvents.some((entry) => entry.event === 'resolution_result'), true);
+    assert.equal(loggedEvents.some((entry) => entry.event === 'mutation_plan_built'), true);
+    assert.match(result.assistantResponse ?? '', /Штукатурк/i);
+  });
+
   it('maps typed user-facing failure and success messages', () => {
     assert.match(
       buildMutationFailureMessage('anchor_not_found'),
