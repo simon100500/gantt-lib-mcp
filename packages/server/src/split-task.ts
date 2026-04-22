@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
 
-import type { MessageService, TaskService, CommandService } from '@gantt/mcp/services';
+import type { CommandService } from '@gantt/mcp/services';
 import { getPrisma } from '@gantt/runtime-core/prisma';
-import { historyService } from '@gantt/mcp/services';
 
 import { writeServerDebugLog } from './debug-log.js';
 import { buildMutationPlan } from './mutation/plan-builder.js';
 import { executeMutationPlan } from './mutation/execution.js';
-import type { MutationTaskSnapshot, ResolvedMutationContext, StructuredFragmentPlan } from './mutation/types.js';
+import type {
+  MutationExecutionResult,
+  MutationPlan,
+  MutationTaskSnapshot,
+  ResolvedMutationContext,
+  SpecializedExecutorResolution,
+  StructuredFragmentPlan,
+} from './mutation/types.js';
 import type { ServerMessage } from './ws.js';
 
 type SplitTaskServices = {
@@ -21,10 +27,23 @@ type SplitTaskServices = {
         requestContextId?: string;
         historyGroupId?: string;
       },
-    ): ReturnType<MessageService['add']>;
+    ): Promise<unknown>;
   };
-  taskService: Pick<TaskService, 'get' | 'list'>;
-  commandService: Pick<CommandService, 'commitCommand'>;
+  taskService: {
+    get(
+      id: string,
+      includeChildren?: boolean | 'shallow' | 'deep',
+    ): Promise<unknown>;
+    list(
+      projectId?: string,
+      parentId?: string | null,
+      limit?: number,
+      offset?: number,
+    ): Promise<{ tasks: MutationTaskSnapshot[]; hasMore?: boolean; total?: number }>;
+  };
+  commandService: {
+    commitCommand: CommandService['commitCommand'];
+  };
 };
 
 type SplitTaskEnv = {
@@ -40,9 +59,22 @@ export type RunDirectSplitTaskInput = {
   runId: string;
   taskId: string;
   details?: string;
+  handoff?: Extract<SpecializedExecutorResolution, { executor: 'split_task' }>;
   env: SplitTaskEnv;
   services: SplitTaskServices;
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
+  plannerQuery?: (prompt: string, env: SplitTaskEnv) => Promise<string>;
+  loadProjectVersion?: (projectId: string) => Promise<number>;
+  writeDebugLog?: typeof writeServerDebugLog;
+  getLatestVisibleGroupId?: (projectId: string) => Promise<string | null>;
+};
+
+export type RunDirectSplitTaskResult = {
+  execution: MutationExecutionResult;
+  assistantResponse: string;
+  tasksAfter: MutationTaskSnapshot[];
+  plan: MutationPlan;
+  fragmentPlan: StructuredFragmentPlan;
 };
 
 type DirectSplitPayload = {
@@ -279,15 +311,31 @@ async function getProjectVersion(projectId: string): Promise<number> {
   return project.version;
 }
 
-export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promise<void> {
+async function getLatestVisibleHistoryGroupId(projectId: string): Promise<string | null> {
+  const { historyService } = await import('@gantt/mcp/services');
+  return historyService.getLatestVisibleGroupId(projectId);
+}
+
+export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promise<RunDirectSplitTaskResult> {
+  const executePlannerQuery = input.plannerQuery ?? executeDirectSplitPlanningQuery;
+  const loadProjectVersion = input.loadProjectVersion ?? getProjectVersion;
+  const debugLog = input.writeDebugLog ?? writeServerDebugLog;
+  const resolveLatestVisibleGroupId = input.getLatestVisibleGroupId
+    ?? getLatestVisibleHistoryGroupId;
   const listed = await input.services.taskService.list(input.projectId);
   const taskBefore = listed.tasks.find((task) => task.id === input.taskId);
   if (!taskBefore) {
     throw new Error('Task not found in current project');
   }
 
-  const task = await input.services.taskService.get(input.taskId, 'shallow');
-  if (!task) {
+  const task = await input.services.taskService.get(input.taskId, 'shallow') as {
+    id: string;
+    name: string;
+    startDate?: string | Date;
+    endDate?: string | Date;
+    children?: Array<{ name: string }>;
+  } | undefined;
+  if (!task || typeof task.name !== 'string') {
     throw new Error('Task not found');
   }
 
@@ -297,13 +345,13 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const existingChildNames = (task.children ?? []).map((child) => child.name.trim()).filter(Boolean);
   const userTrace = buildSplitTaskTrace(taskName, input.details);
   const historyGroupId = randomUUID();
-  const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
+  const checkpointGroupId = resolveCheckpointGroupId(await resolveLatestVisibleGroupId(input.projectId));
 
   await input.services.messageService.add('user', userTrace, input.projectId, {
     requestContextId: input.runId,
     historyGroupId: checkpointGroupId,
   });
-  await writeServerDebugLog('direct_split_requested', {
+  await debugLog('direct_split_requested', {
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
@@ -322,9 +370,9 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     details: input.details,
   });
 
-  const plannerOutput = await executeDirectSplitPlanningQuery(plannerPrompt, input.env);
+  const plannerOutput = await executePlannerQuery(plannerPrompt, input.env);
   const fragmentPlan = parseFragmentPlan(plannerOutput);
-  const projectVersion = await getProjectVersion(input.projectId);
+  const projectVersion = await loadProjectVersion(input.projectId);
 
   const resolutionContext: ResolvedMutationContext = {
     projectId: input.projectId,
@@ -407,7 +455,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     },
   });
 
-  await writeServerDebugLog('direct_split_completed', {
+  await debugLog('direct_split_completed', {
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
@@ -416,4 +464,12 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     commandTypes: execution.committedCommandTypes,
     taskCountAfter: tasksAfter.length,
   });
+
+  return {
+    execution,
+    assistantResponse,
+    tasksAfter: tasksAfter as MutationTaskSnapshot[],
+    plan,
+    fragmentPlan,
+  };
 }

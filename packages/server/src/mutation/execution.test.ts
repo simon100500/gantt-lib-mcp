@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { executeMutationPlan } from './execution.js';
-import type { MutationPlan, MutationTaskSnapshot } from './types.js';
+import type { MutationPlan, MutationPlanOperation, MutationTaskSnapshot } from './types.js';
 
 function buildTask(id: string, name: string, startDate: string, endDate: string): MutationTaskSnapshot {
   return { id, name, startDate, endDate };
@@ -213,5 +213,26 @@ describe('executeMutationPlan', () => {
     assert.equal(result.status, 'completed');
     assert.equal(committedCommands[0]?.type, 'create_tasks_batch');
     assert.equal(committedCommands[0]?.tasks?.[0]?.type, 'milestone');
+  });
+
+  it('does not expose decompose_task as a low-level executable operation kind', () => {
+    const allowedOperationKinds = new Set<MutationPlanOperation['kind']>([
+      'append_task_after',
+      'append_task_before',
+      'append_task_to_container',
+      'change_task_duration',
+      'shift_task_by_delta',
+      'move_task_to_date',
+      'move_task_in_hierarchy',
+      'link_tasks',
+      'unlink_tasks',
+      'delete_task',
+      'rename_task',
+      'update_task_metadata',
+      'fanout_fragment_to_groups',
+      'expand_branch_from_plan',
+    ]);
+
+    assert.equal(allowedOperationKinds.has('decompose_task' as MutationPlanOperation['kind']), false);
   });
 });

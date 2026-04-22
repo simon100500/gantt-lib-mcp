@@ -1100,6 +1100,106 @@ describe('staged mutation orchestrator', () => {
     );
   });
 
+  it('hands high-confidence decompose_task routes to the direct split-task executor', async () => {
+    const directSplitCalls: Array<{ taskId: string; details?: string; mode?: string; rangeFrom?: number; rangeTo?: number }> = [];
+    const result = await runStagedMutation({
+      userMessage: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
+      projectId: 'project-1',
+      projectVersion: 3,
+      sessionId: 'session-1',
+      runId: 'run-decompose-4',
+      tasksBefore: [],
+      env,
+      messageService: { add: async () => undefined },
+      taskService: {
+        list: async () => ({
+          tasks: [{ id: 'task-slab:12', name: '12 этаж' }],
+        }),
+        get: async () => ({
+          id: 'task-slab',
+          name: 'Бетонирование перекрытий 12-17 этажей',
+          startDate: '2026-04-01',
+          endDate: '2026-04-12',
+          children: [],
+        }),
+        findTasksByName: async () => ([
+          {
+            taskId: 'task-slab',
+            name: 'Бетонирование перекрытий 12-17 этажей',
+            parentId: null,
+            path: ['Бетонирование перекрытий 12-17 этажей'],
+            startDate: '2026-04-01',
+            endDate: '2026-04-12',
+            matchType: 'exact',
+            score: 0.96,
+          },
+        ]),
+        findContainerCandidates: async () => [],
+        listBranchTasks: async () => [],
+        findGroupScopes: async () => [],
+      },
+      commandService: {
+        commitCommand: async () => {
+          throw new Error('not expected');
+        },
+      },
+      broadcastToSession: () => undefined,
+      logger: {
+        debug: () => undefined,
+      },
+      directSplitTaskRunner: async (input) => {
+        directSplitCalls.push({
+          taskId: input.taskId,
+          details: input.details,
+          mode: input.handoff?.mode,
+          rangeFrom: input.handoff?.rangeFrom,
+          rangeTo: input.handoff?.rangeTo,
+        });
+        return {
+          execution: {
+            status: 'completed',
+            executionMode: 'hybrid',
+            committedCommandTypes: ['create_tasks_batch'],
+            changedTaskIds: ['task-slab:12'],
+            verificationVerdict: 'accepted',
+            userFacingMessage: 'Задача «Бетонирование перекрытий 12-17 этажей» детализирована на 6 подзадач.',
+          },
+          assistantResponse: 'Задача «Бетонирование перекрытий 12-17 этажей» детализирована на 6 подзадач.',
+          tasksAfter: [{ id: 'task-slab:12', name: '12 этаж' }],
+          plan: {
+            planType: 'expand_wbs',
+            operations: [],
+            why: 'stub split result',
+            expectedChangedTaskIds: ['task-slab:12'],
+            canExecuteDeterministically: false,
+            needsAgentExecution: false,
+          },
+          fragmentPlan: {
+            title: 'Бетонирование перекрытий 12-17 этажей',
+            why: 'stub split result',
+            nodes: [],
+          },
+        };
+      },
+      semanticIntentQuery: semanticIntentQueryFor('Разбей Бетонирование перекрытий 12-17 этажей поэтажно'),
+    });
+
+    assert.deepEqual(directSplitCalls, [{
+      taskId: 'task-slab',
+      details: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
+      mode: 'by_floor',
+      rangeFrom: 12,
+      rangeTo: 17,
+    }]);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.handled, true);
+    assert.equal(result.legacyFallbackAllowed, false);
+    assert.equal(result.result.status, 'completed');
+    assert.equal(result.result.userFacingMessage, 'Задача «Бетонирование перекрытий 12-17 этажей» детализирована на 6 подзадач.');
+    assert.deepEqual(result.result.changedTaskIds, ['task-slab:12']);
+    assert.equal(result.assistantResponse, 'Задача «Бетонирование перекрытий 12-17 этажей» детализирована на 6 подзадач.');
+  });
+
   it('keeps decompose_task out of low-level mutation plan operations', () => {
     const operationKinds = new Set<MutationPlanOperation['kind']>([
       'append_task_after',
