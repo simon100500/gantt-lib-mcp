@@ -446,9 +446,14 @@ export async function runStagedMutation(
       ? buildMutationSuccessMessage({
           changedTaskIds: execution.changedTaskIds,
           changedTasks: knownChangedTasks,
+          route: semanticIntent.routeEnvelope.route,
+          intentType: semanticIntent.intentType,
         })
       : buildMutationFailureMessage(execution.failureReason ?? 'deterministic_execution_failed', {
           details: execution.userFacingMessage,
+          route: semanticIntent.routeEnvelope.route,
+          intentType: semanticIntent.intentType,
+          failedStep: 'specialized_execution',
         });
     const result = {
       ...execution,
@@ -544,6 +549,9 @@ export async function runStagedMutation(
       buildMutationFailureMessage('unsupported_mutation_shape', {
         details: intent.routeEnvelope.ambiguities.join(', '),
         resolutionContext,
+        route: intent.routeEnvelope.route,
+        intentType: intent.intentType,
+        failedStep: 'routing',
       }),
       {
         ...intent,
@@ -553,6 +561,17 @@ export async function runStagedMutation(
   }
 
   if (intent.routeEnvelope.route === 'agent_path') {
+    await input.logger.debug('agent_escalation_selected', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      route: intent.routeEnvelope.route,
+      intentType: intent.intentType,
+      riskLevel: intent.routeEnvelope.riskLevel,
+      routeConfidence: intent.routeEnvelope.confidence,
+      ambiguities: intent.routeEnvelope.ambiguities,
+      executionMode,
+    });
     return buildControlledFailure(
       input,
       executionMode,
@@ -562,6 +581,9 @@ export async function runStagedMutation(
       buildMutationFailureMessage('unsupported_mutation_shape', {
         details: 'Требуется расширенный агентный маршрут для этой операции.',
         resolutionContext,
+        route: intent.routeEnvelope.route,
+        intentType: intent.intentType,
+        failedStep: 'agent_escalation',
       }),
       {
         ...intent,
@@ -597,7 +619,12 @@ export async function runStagedMutation(
         failureReason,
         resolutionContext,
         null,
-        buildMutationFailureMessage(failureReason, { resolutionContext }),
+        buildMutationFailureMessage(failureReason, {
+          resolutionContext,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
+          failedStep: 'resolution',
+        }),
         {
           ...intent,
           executionMode,
@@ -619,6 +646,9 @@ export async function runStagedMutation(
         buildMutationFailureMessage('unsupported_mutation_shape', {
           details: 'Специализированный split-task executor недоступен для этого запуска.',
           resolutionContext,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
+          failedStep: 'specialized_execution',
         }),
         {
           ...intent,
@@ -626,6 +656,23 @@ export async function runStagedMutation(
         },
       );
     }
+
+    await input.logger.debug('specialized_executor_started', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      route: intent.routeEnvelope.route,
+      intentType: intent.intentType,
+      riskLevel: intent.routeEnvelope.riskLevel,
+      routeConfidence: intent.routeEnvelope.confidence,
+      specializedExecutor: splitTaskHandoff.executor,
+      targetTaskId: splitTaskHandoff.targetTaskId,
+      targetTaskName: splitTaskHandoff.targetTaskName,
+      mode: splitTaskHandoff.mode,
+      rangeFrom: splitTaskHandoff.rangeFrom,
+      rangeTo: splitTaskHandoff.rangeTo,
+      executionMode,
+    });
 
     const splitResult = await directSplitTaskRunner({
       projectId: input.projectId,
@@ -656,6 +703,23 @@ export async function runStagedMutation(
         commandService: input.commandService as Parameters<typeof runDirectSplitTask>[0]['services']['commandService'],
       },
       broadcastToSession: input.broadcastToSession,
+    });
+
+    await input.logger.debug('specialized_executor_completed', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      route: intent.routeEnvelope.route,
+      intentType: intent.intentType,
+      riskLevel: intent.routeEnvelope.riskLevel,
+      routeConfidence: intent.routeEnvelope.confidence,
+      specializedExecutor: splitTaskHandoff.executor,
+      targetTaskId: splitTaskHandoff.targetTaskId,
+      targetTaskName: splitTaskHandoff.targetTaskName,
+      changedTaskIds: splitResult.execution.changedTaskIds,
+      verificationVerdict: splitResult.execution.verificationVerdict,
+      status: splitResult.execution.status,
+      executionMode,
     });
 
     await input.logger.debug('final_outcome', {
@@ -809,10 +873,15 @@ export async function runStagedMutation(
       ? buildMutationSuccessMessage({
           changedTaskIds: execution.changedTaskIds,
           changedTasks: knownChangedTasks,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
         })
       : buildMutationFailureMessage(execution.failureReason ?? 'deterministic_execution_failed', {
           details: execution.userFacingMessage,
           resolutionContext,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
+          failedStep: 'specialized_execution',
         });
     const resultHistory = execution.status === 'completed'
       ? {
@@ -879,7 +948,7 @@ export async function runStagedMutation(
     'unsupported_mutation_shape',
     resolutionContext,
     null,
-    buildMutationFailureMessage('unsupported_mutation_shape', { resolutionContext }),
+      buildMutationFailureMessage('unsupported_mutation_shape', { resolutionContext }),
     {
       ...intent,
       executionMode,
