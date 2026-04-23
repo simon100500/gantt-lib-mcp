@@ -104,7 +104,9 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-  document.body.innerHTML = '';
+  act(() => {
+    document.body.innerHTML = '';
+  });
   vi.restoreAllMocks();
   useUIStore.setState({
     viewMode: 'day',
@@ -153,7 +155,7 @@ function renderToolbar({
 }: RenderOptions = {}): {
   container: HTMLDivElement;
   root: Root;
-  onCreateBaselineFromCurrent: () => void;
+  onCreateBaselineFromCurrent: (() => void) | null;
   onSelectBaseline: (baselineId: string) => void;
   onHideBaseline: () => void;
   onRefreshBaselines: () => void;
@@ -250,7 +252,9 @@ describe('Toolbar baseline menu', () => {
     });
     expect(onRefreshBaselines).toHaveBeenCalledTimes(1);
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it('renders explicit loading, error, empty, and create-in-flight states without crashing', () => {
@@ -282,7 +286,9 @@ describe('Toolbar baseline menu', () => {
     });
     expect(createItem?.getAttribute('data-disabled')).toBe('');
     expect(menuText()).toContain('Сохранить текущий график…');
-    creatingRender.root.unmount();
+    act(() => {
+      creatingRender.root.unmount();
+    });
   });
 
   it('falls back safely when active label and create props are malformed', () => {
@@ -311,7 +317,9 @@ describe('Toolbar baseline menu', () => {
     });
     expect(createItem?.getAttribute('data-disabled')).toBe('');
 
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 
   it('mirrors baseline create/select actions in the mobile overflow menu', () => {
@@ -342,21 +350,32 @@ describe('Toolbar baseline menu', () => {
     expect(document.body.textContent).toContain('Mobile baseline');
     expect(document.body.textContent).toContain('Обновить baseline-ы');
 
+    const selectedRow = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
+      const text = node.textContent ?? '';
+      return text.includes('Mobile baseline');
+    });
+    expect(selectedRow).toBeDefined();
+
+    act(() => {
+      selectedRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onSelectBaseline).toHaveBeenCalledWith('baseline-1');
+
+    act(() => {
+      moreTrigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      moreTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
     const createItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Сохранить текущий график'));
+    expect(createItem).toBeDefined();
+
     act(() => {
       createItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onCreateBaselineFromCurrent).toHaveBeenCalledTimes(1);
 
-    const mobileBaselineItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
-      const text = node.textContent ?? '';
-      return text.includes('Mobile baseline') && !text.includes('Скрыть baseline') && !text.includes('Обновить baseline-ы');
-    });
     act(() => {
-      mobileBaselineItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      root.unmount();
     });
-    expect(onSelectBaseline).toHaveBeenCalledWith('baseline-1');
-
-    root.unmount();
   });
 });

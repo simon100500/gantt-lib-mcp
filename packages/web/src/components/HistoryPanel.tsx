@@ -1,4 +1,4 @@
-import { AlertCircle, Bot, Clock3, History, MoreHorizontal, RotateCcw, User, X } from 'lucide-react';
+import { AlertCircle, Bot, Clock3, History, MoreHorizontal, Plus, RotateCcw, User, X } from 'lucide-react';
 
 import type { HistoryItem } from '../lib/apiTypes.ts';
 import { Button } from './ui/button.tsx';
@@ -13,10 +13,12 @@ interface HistoryPanelProps {
   previewGroupId?: string | null;
   previewingGroupId?: string | null;
   restoringGroupId?: string | null;
+  creatingBaselineFromHistoryGroupId?: string | null;
   onClose: () => void;
   onRefresh: () => unknown;
   onPreviewVersion: (item: HistoryItem) => unknown;
   onRestoreVersion: (groupId: string) => unknown;
+  onCreateBaselineFromHistory: (item: HistoryItem) => unknown;
   onReturnToCurrentVersion: () => unknown;
 }
 
@@ -76,10 +78,12 @@ export function HistoryPanel({
   previewGroupId = null,
   previewingGroupId = null,
   restoringGroupId = null,
+  creatingBaselineFromHistoryGroupId = null,
   onClose,
   onRefresh,
   onPreviewVersion,
   onRestoreVersion,
+  onCreateBaselineFromHistory,
   onReturnToCurrentVersion,
 }: HistoryPanelProps) {
   return (
@@ -150,6 +154,8 @@ export function HistoryPanel({
               const isPreviewing = previewGroupId === item.id;
               const isLoadingPreview = previewingGroupId === item.id;
               const isRestoring = restoringGroupId === item.id;
+              const isCreatingBaseline = creatingBaselineFromHistoryGroupId === item.id;
+              const createBaselineDisabled = disabled || loading || isCreatingBaseline;
               const hasVersionSelection = Boolean(previewGroupId || previewingGroupId || restoringGroupId);
               const isActive = hasVersionSelection
                 ? isPreviewing || isLoadingPreview || isRestoring
@@ -213,6 +219,12 @@ export function HistoryPanel({
                             Восстановление
                           </span>
                         )}
+                        {isCreatingBaseline && (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-violet-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+                            Сохранение baseline
+                          </span>
+                        )}
                       </div>
                     </div>
                     {!item.isCurrent && (
@@ -230,7 +242,17 @@ export function HistoryPanel({
                             <MoreHorizontal className="h-4.5 w-4.5" />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onCreateBaselineFromHistory(item);
+                            }}
+                            disabled={createBaselineDisabled}
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>{isCreatingBaseline ? 'Сохраняем baseline…' : 'Сохранить как baseline'}</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(event) => {
                               event.stopPropagation();

@@ -11,6 +11,7 @@ const toolbarSpy = vi.fn();
 const refreshBaselinesSpy = vi.fn().mockResolvedValue(undefined);
 const fetchBaselineSpy = vi.fn();
 const createFromCurrentSpy = vi.fn();
+const createFromHistorySpy = vi.fn();
 const showVersionByIdSpy = vi.fn();
 const restoreVersionSpy = vi.fn();
 const returnToCurrentVersionSpy = vi.fn();
@@ -19,6 +20,7 @@ let baselinesHookState = {
   loading: false,
   error: null as string | null,
   creatingFromCurrent: false,
+  creatingFromHistoryGroupId: null as string | null,
 };
 
 vi.mock('../../layout/Toolbar.tsx', () => ({
@@ -51,8 +53,13 @@ vi.mock('../../ChatSidebar.tsx', () => ({
   ChatSidebar: () => <div data-testid="chat-sidebar">chat</div>,
 }));
 
+const historyPanelSpy = vi.fn();
+
 vi.mock('../../HistoryPanel.tsx', () => ({
-  HistoryPanel: () => <div data-testid="history-panel">history</div>,
+  HistoryPanel: (props: Record<string, unknown>) => {
+    historyPanelSpy(props);
+    return <div data-testid="history-panel">history</div>;
+  },
 }));
 
 vi.mock('../../SplitTaskModal.tsx', () => ({
@@ -94,9 +101,11 @@ vi.mock('../../../hooks/useProjectBaselines.ts', () => ({
     loading: baselinesHookState.loading,
     error: baselinesHookState.error,
     creatingFromCurrent: baselinesHookState.creatingFromCurrent,
+    creatingFromHistoryGroupId: baselinesHookState.creatingFromHistoryGroupId,
     refreshBaselines: refreshBaselinesSpy,
     fetchBaseline: fetchBaselineSpy,
     createFromCurrent: createFromCurrentSpy,
+    createFromHistory: createFromHistorySpy,
   }),
 }));
 
@@ -187,10 +196,13 @@ beforeEach(() => {
   refreshBaselinesSpy.mockClear();
   fetchBaselineSpy.mockReset();
   createFromCurrentSpy.mockReset();
+  createFromHistorySpy.mockReset();
+  historyPanelSpy.mockClear();
   baselinesHookState = {
     loading: false,
     error: null,
     creatingFromCurrent: false,
+    creatingFromHistoryGroupId: null,
   };
   fetchBaselineSpy.mockResolvedValue({
     id: 'baseline-1',

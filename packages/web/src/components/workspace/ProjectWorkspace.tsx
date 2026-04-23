@@ -313,6 +313,8 @@ export function ProjectWorkspace({
     fetchBaseline,
     createFromCurrent,
     creatingFromCurrent,
+    creatingFromHistoryGroupId,
+    createFromHistory,
   } = useProjectBaselines(accessToken);
   const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
   const selectedBaselineLabel = selectedBaselineState?.label ?? null;
@@ -554,6 +556,25 @@ export function ProjectWorkspace({
     }
   }, [createFromCurrent, creatingFromCurrent, projectId, setProjectState]);
 
+  const handleCreateBaselineFromHistory = useCallback(async (groupId: string) => {
+    if (!projectId || creatingFromHistoryGroupId === groupId) {
+      return;
+    }
+
+    try {
+      const baseline = await createFromHistory(groupId, buildDefaultBaselineName());
+      setProjectState(projectId, {
+        selectedBaseline: {
+          id: baseline.id,
+          label: baseline.name || 'Без названия',
+          snapshot: baseline.snapshot,
+        },
+      });
+    } catch {
+      // Preserve the existing selected baseline; hook state already exposes the error.
+    }
+  }, [createFromHistory, creatingFromHistoryGroupId, projectId, setProjectState]);
+
 
   useEffect(() => {
     if (!accessToken || historyRefreshRevision === 0) {
@@ -784,10 +805,14 @@ export function ProjectWorkspace({
             previewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
             previewingGroupId={previewingGroupId}
             restoringGroupId={restoringGroupId}
+            creatingBaselineFromHistoryGroupId={creatingFromHistoryGroupId}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
             onPreviewVersion={showVersion}
             onRestoreVersion={restoreVersion}
+            onCreateBaselineFromHistory={(item) => {
+              void handleCreateBaselineFromHistory(item.id);
+            }}
             onReturnToCurrentVersion={returnToCurrentVersion}
           />
         )}
