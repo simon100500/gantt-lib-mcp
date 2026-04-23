@@ -144,12 +144,14 @@ model Project {
   calendar      WorkCalendar?   @relation("ProjectSelectedCalendar", fields: [calendarId], references: [id], onDelete: SetNull)
   ownedCalendars WorkCalendar[] @relation("ProjectOwnedCalendars")
   sessions      Session[]
-  tasks         Task[]
-  messages      Message[]
-  shareLinks    ShareLink[]
-  projectEvents ProjectEvent[]
+  tasks          Task[]
+  resources      Resource[]
+  taskAssignments TaskAssignment[]
+  messages       Message[]
+  shareLinks     ShareLink[]
+  projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
-  baselines     Baseline[]
+  baselines      Baseline[]
   agentDebugLogs AgentDebugLog[]
 
   @@map("projects")
