@@ -73,9 +73,11 @@ interface ToolbarProps {
   baselineEmptyLabel?: string | null;
   baselineCreateLabel?: string | null;
   creatingBaselineFromCurrent?: boolean | null;
+  deletingBaselineId?: string | null;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onHideBaseline?: () => void;
+  onDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
 
@@ -87,9 +89,11 @@ interface BaselineMenuSectionProps {
   emptyLabel: string;
   createLabel: string;
   creatingBaselineFromCurrent: boolean;
+  deletingBaselineId: string | null;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onHideBaseline?: () => void;
+  onDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
 
@@ -101,14 +105,18 @@ function renderBaselineMenuSection({
   emptyLabel,
   createLabel,
   creatingBaselineFromCurrent,
+  deletingBaselineId,
   onCreateBaselineFromCurrent,
   onSelectBaseline,
   onHideBaseline,
+  onDeleteBaseline,
   onRefreshBaselines,
 }: BaselineMenuSectionProps) {
   const hasActiveBaseline = Boolean(activeLabel?.trim());
   const hasRows = rows.length > 0;
   const createActionDisabled = !onCreateBaselineFromCurrent || creatingBaselineFromCurrent;
+  const activeRow = rows.find((row) => row.selected) ?? null;
+  const activeBaselineDeleting = Boolean(activeRow && deletingBaselineId === activeRow.id);
 
   return (
     <>
@@ -202,6 +210,17 @@ function renderBaselineMenuSection({
           <span className="text-sm">Скрыть baseline</span>
         </DropdownMenuItem>
       ) : null}
+
+      {activeRow ? (
+        <DropdownMenuItem
+          onClick={() => void onDeleteBaseline?.(activeRow.id)}
+          disabled={!onDeleteBaseline || activeBaselineDeleting}
+          className="flex cursor-pointer items-center gap-2 text-rose-700 focus:text-rose-700"
+        >
+          <X className="h-4 w-4" />
+          <span className="text-sm">{activeBaselineDeleting ? 'Удаляем baseline…' : 'Удалить baseline'}</span>
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
 }
@@ -236,9 +255,11 @@ export function Toolbar({
   baselineEmptyLabel = 'Сохранённые baseline-ы пока не появились.',
   baselineCreateLabel = 'Сохранить текущий график',
   creatingBaselineFromCurrent = false,
+  deletingBaselineId = null,
   onCreateBaselineFromCurrent = null,
   onSelectBaseline,
   onHideBaseline,
+  onDeleteBaseline,
   onRefreshBaselines,
 }: ToolbarProps) {
   const showTaskList = useUIStore((state) => state.showTaskList);
@@ -517,9 +538,11 @@ export function Toolbar({
             emptyLabel: normalizedBaselineEmptyLabel,
             createLabel: normalizedBaselineCreateLabel,
             creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+            deletingBaselineId,
             onCreateBaselineFromCurrent,
             onSelectBaseline,
             onHideBaseline,
+            onDeleteBaseline,
             onRefreshBaselines,
           })}
         </DropdownMenuContent>
@@ -697,9 +720,11 @@ export function Toolbar({
             emptyLabel: normalizedBaselineEmptyLabel,
             createLabel: normalizedBaselineCreateLabel,
             creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+            deletingBaselineId,
             onCreateBaselineFromCurrent,
             onSelectBaseline,
             onHideBaseline,
+            onDeleteBaseline,
             onRefreshBaselines,
           })}
 

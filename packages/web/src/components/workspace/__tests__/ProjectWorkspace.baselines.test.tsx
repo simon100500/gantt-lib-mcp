@@ -12,6 +12,7 @@ const refreshBaselinesSpy = vi.fn().mockResolvedValue(undefined);
 const fetchBaselineSpy = vi.fn();
 const createFromCurrentSpy = vi.fn();
 const createFromHistorySpy = vi.fn();
+const deleteBaselineSpy = vi.fn();
 const showVersionByIdSpy = vi.fn();
 const restoreVersionSpy = vi.fn();
 const returnToCurrentVersionSpy = vi.fn();
@@ -21,6 +22,7 @@ let baselinesHookState = {
   error: null as string | null,
   creatingFromCurrent: false,
   creatingFromHistoryGroupId: null as string | null,
+  deletingBaselineId: null as string | null,
 };
 
 vi.mock('../../layout/Toolbar.tsx', () => ({
@@ -36,6 +38,9 @@ vi.mock('../../layout/Toolbar.tsx', () => ({
         </button>
         <button type="button" data-testid="hide-baseline" onClick={() => void (props.onHideBaseline as (() => void) | undefined)?.()}>
           hide baseline
+        </button>
+        <button type="button" data-testid="delete-baseline" onClick={() => void (props.onDeleteBaseline as ((id: string) => void) | undefined)?.('baseline-1')}>
+          delete baseline
         </button>
         <button type="button" data-testid="refresh-baselines" onClick={() => void (props.onRefreshBaselines as (() => void) | undefined)?.()}>
           refresh baselines
@@ -102,10 +107,12 @@ vi.mock('../../../hooks/useProjectBaselines.ts', () => ({
     error: baselinesHookState.error,
     creatingFromCurrent: baselinesHookState.creatingFromCurrent,
     creatingFromHistoryGroupId: baselinesHookState.creatingFromHistoryGroupId,
+    deletingBaselineId: baselinesHookState.deletingBaselineId,
     refreshBaselines: refreshBaselinesSpy,
     fetchBaseline: fetchBaselineSpy,
     createFromCurrent: createFromCurrentSpy,
     createFromHistory: createFromHistorySpy,
+    deleteBaseline: deleteBaselineSpy,
   }),
 }));
 
@@ -199,12 +206,14 @@ beforeEach(() => {
   fetchBaselineSpy.mockReset();
   createFromCurrentSpy.mockReset();
   createFromHistorySpy.mockReset();
+  deleteBaselineSpy.mockReset();
   historyPanelSpy.mockClear();
   baselinesHookState = {
     loading: false,
     error: null,
     creatingFromCurrent: false,
     creatingFromHistoryGroupId: null,
+    deletingBaselineId: null,
   };
   fetchBaselineSpy.mockResolvedValue({
     id: 'baseline-1',
@@ -234,6 +243,7 @@ beforeEach(() => {
       dependencies: [],
     },
   });
+  deleteBaselineSpy.mockResolvedValue({ id: 'baseline-1' });
   historyItemsMock = [];
   useUIStore.setState({
     workspace: { kind: 'project', projectId: 'project-1', chatOpen: false },
@@ -435,15 +445,85 @@ describe('ProjectWorkspace baseline wiring', () => {
     root.unmount();
   });
 
-  it('refresh action reuses the explicit workspace refresh seam', async () => {
+  it('deletes the active baseline and clears project-local compare state', async () => {
+    useProjectUIStore.getState().setProjectState('project-1', {
+      selectedBaseline: {
+        id: 'baseline-1',
+        label: 'Baseline alpha',
+        snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
+      },
+    });
+
     const { container, root } = renderWorkspace();
 
     await act(async () => {
-      container.querySelector('[data-testid="refresh-baselines"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      container.querySelector('[data-testid="delete-baseline"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(refreshBaselinesSpy).toHaveBeenCalledTimes(2);
+    expect(deleteBaselineSpy).toHaveBeenCalledWith('baseline-1');
+    const projectState = useProjectUIStore.getState().projectStates['project-1'];
+    expect(projectState?.selectedBaseline).toBeNull();
+
+    const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.baselineActiveLabel).toBeNull();
+    expect(container.textContent).not.toContain('Baseline: Baseline alpha');
+
+    root.unmount();
+  });
+
+  it('deleting a non-active baseline preserves the current compare selection', async () => {
+    deleteBaselineSpy.mockResolvedValueOnce({ id: 'baseline-2' });
+    useProjectUIStore.getState().setProjectState('project-1', {
+      selectedBaseline: {
+        id: 'baseline-1',
+        label: 'Baseline alpha',
+        snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
+      },
+    });
+
+    const { container, root } = renderWorkspace();
+
+    await act(async () => {
+      await (lastCallArg<Record<string, unknown>>(toolbarSpy)!.onDeleteBaseline as ((id: string) => void))('baseline-2');
+      await Promise.resolve();
+    });
+
+    expect(deleteBaselineSpy).toHaveBeenCalledWith('baseline-2');
+    const projectState = useProjectUIStore.getState().projectStates['project-1'];
+    expect(projectState?.selectedBaseline).toMatchObject({
+      id: 'baseline-1',
+      label: 'Baseline alpha',
+    });
+    expect(container.textContent).toContain('Baseline: Baseline alpha');
+
+    root.unmount();
+  });
+
+  it('does not emit duplicate delete requests while the same baseline row is in flight', async () => {
+    baselinesHookState.deletingBaselineId = 'baseline-1';
+    useProjectUIStore.getState().setProjectState('project-1', {
+      selectedBaseline: {
+        id: 'baseline-1',
+        label: 'Baseline alpha',
+        snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
+      },
+    });
+
+    const { container, root } = renderWorkspace();
+    const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.deletingBaselineId).toBe('baseline-1');
+
+    await act(async () => {
+      container.querySelector('[data-testid="delete-baseline"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(deleteBaselineSpy).not.toHaveBeenCalled();
+    expect(useProjectUIStore.getState().projectStates['project-1']?.selectedBaseline).toMatchObject({
+      id: 'baseline-1',
+      label: 'Baseline alpha',
+    });
 
     root.unmount();
   });

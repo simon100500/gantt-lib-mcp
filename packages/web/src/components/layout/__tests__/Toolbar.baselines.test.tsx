@@ -132,10 +132,12 @@ interface RenderOptions {
   baselineEmptyLabel?: string | null;
   baselineCreateLabel?: string | null;
   creatingBaselineFromCurrent?: boolean | null;
+  deletingBaselineId?: string | null;
   baselineMenuOpen?: boolean;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onHideBaseline?: () => void;
+  onDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
 
@@ -147,10 +149,12 @@ function renderToolbar({
   baselineEmptyLabel = 'Список пуст',
   baselineCreateLabel = 'Сохранить текущий график',
   creatingBaselineFromCurrent = false,
+  deletingBaselineId = null,
   baselineMenuOpen = false,
   onCreateBaselineFromCurrent = vi.fn(),
   onSelectBaseline = vi.fn(),
   onHideBaseline = vi.fn(),
+  onDeleteBaseline = vi.fn(),
   onRefreshBaselines = vi.fn(),
 }: RenderOptions = {}): {
   container: HTMLDivElement;
@@ -158,6 +162,7 @@ function renderToolbar({
   onCreateBaselineFromCurrent: (() => void) | null;
   onSelectBaseline: (baselineId: string) => void;
   onHideBaseline: () => void;
+  onDeleteBaseline: (baselineId: string) => void;
   onRefreshBaselines: () => void;
 } {
   const container = document.createElement('div');
@@ -177,17 +182,19 @@ function renderToolbar({
         baselineEmptyLabel={baselineEmptyLabel}
         baselineCreateLabel={baselineCreateLabel}
         creatingBaselineFromCurrent={creatingBaselineFromCurrent}
+        deletingBaselineId={deletingBaselineId}
         baselineMenuOpen={baselineMenuOpen}
         onBaselineMenuOpenChange={() => {}}
         onCreateBaselineFromCurrent={onCreateBaselineFromCurrent}
         onSelectBaseline={onSelectBaseline}
         onHideBaseline={onHideBaseline}
+        onDeleteBaseline={onDeleteBaseline}
         onRefreshBaselines={onRefreshBaselines}
       />,
     );
   });
 
-  return { container, root, onCreateBaselineFromCurrent, onSelectBaseline, onHideBaseline, onRefreshBaselines };
+  return { container, root, onCreateBaselineFromCurrent, onSelectBaseline, onHideBaseline, onDeleteBaseline, onRefreshBaselines };
 }
 
 function menuText(): string {
@@ -199,6 +206,7 @@ describe('Toolbar baseline menu', () => {
     const onCreateBaselineFromCurrent = vi.fn();
     const onSelectBaseline = vi.fn();
     const onHideBaseline = vi.fn();
+    const onDeleteBaseline = vi.fn();
     const onRefreshBaselines = vi.fn();
 
     const { container, root } = renderToolbar({
@@ -211,6 +219,7 @@ describe('Toolbar baseline menu', () => {
       onCreateBaselineFromCurrent,
       onSelectBaseline,
       onHideBaseline,
+      onDeleteBaseline,
       onRefreshBaselines,
     });
 
@@ -224,6 +233,7 @@ describe('Toolbar baseline menu', () => {
     expect(menuText()).toContain('Forecast copy');
     expect(menuText()).toContain('Активный');
     expect(menuText()).toContain('Скрыть baseline');
+    expect(menuText()).toContain('Удалить baseline');
     expect(menuText()).toContain('Обновить baseline-ы');
 
     const createItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Сохранить текущий график'));
@@ -249,6 +259,15 @@ describe('Toolbar baseline menu', () => {
     });
     expect(onHideBaseline).toHaveBeenCalledTimes(1);
 
+    const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
+      const text = node.textContent ?? '';
+      return text.includes('Удалить baseline');
+    });
+    act(() => {
+      deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onDeleteBaseline).toHaveBeenCalledWith('baseline-1');
+
     const refreshItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Обновить baseline-ы'));
     act(() => {
       refreshItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -260,7 +279,7 @@ describe('Toolbar baseline menu', () => {
     });
   });
 
-  it('renders explicit loading, error, empty, and create-in-flight states without crashing', () => {
+  it('renders explicit loading, error, empty, create-in-flight, and delete-in-flight states without crashing', () => {
     const loadingRender = renderToolbar({ baselineMenuOpen: true, baselineLoading: true, baselineRows: null, baselineError: null });
     expect(menuText()).toContain('Загрузка baseline-ов…');
     expect(menuText()).toContain('Сохранить текущий график');
@@ -291,6 +310,23 @@ describe('Toolbar baseline menu', () => {
     expect(menuText()).toContain('Сохранить текущий график…');
     act(() => {
       creatingRender.root.unmount();
+    });
+
+    const deletingRender = renderToolbar({
+      baselineMenuOpen: true,
+      baselineActiveLabel: 'Delete me',
+      baselineRows: [{ id: 'baseline-delete', label: 'Delete me', selected: true }],
+      deletingBaselineId: 'baseline-delete',
+      onDeleteBaseline: undefined,
+    });
+    const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
+      const text = node.textContent ?? '';
+      return text.includes('Удаляем baseline…');
+    });
+    expect(deleteItem?.getAttribute('data-disabled')).toBe('');
+    expect(menuText()).toContain('Удаляем baseline…');
+    act(() => {
+      deletingRender.root.unmount();
     });
   });
 

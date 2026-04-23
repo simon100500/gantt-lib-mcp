@@ -292,6 +292,8 @@ export function ProjectWorkspace({
     createFromCurrent,
     creatingFromCurrent,
     creatingFromHistoryGroupId,
+    deleteBaseline,
+    deletingBaselineId,
     createFromHistory,
   } = useProjectBaselines(accessToken);
   const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
@@ -587,6 +589,26 @@ export function ProjectWorkspace({
     }
   }, [createFromHistory, creatingFromHistoryGroupId, projectId, setProjectState]);
 
+  const handleDeleteBaseline = useCallback(async (baselineId: string) => {
+    if (!projectId) {
+      return;
+    }
+
+    const trimmedBaselineId = baselineId.trim();
+    if (!trimmedBaselineId || deletingBaselineId === trimmedBaselineId) {
+      return;
+    }
+
+    try {
+      const deleted = await deleteBaseline(trimmedBaselineId);
+      if (selectedBaselineState?.id === deleted.id) {
+        setProjectState(projectId, { selectedBaseline: null });
+      }
+    } catch {
+      // Preserve the existing selected baseline; hook state already exposes the error.
+    }
+  }, [deleteBaseline, deletingBaselineId, projectId, selectedBaselineState?.id, setProjectState]);
+
 
   useEffect(() => {
     if (!accessToken || historyRefreshRevision === 0) {
@@ -630,6 +652,7 @@ export function ProjectWorkspace({
           baselineEmptyLabel="Сохранённые baseline-ы пока не появились."
           baselineCreateLabel="Сохранить текущий график"
           creatingBaselineFromCurrent={creatingFromCurrent}
+          deletingBaselineId={deletingBaselineId}
           onCreateBaselineFromCurrent={() => {
             void handleCreateBaselineFromCurrent();
           }}
@@ -637,6 +660,9 @@ export function ProjectWorkspace({
             void handleSelectBaseline(baselineId);
           }}
           onHideBaseline={handleHideBaseline}
+          onDeleteBaseline={(baselineId) => {
+            void handleDeleteBaseline(baselineId);
+          }}
           onRefreshBaselines={() => {
             void handleRefreshBaselines();
           }}
