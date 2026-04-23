@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import {
   assignmentService,
   AssignmentValidationError,
+  plannerService,
+  PlannerValidationError,
   resourceService,
   ResourceValidationError,
 } from '@gantt/mcp/services';
@@ -64,7 +66,39 @@ function isAssignmentValidationError(error: unknown): error is AssignmentValidat
   );
 }
 
+function isPlannerValidationError(error: unknown): error is PlannerValidationError {
+  return error instanceof PlannerValidationError || (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'validation_error' &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    'issue' in error
+  );
+}
+
 export async function registerResourceRoutes(fastify: FastifyInstance): Promise<void> {
+  fastify.get('/api/resources/planner', { preHandler: [authMiddleware] }, async (req, reply) => {
+    try {
+      const response = await plannerService.getResourcePlanner({
+        projectId: req.user!.projectId,
+      });
+
+      return reply.send(response);
+    } catch (error) {
+      if (isPlannerValidationError(error)) {
+        return reply.status(400).send({
+          reason: 'validation_error',
+          error: error.message,
+          issue: error.issue,
+        });
+      }
+
+      throw error;
+    }
+  });
+
   fastify.get('/api/resources', { preHandler: [authMiddleware] }, async (req, reply) => {
     try {
       const response = await resourceService.list({

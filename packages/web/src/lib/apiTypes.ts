@@ -1,9 +1,13 @@
 import type { AuthProject, AuthUser } from '../stores/useAuthStore.ts';
 import type { ProjectDependency, Task } from '../types.ts';
 
-export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
-
-export type ResourceScope = 'shared' | 'project';
+export type {
+  ResourcePlannerInterval,
+  ResourcePlannerResource,
+  ResourcePlannerResult,
+  ResourceScope,
+  ResourceType,
+} from '../types.ts';
 
 export interface ProjectResource {
   id: string;

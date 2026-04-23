@@ -5,6 +5,7 @@ import { describe, it } from 'vitest';
 
 const resourceRoutesSource = readFileSync(resolve(process.cwd(), 'packages/server/src/routes/resource-routes.ts'), 'utf8');
 const indexSource = readFileSync(resolve(process.cwd(), 'packages/server/src/index.ts'), 'utf8');
+const apiTypesSource = readFileSync(resolve(process.cwd(), 'packages/web/src/lib/apiTypes.ts'), 'utf8');
 
 describe('resource routes', () => {
   it('registers registerResourceRoutes in server startup', () => {
@@ -12,7 +13,8 @@ describe('resource routes', () => {
     assert.match(indexSource, /await registerResourceRoutes\(fastify\);/);
   });
 
-  it('guards resource and assignment endpoints with authMiddleware', () => {
+  it('guards resource, planner, and assignment endpoints with authMiddleware', () => {
+    assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources\/planner', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/resources', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.patch\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
@@ -20,10 +22,32 @@ describe('resource routes', () => {
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments\/materialize', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
   });
 
+  it('registers a dedicated planner route that delegates to plannerService with stable validation_error mapping', () => {
+    assert.match(resourceRoutesSource, /import \{[\s\S]*plannerService,[\s\S]*PlannerValidationError,[\s\S]*\} from '@gantt\/mcp\/services';/);
+    assert.match(resourceRoutesSource, /function isPlannerValidationError\(error: unknown\): error is PlannerValidationError/);
+    assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources\/planner', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
+    assert.match(resourceRoutesSource, /plannerService\.getResourcePlanner\(\{[\s\S]*projectId: req\.user!\.projectId,[\s\S]*\}\)/);
+    assert.match(resourceRoutesSource, /if \(isPlannerValidationError\(error\)\) \{/);
+    assert.match(resourceRoutesSource, /return reply\.status\(400\)\.send\(\{\s*reason: 'validation_error',\s*error: error\.message,\s*issue: error\.issue,\s*\}\);/s);
+  });
+
   it('passes ownership scope through resource create and update routes', () => {
     assert.match(resourceRoutesSource, /type ResourceBody = \{[\s\S]*scope\?: 'shared' \| 'project';[\s\S]*\};/);
     assert.match(resourceRoutesSource, /resourceService\.create\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
     assert.match(resourceRoutesSource, /resourceService\.update\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
+  });
+
+  it('keeps /api/project as the current-project hydration seam instead of embedding planner data', () => {
+    assert.match(indexSource, /fastify\.get\('\/api\/project', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
+    assert.match(indexSource, /const \[project, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
+    assert.doesNotMatch(indexSource, /plannerService/);
+    assert.doesNotMatch(indexSource, /workspaceUserId/);
+  });
+
+  it('re-exports planner transport types for the web layer without inventing a second schema', () => {
+    assert.match(apiTypesSource, /export type \{[\s\S]*ResourcePlannerInterval,[\s\S]*ResourcePlannerResource,[\s\S]*ResourcePlannerResult,[\s\S]*ResourceScope,[\s\S]*ResourceType,[\s\S]*\} from '\.\.\/types\.ts';/);
+    assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerResult/);
+    assert.doesNotMatch(apiTypesSource, /export type ResourcePlannerResult =/);
   });
 
   it('maps malformed params and typed assignment validation failures to stable validation_error bodies', () => {
