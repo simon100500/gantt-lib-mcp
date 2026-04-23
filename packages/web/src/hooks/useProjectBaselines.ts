@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import type {
   BaselineCreateResponse,
+  BaselineDeleteResponse,
   BaselineItem,
   BaselineListResponse,
   BaselineSnapshotResponse,
@@ -77,6 +78,14 @@ async function parseBaselineSnapshotResponse(response: Response): Promise<Baseli
   };
 }
 
+async function parseBaselineDeleteResponse(response: Response): Promise<BaselineDeleteResponse> {
+  const data = await response.json() as Partial<BaselineDeleteResponse> | null;
+
+  return {
+    id: typeof data?.id === 'string' ? data.id : '',
+  };
+}
+
 function normalizeRequestError(error: unknown, fallback: string): Error {
   if (typeof error === 'object' && error !== null && 'name' in error && (error as { name?: string }).name === 'AbortError') {
     return new Error('Request timed out');
@@ -98,6 +107,7 @@ export function useProjectBaselines(accessToken: string | null) {
   const [activeBaselineId, setActiveBaselineId] = useState<string | null>(null);
   const [creatingFromCurrent, setCreatingFromCurrent] = useState(false);
   const [creatingFromHistoryGroupId, setCreatingFromHistoryGroupId] = useState<string | null>(null);
+  const [deletingBaselineId, setDeletingBaselineId] = useState<string | null>(null);
 
   const loadBaselines = useCallback(async () => {
     if (!accessToken) {
@@ -266,6 +276,53 @@ export function useProjectBaselines(accessToken: string | null) {
     }
   }, [accessToken]);
 
+  const deleteBaseline = useCallback(async (baselineId: string): Promise<BaselineDeleteResponse> => {
+    if (!accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const trimmedBaselineId = baselineId.trim();
+    if (!trimmedBaselineId) {
+      throw new Error('baselineId required');
+    }
+
+    if (deletingBaselineId === trimmedBaselineId) {
+      throw new Error('Baseline deletion already in progress');
+    }
+
+    setDeletingBaselineId(trimmedBaselineId);
+    setLoading(true);
+    setError(null);
+    const { signal, cleanup } = createRequestSignal();
+
+    try {
+      const response = await fetch(`/api/baselines/${encodeURIComponent(trimmedBaselineId)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const data = await parseBaselineDeleteResponse(response);
+      const deletedId = data.id || trimmedBaselineId;
+      setItems((current) => current.filter((item) => item.id !== deletedId));
+      return { id: deletedId };
+    } catch (err) {
+      const normalizedError = normalizeRequestError(err, 'Failed to delete baseline');
+      setError(normalizedError.message);
+      throw normalizedError;
+    } finally {
+      cleanup();
+      setDeletingBaselineId((current) => (current === trimmedBaselineId ? null : current));
+      setLoading(false);
+    }
+  }, [accessToken, deletingBaselineId]);
+
   return {
     items,
     loading,
@@ -273,11 +330,13 @@ export function useProjectBaselines(accessToken: string | null) {
     activeBaselineId,
     creatingFromCurrent,
     creatingFromHistoryGroupId,
+    deletingBaselineId,
     loadBaselines,
     refreshBaselines: loadBaselines,
     fetchBaseline,
     createFromCurrent,
     createFromHistory,
+    deleteBaseline,
   };
 }
 
@@ -286,5 +345,6 @@ export const __baselineHookInternals = {
   normalizeSnapshot,
   parseBaselineListResponse,
   parseBaselineSnapshotResponse,
+  parseBaselineDeleteResponse,
   normalizeRequestError,
 };

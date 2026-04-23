@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, expect, it } from 'vitest';
 
 const baselineRoutesSource = readFileSync(resolve(process.cwd(), 'packages/server/src/routes/baseline-routes.ts'), 'utf8');
 const indexSource = readFileSync(resolve(process.cwd(), 'packages/server/src/index.ts'), 'utf8');
@@ -30,6 +30,10 @@ describe('baseline routes', () => {
       baselineRoutesSource,
       /fastify\.post\('\/api\/baselines\/history\/:groupId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
     );
+    assert.match(
+      baselineRoutesSource,
+      /fastify\.delete\('\/api\/baselines\/:baselineId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+    );
   });
 
   it('keeps create-from-current and create-from-history distinct and resource-oriented', () => {
@@ -57,6 +61,13 @@ describe('baseline routes', () => {
     assert.match(baselineRoutesSource, /sourceHistoryGroupId: response\.sourceHistoryGroupId/);
     assert.match(baselineRoutesSource, /createdAt: response\.createdAt/);
     assert.match(baselineRoutesSource, /snapshot: response\.snapshot/);
+  });
+
+  it('keeps delete resource-oriented with minimal success payload and typed validation handling', () => {
+    assert.match(baselineRoutesSource, /fastify\.delete\('\/api\/baselines\/:baselineId'/);
+    assert.match(baselineRoutesSource, /deleteBaseline\(\{\s*projectId: req\.user!\.projectId,\s*baselineId: params\.baselineId,\s*\}\)/s);
+    assert.match(baselineRoutesSource, /return reply\.send\(\{\s*id: response\.id,\s*\}\);/s);
+    assert.doesNotMatch(baselineRoutesSource, /return reply\.send\(\{\s*id: response\.id,\s*projectId:/s);
   });
 
   it('preserves history-snapshot delegation in the service layer instead of duplicating rollback logic in routes', () => {

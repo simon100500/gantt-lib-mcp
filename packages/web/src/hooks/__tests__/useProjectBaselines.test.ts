@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { BaselineItem } from '../../lib/apiTypes.ts';
 import { __baselineHookInternals } from '../useProjectBaselines.ts';
 
-const { normalizeBaselineItem, normalizeSnapshot, parseBaselineListResponse, parseBaselineSnapshotResponse, normalizeRequestError } = __baselineHookInternals;
+const { normalizeBaselineItem, normalizeSnapshot, parseBaselineListResponse, parseBaselineSnapshotResponse, parseBaselineDeleteResponse, normalizeRequestError } = __baselineHookInternals;
 
 function createJsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -80,6 +80,12 @@ describe('useProjectBaselines internals', () => {
 
     expect(data.snapshot.tasks).toHaveLength(1);
     expect(data.snapshot.dependencies).toEqual([]);
+  });
+
+  it('parses delete payloads using only the minimal id field', async () => {
+    const response = createJsonResponse({ id: 'baseline-3', extra: 'ignored' });
+
+    await expect(parseBaselineDeleteResponse(response)).resolves.toEqual({ id: 'baseline-3' });
   });
 
   it('returns empty snapshot arrays when payload is malformed', () => {

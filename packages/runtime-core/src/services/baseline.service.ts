@@ -5,6 +5,8 @@ import type {
   BaselineSnapshot,
   CreateBaselineFromCurrentInput,
   CreateBaselineFromHistoryInput,
+  DeleteBaselineInput,
+  DeleteBaselineResponse,
   DependencyType,
   GetBaselineInput,
   ListBaselinesInput,
@@ -125,6 +127,9 @@ type BaselinePrismaClient = {
         source: BaselineSource;
         sourceHistoryGroupId: string | null;
       };
+    }): Promise<BaselineRecord>;
+    delete(args: {
+      where: { id: string };
     }): Promise<BaselineRecord>;
   };
   baselineTask: {
@@ -493,6 +498,35 @@ export class BaselineService {
         sourceHistoryGroupId: historySnapshot.groupId,
         snapshot: validateSnapshot(historySnapshot.snapshot),
       });
+    };
+
+    return this.prisma.$transaction ? this.prisma.$transaction((tx) => run(tx)) : run(this.prisma);
+  }
+
+  async deleteBaseline({ projectId, baselineId }: DeleteBaselineInput): Promise<DeleteBaselineResponse> {
+    assertProjectId(projectId);
+    assertBaselineId(baselineId);
+
+    const run = async (prismaClient: BaselinePrismaClient): Promise<DeleteBaselineResponse> => {
+      await this.assertProjectExists(projectId, prismaClient);
+
+      const baseline = await prismaClient.baseline.findFirst({
+        where: { id: baselineId, projectId },
+        include: {
+          tasks: { orderBy: { sortOrder: 'asc' } },
+          dependencies: true,
+        },
+      });
+
+      if (!baseline) {
+        throw new BaselineValidationError(`Baseline ${baselineId} was not found`);
+      }
+
+      const deleted = await prismaClient.baseline.delete({
+        where: { id: baseline.id },
+      });
+
+      return { id: deleted.id };
     };
 
     return this.prisma.$transaction ? this.prisma.$transaction((tx) => run(tx)) : run(this.prisma);

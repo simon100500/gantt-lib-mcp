@@ -193,6 +193,17 @@ function createHarness(): { prisma: any; state: HarnessState } {
         state.baselines.push(record);
         return record;
       },
+      delete: async ({ where }: any) => {
+        const index = state.baselines.findIndex((baseline) => baseline.id === where.id);
+        if (index < 0) {
+          throw new Error(`Baseline ${where.id} not found in harness`);
+        }
+
+        const [deleted] = state.baselines.splice(index, 1);
+        state.baselineTasks = state.baselineTasks.filter((task) => task.baselineId !== where.id);
+        state.baselineDependencies = state.baselineDependencies.filter((dependency) => dependency.baselineId !== where.id);
+        return deleted;
+      },
     },
     baselineTask: {
       createMany: async ({ data }: any) => {
@@ -328,6 +339,21 @@ describe('BaselineService', () => {
     assert.equal(listed.baselines[1]?.id, current.id);
   });
 
+  it('deletes only the targeted project baseline and cascades its snapshot rows', async () => {
+    const current = await service.createFromCurrent({ projectId: 'project-1', name: 'Current' });
+    const historical = await service.createFromHistory({ projectId: 'project-1', historyGroupId: 'group-1', name: 'Historical' });
+
+    const deleted = await service.deleteBaseline({ projectId: 'project-1', baselineId: current.id });
+    const listed = await service.listBaselines({ projectId: 'project-1' });
+
+    assert.equal(deleted.id, current.id);
+    assert.equal(listed.baselines.length, 1);
+    assert.equal(listed.baselines[0]?.id, historical.id);
+    assert.equal(harness.state.baselineTasks.some((task) => task.baselineId === current.id), false);
+    assert.equal(harness.state.baselineDependencies.some((dependency) => dependency.baselineId === current.id), false);
+    assert.equal(harness.state.baselineTasks.some((task) => task.baselineId === historical.id), true);
+  });
+
   it('rejects malformed inputs and unknown ids with typed validation errors', async () => {
     await assert.rejects(
       () => service.createFromCurrent({ projectId: 'project-1', name: '   ' }),
@@ -336,6 +362,11 @@ describe('BaselineService', () => {
 
     await assert.rejects(
       () => service.getBaseline({ projectId: 'project-1', baselineId: 'missing-baseline' }),
+      (error: unknown) => error instanceof BaselineValidationError && /missing-baseline/.test((error as Error).message),
+    );
+
+    await assert.rejects(
+      () => service.deleteBaseline({ projectId: 'project-1', baselineId: 'missing-baseline' }),
       (error: unknown) => error instanceof BaselineValidationError && /missing-baseline/.test((error as Error).message),
     );
 

@@ -530,13 +530,15 @@ describe('ProjectWorkspace baseline wiring', () => {
     ]);
     expect(container.textContent).toContain('Baseline: Базовый 22.04.2026 10:00');
 
-    useHistoryViewerStore.setState({
-      historyViewer: {
-        mode: 'preview',
-        groupId: 'history-1',
-        snapshot: { tasks, dependencies: [] },
-        isCurrent: false,
-      },
+    act(() => {
+      useHistoryViewerStore.setState({
+        historyViewer: {
+          mode: 'preview',
+          groupId: 'history-1',
+          snapshot: { tasks, dependencies: [] },
+          isCurrent: false,
+        },
+      });
     });
 
     latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;

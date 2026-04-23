@@ -436,6 +436,15 @@ export type CreateBaselineFromHistoryInput = {
   name: string;
 };
 
+export type DeleteBaselineInput = {
+  projectId: string;
+  baselineId: string;
+};
+
+export type DeleteBaselineResponse = {
+  id: string;
+};
+
 export type ProjectCommand =
   | { type: 'switch_gantt_day_mode'; ganttDayMode: GanttDayMode }
   | { type: 'move_task'; taskId: string; startDate: string }

@@ -169,4 +169,34 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
       throw error;
     }
   });
+
+  fastify.delete('/api/baselines/:baselineId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const params = req.params as { baselineId?: string };
+    if (!params.baselineId?.trim()) {
+      return reply.status(400).send({
+        reason: 'validation_error',
+        error: 'baselineId required',
+      });
+    }
+
+    try {
+      const response = await baselineService.deleteBaseline({
+        projectId: req.user!.projectId,
+        baselineId: params.baselineId,
+      });
+
+      return reply.send({
+        id: response.id,
+      });
+    } catch (error) {
+      if (isBaselineValidationError(error)) {
+        return reply.status(400).send({
+          reason: 'validation_error',
+          error: error.message,
+        });
+      }
+
+      throw error;
+    }
+  });
 }
