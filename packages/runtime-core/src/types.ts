@@ -141,11 +141,16 @@ export interface ResourcePlannerInterval {
   startDate: string;
   endDate: string;
   assignmentCreatedAt: string;
+  hasConflict: boolean;
+  conflictCount: number;
+  conflictAssignmentIds: string[];
 }
 
 export interface ResourcePlannerResource {
   resourceId: string;
   resourceName: string;
+  hasConflicts: boolean;
+  conflictCount: number;
   intervals: ResourcePlannerInterval[];
 }
 

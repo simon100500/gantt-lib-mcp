@@ -24,6 +24,14 @@ export interface ValidationResult {
   errors: DependencyError[];
 }
 
+export type {
+  ResourcePlannerInterval,
+  ResourcePlannerResource,
+  ResourcePlannerResult,
+  ResourceScope,
+  ResourceType,
+} from '@gantt/mcp/types';
+
 export interface CalendarDay {
   date: string;
   kind: 'working' | 'non_working' | 'shortened';

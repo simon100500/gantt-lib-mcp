@@ -53,6 +53,7 @@ export type WorkspaceMode =
   | { kind: 'guest' }
   | { kind: 'shared' }
   | { kind: 'project'; projectId: string; chatOpen: boolean }
+  | { kind: 'planner'; projectId: string }
   | {
     kind: 'draft';
     draftName: string;

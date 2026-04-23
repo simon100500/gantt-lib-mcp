@@ -18,6 +18,7 @@ import { DraftWorkspace } from './components/workspace/DraftWorkspace.tsx';
 import type { StartScreenSendResult } from './components/StartScreen.tsx';
 import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
+import { ResourcePlannerWorkspace } from './components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
@@ -756,6 +757,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       if (current.kind === 'project' && current.projectId === projectId) {
         return current;
       }
+      if (current.kind === 'planner' && current.projectId === projectId) {
+        return current;
+      }
       return { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
     });
   }, [auth.isAuthenticated, auth.project?.id, hasShareToken, setWorkspace]);
@@ -1134,8 +1138,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       await openLimitModal(proactiveResourcePoolDenial);
       return;
     }
-    // Resource pool feature for paid tiers — no-op until full implementation
-  }, [billingStatus, openLimitModal]);
+
+    if (!auth.project) {
+      return;
+    }
+
+    setWorkspace({ kind: 'planner', projectId: auth.project.id });
+  }, [auth.project, billingStatus, openLimitModal, setWorkspace]);
 
   const handleDeleteProject = useCallback(async (projectId: string) => {
     const project = auth.projects.find((item) => item.id === projectId);
@@ -1528,85 +1537,95 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ganttDayMode={sharedProject.project?.ganttDayMode ?? 'calendar'}
       />
     )
-    : workspace.kind === 'draft'
-      ? null
-      : showProjectStartScreen
-        ? (
-          <DraftWorkspace
-            isAuthenticated={auth.isAuthenticated}
-            onSend={handleStartScreenSend}
-            onEmptyChart={handleEmptyChart}
-            onLoginRequired={onLoginRequired}
-          />
-        )
-      : workspace.kind === 'project'
-        ? (
-          <ProjectWorkspace
-            ganttRef={ganttRef}
-            tasks={visibleTasks}
-            setTasks={setTasks}
-            loading={loading}
-            accessToken={auth.accessToken}
-            sharedProject={sharedProject.project}
-            shareToken={sharedProject.shareToken}
-            hasShareToken={hasShareToken}
-            displayConnected={displayConnected}
-            isAuthenticated={auth.isAuthenticated}
-            chatUsage={billingStatus}
-            chatDisabled={isArchivedProject || Boolean(proactiveChatDenial)}
-            chatDisabledReason={chatDisabledReason}
-            batchUpdate={batchUpdate}
-            onSend={handleSend}
-            onSplitTask={submitSplitTask}
-            onLoginRequired={onLoginRequired}
-            onCloseChat={closeProjectChat}
-            onToggleChat={toggleProjectChat}
-            onScrollToToday={handleScrollToToday}
-            onCollapseAll={handleCollapseAll}
-            onExpandAll={handleExpandAll}
-            onExportPdf={handleExportPdf}
-            onExportExcel={handleExportExcel}
-            isExportExcelLoading={isExportExcelLoading}
-            onValidation={handleValidation}
-            onCascade={handleCascade}
-            shareStatus={shareStatus}
-            onCreateShareLink={handleCreateShareLink}
-            ganttDayMode={effectiveAuthGanttDayMode}
-            displayGanttDayMode={effectiveAuthGanttDayMode}
-            calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
-            readOnly={isArchivedProject}
-            previewState={previewState.active ? previewState.mode : 'idle'}
-            previewMessage={previewState.active ? previewState.message : null}
-            onGanttDayModeChange={(ganttDayMode) => {
-              void handleGanttDayModeChange(ganttDayMode).catch((error) => {
-                console.error('Failed to update gantt day mode:', error);
-              });
-            }}
-          />
-        )
-        : (
-          <GuestWorkspace
-            ganttRef={ganttRef}
-            tasks={tasks}
-            setTasks={setTasks}
-            loading={loading}
-            isAuthenticated={auth.isAuthenticated}
-            batchUpdate={batchUpdate}
-            onSend={handleStartScreenSend}
-            onEmptyChart={handleEmptyChart}
-            onLoginRequired={onLoginRequired}
-            onScrollToToday={handleScrollToToday}
-            onCollapseAll={handleCollapseAll}
-            onExpandAll={handleExpandAll}
-            onExportPdf={handleExportPdf}
-            isExportExcelLoading={isExportExcelLoading}
-            onValidation={handleValidation}
-            onCascade={handleCascade}
-            shareStatus={shareStatus}
-            onCreateShareLink={handleCreateShareLink}
-            ganttDayMode="calendar"
-          />
-        );
+    : workspace.kind === 'planner'
+      ? (
+        <ResourcePlannerWorkspace
+          accessToken={auth.accessToken}
+          projectId={workspace.projectId}
+          onBackToProject={() => {
+            setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+        />
+      )
+      : workspace.kind === 'draft'
+        ? null
+        : showProjectStartScreen
+          ? (
+            <DraftWorkspace
+              isAuthenticated={auth.isAuthenticated}
+              onSend={handleStartScreenSend}
+              onEmptyChart={handleEmptyChart}
+              onLoginRequired={onLoginRequired}
+            />
+          )
+        : workspace.kind === 'project'
+          ? (
+            <ProjectWorkspace
+              ganttRef={ganttRef}
+              tasks={visibleTasks}
+              setTasks={setTasks}
+              loading={loading}
+              accessToken={auth.accessToken}
+              sharedProject={sharedProject.project}
+              shareToken={sharedProject.shareToken}
+              hasShareToken={hasShareToken}
+              displayConnected={displayConnected}
+              isAuthenticated={auth.isAuthenticated}
+              chatUsage={billingStatus}
+              chatDisabled={isArchivedProject || Boolean(proactiveChatDenial)}
+              chatDisabledReason={chatDisabledReason}
+              batchUpdate={batchUpdate}
+              onSend={handleSend}
+              onSplitTask={submitSplitTask}
+              onLoginRequired={onLoginRequired}
+              onCloseChat={closeProjectChat}
+              onToggleChat={toggleProjectChat}
+              onScrollToToday={handleScrollToToday}
+              onCollapseAll={handleCollapseAll}
+              onExpandAll={handleExpandAll}
+              onExportPdf={handleExportPdf}
+              onExportExcel={handleExportExcel}
+              isExportExcelLoading={isExportExcelLoading}
+              onValidation={handleValidation}
+              onCascade={handleCascade}
+              shareStatus={shareStatus}
+              onCreateShareLink={handleCreateShareLink}
+              ganttDayMode={effectiveAuthGanttDayMode}
+              displayGanttDayMode={effectiveAuthGanttDayMode}
+              calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
+              readOnly={isArchivedProject}
+              previewState={previewState.active ? previewState.mode : 'idle'}
+              previewMessage={previewState.active ? previewState.message : null}
+              onGanttDayModeChange={(ganttDayMode) => {
+                void handleGanttDayModeChange(ganttDayMode).catch((error) => {
+                  console.error('Failed to update gantt day mode:', error);
+                });
+              }}
+            />
+          )
+          : (
+            <GuestWorkspace
+              ganttRef={ganttRef}
+              tasks={tasks}
+              setTasks={setTasks}
+              loading={loading}
+              isAuthenticated={auth.isAuthenticated}
+              batchUpdate={batchUpdate}
+              onSend={handleStartScreenSend}
+              onEmptyChart={handleEmptyChart}
+              onLoginRequired={onLoginRequired}
+              onScrollToToday={handleScrollToToday}
+              onCollapseAll={handleCollapseAll}
+              onExpandAll={handleExpandAll}
+              onExportPdf={handleExportPdf}
+              isExportExcelLoading={isExportExcelLoading}
+              onValidation={handleValidation}
+              onCascade={handleCascade}
+              shareStatus={shareStatus}
+              onCreateShareLink={handleCreateShareLink}
+              ganttDayMode="calendar"
+            />
+          );
 
   return (
     <>

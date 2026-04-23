@@ -47,6 +47,8 @@ describe('resource routes', () => {
   it('re-exports planner transport types for the web layer without inventing a second schema', () => {
     assert.match(apiTypesSource, /export type \{[\s\S]*ResourcePlannerInterval,[\s\S]*ResourcePlannerResource,[\s\S]*ResourcePlannerResult,[\s\S]*ResourceScope,[\s\S]*ResourceType,[\s\S]*\} from '\.\.\/types\.ts';/);
     assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerResult/);
+    assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerInterval/);
+    assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerResource/);
     assert.doesNotMatch(apiTypesSource, /export type ResourcePlannerResult =/);
   });
 

@@ -124,6 +124,56 @@ function toIsoDate(value: Date): string {
   return value.toISOString().split('T')[0]!;
 }
 
+function overlaps(left: Pick<ResourcePlannerInterval, 'startDate' | 'endDate'>, right: Pick<ResourcePlannerInterval, 'startDate' | 'endDate'>): boolean {
+  return left.startDate < right.endDate && right.startDate < left.endDate;
+}
+
+function annotateResourceConflicts(resource: ResourcePlannerResource): ResourcePlannerResource {
+  const intervals = resource.intervals;
+  const conflictMap = new Map<string, Set<string>>();
+
+  for (const interval of intervals) {
+    conflictMap.set(interval.assignmentId, new Set<string>());
+  }
+
+  for (let leftIndex = 0; leftIndex < intervals.length; leftIndex += 1) {
+    const left = intervals[leftIndex]!;
+
+    for (let rightIndex = leftIndex + 1; rightIndex < intervals.length; rightIndex += 1) {
+      const right = intervals[rightIndex]!;
+      if (right.startDate >= left.endDate) {
+        break;
+      }
+
+      if (!overlaps(left, right)) {
+        continue;
+      }
+
+      conflictMap.get(left.assignmentId)?.add(right.assignmentId);
+      conflictMap.get(right.assignmentId)?.add(left.assignmentId);
+    }
+  }
+
+  const annotatedIntervals = intervals.map((interval) => {
+    const conflicts = Array.from(conflictMap.get(interval.assignmentId) ?? []).sort((left, right) => left.localeCompare(right));
+    return {
+      ...interval,
+      hasConflict: conflicts.length > 0,
+      conflictCount: conflicts.length,
+      conflictAssignmentIds: conflicts,
+    };
+  });
+
+  const conflictCount = annotatedIntervals.filter((interval) => interval.hasConflict).length;
+
+  return {
+    ...resource,
+    hasConflicts: conflictCount > 0,
+    conflictCount,
+    intervals: annotatedIntervals,
+  };
+}
+
 export class PlannerService {
   private _prisma?: PlannerPrismaClient;
 
@@ -252,6 +302,9 @@ export class PlannerService {
         startDate: toIsoDate(task.startDate),
         endDate: toIsoDate(task.endDate),
         assignmentCreatedAt: row.createdAt.toISOString(),
+        hasConflict: false,
+        conflictCount: 0,
+        conflictAssignmentIds: [],
       };
 
       const existing = resourceMap.get(resource.id);
@@ -263,12 +316,14 @@ export class PlannerService {
       resourceMap.set(resource.id, {
         resourceId: resource.id,
         resourceName: resource.name,
+        hasConflicts: false,
+        conflictCount: 0,
         intervals: [interval],
       });
     }
 
     const resources = Array.from(resourceMap.values())
-      .map((resource) => ({
+      .map((resource) => annotateResourceConflicts({
         ...resource,
         intervals: resource.intervals.sort((left, right) => {
           return (

@@ -261,7 +261,22 @@ function createFixture() {
 
 describe('planner service contracts', () => {
   it('aggregates one shared resource across sibling projects into one authoritative planner payload', async () => {
-    const { plannerService } = createFixture();
+    const { plannerService, prisma } = createFixture();
+
+    prisma.tasks.set('task-beta-overlap', {
+      id: 'task-beta-overlap',
+      projectId: 'project-beta',
+      name: 'Beta overlap',
+      startDate: new Date('2026-05-02T00:00:00.000Z'),
+      endDate: new Date('2026-05-05T00:00:00.000Z'),
+    });
+    prisma.assignments.set('assignment-beta-overlap', {
+      id: 'assignment-beta-overlap',
+      projectId: 'project-beta',
+      taskId: 'task-beta-overlap',
+      resourceId: 'shared-designer',
+      createdAt: new Date('2026-04-20T12:00:07.000Z'),
+    });
 
     const result = await plannerService.getResourcePlanner({
       projectId: 'project-alpha',
@@ -274,41 +289,109 @@ describe('planner service contracts', () => {
     const sharedDesigner = result.resources.find((resource) => resource.resourceId === 'shared-designer');
     assert.ok(sharedDesigner);
     assert.equal(sharedDesigner.resourceName, 'Shared Designer');
-    assert.equal(sharedDesigner.intervals.length, 2);
+    assert.equal(sharedDesigner.intervals.length, 3);
+    assert.equal(sharedDesigner.conflictCount, 3);
+    assert.equal(sharedDesigner.hasConflicts, true);
     assert.deepEqual(
       sharedDesigner.intervals.map((interval) => ({
+        assignmentId: interval.assignmentId,
         projectId: interval.projectId,
         projectName: interval.projectName,
         taskId: interval.taskId,
         taskName: interval.taskName,
         startDate: interval.startDate,
         endDate: interval.endDate,
+        hasConflict: interval.hasConflict,
+        conflictAssignmentIds: interval.conflictAssignmentIds,
+        conflictCount: interval.conflictCount,
       })),
       [
         {
+          assignmentId: 'assignment-alpha',
           projectId: 'project-alpha',
           projectName: 'Alpha Project',
           taskId: 'task-alpha-plan',
           taskName: 'Alpha planning',
           startDate: '2026-05-01',
           endDate: '2026-05-03',
+          hasConflict: true,
+          conflictAssignmentIds: ['assignment-beta-overlap'],
+          conflictCount: 1,
         },
         {
+          assignmentId: 'assignment-beta-overlap',
+          projectId: 'project-beta',
+          projectName: 'Beta Project',
+          taskId: 'task-beta-overlap',
+          taskName: 'Beta overlap',
+          startDate: '2026-05-02',
+          endDate: '2026-05-05',
+          hasConflict: true,
+          conflictAssignmentIds: ['assignment-alpha', 'assignment-beta-build'],
+          conflictCount: 2,
+        },
+        {
+          assignmentId: 'assignment-beta-build',
           projectId: 'project-beta',
           projectName: 'Beta Project',
           taskId: 'task-beta-build',
           taskName: 'Beta build',
           startDate: '2026-05-04',
           endDate: '2026-05-08',
+          hasConflict: true,
+          conflictAssignmentIds: ['assignment-beta-overlap'],
+          conflictCount: 1,
         },
       ],
     );
 
     const sharedQa = result.resources.find((resource) => resource.resourceId === 'shared-qa');
     assert.ok(sharedQa);
+    assert.equal(sharedQa.hasConflicts, false);
+    assert.equal(sharedQa.conflictCount, 0);
     assert.equal(sharedQa.intervals.length, 1);
     assert.equal(sharedQa.intervals[0]?.projectName, 'Beta Project');
     assert.equal(sharedQa.intervals[0]?.taskName, 'Beta review');
+    assert.equal(sharedQa.intervals[0]?.hasConflict, false);
+    assert.deepEqual(sharedQa.intervals[0]?.conflictAssignmentIds, []);
+    assert.equal(sharedQa.intervals[0]?.conflictCount, 0);
+  });
+
+  it('treats adjacent intervals as non-overlapping and returns stable conflict metadata across repeated reads', async () => {
+    const { plannerService } = createFixture();
+
+    const first = await plannerService.getResourcePlanner({ projectId: 'project-alpha' });
+    const second = await plannerService.getResourcePlanner({ projectId: 'project-alpha' });
+
+    const sharedDesigner = first.resources.find((resource) => resource.resourceId === 'shared-designer');
+    assert.ok(sharedDesigner);
+    assert.equal(sharedDesigner.hasConflicts, false);
+    assert.equal(sharedDesigner.conflictCount, 0);
+    assert.deepEqual(
+      sharedDesigner.intervals.map((interval) => ({
+        assignmentId: interval.assignmentId,
+        hasConflict: interval.hasConflict,
+        conflictAssignmentIds: interval.conflictAssignmentIds,
+        conflictCount: interval.conflictCount,
+      })),
+      [
+        {
+          assignmentId: 'assignment-alpha',
+          hasConflict: false,
+          conflictAssignmentIds: [],
+          conflictCount: 0,
+        },
+        {
+          assignmentId: 'assignment-beta-build',
+          hasConflict: false,
+          conflictAssignmentIds: [],
+          conflictCount: 0,
+        },
+      ],
+      'endDate touching next startDate should stay adjacency, not a conflict',
+    );
+
+    assert.deepEqual(second, first, 'planner conflict annotations should be deterministic across repeated reads');
   });
 
   it('returns an empty but valid planner payload when the workspace has no shared assignments', async () => {

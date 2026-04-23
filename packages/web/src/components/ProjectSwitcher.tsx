@@ -286,6 +286,22 @@ export function ProjectSwitcher({
         </Button>
       </div>
 
+      {onOpenResourcePool && (
+        <div className="shrink-0 px-3 pb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void onOpenResourcePool();
+            }}
+            className="h-8 w-full rounded-md px-3 text-sm font-medium sm:h-8"
+            data-testid="open-resource-planner"
+          >
+            <span>Planner ресурсов</span>
+          </Button>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2">
         <div className="flex flex-col gap-2">
           {activeProjects.length > 0 ? (
