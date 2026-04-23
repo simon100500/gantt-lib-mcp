@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Task, ProjectState, ProjectSnapshot, FrontendProjectCommand, PendingCommand } from '../types';
+import type { ProjectResource, TaskAssignmentRecord } from '../lib/apiTypes';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
 import { getDefaultProjectScheduleOptions } from '../lib/projectScheduleOptions';
 import type { ScheduleCommandOptions } from 'gantt-lib/core/scheduling';
@@ -31,9 +32,12 @@ export function deriveVisibleSnapshot(
 }
 
 interface ProjectStoreState extends ProjectState {
+  resources: ProjectResource[];
+  assignments: TaskAssignmentRecord[];
+  assignmentError: string | null;
   setConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
   mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
-  hydrateConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
+  hydrateConfirmed: (version: number, snapshot: ProjectSnapshot, extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[] }) => void;
   addPending: (pending: PendingCommand) => void;
   resolvePending: (requestId: string, newVersion: number, snapshot: ProjectSnapshot) => void;
   rejectPending: (requestId: string) => void;
@@ -41,10 +45,16 @@ interface ProjectStoreState extends ProjectState {
   clearTransientState: () => void;
   scheduleOptions: ProjectScheduleOptions;
   setScheduleOptions: (options: ProjectScheduleOptions) => void;
+  setResources: (resources: ProjectResource[]) => void;
+  setAssignments: (assignments: TaskAssignmentRecord[]) => void;
+  setAssignmentError: (error: string | null) => void;
 }
 
 export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
+  resources: [],
+  assignments: [],
+  assignmentError: null,
   pending: [],
   dragPreview: undefined,
   scheduleOptions: getDefaultProjectScheduleOptions(),
@@ -64,8 +74,11 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       confirmed: { version: nextVersion, snapshot },
     };
   }),
-  hydrateConfirmed: (version, snapshot) => set({
+  hydrateConfirmed: (version, snapshot, extras) => set({
     confirmed: { version, snapshot },
+    resources: extras?.resources ?? [],
+    assignments: extras?.assignments ?? [],
+    assignmentError: null,
     pending: [],
     dragPreview: undefined,
   }),
@@ -84,4 +97,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   setDragPreview: (preview) => set({ dragPreview: preview }),
   clearTransientState: () => set({ pending: [], dragPreview: undefined }),
   setScheduleOptions: (options) => set({ scheduleOptions: options }),
+  setResources: (resources) => set({ resources }),
+  setAssignments: (assignments) => set({ assignments }),
+  setAssignmentError: (assignmentError) => set({ assignmentError }),
 }));

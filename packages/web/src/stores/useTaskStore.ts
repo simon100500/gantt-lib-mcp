@@ -190,6 +190,9 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       useProjectStore.getState().hydrateConfirmed(project.version, {
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,
+      }, {
+        resources: project.snapshot.resources,
+        assignments: project.snapshot.assignments,
       });
       const authState = useAuthStore.getState();
       if (authState.project) {
@@ -227,6 +230,9 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     useProjectStore.getState().hydrateConfirmed(0, {
       tasks: snapshot.tasks,
       dependencies: [],
+    }, {
+      resources: [],
+      assignments: [],
     });
 
     set({
@@ -248,6 +254,9 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     useProjectStore.getState().hydrateConfirmed(0, {
       tasks: [],
       dependencies: [],
+    }, {
+      resources: [],
+      assignments: [],
     });
     set({
       activeSource: 'shared',

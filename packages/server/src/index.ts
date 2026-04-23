@@ -35,6 +35,7 @@ import { registerBaselineRoutes } from './routes/baseline-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
 import { registerExcelExportRoutes } from './routes/excel-export-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
+import { registerResourceRoutes } from './routes/resource-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
@@ -53,6 +54,7 @@ await registerBaselineRoutes(fastify);
 await registerCommandRoutes(fastify);
 await registerExcelExportRoutes(fastify);
 await registerHistoryRoutes(fastify);
+await registerResourceRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -60,7 +62,25 @@ await registerHistoryRoutes(fastify);
 
 async function buildProjectLoadResponse(projectId: string, requesterEmail?: string): Promise<{
   version: number;
-  snapshot: ProjectSnapshot;
+  snapshot: ProjectSnapshot & {
+    resources: Array<{
+      id: string;
+      projectId: string;
+      name: string;
+      type: 'human' | 'equipment' | 'material' | 'other';
+      isActive: boolean;
+      createdAt: string;
+      updatedAt: string;
+      deactivatedAt: string | null;
+    }>;
+    assignments: Array<{
+      id: string;
+      projectId: string;
+      taskId: string;
+      resourceId: string;
+      createdAt: string;
+    }>;
+  };
   project: {
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
@@ -81,7 +101,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     throw new Error('Project unavailable');
   }
 
-  const [project, tasks, dependencies, projectCalendar] = await Promise.all([
+  const [project, tasks, dependencies, resources, assignments, projectCalendar] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: projectId,
@@ -96,6 +116,15 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     prisma.dependency.findMany({
       where: { task: { projectId } },
       select: { id: true, taskId: true, depTaskId: true, type: true, lag: true },
+    }),
+    prisma.resource.findMany({
+      where: { projectId },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.taskAssignment.findMany({
+      where: { projectId },
+      select: { id: true, projectId: true, taskId: true, resourceId: true, createdAt: true },
+      orderBy: [{ taskId: 'asc' }, { resourceId: 'asc' }],
     }),
     getProjectCalendarSettings(prisma, projectId),
   ]);
@@ -126,6 +155,23 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         depTaskId: dependency.depTaskId,
         type: dependency.type as DependencyType,
         lag: dependency.lag,
+      })),
+      resources: resources.map((resource: any) => ({
+        id: resource.id,
+        projectId: resource.projectId,
+        name: resource.name,
+        type: resource.type,
+        isActive: resource.isActive,
+        createdAt: resource.createdAt.toISOString(),
+        updatedAt: resource.updatedAt.toISOString(),
+        deactivatedAt: resource.deactivatedAt ? resource.deactivatedAt.toISOString() : null,
+      })),
+      assignments: assignments.map((assignment: any) => ({
+        id: assignment.id,
+        projectId: assignment.projectId,
+        taskId: assignment.taskId,
+        resourceId: assignment.resourceId,
+        createdAt: assignment.createdAt.toISOString(),
       })),
     },
   };

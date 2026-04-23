@@ -1,6 +1,27 @@
 import type { AuthProject, AuthUser } from '../stores/useAuthStore.ts';
 import type { ProjectDependency, Task } from '../types.ts';
 
+export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
+
+export interface ProjectResource {
+  id: string;
+  projectId: string;
+  name: string;
+  type: ResourceType;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deactivatedAt: string | null;
+}
+
+export interface TaskAssignmentRecord {
+  id: string;
+  projectId: string;
+  taskId: string;
+  resourceId: string;
+  createdAt: string;
+}
+
 export interface AuthSuccessResponse {
   accessToken: string;
   refreshToken: string;
@@ -14,6 +35,8 @@ export interface ProjectLoadResponse {
   snapshot: {
     tasks: Task[];
     dependencies: ProjectDependency[];
+    resources: ProjectResource[];
+    assignments: TaskAssignmentRecord[];
   };
 }
 

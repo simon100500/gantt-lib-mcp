@@ -407,6 +407,61 @@ describe('resource and assignment service contracts', () => {
     );
   });
 
+  it('keeps persisted inactive-resource assignments readable while rejecting new writes with resource_inactive', async () => {
+    const { resourceService, assignmentService } = createFixture();
+    const active = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+    const inactiveLater = await resourceService.create({ projectId: 'project-1', name: 'Crew to deactivate' });
+
+    const assigned = await assignmentService.replaceForTask({
+      projectId: 'project-1',
+      taskId: 'leaf-task',
+      resourceIds: [active.id, inactiveLater.id],
+    });
+
+    assert.deepEqual(
+      assigned.resources.map((resource) => ({ id: resource.id, isActive: resource.isActive })).sort((left, right) => left.id.localeCompare(right.id)),
+      [
+        { id: active.id, isActive: true },
+        { id: inactiveLater.id, isActive: true },
+      ].sort((left, right) => left.id.localeCompare(right.id)),
+    );
+
+    await resourceService.deactivate('project-1', inactiveLater.id);
+
+    const listed = await assignmentService.list({
+      projectId: 'project-1',
+      taskId: 'leaf-task',
+    } satisfies ListTaskAssignmentsInput);
+
+    assert.deepEqual(
+      listed.assignments.map((assignment) => assignment.resourceId).sort(),
+      [active.id, inactiveLater.id],
+    );
+    assert.deepEqual(
+      listed.resources.map((resource) => ({ id: resource.id, isActive: resource.isActive })).sort((left, right) => left.id.localeCompare(right.id)),
+      [
+        { id: active.id, isActive: true },
+        { id: inactiveLater.id, isActive: false },
+      ],
+      'persisted assignments should still round-trip with inactive resource details on read',
+    );
+
+    await assert.rejects(
+      () => assignmentService.replaceForTask({
+        projectId: 'project-1',
+        taskId: 'leaf-task',
+        resourceIds: [inactiveLater.id],
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'resource_inactive');
+        assert.equal(error.issue.field, 'resourceId');
+        assert.equal(error.issue.detail, inactiveLater.id);
+        return true;
+      },
+    );
+  });
+
   it('rejects missing resources, inactive resources, non-leaf direct replacement, and cross-project mismatches', async () => {
     const { resourceService, assignmentService } = createFixture();
     const active = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });

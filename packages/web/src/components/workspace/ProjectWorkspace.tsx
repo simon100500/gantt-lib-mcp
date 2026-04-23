@@ -17,6 +17,7 @@ import { useFilterPersistence } from '../../hooks/useFilterPersistence';
 import { useProjectHistory } from '../../hooks/useProjectHistory.ts';
 import { useTaskFilter } from '../../hooks/useTaskFilter';
 import { useChatStore } from '../../stores/useChatStore.ts';
+import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { SubscriptionStatus, UsageStatus } from '../../stores/useBillingStore.ts';
 import { useHistoryViewerStore } from '../../stores/useHistoryViewerStore.ts';
 import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
@@ -25,7 +26,7 @@ import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
-import type { BaselineSnapshotResponse } from '../../lib/apiTypes.ts';
+import type { BaselineSnapshotResponse, ProjectResource, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
 
 interface ProjectWorkspaceProps {
@@ -112,6 +113,44 @@ function buildTaskChatMention(task: Task): string {
   return `[task:${task.id}|${task.name}]\n\n`;
 }
 
+function collectDescendantLeafIds(tasks: Task[], taskId: string): string[] {
+  const childrenByParent = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (!task.parentId) continue;
+    const bucket = childrenByParent.get(task.parentId) ?? [];
+    bucket.push(task);
+    childrenByParent.set(task.parentId, bucket);
+  }
+
+  const rootChildren = childrenByParent.get(taskId) ?? [];
+  const queue = [...rootChildren];
+  const leafIds: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const children = childrenByParent.get(current.id) ?? [];
+    if (children.length === 0) {
+      leafIds.push(current.id);
+      continue;
+    }
+    queue.push(...children);
+  }
+
+  return leafIds;
+}
+
+function assignedResourcesForTask(
+  taskId: string,
+  resources: ProjectResource[],
+  assignments: TaskAssignmentRecord[],
+): ProjectResource[] {
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
+  return assignments
+    .filter((assignment) => assignment.taskId === taskId)
+    .map((assignment) => resourceById.get(assignment.resourceId))
+    .filter((resource): resource is ProjectResource => Boolean(resource));
+}
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -184,6 +223,12 @@ export function ProjectWorkspace({
   const taskFilter = useTaskFilter();
 
   const projectStates = useProjectUIStore((state) => state.projectStates);
+  const resources = useProjectStore((state) => state.resources);
+  const assignments = useProjectStore((state) => state.assignments);
+  const assignmentError = useProjectStore((state) => state.assignmentError);
+  const setResources = useProjectStore((state) => state.setResources);
+  const setAssignments = useProjectStore((state) => state.setAssignments);
+  const setAssignmentError = useProjectStore((state) => state.setAssignmentError);
   const collapsedParentIds = useMemo(() => {
     if (!projectId) return new Set<string>();
     const projectState = projectStates[projectId];
@@ -382,33 +427,6 @@ export function ProjectWorkspace({
     }
   }, [batchUpdate, effectiveReadOnly, ganttDayMode, previewModeActive, setTasks, tasks, weekendPredicate]);
 
-  const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
-    if (effectiveReadOnly || chatDisabled || !showChat) {
-      return [];
-    }
-
-    const commands: TaskListMenuCommand<Task>[] = [
-      {
-        id: 'send-task-to-chat',
-        label: 'Выполнить...',
-        icon: <WandSparkles className="h-4 w-4" />,
-        onSelect: (row) => setTaskChatDraft(row),
-      },
-    ];
-
-    if (onSplitTask) {
-      commands.push({
-        id: 'split-task-with-ai',
-        label: 'Разбить задачу...',
-        icon: <ListTree className="h-4 w-4" />,
-        scope: 'linear',
-        onSelect: (row) => setSplitTaskDraft(row),
-      });
-    }
-
-    return commands;
-  }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat]);
-
   const handleAppendTaskToChat = useCallback((task: Task) => {
     setChatComposerDraft(buildTaskChatMention(task));
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
@@ -444,6 +462,88 @@ export function ProjectWorkspace({
 
     return await Promise.resolve(onSplitTask(splitTaskDraft, details));
   }, [onSplitTask, splitTaskDraft]);
+
+  const handleAssignResources = useCallback(async (task: Task) => {
+    if (!accessToken || effectiveReadOnly) {
+      return;
+    }
+
+    const state = useProjectStore.getState();
+    const activeResources = state.resources.filter((resource) => resource.isActive);
+    const nextResourceIds = activeResources.slice(0, 1).map((resource) => resource.id);
+    const childLeafIds = collectDescendantLeafIds(tasks, task.id);
+    const isParentTask = childLeafIds.length > 0;
+    const endpoint = isParentTask
+      ? `/api/tasks/${task.id}/assignments/materialize`
+      : `/api/tasks/${task.id}/assignments`;
+
+    setAssignmentError(null);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ resourceIds: nextResourceIds }),
+    });
+
+    const data = await response.json().catch(() => ({})) as {
+      error?: string;
+      issue?: { code?: string };
+      taskAssignments?: Array<{ assignments: TaskAssignmentRecord[] }>;
+      assignments?: TaskAssignmentRecord[];
+    };
+
+    if (!response.ok) {
+      const issueCode = data.issue?.code;
+      setAssignmentError(issueCode ? `${issueCode}: ${data.error ?? 'assignment failed'}` : (data.error ?? `HTTP ${response.status}`));
+      return;
+    }
+
+    if (isParentTask) {
+      const nextAssignments = data.taskAssignments?.flatMap((entry) => entry.assignments) ?? [];
+      const unaffectedAssignments = state.assignments.filter((assignment) => !childLeafIds.includes(assignment.taskId));
+      setAssignments([...unaffectedAssignments, ...nextAssignments]);
+    } else {
+      const nextAssignments = data.assignments ?? [];
+      const unaffectedAssignments = state.assignments.filter((assignment) => assignment.taskId !== task.id);
+      setAssignments([...unaffectedAssignments, ...nextAssignments]);
+    }
+  }, [accessToken, effectiveReadOnly, setAssignmentError, setAssignments, tasks]);
+
+  const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
+    if (effectiveReadOnly || chatDisabled || !showChat) {
+      return [];
+    }
+
+    const commands: TaskListMenuCommand<Task>[] = [
+      {
+        id: 'assign-resource',
+        label: 'Назначить ресурс',
+        icon: <Check className="h-4 w-4" />,
+        onSelect: (row) => void handleAssignResources(row),
+      },
+      {
+        id: 'send-task-to-chat',
+        label: 'Выполнить...',
+        icon: <WandSparkles className="h-4 w-4" />,
+        onSelect: (row) => setTaskChatDraft(row),
+      },
+    ];
+
+    if (onSplitTask) {
+      commands.push({
+        id: 'split-task-with-ai',
+        label: 'Разбить задачу...',
+        icon: <ListTree className="h-4 w-4" />,
+        scope: 'linear',
+        onSelect: (row) => setSplitTaskDraft(row),
+      });
+    }
+
+    return commands;
+  }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat, handleAssignResources]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
@@ -677,6 +777,26 @@ export function ProjectWorkspace({
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {assignmentError && (
+              <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="assignment-error-banner">
+                {assignmentError}
+              </div>
+            )}
+
+            {tasks.length > 0 && (
+              <div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-600" data-testid="assignment-summary">
+                {tasks.map((task) => {
+                  const taskResources = assignedResourcesForTask(task.id, resources, assignments);
+                  const names = taskResources.map((resource) => resource.name).join(', ') || '—';
+                  return (
+                    <div key={task.id} data-task-id={task.id}>
+                      {task.name}: {names}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {loading ? (
               <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
                 Загрузка...
