@@ -29,6 +29,7 @@ export interface GanttChartProps {
   containerHeight?: string | number;
   showTaskList?: boolean;
   showChart?: boolean;
+  showBaseline?: boolean;
   taskListWidth?: number;
   onValidateDependencies?: (result: ValidationResult) => void;
   enableAutoSchedule?: boolean;
@@ -74,6 +75,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   containerHeight,
   showTaskList,
   showChart,
+  showBaseline,
   taskListWidth,
   onValidateDependencies,
   enableAutoSchedule,
@@ -129,6 +131,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       containerHeight={containerHeight}
       showTaskList={showTaskList}
       showChart={showChart}
+      showBaseline={showBaseline}
       taskListWidth={taskListWidth}
       onValidateDependencies={onValidateDependencies}
       enableAutoSchedule={enableAutoSchedule}

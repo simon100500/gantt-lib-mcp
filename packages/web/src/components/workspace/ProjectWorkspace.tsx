@@ -311,6 +311,28 @@ export function ProjectWorkspace({
     } satisfies BaselineSnapshotResponse['snapshot'];
   }, [selectedBaselineState]);
   const selectedBaselineTaskCount = selectedBaselineSnapshot?.tasks.length ?? 0;
+  const effectiveTasksWithBaseline = useMemo(() => {
+    if (previewModeActive || !selectedBaselineSnapshot) {
+      return effectiveTasks;
+    }
+
+    const baselineById = new Map(
+      selectedBaselineSnapshot.tasks.map((task) => [task.id, task]),
+    );
+
+    return effectiveTasks.map((task) => {
+      const baselineTask = baselineById.get(task.id);
+      if (!baselineTask?.startDate || !baselineTask?.endDate) {
+        return task;
+      }
+
+      return {
+        ...task,
+        baselineStartDate: baselineTask.startDate,
+        baselineEndDate: baselineTask.endDate,
+      } satisfies Task;
+    });
+  }, [effectiveTasks, previewModeActive, selectedBaselineSnapshot]);
   const baselineRows = useMemo(() => {
     const rows = baselineItems.map((item) => ({
       id: item.id,
@@ -636,7 +658,8 @@ export function ProjectWorkspace({
             ) : (
               <GanttChart
                 ref={ganttRef as Ref<GanttChartRef>}
-                tasks={effectiveTasks}
+                tasks={effectiveTasksWithBaseline}
+                showBaseline={Boolean(selectedBaselineLabel && !previewHistoryItem)}
                 taskFilter={taskFilter}
                 taskListMenuCommands={taskListMenuCommands}
                 onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}

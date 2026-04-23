@@ -46,7 +46,7 @@ vi.mock('../../layout/Toolbar.tsx', () => ({
 }));
 
 vi.mock('../../GanttChart.tsx', () => ({
-  GanttChart: () => <div data-testid="gantt-chart">gantt</div>,
+  GanttChart: (props: Record<string, unknown>) => <div data-testid="gantt-chart">{JSON.stringify(props)}</div>,
 }));
 
 vi.mock('../../ChatSidebar.tsx', () => ({
@@ -215,7 +215,7 @@ beforeEach(() => {
     createdAt: '2026-04-22T00:00:00.000Z',
     snapshot: {
       tasks: [
-        { id: 'baseline-task', name: 'Baseline task', startDate: '2026-03-01', endDate: '2026-03-02', dependencies: [] },
+        { id: 'task-1', name: 'Baseline task', startDate: '2026-03-01', endDate: '2026-03-02', dependencies: [] },
       ],
       dependencies: [],
     },
@@ -304,6 +304,22 @@ describe('ProjectWorkspace baseline wiring', () => {
     ]);
     expect(container.textContent).toContain('Baseline: Baseline alpha');
     expect(container.textContent).toContain('(1 задач)');
+
+    root.unmount();
+  });
+
+  it('maps selected baseline snapshot into gantt baseline props instead of only showing the footer badge', async () => {
+    const { container, root } = renderWorkspace();
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-baseline"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const ganttPayload = container.querySelector('[data-testid="gantt-chart"]')?.textContent ?? '';
+    expect(ganttPayload).toContain('"showBaseline":true');
+    expect(ganttPayload).toContain('"baselineStartDate":"2026-03-01"');
+    expect(ganttPayload).toContain('"baselineEndDate":"2026-03-02"');
 
     root.unmount();
   });

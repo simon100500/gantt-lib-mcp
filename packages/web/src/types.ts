@@ -34,6 +34,8 @@ export interface Task {
   name: string;
   startDate: string | Date;   // YYYY-MM-DD string or Date object (gantt-lib compatible)
   endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)
+  baselineStartDate?: string | Date; // gantt-lib baseline overlay contract
+  baselineEndDate?: string | Date;   // gantt-lib baseline overlay contract
   type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;          // Optional parent task ID for hierarchy
