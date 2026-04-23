@@ -1,14 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { AssignmentService, AssignmentValidationError } from './assignment.service.ts';
-import { ResourceService, ResourceValidationError } from './resource.service.ts';
+import { AssignmentService, AssignmentValidationError } from './assignment.service.js';
+import { ResourceService, ResourceValidationError } from './resource.service.js';
 import type {
   CreateProjectResourceInput,
   ListProjectResourcesInput,
   ListTaskAssignmentsInput,
   ReplaceTaskAssignmentsInput,
   UpdateProjectResourceInput,
-} from '../types.ts';
+} from '../types.js';
 
 type ProjectRow = { id: string; userId: string };
 type TaskRow = { id: string; projectId: string; parentId: string | null };
@@ -38,7 +38,7 @@ class FakeRuntimeCorePrisma {
   readonly assignments = new Map<string, AssignmentRow>();
 
   readonly project = {
-    findUnique: async ({ where, select }: { where: { id: string }; select?: { id?: true; userId?: true } }) => {
+    findUnique: async ({ where, select }: { where: { id: string }; select?: { id?: true; userId?: true } }): Promise<ProjectRow | null> => {
       const project = this.projects.get(where.id) ?? null;
       if (!project) {
         return null;
@@ -47,14 +47,14 @@ class FakeRuntimeCorePrisma {
         return { ...project };
       }
       return {
-        ...(select.id ? { id: project.id } : {}),
-        ...(select.userId ? { userId: project.userId } : {}),
+        id: project.id,
+        userId: project.userId,
       };
     },
   };
 
   readonly task = {
-    findUnique: async ({ where, include }: { where: { id: string }; include?: { children: { select: { id: true } } } }) => {
+    findUnique: async ({ where, include }: { where: { id: string }; include?: { children: { select: { id: true } } } }): Promise<(TaskRow & { children?: Array<{ id: string }> }) | null> => {
       const task = this.tasks.get(where.id) ?? null;
       if (!task) {
         return null;

@@ -20,10 +20,10 @@ describe('resource routes', () => {
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments\/materialize', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
   });
 
-  it('keeps assignment writes resource-oriented and distinct between leaf replacement and parent materialization', () => {
-    assert.match(resourceRoutesSource, /assignmentService\.replaceForTask\(\{/);
-    assert.match(resourceRoutesSource, /assignmentService\.materializeForParentTask\(\{/);
-    assert.doesNotMatch(resourceRoutesSource, /\/api\/commands\/commit/);
+  it('passes ownership scope through resource create and update routes', () => {
+    assert.match(resourceRoutesSource, /type ResourceBody = \{[\s\S]*scope\?: 'shared' \| 'project';[\s\S]*\};/);
+    assert.match(resourceRoutesSource, /resourceService\.create\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
+    assert.match(resourceRoutesSource, /resourceService\.update\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
   });
 
   it('maps malformed params and typed assignment validation failures to stable validation_error bodies', () => {
@@ -45,15 +45,23 @@ describe('resource routes', () => {
     assert.match(indexSource, /assignments: assignments\.map/);
   });
 
-  it('extends the authoritative /api/project payload with resources and assignments for reload hydration, including inactive resources', () => {
+  it('extends the authoritative /api/project payload with mixed-visibility resources and assignments for reload hydration, including inactive resources', () => {
     assert.match(indexSource, /snapshot: ProjectSnapshot & \{/);
-    assert.match(indexSource, /resources: resources\.map/);
+    assert.match(indexSource, /resourceService\.list\(\{[\s\S]*projectId,[\s\S]*includeInactive: true,[\s\S]*\}\)/);
+    assert.match(indexSource, /resources: resourceCatalog\.resources\.map/);
     assert.match(indexSource, /assignments: assignments\.map/);
+    assert.match(indexSource, /userId: resource\.userId/);
+    assert.match(indexSource, /projectId: resource\.projectId/);
+    assert.match(indexSource, /scope: resource\.scope/);
     assert.match(indexSource, /isActive: resource\.isActive/);
-    assert.match(indexSource, /deactivatedAt: resource\.deactivatedAt \? resource\.deactivatedAt\.toISOString\(\) : null/);
+    assert.match(indexSource, /deactivatedAt: resource\.deactivatedAt/);
     assert.match(indexSource, /resourceId: assignment\.resourceId/);
-    assert.match(indexSource, /prisma\.resource\.findMany/);
-    assert.match(indexSource, /prisma\.taskAssignment\.findMany/);
+  });
+
+  it('keeps /api/project resource hydration authoritative to the current project boundary and excludes foreign local resources from direct prisma filtering', () => {
+    assert.match(indexSource, /const \[project, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
+    assert.match(indexSource, /resourceService\.list\(/);
+    assert.doesNotMatch(indexSource, /prisma\.resource\.findMany\(\{[\s\S]*where: \{ projectId \}[\s\S]*\}\)/);
   });
 
   it('keeps parent assignment rows absent from the authoritative load contract by serializing only persisted task_assignments rows', () => {

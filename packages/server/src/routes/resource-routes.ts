@@ -10,6 +10,7 @@ import { authMiddleware } from '../middleware/auth-middleware.js';
 type ResourceBody = {
   name?: string;
   type?: 'human' | 'equipment' | 'material' | 'other';
+  scope?: 'shared' | 'project';
   isActive?: boolean;
 };
 
@@ -100,6 +101,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
         projectId: req.user!.projectId,
         name,
         type: body.type,
+        scope: body.scope,
       });
 
       return reply.status(201).send(response);
@@ -132,6 +134,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
         resourceId: params.resourceId,
         name: typeof body.name === 'string' ? body.name : undefined,
         type: body.type,
+        scope: body.scope,
         isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
       });
 

@@ -39,9 +39,12 @@ type ResourceRow = {
   deactivatedAt: Date | null;
 };
 
+type ProjectOwnerSelection = { id: string; userId: string };
+type ResourceIdSelection = { id: string };
+
 type ResourcePrismaClient = {
   project: {
-    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerRow | null>;
+    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerSelection | null>;
   };
   resource: {
     findMany(args: {
@@ -59,8 +62,17 @@ type ResourcePrismaClient = {
         name?: string;
         OR?: Array<{ projectId: null } | { projectId: string }>;
       };
-      select?: { id: true };
-    }): Promise<{ id: string } | ResourceRow | null>;
+      select: { id: true };
+    }): Promise<ResourceIdSelection | null>;
+    findFirst(args: {
+      where: {
+        id?: string;
+        userId?: string;
+        name?: string;
+        OR?: Array<{ projectId: null } | { projectId: string }>;
+      };
+      select?: undefined;
+    }): Promise<ResourceRow | null>;
     create(args: {
       data: {
         id: string;

@@ -14,7 +14,13 @@
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
 import websocket from '@fastify/websocket';
-import { commandService, messageService, taskService } from '@gantt/mcp/services';
+import {
+  commandService,
+  messageService,
+  taskService,
+  assignmentService,
+  resourceService,
+} from '@gantt/mcp/services';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import { authService } from '@gantt/mcp/services';
 import type {
@@ -65,7 +71,9 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
   snapshot: ProjectSnapshot & {
     resources: Array<{
       id: string;
-      projectId: string;
+      userId: string;
+      projectId: string | null;
+      scope: 'shared' | 'project';
       name: string;
       type: 'human' | 'equipment' | 'material' | 'other';
       isActive: boolean;
@@ -101,7 +109,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     throw new Error('Project unavailable');
   }
 
-  const [project, tasks, dependencies, resources, assignments, projectCalendar] = await Promise.all([
+  const [project, tasks, dependencies, resourceCatalog, assignments, projectCalendar] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: projectId,
@@ -117,9 +125,9 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       where: { task: { projectId } },
       select: { id: true, taskId: true, depTaskId: true, type: true, lag: true },
     }),
-    prisma.resource.findMany({
-      where: { projectId },
-      orderBy: { name: 'asc' },
+    resourceService.list({
+      projectId,
+      includeInactive: true,
     }),
     prisma.taskAssignment.findMany({
       where: { projectId },
@@ -156,15 +164,17 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         type: dependency.type as DependencyType,
         lag: dependency.lag,
       })),
-      resources: resources.map((resource: any) => ({
+      resources: resourceCatalog.resources.map((resource) => ({
         id: resource.id,
+        userId: resource.userId,
         projectId: resource.projectId,
+        scope: resource.scope,
         name: resource.name,
         type: resource.type,
         isActive: resource.isActive,
-        createdAt: resource.createdAt.toISOString(),
-        updatedAt: resource.updatedAt.toISOString(),
-        deactivatedAt: resource.deactivatedAt ? resource.deactivatedAt.toISOString() : null,
+        createdAt: resource.createdAt,
+        updatedAt: resource.updatedAt,
+        deactivatedAt: resource.deactivatedAt,
       })),
       assignments: assignments.map((assignment: any) => ({
         id: assignment.id,
