@@ -65,9 +65,13 @@ export interface WorkType {
 
 export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
 
+export type ResourceScope = 'shared' | 'project';
+
 export interface ProjectResource {
   id: string;
-  projectId: string;
+  userId: string;
+  projectId: string | null;
+  scope: ResourceScope;
   name: string;
   type: ResourceType;
   isActive: boolean;
@@ -88,6 +92,7 @@ export interface CreateProjectResourceInput {
   projectId: string;
   name: string;
   type?: ResourceType;
+  scope?: ResourceScope;
 }
 
 export interface UpdateProjectResourceInput {
@@ -96,6 +101,7 @@ export interface UpdateProjectResourceInput {
   name?: string;
   type?: ResourceType;
   isActive?: boolean;
+  scope?: ResourceScope;
 }
 
 export interface ListProjectResourcesInput {

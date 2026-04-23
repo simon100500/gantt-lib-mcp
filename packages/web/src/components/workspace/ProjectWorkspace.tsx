@@ -488,17 +488,18 @@ export function ProjectWorkspace({
 
     setAssignmentSelectionTaskId(task.id);
     setSelectedResourceIdByTask((current) => {
-      if (current[task.id] !== undefined) {
-        return current;
-      }
+      const currentSelection = current[task.id] ?? '';
+      const selectionStillActive = currentSelection
+        ? activeResources.some((resource) => resource.id === currentSelection)
+        : false;
 
       return {
         ...current,
-        [task.id]: '',
+        [task.id]: selectionStillActive ? currentSelection : '',
       };
     });
     setAssignmentError(null);
-  }, [effectiveReadOnly, setAssignmentError]);
+  }, [activeResources, effectiveReadOnly, setAssignmentError]);
 
   const closeAssignmentSelector = useCallback(() => {
     setAssignmentSelectionTaskId(null);

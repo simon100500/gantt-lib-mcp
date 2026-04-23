@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const toolbarSpy = vi.fn();
 let ganttPropsSpy: Record<string, unknown> | null = null;
+const ganttPropsHistory: Array<Record<string, unknown>> = [];
 
 vi.mock('../../layout/Toolbar.tsx', () => ({
   Toolbar: (props: Record<string, unknown>) => {
@@ -18,10 +19,12 @@ vi.mock('../../layout/Toolbar.tsx', () => ({
 }));
 
 vi.mock('../../GanttChart.tsx', () => ({
-  GanttChart: (props: Record<string, unknown>) => {
+  GanttChart: React.forwardRef((_props: Record<string, unknown>, _ref) => {
+    const props = _props;
     ganttPropsSpy = props;
+    ganttPropsHistory.push(props);
     return <div data-testid="gantt-chart">chart</div>;
-  },
+  }),
 }));
 
 vi.mock('../../ChatSidebar.tsx', () => ({ ChatSidebar: () => <div /> }));
@@ -243,6 +246,7 @@ function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): Pro
 beforeEach(() => {
   toolbarSpy.mockClear();
   ganttPropsSpy = null;
+  ganttPropsHistory.length = 0;
   vi.unstubAllGlobals();
   useTaskStore.setState({
     tasks,
@@ -368,70 +372,93 @@ describe('ProjectWorkspace resource assignments', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          assignments: [
+          requestedTaskId: 'parent-1',
+          leafTaskIds: ['leaf-1', 'leaf-2'],
+          taskAssignments: [
             {
-              id: 'assigned-leaf-2',
-              projectId: 'project-1',
+              taskId: 'leaf-1',
+              assignments: [
+                {
+                  id: 'new-leaf-1',
+                  projectId: 'project-1',
+                  taskId: 'leaf-1',
+                  resourceId: 'resource-2',
+                  createdAt: '2026-04-01T00:00:00.000Z',
+                },
+              ],
+            },
+            {
               taskId: 'leaf-2',
-              resourceId: 'resource-2',
-              createdAt: '2026-04-01T00:00:00.000Z',
-            },
-          ],
-          resources: [
-            {
-              id: 'resource-1',
-              projectId: 'project-1',
-              name: 'Alpha Crew',
-              type: 'human',
-              isActive: true,
-              createdAt: '2026-04-01T00:00:00.000Z',
-              updatedAt: '2026-04-01T00:00:00.000Z',
-              deactivatedAt: null,
-            },
-            {
-              id: 'resource-2',
-              projectId: 'project-1',
-              name: 'Dormant Crew',
-              type: 'human',
-              isActive: true,
-              createdAt: '2026-04-01T00:00:00.000Z',
-              updatedAt: '2026-04-01T00:00:00.000Z',
-              deactivatedAt: null,
+              assignments: [
+                {
+                  id: 'new-leaf-2',
+                  projectId: 'project-1',
+                  taskId: 'leaf-2',
+                  resourceId: 'resource-2',
+                  createdAt: '2026-04-01T00:00:00.000Z',
+                },
+              ],
             },
           ],
         }),
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => buildProjectLoadResponse(),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: async () => ({
-          reason: 'validation_error',
-          error: 'Resource resource-2 is inactive',
-          issue: { code: 'resource_inactive', field: 'resourceId', detail: 'resource-2' },
+        json: async () => buildProjectLoadResponse({
+          snapshot: {
+            tasks,
+            dependencies: [],
+            resources: [
+              {
+                id: 'resource-1',
+                projectId: 'project-1',
+                name: 'Alpha Crew',
+                type: 'human',
+                isActive: true,
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-01T00:00:00.000Z',
+                deactivatedAt: null,
+              },
+              {
+                id: 'resource-2',
+                projectId: 'project-1',
+                name: 'Dormant Crew',
+                type: 'human',
+                isActive: false,
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-02T00:00:00.000Z',
+                deactivatedAt: '2026-04-02T00:00:00.000Z',
+              },
+            ],
+            assignments: [
+              {
+                id: 'new-leaf-1',
+                projectId: 'project-1',
+                taskId: 'leaf-1',
+                resourceId: 'resource-2',
+                createdAt: '2026-04-01T00:00:00.000Z',
+              },
+              {
+                id: 'new-leaf-2',
+                projectId: 'project-1',
+                taskId: 'leaf-2',
+                resourceId: 'resource-2',
+                createdAt: '2026-04-01T00:00:00.000Z',
+              },
+            ],
+          },
         }),
       });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container, root } = renderWorkspaceWithTaskStore();
+    const { container, root } = renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
     expect(assignCommand).toBeTruthy();
 
     await act(async () => {
-      await useProjectStore.getState().setAssignments([
-        {
-          id: 'assigned-leaf-2',
-          projectId: 'project-1',
-          taskId: 'leaf-2',
-          resourceId: 'resource-2',
-          createdAt: '2026-04-01T00:00:00.000Z',
-        },
-      ]);
+      await useProjectStore.getState().setAssignments([]);
       await useProjectStore.getState().setResources([
         {
           id: 'resource-1',
@@ -454,55 +481,23 @@ describe('ProjectWorkspace resource assignments', () => {
           deactivatedAt: null,
         },
       ]);
-      await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
+      await useProjectStore.getState().setAssignmentError(null);
     });
-
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/project', {
-      headers: { Authorization: 'Bearer token' },
-    });
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
 
     await act(async () => {
       assignCommand!.onSelect(tasks[0]!);
       await Promise.resolve();
     });
 
-    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
-    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+    let select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
+    let submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
 
     expect(select).not.toBeNull();
     expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
       'Выберите активный ресурс',
       'Alpha Crew',
+      'Dormant Crew',
     ]);
-    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Dormant Crew')).toBe(false);
-    expect(submitButton?.disabled).toBe(true);
-
-    await act(async () => {
-      await useProjectStore.getState().setAssignmentError(null);
-      await (useProjectStore.getState().setResources as (resources: ProjectLoadResponse['snapshot']['resources']) => void)([
-        {
-          id: 'resource-1',
-          projectId: 'project-1',
-          name: 'Alpha Crew',
-          type: 'human',
-          isActive: true,
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-01T00:00:00.000Z',
-          deactivatedAt: null,
-        },
-        {
-          id: 'resource-2',
-          projectId: 'project-1',
-          name: 'Dormant Crew',
-          type: 'human',
-          isActive: false,
-          createdAt: '2026-04-01T00:00:00.000Z',
-          updatedAt: '2026-04-02T00:00:00.000Z',
-          deactivatedAt: '2026-04-02T00:00:00.000Z',
-        },
-      ]);
-    });
 
     await act(async () => {
       select!.value = 'resource-2';
@@ -514,12 +509,36 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/tasks/parent-1/assignments/materialize', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/tasks/parent-1/assignments/materialize', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ resourceIds: ['resource-2'] }),
     }));
-    expect(useProjectStore.getState().assignmentError).toBe('resource_inactive: Resource resource-2 is inactive');
-    expect(container.querySelector('[data-testid="assignment-error-banner"]')?.textContent).toContain('resource_inactive');
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf A: Dormant Crew');
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+
+    await act(async () => {
+      await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/project', {
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+
+    await act(async () => {
+      assignCommand!.onSelect(tasks[0]!);
+      await Promise.resolve();
+    });
+
+    select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
+    submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+
+    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
+      'Выберите активный ресурс',
+      'Alpha Crew',
+    ]);
+    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Dormant Crew')).toBe(false);
+    expect(submitButton?.disabled).toBe(true);
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
 
     root.unmount();

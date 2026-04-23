@@ -5,8 +5,9 @@ import type {
   CreateProjectResourceInput,
   ListProjectResourcesInput,
   ProjectResource,
-  ResourceType,
   ResourceAssignmentValidationIssue,
+  ResourceScope,
+  ResourceType,
   UpdateProjectResourceInput,
 } from '../types.js';
 
@@ -21,9 +22,15 @@ export class ResourceValidationError extends Error {
   }
 }
 
+type ProjectOwnerRow = {
+  id: string;
+  userId: string;
+};
+
 type ResourceRow = {
   id: string;
-  projectId: string;
+  userId: string;
+  projectId: string | null;
   name: string;
   type: PrismaResourceType | ResourceType;
   isActive: boolean;
@@ -34,21 +41,31 @@ type ResourceRow = {
 
 type ResourcePrismaClient = {
   project: {
-    findUnique(args: { where: { id: string }; select: { id: true } }): Promise<{ id: string } | null>;
+    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerRow | null>;
   };
   resource: {
     findMany(args: {
-      where: { projectId: string; isActive?: boolean };
+      where: {
+        userId: string;
+        isActive?: boolean;
+        OR: Array<{ projectId: null } | { projectId: string }>;
+      };
       orderBy: Array<{ isActive?: 'asc' | 'desc' } | { name?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }>;
     }): Promise<ResourceRow[]>;
     findFirst(args: {
-      where: { id?: string; projectId: string; name?: string };
+      where: {
+        id?: string;
+        userId?: string;
+        name?: string;
+        OR?: Array<{ projectId: null } | { projectId: string }>;
+      };
       select?: { id: true };
     }): Promise<{ id: string } | ResourceRow | null>;
     create(args: {
       data: {
         id: string;
-        projectId: string;
+        userId: string;
+        projectId: string | null;
         name: string;
         type: PrismaResourceType;
       };
@@ -59,6 +76,7 @@ type ResourcePrismaClient = {
         name?: string;
         type?: PrismaResourceType;
         isActive?: boolean;
+        projectId?: string | null;
         deactivatedAt?: Date | null;
       };
     }): Promise<ResourceRow>;
@@ -90,10 +108,26 @@ function normalizeResourceType(type?: ResourceType): PrismaResourceType {
   }
 }
 
+function normalizeScope(scope?: ResourceScope): ResourceScope {
+  switch (scope) {
+    case undefined:
+    case 'project':
+    case 'shared':
+      return scope ?? 'project';
+    default:
+      throw new ResourceValidationError(`Unsupported resource scope: ${String(scope)}`, {
+        code: 'invalid_input',
+        field: 'type',
+      });
+  }
+}
+
 function toDomain(row: ResourceRow): ProjectResource {
   return {
     id: row.id,
+    userId: row.userId,
     projectId: row.projectId,
+    scope: row.projectId === null ? 'shared' : 'project',
     name: row.name,
     type: row.type as ResourceType,
     isActive: row.isActive,
@@ -103,7 +137,7 @@ function toDomain(row: ResourceRow): ProjectResource {
   };
 }
 
-function requireTrimmed(value: string, field: 'projectId' | 'name'): string {
+function requireTrimmed(value: string, field: 'projectId' | 'resourceId' | 'name'): string {
   const normalized = value.trim();
   if (!normalized) {
     throw new ResourceValidationError(`${field} is required`, {
@@ -128,10 +162,10 @@ export class ResourceService {
     return this._prisma;
   }
 
-  private async assertProjectExists(projectId: string): Promise<void> {
+  private async getWorkspaceBoundaryProject(projectId: string): Promise<ProjectOwnerRow> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
 
     if (!project) {
@@ -140,16 +174,22 @@ export class ResourceService {
         field: 'projectId',
       });
     }
+
+    return project;
   }
 
-  private async assertNameAvailable(projectId: string, name: string, resourceId?: string): Promise<void> {
+  private async assertNameAvailable(userId: string, projectId: string | null, name: string, resourceId?: string): Promise<void> {
     const existing = await this.prisma.resource.findFirst({
-      where: { projectId, name },
+      where: {
+        userId,
+        name,
+        OR: [{ projectId }, ...(projectId === null ? [] : [])],
+      },
       select: { id: true },
     });
 
     if (existing && existing.id !== resourceId) {
-      throw new ResourceValidationError(`Resource name "${name}" already exists in project ${projectId}`, {
+      throw new ResourceValidationError(`Resource name "${name}" already exists in this ownership scope`, {
         code: 'resource_name_conflict',
         field: 'name',
         detail: name,
@@ -159,10 +199,12 @@ export class ResourceService {
 
   async list({ projectId, includeInactive = false }: ListProjectResourcesInput): Promise<{ resources: ProjectResource[] }> {
     const normalizedProjectId = requireTrimmed(projectId, 'projectId');
-    await this.assertProjectExists(normalizedProjectId);
+    const project = await this.getWorkspaceBoundaryProject(normalizedProjectId);
 
     const resources = await this.prisma.resource.findMany({
-      where: includeInactive ? { projectId: normalizedProjectId } : { projectId: normalizedProjectId, isActive: true },
+      where: includeInactive
+        ? { userId: project.userId, OR: [{ projectId: null }, { projectId: normalizedProjectId }] }
+        : { userId: project.userId, isActive: true, OR: [{ projectId: null }, { projectId: normalizedProjectId }] },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }, { createdAt: 'asc' }],
     });
 
@@ -173,14 +215,17 @@ export class ResourceService {
     const projectId = requireTrimmed(input.projectId, 'projectId');
     const name = requireTrimmed(input.name, 'name');
     const type = normalizeResourceType(input.type);
+    const scope = normalizeScope(input.scope);
 
-    await this.assertProjectExists(projectId);
-    await this.assertNameAvailable(projectId, name);
+    const project = await this.getWorkspaceBoundaryProject(projectId);
+    const owningProjectId = scope === 'shared' ? null : project.id;
+    await this.assertNameAvailable(project.userId, owningProjectId, name);
 
     const created = await this.prisma.resource.create({
       data: {
         id: randomUUID(),
-        projectId,
+        userId: project.userId,
+        projectId: owningProjectId,
         name,
         type,
       },
@@ -194,22 +239,29 @@ export class ResourceService {
     const resourceId = requireTrimmed(input.resourceId, 'resourceId');
     const nextName = input.name === undefined ? undefined : requireTrimmed(input.name, 'name');
     const nextType = input.type === undefined ? undefined : normalizeResourceType(input.type);
+    const nextScope = input.scope === undefined ? undefined : normalizeScope(input.scope);
 
-    await this.assertProjectExists(projectId);
+    const project = await this.getWorkspaceBoundaryProject(projectId);
 
     const existing = await this.prisma.resource.findFirst({
-      where: { id: resourceId, projectId },
+      where: {
+        id: resourceId,
+        userId: project.userId,
+        OR: [{ projectId: null }, { projectId: project.id }],
+      },
     });
 
     if (!existing) {
-      throw new ResourceValidationError(`Resource ${resourceId} was not found in project ${projectId}`, {
+      throw new ResourceValidationError(`Resource ${resourceId} was not found for project ${projectId}`, {
         code: 'resource_not_found',
         field: 'resourceId',
       });
     }
 
+    const nextProjectOwnership = nextScope === undefined ? existing.projectId : nextScope === 'shared' ? null : project.id;
+
     if (nextName !== undefined) {
-      await this.assertNameAvailable(projectId, nextName, existing.id);
+      await this.assertNameAvailable(project.userId, nextProjectOwnership, nextName, existing.id);
     }
 
     const nextIsActive = input.isActive;
@@ -218,6 +270,7 @@ export class ResourceService {
       data: {
         ...(nextName !== undefined ? { name: nextName } : {}),
         ...(nextType !== undefined ? { type: nextType } : {}),
+        ...(nextScope !== undefined ? { projectId: nextProjectOwnership } : {}),
         ...(nextIsActive !== undefined
           ? {
               isActive: nextIsActive,

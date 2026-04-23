@@ -23,7 +23,7 @@ export class AssignmentValidationError extends Error {
   }
 }
 
-type ProjectRow = { id: string };
+type ProjectRow = { id: string; userId: string };
 type TaskRow = {
   id: string;
   projectId: string;
@@ -32,7 +32,8 @@ type TaskRow = {
 };
 type ResourceRow = {
   id: string;
-  projectId: string;
+  userId: string;
+  projectId: string | null;
   name: string;
   type: ProjectResource['type'];
   isActive: boolean;
@@ -51,7 +52,7 @@ type AssignmentRow = {
 
 type AssignmentPrismaClient = {
   project: {
-    findUnique(args: { where: { id: string }; select: { id: true } }): Promise<ProjectRow | null>;
+    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectRow | null>;
   };
   task: {
     findUnique(args: {
@@ -62,7 +63,11 @@ type AssignmentPrismaClient = {
   };
   resource: {
     findMany(args: {
-      where: { projectId: string; id?: { in: string[] } };
+      where: {
+        userId: string;
+        id?: { in: string[] };
+        OR: Array<{ projectId: null } | { projectId: string }>;
+      };
       orderBy?: Array<{ name?: 'asc' | 'desc' }>;
     }): Promise<ResourceRow[]>;
   };
@@ -100,7 +105,9 @@ function requireTrimmed(value: string, field: 'projectId' | 'taskId'): string {
 function toResource(resource: ResourceRow): ProjectResource {
   return {
     id: resource.id,
+    userId: resource.userId,
     projectId: resource.projectId,
+    scope: resource.projectId === null ? 'shared' : 'project',
     name: resource.name,
     type: resource.type,
     isActive: resource.isActive,
@@ -134,10 +141,10 @@ export class AssignmentService {
     return this._prisma;
   }
 
-  private async assertProjectExists(projectId: string, prismaClient: AssignmentPrismaClient): Promise<void> {
+  private async getWorkspaceBoundaryProject(projectId: string, prismaClient: AssignmentPrismaClient): Promise<ProjectRow> {
     const project = await prismaClient.project.findUnique({
       where: { id: projectId },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
 
     if (!project) {
@@ -146,6 +153,8 @@ export class AssignmentService {
         field: 'projectId',
       });
     }
+
+    return project;
   }
 
   private async loadTaskWithChildrenOrThrow(
@@ -216,7 +225,7 @@ export class AssignmentService {
   }
 
   private async assertResourcesAssignable(
-    projectId: string,
+    project: ProjectRow,
     resourceIds: string[],
     prismaClient: AssignmentPrismaClient,
   ): Promise<ResourceRow[]> {
@@ -226,8 +235,9 @@ export class AssignmentService {
 
     const resources = await prismaClient.resource.findMany({
       where: {
-        projectId,
+        userId: project.userId,
         id: { in: resourceIds },
+        OR: [{ projectId: null }, { projectId: project.id }],
       },
     });
 
@@ -236,16 +246,24 @@ export class AssignmentService {
     for (const resourceId of resourceIds) {
       const resource = resourceById.get(resourceId);
       if (!resource) {
-        throw new AssignmentValidationError(`Resource ${resourceId} was not found in project ${projectId}`, {
+        throw new AssignmentValidationError(`Resource ${resourceId} was not found in project ${project.id}`, {
           code: 'resource_not_found',
           field: 'resourceId',
           detail: resourceId,
         });
       }
 
-      if (resource.projectId !== projectId) {
-        throw new AssignmentValidationError(`Resource ${resourceId} does not belong to project ${projectId}`, {
+      if (resource.userId !== project.userId) {
+        throw new AssignmentValidationError(`Resource ${resourceId} does not belong to project workspace ${project.id}`, {
           code: 'cross_project_mismatch',
+          field: 'resourceId',
+          detail: resourceId,
+        });
+      }
+
+      if (resource.projectId !== null && resource.projectId !== project.id) {
+        throw new AssignmentValidationError(`Resource ${resourceId} is local to another project`, {
+          code: 'resource_not_found',
           field: 'resourceId',
           detail: resourceId,
         });
@@ -355,7 +373,7 @@ export class AssignmentService {
     const normalizedProjectId = requireTrimmed(projectId, 'projectId');
     const normalizedTaskId = requireTrimmed(taskId, 'taskId');
 
-    await this.assertProjectExists(normalizedProjectId, this.prisma);
+    await this.getWorkspaceBoundaryProject(normalizedProjectId, this.prisma);
     await this.loadLeafTaskOrThrow(normalizedProjectId, normalizedTaskId, this.prisma);
 
     const assignments = await this.prisma.taskAssignment.findMany({
@@ -382,9 +400,9 @@ export class AssignmentService {
     const resourceIds = this.normalizeResourceIds(input.resourceIds ?? []);
 
     const run = async (prismaClient: AssignmentPrismaClient): Promise<TaskAssignmentDetails> => {
-      await this.assertProjectExists(projectId, prismaClient);
+      const project = await this.getWorkspaceBoundaryProject(projectId, prismaClient);
       await this.loadLeafTaskOrThrow(projectId, taskId, prismaClient);
-      const requestedResources = await this.assertResourcesAssignable(projectId, resourceIds, prismaClient);
+      const requestedResources = await this.assertResourcesAssignable(project, resourceIds, prismaClient);
 
       return this.replaceAssignmentsForLeafTask(projectId, taskId, resourceIds, requestedResources, prismaClient);
     };
@@ -400,8 +418,8 @@ export class AssignmentService {
     const resourceIds = this.normalizeResourceIds(input.resourceIds ?? []);
 
     const run = async (prismaClient: AssignmentPrismaClient): Promise<ParentTaskAssignmentMaterializationResult> => {
-      await this.assertProjectExists(projectId, prismaClient);
-      const requestedResources = await this.assertResourcesAssignable(projectId, resourceIds, prismaClient);
+      const project = await this.getWorkspaceBoundaryProject(projectId, prismaClient);
+      const requestedResources = await this.assertResourcesAssignable(project, resourceIds, prismaClient);
       const leafTaskIds = await this.resolveDescendantLeafTaskIds(projectId, taskId, prismaClient);
 
       const taskAssignments: TaskAssignmentDetails[] = [];

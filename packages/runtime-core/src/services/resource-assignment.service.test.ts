@@ -10,11 +10,12 @@ import type {
   UpdateProjectResourceInput,
 } from '../types.ts';
 
-type ProjectRow = { id: string };
+type ProjectRow = { id: string; userId: string };
 type TaskRow = { id: string; projectId: string; parentId: string | null };
 type ResourceRow = {
   id: string;
-  projectId: string;
+  userId: string;
+  projectId: string | null;
   name: string;
   type: 'human' | 'equipment' | 'material' | 'other';
   isActive: boolean;
@@ -37,7 +38,19 @@ class FakeRuntimeCorePrisma {
   readonly assignments = new Map<string, AssignmentRow>();
 
   readonly project = {
-    findUnique: async ({ where }: { where: { id: string } }) => this.projects.get(where.id) ?? null,
+    findUnique: async ({ where, select }: { where: { id: string }; select?: { id?: true; userId?: true } }) => {
+      const project = this.projects.get(where.id) ?? null;
+      if (!project) {
+        return null;
+      }
+      if (!select) {
+        return { ...project };
+      }
+      return {
+        ...(select.id ? { id: project.id } : {}),
+        ...(select.userId ? { userId: project.userId } : {}),
+      };
+    },
   };
 
   readonly task = {
@@ -63,23 +76,36 @@ class FakeRuntimeCorePrisma {
   };
 
   readonly resource = {
-    findMany: async ({ where }: { where: { projectId: string; isActive?: boolean; id?: { in: string[] } } }) => {
+    findMany: async ({ where }: { where: { userId?: string; projectId?: string | null; isActive?: boolean; id?: { in: string[] }; OR?: Array<{ projectId: string | null } | { projectId: string }> } }) => {
       return Array.from(this.resources.values())
-        .filter((resource) => resource.projectId === where.projectId)
+        .filter((resource) => (where.userId === undefined ? true : resource.userId === where.userId))
+        .filter((resource) => (where.projectId === undefined ? true : resource.projectId === where.projectId))
         .filter((resource) => (where.isActive === undefined ? true : resource.isActive === where.isActive))
         .filter((resource) => (where.id?.in ? where.id.in.includes(resource.id) : true))
+        .filter((resource) => {
+          if (!where.OR || where.OR.length === 0) {
+            return true;
+          }
+          return where.OR.some((clause) => resource.projectId === clause.projectId);
+        })
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((resource) => ({ ...resource }));
     },
-    findFirst: async ({ where, select }: { where: { id?: string; projectId: string; name?: string }; select?: { id: true } }) => {
+    findFirst: async ({ where, select }: { where: { id?: string; userId?: string; projectId?: string | null; name?: string; OR?: Array<{ projectId: string | null } | { projectId: string }> }; select?: { id: true } }) => {
       const found = Array.from(this.resources.values()).find((resource) => {
-        if (resource.projectId !== where.projectId) {
+        if (where.userId !== undefined && resource.userId !== where.userId) {
+          return false;
+        }
+        if (where.projectId !== undefined && resource.projectId !== where.projectId) {
           return false;
         }
         if (where.id !== undefined && resource.id !== where.id) {
           return false;
         }
         if (where.name !== undefined && resource.name !== where.name) {
+          return false;
+        }
+        if (where.OR && where.OR.length > 0 && !where.OR.some((clause) => resource.projectId === clause.projectId)) {
           return false;
         }
         return true;
@@ -91,10 +117,11 @@ class FakeRuntimeCorePrisma {
 
       return select?.id ? { id: found.id } : { ...found };
     },
-    create: async ({ data }: { data: { id: string; projectId: string; name: string; type: ResourceRow['type'] } }) => {
+    create: async ({ data }: { data: { id: string; userId: string; projectId: string | null; name: string; type: ResourceRow['type'] } }) => {
       const now = new Date();
       const row: ResourceRow = {
         id: data.id,
+        userId: data.userId,
         projectId: data.projectId,
         name: data.name,
         type: data.type,
@@ -106,7 +133,7 @@ class FakeRuntimeCorePrisma {
       this.resources.set(row.id, row);
       return { ...row };
     },
-    update: async ({ where, data }: { where: { id: string }; data: Partial<Pick<ResourceRow, 'name' | 'type' | 'isActive' | 'deactivatedAt'>> }) => {
+    update: async ({ where, data }: { where: { id: string }; data: Partial<Pick<ResourceRow, 'name' | 'type' | 'isActive' | 'deactivatedAt' | 'projectId'>> }) => {
       const existing = this.resources.get(where.id);
       if (!existing) {
         throw new Error(`Missing resource ${where.id}`);
@@ -171,11 +198,14 @@ class FakeRuntimeCorePrisma {
 
 function createFixture() {
   const prisma = new FakeRuntimeCorePrisma();
-  prisma.projects.set('project-1', { id: 'project-1' });
-  prisma.projects.set('project-2', { id: 'project-2' });
+  prisma.projects.set('project-1', { id: 'project-1', userId: 'workspace-user-1' });
+  prisma.projects.set('project-2', { id: 'project-2', userId: 'workspace-user-1' });
+  prisma.projects.set('project-3', { id: 'project-3', userId: 'workspace-user-2' });
 
   prisma.tasks.set('parent-task', { id: 'parent-task', projectId: 'project-1', parentId: null });
   prisma.tasks.set('leaf-task', { id: 'leaf-task', projectId: 'project-1', parentId: 'parent-task' });
+  prisma.tasks.set('project-2-leaf-task', { id: 'project-2-leaf-task', projectId: 'project-2', parentId: null });
+  prisma.tasks.set('project-3-leaf-task', { id: 'project-3-leaf-task', projectId: 'project-3', parentId: null });
   prisma.tasks.set('branch-parent', { id: 'branch-parent', projectId: 'project-1', parentId: null });
   prisma.tasks.set('branch-mid', { id: 'branch-mid', projectId: 'project-1', parentId: 'branch-parent' });
   prisma.tasks.set('branch-leaf-a', { id: 'branch-leaf-a', projectId: 'project-1', parentId: 'branch-mid' });
@@ -190,22 +220,26 @@ function createFixture() {
 }
 
 describe('resource and assignment service contracts', () => {
-  it('creates, lists, renames, and deactivates project resources', async () => {
+  it('creates, lists, renames, and deactivates project-local resources', async () => {
     const { resourceService } = createFixture();
 
     const created = await resourceService.create({
       projectId: 'project-1',
       name: 'Design crew',
       type: 'human',
+      scope: 'project',
     } satisfies CreateProjectResourceInput);
 
     assert.equal(created.projectId, 'project-1');
+    assert.equal(created.userId, 'workspace-user-1');
+    assert.equal(created.scope, 'project');
     assert.equal(created.isActive, true);
     assert.equal(created.type, 'human');
 
     const listed = await resourceService.list({ projectId: 'project-1', includeInactive: true } satisfies ListProjectResourcesInput);
     assert.equal(listed.resources.length, 1);
     assert.equal(listed.resources[0]?.name, 'Design crew');
+    assert.equal(listed.resources[0]?.scope, 'project');
 
     const renamed = await resourceService.update({
       projectId: 'project-1',
@@ -216,6 +250,7 @@ describe('resource and assignment service contracts', () => {
 
     assert.equal(renamed.name, 'Field crew');
     assert.equal(renamed.type, 'equipment');
+    assert.equal(renamed.scope, 'project');
 
     const deactivated = await resourceService.deactivate('project-1', created.id);
     assert.equal(deactivated.isActive, false);
@@ -229,7 +264,53 @@ describe('resource and assignment service contracts', () => {
     assert.equal(allResources.resources[0]?.isActive, false);
   });
 
-  it('rejects empty names and duplicate resource names', async () => {
+  it('lists shared resources across same-workspace projects while hiding foreign local resources', async () => {
+    const { resourceService } = createFixture();
+
+    const shared = await resourceService.create({
+      projectId: 'project-1',
+      name: 'Shared crew',
+      scope: 'shared',
+    });
+    const localProject1 = await resourceService.create({
+      projectId: 'project-1',
+      name: 'Project 1 local',
+      scope: 'project',
+    });
+    await resourceService.create({
+      projectId: 'project-2',
+      name: 'Project 2 local',
+      scope: 'project',
+    });
+    await resourceService.create({
+      projectId: 'project-3',
+      name: 'Other workspace shared',
+      scope: 'shared',
+    });
+
+    const project1View = await resourceService.list({ projectId: 'project-1', includeInactive: true });
+    assert.deepEqual(
+      project1View.resources.map((resource) => ({ name: resource.name, scope: resource.scope })).sort((a, b) => a.name.localeCompare(b.name)),
+      [
+        { name: 'Project 1 local', scope: 'project' },
+        { name: 'Shared crew', scope: 'shared' },
+      ],
+    );
+
+    const project2View = await resourceService.list({ projectId: 'project-2', includeInactive: true });
+    assert.deepEqual(
+      project2View.resources.map((resource) => ({ name: resource.name, scope: resource.scope, projectId: resource.projectId })).sort((a, b) => a.name.localeCompare(b.name)),
+      [
+        { name: 'Project 2 local', scope: 'project', projectId: 'project-2' },
+        { name: 'Shared crew', scope: 'shared', projectId: null },
+      ],
+    );
+
+    assert.equal(shared.projectId, null);
+    assert.equal(localProject1.projectId, 'project-1');
+  });
+
+  it('rejects empty names and duplicate names within the same ownership scope', async () => {
     const { resourceService } = createFixture();
 
     await assert.rejects(
@@ -241,42 +322,68 @@ describe('resource and assignment service contracts', () => {
       },
     );
 
-    const created = await resourceService.create({ projectId: 'project-1', name: 'Crew A' });
-    assert.equal(created.name, 'Crew A');
+    const shared = await resourceService.create({ projectId: 'project-1', name: 'Crew A', scope: 'shared' });
+    assert.equal(shared.name, 'Crew A');
 
     await assert.rejects(
-      () => resourceService.create({ projectId: 'project-1', name: 'Crew A' }),
+      () => resourceService.create({ projectId: 'project-2', name: 'Crew A', scope: 'shared' }),
       (error: unknown) => {
         assert.ok(error instanceof ResourceValidationError);
         assert.equal(error.issue.code, 'resource_name_conflict');
         return true;
       },
     );
+
+    const local = await resourceService.create({ projectId: 'project-1', name: 'Local A', scope: 'project' });
+    assert.equal(local.scope, 'project');
+
+    await assert.rejects(
+      () => resourceService.create({ projectId: 'project-1', name: 'Local A', scope: 'project' }),
+      (error: unknown) => {
+        assert.ok(error instanceof ResourceValidationError);
+        assert.equal(error.issue.code, 'resource_name_conflict');
+        return true;
+      },
+    );
+
+    const siblingLocal = await resourceService.create({ projectId: 'project-2', name: 'Local A', scope: 'project' });
+    assert.equal(siblingLocal.projectId, 'project-2');
   });
 
-  it('replaces leaf assignments idempotently and supports empty assignment sets', async () => {
+  it('replaces leaf assignments idempotently for mixed shared and local resources and supports empty assignment sets', async () => {
     const { resourceService, assignmentService } = createFixture();
-    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
-    const beta = await resourceService.create({ projectId: 'project-1', name: 'Beta' });
+    const shared = await resourceService.create({ projectId: 'project-1', name: 'Shared Alpha', scope: 'shared' });
+    const local = await resourceService.create({ projectId: 'project-1', name: 'Local Beta', scope: 'project' });
 
     const firstSet = await assignmentService.replaceForTask({
       projectId: 'project-1',
       taskId: 'leaf-task',
-      resourceIds: [alpha.id, beta.id],
+      resourceIds: [shared.id, local.id],
     } satisfies ReplaceTaskAssignmentsInput);
 
     assert.deepEqual(
-      firstSet.resources.map((resource) => resource.name).sort(),
-      ['Alpha', 'Beta'],
+      firstSet.resources.map((resource) => ({ name: resource.name, scope: resource.scope })).sort((a, b) => a.name.localeCompare(b.name)),
+      [
+        { name: 'Local Beta', scope: 'project' },
+        { name: 'Shared Alpha', scope: 'shared' },
+      ],
     );
     assert.equal(firstSet.assignments.length, 2);
 
     const repeated = await assignmentService.replaceForTask({
       projectId: 'project-1',
       taskId: 'leaf-task',
-      resourceIds: [alpha.id, beta.id],
+      resourceIds: [shared.id, local.id],
     });
     assert.equal(repeated.assignments.length, 2);
+
+    const sharedInSiblingProject = await assignmentService.replaceForTask({
+      projectId: 'project-2',
+      taskId: 'project-2-leaf-task',
+      resourceIds: [shared.id],
+    });
+    assert.equal(sharedInSiblingProject.resources.length, 1);
+    assert.equal(sharedInSiblingProject.resources[0]?.scope, 'shared');
 
     const cleared = await assignmentService.replaceForTask({
       projectId: 'project-1',
@@ -295,13 +402,13 @@ describe('resource and assignment service contracts', () => {
 
   it('materializes parent assignments only to descendant leaf tasks and stays idempotent', async () => {
     const { prisma, resourceService, assignmentService } = createFixture();
-    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
-    const beta = await resourceService.create({ projectId: 'project-1', name: 'Beta' });
+    const shared = await resourceService.create({ projectId: 'project-1', name: 'Shared Alpha', scope: 'shared' });
+    const beta = await resourceService.create({ projectId: 'project-1', name: 'Beta', scope: 'project' });
 
     const first = await assignmentService.materializeForParentTask({
       projectId: 'project-1',
       taskId: 'branch-parent',
-      resourceIds: [alpha.id, beta.id],
+      resourceIds: [shared.id, beta.id],
     });
 
     assert.equal(first.requestedTaskId, 'branch-parent');
@@ -319,7 +426,7 @@ describe('resource and assignment service contracts', () => {
     const repeated = await assignmentService.materializeForParentTask({
       projectId: 'project-1',
       taskId: 'branch-parent',
-      resourceIds: [alpha.id, beta.id],
+      resourceIds: [shared.id, beta.id],
     });
 
     assert.equal(prisma.assignments.size, firstAssignmentCount, 'repeated materialization should be idempotent');
@@ -329,7 +436,7 @@ describe('resource and assignment service contracts', () => {
 
   it('materializes a single-leaf parent without creating a parent row', async () => {
     const { prisma, resourceService, assignmentService } = createFixture();
-    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha', scope: 'shared' });
 
     const result = await assignmentService.materializeForParentTask({
       projectId: 'project-1',
@@ -346,7 +453,7 @@ describe('resource and assignment service contracts', () => {
 
   it('rejects malformed input and stable no-leaf parent materialization failures', async () => {
     const { resourceService, assignmentService } = createFixture();
-    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha', scope: 'shared' });
 
     await assert.rejects(
       () => assignmentService.replaceForTask({ projectId: '   ', taskId: 'leaf-task', resourceIds: [alpha.id] }),
@@ -391,7 +498,7 @@ describe('resource and assignment service contracts', () => {
 
   it('rejects duplicate resource ids in one assignment request', async () => {
     const { resourceService, assignmentService } = createFixture();
-    const resource = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+    const resource = await resourceService.create({ projectId: 'project-1', name: 'Alpha', scope: 'shared' });
 
     await assert.rejects(
       () => assignmentService.replaceForTask({
@@ -409,8 +516,8 @@ describe('resource and assignment service contracts', () => {
 
   it('keeps persisted inactive-resource assignments readable while rejecting new writes with resource_inactive', async () => {
     const { resourceService, assignmentService } = createFixture();
-    const active = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
-    const inactiveLater = await resourceService.create({ projectId: 'project-1', name: 'Crew to deactivate' });
+    const active = await resourceService.create({ projectId: 'project-1', name: 'Alpha', scope: 'shared' });
+    const inactiveLater = await resourceService.create({ projectId: 'project-1', name: 'Crew to deactivate', scope: 'project' });
 
     const assigned = await assignmentService.replaceForTask({
       projectId: 'project-1',
@@ -435,14 +542,14 @@ describe('resource and assignment service contracts', () => {
 
     assert.deepEqual(
       listed.assignments.map((assignment) => assignment.resourceId).sort(),
-      [active.id, inactiveLater.id],
+      [active.id, inactiveLater.id].sort(),
     );
     assert.deepEqual(
       listed.resources.map((resource) => ({ id: resource.id, isActive: resource.isActive })).sort((left, right) => left.id.localeCompare(right.id)),
       [
         { id: active.id, isActive: true },
         { id: inactiveLater.id, isActive: false },
-      ],
+      ].sort((left, right) => left.id.localeCompare(right.id)),
       'persisted assignments should still round-trip with inactive resource details on read',
     );
 
@@ -462,18 +569,19 @@ describe('resource and assignment service contracts', () => {
     );
   });
 
-  it('rejects missing resources, inactive resources, non-leaf direct replacement, and cross-project mismatches', async () => {
+  it('rejects missing resources, inactive resources, non-leaf direct replacement, and foreign-local assignment leakage', async () => {
     const { resourceService, assignmentService } = createFixture();
-    const active = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
-    const otherProject = await resourceService.create({ projectId: 'project-2', name: 'External crew' });
-    const inactive = await resourceService.create({ projectId: 'project-1', name: 'Inactive crew' });
+    const shared = await resourceService.create({ projectId: 'project-1', name: 'Shared Alpha', scope: 'shared' });
+    const foreignLocal = await resourceService.create({ projectId: 'project-2', name: 'External local crew', scope: 'project' });
+    const foreignWorkspaceShared = await resourceService.create({ projectId: 'project-3', name: 'Other workspace shared', scope: 'shared' });
+    const inactive = await resourceService.create({ projectId: 'project-1', name: 'Inactive crew', scope: 'project' });
     await resourceService.deactivate('project-1', inactive.id);
 
     await assert.rejects(
       () => assignmentService.replaceForTask({
         projectId: 'project-1',
         taskId: 'missing-task',
-        resourceIds: [active.id],
+        resourceIds: [shared.id],
       }),
       (error: unknown) => {
         assert.ok(error instanceof AssignmentValidationError);
@@ -512,7 +620,7 @@ describe('resource and assignment service contracts', () => {
       () => assignmentService.replaceForTask({
         projectId: 'project-1',
         taskId: 'parent-task',
-        resourceIds: [active.id],
+        resourceIds: [shared.id],
       }),
       (error: unknown) => {
         assert.ok(error instanceof AssignmentValidationError);
@@ -525,11 +633,26 @@ describe('resource and assignment service contracts', () => {
       () => assignmentService.replaceForTask({
         projectId: 'project-1',
         taskId: 'leaf-task',
-        resourceIds: [otherProject.id],
+        resourceIds: [foreignLocal.id],
       }),
       (error: unknown) => {
         assert.ok(error instanceof AssignmentValidationError);
         assert.equal(error.issue.code, 'resource_not_found');
+        assert.equal(error.issue.detail, foreignLocal.id);
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      () => assignmentService.replaceForTask({
+        projectId: 'project-1',
+        taskId: 'leaf-task',
+        resourceIds: [foreignWorkspaceShared.id],
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'resource_not_found');
+        assert.equal(error.issue.detail, foreignWorkspaceShared.id);
         return true;
       },
     );
@@ -538,7 +661,7 @@ describe('resource and assignment service contracts', () => {
       () => assignmentService.replaceForTask({
         projectId: 'project-1',
         taskId: 'other-project-task',
-        resourceIds: [active.id],
+        resourceIds: [shared.id],
       }),
       (error: unknown) => {
         assert.ok(error instanceof AssignmentValidationError);
