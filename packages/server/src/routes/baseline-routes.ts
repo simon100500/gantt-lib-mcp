@@ -68,7 +68,7 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
         baselineId: params.baselineId,
       });
 
-      return reply.send({
+      const payload = {
         id: response.id,
         projectId: response.projectId,
         name: response.name,
@@ -76,7 +76,9 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
         sourceHistoryGroupId: response.sourceHistoryGroupId,
         createdAt: response.createdAt,
         snapshot: response.snapshot,
-      });
+      };
+
+      return reply.send(payload);
     } catch (error) {
       if (isBaselineValidationError(error)) {
         return reply.status(400).send({
