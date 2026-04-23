@@ -64,6 +64,9 @@ import { useProjectStore } from '../../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../../stores/useUIStore.ts';
 import { useHistoryViewerStore } from '../../../stores/useHistoryViewerStore.ts';
+import { useTaskStore } from '../../../stores/useTaskStore.ts';
+import { useAuthStore } from '../../../stores/useAuthStore.ts';
+import type { ProjectLoadResponse } from '../../../lib/apiTypes.ts';
 import type { Task, ValidationResult } from '../../../types.ts';
 
 function installDomPolyfills(): void {
@@ -140,10 +143,151 @@ function renderWorkspace(): { container: HTMLDivElement; root: Root } {
   return { container, root };
 }
 
+function renderWorkspaceWithTaskStore(): { container: HTMLDivElement; root: Root } {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+
+  const root = createRoot(container);
+
+  function WorkspaceHarness() {
+    const storeTasks = useTaskStore((state) => state.tasks);
+    const storeLoading = useTaskStore((state) => state.loading);
+    const setStoreTasks = useTaskStore((state) => state.setTasks);
+
+    return (
+      <ProjectWorkspace
+        ganttRef={ganttRef}
+        tasks={storeTasks}
+        setTasks={setStoreTasks}
+        loading={storeLoading}
+        accessToken="token"
+        sharedProject={null}
+        shareToken={null}
+        hasShareToken={false}
+        displayConnected={true}
+        isAuthenticated={true}
+        onSend={async () => ({ accepted: true })}
+        onLoginRequired={() => {}}
+        onScrollToToday={() => {}}
+        onCollapseAll={() => {}}
+        onExpandAll={() => {}}
+        onValidation={(_result: ValidationResult) => {}}
+        readOnly={false}
+        showChat={true}
+        shareStatus="idle"
+        ganttDayMode="calendar"
+      />
+    );
+  }
+
+  act(() => {
+    root.render(<WorkspaceHarness />);
+  });
+
+  return { container, root };
+}
+
+function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): ProjectLoadResponse {
+  return {
+    version: 2,
+    project: {
+      id: 'project-1',
+      name: 'Project 1',
+      status: 'active',
+      ganttDayMode: 'calendar',
+      calendarId: null,
+      calendarDays: [],
+      taskCount: tasks.length,
+      archivedAt: null,
+      deletedAt: null,
+    },
+    snapshot: {
+      tasks,
+      dependencies: [],
+      resources: [
+        {
+          id: 'resource-1',
+          projectId: 'project-1',
+          name: 'Alpha Crew',
+          type: 'human',
+          isActive: true,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+          deactivatedAt: null,
+        },
+        {
+          id: 'resource-2',
+          projectId: 'project-1',
+          name: 'Dormant Crew',
+          type: 'human',
+          isActive: false,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-02T00:00:00.000Z',
+          deactivatedAt: '2026-04-02T00:00:00.000Z',
+        },
+      ],
+      assignments: [
+        {
+          id: 'existing-leaf-2',
+          projectId: 'project-1',
+          taskId: 'leaf-2',
+          resourceId: 'resource-2',
+          createdAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   toolbarSpy.mockClear();
   ganttPropsSpy = null;
   vi.unstubAllGlobals();
+  useTaskStore.setState({
+    tasks,
+    loading: false,
+    error: null,
+    activeSource: 'auth',
+    shareToken: null,
+    project: null,
+    isSharedReadOnly: false,
+    isDemoMode: false,
+    projectName: 'Мой проект',
+    authToken: 'token',
+    currentRequestId: 0,
+  });
+  useAuthStore.setState({
+    isAuthenticated: true,
+    user: { id: 'user-1', email: 'user@example.com' },
+    project: {
+      id: 'project-1',
+      name: 'Project 1',
+      status: 'active',
+      ganttDayMode: 'calendar',
+      calendarId: null,
+      calendarDays: [],
+      taskCount: tasks.length,
+      archivedAt: null,
+      deletedAt: null,
+    },
+    accessToken: 'token',
+    projects: [
+      {
+        id: 'project-1',
+        name: 'Project 1',
+        status: 'active',
+        ganttDayMode: 'calendar',
+        calendarId: null,
+        calendarDays: [],
+        taskCount: tasks.length,
+        archivedAt: null,
+        deletedAt: null,
+      },
+    ],
+    adminContext: null,
+    constraintDenial: null,
+  });
   useProjectStore.setState({
     confirmed: { version: 1, snapshot: { tasks, dependencies: [] } },
     resources: [
@@ -219,6 +363,194 @@ afterEach(() => {
 });
 
 describe('ProjectWorkspace resource assignments', () => {
+  it('reopens through the authoritative /api/project snapshot and keeps inactive assignments visible while excluding them from new writes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          assignments: [
+            {
+              id: 'assigned-leaf-2',
+              projectId: 'project-1',
+              taskId: 'leaf-2',
+              resourceId: 'resource-2',
+              createdAt: '2026-04-01T00:00:00.000Z',
+            },
+          ],
+          resources: [
+            {
+              id: 'resource-1',
+              projectId: 'project-1',
+              name: 'Alpha Crew',
+              type: 'human',
+              isActive: true,
+              createdAt: '2026-04-01T00:00:00.000Z',
+              updatedAt: '2026-04-01T00:00:00.000Z',
+              deactivatedAt: null,
+            },
+            {
+              id: 'resource-2',
+              projectId: 'project-1',
+              name: 'Dormant Crew',
+              type: 'human',
+              isActive: true,
+              createdAt: '2026-04-01T00:00:00.000Z',
+              updatedAt: '2026-04-01T00:00:00.000Z',
+              deactivatedAt: null,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => buildProjectLoadResponse(),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          reason: 'validation_error',
+          error: 'Resource resource-2 is inactive',
+          issue: { code: 'resource_inactive', field: 'resourceId', detail: 'resource-2' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = renderWorkspaceWithTaskStore();
+    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
+    const assignCommand = commands.find((command) => command.id === 'assign-resource');
+
+    expect(assignCommand).toBeTruthy();
+
+    await act(async () => {
+      await useProjectStore.getState().setAssignments([
+        {
+          id: 'assigned-leaf-2',
+          projectId: 'project-1',
+          taskId: 'leaf-2',
+          resourceId: 'resource-2',
+          createdAt: '2026-04-01T00:00:00.000Z',
+        },
+      ]);
+      await useProjectStore.getState().setResources([
+        {
+          id: 'resource-1',
+          projectId: 'project-1',
+          name: 'Alpha Crew',
+          type: 'human',
+          isActive: true,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+          deactivatedAt: null,
+        },
+        {
+          id: 'resource-2',
+          projectId: 'project-1',
+          name: 'Dormant Crew',
+          type: 'human',
+          isActive: true,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+          deactivatedAt: null,
+        },
+      ]);
+      await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/project', {
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+
+    await act(async () => {
+      assignCommand!.onSelect(tasks[0]!);
+      await Promise.resolve();
+    });
+
+    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
+    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+
+    expect(select).not.toBeNull();
+    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
+      'Выберите активный ресурс',
+      'Alpha Crew',
+    ]);
+    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Dormant Crew')).toBe(false);
+    expect(submitButton?.disabled).toBe(true);
+
+    await act(async () => {
+      await useProjectStore.getState().setAssignmentError(null);
+      await (useProjectStore.getState().setResources as (resources: ProjectLoadResponse['snapshot']['resources']) => void)([
+        {
+          id: 'resource-1',
+          projectId: 'project-1',
+          name: 'Alpha Crew',
+          type: 'human',
+          isActive: true,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+          deactivatedAt: null,
+        },
+        {
+          id: 'resource-2',
+          projectId: 'project-1',
+          name: 'Dormant Crew',
+          type: 'human',
+          isActive: false,
+          createdAt: '2026-04-01T00:00:00.000Z',
+          updatedAt: '2026-04-02T00:00:00.000Z',
+          deactivatedAt: '2026-04-02T00:00:00.000Z',
+        },
+      ]);
+    });
+
+    await act(async () => {
+      select!.value = 'resource-2';
+      select!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      submitButton!.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/tasks/parent-1/assignments/materialize', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ resourceIds: ['resource-2'] }),
+    }));
+    expect(useProjectStore.getState().assignmentError).toBe('resource_inactive: Resource resource-2 is inactive');
+    expect(container.querySelector('[data-testid="assignment-error-banner"]')?.textContent).toContain('resource_inactive');
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+
+    root.unmount();
+  });
+
+  it('fails the reopen proof when the authoritative payload omits resources or assignments', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...buildProjectLoadResponse(),
+        snapshot: {
+          ...buildProjectLoadResponse().snapshot,
+          resources: undefined,
+          assignments: undefined,
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
+    });
+
+    expect(useProjectStore.getState().resources).toEqual([]);
+    expect(useProjectStore.getState().assignments).toEqual([]);
+    expect(useProjectStore.getState().confirmed.version).toBe(2);
+    expect(useProjectStore.getState().assignmentError).toBeNull();
+    expect(useProjectStore.getState().resources.some((resource) => resource.name === 'Dormant Crew')).toBe(false);
+    expect(useProjectStore.getState().assignments.some((assignment) => assignment.resourceId === 'resource-2')).toBe(false);
+  });
+
   it('hydrates authoritative resource and assignment state into the visible workspace summary, including inactive existing assignments', () => {
     const { container, root } = renderWorkspace();
 
