@@ -417,16 +417,17 @@ export function Toolbar({
             variant="ghost"
             className={cn(
               actionButtonClassName,
-              'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
+              'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:text-slate-600',
+              normalizedBaselineActiveLabel
+                ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[state=open]:text-primary'
+                : 'data-[state=open]:bg-transparent',
             )}
             title={normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Выбрать baseline'}
             aria-label={normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Baseline menu'}
+            aria-pressed={Boolean(normalizedBaselineActiveLabel)}
           >
             <Layers3 className="h-3.5 w-3.5" />
-            <span className="max-w-[180px] truncate text-xs">
-              {normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Baseline'}
-            </span>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            <ChevronDown className="h-3 w-3 text-current/70" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">

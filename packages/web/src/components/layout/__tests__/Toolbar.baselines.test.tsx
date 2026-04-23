@@ -214,7 +214,10 @@ describe('Toolbar baseline menu', () => {
       onRefreshBaselines,
     });
 
-    expect(container.textContent).toContain('Baseline: Sprint plan v1');
+    expect(container.textContent).not.toContain('Baseline: Sprint plan v1');
+    const activeTrigger = container.querySelector('button[aria-pressed="true"]');
+    expect(activeTrigger?.getAttribute('title')).toBe('Baseline: Sprint plan v1');
+    expect(activeTrigger?.querySelector('svg + svg')).not.toBeNull();
     expect(menuText()).toContain('Сохранить текущий график');
     expect(menuText()).toContain('Активный baseline');
     expect(menuText()).toContain('Sprint plan v1');
@@ -305,7 +308,9 @@ describe('Toolbar baseline menu', () => {
       onCreateBaselineFromCurrent: null,
     });
 
-    expect(container.textContent).toContain('Baseline');
+    expect(container.textContent).not.toContain('Baseline');
+    const idleTrigger = container.querySelector('button[aria-pressed="false"]');
+    expect(idleTrigger?.getAttribute('title')).toBe('Выбрать baseline');
     expect(menuText()).not.toContain('Активный baseline');
     expect(menuText()).toContain('Без названия');
     expect(menuText()).not.toContain('Скрыть baseline');
