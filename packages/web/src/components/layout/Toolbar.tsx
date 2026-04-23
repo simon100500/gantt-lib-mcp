@@ -17,6 +17,7 @@ import {
   Link,
   Lock,
   LockOpen,
+  Plus,
   RefreshCw,
   Rows3,
   X,
@@ -70,6 +71,9 @@ interface ToolbarProps {
   baselineLoading?: boolean | null;
   baselineError?: string | null;
   baselineEmptyLabel?: string | null;
+  baselineCreateLabel?: string | null;
+  creatingBaselineFromCurrent?: boolean | null;
+  onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onHideBaseline?: () => void;
   onRefreshBaselines?: () => void;
@@ -81,6 +85,9 @@ interface BaselineMenuSectionProps {
   loading: boolean;
   error: string | null;
   emptyLabel: string;
+  createLabel: string;
+  creatingBaselineFromCurrent: boolean;
+  onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onHideBaseline?: () => void;
   onRefreshBaselines?: () => void;
@@ -92,18 +99,33 @@ function renderBaselineMenuSection({
   loading,
   error,
   emptyLabel,
+  createLabel,
+  creatingBaselineFromCurrent,
+  onCreateBaselineFromCurrent,
   onSelectBaseline,
   onHideBaseline,
   onRefreshBaselines,
 }: BaselineMenuSectionProps) {
   const hasActiveBaseline = Boolean(activeLabel?.trim());
   const hasRows = rows.length > 0;
+  const createActionDisabled = !onCreateBaselineFromCurrent || creatingBaselineFromCurrent;
 
   return (
     <>
       <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
         Baselines
       </DropdownMenuLabel>
+
+      <DropdownMenuItem
+        onClick={() => void onCreateBaselineFromCurrent?.()}
+        disabled={createActionDisabled}
+        className="flex cursor-pointer items-center gap-2 text-slate-700"
+      >
+        <Plus className="h-4 w-4" />
+        <span className="text-sm">{creatingBaselineFromCurrent ? `${createLabel}…` : createLabel}</span>
+      </DropdownMenuItem>
+
+      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
 
       {hasActiveBaseline ? (
         <div className="px-2 pb-1.5">
@@ -212,6 +234,9 @@ export function Toolbar({
   baselineLoading = false,
   baselineError = null,
   baselineEmptyLabel = 'Сохранённые baseline-ы пока не появились.',
+  baselineCreateLabel = 'Сохранить текущий график',
+  creatingBaselineFromCurrent = false,
+  onCreateBaselineFromCurrent = null,
   onSelectBaseline,
   onHideBaseline,
   onRefreshBaselines,
@@ -255,6 +280,9 @@ export function Toolbar({
   const normalizedBaselineEmptyLabel = typeof baselineEmptyLabel === 'string' && baselineEmptyLabel.trim().length > 0
     ? baselineEmptyLabel
     : 'Сохранённые baseline-ы пока не появились.';
+  const normalizedBaselineCreateLabel = typeof baselineCreateLabel === 'string' && baselineCreateLabel.trim().length > 0
+    ? baselineCreateLabel
+    : 'Сохранить текущий график';
   const normalizedBaselineActiveLabel = typeof baselineActiveLabel === 'string' && baselineActiveLabel.trim().length > 0
     ? baselineActiveLabel
     : null;
@@ -408,6 +436,9 @@ export function Toolbar({
             loading: Boolean(baselineLoading),
             error: normalizedBaselineError,
             emptyLabel: normalizedBaselineEmptyLabel,
+            createLabel: normalizedBaselineCreateLabel,
+            creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+            onCreateBaselineFromCurrent,
             onSelectBaseline,
             onHideBaseline,
             onRefreshBaselines,
@@ -663,6 +694,9 @@ export function Toolbar({
             loading: Boolean(baselineLoading),
             error: normalizedBaselineError,
             emptyLabel: normalizedBaselineEmptyLabel,
+            createLabel: normalizedBaselineCreateLabel,
+            creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+            onCreateBaselineFromCurrent,
             onSelectBaseline,
             onHideBaseline,
             onRefreshBaselines,

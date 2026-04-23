@@ -195,6 +195,14 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
+  const selectedBaselineState = useMemo(() => {
+    if (!projectId) {
+      return null;
+    }
+
+    return projectStates[projectId]?.selectedBaseline ?? null;
+  }, [projectId, projectStates]);
+  const [baselineMenuOpen, setBaselineMenuOpen] = useState(false);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
@@ -274,6 +282,35 @@ export function ProjectWorkspace({
     restoreVersion,
     returnToCurrentVersion,
   } = useProjectHistory(accessToken);
+  const {
+    items: baselineItems,
+    loading: baselinesLoading,
+    error: baselinesError,
+    refreshBaselines,
+    fetchBaseline,
+  } = useProjectBaselines(accessToken);
+  const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
+  const selectedBaselineLabel = selectedBaselineState?.label ?? null;
+  const selectedBaselineSnapshot = useMemo(() => {
+    if (!selectedBaselineState) {
+      return null;
+    }
+
+    return {
+      tasks: Array.isArray(selectedBaselineState.snapshot.tasks)
+        ? selectedBaselineState.snapshot.tasks as Task[]
+        : [],
+      dependencies: Array.isArray(selectedBaselineState.snapshot.dependencies)
+        ? selectedBaselineState.snapshot.dependencies as BaselineSnapshotResponse['snapshot']['dependencies']
+        : [],
+    } satisfies BaselineSnapshotResponse['snapshot'];
+  }, [selectedBaselineState]);
+  const selectedBaselineTaskCount = selectedBaselineSnapshot?.tasks.length ?? 0;
+  const baselineRows = useMemo(() => baselineItems.map((item) => ({
+    id: item.id,
+    label: item.name || 'Без названия',
+    selected: item.id === selectedBaselineState?.id,
+  })), [baselineItems, selectedBaselineState?.id]);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
     () => getProjectWeekendPredicate(calendarDays) ?? (() => false),
@@ -430,12 +467,49 @@ export function ProjectWorkspace({
   }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreVersion]);
 
   useEffect(() => {
-    if (!showHistoryPanel || !accessToken) {
+    if (!hasBaselineAccess) {
       return;
     }
 
-    void refreshHistorySilently();
-  }, [accessToken, refreshHistorySilently, showHistoryPanel]);
+    void refreshBaselines().catch(() => {});
+  }, [hasBaselineAccess, refreshBaselines]);
+
+  const handleRefreshBaselines = useCallback(async () => {
+    if (!hasBaselineAccess) {
+      return;
+    }
+
+    await refreshBaselines();
+  }, [hasBaselineAccess, refreshBaselines]);
+
+  const handleHideBaseline = useCallback(() => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, { selectedBaseline: null });
+  }, [projectId, setProjectState]);
+
+  const handleSelectBaseline = useCallback(async (baselineId: string) => {
+    if (!projectId) {
+      return;
+    }
+
+    const trimmedBaselineId = baselineId.trim();
+    if (!trimmedBaselineId) {
+      return;
+    }
+
+    const baseline = await fetchBaseline(trimmedBaselineId);
+    setProjectState(projectId, {
+      selectedBaseline: {
+        id: baseline.id,
+        label: baseline.name || 'Без названия',
+        snapshot: baseline.snapshot,
+      },
+    });
+  }, [fetchBaseline, projectId, setProjectState]);
+
 
   useEffect(() => {
     if (!accessToken || historyRefreshRevision === 0) {
@@ -470,6 +544,20 @@ export function ProjectWorkspace({
           onGanttDayModeChange={onGanttDayModeChange}
           readOnly={readOnly || aiMutationLocked}
           previewMode={previewModeActive}
+          baselineMenuOpen={baselineMenuOpen}
+          onBaselineMenuOpenChange={setBaselineMenuOpen}
+          baselineActiveLabel={selectedBaselineLabel}
+          baselineRows={baselineRows}
+          baselineLoading={baselinesLoading}
+          baselineError={baselinesError}
+          baselineEmptyLabel="Сохранённые baseline-ы пока не появились."
+          onSelectBaseline={(baselineId) => {
+            void handleSelectBaseline(baselineId);
+          }}
+          onHideBaseline={handleHideBaseline}
+          onRefreshBaselines={() => {
+            void handleRefreshBaselines();
+          }}
         />
       </div>
 
@@ -553,6 +641,15 @@ export function ProjectWorkspace({
                 <span className="font-mono text-[11px] text-slate-400">
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
+
+                {selectedBaselineLabel && !previewHistoryItem && (
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-primary">
+                    Baseline: {selectedBaselineLabel}
+                    <span className="ml-1 text-[10px] font-medium normal-case text-primary/80">
+                      ({selectedBaselineTaskCount} задач)
+                    </span>
+                  </span>
+                )}
 
                 {previewHistoryItem && (
                   <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-amber-700">

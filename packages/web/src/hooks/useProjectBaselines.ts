@@ -78,11 +78,11 @@ async function parseBaselineSnapshotResponse(response: Response): Promise<Baseli
 }
 
 function normalizeRequestError(error: unknown, fallback: string): Error {
-  if (error instanceof Error) {
-    if (error.name === 'AbortError') {
-      return new Error('Request timed out');
-    }
+  if (typeof error === 'object' && error !== null && 'name' in error && (error as { name?: string }).name === 'AbortError') {
+    return new Error('Request timed out');
+  }
 
+  if (error instanceof Error) {
     return error;
   }
 

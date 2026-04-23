@@ -3,10 +3,20 @@ import { persist } from 'zustand/middleware';
 
 import type { ViewMode } from './useUIStore.ts';
 
+interface ProjectBaselineSelectionState {
+  id: string;
+  label: string;
+  snapshot: {
+    tasks: unknown[];
+    dependencies: unknown[];
+  };
+}
+
 interface ProjectUIState {
   viewMode: ViewMode;
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
+  selectedBaseline: ProjectBaselineSelectionState | null;
 }
 
 interface ProjectUIStore {
@@ -20,6 +30,7 @@ const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
   collapsedParentIds: [],
   disableTaskDrag: false,
+  selectedBaseline: null,
 };
 
 export const useProjectUIStore = create<ProjectUIStore>()(
