@@ -3,6 +3,8 @@ import { getPrisma } from '../prisma.js';
 import type { PrismaClient } from '../prisma.js';
 import type {
   ListTaskAssignmentsInput,
+  MaterializeParentTaskAssignmentsInput,
+  ParentTaskAssignmentMaterializationResult,
   ProjectResource,
   ReplaceTaskAssignmentsInput,
   ResourceAssignmentValidationIssue,
@@ -146,7 +148,11 @@ export class AssignmentService {
     }
   }
 
-  private async loadTaskOrThrow(projectId: string, taskId: string, prismaClient: AssignmentPrismaClient): Promise<TaskRow> {
+  private async loadTaskWithChildrenOrThrow(
+    projectId: string,
+    taskId: string,
+    prismaClient: AssignmentPrismaClient,
+  ): Promise<TaskRow> {
     const task = await prismaClient.task.findUnique({
       where: { id: taskId },
       include: {
@@ -167,6 +173,12 @@ export class AssignmentService {
         field: 'taskId',
       });
     }
+
+    return task as TaskRow;
+  }
+
+  private async loadLeafTaskOrThrow(projectId: string, taskId: string, prismaClient: AssignmentPrismaClient): Promise<TaskRow> {
+    const task = await this.loadTaskWithChildrenOrThrow(projectId, taskId, prismaClient);
 
     if ((task.children?.length ?? 0) > 0) {
       throw new AssignmentValidationError(`Task ${taskId} is not a leaf task`, {
@@ -251,12 +263,100 @@ export class AssignmentService {
     return resourceIds.map((resourceId) => resourceById.get(resourceId)!);
   }
 
+  private async replaceAssignmentsForLeafTask(
+    projectId: string,
+    taskId: string,
+    resourceIds: string[],
+    requestedResources: ResourceRow[],
+    prismaClient: AssignmentPrismaClient,
+  ): Promise<TaskAssignmentDetails> {
+    const existingAssignments = await prismaClient.taskAssignment.findMany({
+      where: { projectId, taskId },
+      orderBy: [{ createdAt: 'asc' }, { resourceId: 'asc' }],
+    });
+
+    const existingIds = new Set(existingAssignments.map((assignment) => assignment.resourceId));
+    const requestedIds = new Set(resourceIds);
+
+    const toDelete = existingAssignments
+      .map((assignment) => assignment.resourceId)
+      .filter((resourceId) => !requestedIds.has(resourceId));
+    const toCreate = resourceIds.filter((resourceId) => !existingIds.has(resourceId));
+
+    if (toDelete.length > 0) {
+      await prismaClient.taskAssignment.deleteMany({
+        where: { projectId, taskId, resourceId: { in: toDelete } },
+      });
+    }
+
+    if (toCreate.length > 0) {
+      await prismaClient.taskAssignment.createMany({
+        data: toCreate.map((resourceId) => ({
+          id: randomUUID(),
+          projectId,
+          taskId,
+          resourceId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const assignments = await prismaClient.taskAssignment.findMany({
+      where: { projectId, taskId },
+      include: { resource: true },
+      orderBy: [{ createdAt: 'asc' }, { resourceId: 'asc' }],
+    });
+
+    const resourceById = new Map(requestedResources.map((resource) => [resource.id, resource]));
+    const resources = assignments
+      .map((assignment) => assignment.resource ?? resourceById.get(assignment.resourceId))
+      .filter((resource): resource is ResourceRow => Boolean(resource))
+      .map((resource) => toResource(resource));
+
+    return {
+      taskId,
+      resources,
+      assignments: assignments.map((assignment) => toAssignment(assignment)),
+    };
+  }
+
+  private async resolveDescendantLeafTaskIds(
+    projectId: string,
+    taskId: string,
+    prismaClient: AssignmentPrismaClient,
+  ): Promise<string[]> {
+    const rootTask = await this.loadTaskWithChildrenOrThrow(projectId, taskId, prismaClient);
+    const queue = [...(rootTask.children ?? [])].map((child) => child.id);
+    const leafTaskIds: string[] = [];
+
+    while (queue.length > 0) {
+      const nextTaskId = queue.shift()!;
+      const task = await this.loadTaskWithChildrenOrThrow(projectId, nextTaskId, prismaClient);
+
+      if ((task.children?.length ?? 0) === 0) {
+        leafTaskIds.push(task.id);
+        continue;
+      }
+
+      queue.push(...task.children!.map((child) => child.id));
+    }
+
+    if (leafTaskIds.length === 0) {
+      throw new AssignmentValidationError(`Task ${taskId} has no descendant leaf tasks`, {
+        code: 'task_has_no_leaf_descendants',
+        field: 'taskId',
+      });
+    }
+
+    return leafTaskIds;
+  }
+
   async list({ projectId, taskId }: ListTaskAssignmentsInput): Promise<TaskAssignmentDetails> {
     const normalizedProjectId = requireTrimmed(projectId, 'projectId');
     const normalizedTaskId = requireTrimmed(taskId, 'taskId');
 
     await this.assertProjectExists(normalizedProjectId, this.prisma);
-    await this.loadTaskOrThrow(normalizedProjectId, normalizedTaskId, this.prisma);
+    await this.loadLeafTaskOrThrow(normalizedProjectId, normalizedTaskId, this.prisma);
 
     const assignments = await this.prisma.taskAssignment.findMany({
       where: { projectId: normalizedProjectId, taskId: normalizedTaskId },
@@ -283,56 +383,43 @@ export class AssignmentService {
 
     const run = async (prismaClient: AssignmentPrismaClient): Promise<TaskAssignmentDetails> => {
       await this.assertProjectExists(projectId, prismaClient);
-      await this.loadTaskOrThrow(projectId, taskId, prismaClient);
+      await this.loadLeafTaskOrThrow(projectId, taskId, prismaClient);
       const requestedResources = await this.assertResourcesAssignable(projectId, resourceIds, prismaClient);
 
-      const existingAssignments = await prismaClient.taskAssignment.findMany({
-        where: { projectId, taskId },
-        orderBy: [{ createdAt: 'asc' }, { resourceId: 'asc' }],
-      });
+      return this.replaceAssignmentsForLeafTask(projectId, taskId, resourceIds, requestedResources, prismaClient);
+    };
 
-      const existingIds = new Set(existingAssignments.map((assignment) => assignment.resourceId));
-      const requestedIds = new Set(resourceIds);
+    return this.prisma.$transaction ? this.prisma.$transaction((tx) => run(tx)) : run(this.prisma);
+  }
 
-      const toDelete = existingAssignments
-        .map((assignment) => assignment.resourceId)
-        .filter((resourceId) => !requestedIds.has(resourceId));
-      const toCreate = resourceIds.filter((resourceId) => !existingIds.has(resourceId));
+  async materializeForParentTask(
+    input: MaterializeParentTaskAssignmentsInput,
+  ): Promise<ParentTaskAssignmentMaterializationResult> {
+    const projectId = requireTrimmed(input.projectId, 'projectId');
+    const taskId = requireTrimmed(input.taskId, 'taskId');
+    const resourceIds = this.normalizeResourceIds(input.resourceIds ?? []);
 
-      if (toDelete.length > 0) {
-        await prismaClient.taskAssignment.deleteMany({
-          where: { projectId, taskId, resourceId: { in: toDelete } },
-        });
+    const run = async (prismaClient: AssignmentPrismaClient): Promise<ParentTaskAssignmentMaterializationResult> => {
+      await this.assertProjectExists(projectId, prismaClient);
+      const requestedResources = await this.assertResourcesAssignable(projectId, resourceIds, prismaClient);
+      const leafTaskIds = await this.resolveDescendantLeafTaskIds(projectId, taskId, prismaClient);
+
+      const taskAssignments: TaskAssignmentDetails[] = [];
+      for (const leafTaskId of leafTaskIds) {
+        const details = await this.replaceAssignmentsForLeafTask(
+          projectId,
+          leafTaskId,
+          resourceIds,
+          requestedResources,
+          prismaClient,
+        );
+        taskAssignments.push(details);
       }
-
-      if (toCreate.length > 0) {
-        await prismaClient.taskAssignment.createMany({
-          data: toCreate.map((resourceId) => ({
-            id: randomUUID(),
-            projectId,
-            taskId,
-            resourceId,
-          })),
-          skipDuplicates: true,
-        });
-      }
-
-      const assignments = await prismaClient.taskAssignment.findMany({
-        where: { projectId, taskId },
-        include: { resource: true },
-        orderBy: [{ createdAt: 'asc' }, { resourceId: 'asc' }],
-      });
-
-      const resourceById = new Map(requestedResources.map((resource) => [resource.id, resource]));
-      const resources = assignments
-        .map((assignment) => assignment.resource ?? resourceById.get(assignment.resourceId))
-        .filter((resource): resource is ResourceRow => Boolean(resource))
-        .map((resource) => toResource(resource));
 
       return {
-        taskId,
-        resources,
-        assignments: assignments.map((assignment) => toAssignment(assignment)),
+        requestedTaskId: taskId,
+        leafTaskIds,
+        taskAssignments,
       };
     };
 

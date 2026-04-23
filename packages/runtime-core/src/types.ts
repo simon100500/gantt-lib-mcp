@@ -109,6 +109,12 @@ export interface ReplaceTaskAssignmentsInput {
   resourceIds: string[];
 }
 
+export interface MaterializeParentTaskAssignmentsInput {
+  projectId: string;
+  taskId: string;
+  resourceIds: string[];
+}
+
 export interface ListTaskAssignmentsInput {
   projectId: string;
   taskId: string;
@@ -123,6 +129,7 @@ export interface ResourceAssignmentValidationIssue {
     | 'cross_project_mismatch'
     | 'resource_inactive'
     | 'task_not_leaf'
+    | 'task_has_no_leaf_descendants'
     | 'duplicate_resource_id'
     | 'resource_name_conflict';
   field?: 'projectId' | 'taskId' | 'resourceId' | 'resourceIds' | 'name' | 'type';
@@ -133,6 +140,12 @@ export interface TaskAssignmentDetails {
   taskId: string;
   resources: ProjectResource[];
   assignments: TaskAssignmentRecord[];
+}
+
+export interface ParentTaskAssignmentMaterializationResult {
+  requestedTaskId: string;
+  leafTaskIds: string[];
+  taskAssignments: TaskAssignmentDetails[];
 }
 
 export interface ProjectResourceCatalog {

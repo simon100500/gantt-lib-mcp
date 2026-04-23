@@ -1,14 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { AssignmentService, AssignmentValidationError } from './assignment.service.js';
-import { ResourceService, ResourceValidationError } from './resource.service.js';
+import { AssignmentService, AssignmentValidationError } from './assignment.service.ts';
+import { ResourceService, ResourceValidationError } from './resource.service.ts';
 import type {
   CreateProjectResourceInput,
   ListProjectResourcesInput,
   ListTaskAssignmentsInput,
   ReplaceTaskAssignmentsInput,
   UpdateProjectResourceInput,
-} from '../types.js';
+} from '../types.ts';
 
 type ProjectRow = { id: string };
 type TaskRow = { id: string; projectId: string; parentId: string | null };
@@ -176,6 +176,11 @@ function createFixture() {
 
   prisma.tasks.set('parent-task', { id: 'parent-task', projectId: 'project-1', parentId: null });
   prisma.tasks.set('leaf-task', { id: 'leaf-task', projectId: 'project-1', parentId: 'parent-task' });
+  prisma.tasks.set('branch-parent', { id: 'branch-parent', projectId: 'project-1', parentId: null });
+  prisma.tasks.set('branch-mid', { id: 'branch-mid', projectId: 'project-1', parentId: 'branch-parent' });
+  prisma.tasks.set('branch-leaf-a', { id: 'branch-leaf-a', projectId: 'project-1', parentId: 'branch-mid' });
+  prisma.tasks.set('branch-leaf-b', { id: 'branch-leaf-b', projectId: 'project-1', parentId: 'branch-parent' });
+  prisma.tasks.set('empty-parent', { id: 'empty-parent', projectId: 'project-1', parentId: null });
   prisma.tasks.set('other-project-task', { id: 'other-project-task', projectId: 'project-2', parentId: null });
 
   const resourceService = new ResourceService({ prisma });
@@ -261,7 +266,7 @@ describe('resource and assignment service contracts', () => {
     } satisfies ReplaceTaskAssignmentsInput);
 
     assert.deepEqual(
-      firstSet.resources.map((resource) => resource.name),
+      firstSet.resources.map((resource) => resource.name).sort(),
       ['Alpha', 'Beta'],
     );
     assert.equal(firstSet.assignments.length, 2);
@@ -288,6 +293,102 @@ describe('resource and assignment service contracts', () => {
     assert.equal(listed.assignments.length, 0);
   });
 
+  it('materializes parent assignments only to descendant leaf tasks and stays idempotent', async () => {
+    const { prisma, resourceService, assignmentService } = createFixture();
+    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+    const beta = await resourceService.create({ projectId: 'project-1', name: 'Beta' });
+
+    const first = await assignmentService.materializeForParentTask({
+      projectId: 'project-1',
+      taskId: 'branch-parent',
+      resourceIds: [alpha.id, beta.id],
+    });
+
+    assert.equal(first.requestedTaskId, 'branch-parent');
+    assert.deepEqual([...first.leafTaskIds].sort(), ['branch-leaf-a', 'branch-leaf-b']);
+    assert.deepEqual(
+      first.taskAssignments.map((entry) => entry.taskId).sort(),
+      ['branch-leaf-a', 'branch-leaf-b'],
+    );
+    assert.ok(first.taskAssignments.every((entry) => entry.assignments.length === 2));
+
+    const parentAssignments = Array.from(prisma.assignments.values()).filter((row) => row.taskId === 'branch-parent');
+    assert.equal(parentAssignments.length, 0, 'no persisted parent assignment rows should be created');
+
+    const firstAssignmentCount = prisma.assignments.size;
+    const repeated = await assignmentService.materializeForParentTask({
+      projectId: 'project-1',
+      taskId: 'branch-parent',
+      resourceIds: [alpha.id, beta.id],
+    });
+
+    assert.equal(prisma.assignments.size, firstAssignmentCount, 'repeated materialization should be idempotent');
+    assert.deepEqual([...repeated.leafTaskIds].sort(), ['branch-leaf-a', 'branch-leaf-b']);
+    assert.equal(Array.from(prisma.assignments.values()).filter((row) => row.taskId === 'branch-parent').length, 0);
+  });
+
+  it('materializes a single-leaf parent without creating a parent row', async () => {
+    const { prisma, resourceService, assignmentService } = createFixture();
+    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+
+    const result = await assignmentService.materializeForParentTask({
+      projectId: 'project-1',
+      taskId: 'parent-task',
+      resourceIds: [alpha.id],
+    });
+
+    assert.deepEqual(result.leafTaskIds, ['leaf-task']);
+    assert.equal(result.taskAssignments.length, 1);
+    assert.equal(result.taskAssignments[0]?.taskId, 'leaf-task');
+    assert.equal(result.taskAssignments[0]?.assignments.length, 1);
+    assert.equal(Array.from(prisma.assignments.values()).filter((row) => row.taskId === 'parent-task').length, 0);
+  });
+
+  it('rejects malformed input and stable no-leaf parent materialization failures', async () => {
+    const { resourceService, assignmentService } = createFixture();
+    const alpha = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
+
+    await assert.rejects(
+      () => assignmentService.replaceForTask({ projectId: '   ', taskId: 'leaf-task', resourceIds: [alpha.id] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'invalid_input');
+        assert.equal(error.issue.field, 'projectId');
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      () => assignmentService.replaceForTask({ projectId: 'project-1', taskId: '   ', resourceIds: [alpha.id] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'invalid_input');
+        assert.equal(error.issue.field, 'taskId');
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      () => assignmentService.replaceForTask({ projectId: 'project-1', taskId: 'leaf-task', resourceIds: ['   '] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'invalid_input');
+        assert.equal(error.issue.field, 'resourceIds');
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      () => assignmentService.materializeForParentTask({ projectId: 'project-1', taskId: 'empty-parent', resourceIds: [alpha.id] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'task_has_no_leaf_descendants');
+        assert.equal(error.issue.field, 'taskId');
+        return true;
+      },
+    );
+  });
+
   it('rejects duplicate resource ids in one assignment request', async () => {
     const { resourceService, assignmentService } = createFixture();
     const resource = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
@@ -306,7 +407,7 @@ describe('resource and assignment service contracts', () => {
     );
   });
 
-  it('rejects missing resources, inactive resources, non-leaf tasks, and cross-project mismatches', async () => {
+  it('rejects missing resources, inactive resources, non-leaf direct replacement, and cross-project mismatches', async () => {
     const { resourceService, assignmentService } = createFixture();
     const active = await resourceService.create({ projectId: 'project-1', name: 'Alpha' });
     const otherProject = await resourceService.create({ projectId: 'project-2', name: 'External crew' });
