@@ -89,12 +89,17 @@ function normalizeProjectResources(resources: ProjectLoadResponse['snapshot']['r
 function normalizeTaskAssignments(
   assignments: ProjectLoadResponse['snapshot']['assignments'] | undefined,
   resources: ProjectLoadResponse['snapshot']['resources'],
+  currentProjectId: string,
 ): ProjectLoadResponse['snapshot']['assignments'] {
   if (!Array.isArray(assignments)) {
     return [];
   }
 
-  const visibleResourceIds = new Set(resources.map((resource) => resource.id));
+  const visibleResourcesById = new Map(
+    resources
+      .filter((resource) => resource.scope === 'shared' || resource.projectId === currentProjectId)
+      .map((resource) => [resource.id, resource]),
+  );
 
   return assignments.flatMap((assignment) => {
     if (!assignment || typeof assignment !== 'object') {
@@ -107,7 +112,7 @@ function normalizeTaskAssignments(
     const resourceId = typeof assignment.resourceId === 'string' ? assignment.resourceId : '';
     const createdAt = typeof assignment.createdAt === 'string' ? assignment.createdAt : '';
 
-    if (!id || !projectId || !taskId || !resourceId || !createdAt || !visibleResourceIds.has(resourceId)) {
+    if (!id || !projectId || !taskId || !resourceId || !createdAt || !visibleResourcesById.has(resourceId)) {
       return [];
     }
 
@@ -279,7 +284,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
 
       const normalizedTasks = normalizeTasks(project.snapshot.tasks);
       const normalizedResources = normalizeProjectResources(project.snapshot.resources);
-      const normalizedAssignments = normalizeTaskAssignments(project.snapshot.assignments, normalizedResources);
+      const normalizedAssignments = normalizeTaskAssignments(project.snapshot.assignments, normalizedResources, project.project.id);
       useProjectStore.getState().hydrateConfirmed(project.version, {
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,

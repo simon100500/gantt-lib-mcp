@@ -111,12 +111,12 @@ const tasks: Task[] = [
   { id: 'solo-parent', name: 'Solo Parent', startDate: '2026-04-03', endDate: '2026-04-04', dependencies: [] },
 ];
 
-function renderWorkspace(): { container: HTMLDivElement; root: Root } {
+async function renderWorkspace(): Promise<{ container: HTMLDivElement; root: Root }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
   const root = createRoot(container);
-  act(() => {
+  await act(async () => {
     root.render(
       <ProjectWorkspace
         ganttRef={ganttRef}
@@ -141,12 +141,13 @@ function renderWorkspace(): { container: HTMLDivElement; root: Root } {
         ganttDayMode="calendar"
       />,
     );
+    await Promise.resolve();
   });
 
   return { container, root };
 }
 
-function renderWorkspaceWithTaskStore(): { container: HTMLDivElement; root: Root } {
+async function renderWorkspaceWithTaskStore(): Promise<{ container: HTMLDivElement; root: Root }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -183,11 +184,19 @@ function renderWorkspaceWithTaskStore(): { container: HTMLDivElement; root: Root
     );
   }
 
-  act(() => {
+  await act(async () => {
     root.render(<WorkspaceHarness />);
+    await Promise.resolve();
   });
 
   return { container, root };
+}
+
+async function unmountWorkspace(root: Root): Promise<void> {
+  await act(async () => {
+    root.unmount();
+    await Promise.resolve();
+  });
 }
 
 function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): ProjectLoadResponse {
@@ -425,7 +434,7 @@ describe('ProjectWorkspace resource assignments', () => {
       }));
     });
 
-    const { container, root } = renderWorkspace();
+    const { container, root } = await renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -445,7 +454,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Foreign Project Crew')).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('drops foreign local resources and orphaned assignments from authoritative reload state', async () => {
@@ -536,12 +545,12 @@ describe('ProjectWorkspace resource assignments', () => {
     ]);
     expect(useProjectStore.getState().assignments.some((assignment) => assignment.resourceId === 'resource-local-foreign')).toBe(false);
 
-    const { container, root } = renderWorkspaceWithTaskStore();
+    const { container, root } = await renderWorkspaceWithTaskStore();
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf A: Shared Crew');
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Current Project Crew');
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).not.toContain('Foreign Project Crew');
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('reopens through the authoritative /api/project snapshot and keeps inactive assignments visible while excluding them from new writes', async () => {
@@ -588,7 +597,9 @@ describe('ProjectWorkspace resource assignments', () => {
             resources: [
               {
                 id: 'resource-1',
+                userId: 'user-1',
                 projectId: 'project-1',
+                scope: 'project',
                 name: 'Alpha Crew',
                 type: 'human',
                 isActive: true,
@@ -598,7 +609,9 @@ describe('ProjectWorkspace resource assignments', () => {
               },
               {
                 id: 'resource-2',
+                userId: 'user-1',
                 projectId: 'project-1',
+                scope: 'project',
                 name: 'Dormant Crew',
                 type: 'human',
                 isActive: false,
@@ -628,7 +641,7 @@ describe('ProjectWorkspace resource assignments', () => {
       });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container, root } = renderWorkspace();
+    const { container, root } = await renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -722,7 +735,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(submitButton?.disabled).toBe(true);
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('fails the reopen proof when the authoritative payload omits resources or assignments', async () => {
@@ -751,21 +764,21 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(useProjectStore.getState().assignments.some((assignment) => assignment.resourceId === 'resource-2')).toBe(false);
   });
 
-  it('hydrates authoritative resource and assignment state into the visible workspace summary, including inactive existing assignments', () => {
-    const { container, root } = renderWorkspace();
+  it('hydrates authoritative resource and assignment state into the visible workspace summary, including inactive existing assignments', async () => {
+    const { container, root } = await renderWorkspace();
 
     expect(container.textContent).toContain('Leaf B: Dormant Crew');
     expect(container.textContent).toContain('Parent: —');
     expect(container.textContent).not.toContain('Parent: Dormant Crew');
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('opens explicit active-only selection instead of auto-submitting the first active resource', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container, root } = renderWorkspace();
+    const { container, root } = await renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -791,7 +804,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(submitButton?.disabled).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('wires a parent assignment submit through the materialize route and stores only descendant leaf assignments', async () => {
@@ -830,7 +843,7 @@ describe('ProjectWorkspace resource assignments', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container, root } = renderWorkspace();
+    const { container, root } = await renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -866,7 +879,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(state.assignmentError).toBeNull();
     expect(container.querySelector('[data-testid="assignment-selection-panel"]')).toBeNull();
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('surfaces the no-leaf validation error deterministically to the user after explicit submit', async () => {
@@ -881,7 +894,7 @@ describe('ProjectWorkspace resource assignments', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container, root } = renderWorkspace();
+    const { container, root } = await renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -911,7 +924,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(container.querySelector('[data-testid="assignment-error-banner"]')?.textContent).toContain('task_has_no_leaf_descendants');
     expect(container.querySelector('[data-testid="assignment-selection-panel"]')).not.toBeNull();
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 
   it('shows a deterministic local error when no active resources are available', async () => {
@@ -923,7 +936,7 @@ describe('ProjectWorkspace resource assignments', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container, root } = renderWorkspace();
+    const { container, root } = await renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -940,6 +953,6 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(submitButton?.disabled).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
 
-    root.unmount();
+    await unmountWorkspace(root);
   });
 });
