@@ -63,6 +63,87 @@ export interface WorkType {
   duration: number;
 }
 
+export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
+
+export interface ProjectResource {
+  id: string;
+  projectId: string;
+  name: string;
+  type: ResourceType;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deactivatedAt: string | null;
+}
+
+export interface TaskAssignmentRecord {
+  id: string;
+  projectId: string;
+  taskId: string;
+  resourceId: string;
+  createdAt: string;
+}
+
+export interface CreateProjectResourceInput {
+  projectId: string;
+  name: string;
+  type?: ResourceType;
+}
+
+export interface UpdateProjectResourceInput {
+  projectId: string;
+  resourceId: string;
+  name?: string;
+  type?: ResourceType;
+  isActive?: boolean;
+}
+
+export interface ListProjectResourcesInput {
+  projectId: string;
+  includeInactive?: boolean;
+}
+
+export interface ReplaceTaskAssignmentsInput {
+  projectId: string;
+  taskId: string;
+  resourceIds: string[];
+}
+
+export interface ListTaskAssignmentsInput {
+  projectId: string;
+  taskId: string;
+}
+
+export interface ResourceAssignmentValidationIssue {
+  code:
+    | 'invalid_input'
+    | 'project_not_found'
+    | 'task_not_found'
+    | 'resource_not_found'
+    | 'cross_project_mismatch'
+    | 'resource_inactive'
+    | 'task_not_leaf'
+    | 'duplicate_resource_id'
+    | 'resource_name_conflict';
+  field?: 'projectId' | 'taskId' | 'resourceId' | 'resourceIds' | 'name' | 'type';
+  detail?: string;
+}
+
+export interface TaskAssignmentDetails {
+  taskId: string;
+  resources: ProjectResource[];
+  assignments: TaskAssignmentRecord[];
+}
+
+export interface ProjectResourceCatalog {
+  resources: ProjectResource[];
+}
+
+export interface WorkType {
+  name: string;
+  duration: number;
+}
+
 export interface RepeatBy {
   sections?: number[];
   floors?: number[];
