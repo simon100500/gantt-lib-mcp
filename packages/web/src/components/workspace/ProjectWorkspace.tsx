@@ -249,6 +249,8 @@ export function ProjectWorkspace({
     return projectStates[projectId]?.selectedBaseline ?? null;
   }, [projectId, projectStates]);
   const [baselineMenuOpen, setBaselineMenuOpen] = useState(false);
+  const [assignmentSelectionTaskId, setAssignmentSelectionTaskId] = useState<string | null>(null);
+  const [selectedResourceIdByTask, setSelectedResourceIdByTask] = useState<Record<string, string>>({});
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
@@ -463,14 +465,72 @@ export function ProjectWorkspace({
     return await Promise.resolve(onSplitTask(splitTaskDraft, details));
   }, [onSplitTask, splitTaskDraft]);
 
-  const handleAssignResources = useCallback(async (task: Task) => {
+  const activeResources = useMemo(
+    () => resources.filter((resource) => resource.isActive),
+    [resources],
+  );
+
+  const selectedAssignmentTask = useMemo(
+    () => assignmentSelectionTaskId
+      ? tasks.find((task) => task.id === assignmentSelectionTaskId) ?? null
+      : null,
+    [assignmentSelectionTaskId, tasks],
+  );
+
+  const selectedAssignmentResourceId = assignmentSelectionTaskId
+    ? selectedResourceIdByTask[assignmentSelectionTaskId] ?? ''
+    : '';
+
+  const openAssignmentSelector = useCallback((task: Task) => {
+    if (effectiveReadOnly) {
+      return;
+    }
+
+    setAssignmentSelectionTaskId(task.id);
+    setSelectedResourceIdByTask((current) => {
+      if (current[task.id] !== undefined) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [task.id]: '',
+      };
+    });
+    setAssignmentError(null);
+  }, [effectiveReadOnly, setAssignmentError]);
+
+  const closeAssignmentSelector = useCallback(() => {
+    setAssignmentSelectionTaskId(null);
+  }, []);
+
+  const handleAssignmentResourceChange = useCallback((taskId: string, resourceId: string) => {
+    setSelectedResourceIdByTask((current) => ({
+      ...current,
+      [taskId]: resourceId,
+    }));
+    setAssignmentError(null);
+  }, [setAssignmentError]);
+
+  const handleAssignResources = useCallback(async (task: Task, selectedResourceId: string) => {
     if (!accessToken || effectiveReadOnly) {
       return;
     }
 
+    const trimmedResourceId = selectedResourceId.trim();
+    if (!trimmedResourceId) {
+      setAssignmentError('Выберите активный ресурс перед назначением.');
+      return;
+    }
+
     const state = useProjectStore.getState();
-    const activeResources = state.resources.filter((resource) => resource.isActive);
-    const nextResourceIds = activeResources.slice(0, 1).map((resource) => resource.id);
+    const activeResourceIds = new Set(state.resources.filter((resource) => resource.isActive).map((resource) => resource.id));
+    if (!activeResourceIds.has(trimmedResourceId)) {
+      setAssignmentError('Можно назначить только активный ресурс.');
+      return;
+    }
+
+    const nextResourceIds = [trimmedResourceId];
     const childLeafIds = collectDescendantLeafIds(tasks, task.id);
     const isParentTask = childLeafIds.length > 0;
     const endpoint = isParentTask
@@ -510,6 +570,8 @@ export function ProjectWorkspace({
       const unaffectedAssignments = state.assignments.filter((assignment) => assignment.taskId !== task.id);
       setAssignments([...unaffectedAssignments, ...nextAssignments]);
     }
+
+    setAssignmentSelectionTaskId(null);
   }, [accessToken, effectiveReadOnly, setAssignmentError, setAssignments, tasks]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
@@ -522,7 +584,7 @@ export function ProjectWorkspace({
         id: 'assign-resource',
         label: 'Назначить ресурс',
         icon: <Check className="h-4 w-4" />,
-        onSelect: (row) => void handleAssignResources(row),
+        onSelect: (row) => openAssignmentSelector(row),
       },
       {
         id: 'send-task-to-chat',
@@ -543,7 +605,7 @@ export function ProjectWorkspace({
     }
 
     return commands;
-  }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat, handleAssignResources]);
+  }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat, openAssignmentSelector]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
@@ -777,6 +839,65 @@ export function ProjectWorkspace({
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {assignmentSelectionTaskId && selectedAssignmentTask && (
+              <div
+                className="border-b border-blue-200 bg-blue-50 px-3 py-3 text-sm text-slate-700"
+                data-testid="assignment-selection-panel"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <div className="font-medium text-slate-900" data-testid="assignment-selection-task-name">
+                      Назначить ресурс: {selectedAssignmentTask.name}
+                    </div>
+                    <label className="flex flex-col gap-1 text-xs text-slate-600">
+                      Активный ресурс
+                      <select
+                        className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
+                        data-testid="assignment-resource-select"
+                        value={selectedAssignmentResourceId}
+                        onChange={(event) => handleAssignmentResourceChange(selectedAssignmentTask.id, event.target.value)}
+                      >
+                        <option value="">Выберите активный ресурс</option>
+                        {activeResources.map((resource) => (
+                          <option key={resource.id} value={resource.id}>
+                            {resource.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="text-xs text-slate-500" data-testid="assignment-selection-hint">
+                      Неактивные ресурсы остаются видимыми в сводке ниже, но недоступны для новых назначений.
+                    </div>
+                    {activeResources.length === 0 && (
+                      <div className="text-xs text-amber-700" data-testid="assignment-selection-empty">
+                        Нет активных ресурсов для назначения.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      onClick={closeAssignmentSelector}
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      data-testid="assignment-submit-button"
+                      disabled={!selectedAssignmentResourceId || activeResources.length === 0}
+                      onClick={() => {
+                        void handleAssignResources(selectedAssignmentTask, selectedAssignmentResourceId);
+                      }}
+                    >
+                      Подтвердить назначение
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {assignmentError && (
               <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="assignment-error-banner">
                 {assignmentError}

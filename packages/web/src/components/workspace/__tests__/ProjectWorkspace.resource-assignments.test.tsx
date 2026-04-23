@@ -143,6 +143,7 @@ function renderWorkspace(): { container: HTMLDivElement; root: Root } {
 beforeEach(() => {
   toolbarSpy.mockClear();
   ganttPropsSpy = null;
+  vi.unstubAllGlobals();
   useProjectStore.setState({
     confirmed: { version: 1, snapshot: { tasks, dependencies: [] } },
     resources: [
@@ -156,13 +157,23 @@ beforeEach(() => {
         updatedAt: '2026-04-01T00:00:00.000Z',
         deactivatedAt: null,
       },
+      {
+        id: 'resource-2',
+        projectId: 'project-1',
+        name: 'Dormant Crew',
+        type: 'human',
+        isActive: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-02T00:00:00.000Z',
+        deactivatedAt: '2026-04-02T00:00:00.000Z',
+      },
     ],
     assignments: [
       {
         id: 'existing-leaf-2',
         projectId: 'project-1',
         taskId: 'leaf-2',
-        resourceId: 'resource-1',
+        resourceId: 'resource-2',
         createdAt: '2026-04-01T00:00:00.000Z',
       },
     ],
@@ -208,17 +219,50 @@ afterEach(() => {
 });
 
 describe('ProjectWorkspace resource assignments', () => {
-  it('hydrates authoritative resource and assignment state into the visible workspace summary', () => {
+  it('hydrates authoritative resource and assignment state into the visible workspace summary, including inactive existing assignments', () => {
     const { container, root } = renderWorkspace();
 
-    expect(container.textContent).toContain('Leaf B: Alpha Crew');
+    expect(container.textContent).toContain('Leaf B: Dormant Crew');
     expect(container.textContent).toContain('Parent: —');
-    expect(container.textContent).not.toContain('Parent: Alpha Crew');
+    expect(container.textContent).not.toContain('Parent: Dormant Crew');
 
     root.unmount();
   });
 
-  it('wires a parent assignment command through the materialize route and stores only descendant leaf assignments', async () => {
+  it('opens explicit active-only selection instead of auto-submitting the first active resource', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = renderWorkspace();
+    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
+    const assignCommand = commands.find((command) => command.id === 'assign-resource');
+
+    expect(assignCommand).toBeTruthy();
+
+    await act(async () => {
+      assignCommand!.onSelect(tasks[0]!);
+      await Promise.resolve();
+    });
+
+    const panel = container.querySelector('[data-testid="assignment-selection-panel"]');
+    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
+    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('Назначить ресурс: Parent');
+    expect(select).not.toBeNull();
+    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
+      'Выберите активный ресурс',
+      'Alpha Crew',
+    ]);
+    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Dormant Crew')).toBe(false);
+    expect(submitButton?.disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    root.unmount();
+  });
+
+  it('wires a parent assignment submit through the materialize route and stores only descendant leaf assignments', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -254,7 +298,7 @@ describe('ProjectWorkspace resource assignments', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { root } = renderWorkspace();
+    const { container, root } = renderWorkspace();
     const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
     const assignCommand = commands.find((command) => command.id === 'assign-resource');
 
@@ -265,16 +309,35 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/parent-1/assignments/materialize', expect.objectContaining({ method: 'POST' }));
+    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement;
+    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement;
+
+    await act(async () => {
+      select.value = 'resource-1';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(submitButton.disabled).toBe(false);
+
+    await act(async () => {
+      submitButton.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/parent-1/assignments/materialize', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ resourceIds: ['resource-1'] }),
+    }));
     const state = useProjectStore.getState();
     expect(state.assignments.map((assignment) => assignment.taskId).sort()).toEqual(['leaf-1', 'leaf-2']);
     expect(state.assignments.some((assignment) => assignment.taskId === 'parent-1')).toBe(false);
     expect(state.assignmentError).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-selection-panel"]')).toBeNull();
 
     root.unmount();
   });
 
-  it('surfaces the no-leaf validation error deterministically to the user', async () => {
+  it('surfaces the no-leaf validation error deterministically to the user after explicit submit', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
@@ -295,9 +358,55 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/solo-parent/assignments', expect.objectContaining({ method: 'POST' }));
+    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement;
+    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement;
+
+    await act(async () => {
+      select.value = 'resource-1';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      submitButton.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/solo-parent/assignments', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ resourceIds: ['resource-1'] }),
+    }));
     expect(useProjectStore.getState().assignmentError).toBe('task_has_no_leaf_descendants: Task solo-parent has no descendant leaf tasks');
     expect(container.querySelector('[data-testid="assignment-error-banner"]')?.textContent).toContain('task_has_no_leaf_descendants');
+    expect(container.querySelector('[data-testid="assignment-selection-panel"]')).not.toBeNull();
+
+    root.unmount();
+  });
+
+  it('shows a deterministic local error when no active resources are available', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      resources: state.resources.map((resource) => ({ ...resource, isActive: false, deactivatedAt: resource.deactivatedAt ?? '2026-04-03T00:00:00.000Z' })),
+      assignmentError: null,
+    }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = renderWorkspace();
+    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
+    const assignCommand = commands.find((command) => command.id === 'assign-resource');
+
+    await act(async () => {
+      assignCommand!.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
+    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+
+    expect(container.querySelector('[data-testid="assignment-selection-empty"]')?.textContent).toContain('Нет активных ресурсов');
+    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual(['Выберите активный ресурс']);
+    expect(submitButton?.disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
 
     root.unmount();
   });
