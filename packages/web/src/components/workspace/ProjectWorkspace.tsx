@@ -311,11 +311,23 @@ export function ProjectWorkspace({
     } satisfies BaselineSnapshotResponse['snapshot'];
   }, [selectedBaselineState]);
   const selectedBaselineTaskCount = selectedBaselineSnapshot?.tasks.length ?? 0;
-  const baselineRows = useMemo(() => baselineItems.map((item) => ({
-    id: item.id,
-    label: item.name || 'Без названия',
-    selected: item.id === selectedBaselineState?.id,
-  })), [baselineItems, selectedBaselineState?.id]);
+  const baselineRows = useMemo(() => {
+    const rows = baselineItems.map((item) => ({
+      id: item.id,
+      label: item.name || 'Без названия',
+      selected: item.id === selectedBaselineState?.id,
+    }));
+
+    if (selectedBaselineState && !rows.some((row) => row.id === selectedBaselineState.id)) {
+      rows.unshift({
+        id: selectedBaselineState.id,
+        label: selectedBaselineState.label || 'Без названия',
+        selected: true,
+      });
+    }
+
+    return rows;
+  }, [baselineItems, selectedBaselineState]);
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const weekendPredicate = useMemo(
     () => getProjectWeekendPredicate(calendarDays) ?? (() => false),
