@@ -9,6 +9,8 @@ interface ProjectBaselineSelectionState {
   snapshot: {
     tasks: unknown[];
     dependencies: unknown[];
+    resources?: unknown[];
+    assignments?: unknown[];
   };
 }
 

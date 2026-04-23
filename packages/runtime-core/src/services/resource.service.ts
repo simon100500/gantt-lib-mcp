@@ -42,6 +42,16 @@ type ResourceRow = {
 type ProjectOwnerSelection = { id: string; userId: string };
 type ResourceIdSelection = { id: string };
 
+type ResourceFindFirstArgs = {
+  where: {
+    id?: string;
+    userId?: string;
+    name?: string;
+    OR?: Array<{ projectId: null } | { projectId: string }>;
+  };
+  select?: { id: true };
+};
+
 type ResourcePrismaClient = {
   project: {
     findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerSelection | null>;
@@ -55,24 +65,7 @@ type ResourcePrismaClient = {
       };
       orderBy: Array<{ isActive?: 'asc' | 'desc' } | { name?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }>;
     }): Promise<ResourceRow[]>;
-    findFirst(args: {
-      where: {
-        id?: string;
-        userId?: string;
-        name?: string;
-        OR?: Array<{ projectId: null } | { projectId: string }>;
-      };
-      select: { id: true };
-    }): Promise<ResourceIdSelection | null>;
-    findFirst(args: {
-      where: {
-        id?: string;
-        userId?: string;
-        name?: string;
-        OR?: Array<{ projectId: null } | { projectId: string }>;
-      };
-      select?: undefined;
-    }): Promise<ResourceRow | null>;
+    findFirst(args: ResourceFindFirstArgs): Promise<ResourceIdSelection | ResourceRow | null>;
     create(args: {
       data: {
         id: string;
@@ -261,7 +254,7 @@ export class ResourceService {
         userId: project.userId,
         OR: [{ projectId: null }, { projectId: project.id }],
       },
-    });
+    }) as ResourceRow | null;
 
     if (!existing) {
       throw new ResourceValidationError(`Resource ${resourceId} was not found for project ${projectId}`, {

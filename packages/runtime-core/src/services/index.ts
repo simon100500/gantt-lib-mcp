@@ -14,6 +14,8 @@ export { resourceService } from './resource.service.js';
 export { ResourceService, ResourceValidationError } from './resource.service.js';
 export { assignmentService } from './assignment.service.js';
 export { AssignmentService, AssignmentValidationError } from './assignment.service.js';
+export { plannerService } from './planner.service.js';
+export { PlannerService, PlannerValidationError } from './planner.service.js';
 export {
   enforcementService,
   createEnforcementService,

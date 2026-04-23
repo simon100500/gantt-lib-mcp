@@ -36,7 +36,7 @@ async function parseHistoryRestoreResponse(response: Response): Promise<HistoryR
     groupId: data.groupId ?? '',
     targetGroupId: data.targetGroupId ?? '',
     version: data.version ?? 0,
-    snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
+    snapshot: data.snapshot ?? { tasks: [], dependencies: [], resources: [], assignments: [] },
     chatCleanup: data.chatCleanup ?? {
       deletedCount: 0,
       deletedFromMessageId: null,
@@ -51,7 +51,7 @@ async function parseHistorySnapshotResponse(response: Response): Promise<History
     groupId: data.groupId ?? '',
     isCurrent: data.isCurrent ?? false,
     currentVersion: data.currentVersion ?? 0,
-    snapshot: data.snapshot ?? { tasks: [], dependencies: [] },
+    snapshot: data.snapshot ?? { tasks: [], dependencies: [], resources: [], assignments: [] },
   };
 }
 

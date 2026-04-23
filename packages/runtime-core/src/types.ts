@@ -126,6 +126,35 @@ export interface ListTaskAssignmentsInput {
   taskId: string;
 }
 
+export interface GetResourcePlannerInput {
+  projectId: string;
+}
+
+export interface ResourcePlannerInterval {
+  assignmentId: string;
+  resourceId: string;
+  resourceName: string;
+  projectId: string;
+  projectName: string;
+  taskId: string;
+  taskName: string;
+  startDate: string;
+  endDate: string;
+  assignmentCreatedAt: string;
+}
+
+export interface ResourcePlannerResource {
+  resourceId: string;
+  resourceName: string;
+  intervals: ResourcePlannerInterval[];
+}
+
+export interface ResourcePlannerResult {
+  projectId: string;
+  workspaceUserId: string;
+  resources: ResourcePlannerResource[];
+}
+
 export interface ResourceAssignmentValidationIssue {
   code:
     | 'invalid_input'
@@ -137,7 +166,8 @@ export interface ResourceAssignmentValidationIssue {
     | 'task_not_leaf'
     | 'task_has_no_leaf_descendants'
     | 'duplicate_resource_id'
-    | 'resource_name_conflict';
+    | 'resource_name_conflict'
+    | 'planner_scope_invalid';
   field?: 'projectId' | 'taskId' | 'resourceId' | 'resourceIds' | 'name' | 'type';
   detail?: string;
 }

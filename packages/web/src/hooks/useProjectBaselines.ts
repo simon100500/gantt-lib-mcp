@@ -57,6 +57,8 @@ function normalizeSnapshot(
   return {
     tasks: Array.isArray(snapshot?.tasks) ? snapshot.tasks : [],
     dependencies: Array.isArray(snapshot?.dependencies) ? snapshot.dependencies : [],
+    resources: Array.isArray(snapshot?.resources) ? snapshot.resources : [],
+    assignments: Array.isArray(snapshot?.assignments) ? snapshot.assignments : [],
   };
 }
 

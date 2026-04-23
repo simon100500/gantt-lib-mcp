@@ -361,6 +361,12 @@ export function ProjectWorkspace({
       dependencies: Array.isArray(selectedBaselineState.snapshot.dependencies)
         ? selectedBaselineState.snapshot.dependencies as BaselineSnapshotResponse['snapshot']['dependencies']
         : [],
+      resources: Array.isArray(selectedBaselineState.snapshot.resources)
+        ? selectedBaselineState.snapshot.resources as BaselineSnapshotResponse['snapshot']['resources']
+        : [],
+      assignments: Array.isArray(selectedBaselineState.snapshot.assignments)
+        ? selectedBaselineState.snapshot.assignments as BaselineSnapshotResponse['snapshot']['assignments']
+        : [],
     } satisfies BaselineSnapshotResponse['snapshot'];
   }, [selectedBaselineState]);
   const selectedBaselineTaskCount = selectedBaselineSnapshot?.tasks.length ?? 0;
