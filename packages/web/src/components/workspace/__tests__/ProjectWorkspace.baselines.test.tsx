@@ -15,7 +15,7 @@ const createFromHistorySpy = vi.fn();
 const showVersionByIdSpy = vi.fn();
 const restoreVersionSpy = vi.fn();
 const returnToCurrentVersionSpy = vi.fn();
-let historyItemsMock: Array<{ id: string; createdAt: string; canRestore: boolean; isCurrent: boolean }> = [];
+let historyItemsMock: HistoryItem[] = [];
 let baselinesHookState = {
   loading: false,
   error: null as string | null,
@@ -113,6 +113,8 @@ import { ProjectWorkspace } from '../ProjectWorkspace.tsx';
 import { useProjectUIStore } from '../../../stores/useProjectUIStore.ts';
 import { useUIStore } from '../../../stores/useUIStore.ts';
 import { useHistoryViewerStore } from '../../../stores/useHistoryViewerStore.ts';
+import { buildDefaultBaselineName } from '../../../lib/baselineNaming.ts';
+import type { HistoryItem } from '../../../lib/apiTypes.ts';
 import type { Task, ValidationResult } from '../../../types.ts';
 
 function installDomPolyfills(): void {
@@ -441,7 +443,12 @@ describe('ProjectWorkspace baseline wiring', () => {
     historyItemsMock = [
       {
         id: 'history-1',
+        actorType: 'user',
+        title: 'move_task',
         createdAt: '2026-04-22T10:00:00.000Z',
+        baseVersion: 1,
+        newVersion: 2,
+        commandCount: 1,
         canRestore: true,
         isCurrent: false,
       },
@@ -461,5 +468,210 @@ describe('ProjectWorkspace baseline wiring', () => {
     expect(container.textContent).not.toContain('Baseline: Baseline alpha');
 
     root.unmount();
+  });
+
+  it('creates a baseline from history, activates it immediately, and preserves preview precedence in the footer', async () => {
+    historyItemsMock = [
+      {
+        id: 'history-1',
+        actorType: 'user',
+        title: 'move_task',
+        createdAt: '2026-04-22T10:00:00.000Z',
+        baseVersion: 1,
+        newVersion: 2,
+        commandCount: 1,
+        canRestore: true,
+        isCurrent: false,
+      },
+    ];
+    useUIStore.setState({ showHistoryPanel: true });
+    createFromHistorySpy.mockResolvedValueOnce({
+      id: 'baseline-history-1',
+      projectId: 'project-1',
+      name: buildDefaultBaselineName('2026-04-22T10:00:00.000Z'),
+      source: 'history',
+      sourceHistoryGroupId: 'history-1',
+      createdAt: '2026-04-23T00:45:00.000Z',
+      snapshot: {
+        tasks: [
+          { id: 'history-task', name: 'History baseline task', startDate: '2026-04-05', endDate: '2026-04-06', dependencies: [] },
+        ],
+        dependencies: [],
+      },
+    });
+
+    const { container, root } = renderWorkspace();
+
+    const historyPanelProps = lastCallArg<Record<string, unknown>>(historyPanelSpy)!;
+    await act(async () => {
+      await (historyPanelProps.onCreateBaselineFromHistory as ((item: HistoryItem) => Promise<unknown> | unknown))(historyItemsMock[0]!);
+    });
+
+    expect(createFromHistorySpy).toHaveBeenCalledTimes(1);
+    expect(createFromHistorySpy).toHaveBeenCalledWith('history-1', 'Базовый 22.04.2026 10:00');
+
+    const projectState = useProjectUIStore.getState().projectStates['project-1'];
+    expect(projectState?.selectedBaseline).toMatchObject({
+      id: 'baseline-history-1',
+      label: 'Базовый 22.04.2026 10:00',
+      snapshot: {
+        tasks: [
+          expect.objectContaining({ id: 'history-task' }),
+        ],
+        dependencies: [],
+      },
+    });
+
+    let latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.baselineActiveLabel).toBe('Базовый 22.04.2026 10:00');
+    expect(latestProps.baselineRows).toEqual([
+      { id: 'baseline-history-1', label: 'Базовый 22.04.2026 10:00', selected: true },
+      { id: 'baseline-1', label: 'Baseline alpha', selected: false },
+    ]);
+    expect(container.textContent).toContain('Baseline: Базовый 22.04.2026 10:00');
+
+    useHistoryViewerStore.setState({
+      historyViewer: {
+        mode: 'preview',
+        groupId: 'history-1',
+        snapshot: { tasks, dependencies: [] },
+        isCurrent: false,
+      },
+    });
+
+    latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.baselineActiveLabel).toBe('Базовый 22.04.2026 10:00');
+    expect(container.textContent).not.toContain('Baseline: Базовый 22.04.2026 10:00');
+    expect(container.textContent).toContain('Версия от');
+
+    root.unmount();
+  });
+
+  it('blocks duplicate create-from-history clicks while the same row is marked in flight', async () => {
+    baselinesHookState.creatingFromHistoryGroupId = 'history-1';
+    historyItemsMock = [
+      {
+        id: 'history-1',
+        actorType: 'user',
+        title: 'move_task',
+        createdAt: '2026-04-22T10:00:00.000Z',
+        baseVersion: 1,
+        newVersion: 2,
+        commandCount: 1,
+        canRestore: true,
+        isCurrent: false,
+      },
+    ];
+    useUIStore.setState({ showHistoryPanel: true });
+
+    const { root } = renderWorkspace();
+
+    const historyPanelProps = lastCallArg<Record<string, unknown>>(historyPanelSpy)!;
+    expect(historyPanelProps.creatingBaselineFromHistoryGroupId).toBe('history-1');
+
+    await act(async () => {
+      await (historyPanelProps.onCreateBaselineFromHistory as ((item: HistoryItem) => Promise<unknown> | unknown))(historyItemsMock[0]!);
+    });
+
+    expect(createFromHistorySpy).not.toHaveBeenCalled();
+    expect(useProjectUIStore.getState().projectStates['project-1']?.selectedBaseline).toBeUndefined();
+
+    root.unmount();
+  });
+
+  it('failed create-from-history keeps the previous baseline selection and surfaces the existing error state', async () => {
+    historyItemsMock = [
+      {
+        id: 'history-1',
+        actorType: 'user',
+        title: 'move_task',
+        createdAt: '2026-04-22T10:00:00.000Z',
+        baseVersion: 1,
+        newVersion: 2,
+        commandCount: 1,
+        canRestore: true,
+        isCurrent: false,
+      },
+    ];
+    useUIStore.setState({ showHistoryPanel: true });
+    useProjectUIStore.getState().setProjectState('project-1', {
+      selectedBaseline: {
+        id: 'baseline-existing',
+        label: 'Existing baseline',
+        snapshot: { tasks: [{ id: 'existing-task' }], dependencies: [] },
+      },
+    });
+    baselinesHookState.error = 'Не удалось создать baseline из истории';
+    createFromHistorySpy.mockRejectedValueOnce(new Error('Не удалось создать baseline из истории'));
+
+    const { container, root } = renderWorkspace();
+
+    const historyPanelProps = lastCallArg<Record<string, unknown>>(historyPanelSpy)!;
+    await act(async () => {
+      await (historyPanelProps.onCreateBaselineFromHistory as ((item: HistoryItem) => Promise<unknown> | unknown))(historyItemsMock[0]!);
+    });
+
+    expect(createFromHistorySpy).toHaveBeenCalledWith('history-1', 'Базовый 22.04.2026 10:00');
+    const projectState = useProjectUIStore.getState().projectStates['project-1'];
+    expect(projectState?.selectedBaseline).toMatchObject({
+      id: 'baseline-existing',
+      label: 'Existing baseline',
+    });
+
+    const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.baselineActiveLabel).toBe('Existing baseline');
+    expect(latestProps.baselineError).toBe('Не удалось создать baseline из истории');
+    expect(container.textContent).toContain('Baseline: Existing baseline');
+
+    root.unmount();
+  });
+
+  it('passes create-from-history props into HistoryPanel without disturbing preview priority', () => {
+    baselinesHookState.creatingFromHistoryGroupId = 'history-1';
+    historyItemsMock = [
+      {
+        id: 'history-1',
+        actorType: 'user',
+        title: 'move_task',
+        createdAt: '2026-04-22T10:00:00.000Z',
+        baseVersion: 1,
+        newVersion: 2,
+        commandCount: 1,
+        canRestore: true,
+        isCurrent: false,
+      },
+    ];
+    useUIStore.setState({ showHistoryPanel: true });
+    useProjectUIStore.getState().setProjectState('project-1', {
+      selectedBaseline: {
+        id: 'baseline-1',
+        label: 'Baseline alpha',
+        snapshot: { tasks: [{ id: 'x' }], dependencies: [] },
+      },
+    });
+    useHistoryViewerStore.setState({
+      historyViewer: {
+        mode: 'preview',
+        groupId: 'history-1',
+        snapshot: { tasks, dependencies: [] },
+        isCurrent: false,
+      },
+    });
+
+    const { container, root } = renderWorkspace();
+
+    const historyPanelProps = lastCallArg<Record<string, unknown>>(historyPanelSpy)!;
+    expect(historyPanelProps.creatingBaselineFromHistoryGroupId).toBe('history-1');
+    expect(typeof historyPanelProps.onCreateBaselineFromHistory).toBe('function');
+    expect(useHistoryViewerStore.getState().historyViewer.mode).toBe('preview');
+    expect(container.textContent).not.toContain('Baseline: Baseline alpha');
+
+    root.unmount();
+  });
+
+  it('reuses the same formatter for current and history-derived baseline names', () => {
+    expect(buildDefaultBaselineName(new Date('2026-04-23T03:41:00.000+03:00'))).toBe('Базовый 23.04.2026 03:41');
+    expect(buildDefaultBaselineName('2026-04-22T10:00:00.000Z')).toBe('Базовый 22.04.2026 10:00');
+    expect(buildDefaultBaselineName('invalid')).toBe('Базовый');
   });
 });

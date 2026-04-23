@@ -23,6 +23,7 @@ import type { SharedTaskProject } from '../../stores/useTaskStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
+import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
 import type { BaselineSnapshotResponse } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
@@ -93,29 +94,6 @@ function formatHistoryVersionTimestamp(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatBaselineTimestampPart(date: Date, type: 'day' | 'month' | 'year' | 'hour' | 'minute'): string {
-  const formatter = new Intl.DateTimeFormat('ru-RU', {
-    [type]: type === 'year' ? 'numeric' : '2-digit',
-  });
-
-  const match = formatter.formatToParts(date).find((part) => part.type === type)?.value;
-  return match ?? '';
-}
-
-function buildDefaultBaselineName(date = new Date()): string {
-  if (Number.isNaN(date.getTime())) {
-    return 'Базовый';
-  }
-
-  const day = formatBaselineTimestampPart(date, 'day');
-  const month = formatBaselineTimestampPart(date, 'month');
-  const year = formatBaselineTimestampPart(date, 'year');
-  const hour = formatBaselineTimestampPart(date, 'hour');
-  const minute = formatBaselineTimestampPart(date, 'minute');
-
-  return `Базовый ${day}.${month}.${year} ${hour}:${minute}`;
 }
 
 function buildCheckpointLabel(groupId: string, createdAt?: string): string {
@@ -556,13 +534,13 @@ export function ProjectWorkspace({
     }
   }, [createFromCurrent, creatingFromCurrent, projectId, setProjectState]);
 
-  const handleCreateBaselineFromHistory = useCallback(async (groupId: string) => {
-    if (!projectId || creatingFromHistoryGroupId === groupId) {
+  const handleCreateBaselineFromHistory = useCallback(async (item: { id: string; createdAt: string }) => {
+    if (!projectId || creatingFromHistoryGroupId === item.id) {
       return;
     }
 
     try {
-      const baseline = await createFromHistory(groupId, buildDefaultBaselineName());
+      const baseline = await createFromHistory(item.id, buildDefaultBaselineName(item.createdAt));
       setProjectState(projectId, {
         selectedBaseline: {
           id: baseline.id,
@@ -811,7 +789,7 @@ export function ProjectWorkspace({
             onPreviewVersion={showVersion}
             onRestoreVersion={restoreVersion}
             onCreateBaselineFromHistory={(item) => {
-              void handleCreateBaselineFromHistory(item.id);
+              void handleCreateBaselineFromHistory(item);
             }}
             onReturnToCurrentVersion={returnToCurrentVersion}
           />
