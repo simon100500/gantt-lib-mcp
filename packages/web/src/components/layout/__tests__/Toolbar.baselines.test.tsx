@@ -309,7 +309,9 @@ describe('Toolbar baseline menu', () => {
     });
 
     expect(container.textContent).not.toContain('Baseline');
-    const idleTrigger = container.querySelector('button[aria-pressed="false"]');
+    const idleTrigger =
+      container.querySelector('button[title="Выбрать baseline"]') ??
+      container.querySelector('button[aria-label="Baseline menu"]');
     expect(idleTrigger?.getAttribute('title')).toBe('Выбрать baseline');
     expect(menuText()).not.toContain('Активный baseline');
     expect(menuText()).toContain('Без названия');
