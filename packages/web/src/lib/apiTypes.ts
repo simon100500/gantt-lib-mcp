@@ -3,9 +3,13 @@ import type { ProjectDependency, Task } from '../types.ts';
 
 export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
 
+export type ResourceScope = 'shared' | 'project';
+
 export interface ProjectResource {
   id: string;
-  projectId: string;
+  userId: string;
+  projectId: string | null;
+  scope: ResourceScope;
   name: string;
   type: ResourceType;
   isActive: boolean;

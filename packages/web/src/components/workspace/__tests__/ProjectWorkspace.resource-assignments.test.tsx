@@ -210,7 +210,9 @@ function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): Pro
       resources: [
         {
           id: 'resource-1',
-          projectId: 'project-1',
+          userId: 'user-1',
+          projectId: null,
+          scope: 'shared',
           name: 'Alpha Crew',
           type: 'human',
           isActive: true,
@@ -220,7 +222,9 @@ function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): Pro
         },
         {
           id: 'resource-2',
+          userId: 'user-1',
           projectId: 'project-1',
+          scope: 'project',
           name: 'Dormant Crew',
           type: 'human',
           isActive: false,
@@ -297,7 +301,9 @@ beforeEach(() => {
     resources: [
       {
         id: 'resource-1',
-        projectId: 'project-1',
+        userId: 'user-1',
+        projectId: null,
+        scope: 'shared',
         name: 'Alpha Crew',
         type: 'human',
         isActive: true,
@@ -307,7 +313,9 @@ beforeEach(() => {
       },
       {
         id: 'resource-2',
+        userId: 'user-1',
         projectId: 'project-1',
+        scope: 'project',
         name: 'Dormant Crew',
         type: 'human',
         isActive: false,
@@ -367,6 +375,175 @@ afterEach(() => {
 });
 
 describe('ProjectWorkspace resource assignments', () => {
+  it('shows shared resources plus current-project local resources, while excluding foreign local resources from the selector', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      useProjectStore.setState((state) => ({
+        ...state,
+        resources: [
+          {
+            id: 'resource-shared',
+            userId: 'user-1',
+            projectId: null,
+            scope: 'shared',
+            name: 'Shared Crew',
+            type: 'human',
+            isActive: true,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+            deactivatedAt: null,
+          },
+          {
+            id: 'resource-local-current',
+            userId: 'user-1',
+            projectId: 'project-1',
+            scope: 'project',
+            name: 'Current Project Crew',
+            type: 'human',
+            isActive: true,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+            deactivatedAt: null,
+          },
+          {
+            id: 'resource-local-foreign',
+            userId: 'user-1',
+            projectId: 'project-2',
+            scope: 'project',
+            name: 'Foreign Project Crew',
+            type: 'human',
+            isActive: true,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+            deactivatedAt: null,
+          },
+        ],
+        assignments: [],
+        assignmentError: null,
+      }));
+    });
+
+    const { container, root } = renderWorkspace();
+    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
+    const assignCommand = commands.find((command) => command.id === 'assign-resource');
+
+    expect(assignCommand).toBeTruthy();
+
+    await act(async () => {
+      assignCommand!.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
+    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
+      'Выберите активный ресурс',
+      'Shared Crew',
+      'Current Project Crew',
+    ]);
+    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Foreign Project Crew')).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    root.unmount();
+  });
+
+  it('drops foreign local resources and orphaned assignments from authoritative reload state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => buildProjectLoadResponse({
+        snapshot: {
+          tasks,
+          dependencies: [],
+          resources: [
+            {
+              id: 'resource-shared',
+              userId: 'user-1',
+              projectId: null,
+              scope: 'shared',
+              name: 'Shared Crew',
+              type: 'human',
+              isActive: true,
+              createdAt: '2026-04-01T00:00:00.000Z',
+              updatedAt: '2026-04-01T00:00:00.000Z',
+              deactivatedAt: null,
+            },
+            {
+              id: 'resource-local-current',
+              userId: 'user-1',
+              projectId: 'project-1',
+              scope: 'project',
+              name: 'Current Project Crew',
+              type: 'human',
+              isActive: true,
+              createdAt: '2026-04-01T00:00:00.000Z',
+              updatedAt: '2026-04-01T00:00:00.000Z',
+              deactivatedAt: null,
+            },
+            {
+              id: 'resource-local-foreign',
+              userId: 'user-1',
+              projectId: 'project-2',
+              scope: 'project',
+              name: 'Foreign Project Crew',
+              type: 'human',
+              isActive: true,
+              createdAt: '2026-04-01T00:00:00.000Z',
+              updatedAt: '2026-04-01T00:00:00.000Z',
+              deactivatedAt: null,
+            },
+          ] as ProjectLoadResponse['snapshot']['resources'],
+          assignments: [
+            {
+              id: 'assignment-shared',
+              projectId: 'project-1',
+              taskId: 'leaf-1',
+              resourceId: 'resource-shared',
+              createdAt: '2026-04-01T00:00:00.000Z',
+            },
+            {
+              id: 'assignment-current-local',
+              projectId: 'project-1',
+              taskId: 'leaf-2',
+              resourceId: 'resource-local-current',
+              createdAt: '2026-04-01T00:00:00.000Z',
+            },
+            {
+              id: 'assignment-foreign-local',
+              projectId: 'project-1',
+              taskId: 'parent-1',
+              resourceId: 'resource-local-foreign',
+              createdAt: '2026-04-01T00:00:00.000Z',
+            },
+          ],
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
+    });
+
+    expect(useProjectStore.getState().resources.map((resource) => resource.name)).toEqual([
+      'Shared Crew',
+      'Current Project Crew',
+      'Foreign Project Crew',
+    ]);
+    expect(useProjectStore.getState().assignments.map((assignment) => assignment.resourceId).sort()).toEqual([
+      'resource-local-current',
+      'resource-shared',
+    ]);
+    expect(useProjectStore.getState().assignments.some((assignment) => assignment.resourceId === 'resource-local-foreign')).toBe(false);
+
+    const { container, root } = renderWorkspaceWithTaskStore();
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf A: Shared Crew');
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Current Project Crew');
+    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).not.toContain('Foreign Project Crew');
+
+    root.unmount();
+  });
+
   it('reopens through the authoritative /api/project snapshot and keeps inactive assignments visible while excluding them from new writes', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -462,7 +639,9 @@ describe('ProjectWorkspace resource assignments', () => {
       await useProjectStore.getState().setResources([
         {
           id: 'resource-1',
-          projectId: 'project-1',
+          userId: 'user-1',
+          projectId: null,
+          scope: 'shared',
           name: 'Alpha Crew',
           type: 'human',
           isActive: true,
@@ -472,7 +651,9 @@ describe('ProjectWorkspace resource assignments', () => {
         },
         {
           id: 'resource-2',
+          userId: 'user-1',
           projectId: 'project-1',
+          scope: 'project',
           name: 'Dormant Crew',
           type: 'human',
           isActive: true,

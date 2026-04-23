@@ -151,6 +151,10 @@ function assignedResourcesForTask(
     .filter((resource): resource is ProjectResource => Boolean(resource));
 }
 
+function isResourceVisibleInProject(resource: ProjectResource, projectId: string): boolean {
+  return resource.scope === 'shared' || resource.projectId === projectId;
+}
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -466,8 +470,14 @@ export function ProjectWorkspace({
   }, [onSplitTask, splitTaskDraft]);
 
   const activeResources = useMemo(
-    () => resources.filter((resource) => resource.isActive),
-    [resources],
+    () => {
+      if (workspace.kind !== 'project') {
+        return resources.filter((resource) => resource.isActive);
+      }
+
+      return resources.filter((resource) => resource.isActive && isResourceVisibleInProject(resource, workspace.projectId));
+    },
+    [resources, workspace],
   );
 
   const selectedAssignmentTask = useMemo(
