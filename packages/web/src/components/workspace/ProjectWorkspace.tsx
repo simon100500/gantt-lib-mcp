@@ -95,6 +95,29 @@ function formatHistoryVersionTimestamp(value: string): string {
   });
 }
 
+function formatBaselineTimestampPart(date: Date, type: 'day' | 'month' | 'year' | 'hour' | 'minute'): string {
+  const formatter = new Intl.DateTimeFormat('ru-RU', {
+    [type]: type === 'year' ? 'numeric' : '2-digit',
+  });
+
+  const match = formatter.formatToParts(date).find((part) => part.type === type)?.value;
+  return match ?? '';
+}
+
+function buildDefaultBaselineName(date = new Date()): string {
+  if (Number.isNaN(date.getTime())) {
+    return 'Базовый';
+  }
+
+  const day = formatBaselineTimestampPart(date, 'day');
+  const month = formatBaselineTimestampPart(date, 'month');
+  const year = formatBaselineTimestampPart(date, 'year');
+  const hour = formatBaselineTimestampPart(date, 'hour');
+  const minute = formatBaselineTimestampPart(date, 'minute');
+
+  return `Базовый ${day}.${month}.${year} ${hour}:${minute}`;
+}
+
 function buildCheckpointLabel(groupId: string, createdAt?: string): string {
   if (groupId === 'initial') {
     return 'Исходная версия';
@@ -288,6 +311,8 @@ export function ProjectWorkspace({
     error: baselinesError,
     refreshBaselines,
     fetchBaseline,
+    createFromCurrent,
+    creatingFromCurrent,
   } = useProjectBaselines(accessToken);
   const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
   const selectedBaselineLabel = selectedBaselineState?.label ?? null;
@@ -510,6 +535,25 @@ export function ProjectWorkspace({
     });
   }, [fetchBaseline, projectId, setProjectState]);
 
+  const handleCreateBaselineFromCurrent = useCallback(async () => {
+    if (!projectId || creatingFromCurrent) {
+      return;
+    }
+
+    try {
+      const baseline = await createFromCurrent(buildDefaultBaselineName());
+      setProjectState(projectId, {
+        selectedBaseline: {
+          id: baseline.id,
+          label: baseline.name || 'Без названия',
+          snapshot: baseline.snapshot,
+        },
+      });
+    } catch {
+      // Preserve the existing selected baseline; hook state already exposes the error.
+    }
+  }, [createFromCurrent, creatingFromCurrent, projectId, setProjectState]);
+
 
   useEffect(() => {
     if (!accessToken || historyRefreshRevision === 0) {
@@ -551,6 +595,11 @@ export function ProjectWorkspace({
           baselineLoading={baselinesLoading}
           baselineError={baselinesError}
           baselineEmptyLabel="Сохранённые baseline-ы пока не появились."
+          baselineCreateLabel="Сохранить текущий график"
+          creatingBaselineFromCurrent={creatingFromCurrent}
+          onCreateBaselineFromCurrent={() => {
+            void handleCreateBaselineFromCurrent();
+          }}
           onSelectBaseline={(baselineId) => {
             void handleSelectBaseline(baselineId);
           }}

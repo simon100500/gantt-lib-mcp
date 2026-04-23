@@ -5,19 +5,30 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 const toolbarSpy = vi.fn();
 const refreshBaselinesSpy = vi.fn().mockResolvedValue(undefined);
 const fetchBaselineSpy = vi.fn();
+const createFromCurrentSpy = vi.fn();
 const showVersionByIdSpy = vi.fn();
 const restoreVersionSpy = vi.fn();
 const returnToCurrentVersionSpy = vi.fn();
 let historyItemsMock: Array<{ id: string; createdAt: string; canRestore: boolean; isCurrent: boolean }> = [];
+let baselinesHookState = {
+  loading: false,
+  error: null as string | null,
+  creatingFromCurrent: false,
+};
 
 vi.mock('../../layout/Toolbar.tsx', () => ({
   Toolbar: (props: Record<string, unknown>) => {
     toolbarSpy(props);
     return (
       <div data-testid="toolbar-props">
+        <button type="button" data-testid="create-baseline" onClick={() => void (props.onCreateBaselineFromCurrent as (() => void) | undefined)?.()}>
+          create baseline
+        </button>
         <button type="button" data-testid="select-baseline" onClick={() => void (props.onSelectBaseline as ((id: string) => void) | undefined)?.('baseline-1')}>
           select baseline
         </button>
@@ -80,10 +91,12 @@ vi.mock('../../../hooks/useProjectBaselines.ts', () => ({
         createdAt: '2026-04-22T00:00:00.000Z',
       },
     ],
-    loading: false,
-    error: null,
+    loading: baselinesHookState.loading,
+    error: baselinesHookState.error,
+    creatingFromCurrent: baselinesHookState.creatingFromCurrent,
     refreshBaselines: refreshBaselinesSpy,
     fetchBaseline: fetchBaselineSpy,
+    createFromCurrent: createFromCurrentSpy,
   }),
 }));
 
@@ -173,6 +186,12 @@ beforeEach(() => {
   toolbarSpy.mockClear();
   refreshBaselinesSpy.mockClear();
   fetchBaselineSpy.mockReset();
+  createFromCurrentSpy.mockReset();
+  baselinesHookState = {
+    loading: false,
+    error: null,
+    creatingFromCurrent: false,
+  };
   fetchBaselineSpy.mockResolvedValue({
     id: 'baseline-1',
     projectId: 'project-1',
@@ -183,6 +202,20 @@ beforeEach(() => {
     snapshot: {
       tasks: [
         { id: 'baseline-task', name: 'Baseline task', startDate: '2026-03-01', endDate: '2026-03-02', dependencies: [] },
+      ],
+      dependencies: [],
+    },
+  });
+  createFromCurrentSpy.mockResolvedValue({
+    id: 'baseline-created',
+    projectId: 'project-1',
+    name: 'Базовый 23.04.2026 03:41',
+    source: 'current',
+    sourceHistoryGroupId: null,
+    createdAt: '2026-04-23T00:41:00.000Z',
+    snapshot: {
+      tasks: [
+        { id: 'created-task', name: 'Created baseline task', startDate: '2026-04-03', endDate: '2026-04-04', dependencies: [] },
       ],
       dependencies: [],
     },
@@ -230,6 +263,7 @@ describe('ProjectWorkspace baseline wiring', () => {
     expect(latestProps.baselineActiveLabel).toBeNull();
     expect(latestProps.baselineLoading).toBe(false);
     expect(latestProps.baselineError).toBeNull();
+    expect(latestProps.creatingBaselineFromCurrent).toBe(false);
 
     root.unmount();
   });
@@ -256,6 +290,91 @@ describe('ProjectWorkspace baseline wiring', () => {
     ]);
     expect(container.textContent).toContain('Baseline: Baseline alpha');
     expect(container.textContent).toContain('(1 задач)');
+
+    root.unmount();
+  });
+
+  it('creates a baseline with a generated russian default name and immediately activates the returned payload', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-23T03:41:00.000+03:00'));
+
+    const { container, root } = renderWorkspace();
+
+    await act(async () => {
+      container.querySelector('[data-testid="create-baseline"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(createFromCurrentSpy).toHaveBeenCalledTimes(1);
+    expect(createFromCurrentSpy).toHaveBeenCalledWith('Базовый 23.04.2026 03:41');
+
+    const projectState = useProjectUIStore.getState().projectStates['project-1'];
+    expect(projectState?.selectedBaseline).toMatchObject({
+      id: 'baseline-created',
+      label: 'Базовый 23.04.2026 03:41',
+      snapshot: {
+        tasks: [
+          expect.objectContaining({ id: 'created-task' }),
+        ],
+        dependencies: [],
+      },
+    });
+
+    const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.baselineActiveLabel).toBe('Базовый 23.04.2026 03:41');
+    expect(container.textContent).toContain('Baseline: Базовый 23.04.2026 03:41');
+    expect(container.textContent).toContain('(1 задач)');
+
+    root.unmount();
+    vi.useRealTimers();
+  });
+
+  it('does not emit duplicate create requests while hook loading state marks create as in flight', async () => {
+    baselinesHookState.creatingFromCurrent = true;
+    const { container, root } = renderWorkspace();
+
+    const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.creatingBaselineFromCurrent).toBe(true);
+
+    await act(async () => {
+      container.querySelector('[data-testid="create-baseline"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(createFromCurrentSpy).not.toHaveBeenCalled();
+    expect(useProjectUIStore.getState().projectStates['project-1']?.selectedBaseline).toBeUndefined();
+
+    root.unmount();
+  });
+
+  it('failed create keeps previous selection intact and preserves hook error visibility', async () => {
+    useProjectUIStore.getState().setProjectState('project-1', {
+      selectedBaseline: {
+        id: 'baseline-existing',
+        label: 'Existing baseline',
+        snapshot: { tasks: [{ id: 'existing-task' }], dependencies: [] },
+      },
+    });
+    baselinesHookState.error = 'Не удалось создать baseline';
+    createFromCurrentSpy.mockRejectedValueOnce(new Error('Не удалось создать baseline'));
+
+    const { container, root } = renderWorkspace();
+
+    await act(async () => {
+      container.querySelector('[data-testid="create-baseline"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const projectState = useProjectUIStore.getState().projectStates['project-1'];
+    expect(projectState?.selectedBaseline).toMatchObject({
+      id: 'baseline-existing',
+      label: 'Existing baseline',
+    });
+
+    const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
+    expect(latestProps.baselineActiveLabel).toBe('Existing baseline');
+    expect(latestProps.baselineError).toBe('Не удалось создать baseline');
+    expect(container.textContent).toContain('Baseline: Existing baseline');
 
     root.unmount();
   });
