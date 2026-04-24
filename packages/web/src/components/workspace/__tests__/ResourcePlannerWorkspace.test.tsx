@@ -748,7 +748,7 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(root);
   });
 
-  it('renders authoritative conflict metadata and exposes correction actions', async () => {
+  it('renders planner payloads as timeline rows with calendar bars, conflict metadata, diagnostics, and correction actions', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -792,6 +792,21 @@ describe('ResourcePlanner workspace integration', () => {
                 conflictCount: 0,
                 conflictAssignmentIds: [],
               },
+              {
+                assignmentId: 'assignment-invalid',
+                resourceId: 'resource-1',
+                resourceName: 'Shared Designer',
+                projectId: 'project-1',
+                projectName: 'Project 1',
+                taskId: 'task-invalid',
+                taskName: 'Broken date task',
+                startDate: 'bad-date',
+                endDate: '2026-04-06',
+                assignmentCreatedAt: '2026-04-03T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              },
             ],
           },
         ],
@@ -809,12 +824,21 @@ describe('ResourcePlanner workspace integration', () => {
 
     expect(container.querySelector('[data-testid="planner-conflict-resource-count"]')?.textContent).toBe('1');
     expect(container.querySelector('[data-testid="planner-conflict-interval-count"]')?.textContent).toBe('1');
-    expect(container.querySelector('[data-testid="planner-resource-conflict-badge-resource-1"]')?.textContent).toContain('Конфликтов: 2');
-    expect(container.querySelector('[data-testid="planner-interval-conflict-assignment-1"]')?.textContent).toContain('Пересечение с 1 назначени');
-    expect(container.querySelector('[data-testid="planner-conflict-peers-assignment-1"]')?.textContent).toContain('assignment-3');
+    expect(container.querySelector('[data-testid="resource-timeline-grid"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="resource-timeline-row-resource-1"]')?.textContent).toContain('Shared Designer');
+    expect(container.querySelector('[data-testid="resource-timeline-calendar-day-2026-04-01"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="resource-timeline-calendar-day-2026-04-04"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="resource-timeline-bar-assignment-1"]')?.textContent).toContain('Landing');
+    expect(container.querySelector('[data-testid="resource-timeline-bar-assignment-2"]')?.textContent).toContain('Spec');
+    expect(container.querySelector('[data-testid="resource-timeline-conflict-badge-resource-1"]')?.textContent).toContain('Конфликтов: 2');
+    expect(container.querySelector('[data-testid="resource-timeline-conflict-assignment-1"]')?.textContent).toContain('assignment-3');
+    expect(container.querySelector('[data-testid="resource-timeline-invalid-intervals"]')?.textContent).toContain('Некорректные интервалы: 1');
+    expect(container.querySelector('[data-testid="resource-timeline-invalid-interval-assignment-invalid"]')?.textContent).toContain('Broken date task');
+    expect(container.querySelector('[data-testid="planner-resource-conflict-badge-resource-1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="planner-interval-conflict-assignment-1"]')).toBeNull();
 
     await act(async () => {
-      (container.querySelector('[data-testid="planner-correct-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="resource-timeline-correct-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 

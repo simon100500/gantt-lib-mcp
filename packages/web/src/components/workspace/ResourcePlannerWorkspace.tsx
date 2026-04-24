@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { PlannerScope, ProjectResource, ResourcePlannerResult } from '../../lib/apiTypes.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
+import { ResourceTimelineGrid } from './ResourceTimelineGrid.tsx';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
 
@@ -157,10 +158,6 @@ function normalizeResourceListPayload(payload: unknown): ProjectResource[] | nul
 
   const normalized = resources.map((resource) => normalizeProjectResource(resource));
   return normalized.every((resource): resource is ProjectResource => Boolean(resource)) ? normalized : null;
-}
-
-function formatIntervalLabel(startDate: string, endDate: string): string {
-  return startDate === endDate ? startDate : `${startDate} → ${endDate}`;
 }
 
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
@@ -519,82 +516,11 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
               </div>
             </div>
 
-            {displayedPlannerData.resources.map((resource) => (
-              <section
-                key={resource.resourceId}
-                className="overflow-hidden rounded-xl border border-slate-200 bg-white"
-                data-testid={`planner-resource-${resource.resourceId}`}
-              >
-                <header className="border-b border-slate-200 px-4 py-3">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold text-slate-900">{resource.resourceName}</h2>
-                      <p className="text-xs text-slate-500">{resource.intervals.length} интервал(ов) в нескольких проектах workspace</p>
-                    </div>
-                    <div
-                      className={resource.hasConflicts
-                        ? 'inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800'
-                        : 'inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700'}
-                      data-testid={`planner-resource-conflict-badge-${resource.resourceId}`}
-                    >
-                      {resource.hasConflicts ? `Конфликтов: ${resource.conflictCount}` : 'Без конфликтов'}
-                    </div>
-                  </div>
-                </header>
-                <div className="divide-y divide-slate-100">
-                  {resource.intervals.map((interval) => (
-                    <div
-                      key={interval.assignmentId}
-                      className={interval.hasConflict
-                        ? 'grid gap-3 bg-amber-50/60 px-4 py-3 text-sm text-slate-700 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1fr)_auto]'
-                        : 'grid gap-3 px-4 py-3 text-sm text-slate-700 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1fr)_auto]'}
-                      data-testid={`planner-interval-${interval.assignmentId}`}
-                    >
-                      <div>
-                        <div className="font-medium text-slate-900">{formatIntervalLabel(interval.startDate, interval.endDate)}</div>
-                        {interval.hasConflict && (
-                          <div className="mt-1 text-xs font-medium text-amber-800" data-testid={`planner-interval-conflict-${interval.assignmentId}`}>
-                            Пересечение с {interval.conflictCount} назначени(ем/ями)
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.08em] text-slate-400">Проект</div>
-                        <div>{interval.projectName}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.08em] text-slate-400">Задача</div>
-                        <div>{interval.taskName}</div>
-                        {interval.hasConflict && interval.conflictAssignmentIds.length > 0 && (
-                          <div className="mt-1 text-xs text-slate-500" data-testid={`planner-conflict-peers-${interval.assignmentId}`}>
-                            Связанные назначения: {interval.conflictAssignmentIds.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-start justify-start md:justify-end">
-                        {interval.hasConflict ? (
-                          <button
-                            type="button"
-                            className="inline-flex h-9 items-center justify-center rounded-md border border-amber-300 bg-white px-3 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-50"
-                            data-testid={`planner-correct-${interval.assignmentId}`}
-                            onClick={() => onCorrectConflict({
-                              projectId: interval.projectId,
-                              taskId: interval.taskId,
-                              assignmentId: interval.assignmentId,
-                              resourceId: interval.resourceId,
-                            })}
-                          >
-                            Открыть задачу для исправления
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">Только просмотр</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ))}
+            <ResourceTimelineGrid
+              emptyMessage={selectedScopeCopy.emptyCopy}
+              onCorrectConflict={onCorrectConflict}
+              resources={displayedPlannerData.resources}
+            />
           </div>
         )}
       </div>
