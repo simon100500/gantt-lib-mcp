@@ -2,7 +2,7 @@ import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Check, ListTree, LoaderCircle, MessageSquare, WandSparkles } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
-import type { TaskListMenuCommand } from 'gantt-lib';
+import type { TaskListColumn, TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -10,6 +10,7 @@ import { HistoryPanel } from '../HistoryPanel.tsx';
 import { SplitTaskModal } from '../SplitTaskModal.tsx';
 import { TaskChatModal } from '../TaskChatModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
+import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
@@ -612,6 +613,16 @@ export function ProjectWorkspace({
     return commands;
   }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat, openAssignmentSelector]);
 
+  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
+    createAssignedResourcesColumn({
+      resources,
+      assignments,
+      editable: !effectiveReadOnly,
+      readOnly: effectiveReadOnly,
+      onEdit: openAssignmentSelector,
+    }),
+  ], [assignments, effectiveReadOnly, openAssignmentSelector, resources]);
+
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
     [historyItems],
@@ -897,6 +908,7 @@ export function ProjectWorkspace({
                 showBaseline={Boolean(selectedBaselineLabel && !previewHistoryItem)}
                 taskFilter={taskFilter}
                 taskListMenuCommands={taskListMenuCommands}
+                additionalColumns={additionalColumns}
                 onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}

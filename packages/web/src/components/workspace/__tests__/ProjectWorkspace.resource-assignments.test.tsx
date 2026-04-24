@@ -399,6 +399,18 @@ afterEach(() => {
 });
 
 describe('ProjectWorkspace resource assignments', () => {
+  it('passes the assigned-resources additional column seam into GanttChart', async () => {
+    const { root } = await renderWorkspace();
+
+    const columns = (ganttPropsSpy?.additionalColumns as Array<{ id: string; header: unknown; renderCell: (ctx: Record<string, unknown>) => React.ReactNode }> | undefined) ?? [];
+    const assignedResourcesColumn = columns.find((column) => column.id === 'assigned-resources');
+
+    expect(assignedResourcesColumn).toBeTruthy();
+    expect(assignedResourcesColumn?.header).toBe('Ресурсы');
+
+    await unmountWorkspace(root);
+  });
+
   it('shows shared resources plus current-project local resources, while excluding foreign local resources from the selector', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
