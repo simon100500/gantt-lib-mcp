@@ -59,6 +59,7 @@ export function ResourceAssignmentModal({
 
   return (
     <div
+      aria-describedby={error ? 'resource-assignment-modal-error' : undefined}
       aria-labelledby="resource-assignment-modal-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6"
@@ -84,8 +85,10 @@ export function ResourceAssignmentModal({
         <div className="flex flex-col gap-4 overflow-y-auto px-5 py-4 text-sm text-slate-700">
           {error && (
             <div
+              aria-atomic="true"
               className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
               data-testid="assignment-modal-error"
+              id="resource-assignment-modal-error"
               role="alert"
             >
               {error}
@@ -167,6 +170,7 @@ export function ResourceAssignmentModal({
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-4">
           <button
             className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Закрыть окно назначения ресурсов"
             disabled={pending}
             onClick={onCancel}
             type="button"
@@ -176,6 +180,7 @@ export function ResourceAssignmentModal({
           <button
             className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-slate-300"
             data-testid="assignment-modal-submit"
+            aria-busy={pending}
             disabled={isSubmitDisabled}
             type="submit"
           >

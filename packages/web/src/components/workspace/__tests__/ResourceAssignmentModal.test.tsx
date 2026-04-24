@@ -112,6 +112,66 @@ afterEach(() => {
 });
 
 describe('ResourceAssignmentModal', () => {
+
+  it('exposes dialog labelling and connects visible errors to assistive technology', () => {
+    const { container, root } = renderModal({ error: 'network_failure: Не удалось сохранить назначения ресурсов.' });
+
+    const dialog = container.querySelector('[data-testid="resource-assignment-modal"]');
+    const title = container.querySelector('#resource-assignment-modal-title');
+    const error = container.querySelector('[data-testid="assignment-modal-error"]');
+
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+    expect(dialog?.getAttribute('aria-labelledby')).toBe('resource-assignment-modal-title');
+    expect(dialog?.getAttribute('aria-describedby')).toBe('resource-assignment-modal-error');
+    expect(title?.textContent).toContain(task.name);
+    expect(error?.getAttribute('role')).toBe('alert');
+    expect(error?.getAttribute('aria-atomic')).toBe('true');
+    expect(error?.textContent).toContain('network_failure');
+
+    unmount(root);
+  });
+
+  it('disables modal controls and exposes busy submit text while pending', () => {
+    const onCancel = vi.fn();
+    const { container, root, onSelectionChange, onSubmit } = renderModal({ onCancel, pending: true });
+
+    const activeCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-active"]') as HTMLInputElement | null;
+    const submitButton = container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement | null;
+    const cancelButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отмена')) as HTMLButtonElement | undefined;
+
+    expect(activeCheckbox?.disabled).toBe(true);
+    expect(submitButton?.disabled).toBe(true);
+    expect(submitButton?.getAttribute('aria-busy')).toBe('true');
+    expect(submitButton?.textContent).toContain('Сохраняем назначение');
+    expect(cancelButton?.disabled).toBe(true);
+    expect(cancelButton?.getAttribute('aria-label')).toBe('Закрыть окно назначения ресурсов');
+
+    act(() => {
+      activeCheckbox?.click();
+      submitButton?.click();
+      cancelButton?.click();
+    });
+
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    unmount(root);
+  });
+
+  it('adds a newly checked resource id to the selected array deterministically', () => {
+    const { container, root, onSelectionChange } = renderModal({ selectedResourceIds: [activeResource.id] });
+
+    const secondCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-second-active"]') as HTMLInputElement;
+    act(() => {
+      secondCheckbox.click();
+    });
+
+    expect(onSelectionChange).toHaveBeenCalledWith([activeResource.id, secondActiveResource.id]);
+
+    unmount(root);
+  });
   it('renders active resources as selectable choices and active assignments as context', () => {
     const { container, root } = renderModal();
 
