@@ -116,7 +116,7 @@ interface UIState {
   tempHighlightedTaskId: string | null;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
   setPlannerCorrectionTarget: (target: PlannerCorrectionTarget | null) => void;
-  consumePlannerCorrectionTarget: () => PlannerCorrectionTarget | null;
+  consumePlannerCorrectionTarget: (predicate?: (target: PlannerCorrectionTarget) => boolean) => PlannerCorrectionTarget | null;
   setPendingPostAuthAction: (action: PendingPostAuthAction) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
@@ -209,11 +209,12 @@ export const useUIStore = create<UIState>()((set, get) => ({
   },
   setPendingPostAuthAction: (pendingPostAuthAction) => set({ pendingPostAuthAction }),
   setPlannerCorrectionTarget: (plannerCorrectionTarget) => set({ plannerCorrectionTarget }),
-  consumePlannerCorrectionTarget: () => {
+  consumePlannerCorrectionTarget: (predicate) => {
     const current = get().plannerCorrectionTarget;
-    if (current) {
-      set({ plannerCorrectionTarget: null });
+    if (!current || (predicate && !predicate(current))) {
+      return null;
     }
+    set({ plannerCorrectionTarget: null });
     return current;
   },
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),

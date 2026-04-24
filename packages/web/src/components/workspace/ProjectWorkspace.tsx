@@ -433,8 +433,13 @@ export function ProjectWorkspace({
   }, []);
 
   useEffect(() => {
-    const correctionTarget = consumePlannerCorrectionTarget();
-    if (!correctionTarget || correctionTarget.projectId !== projectId) {
+    const correctionTarget = consumePlannerCorrectionTarget((target) => {
+      if (!projectId || target.projectId !== projectId || !target.taskId) {
+        return false;
+      }
+      return true;
+    });
+    if (!correctionTarget) {
       return;
     }
 
