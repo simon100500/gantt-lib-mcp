@@ -9,6 +9,7 @@ import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { HistoryPanel } from '../HistoryPanel.tsx';
 import { SplitTaskModal } from '../SplitTaskModal.tsx';
 import { TaskChatModal } from '../TaskChatModal.tsx';
+import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
@@ -26,8 +27,15 @@ import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
-import type { BaselineSnapshotResponse, ProjectResource, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import type { BaselineSnapshotResponse, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
+import {
+  assignedResourcesForTask,
+  collectDescendantLeafIds,
+  getAssignableResources,
+  getInitialSelectedResourceIds,
+  getTaskAssignmentResourceGroups,
+} from './resourceAssignmentUtils.ts';
 
 interface ProjectWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
@@ -111,48 +119,6 @@ function buildCheckpointLabel(groupId: string, createdAt?: string): string {
 
 function buildTaskChatMention(task: Task): string {
   return `[task:${task.id}|${task.name}]\n\n`;
-}
-
-function collectDescendantLeafIds(tasks: Task[], taskId: string): string[] {
-  const childrenByParent = new Map<string, Task[]>();
-  for (const task of tasks) {
-    if (!task.parentId) continue;
-    const bucket = childrenByParent.get(task.parentId) ?? [];
-    bucket.push(task);
-    childrenByParent.set(task.parentId, bucket);
-  }
-
-  const rootChildren = childrenByParent.get(taskId) ?? [];
-  const queue = [...rootChildren];
-  const leafIds: string[] = [];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const children = childrenByParent.get(current.id) ?? [];
-    if (children.length === 0) {
-      leafIds.push(current.id);
-      continue;
-    }
-    queue.push(...children);
-  }
-
-  return leafIds;
-}
-
-function assignedResourcesForTask(
-  taskId: string,
-  resources: ProjectResource[],
-  assignments: TaskAssignmentRecord[],
-): ProjectResource[] {
-  const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
-  return assignments
-    .filter((assignment) => assignment.taskId === taskId)
-    .map((assignment) => resourceById.get(assignment.resourceId))
-    .filter((resource): resource is ProjectResource => Boolean(resource));
-}
-
-function isResourceVisibleInProject(resource: ProjectResource, projectId: string): boolean {
-  return resource.scope === 'shared' || resource.projectId === projectId;
 }
 
 export function ProjectWorkspace({
@@ -254,7 +220,8 @@ export function ProjectWorkspace({
   }, [projectId, projectStates]);
   const [baselineMenuOpen, setBaselineMenuOpen] = useState(false);
   const [assignmentSelectionTaskId, setAssignmentSelectionTaskId] = useState<string | null>(null);
-  const [selectedResourceIdByTask, setSelectedResourceIdByTask] = useState<Record<string, string>>({});
+  const [selectedResourceIdsByTask, setSelectedResourceIdsByTask] = useState<Record<string, string[]>>({});
+  const [assignmentSubmitting, setAssignmentSubmitting] = useState(false);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
@@ -485,13 +452,7 @@ export function ProjectWorkspace({
   }, [onSplitTask, splitTaskDraft]);
 
   const activeResources = useMemo(
-    () => {
-      if (workspace.kind !== 'project') {
-        return resources.filter((resource) => resource.isActive);
-      }
-
-      return resources.filter((resource) => resource.isActive && isResourceVisibleInProject(resource, workspace.projectId));
-    },
+    () => getAssignableResources(resources, workspace.kind === 'project' ? workspace.projectId : null),
     [resources, workspace],
   );
   const assignedTaskCount = useMemo(
@@ -509,9 +470,13 @@ export function ProjectWorkspace({
     [assignmentSelectionTaskId, tasks],
   );
 
-  const selectedAssignmentResourceId = assignmentSelectionTaskId
-    ? selectedResourceIdByTask[assignmentSelectionTaskId] ?? ''
-    : '';
+  const selectedAssignmentResourceIds = assignmentSelectionTaskId
+    ? selectedResourceIdsByTask[assignmentSelectionTaskId] ?? []
+    : [];
+  const selectedAssignmentResourceGroups = useMemo(
+    () => getTaskAssignmentResourceGroups(assignmentSelectionTaskId, resources, assignments),
+    [assignmentSelectionTaskId, assignments, resources],
+  );
 
   const openAssignmentSelector = useCallback((task: Task) => {
     if (effectiveReadOnly) {
@@ -519,51 +484,50 @@ export function ProjectWorkspace({
     }
 
     setAssignmentSelectionTaskId(task.id);
-    setSelectedResourceIdByTask((current) => {
-      const currentSelection = current[task.id] ?? '';
-      const selectionStillActive = currentSelection
-        ? activeResources.some((resource) => resource.id === currentSelection)
-        : false;
+    setSelectedResourceIdsByTask((current) => {
+      const currentSelection = current[task.id] ?? [];
+      const activeResourceIds = new Set(activeResources.map((resource) => resource.id));
+      const selectionStillActive = currentSelection.filter((resourceId) => activeResourceIds.has(resourceId));
+      const initialSelection = getInitialSelectedResourceIds(task.id, resources, assignments)
+        .filter((resourceId) => activeResourceIds.has(resourceId));
 
       return {
         ...current,
-        [task.id]: selectionStillActive ? currentSelection : '',
+        [task.id]: selectionStillActive.length > 0 ? selectionStillActive : initialSelection,
       };
     });
     setAssignmentError(null);
-  }, [activeResources, effectiveReadOnly, setAssignmentError]);
+  }, [activeResources, assignments, effectiveReadOnly, resources, setAssignmentError]);
 
   const closeAssignmentSelector = useCallback(() => {
     setAssignmentSelectionTaskId(null);
   }, []);
 
-  const handleAssignmentResourceChange = useCallback((taskId: string, resourceId: string) => {
-    setSelectedResourceIdByTask((current) => ({
+  const handleAssignmentResourceChange = useCallback((taskId: string, resourceIds: string[]) => {
+    setSelectedResourceIdsByTask((current) => ({
       ...current,
-      [taskId]: resourceId,
+      [taskId]: resourceIds,
     }));
     setAssignmentError(null);
   }, [setAssignmentError]);
 
-  const handleAssignResources = useCallback(async (task: Task, selectedResourceId: string) => {
+  const handleAssignResources = useCallback(async (task: Task, selectedResourceIds: string[]) => {
     if (!accessToken || effectiveReadOnly) {
       return;
     }
 
-    const trimmedResourceId = selectedResourceId.trim();
-    if (!trimmedResourceId) {
+    const nextResourceIds = Array.from(new Set(selectedResourceIds.map((resourceId) => resourceId.trim()).filter(Boolean)));
+    if (nextResourceIds.length === 0) {
       setAssignmentError('Выберите активный ресурс перед назначением.');
       return;
     }
 
     const state = useProjectStore.getState();
     const activeResourceIds = new Set(state.resources.filter((resource) => resource.isActive).map((resource) => resource.id));
-    if (!activeResourceIds.has(trimmedResourceId)) {
+    if (nextResourceIds.some((resourceId) => !activeResourceIds.has(resourceId))) {
       setAssignmentError('Можно назначить только активный ресурс.');
       return;
     }
-
-    const nextResourceIds = [trimmedResourceId];
     const childLeafIds = collectDescendantLeafIds(tasks, task.id);
     const isParentTask = childLeafIds.length > 0;
     const endpoint = isParentTask
@@ -571,40 +535,47 @@ export function ProjectWorkspace({
       : `/api/tasks/${task.id}/assignments`;
 
     setAssignmentError(null);
+    setAssignmentSubmitting(true);
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ resourceIds: nextResourceIds }),
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ resourceIds: nextResourceIds }),
+      });
 
-    const data = await response.json().catch(() => ({})) as {
-      error?: string;
-      issue?: { code?: string };
-      taskAssignments?: Array<{ assignments: TaskAssignmentRecord[] }>;
-      assignments?: TaskAssignmentRecord[];
-    };
+      const data = await response.json().catch(() => ({})) as {
+        error?: string;
+        issue?: { code?: string };
+        taskAssignments?: Array<{ assignments: TaskAssignmentRecord[] }>;
+        assignments?: TaskAssignmentRecord[];
+      };
 
-    if (!response.ok) {
-      const issueCode = data.issue?.code;
-      setAssignmentError(issueCode ? `${issueCode}: ${data.error ?? 'assignment failed'}` : (data.error ?? `HTTP ${response.status}`));
-      return;
+      if (!response.ok) {
+        const issueCode = data.issue?.code;
+        setAssignmentError(issueCode ? `${issueCode}: ${data.error ?? 'assignment failed'}` : (data.error ?? `HTTP ${response.status}`));
+        return;
+      }
+
+      if (isParentTask) {
+        const nextAssignments = data.taskAssignments?.flatMap((entry) => entry.assignments) ?? [];
+        const unaffectedAssignments = state.assignments.filter((assignment) => !childLeafIds.includes(assignment.taskId));
+        setAssignments([...unaffectedAssignments, ...nextAssignments]);
+      } else {
+        const nextAssignments = data.assignments ?? [];
+        const unaffectedAssignments = state.assignments.filter((assignment) => assignment.taskId !== task.id);
+        setAssignments([...unaffectedAssignments, ...nextAssignments]);
+      }
+
+      setAssignmentSelectionTaskId(null);
+    } catch {
+      setAssignmentError('network_failure: Не удалось сохранить назначения ресурсов.');
+    } finally {
+      setAssignmentSubmitting(false);
     }
-
-    if (isParentTask) {
-      const nextAssignments = data.taskAssignments?.flatMap((entry) => entry.assignments) ?? [];
-      const unaffectedAssignments = state.assignments.filter((assignment) => !childLeafIds.includes(assignment.taskId));
-      setAssignments([...unaffectedAssignments, ...nextAssignments]);
-    } else {
-      const nextAssignments = data.assignments ?? [];
-      const unaffectedAssignments = state.assignments.filter((assignment) => assignment.taskId !== task.id);
-      setAssignments([...unaffectedAssignments, ...nextAssignments]);
-    }
-
-    setAssignmentSelectionTaskId(null);
   }, [accessToken, effectiveReadOnly, setAssignmentError, setAssignments, tasks]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
@@ -873,66 +844,24 @@ export function ProjectWorkspace({
         )}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
             {assignmentSelectionTaskId && selectedAssignmentTask && (
-              <div
-                className="border-b border-blue-200 bg-blue-50 px-3 py-3 text-sm text-slate-700"
-                data-testid="assignment-selection-panel"
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                  <div className="flex min-w-0 flex-1 flex-col gap-2">
-                    <div className="font-medium text-slate-900" data-testid="assignment-selection-task-name">
-                      Назначить ресурс: {selectedAssignmentTask.name}
-                    </div>
-                    <label className="flex flex-col gap-1 text-xs text-slate-600">
-                      Активный ресурс
-                      <select
-                        className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
-                        data-testid="assignment-resource-select"
-                        value={selectedAssignmentResourceId}
-                        onChange={(event) => handleAssignmentResourceChange(selectedAssignmentTask.id, event.target.value)}
-                      >
-                        <option value="">Выберите активный ресурс</option>
-                        {activeResources.map((resource) => (
-                          <option key={resource.id} value={resource.id}>
-                            {resource.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="text-xs text-slate-500" data-testid="assignment-selection-hint">
-                      Неактивные ресурсы остаются видимыми в сводке ниже, но недоступны для новых назначений.
-                    </div>
-                    {activeResources.length === 0 && (
-                      <div className="text-xs text-amber-700" data-testid="assignment-selection-empty">
-                        Нет активных ресурсов для назначения.
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                      onClick={closeAssignmentSelector}
-                    >
-                      Отмена
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      data-testid="assignment-submit-button"
-                      disabled={!selectedAssignmentResourceId || activeResources.length === 0}
-                      onClick={() => {
-                        void handleAssignResources(selectedAssignmentTask, selectedAssignmentResourceId);
-                      }}
-                    >
-                      Подтвердить назначение
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <ResourceAssignmentModal
+                activeAssignedResources={selectedAssignmentResourceGroups.activeAssignedResources}
+                assignableResources={activeResources}
+                error={assignmentError}
+                inactiveAssignedResources={selectedAssignmentResourceGroups.inactiveAssignedResources}
+                onCancel={closeAssignmentSelector}
+                onSelectionChange={(resourceIds) => handleAssignmentResourceChange(selectedAssignmentTask.id, resourceIds)}
+                onSubmit={(resourceIds) => {
+                  void handleAssignResources(selectedAssignmentTask, resourceIds);
+                }}
+                pending={assignmentSubmitting}
+                selectedResourceIds={selectedAssignmentResourceIds}
+                task={selectedAssignmentTask}
+              />
             )}
 
-            {assignmentError && (
-              <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="assignment-error-banner">
+            {assignmentError && !assignmentSelectionTaskId && (
+              <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="assignment-error-banner" role="alert">
                 {assignmentError}
               </div>
             )}
