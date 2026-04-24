@@ -472,6 +472,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const workspace = useUIStore((state) => state.workspace);
   const pendingPostAuthAction = useUIStore((state) => state.pendingPostAuthAction);
   const setWorkspace = useUIStore((state) => state.setWorkspace);
+  const plannerCorrectionTarget = useUIStore((state) => state.plannerCorrectionTarget);
+  const setPlannerCorrectionTarget = useUIStore((state) => state.setPlannerCorrectionTarget);
+  const consumePlannerCorrectionTarget = useUIStore((state) => state.consumePlannerCorrectionTarget);
   const setPendingPostAuthAction = useUIStore((state) => state.setPendingPostAuthAction);
   const setSidebarState = useUIStore((state) => state.setSidebarState);
   const showBillingPage = useUIStore((state) => state.showBillingPage);
@@ -767,6 +770,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   useEffect(() => {
     setActiveEmptyProjectModeProjectId(null);
   }, [auth.project?.id]);
+
 
   const closeProjectChat = useCallback(() => {
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: false } : current);
@@ -1098,6 +1102,40 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     await auth.switchProject(projectId);
     setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
   }, [auth, setWorkspace]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
+      return;
+    }
+
+    const { projectId, taskId } = plannerCorrectionTarget;
+    if (!projectId || !taskId) {
+      consumePlannerCorrectionTarget();
+      return;
+    }
+
+    if (workspace.kind === 'project' && workspace.projectId === projectId) {
+      return;
+    }
+
+    if (auth.project.id !== projectId) {
+      void handleSwitchProject(projectId).catch(() => {
+        consumePlannerCorrectionTarget();
+      });
+      return;
+    }
+
+    setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
+  }, [
+    auth.isAuthenticated,
+    auth.project?.id,
+    consumePlannerCorrectionTarget,
+    handleSwitchProject,
+    hasShareToken,
+    plannerCorrectionTarget,
+    setWorkspace,
+    workspace,
+  ]);
 
   const handleCreateProject = useCallback(async () => {
     if (hasShareToken) {
@@ -1543,7 +1581,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
           onBackToProject={() => {
+            setPlannerCorrectionTarget(null);
             setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+          onCorrectConflict={(target) => {
+            setPlannerCorrectionTarget(target);
+            setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
           }}
         />
       )

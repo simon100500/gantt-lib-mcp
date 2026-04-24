@@ -213,6 +213,7 @@ export function ProjectWorkspace({
   const setWorkspace = useUIStore((state) => state.setWorkspace);
   const setChatComposerDraft = useUIStore((state) => state.setChatComposerDraft);
   const setTempHighlightedTaskId = useUIStore((state) => state.setTempHighlightedTaskId);
+  const consumePlannerCorrectionTarget = useUIStore((state) => state.consumePlannerCorrectionTarget);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
 
@@ -463,6 +464,15 @@ export function ProjectWorkspace({
       window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    const correctionTarget = consumePlannerCorrectionTarget();
+    if (!correctionTarget || correctionTarget.projectId !== projectId) {
+      return;
+    }
+
+    handleTaskReferenceClick(correctionTarget.taskId);
+  }, [consumePlannerCorrectionTarget, handleTaskReferenceClick, projectId]);
 
   const handleSplitTaskSubmit = useCallback(async (details: string) => {
     if (!splitTaskDraft || !onSplitTask) {

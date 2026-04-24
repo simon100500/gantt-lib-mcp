@@ -69,9 +69,17 @@ export type PendingPostAuthAction =
   }
   | null;
 
+export interface PlannerCorrectionTarget {
+  projectId: string;
+  taskId: string;
+  assignmentId: string;
+  resourceId: string;
+}
+
 interface UIState {
   workspace: WorkspaceMode;
   pendingPostAuthAction: PendingPostAuthAction;
+  plannerCorrectionTarget: PlannerCorrectionTarget | null;
   showOtpModal: boolean;
   showEditProjectModal: boolean;
   showBillingPage: boolean;
@@ -107,6 +115,8 @@ interface UIState {
   searchIndex: number;
   tempHighlightedTaskId: string | null;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
+  setPlannerCorrectionTarget: (target: PlannerCorrectionTarget | null) => void;
+  consumePlannerCorrectionTarget: () => PlannerCorrectionTarget | null;
   setPendingPostAuthAction: (action: PendingPostAuthAction) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
@@ -153,6 +163,7 @@ const initialWorkspace: WorkspaceMode = { kind: 'guest' };
 export const useUIStore = create<UIState>()((set, get) => ({
   workspace: initialWorkspace,
   pendingPostAuthAction: null,
+  plannerCorrectionTarget: null,
   showOtpModal: false,
   showEditProjectModal: false,
   showBillingPage: false,
@@ -197,6 +208,14 @@ export const useUIStore = create<UIState>()((set, get) => ({
     });
   },
   setPendingPostAuthAction: (pendingPostAuthAction) => set({ pendingPostAuthAction }),
+  setPlannerCorrectionTarget: (plannerCorrectionTarget) => set({ plannerCorrectionTarget }),
+  consumePlannerCorrectionTarget: () => {
+    const current = get().plannerCorrectionTarget;
+    if (current) {
+      set({ plannerCorrectionTarget: null });
+    }
+    return current;
+  },
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
   setShowBillingPage: (showBillingPage) => set({ showBillingPage }),

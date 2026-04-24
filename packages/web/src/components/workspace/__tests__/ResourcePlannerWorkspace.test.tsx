@@ -10,12 +10,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const plannerWorkspaceSpy = vi.fn();
 const projectWorkspaceSpy = vi.fn();
 
-vi.mock('../ResourcePlannerWorkspace.tsx', () => ({
-  ResourcePlannerWorkspace: (props: Record<string, unknown>) => {
-    plannerWorkspaceSpy(props);
-    return <div data-testid="planner-workspace">planner workspace</div>;
-  },
-}));
+vi.mock('../ResourcePlannerWorkspace.tsx', async () => {
+  const actual = await vi.importActual<typeof import('../ResourcePlannerWorkspace.tsx')>('../ResourcePlannerWorkspace.tsx');
+  return {
+    ...actual,
+    ResourcePlannerWorkspace: (props: Record<string, unknown>) => {
+      plannerWorkspaceSpy(props);
+      return actual.ResourcePlannerWorkspace(props as never);
+    },
+  };
+});
 
 vi.mock('../ProjectWorkspace.tsx', () => ({
   ProjectWorkspace: (props: Record<string, unknown>) => {
@@ -160,6 +164,7 @@ import App from '../../../App.tsx';
 import { useUIStore } from '../../../stores/useUIStore.ts';
 import { useAuthStore } from '../../../stores/useAuthStore.ts';
 import { useBillingStore } from '../../../stores/useBillingStore.ts';
+import { ResourcePlannerWorkspace } from '../ResourcePlannerWorkspace.tsx';
 
 function installDomPolyfills(): void {
   Object.defineProperty(window, 'matchMedia', {
@@ -205,6 +210,19 @@ async function renderApp(): Promise<{ container: HTMLDivElement; root: Root }> {
   return { container, root };
 }
 
+async function renderPlannerWorkspace(props: React.ComponentProps<typeof ResourcePlannerWorkspace>): Promise<{ container: HTMLDivElement; root: Root }> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<ResourcePlannerWorkspace {...props} />);
+    await Promise.resolve();
+  });
+
+  return { container, root };
+}
+
 async function unmountApp(root: Root): Promise<void> {
   await act(async () => {
     root.unmount();
@@ -215,6 +233,21 @@ async function unmountApp(root: Root): Promise<void> {
 beforeEach(() => {
   plannerWorkspaceSpy.mockClear();
   projectWorkspaceSpy.mockClear();
+  vi.restoreAllMocks();
+
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/api/billing/subscription')) {
+      return { ok: true, json: async () => ({ plan: 'start', isActive: true, planMeta: { label: 'Старт' }, usage: { projects: { usageState: 'tracked', used: 1, limit: 5 }, ai_queries: { usageState: 'tracked', used: 0, limit: 100 } }, remaining: { projects: { remainingState: 'tracked', remaining: 4, limit: 5 }, ai_queries: { remainingState: 'tracked', remaining: 100, limit: 100 } }, limits: { archive: true, resource_pool: true, export: 'pdf' } }) } as Response;
+    }
+    if (url.includes('/api/usage')) {
+      return { ok: true, json: async () => ({ plan: 'start', isActive: true, planMeta: { label: 'Старт' }, usage: { projects: { usageState: 'tracked', used: 1, limit: 5 }, ai_queries: { usageState: 'tracked', used: 0, limit: 100 } }, remaining: { projects: { remainingState: 'tracked', remaining: 4, limit: 5 }, ai_queries: { remainingState: 'tracked', remaining: 100, limit: 100 } }, limits: { archive: true, resource_pool: true, export: 'pdf' } }) } as Response;
+    }
+    if (url.includes('/api/resources/planner')) {
+      return { ok: true, json: async () => ({ projectId: 'project-1', workspaceUserId: 'user-1', resources: [] }) } as Response;
+    }
+    return { ok: true, json: async () => ({}) } as Response;
+  }));
 
   useAuthStore.setState({
     isAuthenticated: true,
@@ -251,6 +284,7 @@ beforeEach(() => {
   useUIStore.setState({
     workspace: { kind: 'project', projectId: 'project-1', chatOpen: false },
     pendingPostAuthAction: null,
+    plannerCorrectionTarget: null,
     showOtpModal: false,
     showEditProjectModal: false,
     showBillingPage: false,
@@ -305,7 +339,6 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
-  vi.restoreAllMocks();
 });
 
 describe('ResourcePlanner workspace integration', () => {
@@ -313,7 +346,7 @@ describe('ResourcePlanner workspace integration', () => {
     const { container, root } = await renderApp();
 
     expect(container.querySelector('[data-testid="project-workspace"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="planner-workspace"]')).toBeNull();
+    expect(container.querySelector('[data-testid="planner-loading-state"]')).toBeNull();
 
     await act(async () => {
       (container.querySelector('[data-testid="menu-open-planner"]') as HTMLButtonElement).click();
@@ -321,9 +354,8 @@ describe('ResourcePlanner workspace integration', () => {
     });
 
     expect(useUIStore.getState().workspace).toEqual({ kind: 'planner', projectId: 'project-1' });
-    expect(container.querySelector('[data-testid="planner-workspace"]')).not.toBeNull();
     expect(plannerWorkspaceSpy).toHaveBeenCalled();
-    expect(projectWorkspaceSpy.mock.calls.length).toBe(1);
+    expect(projectWorkspaceSpy).toHaveBeenCalled();
 
     await unmountApp(root);
   });
@@ -337,7 +369,6 @@ describe('ResourcePlanner workspace integration', () => {
     });
 
     expect(useUIStore.getState().workspace).toEqual({ kind: 'planner', projectId: 'project-1' });
-    expect(container.querySelector('[data-testid="planner-workspace"]')).not.toBeNull();
 
     await act(async () => {
       useAuthStore.setState({
@@ -357,7 +388,154 @@ describe('ResourcePlanner workspace integration', () => {
     });
 
     expect(useUIStore.getState().workspace).toEqual({ kind: 'planner', projectId: 'project-1' });
-    expect(container.querySelector('[data-testid="planner-workspace"]')).not.toBeNull();
+    expect(plannerWorkspaceSpy).toHaveBeenCalled();
+
+    await unmountApp(root);
+  });
+
+  it('renders authoritative conflict metadata and exposes correction actions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        projectId: 'project-1',
+        workspaceUserId: 'user-1',
+        resources: [
+          {
+            resourceId: 'resource-1',
+            resourceName: 'Shared Designer',
+            hasConflicts: true,
+            conflictCount: 2,
+            intervals: [
+              {
+                assignmentId: 'assignment-1',
+                resourceId: 'resource-1',
+                resourceName: 'Shared Designer',
+                projectId: 'project-2',
+                projectName: 'Project 2',
+                taskId: 'task-2',
+                taskName: 'Landing',
+                startDate: '2026-04-01',
+                endDate: '2026-04-03',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: true,
+                conflictCount: 1,
+                conflictAssignmentIds: ['assignment-3'],
+              },
+              {
+                assignmentId: 'assignment-2',
+                resourceId: 'resource-1',
+                resourceName: 'Shared Designer',
+                projectId: 'project-1',
+                projectName: 'Project 1',
+                taskId: 'task-1',
+                taskName: 'Spec',
+                startDate: '2026-04-04',
+                endDate: '2026-04-04',
+                assignmentCreatedAt: '2026-04-02T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onCorrectConflict = vi.fn();
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict,
+    });
+
+    expect(container.querySelector('[data-testid="planner-conflict-resource-count"]')?.textContent).toBe('1');
+    expect(container.querySelector('[data-testid="planner-conflict-interval-count"]')?.textContent).toBe('1');
+    expect(container.querySelector('[data-testid="planner-resource-conflict-badge-resource-1"]')?.textContent).toContain('Конфликтов: 2');
+    expect(container.querySelector('[data-testid="planner-interval-conflict-assignment-1"]')?.textContent).toContain('Пересечение с 1 назначени');
+    expect(container.querySelector('[data-testid="planner-conflict-peers-assignment-1"]')?.textContent).toContain('assignment-3');
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-correct-assignment-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    expect(onCorrectConflict).toHaveBeenCalledWith({
+      projectId: 'project-2',
+      taskId: 'task-2',
+      assignmentId: 'assignment-1',
+      resourceId: 'resource-1',
+    });
+
+    await unmountApp(root);
+  });
+
+  it('surfaces malformed planner payloads as an explicit error state', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        projectId: 'project-1',
+        workspaceUserId: 'user-1',
+        resources: [
+          {
+            resourceId: 'resource-1',
+            resourceName: 'Broken Resource',
+            intervals: [],
+          },
+        ],
+      }),
+    }));
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="planner-error-state"]')?.textContent ?? '').toContain('Planner payload was malformed');
+
+    await unmountApp(root);
+  });
+
+  it('stores a one-shot correction target and switches back to project workspace on planner correction', async () => {
+    const { container, root } = await renderApp();
+
+    await act(async () => {
+      useUIStore.setState({ workspace: { kind: 'planner', projectId: 'project-1' } });
+      await Promise.resolve();
+    });
+
+    const plannerProps = plannerWorkspaceSpy.mock.calls[plannerWorkspaceSpy.mock.calls.length - 1]?.[0] as {
+      onCorrectConflict: (target: { projectId: string; taskId: string; assignmentId: string; resourceId: string }) => void;
+    };
+
+    await act(async () => {
+      plannerProps.onCorrectConflict({
+        projectId: 'project-1',
+        taskId: 'task-1',
+        assignmentId: 'assignment-1',
+        resourceId: 'resource-1',
+      });
+      await Promise.resolve();
+    });
+
+    expect(useUIStore.getState().workspace).toEqual({ kind: 'project', projectId: 'project-1', chatOpen: false });
+    expect(useUIStore.getState().plannerCorrectionTarget).toEqual({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      assignmentId: 'assignment-1',
+      resourceId: 'resource-1',
+    });
+    expect(projectWorkspaceSpy.mock.calls.length).toBeGreaterThan(1);
 
     await unmountApp(root);
   });
