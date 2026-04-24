@@ -231,7 +231,6 @@ export function ProjectWorkspace({
   const resources = useProjectStore((state) => state.resources);
   const assignments = useProjectStore((state) => state.assignments);
   const assignmentError = useProjectStore((state) => state.assignmentError);
-  const setResources = useProjectStore((state) => state.setResources);
   const setAssignments = useProjectStore((state) => state.setAssignments);
   const setAssignmentError = useProjectStore((state) => state.setAssignmentError);
   const collapsedParentIds = useMemo(() => {
@@ -495,7 +494,14 @@ export function ProjectWorkspace({
     },
     [resources, workspace],
   );
-
+  const assignedTaskCount = useMemo(
+    () => new Set(assignments.map((assignment) => assignment.taskId)).size,
+    [assignments],
+  );
+  const assignedResourceCount = useMemo(
+    () => new Set(assignments.map((assignment) => assignment.resourceId)).size,
+    [assignments],
+  );
   const selectedAssignmentTask = useMemo(
     () => assignmentSelectionTaskId
       ? tasks.find((task) => task.id === assignmentSelectionTaskId) ?? null
@@ -932,17 +938,22 @@ export function ProjectWorkspace({
             )}
 
             {tasks.length > 0 && (
-              <div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-600" data-testid="assignment-summary">
-                {tasks.map((task) => {
-                  const taskResources = assignedResourcesForTask(task.id, resources, assignments);
-                  const names = taskResources.map((resource) => resource.name).join(', ') || '—';
-                  return (
-                    <div key={task.id} data-task-id={task.id}>
-                      {task.name}: {names}
-                    </div>
-                  );
-                })}
-              </div>
+              <details className="border-b border-slate-200 text-xs text-slate-600" data-testid="assignment-summary">
+                <summary className="cursor-pointer select-none px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">
+                  Назначенные ресурсы: {assignedTaskCount} задач, {assignedResourceCount} ресурсов
+                </summary>
+                <div className="px-3 pb-2">
+                  {tasks.map((task) => {
+                    const taskResources = assignedResourcesForTask(task.id, resources, assignments);
+                    const names = taskResources.map((resource) => resource.name).join(', ') || '—';
+                    return (
+                      <div key={task.id} data-task-id={task.id}>
+                        {task.name}: {names}
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
             )}
 
             {loading ? (
@@ -1175,3 +1186,4 @@ export function ProjectWorkspace({
     </div>
   );
 }
+

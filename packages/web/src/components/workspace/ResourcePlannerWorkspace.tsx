@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { ResourcePlannerResult } from '../../lib/apiTypes.ts';
+import type { ProjectResource, ResourcePlannerResult } from '../../lib/apiTypes.ts';
+import { useAuthStore } from '../../stores/useAuthStore.ts';
+import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
 
 interface ResourcePlannerWorkspaceProps {
@@ -93,12 +96,92 @@ function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null
   };
 }
 
+function normalizeProjectResource(payload: unknown): ProjectResource | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const resource = payload as Partial<ProjectResource>;
+  if (
+    typeof resource.id !== 'string'
+    || typeof resource.userId !== 'string'
+    || !(typeof resource.projectId === 'string' || resource.projectId === null)
+    || !(resource.scope === 'shared' || resource.scope === 'project')
+    || typeof resource.name !== 'string'
+    || !(resource.type === 'human' || resource.type === 'equipment' || resource.type === 'material' || resource.type === 'other')
+    || typeof resource.isActive !== 'boolean'
+    || typeof resource.createdAt !== 'string'
+    || typeof resource.updatedAt !== 'string'
+    || !(typeof resource.deactivatedAt === 'string' || resource.deactivatedAt === null)
+  ) {
+    return null;
+  }
+
+  return resource as ProjectResource;
+}
+
+function normalizeResourceListPayload(payload: unknown): ProjectResource[] | null {
+  if (!payload || typeof payload !== 'object' || !('resources' in payload)) {
+    return null;
+  }
+
+  const resources = (payload as { resources?: unknown }).resources;
+  if (!Array.isArray(resources)) {
+    return null;
+  }
+
+  const normalized = resources.map((resource) => normalizeProjectResource(resource));
+  return normalized.every((resource): resource is ProjectResource => Boolean(resource)) ? normalized : null;
+}
+
 function formatIntervalLabel(startDate: string, endDate: string): string {
   return startDate === endDate ? startDate : `${startDate} → ${endDate}`;
 }
 
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
   const [state, setState] = useState<PlannerState>({ status: 'loading', data: null, error: null });
+  const projects = useAuthStore((store) => store.projects);
+  const resources = useProjectStore((store) => store.resources);
+  const setResources = useProjectStore((store) => store.setResources);
+  const [resourceNameDraft, setResourceNameDraft] = useState('');
+  const [resourceTargetDraft, setResourceTargetDraft] = useState('shared');
+  const [resourceListError, setResourceListError] = useState<string | null>(null);
+  const [resourceCreateError, setResourceCreateError] = useState<string | null>(null);
+  const [resourceListLoading, setResourceListLoading] = useState(false);
+  const [creatingResource, setCreatingResource] = useState(false);
+
+  const loadResourceCatalog = useCallback(async (catalogProjectId = projectId) => {
+    if (!accessToken) {
+      return;
+    }
+
+    setResourceListLoading(true);
+    setResourceListError(null);
+
+    try {
+      const response = await fetch(`/api/resources?projectId=${encodeURIComponent(catalogProjectId)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const normalized = normalizeResourceListPayload(body);
+      if (!normalized) {
+        throw new Error('Resource list payload was malformed.');
+      }
+
+      setResources(normalized);
+    } catch (error) {
+      setResourceListError(error instanceof Error ? error.message : 'Resource list failed to load.');
+    } finally {
+      setResourceListLoading(false);
+    }
+  }, [accessToken, projectId, setResources]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,7 +237,63 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     };
   }, [accessToken, projectId]);
 
+  useEffect(() => {
+    void loadResourceCatalog();
+  }, [loadResourceCatalog]);
+
+  const handleCreateResource = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!accessToken || creatingResource) {
+      return;
+    }
+
+    const name = resourceNameDraft.trim();
+    if (!name) {
+      setResourceCreateError('Введите название ресурса.');
+      return;
+    }
+
+    setCreatingResource(true);
+    setResourceCreateError(null);
+
+    try {
+      const response = await fetch('/api/resources', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(resourceTargetDraft === 'shared'
+          ? { name, type: 'human', scope: 'shared' }
+          : { name, type: 'human', scope: 'project', projectId: resourceTargetDraft }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const created = normalizeProjectResource(body);
+      if (!created) {
+        throw new Error('Resource payload was malformed.');
+      }
+
+      setResourceNameDraft('');
+      await loadResourceCatalog(resourceTargetDraft === 'shared' ? projectId : resourceTargetDraft);
+    } catch (error) {
+      setResourceCreateError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
+    } finally {
+      setCreatingResource(false);
+    }
+  }, [accessToken, creatingResource, loadResourceCatalog, projectId, resourceNameDraft, resourceTargetDraft]);
+
   const resourceCount = state.status === 'ready' ? state.data.resources.length : 0;
+  const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
+  const sharedResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'shared').length, [resources]);
+  const projectResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'project').length, [resources]);
   const intervalCount = useMemo(() => {
     if (state.status !== 'ready') {
       return 0;
@@ -203,6 +342,83 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       </div>
 
       <div className="flex-1 overflow-auto p-4">
+        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="resource-management-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-slate-900">Создать ресурс</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Shared ресурсы видны в planner по всем проектам workspace; проектные ресурсы доступны только выбранному проекту.
+              </p>
+              <form className="mt-3 grid gap-3 md:grid-cols-[minmax(220px,1fr)_260px_auto]" data-testid="resource-create-form" onSubmit={handleCreateResource}>
+                <label className="flex flex-col gap-1 text-xs text-slate-600">
+                  Название
+                  <input
+                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
+                    data-testid="resource-create-name-input"
+                    placeholder="Например: Бригада 1"
+                    value={resourceNameDraft}
+                    onChange={(event) => {
+                      setResourceNameDraft(event.target.value);
+                      setResourceCreateError(null);
+                    }}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-slate-600">
+                  Где создать
+                  <select
+                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
+                    data-testid="resource-create-target-select"
+                    value={resourceTargetDraft}
+                    onChange={(event) => {
+                      setResourceTargetDraft(event.target.value);
+                      setResourceCreateError(null);
+                    }}
+                  >
+                    <option value="shared">Shared workspace</option>
+                    {activeProjects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        Проект: {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="submit"
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 md:self-end"
+                  data-testid="resource-create-submit"
+                  disabled={!accessToken || creatingResource || resourceNameDraft.trim().length === 0}
+                >
+                  {creatingResource ? 'Создание...' : 'Создать ресурс'}
+                </button>
+              </form>
+              {resourceCreateError && (
+                <div className="mt-2 text-xs text-red-700" data-testid="resource-create-error">
+                  {resourceCreateError}
+                </div>
+              )}
+            </div>
+            <div className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 lg:w-[320px]" data-testid="resource-catalog-summary">
+              <div className="font-semibold text-slate-800">Каталог ресурсов</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-white px-2 py-1">Shared: {sharedResourceCount}</span>
+                <span className="rounded-full bg-white px-2 py-1">Project: {projectResourceCount}</span>
+              </div>
+              {resourceListLoading && <div className="mt-2 text-slate-500">Загрузка списка ресурсов...</div>}
+              {resourceListError && <div className="mt-2 text-red-700" data-testid="resource-list-error">{resourceListError}</div>}
+              {resources.length > 0 && (
+                <div className="mt-3 max-h-28 space-y-1 overflow-auto" data-testid="resource-catalog-list">
+                  {resources.map((resource) => (
+                    <div key={resource.id} className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1">
+                      <span className="truncate">{resource.name}</span>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{resource.scope}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         {state.status === 'loading' && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-loading-state">
             Загружаем planner view по shared-ресурсам текущего workspace…
@@ -324,3 +540,4 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     </div>
   );
 }
+

@@ -7,10 +7,12 @@ import {
   resourceService,
   ResourceValidationError,
 } from '@gantt/mcp/services';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 
 type ResourceBody = {
   name?: string;
+  projectId?: string;
   type?: 'human' | 'equipment' | 'material' | 'other';
   scope?: 'shared' | 'project';
   isActive?: boolean;
@@ -41,6 +43,22 @@ function parseAssignmentResourceIds(body: unknown): string[] | undefined {
 
   const { resourceIds } = body as AssignmentBody;
   return Array.isArray(resourceIds) ? resourceIds : undefined;
+}
+
+async function resolveOwnedProjectId(requestedProjectId: unknown, userId: string, fallbackProjectId: string): Promise<string | null> {
+  const targetProjectId = typeof requestedProjectId === 'string' && requestedProjectId.trim().length > 0
+    ? requestedProjectId.trim()
+    : fallbackProjectId;
+  const project = await getPrisma().project.findFirst({
+    where: {
+      id: targetProjectId,
+      userId,
+      status: { not: 'deleted' },
+    },
+    select: { id: true },
+  });
+
+  return project?.id ?? null;
 }
 
 function isResourceValidationError(error: unknown): error is ResourceValidationError {
@@ -101,8 +119,17 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
 
   fastify.get('/api/resources', { preHandler: [authMiddleware] }, async (req, reply) => {
     try {
+      const query = req.query as { projectId?: string };
+      const targetProjectId = await resolveOwnedProjectId(query.projectId, req.user!.userId, req.user!.projectId);
+      if (!targetProjectId) {
+        return reply.status(400).send({
+          reason: 'validation_error',
+          error: 'projectId unavailable',
+        });
+      }
+
       const response = await resourceService.list({
-        projectId: req.user!.projectId,
+        projectId: targetProjectId,
         includeInactive: true,
       });
 
@@ -131,8 +158,16 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
 
     try {
       const body = (req.body ?? {}) as ResourceBody;
+      const targetProjectId = await resolveOwnedProjectId(body.projectId, req.user!.userId, req.user!.projectId);
+      if (!targetProjectId) {
+        return reply.status(400).send({
+          reason: 'validation_error',
+          error: 'projectId unavailable',
+        });
+      }
+
       const response = await resourceService.create({
-        projectId: req.user!.projectId,
+        projectId: targetProjectId,
         name,
         type: body.type,
         scope: body.scope,

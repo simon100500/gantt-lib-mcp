@@ -32,14 +32,16 @@ describe('resource routes', () => {
   });
 
   it('passes ownership scope through resource create and update routes', () => {
-    assert.match(resourceRoutesSource, /type ResourceBody = \{[\s\S]*scope\?: 'shared' \| 'project';[\s\S]*\};/);
-    assert.match(resourceRoutesSource, /resourceService\.create\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
+    assert.match(resourceRoutesSource, /type ResourceBody = \{[\s\S]*projectId\?: string;[\s\S]*scope\?: 'shared' \| 'project';[\s\S]*\};/);
+    assert.match(resourceRoutesSource, /function resolveOwnedProjectId\(requestedProjectId: unknown, userId: string, fallbackProjectId: string\)/);
+    assert.match(resourceRoutesSource, /status: \{ not: 'deleted' \}/);
+    assert.match(resourceRoutesSource, /resourceService\.create\(\{[\s\S]*projectId: targetProjectId,[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
     assert.match(resourceRoutesSource, /resourceService\.update\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
   });
 
   it('keeps /api/project as the current-project hydration seam instead of embedding planner data', () => {
     assert.match(indexSource, /fastify\.get\('\/api\/project', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(indexSource, /const \[project, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
+    assert.match(indexSource, /const \[projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
     assert.doesNotMatch(indexSource, /plannerService/);
     assert.doesNotMatch(indexSource, /workspaceUserId/);
   });
@@ -82,10 +84,12 @@ describe('resource routes', () => {
     assert.match(indexSource, /isActive: resource\.isActive/);
     assert.match(indexSource, /deactivatedAt: resource\.deactivatedAt/);
     assert.match(indexSource, /resourceId: assignment\.resourceId/);
+    assert.match(indexSource, /id: accessibleProject\?\.id \?\? projectId/);
+    assert.match(indexSource, /taskCount: tasks\.length/);
   });
 
   it('keeps /api/project resource hydration authoritative to the current project boundary and excludes foreign local resources from direct prisma filtering', () => {
-    assert.match(indexSource, /const \[project, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
+    assert.match(indexSource, /const \[projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
     assert.match(indexSource, /resourceService\.list\(/);
     assert.doesNotMatch(indexSource, /prisma\.resource\.findMany\(\{[\s\S]*where: \{ projectId \}[\s\S]*\}\)/);
   });

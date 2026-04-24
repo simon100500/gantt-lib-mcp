@@ -90,9 +90,15 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     }>;
   };
   project: {
+    id: string;
+    name: string;
+    status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    taskCount: number;
+    archivedAt: string | null;
+    deletedAt: string | null;
   };
 }> {
   const { getPrisma } = await import('@gantt/runtime-core/prisma');
@@ -109,7 +115,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     throw new Error('Project unavailable');
   }
 
-  const [project, tasks, dependencies, resourceCatalog, assignments, projectCalendar] = await Promise.all([
+  const [projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: projectId,
@@ -138,8 +144,18 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
   ]);
 
   return {
-    version: project?.version ?? 0,
-    project: projectCalendar,
+    version: projectVersion?.version ?? 0,
+    project: {
+      id: accessibleProject?.id ?? projectId,
+      name: accessibleProject?.name ?? 'Deleted project',
+      status: accessibleProject?.status ?? 'deleted',
+      ganttDayMode: projectCalendar.ganttDayMode,
+      calendarId: projectCalendar.calendarId,
+      calendarDays: projectCalendar.calendarDays,
+      taskCount: tasks.length,
+      archivedAt: accessibleProject?.archivedAt ?? null,
+      deletedAt: accessibleProject?.deletedAt ?? null,
+    },
     snapshot: {
       tasks: tasks.map((task: any) => ({
         id: task.id,

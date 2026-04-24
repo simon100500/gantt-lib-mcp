@@ -956,3 +956,4 @@ describe('ProjectWorkspace resource assignments', () => {
     await unmountWorkspace(root);
   });
 });
+

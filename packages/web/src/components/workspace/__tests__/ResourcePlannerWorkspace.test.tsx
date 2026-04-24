@@ -144,6 +144,50 @@ vi.mock('../../../hooks/useAuth.ts', () => ({
         archivedAt: null,
         deletedAt: null,
       },
+      {
+        id: 'project-2',
+        name: 'Project 2',
+        status: 'active',
+        ganttDayMode: 'calendar',
+        calendarId: null,
+        calendarDays: [],
+        taskCount: 0,
+        archivedAt: null,
+        deletedAt: null,
+      },
+      {
+        id: 'project-2',
+        name: 'Project 2',
+        status: 'active',
+        ganttDayMode: 'calendar',
+        calendarId: null,
+        calendarDays: [],
+        taskCount: 0,
+        archivedAt: null,
+        deletedAt: null,
+      },
+      {
+        id: 'project-2',
+        name: 'Project 2',
+        status: 'active',
+        ganttDayMode: 'calendar',
+        calendarId: null,
+        calendarDays: [],
+        taskCount: 0,
+        archivedAt: null,
+        deletedAt: null,
+      },
+      {
+        id: 'project-2',
+        name: 'Project 2',
+        status: 'active',
+        ganttDayMode: 'calendar',
+        calendarId: null,
+        calendarDays: [],
+        taskCount: 0,
+        archivedAt: null,
+        deletedAt: null,
+      },
     ],
     accessToken: 'token',
     refreshAccessToken: vi.fn().mockResolvedValue('token'),
@@ -164,6 +208,7 @@ import App from '../../../App.tsx';
 import { useUIStore } from '../../../stores/useUIStore.ts';
 import { useAuthStore } from '../../../stores/useAuthStore.ts';
 import { useBillingStore } from '../../../stores/useBillingStore.ts';
+import { useProjectStore } from '../../../stores/useProjectStore.ts';
 import { ResourcePlannerWorkspace } from '../ResourcePlannerWorkspace.tsx';
 
 function installDomPolyfills(): void {
@@ -315,6 +360,15 @@ beforeEach(() => {
     tempHighlightedTaskId: null,
   });
 
+  useProjectStore.setState({
+    confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
+    resources: [],
+    assignments: [],
+    assignmentError: null,
+    pending: [],
+    dragPreview: undefined,
+  });
+
   useBillingStore.setState({
     subscription: {
       plan: 'start',
@@ -342,6 +396,107 @@ afterEach(() => {
 });
 
 describe('ResourcePlanner workspace integration', () => {
+  it('creates resources from the resource screen with the selected scope and refreshes the catalog', async () => {
+    const existingShared = {
+      id: 'resource-existing',
+      userId: 'user-1',
+      projectId: null,
+      scope: 'shared' as const,
+      name: 'Shared Crew',
+      type: 'human' as const,
+      isActive: true,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+      deactivatedAt: null,
+    };
+    const createdProjectResource = {
+      id: 'resource-new',
+      userId: 'user-1',
+      projectId: 'project-2',
+      scope: 'project' as const,
+      name: 'Local Crane',
+      type: 'human' as const,
+      isActive: true,
+      createdAt: '2026-04-03T00:00:00.000Z',
+      updatedAt: '2026-04-03T00:00:00.000Z',
+      deactivatedAt: null,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return { ok: true, json: async () => ({ projectId: 'project-1', workspaceUserId: 'user-1', resources: [] }) } as Response;
+      }
+      if (url === '/api/resources' && init?.method === 'POST') {
+        return { ok: true, status: 201, json: async () => createdProjectResource } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        const hasCreated = fetchMock.mock.calls.some(([, callInit]) => callInit?.method === 'POST');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ resources: hasCreated ? [existingShared, createdProjectResource] : [existingShared] }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useAuthStore.setState((state) => ({
+      projects: [
+        ...state.projects,
+        {
+          id: 'project-2',
+          name: 'Project 2',
+          status: 'active',
+          ganttDayMode: 'calendar',
+          calendarId: null,
+          calendarDays: [],
+          taskCount: 0,
+          archivedAt: null,
+          deletedAt: null,
+        },
+      ],
+    }));
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+
+    const input = container.querySelector('[data-testid="resource-create-name-input"]') as HTMLInputElement;
+    const targetSelect = container.querySelector('[data-testid="resource-create-target-select"]') as HTMLSelectElement;
+    const submit = container.querySelector('[data-testid="resource-create-submit"]') as HTMLButtonElement;
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'Local Crane');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(targetSelect, 'project-2');
+      targetSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      submit.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ name: 'Local Crane', type: 'human', scope: 'project', projectId: 'project-2' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources?projectId=project-2', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }));
+    expect(useProjectStore.getState().resources.map((resource) => resource.id).sort()).toEqual(['resource-existing', 'resource-new']);
+    expect(container.querySelector('[data-testid="resource-catalog-summary"]')?.textContent).toContain('Project: 1');
+    expect(input.value).toBe('');
+
+    await unmountApp(root);
+  });
+
   it('opens a dedicated planner workspace from the resource-pool entry and renders outside ProjectWorkspace', async () => {
     const { container, root } = await renderApp();
 
