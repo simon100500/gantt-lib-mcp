@@ -99,8 +99,10 @@ function isPlannerValidationError(error: unknown): error is PlannerValidationErr
 export async function registerResourceRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/api/resources/planner', { preHandler: [authMiddleware] }, async (req, reply) => {
     try {
+      const query = req.query as { scope?: string };
       const response = await plannerService.getResourcePlanner({
         projectId: req.user!.projectId,
+        scope: query.scope,
       });
 
       return reply.send(response);

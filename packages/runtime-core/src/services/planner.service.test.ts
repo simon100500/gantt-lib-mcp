@@ -49,17 +49,43 @@ class FakePlannerPrisma {
       }
       return { id: project.id, userId: project.userId };
     },
-    findMany: async ({ where }: { where: { userId: string; status?: { not: 'deleted' } }; select: { id: true; name: true; userId: true } }) => {
+    findMany: async ({ where }: { where: { userId: string; status?: { not: 'deleted' }; id?: { in: string[] } }; select: { id: true; name: true; userId: true } }) => {
       return Array.from(this.projects.values())
         .filter((project) => project.userId === where.userId)
         .filter((project) => (where.status?.not ? project.status !== where.status.not : true))
+        .filter((project) => (where.id?.in ? where.id.in.includes(project.id) : true))
         .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
         .map((project) => ({ id: project.id, name: project.name, userId: project.userId }));
     },
   };
 
   readonly taskAssignment = {
-    findMany: async ({ where }: { where: { projectId: { in: string[] }; resource: { userId: string; projectId: null } } }) => {
+    findMany: async ({ where }: { where: { projectId: { in: string[] }; resource: { userId: string; projectId?: null | string | { in: Array<string | null> }; OR?: Array<{ projectId: null } | { projectId: { in: string[] } }> } } }) => {
+      const resourceProjectMatches = (resource: ResourceRow): boolean => {
+        if (where.resource.OR) {
+          return where.resource.OR.some((branch) => {
+            if ('projectId' in branch && branch.projectId === null) {
+              return resource.projectId === null;
+            }
+            if ('projectId' in branch && typeof branch.projectId === 'object' && 'in' in branch.projectId) {
+              return resource.projectId !== null && branch.projectId.in.includes(resource.projectId);
+            }
+            return false;
+          });
+        }
+
+        if ('projectId' in where.resource) {
+          const projectIdFilter = where.resource.projectId;
+          if (projectIdFilter && typeof projectIdFilter === 'object' && 'in' in projectIdFilter) {
+            return projectIdFilter.in.includes(resource.projectId);
+          }
+
+          return resource.projectId === projectIdFilter;
+        }
+
+        return true;
+      };
+
       return Array.from(this.assignments.values())
         .filter((assignment) => where.projectId.in.includes(assignment.projectId))
         .map((assignment) => {
@@ -67,7 +93,7 @@ class FakePlannerPrisma {
           const task = this.tasks.get(assignment.taskId) ?? null;
           const project = task ? this.projects.get(task.projectId) ?? null : null;
 
-          if (!resource || resource.userId !== where.resource.userId || resource.projectId !== where.resource.projectId) {
+          if (!resource || resource.userId !== where.resource.userId || !resourceProjectMatches(resource)) {
             return null;
           }
 
@@ -161,6 +187,13 @@ function createFixture() {
     name: 'Shared QA',
     isActive: true,
   });
+  prisma.resources.set('local-alpha-only', {
+    id: 'local-alpha-only',
+    userId: 'workspace-1',
+    projectId: 'project-alpha',
+    name: 'Alpha Local Crew',
+    isActive: true,
+  });
   prisma.resources.set('local-beta-only', {
     id: 'local-beta-only',
     userId: 'workspace-1',
@@ -233,26 +266,33 @@ function createFixture() {
     resourceId: 'shared-qa',
     createdAt: new Date(now.getTime() + 3_000),
   });
+  prisma.assignments.set('assignment-alpha-local', {
+    id: 'assignment-alpha-local',
+    projectId: 'project-alpha',
+    taskId: 'task-alpha-plan',
+    resourceId: 'local-alpha-only',
+    createdAt: new Date(now.getTime() + 4_000),
+  });
   prisma.assignments.set('assignment-local-leak', {
     id: 'assignment-local-leak',
     projectId: 'project-beta',
     taskId: 'task-beta-build',
     resourceId: 'local-beta-only',
-    createdAt: new Date(now.getTime() + 4_000),
+    createdAt: new Date(now.getTime() + 5_000),
   });
   prisma.assignments.set('assignment-foreign-shared', {
     id: 'assignment-foreign-shared',
     projectId: 'project-foreign',
     taskId: 'task-foreign',
     resourceId: 'foreign-shared',
-    createdAt: new Date(now.getTime() + 5_000),
+    createdAt: new Date(now.getTime() + 6_000),
   });
   prisma.assignments.set('assignment-missing-task', {
     id: 'assignment-missing-task',
     projectId: 'project-beta',
     taskId: 'missing-task',
     resourceId: 'shared-designer',
-    createdAt: new Date(now.getTime() + 6_000),
+    createdAt: new Date(now.getTime() + 7_000),
   });
 
   const plannerService = new PlannerService({ prisma });
@@ -283,6 +323,7 @@ describe('planner service contracts', () => {
     } satisfies GetResourcePlannerInput);
 
     assert.equal(result.projectId, 'project-alpha');
+    assert.equal(result.scope, 'all-projects');
     assert.equal(result.workspaceUserId, 'workspace-1');
     assert.equal(result.resources.length, 2);
 
@@ -357,6 +398,63 @@ describe('planner service contracts', () => {
     assert.equal(sharedQa.intervals[0]?.conflictCount, 0);
   });
 
+  it('returns current-project shared and same-project local resources without foreign local leakage', async () => {
+    const { plannerService } = createFixture();
+
+    const result = await plannerService.getResourcePlanner({ projectId: 'project-alpha', scope: 'current-project' });
+
+    assert.equal(result.projectId, 'project-alpha');
+    assert.equal(result.scope, 'current-project');
+    assert.equal(result.workspaceUserId, 'workspace-1');
+    assert.deepEqual(
+      result.resources.map((resource) => resource.resourceId),
+      ['local-alpha-only', 'shared-designer'],
+    );
+
+    const sharedDesigner = result.resources.find((resource) => resource.resourceId === 'shared-designer');
+    assert.ok(sharedDesigner);
+    assert.deepEqual(
+      sharedDesigner.intervals.map((interval) => interval.assignmentId),
+      ['assignment-alpha'],
+      'current-project scope should keep shared-resource assignments only for the active project',
+    );
+
+    const localAlpha = result.resources.find((resource) => resource.resourceId === 'local-alpha-only');
+    assert.ok(localAlpha);
+    assert.deepEqual(
+      localAlpha.intervals.map((interval) => ({
+        assignmentId: interval.assignmentId,
+        projectId: interval.projectId,
+        projectName: interval.projectName,
+      })),
+      [{ assignmentId: 'assignment-alpha-local', projectId: 'project-alpha', projectName: 'Alpha Project' }],
+      'current-project scope should include project-local resources owned by the active project',
+    );
+
+    const allIntervalIds = result.resources.flatMap((resource) => resource.intervals.map((interval) => interval.assignmentId));
+    assert.equal(allIntervalIds.includes('assignment-beta-build'), false, 'current-project scope must not include sibling project shared assignments');
+    assert.equal(allIntervalIds.includes('assignment-local-leak'), false, 'current-project scope must not include sibling project-local resources');
+  });
+
+  it('preserves all-project scope as workspace-wide shared-only planner data', async () => {
+    const { plannerService } = createFixture();
+
+    const result = await plannerService.getResourcePlanner({ projectId: 'project-alpha', scope: 'all-projects' });
+
+    assert.equal(result.scope, 'all-projects');
+    assert.deepEqual(
+      result.resources.map((resource) => resource.resourceId),
+      ['shared-designer', 'shared-qa'],
+    );
+
+    const allIntervalIds = result.resources.flatMap((resource) => resource.intervals.map((interval) => interval.assignmentId));
+    assert.equal(allIntervalIds.includes('assignment-alpha'), true);
+    assert.equal(allIntervalIds.includes('assignment-beta-build'), true);
+    assert.equal(allIntervalIds.includes('assignment-beta-review'), true);
+    assert.equal(allIntervalIds.includes('assignment-alpha-local'), false, 'all-projects scope must exclude current project-local resources');
+    assert.equal(allIntervalIds.includes('assignment-local-leak'), false, 'all-projects scope must exclude sibling project-local resources');
+  });
+
   it('treats adjacent intervals as non-overlapping and returns stable conflict metadata across repeated reads', async () => {
     const { plannerService } = createFixture();
 
@@ -402,6 +500,7 @@ describe('planner service contracts', () => {
 
     assert.deepEqual(result, {
       projectId: 'project-alpha',
+      scope: 'all-projects',
       workspaceUserId: 'workspace-1',
       resources: [],
     });
@@ -460,6 +559,17 @@ describe('planner service contracts', () => {
         assert.ok(error instanceof PlannerValidationError);
         assert.equal(error.issue.code, 'project_not_found');
         assert.equal(error.issue.field, 'projectId');
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      () => plannerService.getResourcePlanner({ projectId: 'project-alpha', scope: 'everything' as never }),
+      (error: unknown) => {
+        assert.ok(error instanceof PlannerValidationError);
+        assert.equal(error.issue.code, 'planner_scope_invalid');
+        assert.equal(error.issue.field, 'scope');
+        assert.equal(error.issue.detail, 'everything');
         return true;
       },
     );

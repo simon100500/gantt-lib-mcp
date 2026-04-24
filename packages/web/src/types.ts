@@ -25,6 +25,7 @@ export interface ValidationResult {
 }
 
 export type {
+  PlannerScope,
   ResourcePlannerInterval,
   ResourcePlannerResource,
   ResourcePlannerResult,

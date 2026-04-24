@@ -289,7 +289,7 @@ beforeEach(() => {
       return { ok: true, json: async () => ({ plan: 'start', isActive: true, planMeta: { label: 'Старт' }, usage: { projects: { usageState: 'tracked', used: 1, limit: 5 }, ai_queries: { usageState: 'tracked', used: 0, limit: 100 } }, remaining: { projects: { remainingState: 'tracked', remaining: 4, limit: 5 }, ai_queries: { remainingState: 'tracked', remaining: 100, limit: 100 } }, limits: { archive: true, resource_pool: true, export: 'pdf' } }) } as Response;
     }
     if (url.includes('/api/resources/planner')) {
-      return { ok: true, json: async () => ({ projectId: 'project-1', workspaceUserId: 'user-1', resources: [] }) } as Response;
+      return { ok: true, json: async () => ({ projectId: 'project-1', scope: 'all-projects', workspaceUserId: 'user-1', resources: [] }) } as Response;
     }
     return { ok: true, json: async () => ({}) } as Response;
   }));
@@ -424,7 +424,7 @@ describe('ResourcePlanner workspace integration', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/api/resources/planner')) {
-        return { ok: true, json: async () => ({ projectId: 'project-1', workspaceUserId: 'user-1', resources: [] }) } as Response;
+        return { ok: true, json: async () => ({ projectId: 'project-1', scope: 'all-projects', workspaceUserId: 'user-1', resources: [] }) } as Response;
       }
       if (url === '/api/resources' && init?.method === 'POST') {
         return { ok: true, status: 201, json: async () => createdProjectResource } as Response;
@@ -553,6 +553,7 @@ describe('ResourcePlanner workspace integration', () => {
       ok: true,
       json: async () => ({
         projectId: 'project-1',
+        scope: 'all-projects',
         workspaceUserId: 'user-1',
         resources: [
           {
@@ -632,6 +633,7 @@ describe('ResourcePlanner workspace integration', () => {
       ok: true,
       json: async () => ({
         projectId: 'project-1',
+        scope: 'all-projects',
         workspaceUserId: 'user-1',
         resources: [
           {

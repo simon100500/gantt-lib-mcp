@@ -2,6 +2,7 @@ import { getPrisma } from '../prisma.js';
 import type { PrismaClient } from '../prisma.js';
 import type {
   GetResourcePlannerInput,
+  PlannerScope,
   ResourceAssignmentValidationIssue,
   ResourcePlannerInterval,
   ResourcePlannerResource,
@@ -60,7 +61,7 @@ type PlannerPrismaClient = {
   project: {
     findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerRow | null>;
     findMany(args: {
-      where: { userId: string; status?: { not: 'deleted' } };
+      where: { userId: string; status?: { not: 'deleted' }; id?: { in: string[] } };
       select: { id: true; name: true; userId: true };
       orderBy?: Array<{ createdAt?: 'asc' | 'desc' } | { name?: 'asc' | 'desc' }>;
     }): Promise<PlannerProjectRow[]>;
@@ -71,7 +72,8 @@ type PlannerPrismaClient = {
         projectId: { in: string[] };
         resource: {
           userId: string;
-          projectId: null;
+          projectId?: null | string | { in: Array<string | null> };
+          OR?: Array<{ projectId: null } | { projectId: { in: string[] } }>;
         };
       };
       select: {
@@ -118,6 +120,22 @@ function requireTrimmed(value: string, field: 'projectId'): string {
     });
   }
   return normalized;
+}
+
+function normalizePlannerScope(scope: GetResourcePlannerInput['scope']): PlannerScope {
+  if (scope === undefined) {
+    return 'all-projects';
+  }
+
+  if (scope === 'current-project' || scope === 'all-projects') {
+    return scope;
+  }
+
+  throw new PlannerValidationError(`Planner scope ${String(scope)} is invalid`, {
+    code: 'planner_scope_invalid',
+    field: 'scope',
+    detail: String(scope),
+  });
 }
 
 function toIsoDate(value: Date): string {
@@ -206,12 +224,15 @@ export class PlannerService {
 
   async getResourcePlanner(input: GetResourcePlannerInput): Promise<ResourcePlannerResult> {
     const projectId = requireTrimmed(input.projectId, 'projectId');
+    const scope = normalizePlannerScope(input.scope);
     const currentProject = await this.getWorkspaceBoundaryProject(projectId);
 
+    const scopedProjectIds = scope === 'current-project' ? [projectId] : undefined;
     const workspaceProjects = await this.prisma.project.findMany({
       where: {
         userId: currentProject.userId,
         status: { not: 'deleted' },
+        ...(scopedProjectIds ? { id: { in: scopedProjectIds } } : {}),
       },
       select: { id: true, name: true, userId: true },
       orderBy: [{ name: 'asc' }, { id: 'asc' } as never],
@@ -226,12 +247,16 @@ export class PlannerService {
       });
     }
 
+    const resourceProjectFilter = scope === 'current-project'
+      ? { OR: [{ projectId: null }, { projectId: { in: workspaceProjectIds } }] }
+      : { projectId: null };
+
     const plannerRows = await this.prisma.taskAssignment.findMany({
       where: {
         projectId: { in: workspaceProjectIds },
         resource: {
           userId: currentProject.userId,
-          projectId: null,
+          ...resourceProjectFilter,
         },
       },
       select: {
@@ -279,7 +304,15 @@ export class PlannerService {
         continue;
       }
 
-      if (resource.projectId !== null || resource.userId !== currentProject.userId) {
+      if (scope === 'all-projects' && resource.projectId !== null) {
+        continue;
+      }
+
+      if (scope === 'current-project' && resource.projectId !== null && resource.projectId !== projectId) {
+        continue;
+      }
+
+      if (resource.userId !== currentProject.userId) {
         continue;
       }
 
@@ -339,6 +372,7 @@ export class PlannerService {
 
     return {
       projectId,
+      scope,
       workspaceUserId: currentProject.userId,
       resources,
     };

@@ -1,12 +1,14 @@
 import type { AuthProject, AuthUser } from '../stores/useAuthStore.ts';
 import type {
   ProjectDependency,
+  PlannerScope,
   ResourceScope,
   ResourceType,
   Task,
 } from '../types.ts';
 
 export type {
+  PlannerScope,
   ResourcePlannerInterval,
   ResourcePlannerResource,
   ResourcePlannerResult,

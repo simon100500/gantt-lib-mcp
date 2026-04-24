@@ -67,6 +67,8 @@ export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
 
 export type ResourceScope = 'shared' | 'project';
 
+export type PlannerScope = 'current-project' | 'all-projects';
+
 export interface ProjectResource {
   id: string;
   userId: string;
@@ -128,6 +130,7 @@ export interface ListTaskAssignmentsInput {
 
 export interface GetResourcePlannerInput {
   projectId: string;
+  scope?: PlannerScope | string;
 }
 
 export interface ResourcePlannerInterval {
@@ -156,6 +159,7 @@ export interface ResourcePlannerResource {
 
 export interface ResourcePlannerResult {
   projectId: string;
+  scope: PlannerScope;
   workspaceUserId: string;
   resources: ResourcePlannerResource[];
 }
@@ -173,7 +177,7 @@ export interface ResourceAssignmentValidationIssue {
     | 'duplicate_resource_id'
     | 'resource_name_conflict'
     | 'planner_scope_invalid';
-  field?: 'projectId' | 'taskId' | 'resourceId' | 'resourceIds' | 'name' | 'type';
+  field?: 'projectId' | 'taskId' | 'resourceId' | 'resourceIds' | 'name' | 'type' | 'scope';
   detail?: string;
 }
 

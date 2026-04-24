@@ -24,7 +24,12 @@ function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null
   }
 
   const candidate = payload as Partial<ResourcePlannerResult>;
-  if (typeof candidate.projectId !== 'string' || typeof candidate.workspaceUserId !== 'string' || !Array.isArray(candidate.resources)) {
+  if (
+    typeof candidate.projectId !== 'string'
+    || !(candidate.scope === 'current-project' || candidate.scope === 'all-projects')
+    || typeof candidate.workspaceUserId !== 'string'
+    || !Array.isArray(candidate.resources)
+  ) {
     return null;
   }
 
@@ -91,6 +96,7 @@ function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null
 
   return {
     projectId: candidate.projectId,
+    scope: candidate.scope,
     workspaceUserId: candidate.workspaceUserId,
     resources,
   };

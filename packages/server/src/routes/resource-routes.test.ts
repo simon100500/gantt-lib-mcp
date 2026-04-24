@@ -26,9 +26,18 @@ describe('resource routes', () => {
     assert.match(resourceRoutesSource, /import \{[\s\S]*plannerService,[\s\S]*PlannerValidationError,[\s\S]*\} from '@gantt\/mcp\/services';/);
     assert.match(resourceRoutesSource, /function isPlannerValidationError\(error: unknown\): error is PlannerValidationError/);
     assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources\/planner', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(resourceRoutesSource, /plannerService\.getResourcePlanner\(\{[\s\S]*projectId: req\.user!\.projectId,[\s\S]*\}\)/);
+    assert.match(resourceRoutesSource, /const query = req\.query as \{ scope\?: string \};/);
+    assert.match(resourceRoutesSource, /plannerService\.getResourcePlanner\(\{[\s\S]*projectId: req\.user!\.projectId,[\s\S]*scope: query\.scope,[\s\S]*\}\)/);
     assert.match(resourceRoutesSource, /if \(isPlannerValidationError\(error\)\) \{/);
     assert.match(resourceRoutesSource, /return reply\.status\(400\)\.send\(\{\s*reason: 'validation_error',\s*error: error\.message,\s*issue: error\.issue,\s*\}\);/s);
+  });
+
+  it('keeps planner scope query validation centralized in runtime-core instead of broadening in the route', () => {
+    assert.match(resourceRoutesSource, /const query = req\.query as \{ scope\?: string \};/);
+    assert.match(resourceRoutesSource, /scope: query\.scope/);
+    assert.doesNotMatch(resourceRoutesSource, /query\.scope === 'current-project'/);
+    assert.doesNotMatch(resourceRoutesSource, /query\.scope === 'all-projects'/);
+    assert.match(resourceRoutesSource, /issue: error\.issue/);
   });
 
   it('passes ownership scope through resource create and update routes', () => {
@@ -47,11 +56,12 @@ describe('resource routes', () => {
   });
 
   it('re-exports planner transport types for the web layer without inventing a second schema', () => {
-    assert.match(apiTypesSource, /export type \{[\s\S]*ResourcePlannerInterval,[\s\S]*ResourcePlannerResource,[\s\S]*ResourcePlannerResult,[\s\S]*ResourceScope,[\s\S]*ResourceType,[\s\S]*\} from '\.\.\/types\.ts';/);
+    assert.match(apiTypesSource, /export type \{[\s\S]*PlannerScope,[\s\S]*ResourcePlannerInterval,[\s\S]*ResourcePlannerResource,[\s\S]*ResourcePlannerResult,[\s\S]*ResourceScope,[\s\S]*ResourceType,[\s\S]*\} from '\.\.\/types\.ts';/);
     assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerResult/);
     assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerInterval/);
     assert.doesNotMatch(apiTypesSource, /export interface ResourcePlannerResource/);
     assert.doesNotMatch(apiTypesSource, /export type ResourcePlannerResult =/);
+    assert.doesNotMatch(apiTypesSource, /export type PlannerScope =/);
   });
 
   it('maps malformed params and typed assignment validation failures to stable validation_error bodies', () => {
