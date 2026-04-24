@@ -199,6 +199,21 @@ async function unmountWorkspace(root: Root): Promise<void> {
   });
 }
 
+function getAssignCommand(): { id: string; onSelect: (task: Task) => void } {
+  const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
+  const assignCommand = commands.find((command) => command.id === 'assign-resource');
+  expect(assignCommand).toBeTruthy();
+  return assignCommand!;
+}
+
+function getCheckbox(container: HTMLElement, resourceId: string): HTMLInputElement | null {
+  return container.querySelector(`[data-testid="assignment-resource-checkbox-${resourceId}"]`) as HTMLInputElement | null;
+}
+
+function getSubmitButton(container: HTMLElement): HTMLButtonElement | null {
+  return container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement | null;
+}
+
 function buildProjectLoadResponse(overrides?: Partial<ProjectLoadResponse>): ProjectLoadResponse {
   return {
     version: 2,
@@ -435,23 +450,17 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     const { container, root } = await renderWorkspace();
-    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
-    const assignCommand = commands.find((command) => command.id === 'assign-resource');
-
-    expect(assignCommand).toBeTruthy();
+    const assignCommand = getAssignCommand();
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[1]!);
+      assignCommand.onSelect(tasks[1]!);
       await Promise.resolve();
     });
 
-    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
-    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
-      'Выберите активный ресурс',
-      'Shared Crew',
-      'Current Project Crew',
-    ]);
-    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Foreign Project Crew')).toBe(false);
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-shared"]')?.textContent).toContain('Shared Crew');
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-local-current"]')?.textContent).toContain('Current Project Crew');
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-local-foreign"]')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
 
     await unmountWorkspace(root);
@@ -642,10 +651,7 @@ describe('ProjectWorkspace resource assignments', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container, root } = await renderWorkspace();
-    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
-    const assignCommand = commands.find((command) => command.id === 'assign-resource');
-
-    expect(assignCommand).toBeTruthy();
+    const assignCommand = getAssignCommand();
 
     await act(async () => {
       await useProjectStore.getState().setAssignments([]);
@@ -679,23 +685,20 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[0]!);
+      assignCommand.onSelect(tasks[0]!);
       await Promise.resolve();
     });
 
-    let select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
-    let submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+    let alphaCheckbox = getCheckbox(container, 'resource-1');
+    let dormantCheckbox = getCheckbox(container, 'resource-2');
+    let submitButton = getSubmitButton(container);
 
-    expect(select).not.toBeNull();
-    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
-      'Выберите активный ресурс',
-      'Alpha Crew',
-      'Dormant Crew',
-    ]);
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
+    expect(alphaCheckbox).not.toBeNull();
+    expect(dormantCheckbox).not.toBeNull();
 
     await act(async () => {
-      select!.value = 'resource-2';
-      select!.dispatchEvent(new Event('change', { bubbles: true }));
+      dormantCheckbox!.click();
     });
 
     await act(async () => {
@@ -720,19 +723,17 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[0]!);
+      assignCommand.onSelect(tasks[0]!);
       await Promise.resolve();
     });
 
-    select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
-    submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+    alphaCheckbox = getCheckbox(container, 'resource-1');
+    dormantCheckbox = getCheckbox(container, 'resource-2');
+    submitButton = getSubmitButton(container);
 
-    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
-      'Выберите активный ресурс',
-      'Alpha Crew',
-    ]);
-    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Dormant Crew')).toBe(false);
-    expect(submitButton?.disabled).toBe(true);
+    expect(alphaCheckbox).not.toBeNull();
+    expect(dormantCheckbox).toBeNull();
+    expect(submitButton?.disabled).toBe(false);
     expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
 
     await unmountWorkspace(root);
@@ -779,29 +780,23 @@ describe('ProjectWorkspace resource assignments', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container, root } = await renderWorkspace();
-    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
-    const assignCommand = commands.find((command) => command.id === 'assign-resource');
-
-    expect(assignCommand).toBeTruthy();
+    const assignCommand = getAssignCommand();
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[0]!);
+      assignCommand.onSelect(tasks[0]!);
       await Promise.resolve();
     });
 
-    const panel = container.querySelector('[data-testid="assignment-selection-panel"]');
-    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
-    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+    const modal = container.querySelector('[data-testid="resource-assignment-modal"]');
+    const alphaCheckbox = getCheckbox(container, 'resource-1');
+    const dormantCheckbox = getCheckbox(container, 'resource-2');
+    const submitButton = getSubmitButton(container);
 
-    expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain('Назначить ресурс: Parent');
-    expect(select).not.toBeNull();
-    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual([
-      'Выберите активный ресурс',
-      'Alpha Crew',
-    ]);
-    expect(Array.from(select?.options ?? []).some((option) => option.textContent === 'Dormant Crew')).toBe(false);
-    expect(submitButton?.disabled).toBe(true);
+    expect(modal).not.toBeNull();
+    expect(modal?.textContent).toContain('Parent');
+    expect(alphaCheckbox).not.toBeNull();
+    expect(dormantCheckbox).toBeNull();
+    expect(submitButton?.disabled).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
 
     await unmountWorkspace(root);
@@ -844,22 +839,18 @@ describe('ProjectWorkspace resource assignments', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container, root } = await renderWorkspace();
-    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
-    const assignCommand = commands.find((command) => command.id === 'assign-resource');
-
-    expect(assignCommand).toBeTruthy();
+    const assignCommand = getAssignCommand();
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[0]!);
+      assignCommand.onSelect(tasks[0]!);
       await Promise.resolve();
     });
 
-    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement;
-    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement;
+    const alphaCheckbox = getCheckbox(container, 'resource-1');
+    const submitButton = getSubmitButton(container)!;
 
     await act(async () => {
-      select.value = 'resource-1';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      alphaCheckbox!.click();
     });
 
     expect(submitButton.disabled).toBe(false);
@@ -877,7 +868,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(state.assignments.map((assignment) => assignment.taskId).sort()).toEqual(['leaf-1', 'leaf-2']);
     expect(state.assignments.some((assignment) => assignment.taskId === 'parent-1')).toBe(false);
     expect(state.assignmentError).toBeNull();
-    expect(container.querySelector('[data-testid="assignment-selection-panel"]')).toBeNull();
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).toBeNull();
 
     await unmountWorkspace(root);
   });
@@ -895,20 +886,18 @@ describe('ProjectWorkspace resource assignments', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container, root } = await renderWorkspace();
-    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
-    const assignCommand = commands.find((command) => command.id === 'assign-resource');
+    const assignCommand = getAssignCommand();
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[3]!);
+      assignCommand.onSelect(tasks[3]!);
       await Promise.resolve();
     });
 
-    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement;
-    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement;
+    const alphaCheckbox = getCheckbox(container, 'resource-1');
+    const submitButton = getSubmitButton(container)!;
 
     await act(async () => {
-      select.value = 'resource-1';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      alphaCheckbox!.click();
     });
 
     await act(async () => {
@@ -921,8 +910,206 @@ describe('ProjectWorkspace resource assignments', () => {
       body: JSON.stringify({ resourceIds: ['resource-1'] }),
     }));
     expect(useProjectStore.getState().assignmentError).toBe('task_has_no_leaf_descendants: Task solo-parent has no descendant leaf tasks');
-    expect(container.querySelector('[data-testid="assignment-error-banner"]')?.textContent).toContain('task_has_no_leaf_descendants');
-    expect(container.querySelector('[data-testid="assignment-selection-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-modal-error"]')?.textContent).toContain('task_has_no_leaf_descendants');
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain('Solo Parent');
+
+    await unmountWorkspace(root);
+  });
+
+  it('disables submit and shows the loading label while an assignment mutation is pending', async () => {
+    let resolveFetch: ((value: { ok: boolean; json: () => Promise<{ assignments: [] }> }) => void) | null = null;
+    const fetchMock = vi.fn().mockReturnValue(new Promise((resolve) => {
+      resolveFetch = resolve;
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderWorkspace();
+    const assignCommand = getAssignCommand();
+
+    await act(async () => {
+      assignCommand.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      getCheckbox(container, 'resource-1')!.click();
+    });
+
+    await act(async () => {
+      getSubmitButton(container)!.click();
+      await Promise.resolve();
+    });
+
+    expect(getSubmitButton(container)?.disabled).toBe(true);
+    expect(getSubmitButton(container)?.textContent).toContain('Сохраняем назначение');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFetch!({ ok: true, json: async () => ({ assignments: [] }) });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).toBeNull();
+
+    await unmountWorkspace(root);
+  });
+
+  it('submits an empty resourceIds array to unassign a leaf task without losing modal context before success', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ assignments: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderWorkspace();
+    const assignCommand = getAssignCommand();
+
+    await act(async () => {
+      assignCommand.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    const submitButton = getSubmitButton(container)!;
+
+    await act(async () => {
+      submitButton.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/leaf-1/assignments', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ resourceIds: [] }),
+    }));
+    expect(useProjectStore.getState().assignments.some((assignment) => assignment.taskId === 'leaf-1')).toBe(false);
+    expect(useProjectStore.getState().assignmentError).toBeNull();
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).toBeNull();
+
+    await unmountWorkspace(root);
+  });
+
+  it('submits a multi-resource leaf replacement payload and stores returned assignments', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      resources: state.resources.map((resource) => resource.id === 'resource-2'
+        ? { ...resource, isActive: true, deactivatedAt: null }
+        : resource),
+    }));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        assignments: [
+          {
+            id: 'leaf-1-alpha',
+            projectId: 'project-1',
+            taskId: 'leaf-1',
+            resourceId: 'resource-1',
+            createdAt: '2026-04-02T00:00:00.000Z',
+          },
+          {
+            id: 'leaf-1-dormant',
+            projectId: 'project-1',
+            taskId: 'leaf-1',
+            resourceId: 'resource-2',
+            createdAt: '2026-04-02T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderWorkspace();
+    const assignCommand = getAssignCommand();
+
+    await act(async () => {
+      assignCommand.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      getCheckbox(container, 'resource-1')!.click();
+      getCheckbox(container, 'resource-2')!.click();
+    });
+
+    await act(async () => {
+      getSubmitButton(container)!.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/leaf-1/assignments', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ resourceIds: ['resource-1', 'resource-2'] }),
+    }));
+    expect(useProjectStore.getState().assignments.filter((assignment) => assignment.taskId === 'leaf-1').map((assignment) => assignment.resourceId).sort()).toEqual([
+      'resource-1',
+      'resource-2',
+    ]);
+    expect(useProjectStore.getState().assignmentError).toBeNull();
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).toBeNull();
+
+    await unmountWorkspace(root);
+  });
+
+  it('keeps the same task modal open and preserves assignments when a success response is malformed', async () => {
+    const beforeAssignments = useProjectStore.getState().assignments;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderWorkspace();
+    const assignCommand = getAssignCommand();
+
+    await act(async () => {
+      assignCommand.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      getCheckbox(container, 'resource-1')!.click();
+    });
+
+    await act(async () => {
+      getSubmitButton(container)!.click();
+      await Promise.resolve();
+    });
+
+    expect(useProjectStore.getState().assignmentError).toBe('malformed_assignment_response: Сервер вернул назначения в неизвестном формате.');
+    expect(useProjectStore.getState().assignments).toEqual(beforeAssignments);
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain('Leaf A');
+    expect(container.querySelector('[data-testid="assignment-modal-error"]')?.textContent).toContain('malformed_assignment_response');
+
+    await unmountWorkspace(root);
+  });
+
+  it('keeps the selected task modal open and exposes a deterministic network failure', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('offline'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderWorkspace();
+    const assignCommand = getAssignCommand();
+
+    await act(async () => {
+      assignCommand.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      getCheckbox(container, 'resource-1')!.click();
+    });
+
+    await act(async () => {
+      getSubmitButton(container)!.click();
+      await Promise.resolve();
+    });
+
+    expect(useProjectStore.getState().assignmentError).toBe('network_failure: Не удалось сохранить назначения ресурсов.');
+    expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain('Leaf A');
+    expect(container.querySelector('[data-testid="assignment-modal-error"]')?.textContent).toContain('network_failure');
 
     await unmountWorkspace(root);
   });
@@ -937,19 +1124,17 @@ describe('ProjectWorkspace resource assignments', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container, root } = await renderWorkspace();
-    const commands = (ganttPropsSpy?.taskListMenuCommands as Array<{ id: string; onSelect: (task: Task) => void }> | undefined) ?? [];
-    const assignCommand = commands.find((command) => command.id === 'assign-resource');
+    const assignCommand = getAssignCommand();
 
     await act(async () => {
-      assignCommand!.onSelect(tasks[1]!);
+      assignCommand.onSelect(tasks[1]!);
       await Promise.resolve();
     });
 
-    const select = container.querySelector('[data-testid="assignment-resource-select"]') as HTMLSelectElement | null;
-    const submitButton = container.querySelector('[data-testid="assignment-submit-button"]') as HTMLButtonElement | null;
+    const submitButton = getSubmitButton(container);
 
-    expect(container.querySelector('[data-testid="assignment-selection-empty"]')?.textContent).toContain('Нет активных ресурсов');
-    expect(Array.from(select?.options ?? []).map((option) => option.textContent)).toEqual(['Выберите активный ресурс']);
+    expect(container.querySelector('[data-testid="assignment-modal-no-assignable-resources"]')?.textContent).toContain('Нет активных ресурсов');
+    expect(container.querySelector('[data-testid="assignment-modal-resource-options"]')).toBeNull();
     expect(submitButton?.disabled).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
 

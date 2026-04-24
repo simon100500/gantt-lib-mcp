@@ -220,7 +220,7 @@ export function ProjectWorkspace({
   }, [projectId, projectStates]);
   const [baselineMenuOpen, setBaselineMenuOpen] = useState(false);
   const [assignmentSelectionTaskId, setAssignmentSelectionTaskId] = useState<string | null>(null);
-  const [selectedResourceIdsByTask, setSelectedResourceIdsByTask] = useState<Record<string, string[]>>({});
+  const [selectedAssignmentResourceIds, setSelectedAssignmentResourceIds] = useState<string[]>([]);
   const [assignmentSubmitting, setAssignmentSubmitting] = useState(false);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const previewModeActive = historyViewer.mode === 'preview';
@@ -470,9 +470,6 @@ export function ProjectWorkspace({
     [assignmentSelectionTaskId, tasks],
   );
 
-  const selectedAssignmentResourceIds = assignmentSelectionTaskId
-    ? selectedResourceIdsByTask[assignmentSelectionTaskId] ?? []
-    : [];
   const selectedAssignmentResourceGroups = useMemo(
     () => getTaskAssignmentResourceGroups(assignmentSelectionTaskId, resources, assignments),
     [assignmentSelectionTaskId, assignments, resources],
@@ -483,31 +480,24 @@ export function ProjectWorkspace({
       return;
     }
 
-    setAssignmentSelectionTaskId(task.id);
-    setSelectedResourceIdsByTask((current) => {
-      const currentSelection = current[task.id] ?? [];
-      const activeResourceIds = new Set(activeResources.map((resource) => resource.id));
-      const selectionStillActive = currentSelection.filter((resourceId) => activeResourceIds.has(resourceId));
-      const initialSelection = getInitialSelectedResourceIds(task.id, resources, assignments)
-        .filter((resourceId) => activeResourceIds.has(resourceId));
+    const activeResourceIds = new Set(activeResources.map((resource) => resource.id));
+    const initialSelection = getInitialSelectedResourceIds(task.id, resources, assignments)
+      .filter((resourceId) => activeResourceIds.has(resourceId));
 
-      return {
-        ...current,
-        [task.id]: selectionStillActive.length > 0 ? selectionStillActive : initialSelection,
-      };
-    });
+    setAssignmentSelectionTaskId(task.id);
+    setSelectedAssignmentResourceIds(initialSelection);
+    setAssignmentSubmitting(false);
     setAssignmentError(null);
   }, [activeResources, assignments, effectiveReadOnly, resources, setAssignmentError]);
 
   const closeAssignmentSelector = useCallback(() => {
     setAssignmentSelectionTaskId(null);
+    setSelectedAssignmentResourceIds([]);
+    setAssignmentSubmitting(false);
   }, []);
 
-  const handleAssignmentResourceChange = useCallback((taskId: string, resourceIds: string[]) => {
-    setSelectedResourceIdsByTask((current) => ({
-      ...current,
-      [taskId]: resourceIds,
-    }));
+  const handleAssignmentResourceChange = useCallback((resourceIds: string[]) => {
+    setSelectedAssignmentResourceIds(resourceIds);
     setAssignmentError(null);
   }, [setAssignmentError]);
 
@@ -517,15 +507,14 @@ export function ProjectWorkspace({
     }
 
     const nextResourceIds = Array.from(new Set(selectedResourceIds.map((resourceId) => resourceId.trim()).filter(Boolean)));
-    if (nextResourceIds.length === 0) {
-      setAssignmentError('Выберите активный ресурс перед назначением.');
-      return;
-    }
 
     const state = useProjectStore.getState();
-    const activeResourceIds = new Set(state.resources.filter((resource) => resource.isActive).map((resource) => resource.id));
+    const activeResourceIds = new Set(
+      getAssignableResources(state.resources, workspace.kind === 'project' ? workspace.projectId : null)
+        .map((resource) => resource.id),
+    );
     if (nextResourceIds.some((resourceId) => !activeResourceIds.has(resourceId))) {
-      setAssignmentError('Можно назначить только активный ресурс.');
+      setAssignmentError('invalid_resource_selection: Можно назначить только активный ресурс текущего проекта.');
       return;
     }
     const childLeafIds = collectDescendantLeafIds(tasks, task.id);
@@ -561,22 +550,34 @@ export function ProjectWorkspace({
       }
 
       if (isParentTask) {
-        const nextAssignments = data.taskAssignments?.flatMap((entry) => entry.assignments) ?? [];
+        const nextAssignments = Array.isArray(data.taskAssignments)
+          ? data.taskAssignments.flatMap((entry) => Array.isArray(entry.assignments) ? entry.assignments : [])
+          : null;
+        if (!nextAssignments) {
+          setAssignmentError('malformed_assignment_response: Сервер вернул назначения в неизвестном формате.');
+          return;
+        }
         const unaffectedAssignments = state.assignments.filter((assignment) => !childLeafIds.includes(assignment.taskId));
         setAssignments([...unaffectedAssignments, ...nextAssignments]);
       } else {
-        const nextAssignments = data.assignments ?? [];
+        if (!Array.isArray(data.assignments)) {
+          setAssignmentError('malformed_assignment_response: Сервер вернул назначения в неизвестном формате.');
+          return;
+        }
+        const nextAssignments = data.assignments;
         const unaffectedAssignments = state.assignments.filter((assignment) => assignment.taskId !== task.id);
         setAssignments([...unaffectedAssignments, ...nextAssignments]);
       }
 
+      setAssignmentError(null);
       setAssignmentSelectionTaskId(null);
+      setSelectedAssignmentResourceIds([]);
     } catch {
       setAssignmentError('network_failure: Не удалось сохранить назначения ресурсов.');
     } finally {
       setAssignmentSubmitting(false);
     }
-  }, [accessToken, effectiveReadOnly, setAssignmentError, setAssignments, tasks]);
+  }, [accessToken, effectiveReadOnly, setAssignmentError, setAssignments, tasks, workspace]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
     if (effectiveReadOnly || chatDisabled || !showChat) {
@@ -850,7 +851,7 @@ export function ProjectWorkspace({
                 error={assignmentError}
                 inactiveAssignedResources={selectedAssignmentResourceGroups.inactiveAssignedResources}
                 onCancel={closeAssignmentSelector}
-                onSelectionChange={(resourceIds) => handleAssignmentResourceChange(selectedAssignmentTask.id, resourceIds)}
+                onSelectionChange={handleAssignmentResourceChange}
                 onSubmit={(resourceIds) => {
                   void handleAssignResources(selectedAssignmentTask, resourceIds);
                 }}
