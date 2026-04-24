@@ -275,6 +275,14 @@ async function unmountApp(root: Root): Promise<void> {
   });
 }
 
+async function flushPlannerEffects(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 beforeEach(() => {
   plannerWorkspaceSpy.mockClear();
   projectWorkspaceSpy.mockClear();
@@ -396,6 +404,198 @@ afterEach(() => {
 });
 
 describe('ResourcePlanner workspace integration', () => {
+  it('fetches the planner with an explicit default scope and switches scopes deterministically', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        const scope = url.includes('scope=current-project') ? 'current-project' : 'all-projects';
+        return { ok: true, json: async () => ({ projectId: 'project-1', scope, workspaceUserId: 'user-1', resources: [] }) } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+
+    await flushPlannerEffects();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=all-projects', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }));
+    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toContain('Все проекты');
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Во всех доступных проектах');
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=current-project', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }));
+    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toContain('Текущий проект');
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('В текущем проекте');
+
+    await unmountApp(root);
+  });
+
+  it('shows a scoped loading state while a scope switch is in flight', async () => {
+    let resolveCurrentProject: ((response: Response) => void) | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner?scope=current-project')) {
+        return new Promise<Response>((resolve) => {
+          resolveCurrentProject = resolve;
+        });
+      }
+      if (url.includes('/api/resources/planner')) {
+        return { ok: true, json: async () => ({ projectId: 'project-1', scope: 'all-projects', workspaceUserId: 'user-1', resources: [] }) } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="planner-loading-state"]')?.textContent).toContain('Текущий проект');
+    expect(container.querySelector('[data-testid="resource-management-panel"]')).not.toBeNull();
+
+    await act(async () => {
+      resolveCurrentProject?.({ ok: true, json: async () => ({ projectId: 'project-1', scope: 'current-project', workspaceUserId: 'user-1', resources: [] }) } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('В текущем проекте');
+
+    await unmountApp(root);
+  });
+
+  it('retries failed planner fetches with the selected scope while preserving catalog state', async () => {
+    let currentProjectAttempts = 0;
+    let resolveRetry: ((response: Response) => void) | null = null;
+    const existingShared = {
+      id: 'resource-existing',
+      userId: 'user-1',
+      projectId: null,
+      scope: 'shared' as const,
+      name: 'Shared Crew',
+      type: 'human' as const,
+      isActive: true,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+      deactivatedAt: null,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner?scope=current-project')) {
+        currentProjectAttempts += 1;
+        if (currentProjectAttempts === 1) {
+          return { ok: false, status: 503, json: async () => ({ error: 'planner temporarily unavailable' }) } as Response;
+        }
+        return new Promise<Response>((resolve) => {
+          resolveRetry = resolve;
+        });
+      }
+      if (url.includes('/api/resources/planner')) {
+        return { ok: true, json: async () => ({ projectId: 'project-1', scope: 'all-projects', workspaceUserId: 'user-1', resources: [] }) } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: [existingShared] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    expect(container.querySelector('[data-testid="planner-error-state"]')?.textContent).toContain('planner temporarily unavailable');
+    expect(container.querySelector('[data-testid="resource-catalog-list"]')?.textContent).toContain('Shared Crew');
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-retry-button"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="planner-loading-state"]')?.textContent).toContain('Текущий проект');
+    expect(container.querySelector('[data-testid="resource-catalog-list"]')?.textContent).toContain('Shared Crew');
+
+    await act(async () => {
+      resolveRetry?.({ ok: true, json: async () => ({ projectId: 'project-1', scope: 'current-project', workspaceUserId: 'user-1', resources: [] }) } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=current-project', expect.any(Object));
+    expect(currentProjectAttempts).toBe(2);
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('В текущем проекте');
+    expect(container.querySelector('[data-testid="resource-catalog-list"]')?.textContent).toContain('Shared Crew');
+
+    await unmountApp(root);
+  });
+
+  it('surfaces mismatched planner scopes as malformed payload errors', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return { ok: true, json: async () => ({ projectId: 'project-1', scope: 'current-project', workspaceUserId: 'user-1', resources: [] }) } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+
+    await flushPlannerEffects();
+
+    expect(container.querySelector('[data-testid="planner-error-state"]')?.textContent ?? '').toContain('Planner payload was malformed for the selected scope.');
+
+    await unmountApp(root);
+  });
+
   it('creates resources from the resource screen with the selected scope and refreshes the catalog', async () => {
     const existingShared = {
       id: 'resource-existing',

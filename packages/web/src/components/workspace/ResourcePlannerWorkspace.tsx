@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { ProjectResource, ResourcePlannerResult } from '../../lib/apiTypes.ts';
+import type { PlannerScope, ProjectResource, ResourcePlannerResult } from '../../lib/apiTypes.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
@@ -14,9 +14,28 @@ interface ResourcePlannerWorkspaceProps {
 }
 
 type PlannerState =
-  | { status: 'loading'; data: null; error: null }
-  | { status: 'error'; data: null; error: string }
+  | { status: 'loading'; data: ResourcePlannerResult | null; error: null }
+  | { status: 'error'; data: ResourcePlannerResult | null; error: string }
   | { status: 'ready'; data: ResourcePlannerResult; error: null };
+
+const PLANNER_SCOPE_OPTIONS: Array<{ scope: PlannerScope; label: string; description: string; emptyCopy: string }> = [
+  {
+    scope: 'current-project',
+    label: 'Текущий проект',
+    description: 'Показывает shared-ресурсы и проектные ресурсы только выбранного проекта.',
+    emptyCopy: 'В текущем проекте пока нет ресурсов с назначениями для planner view.',
+  },
+  {
+    scope: 'all-projects',
+    label: 'Все проекты',
+    description: 'Показывает shared-ресурсы workspace и их интервалы по доступным проектам.',
+    emptyCopy: 'Во всех доступных проектах пока нет shared-ресурсов с назначениями в planner view.',
+  },
+];
+
+function getPlannerScopeCopy(scope: PlannerScope) {
+  return PLANNER_SCOPE_OPTIONS.find((option) => option.scope === scope) ?? PLANNER_SCOPE_OPTIONS[1];
+}
 
 function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null {
   if (!payload || typeof payload !== 'object') {
@@ -145,6 +164,7 @@ function formatIntervalLabel(startDate: string, endDate: string): string {
 }
 
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
+  const [plannerScope, setPlannerScope] = useState<PlannerScope>('all-projects');
   const [state, setState] = useState<PlannerState>({ status: 'loading', data: null, error: null });
   const projects = useAuthStore((store) => store.projects);
   const resources = useProjectStore((store) => store.resources);
@@ -189,59 +209,51 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     }
   }, [accessToken, projectId, setResources]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadPlanner = useCallback(async (scope: PlannerScope, options: { keepData?: boolean } = {}) => {
+    if (!accessToken) {
+      setState({ status: 'error', data: null, error: 'Planner requires an authenticated project session.' });
+      return;
+    }
 
-    const loadPlanner = async () => {
-      if (!accessToken) {
-        if (!cancelled) {
-          setState({ status: 'error', data: null, error: 'Planner requires an authenticated project session.' });
-        }
-        return;
+    setState((current) => ({
+      status: 'loading',
+      data: options.keepData ? current.data : null,
+      error: null,
+    }));
+
+    try {
+      const response = await fetch(`/api/resources/planner?scope=${encodeURIComponent(scope)}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
       }
 
-      setState({ status: 'loading', data: null, error: null });
-
-      try {
-        const response = await fetch('/api/resources/planner', {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        const body = await response.json().catch(() => null);
-        if (!response.ok) {
-          const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-            ? body.error
-            : `HTTP ${response.status}`;
-          throw new Error(errorMessage);
-        }
-
-        const normalized = normalizePlannerPayload(body);
-        if (!normalized) {
-          throw new Error('Planner payload was malformed.');
-        }
-
-        if (!cancelled) {
-          setState({ status: 'ready', data: normalized, error: null });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setState({
-            status: 'error',
-            data: null,
-            error: error instanceof Error ? error.message : 'Planner failed to load.',
-          });
-        }
+      const normalized = normalizePlannerPayload(body);
+      if (!normalized || normalized.scope !== scope || normalized.projectId !== projectId) {
+        throw new Error('Planner payload was malformed for the selected scope.');
       }
-    };
 
-    void loadPlanner();
-
-    return () => {
-      cancelled = true;
-    };
+      setState({ status: 'ready', data: normalized, error: null });
+    } catch (error) {
+      setState((current) => ({
+        status: 'error',
+        data: options.keepData ? current.data : null,
+        error: error instanceof Error ? error.message : 'Planner failed to load.',
+      }));
+    }
   }, [accessToken, projectId]);
+
+  useEffect(() => {
+    void loadPlanner(plannerScope);
+  }, [loadPlanner, plannerScope]);
 
   useEffect(() => {
     void loadResourceCatalog();
@@ -296,34 +308,36 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     }
   }, [accessToken, creatingResource, loadResourceCatalog, projectId, resourceNameDraft, resourceTargetDraft]);
 
-  const resourceCount = state.status === 'ready' ? state.data.resources.length : 0;
+  const selectedScopeCopy = getPlannerScopeCopy(plannerScope);
+  const displayedPlannerData = state.data;
+  const resourceCount = displayedPlannerData ? displayedPlannerData.resources.length : 0;
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
   const sharedResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'shared').length, [resources]);
   const projectResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'project').length, [resources]);
   const intervalCount = useMemo(() => {
-    if (state.status !== 'ready') {
+    if (!displayedPlannerData) {
       return 0;
     }
 
-    return state.data.resources.reduce((total, resource) => total + resource.intervals.length, 0);
-  }, [state]);
+    return displayedPlannerData.resources.reduce((total, resource) => total + resource.intervals.length, 0);
+  }, [displayedPlannerData]);
   const conflictingResourceCount = useMemo(() => {
-    if (state.status !== 'ready') {
+    if (!displayedPlannerData) {
       return 0;
     }
 
-    return state.data.resources.filter((resource) => resource.hasConflicts).length;
-  }, [state]);
+    return displayedPlannerData.resources.filter((resource) => resource.hasConflicts).length;
+  }, [displayedPlannerData]);
   const conflictIntervalCount = useMemo(() => {
-    if (state.status !== 'ready') {
+    if (!displayedPlannerData) {
       return 0;
     }
 
-    return state.data.resources.reduce(
+    return displayedPlannerData.resources.reduce(
       (total, resource) => total + resource.intervals.filter((interval) => interval.hasConflict).length,
       0,
     );
-  }, [state]);
+  }, [displayedPlannerData]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -331,9 +345,9 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Planner</p>
-            <h1 className="text-lg font-semibold text-slate-900" data-testid="planner-title">Загрузка ресурсов по проектам</h1>
+            <h1 className="text-lg font-semibold text-slate-900" data-testid="planner-title">Ресурсный planner: {selectedScopeCopy.label}</h1>
             <p className="text-sm text-slate-600" data-testid="planner-description">
-              Planner показывает только shared-ресурсы текущего workspace и их интервалы по sibling-проектам.
+              {selectedScopeCopy.description}
             </p>
           </div>
           <button
@@ -425,25 +439,66 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           </div>
         </section>
 
+        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="planner-scope-controls">
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-slate-900">Область planner</legend>
+            <p className="text-xs text-slate-500" id="planner-scope-help">
+              Переключение всегда отправляет явный scope в planner API и не меняет каталог ресурсов.
+            </p>
+            <div className="grid gap-2 md:grid-cols-2" role="radiogroup" aria-describedby="planner-scope-help">
+              {PLANNER_SCOPE_OPTIONS.map((option) => (
+                <label
+                  key={option.scope}
+                  className={option.scope === plannerScope
+                    ? 'flex cursor-pointer flex-col gap-1 rounded-lg border border-slate-900 bg-slate-900 px-3 py-2 text-white'
+                    : 'flex cursor-pointer flex-col gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50'}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="radio"
+                      name="planner-scope"
+                      value={option.scope}
+                      checked={plannerScope === option.scope}
+                      onChange={() => setPlannerScope(option.scope)}
+                      className="accent-slate-900"
+                      data-testid={`planner-scope-${option.scope}`}
+                    />
+                    {option.label}
+                  </span>
+                  <span className={option.scope === plannerScope ? 'text-xs text-slate-200' : 'text-xs text-slate-500'}>{option.description}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </section>
+
         {state.status === 'loading' && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-loading-state">
-            Загружаем planner view по shared-ресурсам текущего workspace…
+            Загружаем planner view: {selectedScopeCopy.label}…
           </div>
         )}
 
         {state.status === 'error' && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700" data-testid="planner-error-state">
-            Не удалось загрузить planner: {state.error}
+          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700" data-testid="planner-error-state" role="alert">
+            <div>Не удалось загрузить planner для области «{selectedScopeCopy.label}»: {state.error}</div>
+            <button
+              type="button"
+              className="mt-3 inline-flex h-9 items-center justify-center rounded-md border border-red-300 bg-white px-3 text-sm font-medium text-red-800 transition-colors hover:bg-red-50"
+              data-testid="planner-retry-button"
+              onClick={() => { void loadPlanner(plannerScope, { keepData: true }); }}
+            >
+              Повторить загрузку
+            </button>
           </div>
         )}
 
-        {state.status === 'ready' && state.data.resources.length === 0 && (
+        {state.status === 'ready' && displayedPlannerData && displayedPlannerData.resources.length === 0 && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-empty-state">
-            В текущем workspace пока нет shared-ресурсов с назначениями в planner view.
+            {selectedScopeCopy.emptyCopy}
           </div>
         )}
 
-        {state.status === 'ready' && state.data.resources.length > 0 && (
+        {state.status === 'ready' && displayedPlannerData && displayedPlannerData.resources.length > 0 && (
           <div className="space-y-4" data-testid="planner-data-state">
             <div className="grid gap-3 md:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
@@ -464,7 +519,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
               </div>
             </div>
 
-            {state.data.resources.map((resource) => (
+            {displayedPlannerData.resources.map((resource) => (
               <section
                 key={resource.resourceId}
                 className="overflow-hidden rounded-xl border border-slate-200 bg-white"
