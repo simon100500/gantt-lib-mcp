@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   buildTaskRangeFromEnd,
   buildTaskRangeFromStart,
+  getTaskDuration,
   moveTaskWithCascade,
   parseDateOnly,
   recalculateProjectSchedule,
@@ -183,14 +184,14 @@ function normalizeCreatedTask(task: Task, options: CoreOptions): Task {
     });
   }
 
-  const startDate = parseDateOnly(task.startDate as string);
-  const endDate = parseDateOnly(task.endDate as string);
-  const duration = Math.max(
-    1,
-    Math.round((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+  const duration = getTaskDuration(
+    task.startDate as string,
+    task.endDate as string,
+    options.businessDays ?? false,
+    options.weekendPredicate,
   );
   const normalizedRange = buildTaskRangeFromStart(
-    startDate,
+    parseDateOnly(task.startDate as string),
     duration,
     options.businessDays ?? false,
     options.weekendPredicate,

@@ -649,13 +649,49 @@ describe('CommandService command dispatch', () => {
         {
           name: 'Weekend Task',
           startDate: '2026-04-06',
-          endDate: '2026-04-07',
+          endDate: '2026-04-06',
         },
       ],
     );
   });
 
-  it('create_tasks_batch normalizes new tasks through core scheduling in business-day mode', async () => {
+  it('create_task converts the selected span to working days in business-day mode', async () => {
+    const service = new CommandService() as any;
+    const isWeekend = (d: Date) => { const day = d.getUTCDay(); return day === 0 || day === 6; };
+
+    const result = await service.executeCommand(
+      {
+        type: 'create_task',
+        task: {
+          name: 'Five Calendar Days',
+          startDate: '2026-04-24',
+          endDate: '2026-04-28',
+          dependencies: [],
+        },
+      },
+      [],
+      { businessDays: true, weekendPredicate: isWeekend },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(
+      result.changedTasks.map((task: Task) => ({
+        name: task.name,
+        startDate: task.startDate,
+        endDate: task.endDate,
+      })),
+      [
+        {
+          name: 'Five Calendar Days',
+          startDate: '2026-04-24',
+          endDate: '2026-04-28',
+        },
+      ],
+    );
+  });
+
+  it('create_tasks_batch preserves new task ranges and only schedules linked successors in business-day mode', async () => {
     const service = new CommandService() as any;
     const isWeekend = (d: Date) => { const day = d.getUTCDay(); return day === 0 || day === 6; };
 
@@ -694,8 +730,8 @@ describe('CommandService command dispatch', () => {
         endDate: task.endDate,
       })),
       [
-        { id: 'A', startDate: '2026-04-06', endDate: '2026-04-08' },
-        { id: 'B', startDate: '2026-04-10', endDate: '2026-04-13' },
+        { id: 'A', startDate: '2026-04-06', endDate: '2026-04-06' },
+        { id: 'B', startDate: '2026-04-08', endDate: '2026-04-08' },
       ],
     );
   });
