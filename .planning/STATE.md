@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: active
-last_updated: "2026-04-25T07:51:00Z"
+last_updated: "2026-04-25T08:01:23Z"
 last_activity: 2026-04-25
 progress:
   total_phases: 18
   completed_phases: 16
   total_plans: 65
-  completed_plans: 62
-  percent: 95
+  completed_plans: 63
+  percent: 96
 ---
 
 # Project State: gantt-lib MCP Server
@@ -33,12 +33,12 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 48
-Plan: 03
+Plan: 04
 Status: Phase 48 in progress
 Last activity: 2026-04-25
 Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
-Progress: [█████████░] 95%
+Progress: [█████████░] 96%
 
 ---
 
@@ -191,6 +191,9 @@ packages/
 - [Phase 48]: Resource planner item metadata must flow through getPlannerItemMetadata before conflict correction callbacks.
 - [Phase 48]: Resource planner filters are client-only over mapped gantt-lib timeline resources; scope switching is the only filter path that refetches `/api/resources/planner`.
 - [Phase 48]: Assignment details actions derive PlannerCorrectionTarget from typed resource planner metadata instead of DOM text.
+- [Phase 48]: Resource catalog UI is split into ResourceCatalogPanel while ResourcePlannerWorkspace owns authenticated create/PATCH mutations and backend-authoritative reloads.
+- [Phase 48]: Catalog PATCH responses are normalized defensively as either ProjectResource or `{ resource }` before catalog/planner reload.
+- [Phase 48]: Failed catalog mutations show inline catalog alerts and preserve the last successful catalog/planner data.
 
 ## Performance Metrics
 
@@ -229,13 +232,14 @@ packages/
 | Phase 47 P03 | 18min | 2 tasks | 7 files |
 | 48-resource-screen | 01 | 5min | 2 | 4 | 2026-04-25 |
 | 48-resource-screen | 02 | 7min | 2 | 5 | 2026-04-25 |
+| 48-resource-screen | 03 | 8min | 2 | 3 | 2026-04-25 |
 
 ## Session
 
-- Last session: 2026-04-25T10:51:00+03:00
-- Stopped at: Completed 48-02-PLAN.md
-- Resume file: .planning/phases/48-resource-screen/48-03-PLAN.md
+- Last session: 2026-04-25T11:01:23+03:00
+- Stopped at: Completed 48-03-PLAN.md
+- Resume file: .planning/phases/48-resource-screen/48-04-PLAN.md
 
 ---
 
-*Last updated: 2026-04-25 — Phase 48 Plan 02 completed*
+*Last updated: 2026-04-25 — Phase 48 Plan 03 completed*
