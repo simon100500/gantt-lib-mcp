@@ -633,14 +633,14 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(root);
   });
 
-  it('creates resources from the resource screen with the selected scope and refreshes the catalog', async () => {
+  it('creates resources from the resource screen with the selected scope and type, then refreshes catalog and planner', async () => {
     const existingShared = {
       id: 'resource-existing',
       userId: 'user-1',
       projectId: null,
       scope: 'shared' as const,
       name: 'Shared Crew',
-      type: 'human' as const,
+      type: 'equipment' as const,
       isActive: true,
       createdAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-04-01T00:00:00.000Z',
@@ -703,6 +703,7 @@ describe('ResourcePlanner workspace integration', () => {
 
     const input = container.querySelector('[data-testid="resource-create-name-input"]') as HTMLInputElement;
     const targetSelect = container.querySelector('[data-testid="resource-create-target-select"]') as HTMLSelectElement;
+    const typeSelect = container.querySelector('[data-testid="resource-create-type-select"]') as HTMLSelectElement;
     const submit = container.querySelector('[data-testid="resource-create-submit"]') as HTMLButtonElement;
 
     await act(async () => {
@@ -710,6 +711,8 @@ describe('ResourcePlanner workspace integration', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(targetSelect, 'project-2');
       targetSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(typeSelect, 'equipment');
+      typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -722,11 +725,12 @@ describe('ResourcePlanner workspace integration', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/resources', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ name: 'Local Crane', type: 'human', scope: 'project', projectId: 'project-2' }),
+      body: JSON.stringify({ name: 'Local Crane', type: 'equipment', scope: 'project', projectId: 'project-2' }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/resources?projectId=project-2', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner?scope=all-projects'))).toHaveLength(2);
     expect(useProjectStore.getState().resources.map((resource) => resource.id).sort()).toEqual(['resource-existing', 'resource-new']);
     expect(container.querySelector('[data-testid="resource-catalog-summary"]')?.textContent).toContain('Project: 1');
     expect(input.value).toBe('');
@@ -1016,6 +1020,132 @@ describe('ResourcePlanner workspace integration', () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner'))).toHaveLength(plannerFetchesBeforeFilter + 1);
 
     await unmountApp(root);
+  });
+
+  it('shows catalog resource type, scope, status, assignment count, conflict count, and blocks readonly creation', async () => {
+    const catalogResources = [
+      {
+        id: 'resource-human',
+        userId: 'user-1',
+        projectId: null,
+        scope: 'shared' as const,
+        name: 'Shared Crew',
+        type: 'human' as const,
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: null,
+      },
+      {
+        id: 'resource-material',
+        userId: 'user-1',
+        projectId: 'project-1',
+        scope: 'project' as const,
+        name: 'Concrete',
+        type: 'material' as const,
+        isActive: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: '2026-04-02T00:00:00.000Z',
+      },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'all-projects',
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-human',
+                resourceName: 'Shared Crew',
+                hasConflicts: true,
+                conflictCount: 1,
+                intervals: [
+                  {
+                    assignmentId: 'assignment-1',
+                    resourceId: 'resource-human',
+                    resourceName: 'Shared Crew',
+                    projectId: 'project-1',
+                    projectName: 'Project 1',
+                    taskId: 'task-1',
+                    taskName: 'Install',
+                    startDate: '2026-04-01',
+                    endDate: '2026-04-02',
+                    assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                    hasConflict: true,
+                    conflictCount: 1,
+                    conflictAssignmentIds: ['assignment-2'],
+                  },
+                  {
+                    assignmentId: 'assignment-3',
+                    resourceId: 'resource-human',
+                    resourceName: 'Shared Crew',
+                    projectId: 'project-1',
+                    projectName: 'Project 1',
+                    taskId: 'task-3',
+                    taskName: 'Inspect',
+                    startDate: '2026-04-03',
+                    endDate: '2026-04-03',
+                    assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                    hasConflict: false,
+                    conflictCount: 0,
+                    conflictAssignmentIds: [],
+                  },
+                ],
+              },
+              {
+                resourceId: 'resource-material',
+                resourceName: 'Concrete',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: catalogResources }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: null,
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    expect(container.querySelector('[data-testid="resource-catalog-readonly"]')?.textContent).toContain('Войдите, чтобы изменять ресурсы');
+    expect(container.querySelector('[data-testid="resource-create-submit"]')).toHaveProperty('disabled', true);
+
+    await unmountApp(root);
+
+    const rendered = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Shared Crew');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Люди');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('shared');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Активен');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Назначений: 2');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Конфликтов: 1');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-material"]')?.textContent).toContain('Материалы');
+    expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-material"]')?.textContent).toContain('Неактивен');
+
+    await unmountApp(rendered.root);
   });
 
   it('opens and closes assignment details accessibly while preserving conflict correction metadata', async () => {
