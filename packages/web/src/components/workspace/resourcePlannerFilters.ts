@@ -17,7 +17,7 @@ function normalizeSearchText(value: string): string {
 }
 
 function includesSearchText(value: string | null | undefined, query: string): boolean {
-  return Boolean(value) && value.toLocaleLowerCase().includes(query);
+  return typeof value === 'string' && value.toLocaleLowerCase().includes(query);
 }
 
 function resourceMatchesQuery(resource: ResourcePlannerTimelineResource, query: string): boolean {
