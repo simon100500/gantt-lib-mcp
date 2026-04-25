@@ -17,9 +17,10 @@ vi.mock('gantt-lib', async () => {
     ...actual,
     GanttChart: (props: {
       mode?: string;
-      resources?: Array<{ id: string; name: string; items: Array<{ id: string; title: string }> }>;
+      resources?: Array<{ id: string; name: string; items: Array<{ id: string; title: string; subtitle?: string }> }>;
       renderItem?: (item: { id: string; title: string }) => React.ReactNode;
       getItemClassName?: (item: { id: string; title: string }) => string | undefined;
+      onResourceItemClick?: (item: { id: string; title: string; subtitle?: string }) => void;
     }) => {
       ganttLibChartSpy(props);
       return (
@@ -32,8 +33,22 @@ vi.mock('gantt-lib', async () => {
                   key={item.id}
                   className={props.getItemClassName?.(item)}
                   data-testid={`gantt-resource-item-${item.id}`}
+                  role={props.onResourceItemClick ? 'button' : undefined}
+                  tabIndex={props.onResourceItemClick ? 0 : undefined}
+                  onClick={() => props.onResourceItemClick?.(item)}
+                  onKeyDown={(event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && props.onResourceItemClick) {
+                      event.preventDefault();
+                      props.onResourceItemClick(item);
+                    }
+                  }}
                 >
-                  {props.renderItem ? props.renderItem(item) : item.title}
+                  {props.renderItem ? props.renderItem(item) : (
+                    <>
+                      <span>{item.title}</span>
+                      {item.subtitle ? <span>{item.subtitle}</span> : null}
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -470,7 +485,7 @@ describe('ResourcePlanner workspace integration', () => {
     expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
 
     await act(async () => {
-      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
     await flushPlannerEffects();
@@ -513,12 +528,11 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
-      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
     expect(container.querySelector('[data-testid="planner-loading-state"]')?.textContent).toContain('Текущий проект');
-    expect(container.querySelector('[data-testid="resource-management-panel"]')).not.toBeNull();
 
     await act(async () => {
       resolveCurrentProject?.({ ok: true, json: async () => ({ projectId: 'project-1', scope: 'current-project', workspaceUserId: 'user-1', resources: [] }) } as Response);
@@ -576,10 +590,15 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
-      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
     await flushPlannerEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-open-catalog"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
 
     expect(container.querySelector('[data-testid="planner-error-state"]')?.textContent).toContain('planner temporarily unavailable');
     expect(container.querySelector('[data-testid="resource-catalog-list"]')?.textContent).toContain('Shared Crew');
@@ -699,6 +718,11 @@ describe('ResourcePlanner workspace integration', () => {
       projectId: 'project-1',
       onBackToProject: vi.fn(),
       onCorrectConflict: vi.fn(),
+    });
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-open-catalog"]') as HTMLButtonElement).click();
+      await Promise.resolve();
     });
 
     const input = container.querySelector('[data-testid="resource-create-name-input"]') as HTMLInputElement;
@@ -855,8 +879,6 @@ describe('ResourcePlanner workspace integration', () => {
       onCorrectConflict,
     });
 
-    expect(container.querySelector('[data-testid="planner-conflict-resource-count"]')?.textContent).toBe('1');
-    expect(container.querySelector('[data-testid="planner-conflict-interval-count"]')?.textContent).toBe('1');
     expect(container.querySelector('[aria-label="Ресурсный календарь"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="resource-timeline-grid"]')).toBeNull();
     expect(container.querySelector('[data-testid="gantt-lib-resource-planner"]')).not.toBeNull();
@@ -881,7 +903,7 @@ describe('ResourcePlanner workspace integration', () => {
     }));
 
     await act(async () => {
-      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
@@ -1006,7 +1028,13 @@ describe('ResourcePlanner workspace integration', () => {
     const plannerFetchesBeforeFilter = fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner')).length;
 
     await act(async () => {
-      const input = container.querySelector('[data-testid="planner-filter-query"]') as HTMLInputElement;
+      (container.querySelector('[data-testid="planner-open-filter"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      const input = document.querySelector('input[data-testid="planner-filter-query"]') as HTMLInputElement;
+      expect(input).not.toBeNull();
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'crane');
       input.dispatchEvent(new Event('input', { bubbles: true }));
       await Promise.resolve();
@@ -1017,7 +1045,7 @@ describe('ResourcePlanner workspace integration', () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner'))).toHaveLength(plannerFetchesBeforeFilter);
 
     await act(async () => {
-      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
     await flushPlannerEffects();
@@ -1128,6 +1156,11 @@ describe('ResourcePlanner workspace integration', () => {
     });
     await flushPlannerEffects();
 
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-open-catalog"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
     expect(container.querySelector('[data-testid="resource-catalog-readonly"]')?.textContent).toContain('Войдите, чтобы изменять ресурсы');
     expect(container.querySelector('[data-testid="resource-create-submit"]')).toHaveProperty('disabled', true);
 
@@ -1140,6 +1173,11 @@ describe('ResourcePlanner workspace integration', () => {
       onCorrectConflict: vi.fn(),
     });
     await flushPlannerEffects();
+
+    await act(async () => {
+      (rendered.container.querySelector('[data-testid="planner-open-catalog"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
 
     expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Shared Crew');
     expect(rendered.container.querySelector('[data-testid="resource-catalog-row-resource-human"]')?.textContent).toContain('Люди');
@@ -1233,6 +1271,11 @@ describe('ResourcePlanner workspace integration', () => {
       onCorrectConflict: vi.fn(),
     });
     await flushPlannerEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-open-catalog"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
 
     await act(async () => {
       const renameInput = container.querySelector('[data-testid="resource-rename-input-resource-1"]') as HTMLInputElement;
@@ -1370,6 +1413,11 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
+      (container.querySelector('[data-testid="planner-open-catalog"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
       const renameInput = container.querySelector('[data-testid="resource-rename-input-resource-1"]') as HTMLInputElement;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(renameInput, 'Rejected Name');
       renameInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1442,7 +1490,7 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
-      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
@@ -1472,7 +1520,7 @@ describe('ResourcePlanner workspace integration', () => {
     expect(container.querySelector('[data-testid="assignment-details-panel"]')).toBeNull();
 
     await act(async () => {
-      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       await Promise.resolve();
     });
 
@@ -1897,6 +1945,7 @@ describe('ResourcePlanner workspace integration', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    const readonlyCallCount = ganttLibChartSpy.mock.calls.length;
     const readonlyRender = await renderPlannerWorkspace({
       accessToken: null,
       projectId: 'project-1',
@@ -1904,7 +1953,8 @@ describe('ResourcePlanner workspace integration', () => {
       onCorrectConflict: vi.fn(),
     });
     await flushPlannerEffects();
-    expect((ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as { onResourceItemMove?: unknown } | undefined)?.onResourceItemMove).toBeUndefined();
+    const readonlyCall = ganttLibChartSpy.mock.calls[readonlyCallCount]?.[0] as { onResourceItemMove?: unknown } | undefined;
+    expect(readonlyCall?.onResourceItemMove).toBeUndefined();
     await unmountApp(readonlyRender.root);
 
     const lockedItem = {
@@ -2019,7 +2069,7 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
-      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 

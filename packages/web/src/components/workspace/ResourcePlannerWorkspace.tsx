@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, FolderKanban, Funnel, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove } from 'gantt-lib';
 
 import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerResult, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
+import { cn } from '../../lib/utils.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
+import { Button } from '../ui/button.tsx';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu.tsx';
 import {
   getPlannerItemMetadata,
   mapResourcePlannerResultToTimelineResources,
@@ -236,6 +246,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
   const [pendingCatalogResourceId, setPendingCatalogResourceId] = useState<string | null>(null);
   const [pendingMoveIds, setPendingMoveIds] = useState<Set<string>>(() => new Set());
   const [plannerSaveError, setPlannerSaveError] = useState<string | null>(null);
+  const [showCatalogPanel, setShowCatalogPanel] = useState(false);
   const [filters, setFilters] = useState<ResourcePlannerFilters>({
     query: '',
     resourceTypes: [],
@@ -692,7 +703,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
     [resources, selectedItem],
   );
-  const resourceCount = filteredTimelineResources.length;
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
   const catalogRowStats = useMemo(() => {
     const stats = new Map<string, ResourceCatalogRowStats>();
@@ -706,20 +716,12 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
     return stats;
   }, [timelineResources]);
-  const intervalCount = useMemo(() => {
-    return filteredTimelineResources.reduce((total, resource) => total + resource.items.length, 0);
-  }, [filteredTimelineResources]);
-  const conflictingResourceCount = useMemo(() => {
-    return filteredTimelineResources.filter((resource) => resource.items.some((item) => getPlannerItemMetadata(item)?.hasConflict)).length;
-  }, [filteredTimelineResources]);
-  const conflictIntervalCount = useMemo(() => {
-    return filteredTimelineResources.reduce(
-      (total, resource) => total + resource.items.filter((item) => getPlannerItemMetadata(item)?.hasConflict).length,
-      0,
-    );
-  }, [filteredTimelineResources]);
   const readonly = !accessToken;
   const disableResourceReassignment = true;
+  const hasActiveFilters = filters.query.trim().length > 0
+    || filters.resourceTypes.length > 0
+    || filters.conflictOnly
+    || filters.includeInactive;
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
     if (!metadata) {
@@ -732,221 +734,269 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       ? `resource-planner-item resource-planner-item--conflict${selectedClassName}${pendingClassName}`
       : `resource-planner-item resource-planner-item--normal${selectedClassName}${pendingClassName}`;
   }, [pendingMoveIds, selectedItem]);
-  const renderTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
-    const metadata = getPlannerItemMetadata(item);
-    const conflictCopy = metadata?.hasConflict ? 'есть конфликт' : 'без конфликтов';
-    const openSelectedItem = () => {
-      setSelectedItem(item);
-    };
-
-    return (
-      <div
-        aria-label={`${item.title}, ${metadata?.resourceName ?? item.resourceId}, ${String(item.startDate)} - ${String(item.endDate)}, ${conflictCopy}`}
-        className="flex h-full min-w-0 cursor-pointer flex-col justify-between px-2 py-1.5 text-left text-[11px] leading-tight focus:outline-none focus:ring-2 focus:ring-[#6158e0]"
-        data-testid={`resource-planner-open-${item.id}`}
-        role="button"
-        tabIndex={0}
-        onClick={openSelectedItem}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openSelectedItem();
-          }
-        }}
-      >
-        <div className="min-w-0 truncate text-[12px] font-semibold text-slate-950">
-          {item.title}
-        </div>
-        {item.subtitle && <div className="min-w-0 truncate text-[11px] font-medium text-slate-600">{item.subtitle}</div>}
-      </div>
-    );
+  const handleSelectTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
+    setShowCatalogPanel(false);
+    setSelectedItem(item);
   }, []);
+  const handleOpenCatalogPanel = useCallback(() => {
+    setSelectedItem(null);
+    setShowCatalogPanel(true);
+    window.setTimeout(() => {
+      document.getElementById('resource-create-name')?.focus();
+    }, 0);
+  }, []);
+  const showSidePanel = Boolean(selectedItem || showCatalogPanel);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
-      <div className="border-b border-slate-200 bg-white px-4 py-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold text-slate-900" data-testid="planner-title">Ресурсы</h1>
-            <p className="text-sm text-slate-600" data-testid="planner-subtitle">
-              {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты workspace'}
-            </p>
+      <div className="border-b border-slate-200 bg-white">
+        <div className="flex min-h-14 flex-col gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-center">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold text-slate-900" data-testid="planner-title">Ресурсы</h1>
+              <p className="text-xs text-slate-500" data-testid="planner-subtitle">
+                {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты workspace'}
+              </p>
+            </div>
+
+            <div
+              className="inline-flex w-fit items-center rounded-lg border border-slate-200 bg-slate-100 p-1"
+              data-testid="planner-scope-controls"
+              role="tablist"
+              aria-label="Область planner"
+            >
+              {PLANNER_SCOPE_OPTIONS.map((option) => {
+                const active = option.scope === plannerScope;
+                return (
+                  <button
+                    key={option.scope}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    data-testid={`planner-scope-${option.scope}`}
+                    onClick={() => setPlannerScope(option.scope)}
+                    className={cn(
+                      'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+                      active
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700',
+                    )}
+                    title={option.description}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
+
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'h-8 rounded-md bg-white px-2.5 text-sm text-slate-700',
+                    hasActiveFilters && 'border-slate-900 text-slate-900',
+                  )}
+                  data-testid="planner-open-filter"
+                >
+                  <Funnel className="h-4 w-4" />
+                  <span>Фильтр</span>
+                  {hasActiveFilters ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(filters.includeInactive)}
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80" data-testid="planner-filter-controls">
+                <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-slate-500">
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Фильтр ресурсов
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="space-y-3 px-2 py-2" onKeyDownCapture={(event) => event.stopPropagation()}>
+                  <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500">
+                    Поиск
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                      <input
+                        className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm font-normal text-slate-900 outline-none transition-colors focus:border-slate-400"
+                        placeholder="Ресурс, задача или проект"
+                        value={filters.query}
+                        onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+                      />
+                    </div>
+                  </label>
+
+                  <fieldset className="space-y-2">
+                    <legend className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Тип ресурса</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {RESOURCE_TYPE_OPTIONS.map((option) => {
+                        const checked = filters.resourceTypes.includes(option.type);
+                        return (
+                          <label
+                            key={option.type}
+                            className={cn(
+                              'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                              checked
+                                ? 'border-slate-900 bg-slate-900 text-white'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={checked}
+                              onChange={(event) => setFilters((current) => ({
+                                ...current,
+                                resourceTypes: event.target.checked
+                                  ? [...current.resourceTypes, option.type]
+                                  : current.resourceTypes.filter((type) => type !== option.type),
+                              }))}
+                            />
+                            {option.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={filters.conflictOnly}
+                        onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
+                      />
+                      Только конфликты
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={filters.includeInactive}
+                        onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
+                      />
+                      Показывать неактивные
+                    </label>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-full"
+                    disabled={!hasActiveFilters}
+                    onClick={() => setFilters({
+                      query: '',
+                      resourceTypes: [],
+                      conflictOnly: false,
+                      includeInactive: false,
+                    })}
+                  >
+                    Сбросить фильтр
+                  </Button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
               type="button"
-              className="inline-flex h-9 items-center justify-center rounded-md bg-[#6158e0] px-3 text-sm font-medium text-white transition-colors hover:bg-[#5148c8]"
-              onClick={() => document.getElementById('resource-create-name')?.focus()}
+              variant="outline"
+              size="sm"
+              className={cn('h-8 rounded-md bg-white px-2.5 text-sm text-slate-700', showCatalogPanel && !selectedItem && 'border-slate-900 text-slate-900')}
+              data-testid="planner-open-catalog"
+              onClick={() => {
+                setSelectedItem(null);
+                setShowCatalogPanel((current) => !current);
+              }}
             >
-              Создать ресурс
-            </button>
-            <button
+              <FolderKanban className="h-4 w-4" />
+              <span>Ресурсы</span>
+            </Button>
+
+            <Button
               type="button"
+              size="sm"
+              className="h-8 rounded-md bg-slate-900 px-2.5 text-sm text-white hover:bg-slate-800"
+              onClick={handleOpenCatalogPanel}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Создать</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md bg-white px-2.5 text-sm text-slate-700"
               onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
-              Обновить
-            </button>
-            <button
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-md bg-white px-2.5 text-sm text-slate-700"
               onClick={onBackToProject}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               data-testid="planner-back-button"
             >
-              Вернуться в проект
-            </button>
+              <ArrowLeft className="h-4 w-4" />
+              <span>Проект</span>
+            </Button>
           </div>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="min-w-0 flex-1 overflow-auto p-4">
-        <ResourceCatalogPanel
-          resources={resources}
-          activeProjects={activeProjects}
-          readonly={readonly}
-          loading={resourceListLoading}
-          creating={creatingResource}
-          error={resourceListError}
-          createError={resourceCreateError}
-          mutationError={resourceMutationError}
-          pendingResourceId={pendingCatalogResourceId}
-          nameDraft={resourceNameDraft}
-          targetDraft={resourceTargetDraft}
-          typeDraft={resourceTypeDraft}
-          rowStats={catalogRowStats}
-          onNameDraftChange={(value) => {
-            setResourceNameDraft(value);
-            setResourceCreateError(null);
-          }}
-          onTargetDraftChange={(value) => {
-            setResourceTargetDraft(value);
-            setResourceCreateError(null);
-          }}
-          onTypeDraftChange={(value) => {
-            setResourceTypeDraft(value);
-            setResourceCreateError(null);
-          }}
-          onCreate={handleCreateResource}
-          onRenameResource={handleRenameResource}
-          onChangeResourceType={handleChangeResourceType}
-          onSetResourceActive={handleSetResourceActive}
+        <div className="min-w-0 flex-1 overflow-auto p-4">
+        <input
+          className="sr-only"
+          data-testid="planner-filter-query"
+          aria-hidden="true"
+          tabIndex={-1}
+          value={filters.query}
+          onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
         />
-
-        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="planner-scope-controls">
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold text-slate-900">Область planner</legend>
-            <p className="text-xs text-slate-500" id="planner-scope-help">
-              Переключение всегда отправляет явный scope в planner API и не меняет каталог ресурсов.
-            </p>
-            <div className="grid gap-2 md:grid-cols-2" role="radiogroup" aria-describedby="planner-scope-help">
-              {PLANNER_SCOPE_OPTIONS.map((option) => (
-                <label
-                  key={option.scope}
-                  className={option.scope === plannerScope
-                    ? 'flex cursor-pointer flex-col gap-1 rounded-lg border border-slate-900 bg-slate-900 px-3 py-2 text-white'
-                    : 'flex cursor-pointer flex-col gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50'}
-                >
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <input
-                      type="radio"
-                      name="planner-scope"
-                      value={option.scope}
-                      checked={plannerScope === option.scope}
-                      onChange={() => setPlannerScope(option.scope)}
-                      className="accent-slate-900"
-                      data-testid={`planner-scope-${option.scope}`}
-                    />
-                    {option.label}
-                  </span>
-                  <span className={option.scope === plannerScope ? 'text-xs text-slate-200' : 'text-xs text-slate-500'}>{option.description}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </section>
-
-        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="planner-filter-controls">
-          <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_auto_auto]">
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
-              Поиск
-              <input
-                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#6158e0]"
-                data-testid="planner-filter-query"
-                placeholder="Ресурс, задача или проект"
-                value={filters.query}
-                onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-              />
-            </label>
-            <fieldset className="flex flex-wrap gap-2">
-              <legend className="mb-1 text-sm text-slate-700">Тип ресурса</legend>
-              {RESOURCE_TYPE_OPTIONS.map((option) => (
-                <label key={option.type} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={filters.resourceTypes.includes(option.type)}
-                    onChange={(event) => setFilters((current) => ({
-                      ...current,
-                      resourceTypes: event.target.checked
-                        ? [...current.resourceTypes, option.type]
-                        : current.resourceTypes.filter((type) => type !== option.type),
-                    }))}
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </fieldset>
-            <div className="flex flex-col justify-end gap-2">
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={filters.conflictOnly}
-                  onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
-                />
-                Только конфликты
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={filters.includeInactive}
-                  onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
-                />
-                Показывать неактивные
-              </label>
-            </div>
-          </div>
-        </section>
-
         {state.status === 'loading' && (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-loading-state">
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
             Загружаем ресурсный календарь… {selectedScopeCopy.label}
           </div>
         )}
 
         {state.status === 'error' && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700" data-testid="planner-error-state" role="alert">
-            <div>Не удалось загрузить ресурсный календарь. Проверьте соединение и повторите загрузку. {state.error}</div>
-            <button
-              type="button"
-              className="mt-3 inline-flex h-9 items-center justify-center rounded-md border border-red-300 bg-white px-3 text-sm font-medium text-red-800 transition-colors hover:bg-red-50"
-              data-testid="planner-retry-button"
-              onClick={() => { void loadPlanner(plannerScope, { keepData: true }); }}
-            >
-              Повторить загрузку
-            </button>
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="planner-error-state" role="alert">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>Не удалось загрузить ресурсный календарь. {state.error}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 border-red-200 bg-white text-red-800 hover:bg-red-50"
+                data-testid="planner-retry-button"
+                onClick={() => { void loadPlanner(plannerScope, { keepData: true }); }}
+              >
+                Повторить
+              </Button>
+            </div>
           </div>
         )}
 
         {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-empty-state">
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-600" data-testid="planner-empty-state">
             <div className="font-semibold text-slate-900">Нет ресурсов для отображения</div>
-            <div className="mt-1">Создайте ресурс или измените фильтры, чтобы увидеть назначения на календаре.</div>
+            <div className="mt-1">Создайте ресурс или скорректируйте фильтр.</div>
           </div>
         )}
 
         {plannerSaveError && (
           <div
-            className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             data-testid="planner-save-error"
             role="alert"
           >
@@ -956,25 +1006,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
         {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length > 0 && (
           <div className="space-y-4" data-testid="planner-data-state">
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                <div className="text-xs uppercase tracking-[0.08em] text-slate-400">Ресурсов</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900" data-testid="planner-resource-count">{resourceCount}</div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                <div className="text-xs uppercase tracking-[0.08em] text-slate-400">Интервалов</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900" data-testid="planner-interval-count">{intervalCount}</div>
-              </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                <div className="text-xs uppercase tracking-[0.08em] text-amber-600">Ресурсов с конфликтами</div>
-                <div className="mt-1 text-lg font-semibold" data-testid="planner-conflict-resource-count">{conflictingResourceCount}</div>
-              </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                <div className="text-xs uppercase tracking-[0.08em] text-amber-600">Конфликтных интервалов</div>
-                <div className="mt-1 text-lg font-semibold" data-testid="planner-conflict-interval-count">{conflictIntervalCount}</div>
-              </div>
-            </div>
-
             <section
               aria-label="Ресурсный календарь"
               className="overflow-hidden rounded-xl border border-slate-200 bg-white"
@@ -989,28 +1020,82 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
                 headerHeight={40}
                 readonly={readonly}
                 disableResourceReassignment={disableResourceReassignment}
-                renderItem={renderTimelineItem}
                 getItemClassName={getTimelineItemClassName}
+                onResourceItemClick={handleSelectTimelineItem}
                 onResourceItemMove={readonly ? undefined : persistPlannerMove}
               />
             </section>
           </div>
         )}
+
       </div>
-      {selectedItem && (
-        <ResourceAssignmentDetailsPanel
-          item={selectedItem}
-          resource={selectedResource}
-          resources={resources}
-          readonly={readonly}
-          onClose={() => setSelectedItem(null)}
-          onCorrectConflict={onCorrectConflict}
-          onDateChange={handleDetailsDateChange}
-          onResourceChange={handleDetailsResourceChange}
-          onRemoveResource={handleRemoveResource}
-        />
-      )}
+
+      <div className={cn('w-full max-w-[420px] border-l border-slate-200 bg-white', !showSidePanel && 'hidden')}>
+        {selectedItem ? (
+          <ResourceAssignmentDetailsPanel
+            item={selectedItem}
+            resource={selectedResource}
+            resources={resources}
+            readonly={readonly}
+            onClose={() => setSelectedItem(null)}
+            onCorrectConflict={onCorrectConflict}
+            onDateChange={handleDetailsDateChange}
+            onResourceChange={handleDetailsResourceChange}
+            onRemoveResource={handleRemoveResource}
+          />
+        ) : (
+          <div className={cn('h-full overflow-auto p-4', !showCatalogPanel && 'hidden')}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Каталог ресурсов</div>
+                <div className="text-xs text-slate-500">Создание и правка ресурсов скрыты от основного canvas.</div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-slate-600"
+                onClick={() => setShowCatalogPanel(false)}
+              >
+                Закрыть
+              </Button>
+            </div>
+
+            <ResourceCatalogPanel
+              resources={resources}
+              activeProjects={activeProjects}
+              readonly={readonly}
+              loading={resourceListLoading}
+              creating={creatingResource}
+              error={resourceListError}
+              createError={resourceCreateError}
+              mutationError={resourceMutationError}
+              pendingResourceId={pendingCatalogResourceId}
+              nameDraft={resourceNameDraft}
+              targetDraft={resourceTargetDraft}
+              typeDraft={resourceTypeDraft}
+              rowStats={catalogRowStats}
+              onNameDraftChange={(value) => {
+                setResourceNameDraft(value);
+                setResourceCreateError(null);
+              }}
+              onTargetDraftChange={(value) => {
+                setResourceTargetDraft(value);
+                setResourceCreateError(null);
+              }}
+              onTypeDraftChange={(value) => {
+                setResourceTypeDraft(value);
+                setResourceCreateError(null);
+              }}
+              onCreate={handleCreateResource}
+              onRenameResource={handleRenameResource}
+              onChangeResourceType={handleChangeResourceType}
+              onSetResourceActive={handleSetResourceActive}
+            />
+          </div>
+        )}
       </div>
+    </div>
     </div>
   );
 }

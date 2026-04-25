@@ -22,9 +22,10 @@ vi.mock('gantt-lib', async () => {
     ...actual,
     GanttChart: (props: {
       mode?: string;
-      resources?: Array<{ id: string; name: string; items: Array<{ id: string; title: string }> }>;
+      resources?: Array<{ id: string; name: string; items: Array<{ id: string; title: string; subtitle?: string }> }>;
       renderItem?: (item: { id: string; title: string }) => React.ReactNode;
       getItemClassName?: (item: { id: string; title: string }) => string | undefined;
+      onResourceItemClick?: (item: { id: string; title: string; subtitle?: string }) => void;
     }) => {
       resourcePlannerChartSpy(props);
       return (
@@ -37,8 +38,22 @@ vi.mock('gantt-lib', async () => {
                   key={item.id}
                   className={props.getItemClassName?.(item)}
                   data-testid={`gantt-resource-item-${item.id}`}
+                  role={props.onResourceItemClick ? 'button' : undefined}
+                  tabIndex={props.onResourceItemClick ? 0 : undefined}
+                  onClick={() => props.onResourceItemClick?.(item)}
+                  onKeyDown={(event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && props.onResourceItemClick) {
+                      event.preventDefault();
+                      props.onResourceItemClick(item);
+                    }
+                  }}
                 >
-                  {props.renderItem ? props.renderItem(item) : item.title}
+                  {props.renderItem ? props.renderItem(item) : (
+                    <>
+                      <span>{item.title}</span>
+                      {item.subtitle ? <span>{item.subtitle}</span> : null}
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -445,9 +460,6 @@ describe('M004 integrated resource-planning loop', () => {
     });
 
     expect(planner.container.querySelector('[data-testid="planner-data-state"]')).not.toBeNull();
-    expect(planner.container.querySelector('[data-testid="planner-resource-count"]')?.textContent).toBe('1');
-    expect(planner.container.querySelector('[data-testid="planner-conflict-resource-count"]')?.textContent).toBe('1');
-    expect(planner.container.querySelector('[data-testid="planner-conflict-interval-count"]')?.textContent).toBe('1');
     expect(planner.container.querySelector('[data-testid="gantt-lib-resource-planner"]')).not.toBeNull();
     expect(planner.container.querySelector(`[data-testid="gantt-resource-row-${fixture.resourceId}"]`)?.textContent).toContain(fixture.resourceName);
     expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.taskName);
@@ -463,7 +475,7 @@ describe('M004 integrated resource-planning loop', () => {
     }));
 
     await act(async () => {
-      (planner.container.querySelector(`[data-testid="resource-planner-open-${fixture.assignmentId}"]`) as HTMLButtonElement).click();
+      (planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`) as HTMLButtonElement).click();
       await Promise.resolve();
     });
 

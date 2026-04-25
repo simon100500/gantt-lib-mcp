@@ -99,7 +99,7 @@ export function ResourceCatalogPanel({
 
   return (
     <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="resource-management-panel">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-slate-900">Создать ресурс</h2>
           <p className="mt-1 text-xs text-slate-500">
@@ -110,12 +110,12 @@ export function ResourceCatalogPanel({
               Войдите, чтобы изменять ресурсы. Сейчас календарь открыт только для просмотра.
             </div>
           )}
-          <form className="mt-3 grid gap-3 md:grid-cols-[minmax(180px,1fr)_220px_180px_auto]" data-testid="resource-create-form" onSubmit={handleSubmit}>
+          <form className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="resource-create-form" onSubmit={handleSubmit}>
             <label className="flex flex-col gap-1 text-xs text-slate-600">
               Название
               <input
                 id="resource-create-name"
-                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
                 data-testid="resource-create-name-input"
                 disabled={readonly || creating}
                 placeholder="Например: Бригада 1"
@@ -126,7 +126,7 @@ export function ResourceCatalogPanel({
             <label className="flex flex-col gap-1 text-xs text-slate-600">
               Где создать
               <select
-                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
                 data-testid="resource-create-target-select"
                 disabled={readonly || creating}
                 value={targetDraft}
@@ -143,7 +143,7 @@ export function ResourceCatalogPanel({
             <label className="flex flex-col gap-1 text-xs text-slate-600">
               Тип
               <select
-                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
                 data-testid="resource-create-type-select"
                 disabled={readonly || creating}
                 value={typeDraft}
@@ -162,7 +162,7 @@ export function ResourceCatalogPanel({
             </label>
             <button
               type="submit"
-              className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 md:self-end"
+              className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:col-span-2"
               data-testid="resource-create-submit"
               disabled={readonly || creating || nameDraft.trim().length === 0}
             >
@@ -212,7 +212,7 @@ export function ResourceCatalogPanel({
                         Конфликтов: {stats.conflictCount}
                       </span>
                     </div>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="mt-2 grid gap-2">
                       <label className="sr-only" htmlFor={`resource-rename-${resource.id}`}>Новое название</label>
                       <input
                         id={`resource-rename-${resource.id}`}
@@ -224,7 +224,7 @@ export function ResourceCatalogPanel({
                       />
                       <button
                         type="button"
-                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        className="inline-flex h-8 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                         data-testid={`resource-rename-save-${resource.id}`}
                         disabled={actionsDisabled || renameDraft.trim().length === 0 || renameDraft.trim() === resource.name}
                         onClick={() => { void onRenameResource(resource, renameDraft); }}
@@ -232,11 +232,11 @@ export function ResourceCatalogPanel({
                         Переименовать
                       </button>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                       <label className="sr-only" htmlFor={`resource-type-${resource.id}`}>Тип ресурса</label>
                       <select
                         id={`resource-type-${resource.id}`}
-                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
                         data-testid={`resource-type-select-${resource.id}`}
                         disabled={actionsDisabled}
                         value={resource.type}
@@ -253,7 +253,7 @@ export function ResourceCatalogPanel({
                       {resource.isActive ? (
                         <button
                           type="button"
-                          className="inline-flex h-8 items-center justify-center rounded-md border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          className="inline-flex h-8 w-full items-center justify-center rounded-md border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto"
                           data-testid={`resource-deactivate-${resource.id}`}
                           disabled={actionsDisabled}
                           onClick={() => {
@@ -267,7 +267,7 @@ export function ResourceCatalogPanel({
                       ) : (
                         <button
                           type="button"
-                          className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-200 bg-white px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          className="inline-flex h-8 w-full items-center justify-center rounded-md border border-emerald-200 bg-white px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto"
                           data-testid={`resource-activate-${resource.id}`}
                           disabled={actionsDisabled}
                           onClick={() => { void onSetResourceActive(resource, true); }}
