@@ -40,31 +40,12 @@ type PlannerState =
   | { status: 'error'; data: ResourcePlannerResult | null; error: string }
   | { status: 'ready'; data: ResourcePlannerResult; error: null };
 
-const PLANNER_SCOPE_OPTIONS: Array<{ scope: PlannerScope; label: string; description: string; emptyCopy: string }> = [
-  {
-    scope: 'current-project',
-    label: 'Текущий проект',
-    description: 'Показывает shared-ресурсы и проектные ресурсы только выбранного проекта.',
-    emptyCopy: 'В текущем проекте пока нет ресурсов с назначениями для planner view.',
-  },
-  {
-    scope: 'all-projects',
-    label: 'Все проекты',
-    description: 'Показывает shared-ресурсы workspace и их интервалы по доступным проектам.',
-    emptyCopy: 'Во всех доступных проектах пока нет shared-ресурсов с назначениями в planner view.',
-  },
-];
-
 const RESOURCE_TYPE_OPTIONS: Array<{ type: ResourceType; label: string }> = [
   { type: 'human', label: 'Люди' },
   { type: 'equipment', label: 'Оборудование' },
   { type: 'material', label: 'Материалы' },
   { type: 'other', label: 'Другое' },
 ];
-
-function getPlannerScopeCopy(scope: PlannerScope) {
-  return PLANNER_SCOPE_OPTIONS.find((option) => option.scope === scope) ?? PLANNER_SCOPE_OPTIONS[1];
-}
 
 function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null {
   if (!payload || typeof payload !== 'object') {
@@ -227,7 +208,7 @@ function normalizeAssignmentMutationPayload(payload: unknown): TaskAssignmentRec
 }
 
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
-  const [plannerScope, setPlannerScope] = useState<PlannerScope>('all-projects');
+  const plannerScope: PlannerScope = 'current-project';
   const [state, setState] = useState<PlannerState>({ status: 'loading', data: null, error: null });
   const projects = useAuthStore((store) => store.projects);
   const resources = useProjectStore((store) => store.resources);
@@ -684,7 +665,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     }
   }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, reloadProjectSnapshot, selectedItem, setAssignments]);
 
-  const selectedScopeCopy = getPlannerScopeCopy(plannerScope);
   const displayedPlannerData = state.data;
   const timelineResources = useMemo(
     () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData) : [],
@@ -752,42 +732,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       <div className="border-b border-slate-200 bg-white">
         <div className="flex min-h-14 flex-col gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-center">
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold text-slate-900" data-testid="planner-title">Ресурсы</h1>
-              <p className="text-xs text-slate-500" data-testid="planner-subtitle">
-                {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты workspace'}
-              </p>
-            </div>
-
-            <div
-              className="inline-flex w-fit items-center rounded-lg border border-slate-200 bg-slate-100 p-1"
-              data-testid="planner-scope-controls"
-              role="tablist"
-              aria-label="Область planner"
-            >
-              {PLANNER_SCOPE_OPTIONS.map((option) => {
-                const active = option.scope === plannerScope;
-                return (
-                  <button
-                    key={option.scope}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    data-testid={`planner-scope-${option.scope}`}
-                    onClick={() => setPlannerScope(option.scope)}
-                    className={cn(
-                      'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
-                      active
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700',
-                    )}
-                    title={option.description}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
+            <p className="text-xs text-slate-500" data-testid="planner-subtitle">Текущий проект</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -965,7 +910,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
         />
         {state.status === 'loading' && (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
-            Загружаем ресурсный календарь… {selectedScopeCopy.label}
+            Загружаем ресурсный календарь…
           </div>
         )}
 

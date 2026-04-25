@@ -480,7 +480,6 @@ describe('ResourcePlanner workspace integration', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=all-projects', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
-    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toBe('Ресурсы');
     expect(container.querySelector('[data-testid="planner-subtitle"]')?.textContent).toBe('Все проекты workspace');
     expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
 
@@ -493,7 +492,6 @@ describe('ResourcePlanner workspace integration', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=current-project', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
-    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toBe('Ресурсы');
     expect(container.querySelector('[data-testid="planner-subtitle"]')?.textContent).toBe('Текущий проект');
     expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
 
