@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove } from 'gantt-lib';
 
-import type { PlannerScope, ProjectResource, ResourcePlannerResult } from '../../lib/apiTypes.ts';
+import type { PlannerScope, ProjectResource, ResourcePlannerResult, ResourceType } from '../../lib/apiTypes.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
@@ -12,6 +12,8 @@ import {
   mapResourcePlannerResultToTimelineResources,
 } from './resourcePlannerAdapter.ts';
 import type { ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
+import { ResourceAssignmentDetailsPanel } from './ResourceAssignmentDetailsPanel.tsx';
+import { filterResourceTimelineResources, type ResourcePlannerFilters } from './resourcePlannerFilters.ts';
 
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
@@ -38,6 +40,13 @@ const PLANNER_SCOPE_OPTIONS: Array<{ scope: PlannerScope; label: string; descrip
     description: 'Показывает shared-ресурсы workspace и их интервалы по доступным проектам.',
     emptyCopy: 'Во всех доступных проектах пока нет shared-ресурсов с назначениями в planner view.',
   },
+];
+
+const RESOURCE_TYPE_OPTIONS: Array<{ type: ResourceType; label: string }> = [
+  { type: 'human', label: 'Люди' },
+  { type: 'equipment', label: 'Оборудование' },
+  { type: 'material', label: 'Материалы' },
+  { type: 'other', label: 'Другое' },
 ];
 
 function getPlannerScopeCopy(scope: PlannerScope) {
@@ -178,6 +187,13 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
   const [resourceCreateError, setResourceCreateError] = useState<string | null>(null);
   const [resourceListLoading, setResourceListLoading] = useState(false);
   const [creatingResource, setCreatingResource] = useState(false);
+  const [filters, setFilters] = useState<ResourcePlannerFilters>({
+    query: '',
+    resourceTypes: [],
+    conflictOnly: false,
+    includeInactive: false,
+  });
+  const [selectedItem, setSelectedItem] = useState<ResourcePlannerTimelineItem | null>(null);
 
   const loadResourceCatalog = useCallback(async (catalogProjectId = projectId) => {
     if (!accessToken) {
@@ -317,34 +333,35 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData) : [],
     [displayedPlannerData],
   );
-  const resourceCount = displayedPlannerData ? displayedPlannerData.resources.length : 0;
+  const filteredTimelineResources = useMemo(
+    () => filterResourceTimelineResources(
+      timelineResources,
+      resources,
+      filters,
+      selectedItem ? { preserveResourceIds: [selectedItem.resourceId] } : undefined,
+    ),
+    [filters, resources, selectedItem, timelineResources],
+  );
+  const selectedResource = useMemo(
+    () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
+    [resources, selectedItem],
+  );
+  const resourceCount = filteredTimelineResources.length;
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
   const sharedResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'shared').length, [resources]);
   const projectResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'project').length, [resources]);
   const intervalCount = useMemo(() => {
-    if (!displayedPlannerData) {
-      return 0;
-    }
-
-    return displayedPlannerData.resources.reduce((total, resource) => total + resource.intervals.length, 0);
-  }, [displayedPlannerData]);
+    return filteredTimelineResources.reduce((total, resource) => total + resource.items.length, 0);
+  }, [filteredTimelineResources]);
   const conflictingResourceCount = useMemo(() => {
-    if (!displayedPlannerData) {
-      return 0;
-    }
-
-    return displayedPlannerData.resources.filter((resource) => resource.hasConflicts).length;
-  }, [displayedPlannerData]);
+    return filteredTimelineResources.filter((resource) => resource.items.some((item) => getPlannerItemMetadata(item)?.hasConflict)).length;
+  }, [filteredTimelineResources]);
   const conflictIntervalCount = useMemo(() => {
-    if (!displayedPlannerData) {
-      return 0;
-    }
-
-    return displayedPlannerData.resources.reduce(
-      (total, resource) => total + resource.intervals.filter((interval) => interval.hasConflict).length,
+    return filteredTimelineResources.reduce(
+      (total, resource) => total + resource.items.filter((item) => getPlannerItemMetadata(item)?.hasConflict).length,
       0,
     );
-  }, [displayedPlannerData]);
+  }, [filteredTimelineResources]);
   const readonly = !accessToken;
   const disableResourceReassignment = false;
   const handleResourceItemMove = useCallback((_move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
@@ -356,18 +373,33 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       return 'resource-planner-item';
     }
 
+    const selectedClassName = selectedItem?.id === item.id ? ' resource-planner-item--selected' : '';
     return metadata.hasConflict
-      ? 'resource-planner-item resource-planner-item--conflict'
-      : 'resource-planner-item resource-planner-item--normal';
-  }, []);
+      ? `resource-planner-item resource-planner-item--conflict${selectedClassName}`
+      : `resource-planner-item resource-planner-item--normal${selectedClassName}`;
+  }, [selectedItem]);
   const renderTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
     const conflictCount = metadata?.conflictCount ?? 0;
+    const conflictCopy = metadata?.hasConflict ? 'есть конфликт' : 'без конфликтов';
+    const openSelectedItem = () => {
+      setSelectedItem(item);
+    };
 
     return (
       <div
-        className="flex h-full min-w-0 flex-col justify-center gap-1 px-2 py-1 text-left text-[11px] leading-tight"
-        data-testid={`resource-planner-item-content-${item.id}`}
+        aria-label={`${item.title}, ${metadata?.resourceName ?? item.resourceId}, ${String(item.startDate)} - ${String(item.endDate)}, ${conflictCopy}`}
+        className="flex h-full min-w-0 cursor-pointer flex-col justify-center gap-1 px-2 py-1 text-left text-[11px] leading-tight focus:outline-none focus:ring-2 focus:ring-[#6158e0]"
+        data-testid={`resource-planner-open-${item.id}`}
+        role="button"
+        tabIndex={0}
+        onClick={openSelectedItem}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openSelectedItem();
+          }
+        }}
       >
         <div className="flex min-w-0 items-center gap-1">
           <span className="truncate font-semibold">{item.title}</span>
@@ -413,24 +445,40 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       <div className="border-b border-slate-200 bg-white px-4 py-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Planner</p>
-            <h1 className="text-lg font-semibold text-slate-900" data-testid="planner-title">Ресурсный planner: {selectedScopeCopy.label}</h1>
-            <p className="text-sm text-slate-600" data-testid="planner-description">
-              {selectedScopeCopy.description}
+            <h1 className="text-xl font-semibold text-slate-900" data-testid="planner-title">Ресурсы</h1>
+            <p className="text-sm text-slate-600" data-testid="planner-subtitle">
+              {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты workspace'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onBackToProject}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-            data-testid="planner-back-button"
-          >
-            Вернуться в проект
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center justify-center rounded-md bg-[#6158e0] px-3 text-sm font-medium text-white transition-colors hover:bg-[#5148c8]"
+              onClick={() => document.getElementById('resource-create-name')?.focus()}
+            >
+              Создать ресурс
+            </button>
+            <button
+              type="button"
+              onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Обновить
+            </button>
+            <button
+              type="button"
+              onClick={onBackToProject}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              data-testid="planner-back-button"
+            >
+              Вернуться в проект
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="min-w-0 flex-1 overflow-auto p-4">
         <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="resource-management-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1">
@@ -442,6 +490,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
                 <label className="flex flex-col gap-1 text-xs text-slate-600">
                   Название
                   <input
+                    id="resource-create-name"
                     className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
                     data-testid="resource-create-name-input"
                     placeholder="Например: Бригада 1"
@@ -541,15 +590,66 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           </fieldset>
         </section>
 
+        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="planner-filter-controls">
+          <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_auto_auto]">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Поиск
+              <input
+                className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#6158e0]"
+                data-testid="planner-filter-query"
+                placeholder="Ресурс, задача или проект"
+                value={filters.query}
+                onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+              />
+            </label>
+            <fieldset className="flex flex-wrap gap-2">
+              <legend className="mb-1 text-sm text-slate-700">Тип ресурса</legend>
+              {RESOURCE_TYPE_OPTIONS.map((option) => (
+                <label key={option.type} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={filters.resourceTypes.includes(option.type)}
+                    onChange={(event) => setFilters((current) => ({
+                      ...current,
+                      resourceTypes: event.target.checked
+                        ? [...current.resourceTypes, option.type]
+                        : current.resourceTypes.filter((type) => type !== option.type),
+                    }))}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </fieldset>
+            <div className="flex flex-col justify-end gap-2">
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={filters.conflictOnly}
+                  onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
+                />
+                Только конфликты
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={filters.includeInactive}
+                  onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
+                />
+                Показывать неактивные
+              </label>
+            </div>
+          </div>
+        </section>
+
         {state.status === 'loading' && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-loading-state">
-            Загружаем planner view: {selectedScopeCopy.label}…
+            Загружаем ресурсный календарь… {selectedScopeCopy.label}
           </div>
         )}
 
         {state.status === 'error' && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700" data-testid="planner-error-state" role="alert">
-            <div>Не удалось загрузить planner для области «{selectedScopeCopy.label}»: {state.error}</div>
+            <div>Не удалось загрузить ресурсный календарь. Проверьте соединение и повторите загрузку. {state.error}</div>
             <button
               type="button"
               className="mt-3 inline-flex h-9 items-center justify-center rounded-md border border-red-300 bg-white px-3 text-sm font-medium text-red-800 transition-colors hover:bg-red-50"
@@ -561,13 +661,14 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           </div>
         )}
 
-        {state.status === 'ready' && displayedPlannerData && displayedPlannerData.resources.length === 0 && (
+        {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length === 0 && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600" data-testid="planner-empty-state">
-            {selectedScopeCopy.emptyCopy}
+            <div className="font-semibold text-slate-900">Нет ресурсов для отображения</div>
+            <div className="mt-1">Создайте ресурс или измените фильтры, чтобы увидеть назначения на календаре.</div>
           </div>
         )}
 
-        {state.status === 'ready' && displayedPlannerData && displayedPlannerData.resources.length > 0 && (
+        {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length > 0 && (
           <div className="space-y-4" data-testid="planner-data-state">
             <div className="grid gap-3 md:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
@@ -595,7 +696,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
             >
               <GanttChart
                 mode="resource-planner"
-                resources={timelineResources}
+                resources={filteredTimelineResources}
                 dayWidth={36}
                 laneHeight={40}
                 rowHeaderWidth={220}
@@ -609,6 +710,17 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
             </section>
           </div>
         )}
+      </div>
+      {selectedItem && (
+        <ResourceAssignmentDetailsPanel
+          item={selectedItem}
+          resource={selectedResource}
+          resources={resources}
+          readonly={readonly}
+          onClose={() => setSelectedItem(null)}
+          onCorrectConflict={onCorrectConflict}
+        />
+      )}
       </div>
     </div>
   );
