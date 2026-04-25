@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, FolderKanban, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -37,6 +37,7 @@ interface ProjectMenuProps {
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
+  onOpenChartMode?: () => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
@@ -58,6 +59,7 @@ export function ProjectMenu({
   onRestoreProject,
   onDeleteProject,
   onOpenResourcePool,
+  onOpenChartMode,
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
@@ -477,22 +479,46 @@ export function ProjectMenu({
                         {projectUsageLabel}
                       </span>
                     )}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => void onCreateProject()}
-                      disabled={createProjectDisabled}
-                      title={createProjectTitle ?? 'Новый проект'}
-                      className="h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-300"
-                      aria-label="Новый проект"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
                 )}
               </div>
 
-              <div className="hidden min-w-0 flex-1 items-center gap-3 px-4 lg:flex lg:px-8">
+              <div className="hidden min-w-0 flex-1 items-center gap-2 px-4 lg:flex lg:px-6">
+                {!hasShareToken && auth.isAuthenticated && (
+                  <div
+                    className="inline-flex shrink-0 items-center rounded-lg border border-slate-200 bg-slate-100 p-1"
+                    data-testid="topbar-workspace-mode-switch"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { void onOpenChartMode?.(); }}
+                      className={cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        workspace.kind === 'planner'
+                          ? 'text-slate-500 hover:text-slate-700'
+                          : 'bg-white text-slate-900 shadow-sm',
+                      )}
+                      data-testid="topbar-mode-chart"
+                    >
+                      <ChartNoAxesGantt className="h-3.5 w-3.5" />
+                      <span>График</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void onOpenResourcePool?.(); }}
+                      className={cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        workspace.kind === 'planner'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700',
+                      )}
+                      data-testid="topbar-mode-resources"
+                    >
+                      <FolderKanban className="h-3.5 w-3.5" />
+                      <span>Ресурсы</span>
+                    </button>
+                  </div>
+                )}
                 <TaskSearch
                   onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
                   readOnly={isReadOnlyContext}

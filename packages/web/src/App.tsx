@@ -1700,6 +1700,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}
       onOpenResourcePool={handleOpenResourcePool}
+      onOpenChartMode={async () => {
+        const targetProjectId = workspace.kind === 'planner'
+          ? workspace.projectId
+          : auth.project?.id;
+        if (!targetProjectId) {
+          return;
+        }
+        setPlannerCorrectionTarget(null);
+        setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
+      }}
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
