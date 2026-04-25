@@ -773,6 +773,7 @@ describe('ResourcePlanner workspace integration', () => {
 
     expect(useUIStore.getState().workspace).toEqual({ kind: 'planner', projectId: 'project-1' });
     expect(plannerWorkspaceSpy).toHaveBeenCalled();
+    expect(plannerWorkspaceSpy.mock.calls[plannerWorkspaceSpy.mock.calls.length - 1]?.[0]).toEqual(expect.objectContaining({ ganttDayMode: 'calendar' }));
     expect(projectWorkspaceSpy).toHaveBeenCalled();
 
     await unmountApp(root);

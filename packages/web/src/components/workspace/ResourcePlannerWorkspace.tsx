@@ -31,6 +31,7 @@ import { buildReplacementResourceIds, classifyResourcePlannerMove } from './reso
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
   projectId: string;
+  ganttDayMode?: 'business' | 'calendar';
   onBackToProject: () => void;
   onCorrectConflict: (target: PlannerCorrectionTarget) => void;
 }
@@ -207,7 +208,7 @@ function normalizeAssignmentMutationPayload(payload: unknown): TaskAssignmentRec
   return normalized;
 }
 
-export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
+export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttDayMode = 'calendar', onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
   const [state, setState] = useState<PlannerState>({ status: 'loading', data: null, error: null });
   const projects = useAuthStore((store) => store.projects);
@@ -733,6 +734,17 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={toolbarPrimaryButtonClassName}
+            onClick={handleOpenCatalogPanel}
+          >
+            <Plus className="h-4 w-4" />
+            <span>Создать</span>
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -864,17 +876,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
             type="button"
             variant="outline"
             size="sm"
-            className={toolbarPrimaryButtonClassName}
-            onClick={handleOpenCatalogPanel}
-          >
-            <Plus className="h-4 w-4" />
-            <span>Создать</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
             className={toolbarButtonClassName}
             onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
           >
@@ -950,6 +951,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
                 rowHeaderWidth={220}
                 headerHeight={40}
                 allowVerticalPan
+                businessDays={ganttDayMode !== 'calendar'}
                 readonly={readonly}
                 disableResourceReassignment={disableResourceReassignment}
                 getItemClassName={getTimelineItemClassName}

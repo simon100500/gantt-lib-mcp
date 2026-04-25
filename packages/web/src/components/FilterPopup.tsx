@@ -16,6 +16,7 @@ interface FilterPopupProps {
 
 export function FilterPopup({ children }: FilterPopupProps) {
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
+  const filterWithoutParents = useUIStore((state) => state.filterWithoutParents);
   const filterExpired = useUIStore((state) => state.filterExpired);
   const filterSearchText = useUIStore((state) => state.filterSearchText);
   const filterDateFrom = useUIStore((state) => state.filterDateFrom);
@@ -24,6 +25,7 @@ export function FilterPopup({ children }: FilterPopupProps) {
   const setFilterMode = useUIStore((state) => state.setFilterMode);
 
   const setFilterWithoutDeps = useUIStore((state) => state.setFilterWithoutDeps);
+  const setFilterWithoutParents = useUIStore((state) => state.setFilterWithoutParents);
   const setFilterExpired = useUIStore((state) => state.setFilterExpired);
   const setFilterSearchText = useUIStore((state) => state.setFilterSearchText);
   const setFilterDateFrom = useUIStore((state) => state.setFilterDateFrom);
@@ -32,6 +34,7 @@ export function FilterPopup({ children }: FilterPopupProps) {
 
   const hasActiveFilters =
     filterWithoutDeps ||
+    filterWithoutParents ||
     filterExpired ||
     filterSearchText.trim().length > 0 ||
     (filterDateFrom && filterDateTo);
@@ -92,6 +95,23 @@ export function FilterPopup({ children }: FilterPopupProps) {
             className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
           />
           <span className="text-sm">Без зависимостей</span>
+        </DropdownMenuItem>
+
+        {/* Without parent tasks checkbox */}
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            setFilterWithoutParents(!filterWithoutParents);
+          }}
+          className="flex cursor-pointer items-center gap-2"
+        >
+          <input
+            type="checkbox"
+            checked={filterWithoutParents}
+            readOnly
+            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary pointer-events-none"
+          />
+          <span className="text-sm">Без родительских</span>
         </DropdownMenuItem>
 
         {/* Expired checkbox */}

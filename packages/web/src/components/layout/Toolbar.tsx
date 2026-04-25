@@ -278,12 +278,14 @@ export function Toolbar({
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
 
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
+  const filterWithoutParents = useUIStore((state) => state.filterWithoutParents);
   const filterExpired = useUIStore((state) => state.filterExpired);
   const filterSearchText = useUIStore((state) => state.filterSearchText);
   const filterDateFrom = useUIStore((state) => state.filterDateFrom);
   const filterDateTo = useUIStore((state) => state.filterDateTo);
   const hasActiveFilters =
     filterWithoutDeps ||
+    filterWithoutParents ||
     filterExpired ||
     filterSearchText.trim().length > 0 ||
     (filterDateFrom && filterDateTo);

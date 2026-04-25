@@ -104,6 +104,7 @@ interface UIState {
   historyRefreshRevision: number;
   // Filter state
   filterWithoutDeps: boolean;
+  filterWithoutParents: boolean;
   filterExpired: boolean;
   filterSearchText: string;
   filterDateFrom: string;
@@ -144,6 +145,7 @@ interface UIState {
   bumpHistoryRefreshRevision: () => void;
   // Filter actions
   setFilterWithoutDeps: (value: boolean) => void;
+  setFilterWithoutParents: (value: boolean) => void;
   setFilterExpired: (value: boolean) => void;
   setFilterSearchText: (value: string) => void;
   setFilterDateFrom: (value: string) => void;
@@ -187,6 +189,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   showHistoryPanel: false,
   historyRefreshRevision: 0,
   filterWithoutDeps: false,
+  filterWithoutParents: false,
   filterExpired: false,
   filterSearchText: '',
   filterDateFrom: '',
@@ -253,6 +256,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShowHistoryPanel: (showHistoryPanel) => set({ showHistoryPanel }),
   bumpHistoryRefreshRevision: () => set((state) => ({ historyRefreshRevision: state.historyRefreshRevision + 1 })),
   setFilterWithoutDeps: (filterWithoutDeps) => set({ filterWithoutDeps }),
+  setFilterWithoutParents: (filterWithoutParents) => set({ filterWithoutParents }),
   setFilterExpired: (filterExpired) => set({ filterExpired }),
   setFilterSearchText: (filterSearchText) => set({ filterSearchText }),
   setFilterDateFrom: (filterDateFrom) => set({ filterDateFrom }),
@@ -260,6 +264,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setFilterMode: (filterMode) => set({ filterMode }),
   resetFilters: () => set({
     filterWithoutDeps: false,
+    filterWithoutParents: false,
     filterExpired: false,
     filterSearchText: '',
     filterDateFrom: '',

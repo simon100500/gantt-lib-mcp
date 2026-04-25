@@ -1580,6 +1580,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         <ResourcePlannerWorkspace
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
+          ganttDayMode={effectiveAuthGanttDayMode}
           onBackToProject={() => {
             setPlannerCorrectionTarget(null);
             setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
