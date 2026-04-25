@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Task, ProjectState, ProjectSnapshot, FrontendProjectCommand, PendingCommand } from '../types';
-import type { ProjectResource, TaskAssignmentRecord } from '../lib/apiTypes';
+import type { PlannerScope, ProjectResource, ResourcePlannerResult, TaskAssignmentRecord } from '../lib/apiTypes';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
 import { getDefaultProjectScheduleOptions } from '../lib/projectScheduleOptions';
 import type { ScheduleCommandOptions } from 'gantt-lib/core/scheduling';
@@ -35,6 +35,7 @@ interface ProjectStoreState extends ProjectState {
   resources: ProjectResource[];
   assignments: TaskAssignmentRecord[];
   assignmentError: string | null;
+  resourcePlannerCache: Record<string, ResourcePlannerResult>;
   setConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
   mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
   hydrateConfirmed: (version: number, snapshot: ProjectSnapshot, extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[] }) => void;
@@ -48,6 +49,12 @@ interface ProjectStoreState extends ProjectState {
   setResources: (resources: ProjectResource[]) => void;
   setAssignments: (assignments: TaskAssignmentRecord[]) => void;
   setAssignmentError: (error: string | null) => void;
+  setResourcePlannerCache: (projectId: string, scope: PlannerScope, data: ResourcePlannerResult) => void;
+  clearResourcePlannerCache: () => void;
+}
+
+function getResourcePlannerCacheKey(projectId: string, scope: PlannerScope): string {
+  return `${projectId}:${scope}`;
 }
 
 export const useProjectStore = create<ProjectStoreState>((set, get) => ({
@@ -55,6 +62,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   resources: [],
   assignments: [],
   assignmentError: null,
+  resourcePlannerCache: {},
   pending: [],
   dragPreview: undefined,
   scheduleOptions: getDefaultProjectScheduleOptions(),
@@ -79,6 +87,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
     resources: extras?.resources ?? [],
     assignments: extras?.assignments ?? [],
     assignmentError: null,
+    resourcePlannerCache: {},
     pending: [],
     dragPreview: undefined,
   }),
@@ -100,4 +109,11 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   setResources: (resources) => set({ resources }),
   setAssignments: (assignments) => set({ assignments }),
   setAssignmentError: (assignmentError) => set({ assignmentError }),
+  setResourcePlannerCache: (projectId, scope, data) => set((state) => ({
+    resourcePlannerCache: {
+      ...state.resourcePlannerCache,
+      [getResourcePlannerCacheKey(projectId, scope)]: data,
+    },
+  })),
+  clearResourcePlannerCache: () => set({ resourcePlannerCache: {} }),
 }));
