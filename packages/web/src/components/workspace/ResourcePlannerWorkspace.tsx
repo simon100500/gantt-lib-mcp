@@ -1,11 +1,17 @@
 import type { FormEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { GanttChart } from 'gantt-lib';
+import type { ResourceTimelineMove } from 'gantt-lib';
 
 import type { PlannerScope, ProjectResource, ResourcePlannerResult } from '../../lib/apiTypes.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
-import { ResourceTimelineGrid } from './ResourceTimelineGrid.tsx';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
+import {
+  getPlannerItemMetadata,
+  mapResourcePlannerResultToTimelineResources,
+} from './resourcePlannerAdapter.ts';
+import type { ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
 
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
@@ -307,6 +313,10 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
   const selectedScopeCopy = getPlannerScopeCopy(plannerScope);
   const displayedPlannerData = state.data;
+  const timelineResources = useMemo(
+    () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData) : [],
+    [displayedPlannerData],
+  );
   const resourceCount = displayedPlannerData ? displayedPlannerData.resources.length : 0;
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
   const sharedResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'shared').length, [resources]);
@@ -335,6 +345,68 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       0,
     );
   }, [displayedPlannerData]);
+  const readonly = !accessToken;
+  const disableResourceReassignment = false;
+  const handleResourceItemMove = useCallback((_move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
+    // Move persistence is implemented in a later Phase 48 plan; resource mode remains controlled.
+  }, []);
+  const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
+    const metadata = getPlannerItemMetadata(item);
+    if (!metadata) {
+      return 'resource-planner-item';
+    }
+
+    return metadata.hasConflict
+      ? 'resource-planner-item resource-planner-item--conflict'
+      : 'resource-planner-item resource-planner-item--normal';
+  }, []);
+  const renderTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
+    const metadata = getPlannerItemMetadata(item);
+    const conflictCount = metadata?.conflictCount ?? 0;
+
+    return (
+      <div
+        className="flex h-full min-w-0 flex-col justify-center gap-1 px-2 py-1 text-left text-[11px] leading-tight"
+        data-testid={`resource-planner-item-content-${item.id}`}
+      >
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="truncate font-semibold">{item.title}</span>
+          {metadata?.hasConflict && (
+            <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">
+              Конфликт{conflictCount > 1 ? ` ${conflictCount}` : ''}
+            </span>
+          )}
+        </div>
+        {item.subtitle && <div className="truncate opacity-80">{item.subtitle}</div>}
+        <div className="flex min-w-0 items-center gap-1 tabular-nums opacity-80">
+          <span className="truncate">{String(item.startDate)} → {String(item.endDate)}</span>
+        </div>
+        {metadata?.hasConflict && (
+          <div className="flex min-w-0 items-center gap-2">
+            {metadata.conflictAssignmentIds.length > 0 && (
+              <span className="truncate opacity-80">{metadata.conflictAssignmentIds.join(', ')}</span>
+            )}
+            <button
+              type="button"
+              className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-900 shadow-sm"
+              data-testid={`resource-planner-correct-${metadata.assignmentId}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onCorrectConflict({
+                  projectId: metadata.projectId,
+                  taskId: metadata.taskId,
+                  assignmentId: metadata.assignmentId,
+                  resourceId: metadata.resourceId,
+                });
+              }}
+            >
+              Исправить конфликт
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }, [onCorrectConflict]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -516,11 +588,25 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
               </div>
             </div>
 
-            <ResourceTimelineGrid
-              emptyMessage={selectedScopeCopy.emptyCopy}
-              onCorrectConflict={onCorrectConflict}
-              resources={displayedPlannerData.resources}
-            />
+            <section
+              aria-label="Ресурсный календарь"
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+              data-testid="resource-planner-gantt-section"
+            >
+              <GanttChart
+                mode="resource-planner"
+                resources={timelineResources}
+                dayWidth={36}
+                laneHeight={40}
+                rowHeaderWidth={220}
+                headerHeight={40}
+                readonly={readonly}
+                disableResourceReassignment={disableResourceReassignment}
+                renderItem={renderTimelineItem}
+                getItemClassName={getTimelineItemClassName}
+                onResourceItemMove={handleResourceItemMove}
+              />
+            </section>
           </div>
         )}
       </div>
