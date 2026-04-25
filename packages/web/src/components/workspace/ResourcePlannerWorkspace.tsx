@@ -1,4 +1,3 @@
-import type { FormEvent } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove } from 'gantt-lib';
@@ -12,6 +11,7 @@ import {
   mapResourcePlannerResultToTimelineResources,
 } from './resourcePlannerAdapter.ts';
 import type { ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
+import { ResourceCatalogPanel, type ResourceCatalogRowStats } from './ResourceCatalogPanel.tsx';
 import { ResourceAssignmentDetailsPanel } from './ResourceAssignmentDetailsPanel.tsx';
 import { filterResourceTimelineResources, type ResourcePlannerFilters } from './resourcePlannerFilters.ts';
 
@@ -183,6 +183,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
   const setResources = useProjectStore((store) => store.setResources);
   const [resourceNameDraft, setResourceNameDraft] = useState('');
   const [resourceTargetDraft, setResourceTargetDraft] = useState('shared');
+  const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType>('human');
   const [resourceListError, setResourceListError] = useState<string | null>(null);
   const [resourceCreateError, setResourceCreateError] = useState<string | null>(null);
   const [resourceListLoading, setResourceListLoading] = useState(false);
@@ -278,9 +279,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     void loadResourceCatalog();
   }, [loadResourceCatalog]);
 
-  const handleCreateResource = useCallback(async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
+  const handleCreateResource = useCallback(async () => {
     if (!accessToken || creatingResource) {
       return;
     }
@@ -302,8 +301,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(resourceTargetDraft === 'shared'
-          ? { name, type: 'human', scope: 'shared' }
-          : { name, type: 'human', scope: 'project', projectId: resourceTargetDraft }),
+          ? { name, type: resourceTypeDraft, scope: 'shared' }
+          : { name, type: resourceTypeDraft, scope: 'project', projectId: resourceTargetDraft }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -320,12 +319,13 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
       setResourceNameDraft('');
       await loadResourceCatalog(resourceTargetDraft === 'shared' ? projectId : resourceTargetDraft);
+      await loadPlanner(plannerScope, { keepData: true });
     } catch (error) {
       setResourceCreateError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
     } finally {
       setCreatingResource(false);
     }
-  }, [accessToken, creatingResource, loadResourceCatalog, projectId, resourceNameDraft, resourceTargetDraft]);
+  }, [accessToken, creatingResource, loadPlanner, loadResourceCatalog, plannerScope, projectId, resourceNameDraft, resourceTargetDraft, resourceTypeDraft]);
 
   const selectedScopeCopy = getPlannerScopeCopy(plannerScope);
   const displayedPlannerData = state.data;
@@ -348,8 +348,18 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
   );
   const resourceCount = filteredTimelineResources.length;
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
-  const sharedResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'shared').length, [resources]);
-  const projectResourceCount = useMemo(() => resources.filter((resource) => resource.scope === 'project').length, [resources]);
+  const catalogRowStats = useMemo(() => {
+    const stats = new Map<string, ResourceCatalogRowStats>();
+
+    for (const resource of timelineResources) {
+      stats.set(resource.id, {
+        assignmentCount: resource.items.length,
+        conflictCount: resource.items.filter((item) => getPlannerItemMetadata(item)?.hasConflict).length,
+      });
+    }
+
+    return stats;
+  }, [timelineResources]);
   const intervalCount = useMemo(() => {
     return filteredTimelineResources.reduce((total, resource) => total + resource.items.length, 0);
   }, [filteredTimelineResources]);
@@ -479,83 +489,32 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="min-w-0 flex-1 overflow-auto p-4">
-        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="resource-management-panel">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-slate-900">Создать ресурс</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Shared ресурсы видны в planner по всем проектам workspace; проектные ресурсы доступны только выбранному проекту.
-              </p>
-              <form className="mt-3 grid gap-3 md:grid-cols-[minmax(220px,1fr)_260px_auto]" data-testid="resource-create-form" onSubmit={handleCreateResource}>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">
-                  Название
-                  <input
-                    id="resource-create-name"
-                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
-                    data-testid="resource-create-name-input"
-                    placeholder="Например: Бригада 1"
-                    value={resourceNameDraft}
-                    onChange={(event) => {
-                      setResourceNameDraft(event.target.value);
-                      setResourceCreateError(null);
-                    }}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">
-                  Где создать
-                  <select
-                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900"
-                    data-testid="resource-create-target-select"
-                    value={resourceTargetDraft}
-                    onChange={(event) => {
-                      setResourceTargetDraft(event.target.value);
-                      setResourceCreateError(null);
-                    }}
-                  >
-                    <option value="shared">Shared workspace</option>
-                    {activeProjects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        Проект: {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="submit"
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 md:self-end"
-                  data-testid="resource-create-submit"
-                  disabled={!accessToken || creatingResource || resourceNameDraft.trim().length === 0}
-                >
-                  {creatingResource ? 'Создание...' : 'Создать ресурс'}
-                </button>
-              </form>
-              {resourceCreateError && (
-                <div className="mt-2 text-xs text-red-700" data-testid="resource-create-error">
-                  {resourceCreateError}
-                </div>
-              )}
-            </div>
-            <div className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 lg:w-[320px]" data-testid="resource-catalog-summary">
-              <div className="font-semibold text-slate-800">Каталог ресурсов</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="rounded-full bg-white px-2 py-1">Shared: {sharedResourceCount}</span>
-                <span className="rounded-full bg-white px-2 py-1">Project: {projectResourceCount}</span>
-              </div>
-              {resourceListLoading && <div className="mt-2 text-slate-500">Загрузка списка ресурсов...</div>}
-              {resourceListError && <div className="mt-2 text-red-700" data-testid="resource-list-error">{resourceListError}</div>}
-              {resources.length > 0 && (
-                <div className="mt-3 max-h-28 space-y-1 overflow-auto" data-testid="resource-catalog-list">
-                  {resources.map((resource) => (
-                    <div key={resource.id} className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1">
-                      <span className="truncate">{resource.name}</span>
-                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{resource.scope}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+        <ResourceCatalogPanel
+          resources={resources}
+          activeProjects={activeProjects}
+          readonly={readonly}
+          loading={resourceListLoading}
+          creating={creatingResource}
+          error={resourceListError}
+          createError={resourceCreateError}
+          nameDraft={resourceNameDraft}
+          targetDraft={resourceTargetDraft}
+          typeDraft={resourceTypeDraft}
+          rowStats={catalogRowStats}
+          onNameDraftChange={(value) => {
+            setResourceNameDraft(value);
+            setResourceCreateError(null);
+          }}
+          onTargetDraftChange={(value) => {
+            setResourceTargetDraft(value);
+            setResourceCreateError(null);
+          }}
+          onTypeDraftChange={(value) => {
+            setResourceTypeDraft(value);
+            setResourceCreateError(null);
+          }}
+          onCreate={handleCreateResource}
+        />
 
         <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="planner-scope-controls">
           <fieldset className="space-y-3">
