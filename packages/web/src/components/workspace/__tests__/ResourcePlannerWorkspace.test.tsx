@@ -9,6 +9,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const plannerWorkspaceSpy = vi.fn();
 const projectWorkspaceSpy = vi.fn();
+const ganttLibChartSpy = vi.fn();
+
+vi.mock('gantt-lib', async () => {
+  const actual = await vi.importActual<typeof import('gantt-lib')>('gantt-lib');
+  return {
+    ...actual,
+    GanttChart: (props: {
+      mode?: string;
+      resources?: Array<{ id: string; name: string; items: Array<{ id: string; title: string }> }>;
+      renderItem?: (item: { id: string; title: string }) => React.ReactNode;
+      getItemClassName?: (item: { id: string; title: string }) => string | undefined;
+    }) => {
+      ganttLibChartSpy(props);
+      return (
+        <div data-testid="gantt-lib-resource-planner">
+          {props.resources?.map((resource) => (
+            <div key={resource.id} data-testid={`gantt-resource-row-${resource.id}`}>
+              <span>{resource.name}</span>
+              {resource.items.map((item) => (
+                <div
+                  key={item.id}
+                  className={props.getItemClassName?.(item)}
+                  data-testid={`gantt-resource-item-${item.id}`}
+                >
+                  {props.renderItem ? props.renderItem(item) : item.title}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock('../ResourcePlannerWorkspace.tsx', async () => {
   const actual = await vi.importActual<typeof import('../ResourcePlannerWorkspace.tsx')>('../ResourcePlannerWorkspace.tsx');
@@ -286,6 +320,7 @@ async function flushPlannerEffects(): Promise<void> {
 beforeEach(() => {
   plannerWorkspaceSpy.mockClear();
   projectWorkspaceSpy.mockClear();
+  ganttLibChartSpy.mockClear();
   vi.restoreAllMocks();
 
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -748,7 +783,7 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(root);
   });
 
-  it('renders planner payloads as timeline rows with calendar bars, conflict metadata, diagnostics, and correction actions', async () => {
+  it('renders planner payloads through gantt-lib resource planner rows, conflict metadata, and correction actions', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -792,22 +827,14 @@ describe('ResourcePlanner workspace integration', () => {
                 conflictCount: 0,
                 conflictAssignmentIds: [],
               },
-              {
-                assignmentId: 'assignment-invalid',
-                resourceId: 'resource-1',
-                resourceName: 'Shared Designer',
-                projectId: 'project-1',
-                projectName: 'Project 1',
-                taskId: 'task-invalid',
-                taskName: 'Broken date task',
-                startDate: 'bad-date',
-                endDate: '2026-04-06',
-                assignmentCreatedAt: '2026-04-03T00:00:00.000Z',
-                hasConflict: false,
-                conflictCount: 0,
-                conflictAssignmentIds: [],
-              },
             ],
+          },
+          {
+            resourceId: 'resource-empty',
+            resourceName: 'Empty Crane',
+            hasConflicts: false,
+            conflictCount: 0,
+            intervals: [],
           },
         ],
       }),
@@ -824,21 +851,31 @@ describe('ResourcePlanner workspace integration', () => {
 
     expect(container.querySelector('[data-testid="planner-conflict-resource-count"]')?.textContent).toBe('1');
     expect(container.querySelector('[data-testid="planner-conflict-interval-count"]')?.textContent).toBe('1');
-    expect(container.querySelector('[data-testid="resource-timeline-grid"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="resource-timeline-row-resource-1"]')?.textContent).toContain('Shared Designer');
-    expect(container.querySelector('[data-testid="resource-timeline-calendar-day-2026-04-01"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="resource-timeline-calendar-day-2026-04-04"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="resource-timeline-bar-assignment-1"]')?.textContent).toContain('Landing');
-    expect(container.querySelector('[data-testid="resource-timeline-bar-assignment-2"]')?.textContent).toContain('Spec');
-    expect(container.querySelector('[data-testid="resource-timeline-conflict-badge-resource-1"]')?.textContent).toContain('Конфликтов: 2');
-    expect(container.querySelector('[data-testid="resource-timeline-conflict-assignment-1"]')?.textContent).toContain('assignment-3');
-    expect(container.querySelector('[data-testid="resource-timeline-invalid-intervals"]')?.textContent).toContain('Некорректные интервалы: 1');
-    expect(container.querySelector('[data-testid="resource-timeline-invalid-interval-assignment-invalid"]')?.textContent).toContain('Broken date task');
-    expect(container.querySelector('[data-testid="planner-resource-conflict-badge-resource-1"]')).toBeNull();
-    expect(container.querySelector('[data-testid="planner-interval-conflict-assignment-1"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Ресурсный календарь"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="resource-timeline-grid"]')).toBeNull();
+    expect(container.querySelector('[data-testid="gantt-lib-resource-planner"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="gantt-resource-row-resource-1"]')?.textContent).toContain('Shared Designer');
+    expect(container.querySelector('[data-testid="gantt-resource-row-resource-empty"]')?.textContent).toContain('Empty Crane');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Landing');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Project 2');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Конфликт');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('assignment-3');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.className).toContain('resource-planner-item--conflict');
+    expect(ganttLibChartSpy).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'resource-planner',
+      dayWidth: 36,
+      laneHeight: 40,
+      rowHeaderWidth: 220,
+      headerHeight: 40,
+      readonly: false,
+      disableResourceReassignment: false,
+      resources: expect.arrayContaining([
+        expect.objectContaining({ id: 'resource-empty', name: 'Empty Crane', items: [] }),
+      ]),
+    }));
 
     await act(async () => {
-      (container.querySelector('[data-testid="resource-timeline-correct-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="resource-planner-correct-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
