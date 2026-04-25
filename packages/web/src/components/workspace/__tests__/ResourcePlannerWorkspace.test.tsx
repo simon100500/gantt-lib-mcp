@@ -465,8 +465,9 @@ describe('ResourcePlanner workspace integration', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=all-projects', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
-    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toContain('Все проекты');
-    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Во всех доступных проектах');
+    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toBe('Ресурсы');
+    expect(container.querySelector('[data-testid="planner-subtitle"]')?.textContent).toBe('Все проекты workspace');
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
 
     await act(async () => {
       (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
@@ -477,8 +478,9 @@ describe('ResourcePlanner workspace integration', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=current-project', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
-    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toContain('Текущий проект');
-    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('В текущем проекте');
+    expect(container.querySelector('[data-testid="planner-title"]')?.textContent).toBe('Ресурсы');
+    expect(container.querySelector('[data-testid="planner-subtitle"]')?.textContent).toBe('Текущий проект');
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
 
     await unmountApp(root);
   });
@@ -524,7 +526,7 @@ describe('ResourcePlanner workspace integration', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('В текущем проекте');
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
 
     await unmountApp(root);
   });
@@ -598,7 +600,7 @@ describe('ResourcePlanner workspace integration', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/resources/planner?scope=current-project', expect.any(Object));
     expect(currentProjectAttempts).toBe(2);
-    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('В текущем проекте');
+    expect(container.querySelector('[data-testid="planner-empty-state"]')?.textContent).toContain('Нет ресурсов для отображения');
     expect(container.querySelector('[data-testid="resource-catalog-list"]')?.textContent).toContain('Shared Crew');
 
     await unmountApp(root);
@@ -885,6 +887,227 @@ describe('ResourcePlanner workspace integration', () => {
       assignmentId: 'assignment-1',
       resourceId: 'resource-1',
     });
+
+    await unmountApp(root);
+  });
+
+  it('filters planner rows client-side without refetching until scope changes', async () => {
+    const catalogResources = [
+      {
+        id: 'resource-human',
+        userId: 'user-1',
+        projectId: null,
+        scope: 'shared' as const,
+        name: 'Design Team',
+        type: 'human' as const,
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: null,
+      },
+      {
+        id: 'resource-equipment',
+        userId: 'user-1',
+        projectId: null,
+        scope: 'shared' as const,
+        name: 'Tower Crane',
+        type: 'equipment' as const,
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: null,
+      },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        const scope = url.includes('scope=current-project') ? 'current-project' : 'all-projects';
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope,
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-human',
+                resourceName: 'Design Team',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [
+                  {
+                    assignmentId: 'assignment-spec',
+                    resourceId: 'resource-human',
+                    resourceName: 'Design Team',
+                    projectId: 'project-1',
+                    projectName: 'Project 1',
+                    taskId: 'task-spec',
+                    taskName: 'Spec Package',
+                    startDate: '2026-04-01',
+                    endDate: '2026-04-02',
+                    assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                    hasConflict: false,
+                    conflictCount: 0,
+                    conflictAssignmentIds: [],
+                  },
+                ],
+              },
+              {
+                resourceId: 'resource-equipment',
+                resourceName: 'Tower Crane',
+                hasConflicts: true,
+                conflictCount: 1,
+                intervals: [
+                  {
+                    assignmentId: 'assignment-crane',
+                    resourceId: 'resource-equipment',
+                    resourceName: 'Tower Crane',
+                    projectId: 'project-1',
+                    projectName: 'Project 1',
+                    taskId: 'task-crane',
+                    taskName: 'Lift Panels',
+                    startDate: '2026-04-03',
+                    endDate: '2026-04-04',
+                    assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                    hasConflict: true,
+                    conflictCount: 1,
+                    conflictAssignmentIds: ['assignment-peer'],
+                  },
+                ],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: catalogResources }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    const plannerFetchesBeforeFilter = fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner')).length;
+
+    await act(async () => {
+      const input = container.querySelector('[data-testid="planner-filter-query"]') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'crane');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="gantt-resource-row-resource-human"]')).toBeNull();
+    expect(container.querySelector('[data-testid="gantt-resource-row-resource-equipment"]')?.textContent).toContain('Tower Crane');
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner'))).toHaveLength(plannerFetchesBeforeFilter);
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-scope-current-project"]') as HTMLInputElement).click();
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner'))).toHaveLength(plannerFetchesBeforeFilter + 1);
+
+    await unmountApp(root);
+  });
+
+  it('opens and closes assignment details accessibly while preserving conflict correction metadata', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'all-projects',
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-1',
+                resourceName: 'Shared Designer',
+                hasConflicts: true,
+                conflictCount: 1,
+                intervals: [
+                  {
+                    assignmentId: 'assignment-1',
+                    resourceId: 'resource-1',
+                    resourceName: 'Shared Designer',
+                    projectId: 'project-2',
+                    projectName: 'Project 2',
+                    taskId: 'task-2',
+                    taskName: 'Landing',
+                    startDate: '2026-04-01',
+                    endDate: '2026-04-03',
+                    assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                    hasConflict: true,
+                    conflictCount: 1,
+                    conflictAssignmentIds: ['assignment-3'],
+                  },
+                ],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onCorrectConflict = vi.fn();
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict,
+    });
+    await flushPlannerEffects();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')?.textContent).toContain('Детали назначения');
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')?.textContent).toContain('Landing');
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')?.textContent).toContain('Project 2');
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')?.textContent).toContain('Сменить ресурс');
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')?.textContent).toContain('Убрать ресурс с задачи');
+
+    await act(async () => {
+      (container.querySelector('[data-testid="assignment-details-correct"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    expect(onCorrectConflict).toHaveBeenCalledWith({
+      projectId: 'project-2',
+      taskId: 'task-2',
+      assignmentId: 'assignment-1',
+      resourceId: 'resource-1',
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')).toBeNull();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')).not.toBeNull();
 
     await unmountApp(root);
   });
