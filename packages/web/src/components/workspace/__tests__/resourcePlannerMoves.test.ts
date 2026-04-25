@@ -38,12 +38,10 @@ function move(overrides: Partial<ResourceTimelineMove<ResourcePlannerTimelineIte
   return {
     item: baseItem,
     itemId: baseItem.id,
-    taskId: baseItem.taskId,
     fromResourceId: 'resource-1',
     toResourceId: 'resource-1',
     startDate: new Date(Date.UTC(2026, 3, 2)),
     endDate: new Date(Date.UTC(2026, 3, 4)),
-    changeType: 'move',
     ...overrides,
   };
 }
@@ -72,7 +70,6 @@ describe('resourcePlannerMoves', () => {
     expect(classifyResourcePlannerMove(move({
       startDate: new Date(Date.UTC(2026, 2, 31)),
       endDate: new Date(Date.UTC(2026, 3, 3)),
-      changeType: 'resize-start',
     }))).toMatchObject({
       kind: 'date-only',
       commands: [{ type: 'resize_task', taskId: 'task-1', anchor: 'start', date: '2026-03-31' }],
@@ -81,7 +78,6 @@ describe('resourcePlannerMoves', () => {
     expect(classifyResourcePlannerMove(move({
       startDate: new Date(Date.UTC(2026, 3, 1)),
       endDate: new Date(Date.UTC(2026, 3, 5)),
-      changeType: 'resize-end',
     }))).toMatchObject({
       kind: 'date-only',
       commands: [{ type: 'resize_task', taskId: 'task-1', anchor: 'end', date: '2026-04-05' }],
@@ -90,7 +86,6 @@ describe('resourcePlannerMoves', () => {
     expect(classifyResourcePlannerMove(move({
       startDate: new Date(Date.UTC(2026, 2, 31)),
       endDate: new Date(Date.UTC(2026, 3, 5)),
-      changeType: 'move',
     }))).toMatchObject({
       kind: 'date-only',
       commands: [
@@ -143,7 +138,7 @@ describe('resourcePlannerMoves', () => {
       reason: 'locked',
     });
 
-    expect(classifyResourcePlannerMove(move({ item: { ...item(), metadata: null } }))).toEqual({
+    expect(classifyResourcePlannerMove(move({ item: { ...item(), metadata: null as unknown as ResourcePlannerTimelineItem['metadata'] } }))).toEqual({
       kind: 'rejected',
       reason: 'missing-metadata',
     });
