@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, FolderKanban, Funnel, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { FolderKanban, Funnel, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove } from 'gantt-lib';
 
@@ -702,6 +702,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     || filters.resourceTypes.length > 0
     || filters.conflictOnly
     || filters.includeInactive;
+  const toolbarButtonClassName = 'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-primary hover:text-primary';
+  const toolbarPrimaryButtonClassName = 'h-8 rounded-md border border-primary/40 bg-primary/5 px-2.5 text-[12px] font-medium text-primary hover:border-primary hover:bg-primary/10';
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
     if (!metadata) {
@@ -729,177 +731,161 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
-      <div className="border-b border-slate-200 bg-white">
-        <div className="flex min-h-14 flex-col gap-3 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-center">
-            <p className="text-xs text-slate-500" data-testid="planner-subtitle">Текущий проект</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    'h-8 rounded-md bg-white px-2.5 text-sm text-slate-700',
-                    hasActiveFilters && 'border-slate-900 text-slate-900',
-                  )}
-                  data-testid="planner-open-filter"
-                >
-                  <Funnel className="h-4 w-4" />
-                  <span>Фильтр</span>
-                  {hasActiveFilters ? (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                      {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(filters.includeInactive)}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80" data-testid="planner-filter-controls">
-                <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-slate-500">
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  Фильтр ресурсов
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="space-y-3 px-2 py-2" onKeyDownCapture={(event) => event.stopPropagation()}>
-                  <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500">
-                    Поиск
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                      <input
-                        className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm font-normal text-slate-900 outline-none transition-colors focus:border-slate-400"
-                        placeholder="Ресурс, задача или проект"
-                        value={filters.query}
-                        onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-                      />
-                    </div>
-                  </label>
-
-                  <fieldset className="space-y-2">
-                    <legend className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Тип ресурса</legend>
-                    <div className="flex flex-wrap gap-2">
-                      {RESOURCE_TYPE_OPTIONS.map((option) => {
-                        const checked = filters.resourceTypes.includes(option.type);
-                        return (
-                          <label
-                            key={option.type}
-                            className={cn(
-                              'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
-                              checked
-                                ? 'border-slate-900 bg-slate-900 text-white'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              className="sr-only"
-                              checked={checked}
-                              onChange={(event) => setFilters((current) => ({
-                                ...current,
-                                resourceTypes: event.target.checked
-                                  ? [...current.resourceTypes, option.type]
-                                  : current.resourceTypes.filter((type) => type !== option.type),
-                              }))}
-                            />
-                            {option.label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={filters.conflictOnly}
-                        onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
-                      />
-                      Только конфликты
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={filters.includeInactive}
-                        onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
-                      />
-                      Показывать неактивные
-                    </label>
+      <div className="px-3 md:px-4">
+        <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={cn(
+                  toolbarButtonClassName,
+                  hasActiveFilters && 'border-primary bg-primary/5 text-primary',
+                )}
+                data-testid="planner-open-filter"
+              >
+                <Funnel className="h-4 w-4" />
+                <span>Фильтр</span>
+                {hasActiveFilters ? (
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(filters.includeInactive)}
+                  </span>
+                ) : null}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80" data-testid="planner-filter-controls">
+              <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-slate-500">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Фильтр ресурсов
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <div className="space-y-3 px-2 py-2" onKeyDownCapture={(event) => event.stopPropagation()}>
+                <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500">
+                  Поиск
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm font-normal text-slate-900 outline-none transition-colors focus:border-slate-400"
+                      placeholder="Ресурс, задача или проект"
+                      value={filters.query}
+                      onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+                    />
                   </div>
+                </label>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-full"
-                    disabled={!hasActiveFilters}
-                    onClick={() => setFilters({
-                      query: '',
-                      resourceTypes: [],
-                      conflictOnly: false,
-                      includeInactive: false,
-                    })}
-                  >
-                    Сбросить фильтр
-                  </Button>
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Тип ресурса</legend>
+                <div className="flex flex-wrap gap-2">
+                  {RESOURCE_TYPE_OPTIONS.map((option) => {
+                    const checked = filters.resourceTypes.includes(option.type);
+                    return (
+                      <label
+                        key={option.type}
+                        className={cn(
+                          'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                          checked
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={checked}
+                          onChange={(event) => setFilters((current) => ({
+                            ...current,
+                            resourceTypes: event.target.checked
+                              ? [...current.resourceTypes, option.type]
+                              : current.resourceTypes.filter((type) => type !== option.type),
+                          }))}
+                        />
+                        {option.label}
+                      </label>
+                    );
+                  })}
                 </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </fieldset>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn('h-8 rounded-md bg-white px-2.5 text-sm text-slate-700', showCatalogPanel && !selectedItem && 'border-slate-900 text-slate-900')}
-              data-testid="planner-open-catalog"
-              onClick={() => {
-                setSelectedItem(null);
-                setShowCatalogPanel((current) => !current);
-              }}
-            >
-              <FolderKanban className="h-4 w-4" />
-              <span>Ресурсы</span>
-            </Button>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={filters.conflictOnly}
+                    onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
+                  />
+                  Только конфликты
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={filters.includeInactive}
+                    onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
+                  />
+                  Показывать неактивные
+                </label>
+              </div>
 
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 rounded-md bg-slate-900 px-2.5 text-sm text-white hover:bg-slate-800"
-              onClick={handleOpenCatalogPanel}
-            >
-              <Plus className="h-4 w-4" />
-              <span>Создать</span>
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-full"
+                disabled={!hasActiveFilters}
+                onClick={() => setFilters({
+                  query: '',
+                  resourceTypes: [],
+                  conflictOnly: false,
+                  includeInactive: false,
+                })}
+              >
+                Сбросить фильтр
+              </Button>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-md bg-white px-2.5 text-sm text-slate-700"
-              onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(toolbarButtonClassName, showCatalogPanel && !selectedItem && 'border-primary bg-primary/5 text-primary')}
+            data-testid="planner-open-catalog"
+            onClick={() => {
+              setSelectedItem(null);
+              setShowCatalogPanel((current) => !current);
+            }}
+          >
+            <FolderKanban className="h-4 w-4" />
+            <span>Ресурсы</span>
+          </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-md bg-white px-2.5 text-sm text-slate-700"
-              onClick={onBackToProject}
-              data-testid="planner-back-button"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Проект</span>
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={toolbarPrimaryButtonClassName}
+            onClick={handleOpenCatalogPanel}
+          >
+            <Plus className="h-4 w-4" />
+            <span>Создать</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={toolbarButtonClassName}
+            onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1 overflow-auto p-4">
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 lg:flex-row lg:overflow-hidden">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto bg-white">
         <input
           className="sr-only"
           data-testid="planner-filter-query"
@@ -909,7 +895,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
         />
         {state.status === 'loading' && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
+          <div className="bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
             Загружаем ресурсный календарь…
           </div>
         )}
@@ -950,10 +936,10 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
         )}
 
         {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length > 0 && (
-          <div className="space-y-4" data-testid="planner-data-state">
+          <div className="flex min-h-0 flex-1" data-testid="planner-data-state">
             <section
               aria-label="Ресурсный календарь"
-              className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+              className="h-[calc(100dvh-132px)] min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
               data-testid="resource-planner-gantt-section"
             >
               <GanttChart
@@ -963,6 +949,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
                 laneHeight={42}
                 rowHeaderWidth={220}
                 headerHeight={40}
+                allowVerticalPan
                 readonly={readonly}
                 disableResourceReassignment={disableResourceReassignment}
                 getItemClassName={getTimelineItemClassName}
@@ -973,6 +960,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           </div>
         )}
 
+      </div>
       </div>
 
       <div className={cn('w-full max-w-[420px] border-l border-slate-200 bg-white', !showSidePanel && 'hidden')}>
