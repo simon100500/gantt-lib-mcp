@@ -45,7 +45,7 @@
 - [ ] **Phase 38: Paywall Trial Transition** — 14-day Start trial with auto-rollback to free
 - [x] **Phase 41: Initial Generation Refactor** — AI-first planning pipeline for empty-project broad schedule creation — completed 2026-04-08
 - [ ] **Phase 42: MCP Mutation Refactor** — Reliable staged conversational edits via intent, resolution, mutation plan, and deterministic execution
-- [ ] **Phase 48: resource-screen** — Full resource management screen backed by `gantt-lib` resource planner mode
+- [x] **Phase 48: resource-screen** — Full resource management screen backed by `gantt-lib` resource planner mode — completed 2026-04-25
 
 <details>
 <summary>v1.0 MVP (Phases 1-14) — SHIPPED 2026-03-13</summary>
@@ -420,14 +420,14 @@ Plans:
 **Goal:** Build a full resource management screen that replaces the local planner grid with `gantt-lib` resource planner mode, supports catalog management, filters, assignment details, conflict correction, and controlled drag persistence for date/resource changes
 **Requirements**: PRD-only (`RESOURCE-MANAGEMENT-SCREEN-PRD.md`, `RESOURCE-PLANNER-MODE-PRD.md`)
 **Depends on:** Phase 47
-**Plans:** 4/5 plans complete
+**Plans:** 5/5 plans complete
 
 Plans:
 - [x] 48-01-PLAN.md — Adapter and `gantt-lib` renderer swap
 - [x] 48-02-PLAN.md — Filters, selection, details, and accessible fallback actions
 - [x] 48-03-PLAN.md — Resource catalog create, edit, type, and status management
 - [x] 48-04-PLAN.md — Controlled move persistence for dates and resources
-- [ ] 48-05-PLAN.md — Hardening tests and `ResourceTimelineGrid` deprecation handling
+- [x] 48-05-PLAN.md — Hardening tests and `ResourceTimelineGrid` deprecation handling
 
 ---
-*Last updated: 2026-04-25 — Phase 48 Plan 04 completed*
+*Last updated: 2026-04-25 — Phase 48 completed*
