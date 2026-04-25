@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FolderKanban, Funnel, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { Check, FolderKanban, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove } from 'gantt-lib';
 
-import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerResult, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { cn } from '../../lib/utils.ts';
@@ -26,7 +26,7 @@ import type { ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
 import { ResourceCatalogPanel, type ResourceCatalogRowStats } from './ResourceCatalogPanel.tsx';
 import { ResourceAssignmentDetailsPanel } from './ResourceAssignmentDetailsPanel.tsx';
 import { filterResourceTimelineResources, type ResourcePlannerFilters } from './resourcePlannerFilters.ts';
-import { buildReplacementResourceIds, classifyResourcePlannerMove } from './resourcePlannerMoves.ts';
+import { buildReplacementResourceIds, classifyResourcePlannerMove, type ResourcePlannerMoveClassification } from './resourcePlannerMoves.ts';
 
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
@@ -40,6 +40,10 @@ type PlannerState =
   | { status: 'loading'; data: ResourcePlannerResult | null; error: null }
   | { status: 'error'; data: ResourcePlannerResult | null; error: string }
   | { status: 'ready'; data: ResourcePlannerResult; error: null };
+
+type OptimisticPlannerMove = ResourcePlannerMoveClassification & {
+  kind: 'date-only' | 'resource-only' | 'combined';
+};
 
 const RESOURCE_TYPE_OPTIONS: Array<{ type: ResourceType; label: string }> = [
   { type: 'human', label: 'Люди' },
@@ -206,6 +210,77 @@ function normalizeAssignmentMutationPayload(payload: unknown): TaskAssignmentRec
   }
 
   return normalized;
+}
+
+function countPlannerAssignments(data: ResourcePlannerResult | null): number {
+  return data?.resources.reduce((total, resource) => total + resource.intervals.length, 0) ?? 0;
+}
+
+function refreshResourceConflictSummary(resource: ResourcePlannerResult['resources'][number]): ResourcePlannerResult['resources'][number] {
+  const conflictCount = resource.intervals.filter((interval) => interval.hasConflict).length;
+  return {
+    ...resource,
+    hasConflicts: conflictCount > 0,
+    conflictCount,
+  };
+}
+
+function isOptimisticPlannerMove(classification: ResourcePlannerMoveClassification): classification is OptimisticPlannerMove {
+  return classification.kind === 'date-only'
+    || classification.kind === 'resource-only'
+    || classification.kind === 'combined';
+}
+
+function applyOptimisticPlannerMove(
+  data: ResourcePlannerResult,
+  move: OptimisticPlannerMove,
+): ResourcePlannerResult {
+  const sourceResource = data.resources.find((resource) => (
+    resource.intervals.some((interval) => interval.assignmentId === move.assignmentId)
+  ));
+  const sourceInterval = sourceResource?.intervals.find((interval) => interval.assignmentId === move.assignmentId);
+  if (!sourceInterval) {
+    return data;
+  }
+
+  const targetResource = data.resources.find((resource) => resource.resourceId === move.toResourceId);
+  const targetResourceName = targetResource?.resourceName ?? move.toResourceId;
+  const placedInterval: ResourcePlannerInterval = {
+    ...sourceInterval,
+    resourceId: move.toResourceId,
+    resourceName: targetResourceName,
+    startDate: move.startDate,
+    endDate: move.endDate,
+  };
+
+  const resourcesWithoutMovedInterval = data.resources.map((resource) => {
+    const nextIntervals = resource.intervals.filter((interval) => interval.assignmentId !== move.assignmentId);
+
+    return refreshResourceConflictSummary({ ...resource, intervals: nextIntervals });
+  });
+
+  const resourceExists = resourcesWithoutMovedInterval.some((resource) => resource.resourceId === move.toResourceId);
+  const nextResources = resourceExists
+    ? resourcesWithoutMovedInterval.map((resource) => (
+      resource.resourceId === move.toResourceId
+        ? refreshResourceConflictSummary({ ...resource, intervals: [...resource.intervals, placedInterval] })
+        : resource
+    ))
+    : [
+      ...resourcesWithoutMovedInterval,
+      refreshResourceConflictSummary({
+        resourceId: move.toResourceId,
+        resourceName: targetResourceName,
+        hasConflicts: Boolean(placedInterval.hasConflict),
+        conflictCount: placedInterval.hasConflict ? 1 : 0,
+        intervals: [placedInterval],
+      }),
+    ];
+
+  return {
+    ...data,
+    resources: nextResources,
+  };
 }
 
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttDayMode = 'calendar', onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
@@ -532,12 +607,41 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     }
 
     const classification = classifyResourcePlannerMove(move);
-    if (classification.kind === 'rejected' || classification.kind === 'no-op') {
+    if (!isOptimisticPlannerMove(classification)) {
       return;
     }
 
     setPendingMoveIds((current) => new Set(current).add(classification.itemId));
     setPlannerSaveError(null);
+    setState((current) => {
+      if (!current.data) {
+        return current;
+      }
+
+      const optimisticData = applyOptimisticPlannerMove(current.data, classification);
+      return current.status === 'error'
+        ? { status: 'error', data: optimisticData, error: current.error }
+        : { status: 'ready', data: optimisticData, error: null };
+    });
+    setSelectedItem((current) => {
+      if (!current || current.id !== classification.assignmentId) {
+        return current;
+      }
+
+      const targetResourceName = state.data?.resources.find((resource) => resource.resourceId === classification.toResourceId)?.resourceName
+        ?? current.metadata.resourceName;
+      return {
+        ...current,
+        resourceId: classification.toResourceId,
+        startDate: classification.startDate,
+        endDate: classification.endDate,
+        metadata: {
+          ...current.metadata,
+          resourceId: classification.toResourceId,
+          resourceName: targetResourceName,
+        },
+      };
+    });
 
     let datePersisted = false;
     try {
@@ -583,7 +687,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         return next;
       });
     }
-  }, [accessToken, commitCommand, loadPlanner, pendingMoveIds, persistResourceReplacement, plannerScope]);
+  }, [accessToken, commitCommand, loadPlanner, pendingMoveIds, persistResourceReplacement, plannerScope, state.data]);
 
   const handleDetailsDateChange = useCallback((input: { assignmentId: string; startDate: string; endDate: string }) => {
     if (!selectedItem || input.assignmentId !== selectedItem.id) {
@@ -699,6 +803,9 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   }, [timelineResources]);
   const readonly = !accessToken;
   const disableResourceReassignment = true;
+  const plannerResourceCount = displayedPlannerData?.resources.length ?? 0;
+  const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);
+  const pendingMoveCount = pendingMoveIds.size;
   const hasActiveFilters = filters.query.trim().length > 0
     || filters.resourceTypes.length > 0
     || filters.conflictOnly
@@ -940,7 +1047,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           <div className="flex min-h-0 flex-1" data-testid="planner-data-state">
             <section
               aria-label="Ресурсный календарь"
-              className="h-[calc(100dvh-132px)] min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
+              className="min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
               data-testid="resource-planner-gantt-section"
             >
               <GanttChart
@@ -960,6 +1067,57 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               />
             </section>
           </div>
+        )}
+
+        {displayedPlannerData && (
+          <footer
+            className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3"
+            data-testid="resource-planner-statusbar"
+          >
+            <span className="font-mono text-[11px] text-slate-400">
+              {plannerResourceCount} ресурсов
+            </span>
+
+            <span className="font-mono text-[11px] text-slate-400">
+              {plannerAssignmentCount} назначений
+            </span>
+
+            <span className="font-mono text-[11px] text-slate-400">
+              {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
+            </span>
+
+            <span className="font-mono text-[11px] text-slate-400">
+              {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты'}
+            </span>
+
+            {readonly && (
+              <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                Только для чтения
+              </span>
+            )}
+
+            {!readonly && plannerSaveError && (
+              <span className="flex items-center gap-1.5 font-mono text-[11px] text-red-600">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
+                Ошибка сохранения
+              </span>
+            )}
+
+            {!readonly && !plannerSaveError && pendingMoveCount > 0 && (
+              <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
+                <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
+                Сохранение...
+              </span>
+            )}
+
+            {!readonly && !plannerSaveError && pendingMoveCount === 0 && (
+              <span className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-600">
+                <Check className="h-3 w-3 shrink-0" />
+                Сохранено
+              </span>
+            )}
+          </footer>
         )}
 
       </div>
