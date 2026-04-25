@@ -175,6 +175,13 @@ function normalizeResourceListPayload(payload: unknown): ProjectResource[] | nul
   return normalized.every((resource): resource is ProjectResource => Boolean(resource)) ? normalized : null;
 }
 
+function normalizeResourceMutationPayload(payload: unknown): ProjectResource | null {
+  return normalizeProjectResource(payload)
+    ?? (payload && typeof payload === 'object' && 'resource' in payload
+      ? normalizeProjectResource((payload as { resource?: unknown }).resource)
+      : null);
+}
+
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
   const [plannerScope, setPlannerScope] = useState<PlannerScope>('all-projects');
   const [state, setState] = useState<PlannerState>({ status: 'loading', data: null, error: null });
@@ -186,8 +193,10 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
   const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType>('human');
   const [resourceListError, setResourceListError] = useState<string | null>(null);
   const [resourceCreateError, setResourceCreateError] = useState<string | null>(null);
+  const [resourceMutationError, setResourceMutationError] = useState<string | null>(null);
   const [resourceListLoading, setResourceListLoading] = useState(false);
   const [creatingResource, setCreatingResource] = useState(false);
+  const [pendingCatalogResourceId, setPendingCatalogResourceId] = useState<string | null>(null);
   const [filters, setFilters] = useState<ResourcePlannerFilters>({
     query: '',
     resourceTypes: [],
@@ -292,6 +301,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
 
     setCreatingResource(true);
     setResourceCreateError(null);
+    setResourceMutationError(null);
 
     try {
       const response = await fetch('/api/resources', {
@@ -326,6 +336,75 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
       setCreatingResource(false);
     }
   }, [accessToken, creatingResource, loadPlanner, loadResourceCatalog, plannerScope, projectId, resourceNameDraft, resourceTargetDraft, resourceTypeDraft]);
+
+  const patchCatalogResource = useCallback(async (resource: ProjectResource, payload: { name?: string; type?: ResourceType; isActive?: boolean }) => {
+    if (!accessToken || pendingCatalogResourceId) {
+      return;
+    }
+
+    setPendingCatalogResourceId(resource.id);
+    setResourceMutationError(null);
+
+    try {
+      const response = await fetch(`/api/resources/${encodeURIComponent(resource.id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const updated = normalizeResourceMutationPayload(body);
+      if (!updated) {
+        throw new Error('Resource payload was malformed.');
+      }
+
+      await loadResourceCatalog(updated.projectId ?? projectId);
+      await loadPlanner(plannerScope, { keepData: true });
+    } catch (error) {
+      setResourceMutationError(error instanceof Error ? error.message : 'Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
+    } finally {
+      setPendingCatalogResourceId(null);
+    }
+  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
+
+  const handleRenameResource = useCallback(async (resource: ProjectResource, nameDraft: string) => {
+    const name = nameDraft.trim();
+    if (!name) {
+      setResourceMutationError('Введите название ресурса.');
+      return;
+    }
+
+    if (name === resource.name) {
+      return;
+    }
+
+    await patchCatalogResource(resource, { name });
+  }, [patchCatalogResource]);
+
+  const handleChangeResourceType = useCallback(async (resource: ProjectResource, type: ResourceType) => {
+    if (type === resource.type) {
+      return;
+    }
+
+    await patchCatalogResource(resource, { type });
+  }, [patchCatalogResource]);
+
+  const handleSetResourceActive = useCallback(async (resource: ProjectResource, isActive: boolean) => {
+    if (isActive === resource.isActive) {
+      return;
+    }
+
+    await patchCatalogResource(resource, { isActive });
+  }, [patchCatalogResource]);
 
   const selectedScopeCopy = getPlannerScopeCopy(plannerScope);
   const displayedPlannerData = state.data;
@@ -497,6 +576,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           creating={creatingResource}
           error={resourceListError}
           createError={resourceCreateError}
+          mutationError={resourceMutationError}
+          pendingResourceId={pendingCatalogResourceId}
           nameDraft={resourceNameDraft}
           targetDraft={resourceTargetDraft}
           typeDraft={resourceTypeDraft}
@@ -514,6 +595,9 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
             setResourceCreateError(null);
           }}
           onCreate={handleCreateResource}
+          onRenameResource={handleRenameResource}
+          onChangeResourceType={handleChangeResourceType}
+          onSetResourceActive={handleSetResourceActive}
         />
 
         <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="planner-scope-controls">

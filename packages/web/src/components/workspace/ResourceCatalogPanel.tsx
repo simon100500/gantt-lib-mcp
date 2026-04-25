@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { ProjectResource, ResourceScope, ResourceType } from '../../lib/apiTypes.ts';
 
@@ -20,6 +21,8 @@ interface ResourceCatalogPanelProps {
   creating: boolean;
   error: string | null;
   createError: string | null;
+  mutationError: string | null;
+  pendingResourceId: string | null;
   nameDraft: string;
   targetDraft: string;
   typeDraft: ResourceType;
@@ -28,6 +31,9 @@ interface ResourceCatalogPanelProps {
   onTargetDraftChange: (value: string) => void;
   onTypeDraftChange: (value: ResourceType) => void;
   onCreate: () => void | Promise<void>;
+  onRenameResource: (resource: ProjectResource, name: string) => void | Promise<void>;
+  onChangeResourceType: (resource: ProjectResource, type: ResourceType) => void | Promise<void>;
+  onSetResourceActive: (resource: ProjectResource, isActive: boolean) => void | Promise<void>;
 }
 
 const RESOURCE_TYPE_OPTIONS: Array<{ type: ResourceType; label: string }> = [
@@ -58,6 +64,8 @@ export function ResourceCatalogPanel({
   creating,
   error,
   createError,
+  mutationError,
+  pendingResourceId,
   nameDraft,
   targetDraft,
   typeDraft,
@@ -66,9 +74,23 @@ export function ResourceCatalogPanel({
   onTargetDraftChange,
   onTypeDraftChange,
   onCreate,
+  onRenameResource,
+  onChangeResourceType,
+  onSetResourceActive,
 }: ResourceCatalogPanelProps) {
   const sharedResourceCount = resources.filter((resource) => resource.scope === 'shared').length;
   const projectResourceCount = resources.filter((resource) => resource.scope === 'project').length;
+  const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setRenameDrafts((current) => {
+      const next: Record<string, string> = {};
+      for (const resource of resources) {
+        next[resource.id] = current[resource.id] ?? resource.name;
+      }
+      return next;
+    });
+  }, [resources]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -152,6 +174,11 @@ export function ResourceCatalogPanel({
               {createError}
             </div>
           )}
+          {mutationError && (
+            <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" data-testid="resource-catalog-mutation-error" role="alert">
+              {mutationError}
+            </div>
+          )}
         </div>
         <div className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 lg:w-[360px]" data-testid="resource-catalog-summary">
           <div className="font-semibold text-slate-800">Каталог ресурсов</div>
@@ -165,6 +192,9 @@ export function ResourceCatalogPanel({
             <div className="mt-3 max-h-56 space-y-2 overflow-auto" data-testid="resource-catalog-list">
               {resources.map((resource) => {
                 const stats = rowStats.get(resource.id) ?? { assignmentCount: 0, conflictCount: 0 };
+                const isPending = pendingResourceId === resource.id;
+                const actionsDisabled = readonly || isPending || creating;
+                const renameDraft = renameDrafts[resource.id] ?? resource.name;
 
                 return (
                   <div key={resource.id} className="rounded bg-white px-2 py-2" data-testid={`resource-catalog-row-${resource.id}`}>
@@ -181,6 +211,70 @@ export function ResourceCatalogPanel({
                       <span className={stats.conflictCount > 0 ? 'rounded-full bg-amber-50 px-2 py-0.5 text-amber-700' : 'rounded-full bg-slate-100 px-2 py-0.5'}>
                         Конфликтов: {stats.conflictCount}
                       </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <label className="sr-only" htmlFor={`resource-rename-${resource.id}`}>Новое название</label>
+                      <input
+                        id={`resource-rename-${resource.id}`}
+                        className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        data-testid={`resource-rename-input-${resource.id}`}
+                        disabled={actionsDisabled}
+                        value={renameDraft}
+                        onChange={(event) => setRenameDrafts((current) => ({ ...current, [resource.id]: event.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        data-testid={`resource-rename-save-${resource.id}`}
+                        disabled={actionsDisabled || renameDraft.trim().length === 0 || renameDraft.trim() === resource.name}
+                        onClick={() => { void onRenameResource(resource, renameDraft); }}
+                      >
+                        Переименовать
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <label className="sr-only" htmlFor={`resource-type-${resource.id}`}>Тип ресурса</label>
+                      <select
+                        id={`resource-type-${resource.id}`}
+                        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        data-testid={`resource-type-select-${resource.id}`}
+                        disabled={actionsDisabled}
+                        value={resource.type}
+                        onChange={(event) => {
+                          if (isResourceType(event.target.value)) {
+                            void onChangeResourceType(resource, event.target.value);
+                          }
+                        }}
+                      >
+                        {RESOURCE_TYPE_OPTIONS.map((option) => (
+                          <option key={option.type} value={option.type}>{option.label}</option>
+                        ))}
+                      </select>
+                      {resource.isActive ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          data-testid={`resource-deactivate-${resource.id}`}
+                          disabled={actionsDisabled}
+                          onClick={() => {
+                            if (window.confirm('Ресурс станет недоступен для новых назначений. Продолжить?')) {
+                              void onSetResourceActive(resource, false);
+                            }
+                          }}
+                        >
+                          Деактивировать
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-200 bg-white px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          data-testid={`resource-activate-${resource.id}`}
+                          disabled={actionsDisabled}
+                          onClick={() => { void onSetResourceActive(resource, true); }}
+                        >
+                          Активировать
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
