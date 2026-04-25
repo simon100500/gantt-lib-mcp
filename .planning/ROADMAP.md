@@ -420,14 +420,14 @@ Plans:
 **Goal:** Build a full resource management screen that replaces the local planner grid with `gantt-lib` resource planner mode, supports catalog management, filters, assignment details, conflict correction, and controlled drag persistence for date/resource changes
 **Requirements**: PRD-only (`RESOURCE-MANAGEMENT-SCREEN-PRD.md`, `RESOURCE-PLANNER-MODE-PRD.md`)
 **Depends on:** Phase 47
-**Plans:** 1/5 plans complete
+**Plans:** 2/5 plans complete
 
 Plans:
 - [x] 48-01-PLAN.md — Adapter and `gantt-lib` renderer swap
-- [ ] 48-02-PLAN.md — Filters, selection, details, and accessible fallback actions
+- [x] 48-02-PLAN.md — Filters, selection, details, and accessible fallback actions
 - [ ] 48-03-PLAN.md — Resource catalog create, edit, type, and status management
 - [ ] 48-04-PLAN.md — Controlled move persistence for dates and resources
 - [ ] 48-05-PLAN.md — Hardening tests and `ResourceTimelineGrid` deprecation handling
 
 ---
-*Last updated: 2026-04-25 — Phase 48 Plan 01 completed*
+*Last updated: 2026-04-25 — Phase 48 Plan 02 completed*

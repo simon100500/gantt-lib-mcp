@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
 status: active
-last_updated: "2026-04-25T07:43:00Z"
+last_updated: "2026-04-25T07:51:00Z"
 last_activity: 2026-04-25
 progress:
   total_phases: 18
   completed_phases: 16
   total_plans: 65
-  completed_plans: 61
-  percent: 94
+  completed_plans: 62
+  percent: 95
 ---
 
 # Project State: gantt-lib MCP Server
@@ -33,12 +33,12 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 ## Current Position
 
 Phase: 48
-Plan: 02
+Plan: 03
 Status: Phase 48 in progress
 Last activity: 2026-04-25
 Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
-Progress: [█████████░] 94%
+Progress: [█████████░] 95%
 
 ---
 
@@ -189,6 +189,8 @@ packages/
 - [Phase 47]: The isolated split executor keeps decompose_task as its route identity while still compiling through authoritative fragment-plan helpers.
 - [Phase 48]: ResourcePlannerWorkspace now uses GanttChart mode="resource-planner" as the primary timeline renderer instead of ResourceTimelineGrid.
 - [Phase 48]: Resource planner item metadata must flow through getPlannerItemMetadata before conflict correction callbacks.
+- [Phase 48]: Resource planner filters are client-only over mapped gantt-lib timeline resources; scope switching is the only filter path that refetches `/api/resources/planner`.
+- [Phase 48]: Assignment details actions derive PlannerCorrectionTarget from typed resource planner metadata instead of DOM text.
 
 ## Performance Metrics
 
@@ -226,13 +228,14 @@ packages/
 | Phase 45 P05 | 5min | 2 tasks | 4 files |
 | Phase 47 P03 | 18min | 2 tasks | 7 files |
 | 48-resource-screen | 01 | 5min | 2 | 4 | 2026-04-25 |
+| 48-resource-screen | 02 | 7min | 2 | 5 | 2026-04-25 |
 
 ## Session
 
-- Last session: 2026-04-25T10:43:00+03:00
-- Stopped at: Completed 48-01-PLAN.md
-- Resume file: .planning/phases/48-resource-screen/48-02-PLAN.md
+- Last session: 2026-04-25T10:51:00+03:00
+- Stopped at: Completed 48-02-PLAN.md
+- Resume file: .planning/phases/48-resource-screen/48-03-PLAN.md
 
 ---
 
-*Last updated: 2026-04-20 — Phase 46 Plan 05 completed*
+*Last updated: 2026-04-25 — Phase 48 Plan 02 completed*
