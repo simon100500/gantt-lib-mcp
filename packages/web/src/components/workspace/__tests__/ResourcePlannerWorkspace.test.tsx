@@ -864,24 +864,29 @@ describe('ResourcePlanner workspace integration', () => {
     expect(container.querySelector('[data-testid="gantt-resource-row-resource-empty"]')?.textContent).toContain('Empty Crane');
     expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Landing');
     expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Project 2');
-    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Конфликт');
-    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('assignment-3');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).not.toContain('Конфликт');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).not.toContain('assignment-3');
     expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.className).toContain('resource-planner-item--conflict');
     expect(ganttLibChartSpy).toHaveBeenCalledWith(expect.objectContaining({
       mode: 'resource-planner',
-      dayWidth: 36,
-      laneHeight: 40,
+      dayWidth: 30,
+      laneHeight: 42,
       rowHeaderWidth: 220,
       headerHeight: 40,
       readonly: false,
-      disableResourceReassignment: false,
+      disableResourceReassignment: true,
       resources: expect.arrayContaining([
         expect.objectContaining({ id: 'resource-empty', name: 'Empty Crane', items: [] }),
       ]),
     }));
 
     await act(async () => {
-      (container.querySelector('[data-testid="resource-planner-correct-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="resource-planner-open-assignment-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      (container.querySelector('[data-testid="assignment-details-correct"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 

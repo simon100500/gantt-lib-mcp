@@ -719,7 +719,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     );
   }, [filteredTimelineResources]);
   const readonly = !accessToken;
-  const disableResourceReassignment = readonly;
+  const disableResourceReassignment = true;
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
     if (!metadata) {
@@ -734,7 +734,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
   }, [pendingMoveIds, selectedItem]);
   const renderTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
-    const conflictCount = metadata?.conflictCount ?? 0;
     const conflictCopy = metadata?.hasConflict ? 'есть конфликт' : 'без конфликтов';
     const openSelectedItem = () => {
       setSelectedItem(item);
@@ -743,7 +742,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
     return (
       <div
         aria-label={`${item.title}, ${metadata?.resourceName ?? item.resourceId}, ${String(item.startDate)} - ${String(item.endDate)}, ${conflictCopy}`}
-        className="flex h-full min-w-0 cursor-pointer flex-col justify-center gap-1 px-2 py-1 text-left text-[11px] leading-tight focus:outline-none focus:ring-2 focus:ring-[#6158e0]"
+        className="flex h-full min-w-0 cursor-pointer flex-col justify-between px-2 py-1.5 text-left text-[11px] leading-tight focus:outline-none focus:ring-2 focus:ring-[#6158e0]"
         data-testid={`resource-planner-open-${item.id}`}
         role="button"
         tabIndex={0}
@@ -755,44 +754,13 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
           }
         }}
       >
-        <div className="flex min-w-0 items-center gap-1">
-          <span className="truncate font-semibold">{item.title}</span>
-          {metadata?.hasConflict && (
-            <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">
-              Конфликт{conflictCount > 1 ? ` ${conflictCount}` : ''}
-            </span>
-          )}
+        <div className="min-w-0 truncate text-[12px] font-semibold text-slate-950">
+          {item.title}
         </div>
-        {item.subtitle && <div className="truncate opacity-80">{item.subtitle}</div>}
-        <div className="flex min-w-0 items-center gap-1 tabular-nums opacity-80">
-          <span className="truncate">{String(item.startDate)} → {String(item.endDate)}</span>
-        </div>
-        {metadata?.hasConflict && (
-          <div className="flex min-w-0 items-center gap-2">
-            {metadata.conflictAssignmentIds.length > 0 && (
-              <span className="truncate opacity-80">{metadata.conflictAssignmentIds.join(', ')}</span>
-            )}
-            <button
-              type="button"
-              className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-900 shadow-sm"
-              data-testid={`resource-planner-correct-${metadata.assignmentId}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onCorrectConflict({
-                  projectId: metadata.projectId,
-                  taskId: metadata.taskId,
-                  assignmentId: metadata.assignmentId,
-                  resourceId: metadata.resourceId,
-                });
-              }}
-            >
-              Исправить конфликт
-            </button>
-          </div>
-        )}
+        {item.subtitle && <div className="min-w-0 truncate text-[11px] font-medium text-slate-600">{item.subtitle}</div>}
       </div>
     );
-  }, [onCorrectConflict]);
+  }, []);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -1015,8 +983,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, onBack
               <GanttChart
                 mode="resource-planner"
                 resources={filteredTimelineResources}
-                dayWidth={36}
-                laneHeight={40}
+                dayWidth={30}
+                laneHeight={42}
                 rowHeaderWidth={220}
                 headerHeight={40}
                 readonly={readonly}

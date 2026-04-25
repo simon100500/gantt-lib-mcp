@@ -451,8 +451,9 @@ describe('M004 integrated resource-planning loop', () => {
     expect(planner.container.querySelector('[data-testid="gantt-lib-resource-planner"]')).not.toBeNull();
     expect(planner.container.querySelector(`[data-testid="gantt-resource-row-${fixture.resourceId}"]`)?.textContent).toContain(fixture.resourceName);
     expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.taskName);
-    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain('Конфликт');
-    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.peerAssignmentId);
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.projectName);
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).not.toContain('Конфликт');
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).not.toContain(fixture.peerAssignmentId);
     expect(resourcePlannerChartSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       mode: 'resource-planner',
       resources: [expect.objectContaining({
@@ -462,7 +463,12 @@ describe('M004 integrated resource-planning loop', () => {
     }));
 
     await act(async () => {
-      (planner.container.querySelector(`[data-testid="resource-planner-correct-${fixture.assignmentId}"]`) as HTMLButtonElement).click();
+      (planner.container.querySelector(`[data-testid="resource-planner-open-${fixture.assignmentId}"]`) as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      (planner.container.querySelector('[data-testid="assignment-details-correct"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
