@@ -14,6 +14,40 @@ import type { Task, ValidationResult } from '../../../types.ts';
 const scrollToRowSpy = vi.fn();
 let ganttPropsSpy: Record<string, unknown> | null = null;
 const ganttPropsHistory: Array<Record<string, unknown>> = [];
+const resourcePlannerChartSpy = vi.fn();
+
+vi.mock('gantt-lib', async () => {
+  const actual = await vi.importActual<typeof import('gantt-lib')>('gantt-lib');
+  return {
+    ...actual,
+    GanttChart: (props: {
+      mode?: string;
+      resources?: Array<{ id: string; name: string; items: Array<{ id: string; title: string }> }>;
+      renderItem?: (item: { id: string; title: string }) => React.ReactNode;
+      getItemClassName?: (item: { id: string; title: string }) => string | undefined;
+    }) => {
+      resourcePlannerChartSpy(props);
+      return (
+        <div data-testid="gantt-lib-resource-planner">
+          {props.resources?.map((resource) => (
+            <div key={resource.id} data-testid={`gantt-resource-row-${resource.id}`}>
+              <span>{resource.name}</span>
+              {resource.items.map((item) => (
+                <div
+                  key={item.id}
+                  className={props.getItemClassName?.(item)}
+                  data-testid={`gantt-resource-item-${item.id}`}
+                >
+                  {props.renderItem ? props.renderItem(item) : item.title}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock('../../layout/Toolbar.tsx', () => ({
   Toolbar: () => <div data-testid="toolbar-props">toolbar</div>,
@@ -372,6 +406,7 @@ beforeEach(() => {
     return { ok: true, json: async () => ({}) } as Response;
   }));
   scrollToRowSpy.mockClear();
+  resourcePlannerChartSpy.mockClear();
   ganttPropsSpy = null;
   ganttPropsHistory.length = 0;
   resetStores();
@@ -413,15 +448,21 @@ describe('M004 integrated resource-planning loop', () => {
     expect(planner.container.querySelector('[data-testid="planner-resource-count"]')?.textContent).toBe('1');
     expect(planner.container.querySelector('[data-testid="planner-conflict-resource-count"]')?.textContent).toBe('1');
     expect(planner.container.querySelector('[data-testid="planner-conflict-interval-count"]')?.textContent).toBe('1');
-    expect(planner.container.querySelector(`[data-testid="resource-timeline-row-${fixture.resourceId}"]`)?.textContent).toContain(fixture.resourceName);
-    expect(planner.container.querySelector('[data-testid="resource-timeline-calendar-day-2026-04-01"]')).not.toBeNull();
-    expect(planner.container.querySelector(`[data-testid="resource-timeline-bar-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.taskName);
-    expect(planner.container.querySelector(`[data-testid="resource-timeline-conflict-badge-${fixture.resourceId}"]`)?.textContent).toContain('Конфликтов: 1');
-    expect(planner.container.querySelector(`[data-testid="resource-timeline-conflict-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.peerAssignmentId);
-    expect(planner.container.querySelector('[data-testid="resource-timeline-invalid-intervals"]')).toBeNull();
+    expect(planner.container.querySelector('[data-testid="gantt-lib-resource-planner"]')).not.toBeNull();
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-row-${fixture.resourceId}"]`)?.textContent).toContain(fixture.resourceName);
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.taskName);
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain('Конфликт');
+    expect(planner.container.querySelector(`[data-testid="gantt-resource-item-${fixture.assignmentId}"]`)?.textContent).toContain(fixture.peerAssignmentId);
+    expect(resourcePlannerChartSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      mode: 'resource-planner',
+      resources: [expect.objectContaining({
+        id: fixture.resourceId,
+        items: [expect.objectContaining({ id: fixture.assignmentId })],
+      })],
+    }));
 
     await act(async () => {
-      (planner.container.querySelector(`[data-testid="resource-timeline-correct-${fixture.assignmentId}"]`) as HTMLButtonElement).click();
+      (planner.container.querySelector(`[data-testid="resource-planner-correct-${fixture.assignmentId}"]`) as HTMLButtonElement).click();
       await Promise.resolve();
     });
 

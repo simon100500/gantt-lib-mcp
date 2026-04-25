@@ -155,6 +155,10 @@ function getBarClassName(interval: ResourcePlannerInterval): string {
     : 'group min-h-10 rounded-lg border border-sky-200 bg-sky-100 px-2 py-1 text-left text-[11px] leading-tight text-sky-950 shadow-[0_8px_20px_rgba(14,165,233,0.14)] transition-colors hover:bg-sky-200';
 }
 
+/**
+ * @deprecated Fallback/test fixture only. The resource screen primary renderer is
+ * `GanttChart` with `mode="resource-planner"`, not this local grid.
+ */
 export function ResourceTimelineGrid({
   resources,
   emptyMessage,
