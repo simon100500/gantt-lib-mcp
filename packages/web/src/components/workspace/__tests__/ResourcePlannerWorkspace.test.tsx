@@ -1148,6 +1148,212 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(rendered.root);
   });
 
+  it('patches catalog rename, type, deactivate, and activate actions with authoritative reloads', async () => {
+    const activeResource = {
+      id: 'resource-1',
+      userId: 'user-1',
+      projectId: null,
+      scope: 'shared' as const,
+      name: 'Shared Crew',
+      type: 'human' as const,
+      isActive: true,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+      deactivatedAt: null,
+    };
+    const inactiveResource = {
+      ...activeResource,
+      isActive: false,
+      deactivatedAt: '2026-04-02T00:00:00.000Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return { ok: true, json: async () => ({ projectId: 'project-1', scope: 'all-projects', workspaceUserId: 'user-1', resources: [] }) } as Response;
+      }
+      if (url === '/api/resources/resource-1' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as { name?: string; type?: string; isActive?: boolean };
+        return {
+          ok: true,
+          json: async () => ({
+            ...activeResource,
+            name: body.name ?? activeResource.name,
+            type: body.type ?? activeResource.type,
+            isActive: body.isActive ?? activeResource.isActive,
+            deactivatedAt: body.isActive === false ? '2026-04-02T00:00:00.000Z' : null,
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        const hasDeactivated = fetchMock.mock.calls.some(([, callInit]) => callInit?.method === 'PATCH' && String(callInit.body).includes('"isActive":false'));
+        return { ok: true, json: async () => ({ resources: [hasDeactivated ? inactiveResource : activeResource] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    await act(async () => {
+      const renameInput = container.querySelector('[data-testid="resource-rename-input-resource-1"]') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(renameInput, ' Renamed Crew ');
+      renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      (container.querySelector('[data-testid="resource-rename-save-resource-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/resource-1', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'Renamed Crew' }),
+    }));
+
+    await act(async () => {
+      const typeSelect = container.querySelector('[data-testid="resource-type-select-resource-1"]') as HTMLSelectElement;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(typeSelect, 'equipment');
+      typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/resource-1', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ type: 'equipment' }),
+    }));
+
+    await act(async () => {
+      (container.querySelector('[data-testid="resource-deactivate-resource-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Ресурс станет недоступен для новых назначений. Продолжить?');
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input) === '/api/resources/resource-1' && init?.method === 'PATCH' && String(init.body).includes('"isActive":false'))).toHaveLength(0);
+
+    confirmSpy.mockReturnValue(true);
+    await act(async () => {
+      (container.querySelector('[data-testid="resource-deactivate-resource-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/resource-1', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ isActive: false }),
+    }));
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner?scope=all-projects')).length).toBeGreaterThanOrEqual(4);
+    expect(container.querySelector('[data-testid="resource-catalog-row-resource-1"]')?.textContent).toContain('Неактивен');
+
+    await act(async () => {
+      (container.querySelector('[data-testid="resource-activate-resource-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/resource-1', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ isActive: true }),
+    }));
+
+    await unmountApp(root);
+  });
+
+  it('shows inline catalog mutation errors without wiping last successful data', async () => {
+    const resource = {
+      id: 'resource-1',
+      userId: 'user-1',
+      projectId: null,
+      scope: 'shared' as const,
+      name: 'Shared Crew',
+      type: 'human' as const,
+      isActive: true,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-01T00:00:00.000Z',
+      deactivatedAt: null,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'all-projects',
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-1',
+                resourceName: 'Shared Crew',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [
+                  {
+                    assignmentId: 'assignment-1',
+                    resourceId: 'resource-1',
+                    resourceName: 'Shared Crew',
+                    projectId: 'project-1',
+                    projectName: 'Project 1',
+                    taskId: 'task-1',
+                    taskName: 'Install',
+                    startDate: '2026-04-01',
+                    endDate: '2026-04-02',
+                    assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                    hasConflict: false,
+                    conflictCount: 0,
+                    conflictAssignmentIds: [],
+                  },
+                ],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources/resource-1' && init?.method === 'PATCH') {
+        return { ok: false, status: 400, json: async () => ({ error: 'rename rejected' }) } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: [resource] }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    await act(async () => {
+      const renameInput = container.querySelector('[data-testid="resource-rename-input-resource-1"]') as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(renameInput, 'Rejected Name');
+      renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      (container.querySelector('[data-testid="resource-rename-save-resource-1"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="resource-catalog-mutation-error"]')?.textContent).toContain('rename rejected');
+    expect(container.querySelector('[data-testid="resource-catalog-row-resource-1"]')?.textContent).toContain('Shared Crew');
+    expect(container.querySelector('[data-testid="gantt-resource-row-resource-1"]')?.textContent).toContain('Shared Crew');
+    expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.textContent).toContain('Install');
+
+    await unmountApp(root);
+  });
+
   it('opens and closes assignment details accessibly while preserving conflict correction metadata', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
