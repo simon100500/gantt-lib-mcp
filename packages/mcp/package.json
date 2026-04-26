@@ -18,12 +18,13 @@
     "test": "node --test src/scheduler.test.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "@prisma/client": "^5.22.0",
-    "@qwen-code/sdk": "^0.1.6",
     "@gantt/runtime-core": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@openai/agents": "^0.8.5",
+    "@prisma/client": "^5.22.0",
     "dotenv": "^17.3.1",
-    "gantt-lib": "^0.70.0"
+    "gantt-lib": "^0.70.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

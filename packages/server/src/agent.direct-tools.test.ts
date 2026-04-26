@@ -1,24 +1,19 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { NORMALIZED_TOOL_CATALOG } from '@gantt/runtime-core/tool-core/catalog';
 
 import {
   buildDirectToolDefinitions,
-  resolveOrdinaryAgentMcpServers,
+  resolveOrdinaryAgentToolRuntime,
 } from './agent/direct-tools.js';
 
-function isSdkServerConfig(server: unknown): server is { type: 'sdk'; name: string } {
-  return typeof server === 'object' && server !== null && 'type' in server && (server as { type?: unknown }).type === 'sdk';
-}
-
-function isStdioServerConfig(server: unknown): server is { type?: undefined; command: string; args: string[] } {
-  return typeof server === 'object' && server !== null && 'command' in server;
-}
+const agentSourcePath = join(process.cwd(), 'packages/server/src/agent.ts');
 
 describe('agent direct tool path', () => {
-  it('builds embedded SDK tools from the shared normalized catalog', () => {
+  it('builds OpenAI Agents JS tools from the shared normalized catalog', () => {
     const definitions = buildDirectToolDefinitions({
       projectId: 'project-1',
       runId: 'run-1',
@@ -34,7 +29,7 @@ describe('agent direct tool path', () => {
   });
 
   it('uses the embedded direct path by default', () => {
-    const servers = resolveOrdinaryAgentMcpServers({
+    const runtime = resolveOrdinaryAgentToolRuntime({
       projectId: 'project-1',
       runId: 'run-1',
       sessionId: 'session-1',
@@ -42,15 +37,13 @@ describe('agent direct tool path', () => {
       projectRoot: process.cwd(),
     });
 
-    assert.ok(isSdkServerConfig(servers.gantt));
-    assert.equal(servers.gantt.type, 'sdk');
-    assert.equal(servers.gantt.name, 'gantt');
-    assert.ok(!('command' in servers.gantt));
+    assert.equal(runtime.tools.length, NORMALIZED_TOOL_CATALOG.length);
+    assert.equal(runtime.mcpServers.length, 0);
   });
 
   it('keeps the subprocess path behind an explicit compatibility flag', () => {
     const legacyServerPath = ['packages', 'mcp', 'dist', 'index.js'].join('/');
-    const servers = resolveOrdinaryAgentMcpServers({
+    const runtime = resolveOrdinaryAgentToolRuntime({
       projectId: 'project-1',
       runId: 'run-1',
       sessionId: 'session-1',
@@ -60,13 +53,12 @@ describe('agent direct tool path', () => {
       mcpServerPath: legacyServerPath,
     });
 
-    assert.ok(isStdioServerConfig(servers.gantt));
-    assert.equal(servers.gantt.command, 'node');
-    assert.deepEqual(servers.gantt.args, [legacyServerPath]);
+    assert.equal(runtime.tools.length, 0);
+    assert.equal(runtime.mcpServers.length, 1);
   });
 
   it('locks the ordinary path to the direct path by default with no external MCP subprocess', () => {
-    const source = readFileSync(new URL('./agent.ts', import.meta.url), 'utf8');
+    const source = readFileSync(agentSourcePath, 'utf8');
 
     assert.match(source, /direct_tool_path/);
     assert.match(source, /legacy_subprocess_fallback/);
@@ -77,7 +69,7 @@ describe('agent direct tool path', () => {
   });
 
   it('marks fallback only after the first direct pass is not authoritatively accepted', () => {
-    const source = readFileSync(new URL('./agent.ts', import.meta.url), 'utf8');
+    const source = readFileSync(agentSourcePath, 'utf8');
 
     assert.match(
       source,
@@ -89,7 +81,7 @@ describe('agent direct tool path', () => {
   });
 
   it('keeps acceptedMutationCalls synchronized with authoritative changed-task verification', () => {
-    const source = readFileSync(new URL('./agent.ts', import.meta.url), 'utf8');
+    const source = readFileSync(agentSourcePath, 'utf8');
 
     assert.match(source, /acceptedMutationCalls: input\.acceptedMutationCalls/);
     assert.match(source, /const acceptedChangedTaskIds = uniqueSorted/);

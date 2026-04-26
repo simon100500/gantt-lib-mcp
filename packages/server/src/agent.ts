@@ -3,12 +3,13 @@
  */
 
 import {
-  query,
-  isSDKResultMessage,
-  isSDKAssistantMessage,
-  isSDKPartialAssistantMessage,
-  type ContentBlock,
-} from '@qwen-code/sdk';
+  Agent,
+  Runner,
+  type MCPServer,
+  type RunStreamEvent,
+  type Tool,
+} from '@openai/agents';
+import { OpenAIProvider, setOpenAIAPI } from '@openai/agents';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
@@ -18,7 +19,7 @@ import { writeServerDebugLog } from './debug-log.js';
 import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 import {
   resolveOrdinaryAgentCompatibilityMode,
-  resolveOrdinaryAgentMcpServers,
+  resolveOrdinaryAgentToolRuntime,
   type OrdinaryAgentCompatibilityMode,
 } from './agent/direct-tools.js';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
@@ -101,6 +102,12 @@ type MutationToolCall = {
   reason?: string;
   changedTaskIds?: string[];
 };
+
+type ContentBlock =
+  | { type: 'text'; text?: string }
+  | { type: 'tool_use'; id: string; name: string; input?: unknown }
+  | { type: 'tool_result'; tool_use_id: string; content?: string | ContentBlock[]; is_error?: boolean }
+  | { type: string; [key: string]: unknown };
 
 export type MutationOutcomeAssessment = {
   mutationAttempted: boolean;
@@ -196,34 +203,43 @@ function resolveEnv(): {
 } {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
-    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
-    OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1/',
+    OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
     OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
     USE_SEMANTIC_PLANNER: process.env.USE_SEMANTIC_PLANNER ?? 'true',
   };
 }
 
-function buildSdkEnv(
-  env: ReturnType<typeof resolveEnv>,
-  extraEnv: Record<string, string> = {},
-): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-    ...extraEnv,
-  };
-
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
+function assertOpenAIAgentsEnv(env: ReturnType<typeof resolveEnv>): void {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('API key not configured. Set OPENAI_API_KEY in .env');
   }
+  if (!env.OPENAI_MODEL) {
+    throw new Error('OPENAI_MODEL is required for OpenAI Agents JS.');
+  }
+  if (/^(glm|qwen)-/i.test(env.OPENAI_MODEL)) {
+    throw new Error(`OPENAI_MODEL "${env.OPENAI_MODEL}" is not valid for the OpenAI Agents JS runtime.`);
+  }
+}
 
-  return sdkEnv;
+function createOpenAIRunner(env: ReturnType<typeof resolveEnv>, model: string): Runner {
+  assertOpenAIAgentsEnv({ ...env, OPENAI_MODEL: model });
+  setOpenAIAPI('chat_completions');
+  return new Runner({
+    modelProvider: new OpenAIProvider({
+    apiKey: env.OPENAI_API_KEY,
+    ...(env.OPENAI_BASE_URL ? { baseURL: env.OPENAI_BASE_URL } : {}),
+      useResponses: false,
+    }),
+    tracingDisabled: true,
+    traceIncludeSensitiveData: false,
+    model,
+  });
 }
 
 function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
   return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
+    .filter((block) => (block.type === 'text' || block.type === 'output_text') && typeof block.text === 'string' && block.text.length > 0)
     .map((block) => block.text ?? '')
     .join('');
 }
@@ -251,43 +267,16 @@ async function executeInitialGenerationPlannerQuery(
   input: InitialGenerationPlannerQueryInput,
 ): Promise<{ content: string }> {
   const env = resolveEnv();
-  if (!env.OPENAI_API_KEY) {
-    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
-  }
-
-  const session = query({
-    prompt: input.prompt,
-    options: {
-      authType: 'openai',
-      model: input.model,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: input.stage === 'structure_planning_repair' || input.stage === 'schedule_metadata_repair' ? 4 : 3,
-    },
+  const runner = createOpenAIRunner(env, input.model);
+  const agent = new Agent({
+    name: 'Initial Generation Planner',
+    instructions: 'Return only the requested planning payload. Do not use markdown or code fences.',
+    model: input.model,
   });
-
-  let content = '';
-
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Initial generation planner failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
+  const result = await runner.run(agent, input.prompt, {
+    maxTurns: input.stage === 'structure_planning_repair' || input.stage === 'schedule_metadata_repair' ? 4 : 3,
+  });
+  const content = typeof result.finalOutput === 'string' ? result.finalOutput : '';
 
   if (content.trim().length === 0) {
     throw new Error('Initial generation planner returned an empty response');
@@ -300,43 +289,16 @@ async function executeInitialGenerationRouteDecisionQuery(
   input: InitialGenerationRouteDecisionQueryInput,
 ): Promise<{ content: string }> {
   const env = resolveEnv();
-  if (!env.OPENAI_API_KEY) {
-    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
-  }
-
-  const session = query({
-    prompt: input.prompt,
-    options: {
-      authType: 'openai',
-      model: input.model,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: input.stage === 'initial_request_interpretation_repair' ? 3 : 2,
-    },
+  const runner = createOpenAIRunner(env, input.model);
+  const agent = new Agent({
+    name: 'Initial Route Decision',
+    instructions: 'Return strict JSON only. No markdown, no prose, no code fences.',
+    model: input.model,
   });
-
-  let content = '';
-
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Initial route decision failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
+  const result = await runner.run(agent, input.prompt, {
+    maxTurns: input.stage === 'initial_request_interpretation_repair' ? 3 : 2,
+  });
+  const content = typeof result.finalOutput === 'string' ? result.finalOutput : '';
 
   if (content.trim().length === 0) {
     throw new Error('Initial route decision returned an empty response');
@@ -670,12 +632,13 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
   const toolUseById = new Map<string, MutationToolCall>();
 
   for (const block of blocks) {
+    const toolUseBlock = block as { id?: unknown; name?: unknown };
     const toolName = block.type === 'tool_use'
-      ? resolveNormalizedMutationToolName(block.name)
+      ? resolveNormalizedMutationToolName(toolUseBlock.name)
       : undefined;
-    if (block.type === 'tool_use' && toolName) {
-      toolUseById.set(block.id, {
-        toolUseId: block.id,
+    if (block.type === 'tool_use' && toolName && typeof toolUseBlock.id === 'string') {
+      toolUseById.set(toolUseBlock.id, {
+        toolUseId: toolUseBlock.id,
         toolName,
       });
     }
@@ -686,12 +649,15 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
       continue;
     }
 
-    const toolCall = toolUseById.get(block.tool_use_id);
+    const toolResultBlock = block as { tool_use_id?: unknown; content?: string | ContentBlock[]; is_error?: boolean };
+    const toolCall = typeof toolResultBlock.tool_use_id === 'string'
+      ? toolUseById.get(toolResultBlock.tool_use_id)
+      : undefined;
     if (!toolCall) {
       continue;
     }
 
-    const payload = tryParseToolResultPayload(block.content) as
+    const payload = tryParseToolResultPayload(toolResultBlock.content) as
       | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
       | undefined;
 
@@ -699,7 +665,7 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
       toolCall.status = payload.status;
       toolCall.reason = payload.reason;
       toolCall.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
-    } else if (block.is_error) {
+    } else if (toolResultBlock.is_error) {
       toolCall.status = 'rejected';
       toolCall.reason = 'tool_error';
     }
@@ -710,8 +676,10 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
 
 function collectToolUseIds(blocks: ContentBlock[]): string[] {
   return blocks
-    .filter((block): block is Extract<ContentBlock, { type: 'tool_use'; id: string }> => block.type === 'tool_use')
-    .map((block) => block.id);
+    .flatMap((block) => {
+      const id = (block as { id?: unknown }).id;
+      return block.type === 'tool_use' && typeof id === 'string' ? [id] : [];
+    });
 }
 
 async function getServicesModule(): Promise<TaskServiceModule> {
@@ -771,7 +739,9 @@ async function executeAgentAttempt(
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
   const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
-  const mcpServers = resolveOrdinaryAgentMcpServers({
+  const mutationToolCalls = new Map<string, MutationToolCall>();
+  const observedToolUseIds = new Set<string>();
+  const toolRuntime = resolveOrdinaryAgentToolRuntime({
     projectId,
     runId,
     sessionId,
@@ -783,31 +753,41 @@ async function executeAgentAttempt(
     compatibilityMode,
     projectRoot: PROJECT_ROOT,
     databaseUrl: process.env.DATABASE_URL,
+    onToolResult: (toolCall) => {
+      const existing = mutationToolCalls.get(toolCall.toolUseId);
+      mutationToolCalls.set(toolCall.toolUseId, {
+        ...existing,
+        toolUseId: toolCall.toolUseId,
+        toolName: toolCall.toolName as NormalizedMutationToolName,
+        status: toolCall.status,
+        reason: toolCall.reason,
+        changedTaskIds: toolCall.changedTaskIds,
+      });
+      observedToolUseIds.add(toolCall.toolUseId);
+    },
   });
 
-  const session = query({
-    prompt,
-    options: {
-      authType: 'openai',
-      model,
-      systemPrompt,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      includePartialMessages: true,
-      maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
-      abortController,  // HARD-02: Timeout protection
-      excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
-      env: buildSdkEnv(env),
-      mcpServers,
-    },
+  const runner = createOpenAIRunner(env, model);
+  const agent = new Agent({
+    name: 'Gantt Mutation Agent',
+    instructions: systemPrompt,
+    model,
+    tools: toolRuntime.tools as Tool[],
+    mcpServers: toolRuntime.mcpServers as MCPServer[],
+  });
+
+  for (const server of toolRuntime.mcpServers) {
+    await server.connect();
+  }
+
+  const session = await runner.run(agent, prompt, {
+    stream: true,
+    maxTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
+    signal: abortController.signal,
   });
 
   let assistantResponse = '';
   let streamedContent = false;
-  let capturedPartialContent = false;
-  let timeoutHandle: NodeJS.Timeout | undefined;
-  const mutationToolCalls = new Map<string, MutationToolCall>();
-  const observedToolUseIds = new Set<string>();
   const startedAt = Date.now();
   let firstToolCallAt: number | null = null;
   let firstAssistantTextAt: number | null = null;
@@ -816,68 +796,78 @@ async function executeAgentAttempt(
   let assistantMessageCount = 0;
   let textDeltaCount = 0;
   let toolResultCount = 0;
+  let timeoutHandle: NodeJS.Timeout | undefined;
+
+  function recordToolCall(toolUseId: string, toolName: unknown): void {
+    observedToolUseIds.add(toolUseId);
+    if (firstToolCallAt === null) {
+      firstToolCallAt = Date.now();
+    }
+    const normalizedToolName = resolveNormalizedMutationToolName(toolName);
+    if (normalizedToolName) {
+      const existing = mutationToolCalls.get(toolUseId);
+      mutationToolCalls.set(toolUseId, {
+        ...existing,
+        toolUseId,
+        toolName: normalizedToolName,
+      });
+    }
+  }
+
+  function recordToolOutput(toolUseId: string, output: unknown, isError = false): void {
+    toolResultCount += 1;
+    const existing = mutationToolCalls.get(toolUseId);
+    if (!existing) {
+      return;
+    }
+    const payload = typeof output === 'string'
+      ? tryParseToolResultPayload(output)
+      : output;
+    const parsed = payload as { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] } | undefined;
+    if (parsed?.status) {
+      existing.status = parsed.status;
+      existing.reason = parsed.reason;
+      existing.changedTaskIds = Array.isArray(parsed.changedTaskIds) ? parsed.changedTaskIds : [];
+    } else if (isError) {
+      existing.status = 'rejected';
+      existing.reason = 'tool_error';
+    }
+  }
+
+  function extractTextFromRawEvent(event: RunStreamEvent): string {
+    const raw = event as unknown as {
+      data?: {
+        event?: { type?: string; delta?: string; text?: string };
+        chunk?: { choices?: Array<{ delta?: { content?: string } }> };
+      };
+    };
+    return raw.data?.event?.delta
+      ?? raw.data?.event?.text
+      ?? raw.data?.chunk?.choices?.[0]?.delta?.content
+      ?? '';
+  }
 
   try {
     const sessionPromise = (async () => {
       for await (const event of session) {
-        if (isSDKPartialAssistantMessage(event)) {
-          partialEventCount += 1;
-          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
-            await writeServerDebugLog('sdk_raw_event', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              streamType: 'partial_assistant',
-              raw: sanitizeRawPayload(event),
-            });
-          }
-          if (
-            event.event.type === 'content_block_start'
-            && event.event.content_block.type === 'tool_use'
-          ) {
-            observedToolUseIds.add(event.event.content_block.id);
-            if (firstToolCallAt === null) {
-              firstToolCallAt = Date.now();
-            }
-            const toolName = resolveNormalizedMutationToolName(event.event.content_block.name);
-            if (toolName) {
-              mutationToolCalls.set(event.event.content_block.id, {
-                toolUseId: event.event.content_block.id,
-                toolName,
-              });
-            }
-          }
+        partialEventCount += 1;
+        if (ENABLE_RAW_SDK_EVENT_LOGGING) {
+          await writeServerDebugLog('sdk_raw_event', {
+            runId,
+            attempt,
+            sessionId,
+            projectId,
+            streamType: event.type,
+            raw: sanitizeRawPayload(event),
+          });
+        }
 
-          if (
-            event.event.type === 'content_block_start'
-            && event.event.content_block.type === 'tool_result'
-          ) {
-            toolResultCount += 1;
-            const existing = mutationToolCalls.get(event.event.content_block.tool_use_id);
-            if (existing) {
-              const payload = tryParseToolResultPayload(event.event.content_block.content) as
-                | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
-                | undefined;
-              if (payload?.status) {
-                existing.status = payload.status;
-                existing.reason = payload.reason;
-                existing.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
-              } else if (event.event.content_block.is_error) {
-                existing.status = 'rejected';
-                existing.reason = 'tool_error';
-              }
-            }
-          }
-
-          if (
-            event.event.type === 'content_block_delta'
-            && event.event.delta.type === 'text_delta'
-            && event.event.delta.text
-          ) {
+        if (event.type === 'raw_model_stream_event') {
+          const deltaText = extractTextFromRawEvent(event);
+          if (deltaText) {
             textDeltaCount += 1;
-            assistantResponse += event.event.delta.text;
-            capturedPartialContent = true;
+            assistantResponse += deltaText;
+            streamedContent = true;
             if (firstAssistantTextAt === null) {
               firstAssistantTextAt = Date.now();
             }
@@ -886,40 +876,45 @@ async function executeAgentAttempt(
               attempt,
               sessionId,
               projectId,
-              text: event.event.delta.text,
+              text: deltaText,
             });
           }
           continue;
         }
 
-        if (isSDKAssistantMessage(event)) {
-          assistantMessageCount += 1;
-          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
-            await writeServerDebugLog('sdk_raw_event', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              streamType: 'assistant_message',
-              raw: sanitizeRawPayload(event),
-            });
-          }
-          for (const toolUseId of collectToolUseIds(event.message.content)) {
-            observedToolUseIds.add(toolUseId);
-            if (firstToolCallAt === null) {
-              firstToolCallAt = Date.now();
-            }
-          }
-          for (const toolCall of collectMutationToolCalls(event.message.content)) {
-            const existing = mutationToolCalls.get(toolCall.toolUseId);
-            mutationToolCalls.set(toolCall.toolUseId, {
-              ...existing,
-              ...toolCall,
-            });
-          }
+        if (event.type !== 'run_item_stream_event') {
+          continue;
+        }
 
-          const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-          if (!capturedPartialContent && text) {
+        const item = event.item as unknown as {
+          type?: string;
+          rawItem?: {
+            type?: string;
+            callId?: string;
+            call_id?: string;
+            name?: string;
+            output?: unknown;
+            content?: Array<{ type?: string; text?: string }>;
+          };
+          output?: unknown;
+        };
+
+        if (event.name === 'tool_called') {
+          const toolUseId = item.rawItem?.callId ?? item.rawItem?.call_id ?? crypto.randomUUID();
+          recordToolCall(toolUseId, item.rawItem?.name);
+        }
+
+        if (event.name === 'tool_output') {
+          const toolUseId = item.rawItem?.callId ?? item.rawItem?.call_id;
+          if (toolUseId) {
+            recordToolOutput(toolUseId, item.output ?? item.rawItem?.output);
+          }
+        }
+
+        if (event.name === 'message_output_created') {
+          assistantMessageCount += 1;
+          const text = extractAssistantText((item.rawItem?.content ?? []) as Array<{ type: string; text?: string }>);
+          if (!streamedContent && text) {
             assistantResponse += text;
             if (firstAssistantTextAt === null) {
               firstAssistantTextAt = Date.now();
@@ -931,39 +926,30 @@ async function executeAgentAttempt(
             sessionId,
             projectId,
             text,
-            capturedPartialContent,
+            capturedPartialContent: streamedContent,
           });
         }
+      }
 
-        if (isSDKResultMessage(event)) {
-          resultAt = Date.now();
-          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
-            await writeServerDebugLog('sdk_raw_event', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              streamType: 'result_message',
-              raw: sanitizeRawPayload(event),
-            });
-          }
-          const resultText = typeof event.result === 'string' ? event.result : '';
-          if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
-            assistantResponse = resultText;
-          }
-          await writeServerDebugLog('sdk_result_message', {
-            runId,
-            attempt,
-            sessionId,
-            projectId,
-            subtype: event.subtype,
-            isError: event.is_error,
-            result: resultText,
-            error: event.is_error ? event.error : undefined,
-            turns: event.num_turns,
-          });
-          break;
-        }
+      await session.completed;
+      resultAt = Date.now();
+      const finalOutput = typeof session.finalOutput === 'string' ? session.finalOutput : '';
+      if (assistantResponse.trim().length === 0 && finalOutput.trim().length > 0) {
+        assistantResponse = finalOutput;
+      }
+      await writeServerDebugLog('sdk_result_message', {
+        runId,
+        attempt,
+        sessionId,
+        projectId,
+        subtype: 'completed',
+        isError: Boolean(session.error),
+        result: finalOutput,
+        error: session.error instanceof Error ? session.error.message : session.error ? String(session.error) : undefined,
+        turns: session.currentTurn,
+      });
+      if (session.error) {
+        throw session.error instanceof Error ? session.error : new Error(String(session.error));
       }
     })();
 
@@ -979,6 +965,7 @@ async function executeAgentAttempt(
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
     }
+    await Promise.allSettled(toolRuntime.mcpServers.map((server) => server.close()));
   }
 
   if (mutationToolCalls.size === 0) {

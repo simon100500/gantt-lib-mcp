@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
+import { Agent, Runner, OpenAIProvider, setOpenAIAPI } from '@openai/agents';
 
 import type { CommandService } from '@gantt/mcp/services';
 import { getPrisma } from '@gantt/runtime-core/prisma';
@@ -102,27 +102,6 @@ async function loadAllProjectTasks(
       return allTasks;
     }
   }
-}
-
-function buildSdkEnv(env: SplitTaskEnv): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-  };
-
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
-  }
-
-  return sdkEnv;
-}
-
-function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
-  return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
-    .map((block) => block.text ?? '')
-    .join('');
 }
 
 function normalizeIsoDate(value?: string | Date): string {
@@ -274,43 +253,33 @@ function parseFragmentPlan(payloadText: string): StructuredFragmentPlan {
 
 async function executeDirectSplitPlanningQuery(prompt: string, env: SplitTaskEnv): Promise<string> {
   if (!env.OPENAI_API_KEY) {
-    throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
+    throw new Error('API key not configured. Set OPENAI_API_KEY in .env');
+  }
+  if (!env.OPENAI_MODEL) {
+    throw new Error('OPENAI_MODEL is required for split-task planning.');
+  }
+  if (/^(glm|qwen)-/i.test(env.OPENAI_MODEL)) {
+    throw new Error(`OPENAI_MODEL "${env.OPENAI_MODEL}" is not valid for the OpenAI Agents JS runtime.`);
   }
 
-  const session = query({
-    prompt,
-    options: {
-      authType: 'openai',
-      model: env.OPENAI_MODEL,
-      cwd: process.cwd(),
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: 2,
-      excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],
-    },
+  setOpenAIAPI('chat_completions');
+  const runner = new Runner({
+    modelProvider: new OpenAIProvider({
+      apiKey: env.OPENAI_API_KEY,
+      ...(env.OPENAI_BASE_URL ? { baseURL: env.OPENAI_BASE_URL } : {}),
+      useResponses: false,
+    }),
+    tracingDisabled: true,
+    traceIncludeSensitiveData: false,
+    model: env.OPENAI_MODEL,
   });
-
-  let content = '';
-
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Split task planner failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
+  const agent = new Agent({
+    name: 'Split Task Planner',
+    instructions: 'Return strict JSON only. No markdown, no prose, no code fences.',
+    model: env.OPENAI_MODEL,
+  });
+  const result = await runner.run(agent, prompt, { maxTurns: 2 });
+  const content = typeof result.finalOutput === 'string' ? result.finalOutput : '';
 
   if (content.trim().length === 0) {
     throw new Error('Split task planner returned an empty response');

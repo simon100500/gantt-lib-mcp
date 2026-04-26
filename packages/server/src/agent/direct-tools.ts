@@ -1,4 +1,4 @@
-import { createSdkMcpServer, tool } from '@qwen-code/sdk';
+import { MCPServerStdio, tool, type MCPServer, type Tool } from '@openai/agents';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
@@ -33,6 +33,13 @@ export type BuildDirectToolDefinitionsInput = {
   requestContextId?: string;
   historyTitle?: string;
   userId?: string;
+  onToolResult?: (toolCall: {
+    toolUseId: string;
+    toolName: NormalizedToolName;
+    status: 'accepted' | 'rejected';
+    reason?: string;
+    changedTaskIds?: string[];
+  }) => void;
 };
 
 export type ResolveOrdinaryAgentMcpServersInput = BuildDirectToolDefinitionsInput & {
@@ -102,12 +109,13 @@ function convertToolInputSchemaToZodShape(schema: { properties: Record<string, J
   return shape;
 }
 
-export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInput) {
-  return NORMALIZED_TOOL_CATALOG.map((definition) => tool(
-    definition.name,
-    definition.description,
-    convertToolInputSchemaToZodShape(definition.inputSchema),
-    async (args) => {
+export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInput): Tool[] {
+  return NORMALIZED_TOOL_CATALOG.map((definition) => tool({
+    name: definition.name,
+    description: definition.description,
+    parameters: z.object(convertToolInputSchemaToZodShape(definition.inputSchema)),
+    strict: true,
+    execute: async (args, _context, details) => {
       const context = createToolContext({
         actorType: 'agent',
         actorId: input.userId,
@@ -128,28 +136,31 @@ export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInpu
         args as NormalizedToolInputMap[typeof definition.name],
         context,
       );
+      const payload = result.ok
+        ? result.data
+        : {
+            status: 'rejected',
+            reason: result.error.code,
+            message: result.error.message,
+            changedTaskIds: [],
+            changedTasks: [],
+            changedDependencyIds: [],
+            conflicts: [],
+          };
+      const status = result.ok ? 'accepted' : 'rejected';
+      input.onToolResult?.({
+        toolUseId: details?.toolCall?.callId ?? `${definition.name}-${Date.now()}`,
+        toolName: definition.name as NormalizedToolName,
+        status,
+        reason: result.ok ? undefined : result.error.code,
+        changedTaskIds: Array.isArray((payload as { changedTaskIds?: unknown }).changedTaskIds)
+          ? (payload as { changedTaskIds: string[] }).changedTaskIds
+          : [],
+      });
 
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(
-            result.ok
-              ? result.data
-              : {
-                  status: 'rejected',
-                  reason: result.error.code,
-                  message: result.error.message,
-                  changedTaskIds: [],
-                  changedTasks: [],
-                  changedDependencyIds: [],
-                  conflicts: [],
-                },
-          ),
-        }],
-        ...(result.ok ? {} : { isError: true }),
-      };
+      return JSON.stringify(payload);
     },
-  ));
+  }));
 }
 
 export function resolveOrdinaryAgentCompatibilityMode(mode?: OrdinaryAgentCompatibilityMode): OrdinaryAgentCompatibilityMode {
@@ -162,16 +173,22 @@ export function resolveOrdinaryAgentCompatibilityMode(mode?: OrdinaryAgentCompat
     : 'embedded-direct';
 }
 
-export function resolveOrdinaryAgentMcpServers(input: ResolveOrdinaryAgentMcpServersInput) {
+export function resolveOrdinaryAgentToolRuntime(input: ResolveOrdinaryAgentMcpServersInput): {
+  tools: Tool[];
+  mcpServers: MCPServer[];
+} {
   const compatibilityMode = resolveOrdinaryAgentCompatibilityMode(input.compatibilityMode);
 
   if (compatibilityMode === 'legacy-subprocess') {
     const mcpServerPath = input.mcpServerPath ?? join(input.projectRoot, 'packages/mcp/dist/index.js');
     return {
-      gantt: {
-        command: 'node',
-        args: [mcpServerPath],
-        env: {
+      tools: [],
+      mcpServers: [
+        new MCPServerStdio({
+          name: 'gantt',
+          command: 'node',
+          args: [mcpServerPath],
+          env: {
           DATABASE_URL: input.databaseUrl ?? process.env.DATABASE_URL ?? '',
           PROJECT_ID: input.projectId,
           AI_USER_ID: input.userId ?? '',
@@ -179,15 +196,14 @@ export function resolveOrdinaryAgentMcpServers(input: ResolveOrdinaryAgentMcpSer
           AI_SESSION_ID: input.sessionId,
           AI_MUTATION_SOURCE: 'agent',
           AI_ATTEMPT: String(input.attempt),
-        },
-      },
+          },
+        }),
+      ],
     };
   }
 
   return {
-    gantt: createSdkMcpServer({
-      name: 'gantt',
-      tools: buildDirectToolDefinitions(input),
-    }),
+    tools: buildDirectToolDefinitions(input),
+    mcpServers: [],
   };
 }

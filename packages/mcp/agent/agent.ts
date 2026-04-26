@@ -1,5 +1,11 @@
 // agent/agent.ts
-import { query, isSDKResultMessage, isSDKAssistantMessage } from '@qwen-code/sdk';
+import {
+  Agent,
+  MCPServerStdio,
+  OpenAIProvider,
+  Runner,
+  setOpenAIAPI,
+} from '@openai/agents';
 import * as dotenv from 'dotenv';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -29,16 +35,13 @@ export function validateArgs(arg: string | undefined): string {
 }
 
 /**
- * Resolve env variables with fallback chain:
- * - OPENAI_API_KEY    → ANTHROPIC_AUTH_TOKEN
- * - OPENAI_BASE_URL   → https://api.z.ai/api/paas/v4/
- * - OPENAI_MODEL      → ANTHROPIC_DEFAULT_SONNET_MODEL → 'glm-4.7'
+ * Resolve env variables for OpenAI Agents JS.
  */
 function resolveEnv(): Record<string, string> {
   return {
     OPENAI_API_KEY:  process.env.OPENAI_API_KEY  ?? process.env.ANTHROPIC_AUTH_TOKEN  ?? '',
-    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
-    OPENAI_MODEL:    process.env.OPENAI_MODEL    ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
+    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? '',
+    OPENAI_MODEL:    process.env.OPENAI_MODEL    ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
   };
 }
 
@@ -58,8 +61,14 @@ export async function runAgent(userPrompt: string): Promise<void> {
 
   if (!env.OPENAI_API_KEY) {
     throw new Error(
-      'API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env'
+      'API key not configured. Set OPENAI_API_KEY in .env'
     );
+  }
+  if (!env.OPENAI_MODEL) {
+    throw new Error('OPENAI_MODEL is required for OpenAI Agents JS.');
+  }
+  if (/^(glm|qwen)-/i.test(env.OPENAI_MODEL)) {
+    throw new Error(`OPENAI_MODEL "${env.OPENAI_MODEL}" is not valid for OpenAI Agents JS.`);
   }
 
   // MCP server is at packages/mcp/dist/index.js
@@ -71,51 +80,46 @@ export async function runAgent(userPrompt: string): Promise<void> {
   }
 
   console.log(`[agent] Starting session for: "${userPrompt}"`);
-  console.log(`[agent] Model: ${env.OPENAI_MODEL} via ${env.OPENAI_BASE_URL}`);
+  console.log(`[agent] Model: ${env.OPENAI_MODEL}`);
   console.log(`[agent] MCP server: ${mcpServerPath}`);
 
-  // The @qwen-code/sdk v0.1.5 query() signature:
-  // query({ prompt, options }: { prompt: string; options?: QueryOptions }): Query
-  const session = query({
-    prompt: `${systemPrompt}\n\nUser request: ${userPrompt}`,
-    options: {
-      model: env.OPENAI_MODEL,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      authType: 'openai',
-      env,
-      mcpServers: {
-        gantt: {
-          command: 'node',
-          args: [mcpServerPath],
-        },
-      },
-      maxSessionTurns: 30,
-    },
+  setOpenAIAPI('chat_completions');
+  const mcpServer = new MCPServerStdio({
+    name: 'gantt',
+    command: 'node',
+    args: [mcpServerPath],
   });
 
   let capturedJson: string | null = null;
 
-  for await (const message of session) {
-    if (isSDKAssistantMessage(message)) {
-      // SDKAssistantMessage wraps APIAssistantMessage in .message
-      for (const block of message.message.content) {
-        if (block.type === 'text' && block.text) {
-          process.stdout.write(block.text.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
-          // Try to extract JSON from text output (agent may embed it)
-          const jsonMatch = block.text.match(/```json\n([\s\S]*?)\n```/);
-          if (jsonMatch) {
-            capturedJson = jsonMatch[1].trim();
-          }
-        }
-      }
+  await mcpServer.connect();
+  try {
+    const runner = new Runner({
+      modelProvider: new OpenAIProvider({
+        apiKey: env.OPENAI_API_KEY,
+        ...(env.OPENAI_BASE_URL ? { baseURL: env.OPENAI_BASE_URL } : {}),
+        useResponses: false,
+      }),
+      tracingDisabled: true,
+      traceIncludeSensitiveData: false,
+      model: env.OPENAI_MODEL,
+    });
+    const agent = new Agent({
+      name: 'Gantt CLI Agent',
+      instructions: systemPrompt,
+      model: env.OPENAI_MODEL,
+      mcpServers: [mcpServer],
+    });
+    const result = await runner.run(agent, `User request: ${userPrompt}`, { maxTurns: 30 });
+    const output = typeof result.finalOutput === 'string' ? result.finalOutput : '';
+    if (output) {
+      process.stdout.write(output.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
+      const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
+      capturedJson = jsonMatch ? jsonMatch[1].trim() : output;
     }
-    if (isSDKResultMessage(message)) {
-      if (!message.is_error && message.result) {
-        capturedJson = message.result;
-      }
-      console.log('\n[agent] Session complete.');
-    }
+    console.log('\n[agent] Session complete.');
+  } finally {
+    await mcpServer.close();
   }
 
   // Write output to monorepo root
