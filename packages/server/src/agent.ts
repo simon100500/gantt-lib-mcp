@@ -24,7 +24,7 @@ import {
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
-import { runStagedMutation } from './mutation/orchestrator.js';
+import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1197,17 +1197,6 @@ export async function runAgentWithHistory(
       return;
     }
 
-    const messages = await messageService.list(projectId, 20);
-
-    const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
-      ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
-      : join(PROJECT_ROOT, 'packages/mcp/agent/prompts/system.md');
-    const verboseSystemPrompt = existsSync(systemPromptPath)
-      ? await readFile(systemPromptPath, 'utf-8')
-      : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
-    const systemPrompt = likelyMutationRequest ? COMPACT_MUTATION_SYSTEM_PROMPT : verboseSystemPrompt;
-    const historyContext = buildHistoryContext(messages.slice(0, -1), likelyMutationRequest);
-
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
@@ -1223,439 +1212,53 @@ export async function runAgentWithHistory(
       projectRoot: PROJECT_ROOT,
     });
 
-    const modelRoutingDecision = resolveModelRoutingDecision({
-      route: 'mutation',
-      env,
+    const messages = await messageService.list(projectId, 20);
+    const piHistoryGroupId = crypto.randomUUID();
+    const piResult = await runPiOrdinaryAgent({
+      userMessage,
+      projectId,
+      sessionId,
+      runId,
+      userId,
+      env: {
+        OPENAI_API_KEY: env.OPENAI_API_KEY,
+        OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+        OPENAI_MODEL: env.OPENAI_MODEL,
+      },
+      messages: messages.slice(0, -1),
+      historyGroupId: piHistoryGroupId,
+      requestContextId: runId,
+      historyTitle: buildAgentHistoryTitle(userMessage, true),
+      mutationRoute: likelyMutationRequest,
+      taskService,
+      broadcastToSession,
+      logger: {
+        debug: (event, payload) => writeServerDebugLog(event, payload),
+      },
     });
-    await writeServerDebugLog('model_routing_decision', {
+
+    const assistantResponse = sanitizeAssistantResponse(userMessage, piResult.assistantResponse);
+    let streamedContent = piResult.streamedContent;
+
+    await writeServerDebugLog('pi_ordinary_agent_summary', {
       runId,
       projectId,
       sessionId,
-      ...modelRoutingDecision,
+      toolCallCount: piResult.toolCallCount,
+      acceptedMutatingToolCalls: piResult.acceptedMutatingToolCalls,
+      rejectedMutatingToolCalls: piResult.rejectedMutatingToolCalls,
+      historyGroupId: piHistoryGroupId,
+      ...piResult.metrics,
     });
 
-    const ordinaryCompatibilityMode = resolveOrdinaryAgentCompatibilityMode();
-    let finalCompatibilityMode = ordinaryCompatibilityMode;
-
-    let assistantResponse = '';
-    let streamedContent = false;
-    let tasksAfter: ComparableTask[] = tasksBefore;
-    let ordinaryToolCallCount = 0;
-    let firstDirectPassAccepted = false;
-    const directHistoryGroupId = crypto.randomUUID();
-    const directRequestContextId = runId;
-    const directHistoryTitle = buildAgentHistoryTitle(userMessage, true);
-    let finalVerification: VerificationResult = {
-      tasksAfter: tasksBefore,
-      tasksChanged: false,
-      actualChangedTaskIds: [],
-      mutationAttempted: false,
-      acceptedMutationCalls: [],
-      rejectedMutationCalls: [],
-      acceptedChangedTaskIds: [],
-      acceptedChangedTaskIdMismatch: false,
-    };
-
-    if (
-      likelyMutationRequest
-      && ordinaryCompatibilityMode === 'embedded-direct'
-      && shouldPreferStagedMutation(userMessage)
-    ) {
-      const projectVersion = await getProjectBaseVersion(projectId);
-      const requestContextId = runId;
-      const groupId = crypto.randomUUID();
-      const historyTitle = buildAgentHistoryTitle(userMessage, true);
-      await writeServerDebugLog('mutation_lifecycle_started', {
-        runId,
-        projectId,
-        sessionId,
-        userMessage,
-        mode: 'staged_preferred',
-      });
-      await writeServerDebugLog('mutation_staged_preferred_started', {
-        runId,
-        projectId,
-        sessionId,
-        userMessage,
-      });
-
-      const stagedMutation = await runStagedMutation({
-        userMessage,
-        projectId,
-        projectVersion,
-        sessionId,
-        runId,
-        tasksBefore,
-        env,
-        messageService,
-        taskService,
-        commandService,
-        broadcastToSession,
-        groupId,
-        requestContextId,
-        historyTitle,
-        historyUndoable: true,
-        logger: {
-          debug: (event, payload) => writeServerDebugLog(event, payload),
-        },
-      });
-
-      await writeServerDebugLog('intent_classified', {
-        runId,
-        projectId,
-        sessionId,
-        intent: stagedMutation.intent,
-      });
-      await writeServerDebugLog('execution_mode_selected', {
-        runId,
-        projectId,
-        sessionId,
-        executionMode: stagedMutation.executionMode,
-      });
-
-      if (stagedMutation.handled) {
-        finalCompatibilityMode = 'legacy-subprocess';
-        const stagedAssistantResponse = sanitizeAssistantResponse(
-          userMessage,
-          stagedMutation.assistantResponse ?? stagedMutation.result.userFacingMessage,
-        );
-        const stagedTasksAfter = stagedMutation.tasksAfter ?? tasksBefore;
-
-        if (stagedAssistantResponse) {
-          broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
-          await messageService.add('assistant', stagedAssistantResponse, projectId, {
-            requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-            historyGroupId: stagedMutation.result.historyUndoable
-              ? checkpointGroupId
-              : undefined,
-          });
-        }
-
-        await writeServerDebugLog('agent_response_saved', {
-          runId,
-          projectId,
-          sessionId,
-          assistantResponse: stagedAssistantResponse,
-          streamedContent: Boolean(stagedAssistantResponse),
-          finalTasksChanged: stagedMutation.result.changedTaskIds.length > 0,
-          finalChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIdMismatch: false,
-        });
-
-        broadcastToSession(sessionId, { type: 'tasks', tasks: stagedTasksAfter });
-        await writeServerDebugLog('tasks_broadcast', {
-          runId,
-          projectId,
-          sessionId,
-          taskCount: stagedTasksAfter.length,
-          taskIds: stagedTasksAfter.map((task) => task.id),
-          taskNames: stagedTasksAfter.map((task) => task.name),
-        });
-
-        broadcastToSession(sessionId, { type: 'history_changed' });
-        broadcastToSession(sessionId, {
-          type: 'done',
-          chatMessage: stagedAssistantResponse
-            ? {
-                requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-                historyGroupId: stagedMutation.result.historyUndoable
-                  ? checkpointGroupId
-                  : null,
-              }
-            : undefined,
-        });
-        await writeServerDebugLog('agent_run_completed', {
-          runId,
-          projectId,
-          sessionId,
-          stagedMutationHandled: true,
-          stagedMutationPreferred: true,
-        });
-        return;
-      }
-    }
-
-    const maxAttempts = 1;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const attemptPrompt = buildPrompt(
-        projectId,
-        simpleMutationRequested,
-        historyContext,
-        userMessage,
-      );
-      const systemPromptSummary = summarizeTextPayload(systemPrompt);
-      const historySummary = summarizeTextPayload(historyContext);
-      const userMessageSummary = summarizeTextPayload(userMessage);
-      const promptSummary = summarizeTextPayload(attemptPrompt);
-
-      await writeServerDebugLog('agent_payload_telemetry', {
-        runId,
-        attempt,
-        projectId,
-        sessionId,
-        historyCount: messages.length,
-        simpleMutationRequested,
-        model: modelRoutingDecision.selectedModel,
-        systemPromptChars: systemPromptSummary.chars,
-        systemPromptLines: systemPromptSummary.lines,
-        historyChars: historySummary.chars,
-        historyLines: historySummary.lines,
-        userMessageChars: userMessageSummary.chars,
-        userMessageLines: userMessageSummary.lines,
-        promptChars: promptSummary.chars,
-        promptLines: promptSummary.lines,
-        ...(ENABLE_RAW_SDK_EVENT_LOGGING
-          ? {
-              systemPrompt,
-              historyContext,
-              userMessage,
-              prompt: attemptPrompt,
-            }
-          : {}),
-      });
-
-      let attemptResult: AgentAttemptResult;
-      try {
-        attemptResult = await executeAgentAttempt(
-          attemptPrompt,
-          systemPrompt,
-          runId,
-          projectId,
-          sessionId,
-          directHistoryGroupId,
-          directRequestContextId,
-          directHistoryTitle,
-          userId,
-          attempt,
-          simpleMutationRequested,
-          ordinaryCompatibilityMode,
-          env,
-          modelRoutingDecision.selectedModel,
-          broadcastToSession,
-        );
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await writeServerDebugLog('agent_attempt_failed', {
-          runId,
-          attempt,
-          projectId,
-          sessionId,
-          error: errorMessage,
-        });
-
-        throw error;
-      }
-      assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);
-      streamedContent = streamedContent || attemptResult.streamedContent;
-      ordinaryToolCallCount += attemptResult.toolCallCount;
-      await writeServerDebugLog('agent_attempt_summary', {
-        runId,
-        attempt,
-        projectId,
-        sessionId,
-        toolCallCount: attemptResult.toolCallCount,
-        ...attemptResult.metrics,
-      });
-
-      finalVerification = await verifyMutationAttempt(
-        runId,
-        projectId,
-        sessionId,
-        attempt,
-        tasksBefore,
-        assistantResponse,
-        attemptResult.mutationToolCalls,
-        taskService,
-      );
-      tasksAfter = finalVerification.tasksAfter as ComparableTask[];
-      if (attempt === 1 && ordinaryCompatibilityMode === 'embedded-direct') {
-        firstDirectPassAccepted = finalVerification.tasksChanged
-          && !finalVerification.acceptedChangedTaskIdMismatch;
-      }
-
-      if (finalVerification.rejectedMutationCalls.length > 0) {
-        assistantResponse = buildRejectedMutationMessage(finalVerification.rejectedMutationCalls);
-        break;
-      }
-
-      if (finalVerification.tasksChanged) {
-        if (finalVerification.acceptedChangedTaskIdMismatch) {
-          await writeServerDebugLog('mutation_verification_warning', {
-            runId,
-            attempt,
-            projectId,
-            sessionId,
-            warning: 'accepted_changed_task_id_mismatch',
-            acceptedChangedTaskIds: finalVerification.acceptedChangedTaskIds,
-            actualChangedTaskIds: finalVerification.actualChangedTaskIds,
-          });
-        }
-        assistantResponse = sanitizeAssistantResponse(
-          userMessage,
-          assistantResponse.trim() || 'Изменения применены.',
-        );
-        break;
-      }
-
-      if (attempt >= maxAttempts) {
-        assistantResponse = buildNoMutationMessage();
-        break;
-      }
-    }
-
-    if (
-      likelyMutationRequest
-      && ENABLE_STAGED_MUTATION_FALLBACK
-      && ordinaryCompatibilityMode === 'embedded-direct'
-      && !firstDirectPassAccepted
-    ) {
-      const projectVersion = await getProjectBaseVersion(projectId);
-      const requestContextId = runId;
-      const groupId = crypto.randomUUID();
-      const historyTitle = buildAgentHistoryTitle(userMessage, true);
-      await writeServerDebugLog('mutation_staged_fallback_started', {
-        runId,
-        projectId,
-        sessionId,
-        userMessage,
-      });
-
-      const stagedMutation = await runStagedMutation({
-        userMessage,
-        projectId,
-        projectVersion,
-        sessionId,
-        runId,
-        tasksBefore,
-        env,
-        messageService,
-        taskService,
-        commandService,
-        broadcastToSession,
-        groupId,
-        requestContextId,
-        historyTitle,
-        historyUndoable: true,
-        logger: {
-          debug: (event, payload) => writeServerDebugLog(event, payload),
-        },
-      });
-
-      await writeServerDebugLog('intent_classified', {
-        runId,
-        projectId,
-        sessionId,
-        intent: stagedMutation.intent,
-      });
-      await writeServerDebugLog('execution_mode_selected', {
-        runId,
-        projectId,
-        sessionId,
-        executionMode: stagedMutation.executionMode,
-      });
-
-      if (stagedMutation.handled) {
-        finalCompatibilityMode = 'legacy-subprocess';
-        const stagedAssistantResponse = sanitizeAssistantResponse(
-          userMessage,
-          stagedMutation.assistantResponse ?? stagedMutation.result.userFacingMessage,
-        );
-        const stagedTasksAfter = stagedMutation.tasksAfter ?? tasksBefore;
-
-        if (stagedAssistantResponse) {
-          broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
-          await messageService.add('assistant', stagedAssistantResponse, projectId, {
-            requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-            historyGroupId: stagedMutation.result.historyUndoable
-              ? checkpointGroupId
-              : undefined,
-          });
-        }
-
-        await writeServerDebugLog('agent_response_saved', {
-          runId,
-          projectId,
-          sessionId,
-          assistantResponse: stagedAssistantResponse,
-          streamedContent: Boolean(stagedAssistantResponse),
-          finalTasksChanged: stagedMutation.result.changedTaskIds.length > 0,
-          finalChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIdMismatch: false,
-        });
-
-        broadcastToSession(sessionId, { type: 'tasks', tasks: stagedTasksAfter });
-        await writeServerDebugLog('tasks_broadcast', {
-          runId,
-          projectId,
-          sessionId,
-          taskCount: stagedTasksAfter.length,
-          taskIds: stagedTasksAfter.map((task) => task.id),
-          taskNames: stagedTasksAfter.map((task) => task.name),
-        });
-
-        broadcastToSession(sessionId, { type: 'history_changed' });
-        broadcastToSession(sessionId, {
-          type: 'done',
-          chatMessage: stagedAssistantResponse
-            ? {
-                requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-                historyGroupId: stagedMutation.result.historyUndoable
-                  ? checkpointGroupId
-                  : null,
-              }
-            : undefined,
-        });
-        await writeServerDebugLog('agent_run_completed', {
-          runId,
-          projectId,
-          sessionId,
-          stagedMutationHandled: true,
-        });
-        return;
-      }
-
-      if (stagedMutation.status !== 'deferred_to_legacy' || !stagedMutation.legacyFallbackAllowed) {
-        throw new Error('Staged mutation shell returned an unhandled non-legacy outcome.');
-      }
-    } else if (likelyMutationRequest && !ENABLE_STAGED_MUTATION_FALLBACK) {
-      await writeServerDebugLog('mutation_staged_fallback_disabled', {
-        runId,
-        projectId,
-        sessionId,
-        directPathAccepted: firstDirectPassAccepted,
-      });
-    }
-
-    assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
-    const ordinaryPathTelemetry = summarizeOrdinaryAgentPathTelemetry({
-      initialCompatibilityMode: ordinaryCompatibilityMode,
-      finalCompatibilityMode,
-      toolCallCount: ordinaryToolCallCount,
-      firstDirectPassAccepted,
-      authoritativeVerificationAccepted: finalVerification.tasksChanged
-        && !finalVerification.acceptedChangedTaskIdMismatch,
-      acceptedMutationCalls: finalVerification.acceptedMutationCalls,
-      actualChangedTaskIds: finalVerification.actualChangedTaskIds,
-    });
-    await writeServerDebugLog('ordinary_agent_path_telemetry', {
-      runId,
-      projectId,
-      sessionId,
-      path_contract: ORDINARY_AGENT_PATH_CONTRACT,
-      ...ordinaryPathTelemetry,
-    });
-
-      if (assistantResponse) {
+    if (assistantResponse && !streamedContent) {
       broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
       streamedContent = true;
     }
 
     if (assistantResponse) {
       await messageService.add('assistant', assistantResponse, projectId, {
-        requestContextId: directRequestContextId,
+        requestContextId: runId,
         historyGroupId: checkpointGroupId,
       });
     }
@@ -1665,28 +1268,30 @@ export async function runAgentWithHistory(
       sessionId,
       assistantResponse,
       streamedContent,
-      finalTasksChanged: finalVerification.tasksChanged,
-      finalChangedTaskIds: finalVerification.actualChangedTaskIds,
-      finalAcceptedChangedTaskIds: finalVerification.acceptedChangedTaskIds,
-      finalAcceptedChangedTaskIdMismatch: finalVerification.acceptedChangedTaskIdMismatch,
+      finalTasksChanged: piResult.acceptedMutatingToolCalls.length > 0,
+      finalChangedTaskIds: piResult.acceptedMutatingToolCalls.flatMap((fact) => fact.changedTaskIds),
+      finalAcceptedChangedTaskIds: piResult.acceptedMutatingToolCalls.flatMap((fact) => fact.changedTaskIds),
+      finalAcceptedChangedTaskIdMismatch: false,
     });
 
-    broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter });
-    await writeServerDebugLog('tasks_broadcast', {
-      runId,
-      projectId,
-      sessionId,
-      taskCount: tasksAfter.length,
-      taskIds: tasksAfter.map((task) => task.id),
-      taskNames: tasksAfter.map((task) => task.name),
-    });
+    if (piResult.tasksAfter) {
+      broadcastToSession(sessionId, { type: 'tasks', tasks: piResult.tasksAfter });
+      await writeServerDebugLog('tasks_broadcast', {
+        runId,
+        projectId,
+        sessionId,
+        taskCount: piResult.tasksAfter.length,
+      });
+    }
 
-    broadcastToSession(sessionId, { type: 'history_changed' });
+    if (piResult.acceptedMutatingToolCalls.length > 0) {
+      broadcastToSession(sessionId, { type: 'history_changed' });
+    }
     broadcastToSession(sessionId, {
       type: 'done',
       chatMessage: assistantResponse
         ? {
-            requestContextId: directRequestContextId,
+            requestContextId: runId,
             historyGroupId: checkpointGroupId ?? null,
           }
         : undefined,

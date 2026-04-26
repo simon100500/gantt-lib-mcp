@@ -1,713 +1,93 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { assessMutationOutcome, buildHistoryContext, shouldPreferStagedMutation } from './agent.js';
-import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
+
+import {
+  GANTT_PI_AGENT_CARD,
+  GANTT_PI_AGENT_SYSTEM_PROMPT,
+  looksLikeMutatingRequest,
+} from './agent/pi-agent-runner.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
-import { classifyMutationIntent } from './mutation/intent-classifier.js';
-import { runStagedMutation } from './mutation/orchestrator.js';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-
-function semanticIntentQueryFor(userMessage: string) {
-  const payloads: Record<string, Record<string, unknown>> = {
-    'добавь сдачу технадзору': {
-      intentType: 'add_single_task',
-      confidence: 0.9,
-      entitiesMentioned: ['сдача технадзору'],
-      taskTitle: 'Сдача технадзору',
-      durationDays: 1,
-    },
-    'добавь техприсоединение': {
-      intentType: 'unsupported_or_ambiguous',
-      confidence: 0.2,
-      entitiesMentioned: [],
-    },
-    'сдвинь штукатурку на 2 дня': {
-      intentType: 'shift_relative',
-      confidence: 0.9,
-      entitiesMentioned: ['штукатурка'],
-      deltaDays: 2,
-    },
-    'перенеси фундамент на 2026-05-10': {
-      intentType: 'move_to_date',
-      confidence: 0.9,
-      entitiesMentioned: ['фундамент'],
-      targetDate: '2026-05-10',
-    },
-    'добавь покраску обоев на каждый этаж': {
-      intentType: 'add_repeated_fragment',
-      confidence: 0.9,
-      entitiesMentioned: ['покраска обоев'],
-      groupScopeHint: 'этаж',
-      fragmentPlan: {
-        title: 'Покраска обоев',
-        nodes: [{ nodeKey: 'paint', title: 'Покраска обоев', durationDays: 2, dependsOnNodeKeys: [] }],
-      },
-    },
-    'свяжи исполнительную документацию и акт приемки': {
-      intentType: 'link_tasks',
-      confidence: 0.9,
-      entitiesMentioned: ['исполнительная документация', 'акт приемки'],
-      dependency: { type: 'FS' },
-    },
-    'убери связь между исполнительной документацией и актом приемки': {
-      intentType: 'unlink_tasks',
-      confidence: 0.9,
-      entitiesMentioned: ['исполнительная документация', 'акт приемки'],
-    },
-    'переименуй клининг': {
-      intentType: 'rename_task',
-      confidence: 0.9,
-      entitiesMentioned: ['клининг'],
-      renamedTitle: 'Клининг',
-    },
-    'сделай эту задачу красной': {
-      intentType: 'update_metadata',
-      confidence: 0.9,
-      entitiesMentioned: ['эта задача'],
-      metadataFields: { color: '#ff4d4f' },
-    },
-    'удали этап меблировки': {
-      intentType: 'delete_task',
-      confidence: 0.9,
-      entitiesMentioned: ['этап меблировки'],
-    },
-    'распиши подробнее пункт "Инженерные системы"': {
-      intentType: 'expand_wbs',
-      confidence: 0.9,
-      entitiesMentioned: ['Инженерные системы'],
-      fragmentPlan: {
-        title: 'Инженерные системы',
-        nodes: [{ nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] }],
-      },
-    },
-  };
-
-  return async () => ({ content: JSON.stringify(payloads[userMessage] ?? { intentType: 'unsupported_or_ambiguous', confidence: 0.2, entitiesMentioned: [] }) });
-}
-
-const semanticEnv = {
-  OPENAI_API_KEY: '',
-  OPENAI_BASE_URL: 'https://example.test',
-  OPENAI_MODEL: 'gpt-main',
-};
-
-describe('agent system prompt hierarchy guidance', () => {
-  it('documents structural move workflow for nesting', () => {
-    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
-    const prompt = readFileSync(promptPath, 'utf-8');
-
-    assert.match(prompt, /Hierarchy Rules/);
-    assert.match(prompt, /move_tasks/);
-    assert.match(prompt, /real nesting|child work structurally|under a parent/i);
-    assert.doesNotMatch(prompt, /\bparentId\b/);
-  });
-
-  it('documents container-first planning and validation', () => {
-    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
-    const prompt = readFileSync(promptPath, 'utf-8');
-
-    assert.match(prompt, /Find the container/i);
-    assert.match(prompt, /small intentional fragment|small meaningful fragment/i);
-    assert.match(prompt, /Validate the authoritative result before answering/i);
-    assert.match(prompt, /Avoid duplicates/i);
-  });
-
-  it('documents normalized dependency and shift tools', () => {
-    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
-    const prompt = readFileSync(promptPath, 'utf-8');
-
-    assert.match(prompt, /link_tasks/i);
-    assert.match(prompt, /unlink_tasks/i);
-    assert.match(prompt, /shift_tasks/i);
-    assert.match(prompt, /Do not invent task IDs/i);
-    assert.doesNotMatch(prompt, /`set_dependency`|`remove_dependency`|`resize_task`|`recalculate_schedule`/);
-  });
-
-  it('tells the agent to preserve explicit user dates and dependencies', () => {
-    const promptPath = join(__dirname, '../../mcp/agent/prompts/system.md');
-    const prompt = readFileSync(promptPath, 'utf-8');
-
-    assert.match(prompt, /If the user already provided concrete dates, date ranges, month windows, or recurring cadence labels, treat them as authoritative input/i);
-    assert.match(prompt, /If the user explicitly provided dependency information/i);
-    assert.match(prompt, /Overlapping user-provided date windows are evidence of parallel work/i);
-    assert.match(prompt, /Do not replace explicit user schedule facts with generic planner defaults/i);
-  });
-});
+const repoRoot = process.cwd();
 
 describe('initial-generation route selection', () => {
-  it('routes broad empty-project prompts into initial_generation', async () => {
-    assert.deepEqual(await selectAgentRoute({
-      userMessage: 'Построй график',
-      taskCount: 0,
-      hasHierarchy: false,
-      model: 'gpt-route',
-      routeDecisionQuery: async () => JSON.stringify({
-        route: 'initial_generation',
-        confidence: 0.96,
-        requestKind: 'whole_project',
-        planningMode: 'whole_project_bootstrap',
-        scopeMode: 'full_project',
-        objectProfile: 'unknown',
-        projectArchetype: 'unknown',
-        locationScope: { sections: [], floors: [], zones: [] },
-        worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
-        clarification: { needed: false, reason: 'none' },
-        signals: ['broad_bootstrap'],
-      }),
-    }), {
-      route: 'initial_generation',
-      confidence: 0.96,
-      reason: 'interpreted_whole_project_initial_generation',
-      signals: ['broad_bootstrap'],
-      isEmptyProject: true,
-      hasHierarchy: false,
-      taskCount: 0,
-      projectStateSummary: 'empty_project=true, task_count=0, has_hierarchy=false',
-      usedModelDecision: true,
-      interpretation: {
-        route: 'initial_generation',
-        confidence: 0.96,
-        requestKind: 'whole_project',
-        planningMode: 'whole_project_bootstrap',
-        scopeMode: 'full_project',
-        objectProfile: 'unknown',
-        projectArchetype: 'unknown',
-        locationScope: { sections: [], floors: [], zones: [] },
-        worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
-        clarification: { needed: false, reason: 'none' },
-        signals: ['broad_bootstrap'],
-      },
-    });
-  });
-
-  it('keeps Russian and English broad bootstrap paraphrases on initial_generation', async () => {
-    const russian = await selectAgentRoute({
-      userMessage: 'Построй график',
-      taskCount: 0,
-      hasHierarchy: false,
-    });
-    const english = await selectAgentRoute({
-      userMessage: 'Build a starter schedule for a kindergarten',
-      taskCount: 0,
-      hasHierarchy: false,
-    });
-
-    assert.equal(russian.route, 'initial_generation');
-    assert.equal(english.route, 'initial_generation');
-    assert.equal(russian.reason, 'fallback_empty_project_defaults_to_initial_generation');
-    assert.equal(english.reason, 'fallback_empty_project_defaults_to_initial_generation');
-  });
-
-  it('routes targeted edit payloads to mutation because the interpreter says targeted edit', async () => {
+  it('routes empty-project bootstrap prompts into initial_generation', async () => {
     const result = await selectAgentRoute({
-      userMessage: 'targeted edit',
-      taskCount: 4,
+      userMessage: 'Построй график',
+      taskCount: 0,
+      hasHierarchy: false,
+    });
+
+    assert.equal(result.route, 'initial_generation');
+    assert.equal(result.reason, 'fallback_empty_project_defaults_to_initial_generation');
+  });
+
+  it('routes non-empty project requests to the ordinary mutation runtime by fallback', async () => {
+    const result = await selectAgentRoute({
+      userMessage: 'Покажи задачи по штукатурке',
+      taskCount: 8,
       hasHierarchy: true,
-      model: 'gpt-route',
-      routeDecisionQuery: async () => JSON.stringify({
-        route: 'mutation',
-        confidence: 0.87,
-        requestKind: 'targeted_edit',
-        planningMode: 'partial_scope_bootstrap',
-        scopeMode: 'partial_scope',
-        objectProfile: 'unknown',
-        projectArchetype: 'renovation',
-        locationScope: { sections: [], floors: [], zones: [] },
-        worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
-        clarification: { needed: false, reason: 'none' },
-        signals: ['targeted_edit'],
-      }),
     });
 
     assert.equal(result.route, 'mutation');
-    assert.equal(result.reason, 'interpreted_targeted_edit_mutation');
-    assert.equal(result.interpretation.requestKind, 'targeted_edit');
-  });
-
-  it('uses project state fallback when the interpretation model is unavailable', async () => {
-    const emptyProject = await selectAgentRoute({
-      userMessage: 'Build a starter schedule',
-      taskCount: 0,
-      hasHierarchy: false,
-      model: 'gpt-route',
-      routeDecisionQuery: async () => {
-        throw new Error('model_unavailable');
-      },
-    });
-
-    const nonEmptyProject = await selectAgentRoute({
-      userMessage: 'Build a starter schedule',
-      taskCount: 8,
-      hasHierarchy: true,
-      model: 'gpt-route',
-      routeDecisionQuery: async () => {
-        throw new Error('model_unavailable');
-      },
-    });
-
-    assert.equal(emptyProject.reason, 'fallback_empty_project_defaults_to_initial_generation');
-    assert.equal(emptyProject.route, 'initial_generation');
-    assert.equal(nonEmptyProject.reason, 'fallback_non_empty_project_defaults_to_mutation');
-    assert.equal(nonEmptyProject.route, 'mutation');
-  });
-
-  it('keeps model failure fallback conservative for Build a starter schedule on both empty and non-empty project state', async () => {
-    const emptyProject = await selectAgentRoute({
-      userMessage: 'Build a starter schedule',
-      taskCount: 0,
-      hasHierarchy: false,
-      model: 'gpt-route',
-      routeDecisionQuery: async () => {
-        throw new Error('model failure');
-      },
-    });
-    const populatedProject = await selectAgentRoute({
-      userMessage: 'Build a starter schedule',
-      taskCount: 3,
-      hasHierarchy: true,
-      model: 'gpt-route',
-      routeDecisionQuery: async () => {
-        throw new Error('model failure');
-      },
-    });
-
-    assert.equal(emptyProject.route, 'initial_generation');
-    assert.equal(emptyProject.usedModelDecision, false);
-    assert.equal(populatedProject.route, 'mutation');
-    assert.equal(populatedProject.usedModelDecision, false);
+    assert.equal(result.reason, 'fallback_non_empty_project_defaults_to_mutation');
   });
 });
 
-describe('initial-generation model routing', () => {
-  it('uses the strong model for initial generation', () => {
-    assert.deepEqual(resolveModelRoutingDecision({
-      route: 'initial_generation',
-      env: {
-        OPENAI_MODEL: 'gpt-strong',
-      },
-    }), {
-      route: 'initial_generation',
-      tier: 'strong',
-      selectedModel: 'gpt-strong',
-      reason: 'initial_generation_requires_strong_model',
-    });
+describe('pi ordinary runtime integration surface', () => {
+  it('keeps initial generation but routes ordinary existing-project work to Pi Agent Core', () => {
+    const agentSource = readFileSync(join(repoRoot, 'packages/server/src/agent.ts'), 'utf-8');
+
+    assert.match(agentSource, /runInitialGeneration/);
+    assert.match(agentSource, /runPiOrdinaryAgent/);
+    assert.doesNotMatch(agentSource, /runStagedMutation/);
+    assert.doesNotMatch(agentSource, /mutation_staged_fallback_started/);
+    assert.doesNotMatch(agentSource, /legacyFallbackAllowed/);
   });
 
-  it('uses the cheap model for mutation when configured', () => {
-    assert.deepEqual(resolveModelRoutingDecision({
-      route: 'mutation',
-      env: {
-        OPENAI_MODEL: 'gpt-strong',
-        OPENAI_CHEAP_MODEL: 'gpt-cheap',
-      },
-    }), {
-      route: 'mutation',
-      tier: 'cheap',
-      selectedModel: 'gpt-cheap',
-      reason: 'mutation_prefers_cheap_model',
-    });
+  it('defines an agent card with trigger scope and least-privilege normalized tools', () => {
+    assert.equal(GANTT_PI_AGENT_CARD.name, 'gantt-tool-agent');
+    assert.equal(GANTT_PI_AGENT_CARD.mode, 'fast autonomous execution');
+    assert.deepEqual(GANTT_PI_AGENT_CARD.tools, [
+      'get_project_summary',
+      'get_schedule_slice',
+      'find_tasks',
+      'get_task_context',
+      'create_tasks',
+      'update_tasks',
+      'move_tasks',
+      'shift_tasks',
+      'delete_tasks',
+      'link_tasks',
+      'unlink_tasks',
+      'recalculate_project',
+      'validate_schedule',
+    ]);
+    assert.match(GANTT_PI_AGENT_CARD.doNotUseFor.join('\n'), /empty-project initial generation/);
   });
 
-  it('falls back deterministically to the main model when the cheap model is missing', () => {
-    assert.deepEqual(resolveModelRoutingDecision({
-      route: 'mutation',
-      env: {
-        OPENAI_MODEL: 'gpt-strong',
-      },
-    }), {
-      route: 'mutation',
-      tier: 'main_fallback',
-      selectedModel: 'gpt-strong',
-      reason: 'cheap_model_missing_fallback_to_main',
-    });
-  });
-});
-
-describe('agent initial-generation integration surface', () => {
-  it('removes the legacy template fast path from agent.ts', () => {
-    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
-
-    assert.doesNotMatch(source, /parseInitialScheduleTemplateIntent/);
-    assert.doesNotMatch(source, /tryInitialScheduleTemplateFastPath/);
-    assert.doesNotMatch(source, /buildTypicalConstructionTemplate/);
+  it('locks prompt behavior for core tool-selection examples and unsupported absolute moves', () => {
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /find_tasks: быстрый поиск задач/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /shift_tasks: сдвинуть даты/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /link_tasks: создать predecessor-successor связь/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /validate_schedule: проверить график/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /Абсолютный перенос на дату сейчас не покрыт/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /Не делай validate_schedule после успешного изменения/);
   });
 
-  it('logs route and model routing decisions before SDK execution', () => {
-    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
-
-    assert.match(source, /route_selection/);
-    assert.match(source, /route_decision_evidence/);
-    assert.match(source, /model_routing_decision/);
-    assert.match(source, /runInitialGeneration/);
-    assert.match(source, /OPENAI_CHEAP_MODEL|cheap_model/);
+  it('tells the Pi agent to create simple new tasks autonomously when dates are omitted', () => {
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /не дал даты, не задавай уточняющий вопрос/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /get_project_summary/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /top-level задачу длительностью 1 день/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /effectiveDateRange\.endDate/);
   });
 
-  it('removes lexical mutation routing shortcuts from agent.ts', () => {
-    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
-
-    assert.doesNotMatch(source, /isMutationIntent/);
-    assert.doesNotMatch(source, /isSimpleMutationRequest/);
-    assert.doesNotMatch(source, /tryDirectShiftFastPath/);
-    assert.doesNotMatch(source, /parseFastShiftIntent/);
-  });
-
-  it('guards the entrypoint and route-selection path against forbidden semantic helpers', () => {
-    const agentSource = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
-    const routeSelectionSource = readFileSync(join(__dirname, '../src/initial-generation/route-selection.ts'), 'utf-8');
-
-    assert.doesNotMatch(agentSource, /looksLikeTargetedEdit|detectScopeSignals|hasAmbiguousListLanguage|hasExplicitFragmentTarget|inferWorklistPolicy/);
-    assert.doesNotMatch(routeSelectionSource, /looksLikeTargetedEdit/);
-    assert.match(routeSelectionSource, /interpretInitialRequest/);
-  });
-});
-
-describe('agent history context', () => {
-  it('trims mutation history aggressively', () => {
-    const history = buildHistoryContext(
-      Array.from({ length: 10 }, (_, index) => ({
-        role: index % 2 === 0 ? 'user' : 'assistant',
-        content: `message-${index}-${'x'.repeat(200)}`,
-      })),
-      true,
-    );
-
-    assert.ok(history.length <= 1700, `expected compact history, got ${history.length} chars`);
-    assert.doesNotMatch(history, /message-0-/);
-    assert.doesNotMatch(history, /message-3-/);
-    assert.match(history, /message-9-/);
-  });
-});
-
-describe('agent staged-mutation preference', () => {
-  it('prefers staged mutation for targeted mutation requests broadly', () => {
-    assert.equal(shouldPreferStagedMutation('Добавь сдачу ГАСН в конце работ'), true);
-    assert.equal(shouldPreferStagedMutation('Добавь акт приемки после фасадных работ'), true);
-    assert.equal(shouldPreferStagedMutation('Insert handover before commissioning'), true);
-    assert.equal(shouldPreferStagedMutation('Добавь мобилизацию'), true);
-    assert.equal(shouldPreferStagedMutation('Create milestone ГАСН'), true);
-  });
-});
-
-describe('agent mutation verification assessment', () => {
-  it('detects mismatch between accepted changedTaskIds and actual snapshot diff', () => {
-    const result = assessMutationOutcome(
-      [
-        {
-          toolUseId: 'tool-1',
-          toolName: 'shift_tasks',
-          status: 'accepted',
-          changedTaskIds: ['A'],
-        },
-      ],
-      ['A', 'B'],
-    );
-
-    assert.equal(result.mutationAttempted, true);
-    assert.equal(result.acceptedMutationCalls.length, 1);
-    assert.equal(result.acceptedChangedTaskIdMismatch, true);
-  });
-
-  it('accepts matching authoritative changedTaskIds', () => {
-    const result = assessMutationOutcome(
-      [
-        {
-          toolUseId: 'tool-1',
-          toolName: 'move_tasks',
-          status: 'accepted',
-          changedTaskIds: ['B', 'A'],
-        },
-      ],
-      ['A', 'B'],
-    );
-
-    assert.equal(result.acceptedChangedTaskIdMismatch, false);
-    assert.deepEqual(result.acceptedChangedTaskIds, ['A', 'B']);
-  });
-
-  it('infers accepted mutation when tool call is observed and snapshot changed', () => {
-    const result = assessMutationOutcome(
-      [
-        {
-          toolUseId: 'tool-1',
-          toolName: 'create_tasks',
-        },
-      ],
-      ['A'],
-    );
-
-    assert.equal(result.mutationAttempted, true);
-    assert.equal(result.acceptedMutationCalls.length, 1);
-    assert.equal(result.acceptedMutationCalls[0]?.status, 'accepted');
-    assert.deepEqual(result.acceptedChangedTaskIds, ['A']);
-    assert.equal(result.acceptedChangedTaskIdMismatch, false);
-  });
-});
-
-describe('agent staged mutation lifecycle integration', () => {
-  it('locks the classifier outputs for the core Russian mutation prompts', async () => {
-    assert.equal((await classifyMutationIntent({ userMessage: 'добавь сдачу технадзору', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('добавь сдачу технадзору') })).intentType, 'add_single_task');
-    assert.equal((await classifyMutationIntent({ userMessage: 'добавь техприсоединение', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('добавь техприсоединение') })).intentType, 'unsupported_or_ambiguous');
-    assert.equal((await classifyMutationIntent({ userMessage: 'сдвинь штукатурку на 2 дня', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня') })).intentType, 'shift_relative');
-    assert.equal((await classifyMutationIntent({ userMessage: 'перенеси фундамент на 2026-05-10', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('перенеси фундамент на 2026-05-10') })).intentType, 'move_to_date');
-    assert.equal((await classifyMutationIntent({ userMessage: 'добавь покраску обоев на каждый этаж', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('добавь покраску обоев на каждый этаж') })).intentType, 'add_repeated_fragment');
-    assert.equal((await classifyMutationIntent({ userMessage: 'свяжи исполнительную документацию и акт приемки', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('свяжи исполнительную документацию и акт приемки') })).intentType, 'link_tasks');
-    assert.equal((await classifyMutationIntent({ userMessage: 'убери связь между исполнительной документацией и актом приемки', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('убери связь между исполнительной документацией и актом приемки') })).intentType, 'unlink_tasks');
-    assert.equal((await classifyMutationIntent({ userMessage: 'переименуй клининг', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('переименуй клининг') })).intentType, 'rename_task');
-    assert.equal((await classifyMutationIntent({ userMessage: 'сделай эту задачу красной', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('сделай эту задачу красной') })).intentType, 'update_metadata');
-    assert.equal((await classifyMutationIntent({ userMessage: 'удали этап меблировки', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('удали этап меблировки') })).intentType, 'delete_task');
-    assert.equal((await classifyMutationIntent({ userMessage: 'распиши подробнее пункт "Инженерные системы"', env: semanticEnv, semanticIntentQuery: semanticIntentQueryFor('распиши подробнее пункт "Инженерные системы"') })).intentType, 'expand_wbs');
-  });
-
-  it('hands ordinary edits into the staged shell before the legacy mutation attempt', () => {
-    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
-
-    assert.match(source, /runStagedMutation/);
-    assert.match(source, /mutation_lifecycle_started/);
-    assert.match(source, /intent_classified/);
-    assert.match(source, /execution_mode_selected/);
-    assert.match(source, /legacyFallbackAllowed/);
-    assert.match(source, /deferred_to_legacy/);
-
-    const stagedIndex = source.indexOf('runStagedMutation({');
-    const legacyIndex = source.indexOf('attemptResult = await executeAgentAttempt(');
-    assert.notEqual(stagedIndex, -1);
-    assert.notEqual(legacyIndex, -1);
-    assert.ok(stagedIndex < legacyIndex, 'expected staged mutation handoff before legacy mutation attempt');
-  });
-
-  it('keeps the generic no-valid-tool-call message only in the legacy fallback branch', () => {
-    const source = readFileSync(join(__dirname, '../src/agent.ts'), 'utf-8');
-    const matches = source.match(/не выполнила ни одного валидного mutation tool call/g) ?? [];
-
-    assert.equal(matches.length, 1);
-    assert.match(source, /function buildNoMutationMessage\(\)/);
-    assert.doesNotMatch(source, /staged.*не выполнила ни одного валидного mutation tool call/i);
-  });
-
-  it('locks the full_agent prompt to server-provided staged mutation context', () => {
-    const prompt = readFileSync(join(__dirname, '../../mcp/agent/prompts/system.md'), 'utf-8');
-
-    assert.match(prompt, /ResolvedMutationContext/);
-    assert.match(prompt, /MutationPlan/);
-    assert.match(prompt, /Do not invent task IDs/i);
-    assert.match(prompt, /Do not invent dates/i);
-    assert.match(prompt, /full_agent/);
-  });
-
-  it('records one agent turn as one groupId with one requestContextId and finalizes only the last command', async () => {
-    const historyRequests: Array<Record<string, unknown>> = [];
-    const runId = `run-${randomUUID()}`;
-    const groupId = `group-${randomUUID()}`;
-
-    const result = await runStagedMutation({
-      userMessage: 'распиши подробнее пункт "Инженерные системы"',
-      projectId: 'project-1',
-      projectVersion: 8,
-      sessionId: 'session-1',
-      runId,
-      groupId,
-      requestContextId: runId,
-      historyTitle: 'AI — распиши подробнее пункт "Инженерные системы"',
-      historyUndoable: true,
-      tasksBefore: [{
-        id: 'task-engineering',
-        name: 'Инженерные системы',
-        startDate: '2026-04-01',
-        endDate: '2026-04-03',
-        parentId: 'phase-root',
-      }],
-      env: semanticEnv,
-      messageService: {
-        add: async () => undefined,
-      },
-      taskService: {
-        list: async () => ({
-          tasks: [
-            {
-              id: 'task-engineering',
-              name: 'Инженерные системы',
-              startDate: '2026-04-01',
-              endDate: '2026-04-03',
-              parentId: 'phase-root',
-            },
-            {
-              id: 'phase-root',
-              name: 'Проект',
-              startDate: '2026-03-20',
-              endDate: '2026-04-10',
-            },
-            {
-              id: 'task-engineering:prep',
-              name: 'Подготовка',
-              startDate: '2026-04-04',
-              endDate: '2026-04-05',
-              parentId: 'task-engineering',
-            },
-            {
-              id: 'task-engineering:core',
-              name: 'Основные работы',
-              startDate: '2026-04-06',
-              endDate: '2026-04-08',
-              parentId: 'task-engineering',
-            },
-          ],
-        }),
-        findTasksByName: async () => ([
-          {
-            taskId: 'task-engineering',
-            name: 'Инженерные системы',
-            parentId: null,
-            path: ['Проект', 'Инженерные системы'],
-            startDate: '2026-04-01',
-            endDate: '2026-04-03',
-            matchType: 'exact',
-            score: 0.96,
-          },
-        ]),
-        findContainerCandidates: async () => [],
-        listBranchTasks: async () => [
-          {
-            taskId: 'task-engineering',
-            name: 'Инженерные системы',
-            parentId: 'phase-root',
-            path: ['Проект', 'Инженерные системы'],
-            startDate: '2026-04-01',
-            endDate: '2026-04-03',
-            matchType: 'exact',
-            score: 0.95,
-          },
-        ],
-        findGroupScopes: async () => [],
-      },
-      commandService: {
-        commitCommand: async (request: Record<string, any>) => {
-          historyRequests.push(request.history ?? {});
-          const changedTaskIds = request.command.type === 'create_tasks_batch'
-            ? ['task-engineering', ...(request.command.tasks ?? []).map((task: { id: string }) => task.id)]
-            : ['task-engineering', 'task-engineering:prep', 'task-engineering:core'];
-          return {
-            accepted: true,
-            clientRequestId: request.clientRequestId,
-            baseVersion: request.baseVersion,
-            newVersion: request.baseVersion + 1,
-            result: {
-              snapshot: { tasks: [], dependencies: [] },
-              changedTaskIds,
-              changedDependencyIds: [],
-              conflicts: [],
-              patches: [],
-            },
-            snapshot: { tasks: [], dependencies: [] },
-          };
-        },
-      },
-      broadcastToSession: () => undefined,
-      logger: {
-        debug: () => undefined,
-      },
-      semanticIntentQuery: async () => ({
-        content: JSON.stringify({
-          intentType: 'expand_wbs',
-          confidence: 0.9,
-          entitiesMentioned: ['Инженерные системы'],
-          fragmentPlan: {
-            title: 'Инженерные системы',
-            nodes: [
-              { nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] },
-              { nodeKey: 'core', title: 'Основные работы', durationDays: 3, dependsOnNodeKeys: ['prep'] },
-            ],
-          },
-        }),
-      }),
-    });
-
-    assert.equal(result.status, 'completed');
-    assert.equal(historyRequests.length, 2, 'expected one agent turn to commit two grouped commands');
-    assert.equal(historyRequests[0]?.origin, 'agent_run');
-    assert.equal(historyRequests[0]?.requestContextId, runId);
-    assert.equal(historyRequests[1]?.requestContextId, runId);
-    assert.equal(historyRequests[0]?.groupId, historyRequests[1]?.groupId, 'one agent turn should reuse one groupId');
-    assert.equal(historyRequests[0]?.finalizeGroup, false);
-    assert.equal(historyRequests[1]?.finalizeGroup, true);
-    assert.equal(historyRequests[0]?.undoable, true);
-    assert.equal(historyRequests[1]?.undoable, true);
-    assert.match(String(historyRequests[0]?.title ?? ''), /^AI — /);
-  });
-
-  it('marks non-undoable agent runs explicitly instead of silently storing undoable history', async () => {
-    const historyRequests: Array<Record<string, unknown>> = [];
-    const runId = `run-${randomUUID()}`;
-    const groupId = `group-${randomUUID()}`;
-
-    const result = await runStagedMutation({
-      userMessage: 'сдвинь штукатурку на 2 дня',
-      projectId: 'project-1',
-      projectVersion: 5,
-      sessionId: 'session-1',
-      runId,
-      groupId,
-      requestContextId: runId,
-      historyTitle: 'AI — Неотменяемое действие',
-      historyUndoable: false,
-      tasksBefore: [{
-        id: 'task-plaster',
-        name: 'Штукатурка',
-        startDate: '2026-04-01',
-        endDate: '2026-04-03',
-      }],
-      env: semanticEnv,
-      messageService: {
-        add: async () => undefined,
-      },
-      taskService: {
-        list: async () => ({ tasks: [] }),
-        findTasksByName: async () => ([
-          {
-            taskId: 'task-plaster',
-            name: 'Штукатурка',
-            parentId: null,
-            path: ['Отделка', 'Штукатурка'],
-            startDate: '2026-04-01',
-            endDate: '2026-04-03',
-            matchType: 'exact',
-            score: 0.96,
-          },
-        ]),
-        findContainerCandidates: async () => [],
-        listBranchTasks: async () => [],
-        findGroupScopes: async () => [],
-      },
-      commandService: {
-        commitCommand: async (request: Record<string, any>) => {
-          historyRequests.push(request.history ?? {});
-          return {
-            accepted: false,
-            clientRequestId: request.clientRequestId,
-            reason: 'validation_error',
-            currentVersion: request.baseVersion,
-            error: 'command is not undoable',
-          };
-        },
-      },
-      broadcastToSession: () => undefined,
-      logger: {
-        debug: () => undefined,
-      },
-      semanticIntentQuery: semanticIntentQueryFor('сдвинь штукатурку на 2 дня'),
-    });
-
-    assert.equal(result.status, 'failed');
-    assert.equal(result.result.failureReason, 'deterministic_execution_failed');
-    assert.equal(historyRequests.length, 1);
-    assert.equal(historyRequests[0]?.origin, 'agent_run');
-    assert.equal(historyRequests[0]?.requestContextId, runId);
-    assert.equal(historyRequests[0]?.undoable, false);
-    assert.equal(historyRequests[0]?.finalizeGroup, true);
-    assert.equal(historyRequests[0]?.title, 'AI — Неотменяемое действие');
+  it('detects mutating-looking requests only for failure fallback messaging', () => {
+    assert.equal(looksLikeMutatingRequest('добавь сдачу технадзору'), true);
+    assert.equal(looksLikeMutatingRequest('сдвинь штукатурку на 2 дня'), true);
+    assert.equal(looksLikeMutatingRequest('свяжи исполнительную документацию и акт приемки'), true);
+    assert.equal(looksLikeMutatingRequest('покажи задачи по штукатурке'), false);
   });
 });
