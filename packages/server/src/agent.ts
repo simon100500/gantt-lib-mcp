@@ -150,6 +150,14 @@ const COMPACT_MUTATION_SYSTEM_PROMPT = [
   'Reply briefly with only what changed.',
   'Respond in the user language.',
 ].join(' ');
+const FREE_AGENT_SYSTEM_PROMPT = [
+  'You are an autonomous Gantt planning agent.',
+  'Understand the user request, inspect the project when useful, choose the available tools yourself, and apply the best planning change.',
+  'Act like a professional scheduler: preserve context, use hierarchy, dates, dependencies, and batching when they fit the request.',
+  'Keep the solution as simple as the request allows, but do not flatten work that should naturally be structured.',
+  'If the request cannot be completed with the available tools or is truly ambiguous, say so briefly.',
+  'After tool use, answer briefly in the user language and state what changed.',
+].join(' ');
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 2;
 const READONLY_HISTORY_MESSAGE_LIMIT = 12;
@@ -157,8 +165,10 @@ const MUTATION_HISTORY_CHAR_LIMIT = 300;
 const READONLY_HISTORY_CHAR_LIMIT = 4_000;
 const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
 const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
+const FREE_AGENT_ATTEMPT_TIMEOUT_MS = 180_000;
 const SIMPLE_MUTATION_MAX_SESSION_TURNS = 4;
 const DEFAULT_MUTATION_MAX_SESSION_TURNS = 6;
+const FREE_AGENT_MAX_SESSION_TURNS = 30;
 const READONLY_MAX_SESSION_TURNS = 12;
 const ENABLE_RAW_SDK_EVENT_LOGGING = process.env.GANTT_DEBUG_RAW_SDK === 'true';
 const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
@@ -755,7 +765,9 @@ async function executeAgentAttempt(
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
-  const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
+  const timeoutMs = FORCE_MUTATIONS_TO_AGENT
+    ? FREE_AGENT_ATTEMPT_TIMEOUT_MS
+    : MUTATION_ATTEMPT_TIMEOUT_MS;
   const mutationToolCalls = new Map<string, MutationToolCall>();
   const observedToolUseIds = new Set<string>();
   const toolRuntime = resolveOrdinaryAgentToolRuntime({
@@ -772,6 +784,17 @@ async function executeAgentAttempt(
     databaseUrl: process.env.DATABASE_URL,
     onToolResult: (toolCall) => {
       observedToolUseIds.add(toolCall.toolUseId);
+      void writeServerDebugLog('direct_tool_result', {
+        runId,
+        attempt,
+        projectId,
+        sessionId,
+        toolUseId: toolCall.toolUseId,
+        toolName: toolCall.toolName,
+        status: toolCall.status,
+        reason: toolCall.reason,
+        changedTaskIds: toolCall.changedTaskIds,
+      });
       const mutationToolName = resolveNormalizedMutationToolName(toolCall.toolName);
       if (!mutationToolName) {
         return;
@@ -803,7 +826,11 @@ async function executeAgentAttempt(
 
   const session = await runner.run(agent, prompt, {
     stream: true,
-    maxTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
+    maxTurns: FORCE_MUTATIONS_TO_AGENT
+      ? FREE_AGENT_MAX_SESSION_TURNS
+      : simpleMutationRequested
+        ? SIMPLE_MUTATION_MAX_SESSION_TURNS
+        : DEFAULT_MUTATION_MAX_SESSION_TURNS,
     signal: abortController.signal,
   });
 
@@ -1095,14 +1122,50 @@ export async function runAgentWithHistory(
     const runId = crypto.randomUUID();
     const { tasks: tasksBefore } = await taskService.list(projectId);
     const env = resolveEnv();
-    const routeSelection = await selectAgentRoute({
-      userMessage,
-      taskCount: tasksBefore.length,
-      hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
-      model: env.OPENAI_MODEL,
-      routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
-    });
-    const likelyMutationRequest = routeSelection.route === 'mutation';
+    const routeSelection = FORCE_MUTATIONS_TO_AGENT
+      ? {
+          route: 'mutation' as const,
+          confidence: 1,
+          reason: 'forced_full_agent_test_mode' as const,
+          signals: ['GANTT_FORCE_MUTATIONS_TO_AGENT'],
+          interpretation: {
+            route: 'mutation' as const,
+            confidence: 1,
+            requestKind: 'targeted_edit' as const,
+            planningMode: 'worklist_bootstrap' as const,
+            scopeMode: 'explicit_worklist' as const,
+            objectProfile: 'unknown' as const,
+            projectArchetype: 'unknown' as const,
+            locationScope: {
+              sections: [],
+              floors: [],
+              zones: [],
+            },
+            worklistPolicy: 'worklist_plus_inferred_supporting_tasks' as const,
+            clarification: {
+              needed: false,
+              reason: 'none' as const,
+            },
+            signals: ['forced_full_agent_test_mode'],
+          },
+          isEmptyProject: tasksBefore.length === 0,
+          hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+          taskCount: tasksBefore.length,
+          projectStateSummary: [
+            `empty_project=${tasksBefore.length === 0}`,
+            `task_count=${tasksBefore.length}`,
+            `has_hierarchy=${tasksBefore.some((task) => Boolean(task.parentId))}`,
+          ].join(', '),
+          usedModelDecision: false,
+        }
+      : await selectAgentRoute({
+          userMessage,
+          taskCount: tasksBefore.length,
+          hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+          model: env.OPENAI_MODEL,
+          routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
+        });
+    const likelyMutationRequest = FORCE_MUTATIONS_TO_AGENT || routeSelection.route === 'mutation';
     const simpleMutationRequested = false;
 
     await writeServerDebugLog('agent_run_started', {
@@ -1213,8 +1276,15 @@ export async function runAgentWithHistory(
     const verboseSystemPrompt = existsSync(systemPromptPath)
       ? await readFile(systemPromptPath, 'utf-8')
       : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
-    const systemPrompt = likelyMutationRequest ? COMPACT_MUTATION_SYSTEM_PROMPT : verboseSystemPrompt;
-    const historyContext = buildHistoryContext(messages.slice(0, -1), likelyMutationRequest);
+    const systemPrompt = FORCE_MUTATIONS_TO_AGENT
+      ? FREE_AGENT_SYSTEM_PROMPT
+      : likelyMutationRequest
+        ? COMPACT_MUTATION_SYSTEM_PROMPT
+        : verboseSystemPrompt;
+    const historyContext = buildHistoryContext(
+      messages.slice(0, -1),
+      likelyMutationRequest && !FORCE_MUTATIONS_TO_AGENT,
+    );
 
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
@@ -1477,6 +1547,36 @@ export async function runAgentWithHistory(
         toolCallCount: attemptResult.toolCallCount,
         ...attemptResult.metrics,
       });
+
+      if (likelyMutationRequest && FORCE_MUTATIONS_TO_AGENT) {
+        const { tasks: latestTasks } = await taskService.list(projectId);
+        tasksAfter = latestTasks as ComparableTask[];
+        const actualChangedTaskIds = getChangedTaskIds(tasksBefore, tasksAfter);
+        finalVerification = {
+          tasksAfter,
+          tasksChanged: haveTasksChanged(tasksBefore, tasksAfter),
+          actualChangedTaskIds,
+          mutationAttempted: attemptResult.toolCallCount > 0,
+          acceptedMutationCalls: [],
+          rejectedMutationCalls: [],
+          acceptedChangedTaskIds: actualChangedTaskIds,
+          acceptedChangedTaskIdMismatch: false,
+        };
+        assistantResponse = sanitizeAssistantResponse(
+          userMessage,
+          assistantResponse.trim() || (finalVerification.tasksChanged ? 'Изменения применены.' : ''),
+        );
+        await writeServerDebugLog('agent_verification_skipped', {
+          runId,
+          attempt,
+          projectId,
+          sessionId,
+          reason: 'free_agent_test_mode',
+          tasksChanged: finalVerification.tasksChanged,
+          actualChangedTaskIds,
+        });
+        break;
+      }
 
       finalVerification = await verifyMutationAttempt(
         runId,
