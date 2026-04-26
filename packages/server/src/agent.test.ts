@@ -446,6 +446,25 @@ describe('agent mutation verification assessment', () => {
     assert.deepEqual(result.acceptedChangedTaskIds, ['A']);
     assert.equal(result.acceptedChangedTaskIdMismatch, false);
   });
+
+  it('uses authoritative snapshot diff when an accepted tool omits changedTaskIds', () => {
+    const result = assessMutationOutcome(
+      [
+        {
+          toolUseId: 'call-delete',
+          toolName: 'delete_tasks',
+          status: 'accepted',
+          changedTaskIds: [],
+        },
+      ],
+      ['A', 'B'],
+    );
+
+    assert.equal(result.mutationAttempted, true);
+    assert.deepEqual(result.acceptedChangedTaskIds, ['A', 'B']);
+    assert.equal(result.acceptedChangedTaskIdMismatch, false);
+    assert.deepEqual(result.acceptedMutationCalls[0]?.changedTaskIds, ['A', 'B']);
+  });
 });
 
 describe('agent staged mutation lifecycle integration', () => {

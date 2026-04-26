@@ -133,6 +133,7 @@ export type OrdinaryAgentPathTelemetry = {
 
 const ORDINARY_AGENT_PATH_CONTRACT =
   'Ordinary conversational mutations use the direct path by default with no external MCP subprocess; compatibility fallback remains explicit and bounded.';
+const FORCE_MUTATIONS_TO_AGENT = process.env.GANTT_FORCE_MUTATIONS_TO_AGENT !== 'false';
 const ENABLE_STAGED_MUTATION_FALLBACK = false;
 const COMPACT_MUTATION_SYSTEM_PROMPT = [
   'You edit a Gantt project through normalized tools.',
@@ -142,6 +143,8 @@ const COMPACT_MUTATION_SYSTEM_PROMPT = [
   'Never guess placement or dependencies for schedule edits.',
   'Do not create standalone tasks when the request implies sequence, parent container, or semantic placement.',
   'If placement or dependency semantics are unclear, gather the minimum context first.',
+  'When the user says "there too", "same place", "туда же", or similar, infer the target from recent chat history and current project context before mutating.',
+  'For follow-up additions, prefer adding the new task as a sibling under the same parent or immediately after the most recently created or mentioned task.',
   'Use only normalized tools: get_project_summary, get_task_context, get_schedule_slice, create_tasks, update_tasks, move_tasks, delete_tasks, link_tasks, unlink_tasks, shift_tasks, recalculate_project.',
   'Never invent task IDs.',
   'Reply briefly with only what changed.',
@@ -395,16 +398,30 @@ export function assessMutationOutcome(
   const acceptedMutationCalls = mutationToolCalls.filter((call) => call.status === 'accepted');
   const rejectedMutationCalls = mutationToolCalls.filter((call) => call.status === 'rejected');
   const pendingMutationCalls = mutationToolCalls.filter((call) => call.status === undefined);
-  const inferredAcceptedMutationCalls = acceptedMutationCalls.length === 0
-    && rejectedMutationCalls.length === 0
-    && pendingMutationCalls.length > 0
-    && actualChangedSorted.length > 0
-      ? pendingMutationCalls.map((call) => ({
+  const inferredAcceptedMutationCalls = (() => {
+    if (acceptedMutationCalls.length > 0) {
+      const acceptedChangedIds = uniqueSorted(
+        acceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
+      );
+      if (acceptedChangedIds.length === 0 && actualChangedSorted.length > 0) {
+        return acceptedMutationCalls.map((call) => ({
+          ...call,
+          changedTaskIds: actualChangedSorted,
+        }));
+      }
+      return acceptedMutationCalls;
+    }
+
+    if (rejectedMutationCalls.length === 0 && pendingMutationCalls.length > 0 && actualChangedSorted.length > 0) {
+      return pendingMutationCalls.map((call) => ({
         ...call,
         status: 'accepted' as const,
         changedTaskIds: actualChangedSorted,
-      }))
-      : acceptedMutationCalls;
+      }));
+    }
+
+    return acceptedMutationCalls;
+  })();
   const acceptedChangedTaskIds = uniqueSorted(
     inferredAcceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
   );
@@ -754,16 +771,20 @@ async function executeAgentAttempt(
     projectRoot: PROJECT_ROOT,
     databaseUrl: process.env.DATABASE_URL,
     onToolResult: (toolCall) => {
+      observedToolUseIds.add(toolCall.toolUseId);
+      const mutationToolName = resolveNormalizedMutationToolName(toolCall.toolName);
+      if (!mutationToolName) {
+        return;
+      }
       const existing = mutationToolCalls.get(toolCall.toolUseId);
       mutationToolCalls.set(toolCall.toolUseId, {
         ...existing,
         toolUseId: toolCall.toolUseId,
-        toolName: toolCall.toolName as NormalizedMutationToolName,
+        toolName: mutationToolName,
         status: toolCall.status,
         reason: toolCall.reason,
         changedTaskIds: toolCall.changedTaskIds,
       });
-      observedToolUseIds.add(toolCall.toolUseId);
     },
   });
 
@@ -1243,9 +1264,20 @@ export async function runAgentWithHistory(
       acceptedChangedTaskIdMismatch: false,
     };
 
+    if (likelyMutationRequest && FORCE_MUTATIONS_TO_AGENT) {
+      await writeServerDebugLog('mutation_forced_full_agent', {
+        runId,
+        projectId,
+        sessionId,
+        userMessage,
+        reason: 'GANTT_FORCE_MUTATIONS_TO_AGENT default-on test mode',
+      });
+    }
+
     if (
       likelyMutationRequest
       && ordinaryCompatibilityMode === 'embedded-direct'
+      && !FORCE_MUTATIONS_TO_AGENT
       && shouldPreferStagedMutation(userMessage)
     ) {
       const projectVersion = await getProjectBaseVersion(projectId);

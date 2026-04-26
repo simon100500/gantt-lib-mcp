@@ -1,6 +1,5 @@
 import { MCPServerStdio, tool, type MCPServer, type Tool } from '@openai/agents';
 import { join } from 'node:path';
-import { z } from 'zod';
 import {
   NORMALIZED_TOOL_CATALOG,
 } from '@gantt/runtime-core/tool-core/catalog';
@@ -13,6 +12,7 @@ import type {
 
 type JsonSchemaProperty = {
   type?: string;
+  description?: string;
   enum?: readonly string[];
   pattern?: string;
   minimum?: number;
@@ -49,72 +49,31 @@ export type ResolveOrdinaryAgentMcpServersInput = BuildDirectToolDefinitionsInpu
   databaseUrl?: string;
 };
 
-function convertJsonSchemaPropertyToZodSchema(
-  property: JsonSchemaProperty | undefined,
-  required: boolean,
-): z.ZodTypeAny {
-  let schema: z.ZodTypeAny;
+type ToolInputJsonSchema = {
+  type: 'object';
+  properties: Record<string, JsonSchemaProperty>;
+  required: string[];
+  additionalProperties: true;
+};
 
-  switch (property?.type) {
-    case 'string': {
-      schema = z.string();
-      if (property.pattern) {
-        schema = (schema as z.ZodString).regex(new RegExp(property.pattern));
-      }
-      if (Array.isArray(property.enum) && property.enum.length > 0) {
-        const [first, ...rest] = property.enum;
-        schema = z.enum([first, ...rest] as [string, ...string[]]);
-      }
-      break;
-    }
-    case 'number': {
-      schema = z.number();
-      if (typeof property.minimum === 'number') {
-        schema = (schema as z.ZodNumber).min(property.minimum);
-      }
-      if (typeof property.maximum === 'number') {
-        schema = (schema as z.ZodNumber).max(property.maximum);
-      }
-      break;
-    }
-    case 'boolean':
-      schema = z.boolean();
-      break;
-    case 'array':
-      schema = z.array(convertJsonSchemaPropertyToZodSchema(property.items, true));
-      break;
-    case 'object':
-    default: {
-      const shape: Record<string, z.ZodTypeAny> = {};
-      const objectRequired = new Set(property?.required ?? []);
-      for (const [key, value] of Object.entries(property?.properties ?? {})) {
-        shape[key] = convertJsonSchemaPropertyToZodSchema(value, objectRequired.has(key));
-      }
-      schema = z.object(shape);
-      break;
-    }
-  }
-
-  return required ? schema : schema.optional();
-}
-
-function convertToolInputSchemaToZodShape(schema: { properties: Record<string, JsonSchemaProperty>; required?: readonly string[] }): Record<string, z.ZodTypeAny> {
-  const required = new Set(schema.required ?? []);
-  const shape: Record<string, z.ZodTypeAny> = {};
-
-  for (const [key, value] of Object.entries(schema.properties)) {
-    shape[key] = convertJsonSchemaPropertyToZodSchema(value, required.has(key));
-  }
-
-  return shape;
+function buildOpenAIToolInputSchema(schema: {
+  properties: Record<string, JsonSchemaProperty>;
+  required?: readonly string[];
+}): ToolInputJsonSchema {
+  return {
+    type: 'object',
+    properties: schema.properties,
+    required: [...(schema.required ?? [])],
+    additionalProperties: true,
+  };
 }
 
 export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInput): Tool[] {
   return NORMALIZED_TOOL_CATALOG.map((definition) => tool({
     name: definition.name,
     description: definition.description,
-    parameters: z.object(convertToolInputSchemaToZodShape(definition.inputSchema)),
-    strict: true,
+    parameters: buildOpenAIToolInputSchema(definition.inputSchema),
+    strict: false,
     execute: async (args, _context, details) => {
       const context = createToolContext({
         actorType: 'agent',
