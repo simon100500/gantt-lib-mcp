@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Funnel, LoaderCircle, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { Check, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
-import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { cn } from '../../lib/utils.ts';
@@ -29,6 +29,7 @@ import type { ResourcePlannerTimelineItem, ResourcePlannerTimelineResource } fro
 import { ResourceAssignmentDetailsPanel, type AssignmentResourceView } from './ResourceAssignmentDetailsPanel.tsx';
 import { filterResourceTimelineResources, type ResourcePlannerFilters } from './resourcePlannerFilters.ts';
 import { buildReplacementResourceIds, classifyResourcePlannerMove, type ResourcePlannerMoveClassification } from './resourcePlannerMoves.ts';
+import { CreateResourceModal } from './CreateResourceModal.tsx';
 
 interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
@@ -412,6 +413,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     includeInactive: false,
   });
   const [selectedItem, setSelectedItem] = useState<ResourcePlannerTimelineItem | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const loadResourceCatalog = useCallback(async (catalogProjectId = projectId) => {
     if (!accessToken) {
@@ -637,6 +639,56 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
 
     await patchCatalogResource(resource, { isActive });
   }, [patchCatalogResource]);
+
+  const handleCreateResource = useCallback(async (input: { name: string; type: ResourceType; scope: ResourceScope }) => {
+    if (!accessToken || pendingCatalogResourceId) {
+      return;
+    }
+
+    const name = input.name.trim();
+    if (!name) {
+      setResourceMutationError('Введите название ресурса.');
+      return;
+    }
+
+    setPendingCatalogResourceId('new');
+    setResourceMutationError(null);
+    try {
+      const response = await fetch('/api/resources', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          name,
+          type: input.type,
+          scope: input.scope,
+          projectId,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const created = normalizeProjectResource(body);
+      if (!created) {
+        throw new Error('Resource payload was malformed.');
+      }
+
+      await loadResourceCatalog(created.projectId ?? projectId);
+      await loadPlanner(plannerScope, { keepData: true });
+      setCreateModalOpen(false);
+    } catch (error) {
+      setResourceMutationError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
+    } finally {
+      setPendingCatalogResourceId(null);
+    }
+  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
 
   const handleResourceChange = useCallback(async (nextResource: ResourcePlannerTimelineResource) => {
     const resource = resources.find((candidate) => candidate.id === nextResource.id);
@@ -1083,6 +1135,18 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
+          {!readonly && (
+            <Button
+              type="button"
+              size="sm"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+              data-testid="planner-create-resource"
+              onClick={() => setCreateModalOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Ресурс</span>
+            </Button>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1400,6 +1464,15 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           )}
         </div>
       </div>
+
+      {createModalOpen && (
+        <CreateResourceModal
+          pending={pendingCatalogResourceId === 'new'}
+          error={resourceMutationError}
+          onSubmit={handleCreateResource}
+          onCancel={() => { setCreateModalOpen(false); setResourceMutationError(null); }}
+        />
+      )}
     </div>
   );
 }
