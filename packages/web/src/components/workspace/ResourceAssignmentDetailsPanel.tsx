@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BrickWall, Hammer, Package, Users, X } from 'lucide-react';
+import { Cuboid, Hammer, Package, Users, X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import { cn } from '../../lib/utils.ts';
@@ -47,7 +47,7 @@ function ResourceTypeIcon({ type, className }: { type: ProjectResource['type']; 
     return <Hammer className={className} />;
   }
   if (type === 'material') {
-    return <BrickWall className={className} />;
+    return <Cuboid className={className} />;
   }
   return <Package className={className} />;
 }
@@ -178,7 +178,6 @@ export function ResourceAssignmentDetailsPanel({
               {resourceGroups.length > 0 ? resourceGroups.map((group) => (
                 <div key={group.type} className="border-b border-[#dfe1e6] last:border-b-0">
                   <div className="flex items-center gap-1.5 bg-[#f7f8fa] px-3 py-1.5 text-[11px] font-bold text-[#44546f]">
-                    <ResourceTypeIcon type={group.type} className="h-3.5 w-3.5 shrink-0" />
                     <span>{group.label}</span>
                     <span className="ml-auto rounded-full bg-[#dfe1e6] px-1.5 py-0.5 text-[10px] text-[#42526e]">
                       {group.resources.length}
