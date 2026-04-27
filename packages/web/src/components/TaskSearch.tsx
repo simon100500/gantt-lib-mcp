@@ -204,7 +204,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
             }
           }}
           placeholder={readOnly ? 'Поиск...' : 'Поиск или новая задача...'}
-          className="h-7 w-full rounded-lg border-slate-200 bg-white pl-9 pr-28 text-[13px] focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
+          className="h-7 w-full rounded-lg border-transparent bg-slate-100 pl-9 pr-28 text-[13px] shadow-none focus-visible:border-transparent focus-visible:bg-slate-100 focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или +"
         />

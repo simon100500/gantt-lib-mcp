@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, FolderKanban, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -517,7 +517,7 @@ export function ProjectMenu({
                         )}
                         data-testid="topbar-mode-resources"
                       >
-                        <FolderKanban className="h-3.5 w-3.5" />
+                        <Package className="h-3.5 w-3.5" />
                         <span>Ресурсы</span>
                       </button>
                     </div>
@@ -557,7 +557,7 @@ export function ProjectMenu({
                     data-testid="topbar-workspace-mode-switch-mobile"
                   >
                     {workspace.kind === 'planner' ? (
-                      <FolderKanban className="h-3.5 w-3.5 text-primary" />
+                      <Package className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
@@ -585,7 +585,7 @@ export function ProjectMenu({
                     )}
                     data-testid="topbar-mode-resources-mobile"
                   >
-                    <FolderKanban className="h-4 w-4" />
+                    <Package className="h-4 w-4" />
                     <span>Ресурсы</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>

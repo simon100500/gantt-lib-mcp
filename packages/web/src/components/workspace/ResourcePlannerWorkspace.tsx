@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, FolderKanban, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { Check, Package, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove } from 'gantt-lib';
 
@@ -961,73 +961,73 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                   </div>
                 </label>
 
-              <fieldset className="space-y-2">
-                <legend className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Тип ресурса</legend>
-                <div className="flex flex-wrap gap-2">
-                  {RESOURCE_TYPE_OPTIONS.map((option) => {
-                    const checked = filters.resourceTypes.includes(option.type);
-                    return (
-                      <label
-                        key={option.type}
-                        className={cn(
-                          'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
-                          checked
-                            ? 'border-slate-900 bg-slate-900 text-white'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          className="sr-only"
-                          checked={checked}
-                          onChange={(event) => setFilters((current) => ({
-                            ...current,
-                            resourceTypes: event.target.checked
-                              ? [...current.resourceTypes, option.type]
-                              : current.resourceTypes.filter((type) => type !== option.type),
-                          }))}
-                        />
-                        {option.label}
-                      </label>
-                    );
-                  })}
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Тип ресурса</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {RESOURCE_TYPE_OPTIONS.map((option) => {
+                      const checked = filters.resourceTypes.includes(option.type);
+                      return (
+                        <label
+                          key={option.type}
+                          className={cn(
+                            'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                            checked
+                              ? 'border-slate-900 bg-slate-900 text-white'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={checked}
+                            onChange={(event) => setFilters((current) => ({
+                              ...current,
+                              resourceTypes: event.target.checked
+                                ? [...current.resourceTypes, option.type]
+                                : current.resourceTypes.filter((type) => type !== option.type),
+                            }))}
+                          />
+                          {option.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={filters.conflictOnly}
+                      onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
+                    />
+                    Только конфликты
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={filters.includeInactive}
+                      onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
+                    />
+                    Показывать неактивные
+                  </label>
                 </div>
-              </fieldset>
 
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={filters.conflictOnly}
-                    onChange={(event) => setFilters((current) => ({ ...current, conflictOnly: event.target.checked }))}
-                  />
-                  Только конфликты
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={filters.includeInactive}
-                    onChange={(event) => setFilters((current) => ({ ...current, includeInactive: event.target.checked }))}
-                  />
-                  Показывать неактивные
-                </label>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 w-full"
-                disabled={!hasActiveFilters}
-                onClick={() => setFilters({
-                  query: '',
-                  resourceTypes: [],
-                  conflictOnly: false,
-                  includeInactive: false,
-                })}
-              >
-                Сбросить фильтр
-              </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full"
+                  disabled={!hasActiveFilters}
+                  onClick={() => setFilters({
+                    query: '',
+                    resourceTypes: [],
+                    conflictOnly: false,
+                    includeInactive: false,
+                  })}
+                >
+                  Сбросить фильтр
+                </Button>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1043,7 +1043,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               setShowCatalogPanel((current) => !current);
             }}
           >
-            <FolderKanban className="h-4 w-4" />
+            <Package className="h-4 w-4" />
             <span>Ресурсы</span>
           </Button>
 
@@ -1061,202 +1061,202 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
 
       <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 lg:flex-row lg:overflow-hidden">
         <div className="flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto bg-white">
-        <input
-          className="sr-only"
-          data-testid="planner-filter-query"
-          aria-hidden="true"
-          tabIndex={-1}
-          value={filters.query}
-          onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-        />
-        {state.status === 'loading' && (
-          <div className="bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
-            Загружаем ресурсный календарь…
-          </div>
-        )}
-
-        {state.status === 'error' && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="planner-error-state" role="alert">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span>Не удалось загрузить ресурсный календарь. {state.error}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 border-red-200 bg-white text-red-800 hover:bg-red-50"
-                data-testid="planner-retry-button"
-                onClick={() => { void loadPlanner(plannerScope, { keepData: true }); }}
-              >
-                Повторить
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-600" data-testid="planner-empty-state">
-            <div className="font-semibold text-slate-900">Нет ресурсов для отображения</div>
-            <div className="mt-1">Создайте ресурс или скорректируйте фильтр.</div>
-          </div>
-        )}
-
-        {plannerSaveError && (
-          <div
-            className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            data-testid="planner-save-error"
-            role="alert"
-          >
-            {plannerSaveError}
-          </div>
-        )}
-
-        {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length > 0 && (
-          <div className="flex min-h-0 flex-1" data-testid="planner-data-state">
-            <section
-              aria-label="Ресурсный календарь"
-              className="min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
-              data-testid="resource-planner-gantt-section"
-            >
-              <GanttChart
-                mode="resource-planner"
-                resources={filteredTimelineResources}
-                dayWidth={30}
-                laneHeight={42}
-                rowHeaderWidth={220}
-                headerHeight={40}
-                allowVerticalPan
-                businessDays={ganttDayMode !== 'calendar'}
-                readonly={readonly}
-                disableResourceReassignment={disableResourceReassignment}
-                getItemClassName={getTimelineItemClassName}
-                onResourceItemClick={handleSelectTimelineItem}
-                onResourceItemMove={readonly ? undefined : persistPlannerMove}
-              />
-            </section>
-          </div>
-        )}
-
-        {displayedPlannerData && (
-          <footer
-            className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3"
-            data-testid="resource-planner-statusbar"
-          >
-            <span className="font-mono text-[11px] text-slate-400">
-              {plannerResourceCount} ресурсов
-            </span>
-
-            <span className="font-mono text-[11px] text-slate-400">
-              {plannerAssignmentCount} назначений
-            </span>
-
-            <span className="font-mono text-[11px] text-slate-400">
-              {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
-            </span>
-
-            <span className="font-mono text-[11px] text-slate-400">
-              {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты'}
-            </span>
-
-            {readonly && (
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                Только для чтения
-              </span>
-            )}
-
-            {!readonly && plannerSaveError && (
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-red-600">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                Ошибка сохранения
-              </span>
-            )}
-
-            {!readonly && !plannerSaveError && pendingMoveCount > 0 && (
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
-                <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
-                Сохранение...
-              </span>
-            )}
-
-            {!readonly && !plannerSaveError && pendingMoveCount === 0 && (
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-600">
-                <Check className="h-3 w-3 shrink-0" />
-                Сохранено
-              </span>
-            )}
-          </footer>
-        )}
-
-      </div>
-      </div>
-
-      <div className={cn('w-full max-w-[420px] border-l border-slate-200 bg-white', !showSidePanel && 'hidden')}>
-        {selectedItem ? (
-          <ResourceAssignmentDetailsPanel
-            item={selectedItem}
-            resource={selectedResource}
-            resources={resources}
-            readonly={readonly}
-            onClose={() => setSelectedItem(null)}
-            onCorrectConflict={onCorrectConflict}
-            onDateChange={handleDetailsDateChange}
-            onResourceChange={handleDetailsResourceChange}
-            onRemoveResource={handleRemoveResource}
-          />
-        ) : (
-          <div className={cn('h-full overflow-auto p-4', !showCatalogPanel && 'hidden')}>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">Каталог ресурсов</div>
-                <div className="text-xs text-slate-500">Создание и правка ресурсов скрыты от основного canvas.</div>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-slate-600"
-                onClick={() => setShowCatalogPanel(false)}
-              >
-                Закрыть
-              </Button>
-            </div>
-
-            <ResourceCatalogPanel
-              resources={resources}
-              activeProjects={activeProjects}
-              readonly={readonly}
-              loading={resourceListLoading}
-              creating={creatingResource}
-              error={resourceListError}
-              createError={resourceCreateError}
-              mutationError={resourceMutationError}
-              pendingResourceId={pendingCatalogResourceId}
-              nameDraft={resourceNameDraft}
-              targetDraft={resourceTargetDraft}
-              typeDraft={resourceTypeDraft}
-              rowStats={catalogRowStats}
-              onNameDraftChange={(value) => {
-                setResourceNameDraft(value);
-                setResourceCreateError(null);
-              }}
-              onTargetDraftChange={(value) => {
-                setResourceTargetDraft(value);
-                setResourceCreateError(null);
-              }}
-              onTypeDraftChange={(value) => {
-                setResourceTypeDraft(value);
-                setResourceCreateError(null);
-              }}
-              onCreate={handleCreateResource}
-              onRenameResource={handleRenameResource}
-              onChangeResourceType={handleChangeResourceType}
-              onSetResourceActive={handleSetResourceActive}
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto bg-white">
+            <input
+              className="sr-only"
+              data-testid="planner-filter-query"
+              aria-hidden="true"
+              tabIndex={-1}
+              value={filters.query}
+              onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
             />
+            {state.status === 'loading' && (
+              <div className="bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
+                Загружаем ресурсный календарь…
+              </div>
+            )}
+
+            {state.status === 'error' && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="planner-error-state" role="alert">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span>Не удалось загрузить ресурсный календарь. {state.error}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 border-red-200 bg-white text-red-800 hover:bg-red-50"
+                    data-testid="planner-retry-button"
+                    onClick={() => { void loadPlanner(plannerScope, { keepData: true }); }}
+                  >
+                    Повторить
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length === 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-600" data-testid="planner-empty-state">
+                <div className="font-semibold text-slate-900">Нет ресурсов для отображения</div>
+                <div className="mt-1">Создайте ресурс или скорректируйте фильтр.</div>
+              </div>
+            )}
+
+            {plannerSaveError && (
+              <div
+                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                data-testid="planner-save-error"
+                role="alert"
+              >
+                {plannerSaveError}
+              </div>
+            )}
+
+            {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length > 0 && (
+              <div className="flex min-h-0 flex-1" data-testid="planner-data-state">
+                <section
+                  aria-label="Ресурсный календарь"
+                  className="min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
+                  data-testid="resource-planner-gantt-section"
+                >
+                  <GanttChart
+                    mode="resource-planner"
+                    resources={filteredTimelineResources}
+                    dayWidth={30}
+                    laneHeight={42}
+                    rowHeaderWidth={220}
+                    headerHeight={40}
+                    allowVerticalPan
+                    businessDays={ganttDayMode !== 'calendar'}
+                    readonly={readonly}
+                    disableResourceReassignment={disableResourceReassignment}
+                    getItemClassName={getTimelineItemClassName}
+                    onResourceItemClick={handleSelectTimelineItem}
+                    onResourceItemMove={readonly ? undefined : persistPlannerMove}
+                  />
+                </section>
+              </div>
+            )}
+
+            {displayedPlannerData && (
+              <footer
+                className="flex h-6 shrink-0 select-none items-center gap-3 border-t border-slate-200 bg-white px-3"
+                data-testid="resource-planner-statusbar"
+              >
+                <span className="font-mono text-[11px] text-slate-400">
+                  {plannerResourceCount} ресурсов
+                </span>
+
+                <span className="font-mono text-[11px] text-slate-400">
+                  {plannerAssignmentCount} назначений
+                </span>
+
+                <span className="font-mono text-[11px] text-slate-400">
+                  {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
+                </span>
+
+                <span className="font-mono text-[11px] text-slate-400">
+                  {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты'}
+                </span>
+
+                {readonly && (
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                    Только для чтения
+                  </span>
+                )}
+
+                {!readonly && plannerSaveError && (
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-red-600">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
+                    Ошибка сохранения
+                  </span>
+                )}
+
+                {!readonly && !plannerSaveError && pendingMoveCount > 0 && (
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
+                    <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
+                    Сохранение...
+                  </span>
+                )}
+
+                {!readonly && !plannerSaveError && pendingMoveCount === 0 && (
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-600">
+                    <Check className="h-3 w-3 shrink-0" />
+                    Сохранено
+                  </span>
+                )}
+              </footer>
+            )}
+
           </div>
-        )}
+        </div>
+
+        <div className={cn('w-full max-w-[420px] border-l border-slate-200 bg-white', !showSidePanel && 'hidden')}>
+          {selectedItem ? (
+            <ResourceAssignmentDetailsPanel
+              item={selectedItem}
+              resource={selectedResource}
+              resources={resources}
+              readonly={readonly}
+              onClose={() => setSelectedItem(null)}
+              onCorrectConflict={onCorrectConflict}
+              onDateChange={handleDetailsDateChange}
+              onResourceChange={handleDetailsResourceChange}
+              onRemoveResource={handleRemoveResource}
+            />
+          ) : (
+            <div className={cn('h-full overflow-auto p-4', !showCatalogPanel && 'hidden')}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Каталог ресурсов</div>
+                  <div className="text-xs text-slate-500">Создание и правка ресурсов скрыты от основного canvas.</div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-slate-600"
+                  onClick={() => setShowCatalogPanel(false)}
+                >
+                  Закрыть
+                </Button>
+              </div>
+
+              <ResourceCatalogPanel
+                resources={resources}
+                activeProjects={activeProjects}
+                readonly={readonly}
+                loading={resourceListLoading}
+                creating={creatingResource}
+                error={resourceListError}
+                createError={resourceCreateError}
+                mutationError={resourceMutationError}
+                pendingResourceId={pendingCatalogResourceId}
+                nameDraft={resourceNameDraft}
+                targetDraft={resourceTargetDraft}
+                typeDraft={resourceTypeDraft}
+                rowStats={catalogRowStats}
+                onNameDraftChange={(value) => {
+                  setResourceNameDraft(value);
+                  setResourceCreateError(null);
+                }}
+                onTargetDraftChange={(value) => {
+                  setResourceTargetDraft(value);
+                  setResourceCreateError(null);
+                }}
+                onTypeDraftChange={(value) => {
+                  setResourceTypeDraft(value);
+                  setResourceCreateError(null);
+                }}
+                onCreate={handleCreateResource}
+                onRenameResource={handleRenameResource}
+                onChangeResourceType={handleChangeResourceType}
+                onSetResourceActive={handleSetResourceActive}
+              />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
     </div>
   );
 }
