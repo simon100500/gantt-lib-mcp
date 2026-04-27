@@ -3,6 +3,7 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -206,6 +207,20 @@ function getAssignCommand(): { id: string; onSelect: (task: Task) => void } {
   return assignCommand!;
 }
 
+function getAssignedResourcesColumn(): { id: string; header: unknown; renderCell: (ctx: Record<string, unknown>) => React.ReactNode } {
+  const columns = (ganttPropsSpy?.additionalColumns as Array<{ id: string; header: unknown; renderCell: (ctx: Record<string, unknown>) => React.ReactNode }> | undefined) ?? [];
+  const assignedResourcesColumn = columns.find((column) => column.id === 'assigned-resources');
+  expect(assignedResourcesColumn).toBeTruthy();
+  return assignedResourcesColumn!;
+}
+
+function renderAssignedResourcesCellText(task: Task): string {
+  const html = renderToStaticMarkup(<>{getAssignedResourcesColumn().renderCell({ task })}</>);
+  const host = document.createElement('div');
+  host.innerHTML = html;
+  return host.textContent ?? '';
+}
+
 function getCheckbox(container: HTMLElement, resourceId: string): HTMLInputElement | null {
   return container.querySelector(`[data-testid="assignment-resource-checkbox-${resourceId}"]`) as HTMLInputElement | null;
 }
@@ -400,13 +415,12 @@ afterEach(() => {
 
 describe('ProjectWorkspace resource assignments', () => {
   it('passes the assigned-resources additional column seam into GanttChart', async () => {
-    const { root } = await renderWorkspace();
+    const { container, root } = await renderWorkspace();
 
-    const columns = (ganttPropsSpy?.additionalColumns as Array<{ id: string; header: unknown; renderCell: (ctx: Record<string, unknown>) => React.ReactNode }> | undefined) ?? [];
-    const assignedResourcesColumn = columns.find((column) => column.id === 'assigned-resources');
-
+    const assignedResourcesColumn = getAssignedResourcesColumn();
     expect(assignedResourcesColumn).toBeTruthy();
     expect(assignedResourcesColumn?.header).toBe('Ресурсы');
+    expect(container.querySelector('[data-testid="assignment-summary"]')).toBeNull();
 
     await unmountWorkspace(root);
   });
@@ -566,10 +580,11 @@ describe('ProjectWorkspace resource assignments', () => {
     ]);
     expect(useProjectStore.getState().assignments.some((assignment) => assignment.resourceId === 'resource-local-foreign')).toBe(false);
 
-    const { container, root } = await renderWorkspaceWithTaskStore();
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf A: Shared Crew');
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Current Project Crew');
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).not.toContain('Foreign Project Crew');
+    const { root } = await renderWorkspaceWithTaskStore();
+    expect(renderAssignedResourcesCellText(tasks[1]!)).toContain('Shared Crew');
+    expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Current Project Crew');
+    expect(renderAssignedResourcesCellText(tasks[1]!)).not.toContain('Foreign Project Crew');
+    expect(renderAssignedResourcesCellText(tasks[2]!)).not.toContain('Foreign Project Crew');
 
     await unmountWorkspace(root);
   });
@@ -722,8 +737,8 @@ describe('ProjectWorkspace resource assignments', () => {
       method: 'POST',
       body: JSON.stringify({ resourceIds: ['resource-2'] }),
     }));
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf A: Dormant Crew');
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+    expect(renderAssignedResourcesCellText(tasks[1]!)).toContain('Dormant Crew');
+    expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Dormant Crew');
 
     await act(async () => {
       await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
@@ -732,7 +747,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/project', {
       headers: { Authorization: 'Bearer token' },
     });
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+    expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Dormant Crew');
 
     await act(async () => {
       assignCommand.onSelect(tasks[0]!);
@@ -746,7 +761,7 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(alphaCheckbox).not.toBeNull();
     expect(dormantCheckbox).toBeNull();
     expect(submitButton?.disabled).toBe(false);
-    expect(container.querySelector('[data-testid="assignment-summary"]')?.textContent).toContain('Leaf B: Dormant Crew');
+    expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Dormant Crew');
 
     await unmountWorkspace(root);
   });
@@ -777,12 +792,12 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(useProjectStore.getState().assignments.some((assignment) => assignment.resourceId === 'resource-2')).toBe(false);
   });
 
-  it('hydrates authoritative resource and assignment state into the visible workspace summary, including inactive existing assignments', async () => {
-    const { container, root } = await renderWorkspace();
+  it('hydrates authoritative resource and assignment state into the assigned resources column, including inactive existing assignments', async () => {
+    const { root } = await renderWorkspace();
 
-    expect(container.textContent).toContain('Leaf B: Dormant Crew');
-    expect(container.textContent).toContain('Parent: —');
-    expect(container.textContent).not.toContain('Parent: Dormant Crew');
+    expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Dormant Crew');
+    expect(renderAssignedResourcesCellText(tasks[0]!)).toContain('Ресурсы не назначены');
+    expect(renderAssignedResourcesCellText(tasks[0]!)).not.toContain('Dormant Crew');
 
     await unmountWorkspace(root);
   });
