@@ -200,7 +200,7 @@ export function ResourceAssignmentModal({
                       const label = formatResourceLabel(resource);
                       return (
                         <button
-                          className="flex w-full min-w-0 items-center gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group flex w-full min-w-0 items-center gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`assignment-resource-option-${resource.id}`}
                           disabled={pending || !task}
                           key={resource.id}
@@ -209,6 +209,9 @@ export function ResourceAssignmentModal({
                         >
                           <ResourceTypeIcon type={resource.type} className="h-4 w-4 shrink-0" />
                           <span className="min-w-0 flex-1 break-words text-[13px] font-bold">{label}</span>
+                          <span className="shrink-0 text-[11px] font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                            Добавить
+                          </span>
                         </button>
                       );
                     })}

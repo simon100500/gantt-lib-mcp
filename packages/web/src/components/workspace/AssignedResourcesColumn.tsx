@@ -141,7 +141,7 @@ export function AssignedResourcesColumnCell({
           canEdit ? (
             <button
               aria-label={`Назначить ресурсы для задачи ${task.name || task.id}`}
-              className="assigned-resources-add inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-violet-100 px-1 text-violet-700 transition-colors hover:bg-violet-200 hover:text-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-1"
+              className="assigned-resources-add inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md border border-[#dfe1e6] bg-white px-1 text-[#6b778c] transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] hover:text-[#172b4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25 focus-visible:ring-offset-1"
               data-testid={`assigned-resources-add-${task.id}`}
               onClick={(event) => {
                 event.stopPropagation();
