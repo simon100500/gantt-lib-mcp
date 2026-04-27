@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto';
 
+import type { CommandService } from '@gantt/mcp/services';
+
 import { classifyMutationIntent } from './intent-classifier.js';
 import { executeMutationPlan } from './execution.js';
 import { selectMutationExecutionMode } from './execution-routing.js';
+import { compileSemanticMutationPlan } from './semantic-compiler.js';
 import {
   buildMutationFailureMessage,
   buildMutationSuccessMessage,
 } from './messages.js';
 import { buildMutationPlan } from './plan-builder.js';
 import { resolveMutationContext } from './resolver.js';
+import { planSemanticMutation } from './semantic-planner.js';
+import { resolveSemanticMutationPlan } from './semantic-resolver.js';
+import { runDirectSplitTask } from '../split-task.js';
 import type { ServerMessage } from '../ws.js';
 import type {
   MutationHistoryContext,
@@ -16,8 +22,10 @@ import type {
   MutationFailureReason,
   MutationOrchestrationResult,
   MutationTaskSnapshot,
+  MutationRouteEnvelope,
   ResolvedMutationContext,
 } from './types.js';
+import type { RunDirectSplitTaskInput, RunDirectSplitTaskResult } from '../split-task.js';
 
 type TaskSearchMatch = {
   taskId: string;
@@ -40,17 +48,40 @@ type GroupScopeMatch = {
 
 type MutationServices = {
   messageService: {
-    add(role: 'user' | 'assistant', content: string, projectId: string): Promise<unknown>;
+    add(
+      role: 'user' | 'assistant',
+      content: string,
+      projectId: string,
+      options?: {
+        requestContextId?: string;
+        historyGroupId?: string;
+      },
+    ): Promise<unknown>;
   };
   taskService: {
-    list(projectId: string): Promise<{ tasks: MutationTaskSnapshot[] }>;
+    list(
+      projectId?: string,
+      parentId?: string | null,
+      limit?: number,
+      offset?: number,
+    ): Promise<{ tasks: MutationTaskSnapshot[]; hasMore?: boolean; total?: number }>;
+    get?(
+      taskId: string,
+      depth?: boolean | 'shallow' | 'deep',
+    ): Promise<{
+      id: string;
+      name: string;
+      startDate?: string | Date;
+      endDate?: string | Date;
+      children?: Array<{ name: string }>;
+    } | undefined>;
     findTasksByName(projectId: string, query: string, limit?: number): Promise<TaskSearchMatch[]>;
     findContainerCandidates(projectId: string, query: string, limit?: number): Promise<TaskSearchMatch[]>;
     listBranchTasks(projectId: string, rootTaskId: string): Promise<TaskSearchMatch[]>;
     findGroupScopes(projectId: string, hint: string): Promise<GroupScopeMatch[]>;
   };
   commandService: {
-    commitCommand(...args: unknown[]): Promise<unknown>;
+    commitCommand: CommandService['commitCommand'];
   };
 };
 
@@ -61,7 +92,7 @@ type MutationLogger = {
 type MutationSemanticIntentQueryInput = {
   prompt: string;
   model: string;
-  stage: 'mutation_semantic_extraction';
+  stage: 'mutation_semantic_extraction' | 'mutation_semantic_planner';
 };
 
 type MutationSemanticIntentQueryResult = string | { content?: string };
@@ -78,6 +109,7 @@ export type RunStagedMutationInput = {
     OPENAI_BASE_URL: string;
     OPENAI_MODEL: string;
     OPENAI_CHEAP_MODEL?: string;
+    USE_SEMANTIC_PLANNER?: string;
   };
   messageService: MutationServices['messageService'];
   taskService: MutationServices['taskService'];
@@ -85,7 +117,35 @@ export type RunStagedMutationInput = {
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
   logger: MutationLogger;
   semanticIntentQuery?: (input: MutationSemanticIntentQueryInput) => Promise<MutationSemanticIntentQueryResult>;
+  semanticPlannerQuery?: (input: MutationSemanticIntentQueryInput) => Promise<MutationSemanticIntentQueryResult>;
+  directSplitTaskRunner?: (input: RunDirectSplitTaskInput) => Promise<RunDirectSplitTaskResult>;
 } & Partial<MutationHistoryContext>;
+
+async function loadAllProjectTasks(
+  taskService: MutationServices['taskService'],
+  projectId: string,
+): Promise<MutationTaskSnapshot[]> {
+  const pageSize = 1000;
+  let offset = 0;
+  const allTasks: MutationTaskSnapshot[] = [];
+
+  while (true) {
+    const page = await taskService.list(projectId, undefined, pageSize, offset);
+    allTasks.push(...page.tasks);
+    if (!page.hasMore) {
+      return allTasks;
+    }
+    offset += page.tasks.length;
+    if (page.tasks.length === 0) {
+      return allTasks;
+    }
+  }
+}
+
+function useSemanticPlanner(input: RunStagedMutationInput): boolean {
+  const flag = input.env.USE_SEMANTIC_PLANNER ?? process.env.USE_SEMANTIC_PLANNER ?? 'false';
+  return flag !== 'false';
+}
 
 function buildDeferredResult(executionMode: MutationExecutionMode): MutationOrchestrationResult['result'] {
   return {
@@ -187,6 +247,7 @@ function resolveFailureReason(
 
   if (
     intentType === 'shift_relative'
+    || intentType === 'change_duration'
     || intentType === 'move_to_date'
     || intentType === 'rename_task'
     || intentType === 'update_metadata'
@@ -205,6 +266,10 @@ function resolveFailureReason(
     return 'expansion_anchor_not_resolved';
   }
 
+  if (intentType === 'decompose_task') {
+    return 'anchor_not_found';
+  }
+
   if (intentType === 'add_single_task') {
     if (resolutionContext.selectedContainerId && resolutionContext.placementPolicy === 'unresolved') {
       return 'placement_not_resolved';
@@ -215,9 +280,229 @@ function resolveFailureReason(
   return 'unsupported_mutation_shape';
 }
 
+function mapSemanticActionToIntentType(
+  operation: { action: string; moveMode?: string } | undefined,
+): MutationOrchestrationResult['intent']['intentType'] {
+  switch (operation?.action) {
+    case 'add_task':
+      return 'add_single_task';
+    case 'change_duration':
+      return 'change_duration';
+    case 'move_task':
+      if (operation.moveMode === 'relative_delta') {
+        return 'shift_relative';
+      }
+      if (operation.moveMode === 'to_parent') {
+        return 'move_in_hierarchy';
+      }
+      return 'move_to_date';
+    case 'rename_task':
+      return 'rename_task';
+    case 'delete_task':
+      return 'delete_task';
+    case 'link_tasks':
+      return 'link_tasks';
+    case 'unlink_tasks':
+      return 'unlink_tasks';
+    case 'move_in_hierarchy':
+      return 'move_in_hierarchy';
+    default:
+      return 'unsupported_or_ambiguous';
+  }
+}
+
+function buildSemanticCompatIntent(
+  input: RunStagedMutationInput,
+  operation: { action: string; moveMode?: string } | undefined,
+  executionMode: MutationExecutionMode,
+): MutationOrchestrationResult['intent'] {
+  const intentType = mapSemanticActionToIntentType(operation);
+  const routeEnvelope: MutationRouteEnvelope = {
+    route: executionMode === 'full_agent' ? 'agent_path' : 'fast_path',
+    intentFamily: 'semantic_planner',
+    intentType,
+    confidence: 1,
+    riskLevel: executionMode === 'full_agent' ? 'S3' : 'S1',
+    params: {},
+    ambiguities: [],
+  };
+
+  return {
+    routeEnvelope,
+    intentType,
+    confidence: 1,
+    rawRequest: input.userMessage.trim(),
+    normalizedRequest: input.userMessage.trim().replace(/\s+/g, ' ').toLowerCase(),
+    entitiesMentioned: [],
+    requiresResolution: true,
+    requiresSchedulingPlacement: operation?.action === 'add_task',
+    executionMode,
+  };
+}
+
 export async function runStagedMutation(
   input: RunStagedMutationInput,
 ): Promise<MutationOrchestrationResult> {
+  const directSplitTaskRunner = input.directSplitTaskRunner ?? runDirectSplitTask;
+  if (useSemanticPlanner(input)) {
+    const semanticPlan = await planSemanticMutation({
+      userMessage: input.userMessage,
+      env: input.env,
+      semanticPlannerQuery: input.semanticPlannerQuery || input.semanticIntentQuery
+        ? (queryInput) => (input.semanticPlannerQuery ?? input.semanticIntentQuery)?.({
+            prompt: queryInput.prompt,
+            model: queryInput.model,
+            stage: 'mutation_semantic_planner',
+          }) ?? Promise.resolve('')
+        : undefined,
+    });
+    const executionMode: MutationExecutionMode = 'deterministic';
+    const semanticIntent = buildSemanticCompatIntent(input, semanticPlan.operations[0], executionMode);
+
+    await input.logger.debug('semantic_plan_created', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      semanticPlan,
+    });
+
+    if (semanticPlan.ambiguity !== 'none') {
+      await input.logger.debug('semantic_planner_fallback_to_classifier', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        stage: 'semantic_plan_created',
+        ambiguity: semanticPlan.ambiguity,
+        explanation: semanticPlan.explanation,
+      });
+    } else {
+      await input.logger.debug('semantic_resolution_started', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        operationCount: semanticPlan.operations.length,
+      });
+
+      const resolvedSemanticPlan = await resolveSemanticMutationPlan({
+        projectId: input.projectId,
+        plan: semanticPlan,
+        taskService: input.taskService,
+      });
+
+      await input.logger.debug('semantic_resolution_result', {
+        runId: input.runId,
+        projectId: input.projectId,
+        sessionId: input.sessionId,
+        resolvedSemanticPlan,
+      });
+
+      if (resolvedSemanticPlan.ambiguity !== 'none') {
+        await input.logger.debug('semantic_planner_fallback_to_classifier', {
+          runId: input.runId,
+          projectId: input.projectId,
+          sessionId: input.sessionId,
+          stage: 'semantic_resolution_result',
+          ambiguity: resolvedSemanticPlan.ambiguity,
+          explanation: resolvedSemanticPlan.explanation,
+        });
+      } else {
+        const compiledSemanticPlan = compileSemanticMutationPlan({
+          projectId: input.projectId,
+          tasksBefore: input.tasksBefore,
+          resolvedPlan: resolvedSemanticPlan,
+        });
+
+        await input.logger.debug('semantic_compile_result', {
+          runId: input.runId,
+          projectId: input.projectId,
+          sessionId: input.sessionId,
+          compiledSemanticPlan,
+        });
+
+        if (compiledSemanticPlan.ambiguity !== 'none') {
+          await input.logger.debug('semantic_planner_fallback_to_classifier', {
+            runId: input.runId,
+            projectId: input.projectId,
+            sessionId: input.sessionId,
+            stage: 'semantic_compile_result',
+            ambiguity: compiledSemanticPlan.ambiguity,
+            explanation: compiledSemanticPlan.explanation,
+          });
+        } else {
+          const history = resolveHistoryContext(input);
+          const execution = await executeMutationPlan({
+            projectId: input.projectId,
+            projectVersion: input.projectVersion,
+            tasksBefore: input.tasksBefore,
+            plan: compiledSemanticPlan.plan,
+            history: {
+              groupId: history.groupId,
+              requestContextId: history.requestContextId,
+              historyTitle: history.historyTitle,
+              historyUndoable: history.historyUndoable,
+            },
+            commandService: input.commandService as Parameters<typeof executeMutationPlan>[0]['commandService'],
+          });
+
+          const tasksAfter = execution.status === 'completed'
+            ? await loadAllProjectTasks(input.taskService, input.projectId)
+            : input.tasksBefore;
+          const tasksBeforeIds = new Set(input.tasksBefore.map((task) => task.id));
+          const createdTasks = tasksAfter.filter((task) => !tasksBeforeIds.has(task.id));
+          const knownChangedTasks = Array.from(
+            new Map(
+              [...tasksAfter, ...input.tasksBefore].map((task) => [task.id, task]),
+            ).values(),
+          );
+          const userFacingMessage = execution.status === 'completed'
+            ? buildMutationSuccessMessage({
+                changedTaskIds: execution.changedTaskIds,
+                changedTasks: knownChangedTasks,
+                createdTasks,
+                targetTaskIds: compiledSemanticPlan.plan.expectedChangedTaskIds,
+                route: semanticIntent.routeEnvelope.route,
+                intentType: semanticIntent.intentType,
+              })
+            : buildMutationFailureMessage(execution.failureReason ?? 'deterministic_execution_failed', {
+                details: execution.userFacingMessage,
+                route: semanticIntent.routeEnvelope.route,
+                intentType: semanticIntent.intentType,
+                failedStep: 'specialized_execution',
+              });
+          const result = {
+            ...execution,
+            userFacingMessage,
+          };
+
+          await input.logger.debug('final_outcome', {
+            runId: input.runId,
+            projectId: input.projectId,
+            sessionId: input.sessionId,
+            status: execution.status,
+            executionMode,
+            failureReason: execution.failureReason,
+            changedTaskIds: execution.changedTaskIds,
+            verificationVerdict: execution.verificationVerdict,
+          });
+
+          return {
+            handled: true,
+            status: execution.status,
+            legacyFallbackAllowed: false,
+            failureReason: execution.failureReason,
+            intent: semanticIntent,
+            executionMode,
+            resolutionContext: null,
+            plan: compiledSemanticPlan.plan,
+            result,
+            assistantResponse: result.userFacingMessage,
+            tasksAfter,
+          };
+        }
+      }
+    }
+  }
+
   const history = resolveHistoryContext(input);
   const intent = await classifyMutationIntent({
     userMessage: input.userMessage,
@@ -232,15 +517,19 @@ export async function runStagedMutation(
   });
 
   const executionMode = selectMutationExecutionMode(intent);
-  await input.logger.debug('execution_mode_selected', {
+  await input.logger.debug('route_selected', {
     runId: input.runId,
     projectId: input.projectId,
     sessionId: input.sessionId,
+    route: intent.routeEnvelope.route,
+    intentType: intent.intentType,
+    riskLevel: intent.routeEnvelope.riskLevel,
+    routeConfidence: intent.routeEnvelope.confidence,
     executionMode,
   });
 
   let resolutionContext: ResolvedMutationContext | null = null;
-  if (intent.requiresResolution) {
+  if (intent.requiresResolution && intent.routeEnvelope.route !== 'clarify') {
     await input.logger.debug('resolution_started', {
       runId: input.runId,
       projectId: input.projectId,
@@ -265,6 +554,221 @@ export async function runStagedMutation(
       sessionId: input.sessionId,
       resolutionContext,
     });
+  }
+
+  if (intent.routeEnvelope.route === 'clarify') {
+    return buildControlledFailure(
+      input,
+      executionMode,
+      'unsupported_mutation_shape',
+      resolutionContext,
+      null,
+      buildMutationFailureMessage('unsupported_mutation_shape', {
+        details: intent.routeEnvelope.ambiguities.join(', '),
+        resolutionContext,
+        route: intent.routeEnvelope.route,
+        intentType: intent.intentType,
+        failedStep: 'routing',
+      }),
+      {
+        ...intent,
+        executionMode,
+      },
+    );
+  }
+
+  if (intent.routeEnvelope.route === 'agent_path') {
+    await input.logger.debug('agent_escalation_selected', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      route: intent.routeEnvelope.route,
+      intentType: intent.intentType,
+      riskLevel: intent.routeEnvelope.riskLevel,
+      routeConfidence: intent.routeEnvelope.confidence,
+      ambiguities: intent.routeEnvelope.ambiguities,
+      executionMode,
+    });
+    return buildControlledFailure(
+      input,
+      executionMode,
+      'unsupported_mutation_shape',
+      resolutionContext,
+      null,
+      buildMutationFailureMessage('unsupported_mutation_shape', {
+        details: 'Требуется расширенный агентный маршрут для этой операции.',
+        resolutionContext,
+        route: intent.routeEnvelope.route,
+        intentType: intent.intentType,
+        failedStep: 'agent_escalation',
+      }),
+      {
+        ...intent,
+        executionMode,
+      },
+    );
+  }
+
+  if (intent.routeEnvelope.route === 'specialized_fast_path' && intent.intentType === 'decompose_task') {
+    if (!resolutionContext?.specializedExecutor?.ready) {
+      const failureReason = resolveFailureReason(
+        intent.intentType,
+        resolutionContext ?? {
+          projectId: input.projectId,
+          projectVersion: input.projectVersion,
+          resolutionQuery: intent.normalizedRequest,
+          containers: [],
+          groupMemberIds: [],
+          tasks: [],
+          predecessors: [],
+          successors: [],
+          selectedContainerId: null,
+          selectedPredecessorTaskId: null,
+          selectedSuccessorTaskId: null,
+          placementPolicy: 'unresolved',
+          confidence: 0,
+          ambiguities: intent.routeEnvelope.ambiguities,
+        },
+      );
+      return buildControlledFailure(
+        input,
+        executionMode,
+        failureReason,
+        resolutionContext,
+        null,
+        buildMutationFailureMessage(failureReason, {
+          resolutionContext,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
+          failedStep: 'resolution',
+        }),
+        {
+          ...intent,
+          executionMode,
+        },
+      );
+    }
+
+    const splitTaskHandoff = resolutionContext.specializedExecutor.executor === 'split_task'
+      ? resolutionContext.specializedExecutor
+      : null;
+
+    if (!splitTaskHandoff || typeof input.taskService.get !== 'function') {
+      return buildControlledFailure(
+        input,
+        executionMode,
+        'unsupported_mutation_shape',
+        resolutionContext,
+        null,
+        buildMutationFailureMessage('unsupported_mutation_shape', {
+          details: 'Специализированный split-task executor недоступен для этого запуска.',
+          resolutionContext,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
+          failedStep: 'specialized_execution',
+        }),
+        {
+          ...intent,
+          executionMode,
+        },
+      );
+    }
+
+    await input.logger.debug('specialized_executor_started', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      route: intent.routeEnvelope.route,
+      intentType: intent.intentType,
+      riskLevel: intent.routeEnvelope.riskLevel,
+      routeConfidence: intent.routeEnvelope.confidence,
+      specializedExecutor: splitTaskHandoff.executor,
+      targetTaskId: splitTaskHandoff.targetTaskId,
+      targetTaskName: splitTaskHandoff.targetTaskName,
+      mode: splitTaskHandoff.mode,
+      rangeFrom: splitTaskHandoff.rangeFrom,
+      rangeTo: splitTaskHandoff.rangeTo,
+      executionMode,
+    });
+
+    const splitResult = await directSplitTaskRunner({
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      runId: input.runId,
+      taskId: splitTaskHandoff.targetTaskId,
+      details: input.userMessage,
+      handoff: splitTaskHandoff,
+      env: input.env,
+      services: {
+        messageService: {
+          add: (role, content, projectId, options) =>
+            input.messageService.add(role, content, projectId, options) as ReturnType<
+              RunDirectSplitTaskInput['services']['messageService']['add']
+            >,
+        },
+        taskService: {
+          get: input.taskService.get as NonNullable<MutationServices['taskService']['get']>,
+          list: async (projectId) => {
+            const listed = await input.taskService.list(projectId ?? input.projectId);
+            return {
+              tasks: listed.tasks as Awaited<ReturnType<NonNullable<RunDirectSplitTaskInput['services']['taskService']['list']>>>['tasks'],
+              hasMore: false,
+              total: listed.tasks.length,
+            };
+          },
+        },
+        commandService: input.commandService as Parameters<typeof runDirectSplitTask>[0]['services']['commandService'],
+      },
+      broadcastToSession: input.broadcastToSession,
+    });
+
+    await input.logger.debug('specialized_executor_completed', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      route: intent.routeEnvelope.route,
+      intentType: intent.intentType,
+      riskLevel: intent.routeEnvelope.riskLevel,
+      routeConfidence: intent.routeEnvelope.confidence,
+      specializedExecutor: splitTaskHandoff.executor,
+      targetTaskId: splitTaskHandoff.targetTaskId,
+      targetTaskName: splitTaskHandoff.targetTaskName,
+      changedTaskIds: splitResult.execution.changedTaskIds,
+      verificationVerdict: splitResult.execution.verificationVerdict,
+      status: splitResult.execution.status,
+      executionMode,
+    });
+
+    await input.logger.debug('final_outcome', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      status: splitResult.execution.status,
+      executionMode,
+      failureReason: splitResult.execution.failureReason,
+      changedTaskIds: splitResult.execution.changedTaskIds,
+      verificationVerdict: splitResult.execution.verificationVerdict,
+    });
+
+    return {
+      handled: true,
+      status: splitResult.execution.status,
+      legacyFallbackAllowed: false,
+      failureReason: splitResult.execution.failureReason,
+      intent: {
+        ...intent,
+        executionMode,
+      },
+      executionMode,
+      resolutionContext,
+      plan: splitResult.plan,
+      result: {
+        ...splitResult.execution,
+        userFacingMessage: splitResult.assistantResponse,
+      },
+      assistantResponse: splitResult.assistantResponse,
+      tasksAfter: splitResult.tasksAfter,
+    };
   }
 
   if (executionMode === 'full_agent' || intent.intentType === 'unsupported_or_ambiguous') {
@@ -375,8 +879,10 @@ export async function runStagedMutation(
     });
 
     const tasksAfter = execution.status === 'completed'
-      ? (await input.taskService.list(input.projectId)).tasks
+      ? await loadAllProjectTasks(input.taskService, input.projectId)
       : input.tasksBefore;
+    const tasksBeforeIds = new Set(input.tasksBefore.map((task) => task.id));
+    const createdTasks = tasksAfter.filter((task) => !tasksBeforeIds.has(task.id));
     const knownChangedTasks = Array.from(
       new Map(
         [...tasksAfter, ...input.tasksBefore].map((task) => [task.id, task]),
@@ -386,10 +892,17 @@ export async function runStagedMutation(
       ? buildMutationSuccessMessage({
           changedTaskIds: execution.changedTaskIds,
           changedTasks: knownChangedTasks,
+          createdTasks,
+          targetTaskIds: plan.expectedChangedTaskIds,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
         })
       : buildMutationFailureMessage(execution.failureReason ?? 'deterministic_execution_failed', {
           details: execution.userFacingMessage,
           resolutionContext,
+          route: intent.routeEnvelope.route,
+          intentType: intent.intentType,
+          failedStep: 'specialized_execution',
         });
     const resultHistory = execution.status === 'completed'
       ? {
@@ -456,7 +969,7 @@ export async function runStagedMutation(
     'unsupported_mutation_shape',
     resolutionContext,
     null,
-    buildMutationFailureMessage('unsupported_mutation_shape', { resolutionContext }),
+      buildMutationFailureMessage('unsupported_mutation_shape', { resolutionContext }),
     {
       ...intent,
       executionMode,

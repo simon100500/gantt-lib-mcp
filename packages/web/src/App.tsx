@@ -18,6 +18,7 @@ import { DraftWorkspace } from './components/workspace/DraftWorkspace.tsx';
 import type { StartScreenSendResult } from './components/StartScreen.tsx';
 import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
+import { ResourcePlannerWorkspace } from './components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
@@ -40,6 +41,8 @@ import { normalizeTasks, type Task, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
+const AI_DONE_GRACE_PERIOD_MS = 10000;
+const AI_MUTATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 interface RouteState {
   pathname: string;
@@ -469,6 +472,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const workspace = useUIStore((state) => state.workspace);
   const pendingPostAuthAction = useUIStore((state) => state.pendingPostAuthAction);
   const setWorkspace = useUIStore((state) => state.setWorkspace);
+  const plannerCorrectionTarget = useUIStore((state) => state.plannerCorrectionTarget);
+  const setPlannerCorrectionTarget = useUIStore((state) => state.setPlannerCorrectionTarget);
+  const consumePlannerCorrectionTarget = useUIStore((state) => state.consumePlannerCorrectionTarget);
   const setPendingPostAuthAction = useUIStore((state) => state.setPendingPostAuthAction);
   const setSidebarState = useUIStore((state) => state.setSidebarState);
   const showBillingPage = useUIStore((state) => state.showBillingPage);
@@ -476,6 +482,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
+  const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
@@ -575,8 +582,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
+  const aiDoneGraceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const aiMutationWatchdogRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
+  const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
+  const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
 
   useEffect(() => {
@@ -593,10 +604,54 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setTasks(nextTasks);
   }, [setTasks]);
 
+  const clearAiDoneGraceTimer = useCallback(() => {
+    if (aiDoneGraceTimerRef.current) {
+      window.clearTimeout(aiDoneGraceTimerRef.current);
+      aiDoneGraceTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleAiDoneGraceExit = useCallback(() => {
+    clearAiDoneGraceTimer();
+    aiDoneGraceTimerRef.current = window.setTimeout(() => {
+      aiDoneGraceTimerRef.current = null;
+      useChatStore.getState().finishStreaming();
+    }, AI_DONE_GRACE_PERIOD_MS);
+  }, [clearAiDoneGraceTimer]);
+
+  const armAiMutationWatchdog = useCallback(() => {
+    if (aiMutationWatchdogRef.current) {
+      window.clearTimeout(aiMutationWatchdogRef.current);
+    }
+
+    aiMutationWatchdogRef.current = window.setTimeout(() => {
+      aiMutationWatchdogRef.current = null;
+      clearAiMutationLock();
+      setPreviewState((current) => current.mode === 'failed'
+        ? current
+        : { tasks: [], active: false, mode: 'rendering', message: null });
+      useChatStore.getState().finishStreaming();
+    }, AI_MUTATION_LOCK_TIMEOUT_MS);
+  }, [clearAiMutationLock]);
+
+  const releaseAiMutationLock = useCallback(() => {
+    if (aiMutationWatchdogRef.current) {
+      window.clearTimeout(aiMutationWatchdogRef.current);
+      aiMutationWatchdogRef.current = null;
+    }
+    clearAiMutationLock();
+  }, [clearAiMutationLock]);
+
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     console.log('[WS] message', msg);
     if (msg.type === 'preview_tasks') {
       const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
+      armAiMutationWatchdog();
+      setAiMutationLock({
+        active: true,
+        stage: 'preview',
+        message: 'AI формирует стартовый график и сохраняет его в проект.',
+      });
       setPreviewState({
         tasks: normalizedPreviewTasks,
         active: true,
@@ -606,6 +661,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'preview_failed') {
+      armAiMutationWatchdog();
+      setAiMutationLock({
+        active: true,
+        stage: 'failed',
+        message: msg.message ?? 'Предварительный график не был сохранён.',
+      });
       setPreviewState((current) => current.active
         ? {
             ...current,
@@ -626,6 +687,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         taskCount: normalizedTasks.length,
         tasks: summarizeTasksForLog(normalizedTasks),
       });
+      releaseAiMutationLock();
+      scheduleAiDoneGraceExit();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
@@ -643,10 +706,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'token') {
+      armAiMutationWatchdog();
       useChatStore.getState().appendToken(msg.content ?? '');
       return;
     }
     if (msg.type === 'done') {
+      clearAiDoneGraceTimer();
+      releaseAiMutationLock();
       setPreviewState((current) => current.mode === 'failed'
         ? current
         : { tasks: [], active: false, mode: 'rendering', message: null });
@@ -655,10 +721,21 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     if (msg.type === 'error') {
+      clearAiDoneGraceTimer();
+      releaseAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
-  }, [auth.isAuthenticated, bumpHistoryRefreshRevision, hasShareToken]);
+  }, [
+    armAiMutationWatchdog,
+    auth.isAuthenticated,
+    bumpHistoryRefreshRevision,
+    clearAiDoneGraceTimer,
+    hasShareToken,
+    releaseAiMutationLock,
+    scheduleAiDoneGraceExit,
+    setAiMutationLock,
+  ]);
 
   const { connected, connectedToken } = useWebSocket(
     handleWsMessage,
@@ -684,13 +761,19 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       if (current.kind === 'project' && current.projectId === projectId) {
         return current;
       }
-      return { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
+      if (current.kind === 'planner' && current.projectId === projectId) {
+        return current;
+      }
+      return (getProjectState(projectId)?.activeWorkspace ?? 'project') === 'planner'
+        ? { kind: 'planner', projectId }
+        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
     });
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken, setWorkspace]);
+  }, [auth.isAuthenticated, auth.project?.id, getProjectState, hasShareToken, setWorkspace]);
 
   useEffect(() => {
     setActiveEmptyProjectModeProjectId(null);
   }, [auth.project?.id]);
+
 
   const closeProjectChat = useCallback(() => {
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: false } : current);
@@ -705,11 +788,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setWorkspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
+    clearAiDoneGraceTimer();
+    releaseAiMutationLock();
     setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();
-  }, [replaceTasksFromSystem]);
+  }, [clearAiDoneGraceTimer, releaseAiMutationLock, replaceTasksFromSystem]);
 
   const openCreateProjectModal = useCallback((nextIntent: PendingProjectCreation = {}) => {
     setPendingProjectCreation(nextIntent);
@@ -773,8 +858,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
     let token = getLatestAccessToken();
     if (!token) {
+      releaseAiMutationLock();
       return false;
     }
+
+    armAiMutationWatchdog();
+    setAiMutationLock({
+      active: true,
+      stage: 'thinking',
+      message: 'AI готовит изменения графика. Редактирование временно заблокировано.',
+    });
 
     let response = await fetch('/api/chat', {
       method: 'POST',
@@ -788,6 +881,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (response.status === 401) {
       const refreshedToken = await auth.refreshAccessToken();
       if (!refreshedToken) {
+        releaseAiMutationLock();
         return false;
       }
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
@@ -805,20 +899,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       try {
         const body = await response.json() as Partial<ConstraintDenialPayload>;
         if (isConstraintCode(body.code)) {
+          releaseAiMutationLock();
           await openLimitModal(body);
           return false;
         }
       } catch {
         // response body not JSON — fall through to generic error
       }
+      releaseAiMutationLock();
       throw new Error(`HTTP 403`);
     }
 
     if (!response.ok) {
+      releaseAiMutationLock();
       throw new Error(`HTTP ${response.status}`);
     }
     return true;
-  }, [auth, isArchivedProject, openLimitModal, proactiveChatDenial]);
+  }, [armAiMutationWatchdog, auth, isArchivedProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
   const submitSplitTask = useCallback(async (task: Task, details: string): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
@@ -847,6 +944,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
     useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, details) });
     openProjectChat();
+    armAiMutationWatchdog();
+    setAiMutationLock({
+      active: true,
+      stage: 'thinking',
+      message: 'AI обрабатывает задачу. Редактирование графика временно заблокировано.',
+    });
 
     let response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/split`, {
       method: 'POST',
@@ -860,6 +963,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (response.status === 401) {
       const refreshedToken = await auth.refreshAccessToken();
       if (!refreshedToken) {
+        releaseAiMutationLock();
         return { accepted: false, message: 'Сессия истекла. Войдите заново.' };
       }
       token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
@@ -877,21 +981,24 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       try {
         const body = await response.json() as Partial<ConstraintDenialPayload>;
         if (isConstraintCode(body.code)) {
+          releaseAiMutationLock();
           await openLimitModal(body);
           return { accepted: false };
         }
       } catch {
         // response body not JSON
       }
+      releaseAiMutationLock();
       return { accepted: false, message: 'Доступ к AI-функции ограничен.' };
     }
 
     if (!response.ok) {
+      releaseAiMutationLock();
       return { accepted: false, message: `HTTP ${response.status}` };
     }
 
     return { accepted: true };
-  }, [auth, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial]);
+  }, [armAiMutationWatchdog, auth, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
@@ -996,8 +1103,46 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     useTaskStore.setState({ loading: true, error: null });
     useProjectStore.getState().clearTransientState();
     await auth.switchProject(projectId);
+    setWorkspace(
+      (getProjectState(projectId)?.activeWorkspace ?? 'project') === 'planner'
+        ? { kind: 'planner', projectId }
+        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() }
+    );
+  }, [auth, getProjectState, setWorkspace]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
+      return;
+    }
+
+    const { projectId, taskId } = plannerCorrectionTarget;
+    if (!projectId || !taskId) {
+      consumePlannerCorrectionTarget();
+      return;
+    }
+
+    if (workspace.kind === 'project' && workspace.projectId === projectId) {
+      return;
+    }
+
+    if (auth.project.id !== projectId) {
+      void handleSwitchProject(projectId).catch(() => {
+        consumePlannerCorrectionTarget();
+      });
+      return;
+    }
+
     setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
-  }, [auth, setWorkspace]);
+  }, [
+    auth.isAuthenticated,
+    auth.project?.id,
+    consumePlannerCorrectionTarget,
+    handleSwitchProject,
+    hasShareToken,
+    plannerCorrectionTarget,
+    setWorkspace,
+    workspace,
+  ]);
 
   const handleCreateProject = useCallback(async () => {
     if (hasShareToken) {
@@ -1038,8 +1183,21 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       await openLimitModal(proactiveResourcePoolDenial);
       return;
     }
-    // Resource pool feature for paid tiers — no-op until full implementation
-  }, [billingStatus, openLimitModal]);
+
+    if (!auth.project) {
+      return;
+    }
+
+    setWorkspace({ kind: 'planner', projectId: auth.project.id });
+  }, [auth.project, billingStatus, openLimitModal, setWorkspace]);
+
+  useEffect(() => {
+    if (workspace.kind === 'project') {
+      setProjectState(workspace.projectId, { activeWorkspace: 'project' });
+    } else if (workspace.kind === 'planner') {
+      setProjectState(workspace.projectId, { activeWorkspace: 'planner' });
+    }
+  }, [setProjectState, workspace]);
 
   const handleDeleteProject = useCallback(async (projectId: string) => {
     const project = auth.projects.find((item) => item.id === projectId);
@@ -1121,7 +1279,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     useProjectStore.getState().clearTransientState();
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken]);
+    clearAiDoneGraceTimer();
+    releaseAiMutationLock();
+  }, [auth.isAuthenticated, auth.project?.id, clearAiDoneGraceTimer, hasShareToken, releaseAiMutationLock]);
+
+  useEffect(() => () => {
+    clearAiDoneGraceTimer();
+    releaseAiMutationLock();
+  }, [clearAiDoneGraceTimer, releaseAiMutationLock]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
@@ -1425,85 +1590,101 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ganttDayMode={sharedProject.project?.ganttDayMode ?? 'calendar'}
       />
     )
-    : workspace.kind === 'draft'
-      ? null
-      : showProjectStartScreen
-        ? (
-          <DraftWorkspace
-            isAuthenticated={auth.isAuthenticated}
-            onSend={handleStartScreenSend}
-            onEmptyChart={handleEmptyChart}
-            onLoginRequired={onLoginRequired}
-          />
-        )
-      : workspace.kind === 'project'
-        ? (
-          <ProjectWorkspace
-            ganttRef={ganttRef}
-            tasks={visibleTasks}
-            setTasks={setTasks}
-            loading={loading}
-            accessToken={auth.accessToken}
-            sharedProject={sharedProject.project}
-            shareToken={sharedProject.shareToken}
-            hasShareToken={hasShareToken}
-            displayConnected={displayConnected}
-            isAuthenticated={auth.isAuthenticated}
-            chatUsage={billingStatus}
-            chatDisabled={isArchivedProject || Boolean(proactiveChatDenial)}
-            chatDisabledReason={chatDisabledReason}
-            batchUpdate={batchUpdate}
-            onSend={handleSend}
-            onSplitTask={submitSplitTask}
-            onLoginRequired={onLoginRequired}
-            onCloseChat={closeProjectChat}
-            onToggleChat={toggleProjectChat}
-            onScrollToToday={handleScrollToToday}
-            onCollapseAll={handleCollapseAll}
-            onExpandAll={handleExpandAll}
-            onExportPdf={handleExportPdf}
-            onExportExcel={handleExportExcel}
-            isExportExcelLoading={isExportExcelLoading}
-            onValidation={handleValidation}
-            onCascade={handleCascade}
-            shareStatus={shareStatus}
-            onCreateShareLink={handleCreateShareLink}
-            ganttDayMode={effectiveAuthGanttDayMode}
-            displayGanttDayMode={effectiveAuthGanttDayMode}
-            calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
-            readOnly={isArchivedProject}
-            previewState={previewState.active ? previewState.mode : 'idle'}
-            previewMessage={previewState.active ? previewState.message : null}
-            onGanttDayModeChange={(ganttDayMode) => {
-              void handleGanttDayModeChange(ganttDayMode).catch((error) => {
-                console.error('Failed to update gantt day mode:', error);
-              });
-            }}
-          />
-        )
-        : (
-          <GuestWorkspace
-            ganttRef={ganttRef}
-            tasks={tasks}
-            setTasks={setTasks}
-            loading={loading}
-            isAuthenticated={auth.isAuthenticated}
-            batchUpdate={batchUpdate}
-            onSend={handleStartScreenSend}
-            onEmptyChart={handleEmptyChart}
-            onLoginRequired={onLoginRequired}
-            onScrollToToday={handleScrollToToday}
-            onCollapseAll={handleCollapseAll}
-            onExpandAll={handleExpandAll}
-            onExportPdf={handleExportPdf}
-            isExportExcelLoading={isExportExcelLoading}
-            onValidation={handleValidation}
-            onCascade={handleCascade}
-            shareStatus={shareStatus}
-            onCreateShareLink={handleCreateShareLink}
-            ganttDayMode="calendar"
-          />
-        );
+    : workspace.kind === 'planner'
+      ? (
+        <ResourcePlannerWorkspace
+          accessToken={auth.accessToken}
+          projectId={workspace.projectId}
+          ganttDayMode={effectiveAuthGanttDayMode}
+          onBackToProject={() => {
+            setPlannerCorrectionTarget(null);
+            setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+          onCorrectConflict={(target) => {
+            setPlannerCorrectionTarget(target);
+            setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+        />
+      )
+      : workspace.kind === 'draft'
+        ? null
+        : showProjectStartScreen
+          ? (
+            <DraftWorkspace
+              isAuthenticated={auth.isAuthenticated}
+              onSend={handleStartScreenSend}
+              onEmptyChart={handleEmptyChart}
+              onLoginRequired={onLoginRequired}
+            />
+          )
+        : workspace.kind === 'project'
+          ? (
+            <ProjectWorkspace
+              ganttRef={ganttRef}
+              tasks={visibleTasks}
+              setTasks={setTasks}
+              loading={loading}
+              accessToken={auth.accessToken}
+              sharedProject={sharedProject.project}
+              shareToken={sharedProject.shareToken}
+              hasShareToken={hasShareToken}
+              displayConnected={displayConnected}
+              isAuthenticated={auth.isAuthenticated}
+              chatUsage={billingStatus}
+              chatDisabled={isArchivedProject || Boolean(proactiveChatDenial)}
+              chatDisabledReason={chatDisabledReason}
+              batchUpdate={batchUpdate}
+              onSend={handleSend}
+              onSplitTask={submitSplitTask}
+              onLoginRequired={onLoginRequired}
+              onCloseChat={closeProjectChat}
+              onToggleChat={toggleProjectChat}
+              onScrollToToday={handleScrollToToday}
+              onCollapseAll={handleCollapseAll}
+              onExpandAll={handleExpandAll}
+              onExportPdf={handleExportPdf}
+              onExportExcel={handleExportExcel}
+              isExportExcelLoading={isExportExcelLoading}
+              onValidation={handleValidation}
+              onCascade={handleCascade}
+              shareStatus={shareStatus}
+              onCreateShareLink={handleCreateShareLink}
+              ganttDayMode={effectiveAuthGanttDayMode}
+              displayGanttDayMode={effectiveAuthGanttDayMode}
+              calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
+              readOnly={isArchivedProject}
+              previewState={previewState.active ? previewState.mode : 'idle'}
+              previewMessage={previewState.active ? previewState.message : null}
+              onGanttDayModeChange={(ganttDayMode) => {
+                void handleGanttDayModeChange(ganttDayMode).catch((error) => {
+                  console.error('Failed to update gantt day mode:', error);
+                });
+              }}
+            />
+          )
+          : (
+            <GuestWorkspace
+              ganttRef={ganttRef}
+              tasks={tasks}
+              setTasks={setTasks}
+              loading={loading}
+              isAuthenticated={auth.isAuthenticated}
+              batchUpdate={batchUpdate}
+              onSend={handleStartScreenSend}
+              onEmptyChart={handleEmptyChart}
+              onLoginRequired={onLoginRequired}
+              onScrollToToday={handleScrollToToday}
+              onCollapseAll={handleCollapseAll}
+              onExpandAll={handleExpandAll}
+              onExportPdf={handleExportPdf}
+              isExportExcelLoading={isExportExcelLoading}
+              onValidation={handleValidation}
+              onCascade={handleCascade}
+              shareStatus={shareStatus}
+              onCreateShareLink={handleCreateShareLink}
+              ganttDayMode="calendar"
+            />
+          );
 
   return (
     <>
@@ -1535,6 +1716,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}
       onOpenResourcePool={handleOpenResourcePool}
+      onOpenChartMode={async () => {
+        const targetProjectId = workspace.kind === 'planner'
+          ? workspace.projectId
+          : auth.project?.id;
+        if (!targetProjectId) {
+          return;
+        }
+        setPlannerCorrectionTarget(null);
+        setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
+      }}
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}

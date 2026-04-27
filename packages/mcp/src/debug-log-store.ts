@@ -1,13 +1,20 @@
 import { appendFile, mkdir } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import type { Prisma } from '../dist/prisma-client/index.js';
+import type { Prisma } from '@gantt/runtime-core/prisma';
 import { getPrisma } from './prisma.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const FALLBACK_LOG_DIR = join(__dirname, '../../../.planning/debug');
 const FALLBACK_LOG_PATH = join(FALLBACK_LOG_DIR, 'agent-debug.log');
+const HEAVY_LOG_PATH = join(FALLBACK_LOG_DIR, 'agent-heavy.log');
+const FILE_ONLY_DEBUG_EVENTS = new Set([
+  'agent_payload_telemetry',
+  'agent_attempt_metrics',
+  'agent_attempt_summary',
+  'sdk_raw_event',
+]);
 
 export type DebugLogSource = 'server' | 'mcp';
 
@@ -127,6 +134,16 @@ async function writeFallbackLog(record: Record<string, unknown>): Promise<void> 
   }
 }
 
+async function writeHeavyLog(record: Record<string, unknown>): Promise<void> {
+  const line = JSON.stringify(record);
+  try {
+    await mkdir(FALLBACK_LOG_DIR, { recursive: true });
+    await appendFile(HEAVY_LOG_PATH, `${line}\n`, 'utf8');
+  } catch (error) {
+    console.error('[debug-log] failed to write heavy file log', error);
+  }
+}
+
 export async function writeDebugLog(input: DebugLogInput): Promise<void> {
   const payload = sanitize(input.payload ?? {}) as Prisma.InputJsonValue;
   const sessionId = await resolveSessionId(normalizeString(input.sessionId));
@@ -153,6 +170,13 @@ export async function writeDebugLog(input: DebugLogInput): Promise<void> {
     payload,
   };
 
+  await writeFallbackLog(record);
+
+  if (FILE_ONLY_DEBUG_EVENTS.has(input.event)) {
+    await writeHeavyLog(record);
+    return;
+  }
+
   try {
     await ((getPrisma() as any).agentDebugLog.create({
       data: {
@@ -171,6 +195,5 @@ export async function writeDebugLog(input: DebugLogInput): Promise<void> {
     }) as Promise<unknown>);
   } catch (error) {
     console.error('[debug-log] failed to write db log, falling back to file', error);
-    await writeFallbackLog(record);
   }
 }

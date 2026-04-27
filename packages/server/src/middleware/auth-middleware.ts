@@ -9,7 +9,7 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { verifyToken, type JwtPayload } from '../auth.js';
 import { authService } from '@gantt/mcp/services';
 import { isAdminEmail } from './admin-middleware.js';

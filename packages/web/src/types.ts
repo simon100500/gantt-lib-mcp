@@ -24,6 +24,15 @@ export interface ValidationResult {
   errors: DependencyError[];
 }
 
+export type {
+  PlannerScope,
+  ResourcePlannerInterval,
+  ResourcePlannerResource,
+  ResourcePlannerResult,
+  ResourceScope,
+  ResourceType,
+} from '@gantt/mcp/types';
+
 export interface CalendarDay {
   date: string;
   kind: 'working' | 'non_working' | 'shortened';
@@ -34,6 +43,8 @@ export interface Task {
   name: string;
   startDate: string | Date;   // YYYY-MM-DD string or Date object (gantt-lib compatible)
   endDate: string | Date;     // YYYY-MM-DD string or Date object (gantt-lib compatible)
+  baselineStartDate?: string | Date; // gantt-lib baseline overlay contract
+  baselineEndDate?: string | Date;   // gantt-lib baseline overlay contract
   type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;          // Optional parent task ID for hierarchy

@@ -15,98 +15,147 @@ const env = {
 };
 
 describe('mutation intent classification', () => {
-  it('parses structured semantic payloads from the model', async () => {
+  it('returns a strict route envelope for deterministic edits', async () => {
     const addIntent = await classifyMutationIntent({
       userMessage: 'добавь сдачу технадзору',
       env,
       semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
+        route: 'fast_path',
+        intentFamily: 'task_edit',
         intentType: 'add_single_task',
         confidence: 0.93,
+        riskLevel: 'S1',
+        params: {
+          taskTitle: 'Сдача технадзору',
+          durationDays: 1,
+        },
+        ambiguities: [],
         entitiesMentioned: ['сдача технадзору'],
-        taskTitle: 'Сдача технадзору',
-        durationDays: 1,
       })),
     });
 
+    assert.equal(addIntent.routeEnvelope.route, 'fast_path');
+    assert.equal(addIntent.routeEnvelope.intentFamily, 'task_edit');
     assert.equal(addIntent.intentType, 'add_single_task');
     assert.equal(addIntent.confidence, 0.93);
+    assert.equal(addIntent.routeEnvelope.confidence, 0.93);
+    assert.equal(addIntent.routeEnvelope.riskLevel, 'S1');
     assert.equal(addIntent.rawRequest, 'добавь сдачу технадзору');
     assert.equal(addIntent.normalizedRequest, 'добавь сдачу технадзору');
     assert.deepEqual(addIntent.entitiesMentioned, ['сдача технадзору']);
     assert.equal(addIntent.requiresResolution, true);
     assert.equal(addIntent.requiresSchedulingPlacement, true);
     assert.equal(addIntent.executionMode, 'deterministic');
-    assert.equal(addIntent.taskTitle, 'Сдача технадзору');
-    assert.equal(addIntent.durationDays, 1);
-
-    const shiftIntent = await classifyMutationIntent({
-      userMessage: 'сдвинь штукатурку на 2 дня',
-      env,
-      semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
-        intentType: 'shift_relative',
-        confidence: 0.9,
-        entitiesMentioned: ['штукатурка'],
-        deltaDays: 2,
-      })),
+    assert.deepEqual(addIntent.routeEnvelope.params, {
+      taskTitle: 'Сдача технадзору',
+      durationDays: 1,
     });
-    assert.equal(shiftIntent.intentType, 'shift_relative');
-    assert.equal(shiftIntent.deltaDays, 2);
+    assert.deepEqual(addIntent.routeEnvelope.ambiguities, []);
+  });
 
-    const repeatedIntent = await classifyMutationIntent({
-      userMessage: 'добавь покраску обоев на каждый этаж',
+  it('routes floor-by-floor decomposition through the specialized fast path', async () => {
+    const decomposeIntent = await classifyMutationIntent({
+      userMessage: 'Разбей Бетонирование перекрытий 12-17 этажей поэтажно',
       env,
       semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
-        intentType: 'add_repeated_fragment',
-        confidence: 0.88,
-        entitiesMentioned: ['покраска обоев'],
-        groupScopeHint: 'этаж',
-        fragmentPlan: {
-          title: 'Покраска обоев',
-          nodes: [{ nodeKey: 'wallpaper-paint', title: 'Покраска обоев', durationDays: 2, dependsOnNodeKeys: [] }],
+        route: 'specialized_fast_path',
+        intentFamily: 'structure',
+        intentType: 'decompose_task',
+        confidence: 0.94,
+        riskLevel: 'S2',
+        params: {
+          executor: 'split_task',
+          mode: 'by_floor',
+          range: { from: 12, to: 17 },
         },
+        ambiguities: [],
+        entitiesMentioned: ['Бетонирование перекрытий 12-17 этажей'],
       })),
     });
-    assert.equal(repeatedIntent.intentType, 'add_repeated_fragment');
-    assert.equal(repeatedIntent.groupScopeHint, 'этаж');
 
-    const metadataIntent = await classifyMutationIntent({
-      userMessage: 'сделай эту задачу красной',
+    assert.equal(decomposeIntent.intentType, 'decompose_task');
+    assert.equal(decomposeIntent.routeEnvelope.route, 'specialized_fast_path');
+    assert.equal(decomposeIntent.routeEnvelope.riskLevel, 'S2');
+    assert.deepEqual(decomposeIntent.routeEnvelope.params, {
+      executor: 'split_task',
+      mode: 'by_floor',
+      range: { from: 12, to: 17 },
+    });
+  });
+
+  it('escalates ambiguous structural prompts instead of silently defaulting to deterministic', async () => {
+    const clarifyIntent = await classifyMutationIntent({
+      userMessage: 'Разбей это как лучше',
       env,
       semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
-        intentType: 'update_metadata',
-        confidence: 0.84,
-        entitiesMentioned: ['эта задача'],
-        metadataFields: { color: '#ff4d4f' },
+        route: 'clarify',
+        intentFamily: 'structure',
+        intentType: 'unsupported_or_ambiguous',
+        confidence: 0.32,
+        riskLevel: 'S2',
+        params: {},
+        ambiguities: ['target_task', 'decomposition_mode'],
       })),
     });
-    assert.equal(metadataIntent.intentType, 'update_metadata');
-    assert.deepEqual(metadataIntent.metadataFields, { color: '#ff4d4f', progress: undefined, parentId: undefined });
 
-    const expandIntent = await classifyMutationIntent({
-      userMessage: 'распиши подробнее пункт "Инженерные системы"',
+    assert.equal(clarifyIntent.routeEnvelope.route, 'clarify');
+    assert.notEqual(clarifyIntent.executionMode, 'deterministic');
+    assert.deepEqual(clarifyIntent.routeEnvelope.ambiguities, ['target_task', 'decomposition_mode']);
+
+    const agentIntent = await classifyMutationIntent({
+      userMessage: 'Полностью переразложи весь график по двум бригадам и критическому пути',
       env,
       semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
-        intentType: 'expand_wbs',
-        confidence: 0.91,
-        entitiesMentioned: ['Инженерные системы'],
-        fragmentPlan: {
-          title: 'Инженерные системы',
-          nodes: [
-            { nodeKey: 'prep', title: 'Подготовка', durationDays: 2, dependsOnNodeKeys: [] },
-            { nodeKey: 'core', title: 'Основные работы', durationDays: 3, dependsOnNodeKeys: ['prep'] },
-          ],
+        route: 'agent_path',
+        intentFamily: 'planning',
+        intentType: 'restructure_branch',
+        confidence: 0.41,
+        riskLevel: 'S3',
+        params: {
+          scope: 'whole_project',
         },
+        ambiguities: ['resource_constraints'],
       })),
     });
-    assert.equal(expandIntent.intentType, 'expand_wbs');
-    assert.equal(expandIntent.fragmentPlan?.nodes.length, 2);
+
+    assert.equal(agentIntent.routeEnvelope.route, 'agent_path');
+    assert.notEqual(agentIntent.executionMode, 'deterministic');
+
+    const optimizationIntent = await classifyMutationIntent({
+      userMessage: 'Оптимизируй график под две бригады и критический путь',
+      env,
+      semanticIntentQuery: buildSemanticIntentQuery(JSON.stringify({
+        route: 'agent_path',
+        intentFamily: 'planning',
+        intentType: 'restructure_branch',
+        confidence: 0.56,
+        riskLevel: 'S3',
+        params: {
+          optimizationGoal: 'critical_path_and_crews',
+        },
+        ambiguities: [],
+      })),
+    });
+
+    assert.equal(optimizationIntent.routeEnvelope.route, 'agent_path');
+    assert.equal(optimizationIntent.routeEnvelope.riskLevel, 'S3');
+    assert.equal(optimizationIntent.executionMode, 'full_agent');
   });
 });
 
 describe('mutation execution routing', () => {
-  it('selects deterministic, hybrid, and full_agent modes explicitly', () => {
+  it('projects route classes into compatibility execution modes', () => {
     assert.equal(
       selectMutationExecutionMode({
+        routeEnvelope: {
+          route: 'fast_path',
+          intentFamily: 'task_edit',
+          intentType: 'add_single_task',
+          confidence: 0.9,
+          riskLevel: 'S1',
+          params: {},
+          ambiguities: [],
+        },
         intentType: 'add_single_task',
         confidence: 0.9,
         rawRequest: 'x',
@@ -120,19 +169,59 @@ describe('mutation execution routing', () => {
     );
     assert.equal(
       selectMutationExecutionMode({
-        intentType: 'add_repeated_fragment',
+        routeEnvelope: {
+          route: 'specialized_fast_path',
+          intentFamily: 'structure',
+          intentType: 'decompose_task',
+          confidence: 0.9,
+          riskLevel: 'S2',
+          params: { executor: 'split_task' },
+          ambiguities: [],
+        },
+        intentType: 'decompose_task',
         confidence: 0.9,
         rawRequest: 'x',
         normalizedRequest: 'x',
         entitiesMentioned: ['x'],
         requiresResolution: true,
-        requiresSchedulingPlacement: true,
+        requiresSchedulingPlacement: false,
         executionMode: 'deterministic',
       }),
       'hybrid',
     );
     assert.equal(
       selectMutationExecutionMode({
+        routeEnvelope: {
+          route: 'clarify',
+          intentFamily: 'structure',
+          intentType: 'unsupported_or_ambiguous',
+          confidence: 0.4,
+          riskLevel: 'S2',
+          params: {},
+          ambiguities: ['target_task'],
+        },
+        intentType: 'unsupported_or_ambiguous',
+        confidence: 0.9,
+        rawRequest: 'x',
+        normalizedRequest: 'x',
+        entitiesMentioned: ['x'],
+        requiresResolution: false,
+        requiresSchedulingPlacement: false,
+        executionMode: 'deterministic',
+      }),
+      'full_agent',
+    );
+    assert.equal(
+      selectMutationExecutionMode({
+        routeEnvelope: {
+          route: 'agent_path',
+          intentFamily: 'planning',
+          intentType: 'restructure_branch',
+          confidence: 0.9,
+          riskLevel: 'S3',
+          params: {},
+          ambiguities: [],
+        },
         intentType: 'restructure_branch',
         confidence: 0.9,
         rawRequest: 'x',

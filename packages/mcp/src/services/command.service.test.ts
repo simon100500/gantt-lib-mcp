@@ -649,13 +649,49 @@ describe('CommandService command dispatch', () => {
         {
           name: 'Weekend Task',
           startDate: '2026-04-06',
-          endDate: '2026-04-07',
+          endDate: '2026-04-06',
         },
       ],
     );
   });
 
-  it('create_tasks_batch normalizes new tasks through core scheduling in business-day mode', async () => {
+  it('create_task converts the selected span to working days in business-day mode', async () => {
+    const service = new CommandService() as any;
+    const isWeekend = (d: Date) => { const day = d.getUTCDay(); return day === 0 || day === 6; };
+
+    const result = await service.executeCommand(
+      {
+        type: 'create_task',
+        task: {
+          name: 'Five Calendar Days',
+          startDate: '2026-04-24',
+          endDate: '2026-04-28',
+          dependencies: [],
+        },
+      },
+      [],
+      { businessDays: true, weekendPredicate: isWeekend },
+      'project-1',
+      {},
+    );
+
+    assert.deepStrictEqual(
+      result.changedTasks.map((task: Task) => ({
+        name: task.name,
+        startDate: task.startDate,
+        endDate: task.endDate,
+      })),
+      [
+        {
+          name: 'Five Calendar Days',
+          startDate: '2026-04-24',
+          endDate: '2026-04-28',
+        },
+      ],
+    );
+  });
+
+  it('create_tasks_batch preserves new task ranges and only schedules linked successors in business-day mode', async () => {
     const service = new CommandService() as any;
     const isWeekend = (d: Date) => { const day = d.getUTCDay(); return day === 0 || day === 6; };
 
@@ -694,8 +730,8 @@ describe('CommandService command dispatch', () => {
         endDate: task.endDate,
       })),
       [
-        { id: 'A', startDate: '2026-04-06', endDate: '2026-04-08' },
-        { id: 'B', startDate: '2026-04-10', endDate: '2026-04-13' },
+        { id: 'A', startDate: '2026-04-06', endDate: '2026-04-06' },
+        { id: 'B', startDate: '2026-04-08', endDate: '2026-04-08' },
       ],
     );
   });
@@ -916,6 +952,158 @@ describe('CommandService command dispatch', () => {
 
     assert.deepStrictEqual(result.changedTasks.map((task: Task) => task.id), ['A', 'B']);
     assert.deepStrictEqual(result.changedTasks.map((task: Task) => task.color), [undefined, undefined]);
+  });
+
+  it('commitCommand skips dependency rewrites for rescheduled tasks whose dependency set did not change', async () => {
+    const service = new CommandService() as any;
+    const beforeTaskRows = [
+      {
+        id: 'parent',
+        name: 'Parent',
+        startDate: new Date('2026-04-01T00:00:00.000Z'),
+        endDate: new Date('2026-04-10T00:00:00.000Z'),
+        type: 'task',
+        color: null,
+        parentId: null,
+        progress: 0,
+        sortOrder: 0,
+        dependencies: [],
+      },
+    ];
+    const afterTaskRows = [
+      {
+        id: 'parent',
+        name: 'Parent',
+        startDate: new Date('2026-04-01T00:00:00.000Z'),
+        endDate: new Date('2026-04-12T00:00:00.000Z'),
+        type: 'task',
+        color: null,
+        parentId: null,
+        progress: 0,
+        sortOrder: 0,
+        dependencies: [],
+      },
+      {
+        id: 'new-task',
+        name: 'New Task',
+        startDate: new Date('2026-04-11T00:00:00.000Z'),
+        endDate: new Date('2026-04-12T00:00:00.000Z'),
+        type: 'task',
+        color: null,
+        parentId: 'parent',
+        progress: 0,
+        sortOrder: 1,
+        dependencies: [],
+      },
+    ];
+
+    let taskFindManyCalls = 0;
+    const deleteManyCalls: Array<{ taskId: string }> = [];
+    const tx = {
+      project: {
+        findUnique: async () => ({ version: 3, ganttDayMode: 'calendar' }),
+        update: async () => ({}),
+      },
+      task: {
+        findMany: async () => {
+          taskFindManyCalls += 1;
+          return taskFindManyCalls === 1 ? beforeTaskRows : afterTaskRows;
+        },
+        aggregate: async () => ({ _max: { sortOrder: 0 } }),
+        create: async () => ({}),
+        update: async () => ({}),
+        updateMany: async () => ({}),
+      },
+      dependency: {
+        findMany: async () => [],
+        createMany: async () => ({}),
+        deleteMany: async ({ where }: { where: { taskId: string } }) => {
+          deleteManyCalls.push({ taskId: where.taskId });
+          return {};
+        },
+      },
+      mutationGroup: {
+        findUnique: async () => null,
+        create: async () => ({}),
+        update: async () => ({}),
+      },
+      projectEvent: {
+        aggregate: async () => ({ _max: { ordinal: 0 } }),
+        create: async () => ({}),
+        findMany: async () => [{ inverseCommand: { type: 'delete_task', taskId: 'new-task' } }],
+      },
+    };
+
+    service._prisma = {
+      $transaction: async (callback: (txArg: any) => Promise<unknown>) => callback(tx),
+    };
+    service.getScheduleOptions = async () => ({ businessDays: false });
+    service.executeCommand = async () => ({
+      changedTasks: [
+        {
+          id: 'new-task',
+          name: 'New Task',
+          startDate: '2026-04-11',
+          endDate: '2026-04-12',
+          type: 'task',
+          parentId: 'parent',
+          progress: 0,
+          dependencies: [],
+          sortOrder: 1,
+        },
+        {
+          id: 'parent',
+          name: 'Parent',
+          startDate: '2026-04-01',
+          endDate: '2026-04-12',
+          type: 'task',
+          progress: 0,
+          dependencies: [],
+          sortOrder: 0,
+        },
+      ],
+      changedDependencyIds: [],
+      conflicts: [],
+      dependencyChanges: [],
+      taskChanges: [
+        {
+          action: 'create',
+          task: {
+            id: 'new-task',
+            name: 'New Task',
+            startDate: '2026-04-11',
+            endDate: '2026-04-12',
+            type: 'task',
+            parentId: 'parent',
+            progress: 0,
+            dependencies: [],
+            sortOrder: 1,
+          },
+        },
+      ],
+    });
+
+    const response = await service.commitCommand(
+      {
+        projectId: 'project-1',
+        clientRequestId: 'req-1',
+        baseVersion: 3,
+        command: {
+          type: 'create_task',
+          task: {
+            name: 'New Task',
+            startDate: '2026-04-11',
+            endDate: '2026-04-12',
+            parentId: 'parent',
+            type: 'task',
+          },
+        },
+      },
+      'agent',
+    );
+
+    assert.equal(response.accepted, true);
+    assert.deepStrictEqual(deleteManyCalls, []);
   });
 });
 

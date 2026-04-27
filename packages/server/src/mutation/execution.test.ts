@@ -1,8 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { executeMutationPlan } from './execution.js';
-import type { MutationPlan, MutationTaskSnapshot } from './types.js';
+import type { MutationPlan, MutationPlanOperation, MutationTaskSnapshot } from './types.js';
 
 function buildTask(id: string, name: string, startDate: string, endDate: string): MutationTaskSnapshot {
   return { id, name, startDate, endDate };
@@ -10,11 +11,14 @@ function buildTask(id: string, name: string, startDate: string, endDate: string)
 
 describe('executeMutationPlan', () => {
   it('commits deterministic add plans through commandService and verifies authoritative changed ids', async () => {
-    const commitRequests: Array<{ commandType: string; baseVersion: number }> = [];
+    const commitRequests: Array<{ commandType: string; baseVersion: number; dependencies?: Array<{ taskId: string; type: string }> }> = [];
     const result = await executeMutationPlan({
       projectId: 'project-1',
       projectVersion: 12,
-      tasksBefore: [buildTask('task-tech-supervision', 'Технадзор', '2026-05-01', '2026-05-01')],
+      tasksBefore: [
+        buildTask('task-tech-supervision', 'Технадзор', '2026-05-01', '2026-05-01'),
+        buildTask('container-closeout', 'Сдача', '2026-05-01', '2026-05-10'),
+      ],
       plan: {
         planType: 'add_single_task',
         operations: [{
@@ -22,43 +26,29 @@ describe('executeMutationPlan', () => {
           taskId: 'new-closeout',
           title: 'Сдача',
           predecessorTaskId: 'task-tech-supervision',
-          parentId: null,
+          parentId: 'container-closeout',
           durationDays: 1,
         }],
         why: 'closeout append',
-        expectedChangedTaskIds: ['new-closeout', 'task-tech-supervision'],
+        expectedChangedTaskIds: ['new-closeout', 'container-closeout'],
         canExecuteDeterministically: true,
         needsAgentExecution: false,
       } satisfies MutationPlan,
       commandService: {
-        commitCommand: async (request: { baseVersion: number; command: { type: string } }) => {
-          commitRequests.push({ commandType: request.command.type, baseVersion: request.baseVersion });
-
-          if (request.command.type === 'create_task') {
-            return {
-              accepted: true,
-              clientRequestId: 'req-1',
-              baseVersion: request.baseVersion,
-              newVersion: request.baseVersion + 1,
-              result: {
-                snapshot: { tasks: [], dependencies: [] },
-                changedTaskIds: ['new-closeout'],
-                changedDependencyIds: [],
-                conflicts: [],
-                patches: [],
-              },
-              snapshot: { tasks: [], dependencies: [] },
-            };
-          }
-
+        commitCommand: async (request: { baseVersion: number; command: { type: string; task?: { dependencies?: Array<{ taskId: string; type: string }> } } }) => {
+          commitRequests.push({
+            commandType: request.command.type,
+            baseVersion: request.baseVersion,
+            dependencies: request.command.task?.dependencies,
+          });
           return {
             accepted: true,
-            clientRequestId: 'req-2',
+            clientRequestId: 'req-1',
             baseVersion: request.baseVersion,
             newVersion: request.baseVersion + 1,
             result: {
               snapshot: { tasks: [], dependencies: [] },
-              changedTaskIds: ['task-tech-supervision'],
+              changedTaskIds: ['new-closeout', 'container-closeout'],
               changedDependencyIds: ['dep-1'],
               conflicts: [],
               patches: [],
@@ -70,13 +60,16 @@ describe('executeMutationPlan', () => {
     });
 
     assert.deepEqual(commitRequests, [
-      { commandType: 'create_task', baseVersion: 12 },
-      { commandType: 'create_dependency', baseVersion: 13 },
+      {
+        commandType: 'create_task',
+        baseVersion: 12,
+        dependencies: [{ taskId: 'task-tech-supervision', type: 'FS' }],
+      },
     ]);
     assert.equal(result.status, 'completed');
     assert.equal(result.verificationVerdict, 'accepted');
-    assert.deepEqual(result.committedCommandTypes, ['create_task', 'create_dependency']);
-    assert.deepEqual(result.changedTaskIds, ['new-closeout', 'task-tech-supervision']);
+    assert.deepEqual(result.committedCommandTypes, ['create_task']);
+    assert.deepEqual(result.changedTaskIds, ['new-closeout', 'container-closeout']);
   });
 
   it('fails verification when authoritative changed ids do not match the plan expectation', async () => {
@@ -118,6 +111,55 @@ describe('executeMutationPlan', () => {
     assert.equal(result.verificationVerdict, 'failed');
     assert.equal(result.failureReason, 'verification_failed');
     assert.deepEqual(result.changedTaskIds, ['unexpected-task']);
+  });
+
+  it('compiles duration changes to authoritative change_duration commands instead of move_task', async () => {
+    const committedCommands: Array<{ type: string; duration?: number; anchor?: string }> = [];
+    const result = await executeMutationPlan({
+      projectId: 'project-1',
+      projectVersion: 4,
+      tasksBefore: [buildTask('task-foundation', 'Фундамент', '2026-04-01', '2026-04-05')],
+      plan: {
+        planType: 'change_duration',
+        operations: [{
+          kind: 'change_task_duration',
+          taskId: 'task-foundation',
+          durationDays: 10,
+          anchor: 'end',
+        }],
+        why: 'increase duration',
+        expectedChangedTaskIds: ['task-foundation'],
+        canExecuteDeterministically: true,
+        needsAgentExecution: false,
+      } satisfies MutationPlan,
+      commandService: {
+        commitCommand: async (request: { baseVersion: number; command: { type: string; duration?: number; anchor?: string } }) => {
+          committedCommands.push(request.command);
+          return {
+            accepted: true,
+            clientRequestId: 'req-1',
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds: ['task-foundation'],
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          };
+        },
+      },
+    });
+
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(committedCommands, [{
+      type: 'change_duration',
+      taskId: 'task-foundation',
+      duration: 10,
+      anchor: 'end',
+    }]);
   });
 
   it('preserves milestone type when compiling repeated fragment fan-out', async () => {
@@ -172,5 +214,35 @@ describe('executeMutationPlan', () => {
     assert.equal(result.status, 'completed');
     assert.equal(committedCommands[0]?.type, 'create_tasks_batch');
     assert.equal(committedCommands[0]?.tasks?.[0]?.type, 'milestone');
+  });
+
+  it('does not expose decompose_task as a low-level executable operation kind', () => {
+    const allowedOperationKinds = new Set<MutationPlanOperation['kind']>([
+      'append_task_after',
+      'append_task_before',
+      'append_task_to_container',
+      'change_task_duration',
+      'shift_task_by_delta',
+      'move_task_to_date',
+      'move_task_in_hierarchy',
+      'link_tasks',
+      'unlink_tasks',
+      'delete_task',
+      'rename_task',
+      'update_task_metadata',
+      'fanout_fragment_to_groups',
+      'expand_branch_from_plan',
+    ]);
+
+    assert.equal(allowedOperationKinds.has('decompose_task' as MutationPlanOperation['kind']), false);
+  });
+
+  it('keeps split-task execution wired through authoritative plan helpers', () => {
+    const splitTaskSource = readFileSync(new URL('../split-task.ts', import.meta.url), 'utf8');
+
+    assert.match(splitTaskSource, /buildMutationPlan/);
+    assert.match(splitTaskSource, /executeMutationPlan/);
+    assert.match(splitTaskSource, /intentType:\s*'decompose_task'/);
+    assert.doesNotMatch(splitTaskSource, /type:\s*['"]decompose_task['"]/);
   });
 });

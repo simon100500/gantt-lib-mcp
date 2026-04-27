@@ -51,8 +51,6 @@ export default function InputDemo({
       setDisplayText(selectedPrompt.slice(0, i));
       if (i < selectedPrompt.length) {
         timerId.current = setTimeout(type, 10);
-      } else {
-        onSubmit();
       }
     };
     timerId.current = setTimeout(type, 30);

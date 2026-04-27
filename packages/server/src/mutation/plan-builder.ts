@@ -66,6 +66,64 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function collectLeafDescendantTaskIds(
+  tasks: MutationTaskSnapshot[],
+  rootTaskId: string,
+): string[] {
+  const childrenByParent = new Map<string, MutationTaskSnapshot[]>();
+
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+
+    const siblings = childrenByParent.get(task.parentId) ?? [];
+    siblings.push(task);
+    childrenByParent.set(task.parentId, siblings);
+  }
+
+  const directChildren = childrenByParent.get(rootTaskId) ?? [];
+  if (directChildren.length === 0) {
+    return [rootTaskId];
+  }
+
+  const leafIds: string[] = [];
+  const stack = [...directChildren];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+
+    const children = childrenByParent.get(current.id) ?? [];
+    if (children.length === 0) {
+      leafIds.push(current.id);
+      continue;
+    }
+
+    stack.push(...children);
+  }
+
+  const taskOrder = new Map(tasks.map((task, index) => [task.id, index]));
+  return unique(leafIds).sort((left, right) => (taskOrder.get(left) ?? 0) - (taskOrder.get(right) ?? 0));
+}
+
+function getInclusiveDurationDays(task: MutationTaskSnapshot | undefined): number | undefined {
+  if (!task?.startDate || !task?.endDate) {
+    return undefined;
+  }
+
+  const start = new Date(`${task.startDate}T00:00:00Z`);
+  const end = new Date(`${task.endDate}T00:00:00Z`);
+  const diffMs = end.getTime() - start.getTime();
+  if (Number.isNaN(diffMs) || diffMs < 0) {
+    return undefined;
+  }
+
+  return Math.floor(diffMs / 86_400_000) + 1;
+}
+
 function inferTaskType(input: Pick<BuildMutationPlanInput, 'userMessage' | 'intent'>): 'task' | 'milestone' | undefined {
   if (input.intent.taskType) {
     return input.intent.taskType;
@@ -122,7 +180,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           parentId: resolutionContext.selectedContainerId,
           durationDays,
         }];
-        expectedChangedTaskIds = [taskId, resolutionContext.selectedPredecessorTaskId];
+        expectedChangedTaskIds = [taskId];
       } else if (resolutionContext.selectedSuccessorTaskId) {
         operations = [{
           kind: 'append_task_before',
@@ -133,7 +191,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
           parentId: resolutionContext.selectedContainerId,
           durationDays,
         }];
-        expectedChangedTaskIds = [taskId, resolutionContext.selectedSuccessorTaskId];
+        expectedChangedTaskIds = [taskId];
       } else {
         operations = [{
           kind: 'append_task_to_container',
@@ -158,6 +216,32 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       why = `Сдвиг задачи "${targetTaskId}" вычислен как server-side relative delta.`;
       expectedChangedTaskIds = [targetTaskId];
       break;
+
+    case 'change_duration': {
+      const durationTargetIds = collectLeafDescendantTaskIds(input.tasksBefore, targetTaskId);
+      operations = durationTargetIds.map((durationTargetId) => {
+        const targetTask = input.tasksBefore.find((task) => task.id === durationTargetId);
+        const currentDurationDays = getInclusiveDurationDays(targetTask) ?? 1;
+        const requestedDurationDays = intent.durationDays
+          ?? (typeof intent.durationDeltaDays === 'number'
+            ? Math.max(1, currentDurationDays + intent.durationDeltaDays)
+            : (intent.durationMultiplier
+              ? Math.max(1, Math.round(currentDurationDays * intent.durationMultiplier))
+              : currentDurationDays));
+
+        return {
+          kind: 'change_task_duration' as const,
+          taskId: durationTargetId,
+          durationDays: requestedDurationDays,
+          anchor: 'end' as const,
+        };
+      });
+      why = durationTargetIds.length === 1
+        ? `Длительность задачи "${durationTargetIds[0]}" изменяется через typed change_duration command.`
+        : `Длительность сводной задачи "${targetTaskId}" раскладывается на ${durationTargetIds.length} листовых дочерних задач через typed change_duration command.`;
+      expectedChangedTaskIds = durationTargetIds;
+      break;
+    }
 
     case 'move_to_date':
       operations = [{
@@ -276,6 +360,7 @@ export async function buildMutationPlan(input: BuildMutationPlanInput): Promise<
       break;
     }
 
+    case 'decompose_task':
     case 'expand_wbs': {
       const anchorTaskId = targetTaskId;
       const fragmentPlan = intent.fragmentPlan;

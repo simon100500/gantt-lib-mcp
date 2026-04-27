@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, ValidationResult } from '../types.ts';
-import type { CustomDayConfig, TaskListMenuCommand } from 'gantt-lib';
+import type { CustomDayConfig, TaskListColumn, TaskListMenuCommand } from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -29,6 +29,7 @@ export interface GanttChartProps {
   containerHeight?: string | number;
   showTaskList?: boolean;
   showChart?: boolean;
+  showBaseline?: boolean;
   taskListWidth?: number;
   onValidateDependencies?: (result: ValidationResult) => void;
   enableAutoSchedule?: boolean;
@@ -55,6 +56,7 @@ export interface GanttChartProps {
   filterMode?: 'highlight' | 'hide';
   businessDays?: boolean;
   taskListMenuCommands?: TaskListMenuCommand<Task>[];
+  additionalColumns?: TaskListColumn<Task>[];
 }
 
 export interface GanttChartRef {
@@ -74,6 +76,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   containerHeight,
   showTaskList,
   showChart,
+  showBaseline,
   taskListWidth,
   onValidateDependencies,
   enableAutoSchedule,
@@ -100,6 +103,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   filterMode,
   businessDays,
   taskListMenuCommands,
+  additionalColumns,
 }, ref) => {
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
@@ -129,6 +133,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       containerHeight={containerHeight}
       showTaskList={showTaskList}
       showChart={showChart}
+      showBaseline={showBaseline}
       taskListWidth={taskListWidth}
       onValidateDependencies={onValidateDependencies}
       enableAutoSchedule={enableAutoSchedule}
@@ -160,6 +165,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       filterMode={filterMode}
       businessDays={businessDays}
       taskListMenuCommands={taskListMenuCommands}
+      additionalColumns={additionalColumns}
     />
   );
 });

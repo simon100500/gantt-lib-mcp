@@ -5,6 +5,7 @@ import { useUIStore } from '../stores/useUIStore';
 
 export function useTaskFilter(): TaskPredicate | undefined {
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
+  const filterWithoutParents = useUIStore((state) => state.filterWithoutParents);
   const filterExpired = useUIStore((state) => state.filterExpired);
   const filterSearchText = useUIStore((state) => state.filterSearchText);
   const filterDateFrom = useUIStore((state) => state.filterDateFrom);
@@ -15,6 +16,10 @@ export function useTaskFilter(): TaskPredicate | undefined {
 
     if (filterWithoutDeps) {
       predicates.push(withoutDeps());
+    }
+
+    if (filterWithoutParents) {
+      predicates.push((task) => Boolean(task?.parentId));
     }
 
     if (filterExpired) {
@@ -36,5 +41,5 @@ export function useTaskFilter(): TaskPredicate | undefined {
 
     // Combine all predicates with AND logic
     return and(...predicates);
-  }, [filterWithoutDeps, filterExpired, filterSearchText, filterDateFrom, filterDateTo]);
+  }, [filterWithoutDeps, filterWithoutParents, filterExpired, filterSearchText, filterDateFrom, filterDateTo]);
 }

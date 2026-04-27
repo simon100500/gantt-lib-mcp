@@ -172,7 +172,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
   const showCounter = searchQuery.trim().length > 0;
 
   return (
-    <div className="flex min-w-0 w-full max-w-[43rem] shrink items-center gap-2">
+    <div className="flex min-w-0 w-full max-w-[28rem] shrink items-center gap-2 xl:max-w-[32rem]">
       <div className="relative flex min-w-0 flex-1 items-center group">
         {/* Иконка лупы слева */}
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors pointer-events-none">
@@ -204,7 +204,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
             }
           }}
           placeholder={readOnly ? 'Поиск...' : 'Поиск или новая задача...'}
-          className="h-8 w-full rounded-lg border-slate-200 bg-white pl-10 pr-32 text-sm focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500 focus-visible:ring-offset-0"
+          className="h-9 w-full rounded-lg border-slate-200 bg-white pl-9 pr-28 text-[13px] shadow-none hover:border-slate-200 focus-visible:border-primary focus-visible:bg-white focus-visible:ring-0 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или +"
         />
@@ -229,24 +229,24 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
           )}
           {hasResults && (
             <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNavPrev}
-                className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
-                title="Предыдущий результат"
-              >
-                <ChevronUp className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNavNext}
-                className="h-6 w-6 p-0 text-slate-500 hover:text-slate-700"
-                title="Следующий результат"
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNavPrev}
+                  className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                  title="Предыдущий результат"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNavNext}
+                  className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                  title="Следующий результат"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
             </>
           )}
           {searchQuery && (
@@ -254,7 +254,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
               variant="ghost"
               size="sm"
               onClick={handleClear}
-              className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+              className="h-5 w-5 p-0 text-slate-400 hover:text-slate-600"
               title="Очистить поиск"
             >
               <X className="h-3.5 w-3.5" />
@@ -274,7 +274,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
           size="sm"
           onClick={handleCreateTask}
           title="Создать задачу"
-          className="h-7 shrink-0 px-2.5 py-2.5 text-xs font-medium"
+          className="h-8 shrink-0 px-2.5 py-2 text-xs font-medium"
         >
           + Задача
         </Button>

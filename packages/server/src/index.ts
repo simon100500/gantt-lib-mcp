@@ -14,7 +14,13 @@
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
 import websocket from '@fastify/websocket';
-import { commandService, messageService, taskService } from '@gantt/mcp/services';
+import {
+  commandService,
+  messageService,
+  taskService,
+  assignmentService,
+  resourceService,
+} from '@gantt/mcp/services';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import { authService } from '@gantt/mcp/services';
 import type {
@@ -31,9 +37,11 @@ import { registerAdminRoutes } from './admin.js';
 import { registerAdminApiRoutes } from './routes/admin-routes.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
+import { registerBaselineRoutes } from './routes/baseline-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
 import { registerExcelExportRoutes } from './routes/excel-export-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
+import { registerResourceRoutes } from './routes/resource-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
@@ -48,9 +56,11 @@ await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
 await registerAdminApiRoutes(fastify);
 await registerBillingRoutes(fastify);
+await registerBaselineRoutes(fastify);
 await registerCommandRoutes(fastify);
 await registerExcelExportRoutes(fastify);
 await registerHistoryRoutes(fastify);
+await registerResourceRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,14 +68,40 @@ await registerHistoryRoutes(fastify);
 
 async function buildProjectLoadResponse(projectId: string, requesterEmail?: string): Promise<{
   version: number;
-  snapshot: ProjectSnapshot;
+  snapshot: ProjectSnapshot & {
+    resources: Array<{
+      id: string;
+      userId: string;
+      projectId: string | null;
+      scope: 'shared' | 'project';
+      name: string;
+      type: 'human' | 'equipment' | 'material' | 'other';
+      isActive: boolean;
+      createdAt: string;
+      updatedAt: string;
+      deactivatedAt: string | null;
+    }>;
+    assignments: Array<{
+      id: string;
+      projectId: string;
+      taskId: string;
+      resourceId: string;
+      createdAt: string;
+    }>;
+  };
   project: {
+    id: string;
+    name: string;
+    status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    taskCount: number;
+    archivedAt: string | null;
+    deletedAt: string | null;
   };
 }> {
-  const { getPrisma } = await import('@gantt/mcp/prisma');
+  const { getPrisma } = await import('@gantt/runtime-core/prisma');
   const prisma = getPrisma();
   const accessibleProject = await authService.findProjectById(projectId);
   const deletedProject = !accessibleProject && isAdminEmail(requesterEmail)
@@ -79,7 +115,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     throw new Error('Project unavailable');
   }
 
-  const [project, tasks, dependencies, projectCalendar] = await Promise.all([
+  const [projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: projectId,
@@ -95,12 +131,31 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       where: { task: { projectId } },
       select: { id: true, taskId: true, depTaskId: true, type: true, lag: true },
     }),
+    resourceService.list({
+      projectId,
+      includeInactive: true,
+    }),
+    prisma.taskAssignment.findMany({
+      where: { projectId },
+      select: { id: true, projectId: true, taskId: true, resourceId: true, createdAt: true },
+      orderBy: [{ taskId: 'asc' }, { resourceId: 'asc' }],
+    }),
     getProjectCalendarSettings(prisma, projectId),
   ]);
 
   return {
-    version: project?.version ?? 0,
-    project: projectCalendar,
+    version: projectVersion?.version ?? 0,
+    project: {
+      id: accessibleProject?.id ?? projectId,
+      name: accessibleProject?.name ?? 'Deleted project',
+      status: accessibleProject?.status ?? 'deleted',
+      ganttDayMode: projectCalendar.ganttDayMode,
+      calendarId: projectCalendar.calendarId,
+      calendarDays: projectCalendar.calendarDays,
+      taskCount: tasks.length,
+      archivedAt: accessibleProject?.archivedAt ?? null,
+      deletedAt: accessibleProject?.deletedAt ?? null,
+    },
     snapshot: {
       tasks: tasks.map((task: any) => ({
         id: task.id,
@@ -124,6 +179,25 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         depTaskId: dependency.depTaskId,
         type: dependency.type as DependencyType,
         lag: dependency.lag,
+      })),
+      resources: resourceCatalog.resources.map((resource) => ({
+        id: resource.id,
+        userId: resource.userId,
+        projectId: resource.projectId,
+        scope: resource.scope,
+        name: resource.name,
+        type: resource.type,
+        isActive: resource.isActive,
+        createdAt: resource.createdAt,
+        updatedAt: resource.updatedAt,
+        deactivatedAt: resource.deactivatedAt,
+      })),
+      assignments: assignments.map((assignment: any) => ({
+        id: assignment.id,
+        projectId: assignment.projectId,
+        taskId: assignment.taskId,
+        resourceId: assignment.resourceId,
+        createdAt: assignment.createdAt.toISOString(),
       })),
     },
   };

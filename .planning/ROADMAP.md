@@ -2,7 +2,7 @@
 
 **Current milestone:** v5.0 Plan Constraints
 **Granularity:** Coarse
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-25
 
 ## Progress Summary
 
@@ -45,6 +45,7 @@
 - [ ] **Phase 38: Paywall Trial Transition** — 14-day Start trial with auto-rollback to free
 - [x] **Phase 41: Initial Generation Refactor** — AI-first planning pipeline for empty-project broad schedule creation — completed 2026-04-08
 - [ ] **Phase 42: MCP Mutation Refactor** — Reliable staged conversational edits via intent, resolution, mutation plan, and deterministic execution
+- [x] **Phase 48: resource-screen** — Full resource management screen backed by `gantt-lib` resource planner mode — completed 2026-04-25
 
 <details>
 <summary>v1.0 MVP (Phases 1-14) — SHIPPED 2026-03-13</summary>
@@ -388,5 +389,45 @@ Plans:
 - [x] 45-04-PLAN.md
 - [x] 45-05-PLAN.md
 
+### Phase 46: mcp-replace
+
+**Goal:** Replace the ordinary app-path MCP subprocess with direct in-process tool execution backed by one shared transport-neutral runtime core
+**Requirements**: PRD-only (`.planning/reference/46-DIRECT-TOOLS-REPLAN.md`, `.planning/reference/mcp-mutation-refactor-prd.md`)
+**Depends on:** Phase 45
+**Plans:** 5/5 plans complete
+
+Plans:
+- [x] 46-01-PLAN.md — Extract transport-neutral runtime core package from MCP-owned services and types
+- [x] 46-02-PLAN.md — Create shared normalized tool catalog and in-process handler core
+- [x] 46-03-PLAN.md — Switch the server agent path to SDK-embedded in-process tools
+- [x] 46-04-PLAN.md — Thin MCP into an adapter over the shared tool core and lock parity
+- [x] 46-05-PLAN.md — Add telemetry, regression coverage, and verification artifacts for the direct-path cutover
+
+### Phase 47: agent-routing-fast-path
+
+**Goal:** Conversational mutation requests are routed early into strict `fast_path`, `specialized_fast_path`, `agent_path`, or `clarify` classes so simple edits stay deterministic, decomposition routes into the isolated split executor, and generic mutation-loop failures become rare for valid intents
+**Requirements**: [ARFP-01, ARFP-02, ARFP-03, ARFP-04, ARFP-05, ARFP-06]
+**Depends on:** Phase 46
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 47-01-PLAN.md — Introduce the strict route envelope, risk bands, and route-first orchestration gate
+- [x] 47-02-PLAN.md — Route `decompose_task` into the isolated split-task executor without low-level command leakage
+- [x] 47-03-PLAN.md — Lock route-aware telemetry, failure messaging, and regression guards around the new boundary
+
+### Phase 48: resource-screen
+
+**Goal:** Build a full resource management screen that replaces the local planner grid with `gantt-lib` resource planner mode, supports catalog management, filters, assignment details, conflict correction, and controlled drag persistence for date/resource changes
+**Requirements**: PRD-only (`RESOURCE-MANAGEMENT-SCREEN-PRD.md`, `RESOURCE-PLANNER-MODE-PRD.md`)
+**Depends on:** Phase 47
+**Plans:** 5/5 plans complete
+
+Plans:
+- [x] 48-01-PLAN.md — Adapter and `gantt-lib` renderer swap
+- [x] 48-02-PLAN.md — Filters, selection, details, and accessible fallback actions
+- [x] 48-03-PLAN.md — Resource catalog create, edit, type, and status management
+- [x] 48-04-PLAN.md — Controlled move persistence for dates and resources
+- [x] 48-05-PLAN.md — Hardening tests and `ResourceTimelineGrid` deprecation handling
+
 ---
-*Last updated: 2026-04-18 — Phase 45 Plan 05 completed*
+*Last updated: 2026-04-25 — Phase 48 completed*

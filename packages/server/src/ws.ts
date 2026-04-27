@@ -22,7 +22,7 @@ import { verifyToken } from './auth.js';
 import type { JwtPayload } from './auth.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { authService } from '@gantt/mcp/services';
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 
 // ---------------------------------------------------------------------------

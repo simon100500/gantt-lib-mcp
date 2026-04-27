@@ -1,0 +1,30 @@
+{
+  "name": "@gantt/runtime-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./constraints": "./dist/constraints/index.js",
+    "./types": "./dist/types.js",
+    "./prisma": "./dist/prisma.js",
+    "./services": "./dist/services/index.js",
+    "./services/*": "./dist/services/*.js",
+    "./tool-core": "./dist/tool-core/index.js",
+    "./tool-core/*": "./dist/tool-core/*.js"
+  },
+  "scripts": {
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "gantt-lib": "^0.70.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.7.2"
+  }
+}

@@ -30,6 +30,102 @@ interface SharedResponse {
   tasks: Task[];
 }
 
+function normalizeProjectResources(resources: ProjectLoadResponse['snapshot']['resources'] | undefined): ProjectLoadResponse['snapshot']['resources'] {
+  if (!Array.isArray(resources)) {
+    return [];
+  }
+
+  return resources.flatMap((resource) => {
+    if (!resource || typeof resource !== 'object') {
+      return [];
+    }
+
+    const id = typeof resource.id === 'string' ? resource.id : '';
+    const userId = typeof resource.userId === 'string' ? resource.userId : '';
+    const projectId = typeof resource.projectId === 'string'
+      ? resource.projectId
+      : resource.projectId === null
+        ? null
+        : null;
+    const scope = resource.scope === 'project' ? 'project' : resource.scope === 'shared' ? 'shared' : null;
+    const name = typeof resource.name === 'string' ? resource.name : '';
+    const type = resource.type === 'equipment' || resource.type === 'material' || resource.type === 'other'
+      ? resource.type
+      : resource.type === 'human'
+        ? 'human'
+        : null;
+    const isActive = typeof resource.isActive === 'boolean' ? resource.isActive : null;
+    const createdAt = typeof resource.createdAt === 'string' ? resource.createdAt : '';
+    const updatedAt = typeof resource.updatedAt === 'string' ? resource.updatedAt : '';
+    const deactivatedAt = typeof resource.deactivatedAt === 'string'
+      ? resource.deactivatedAt
+      : resource.deactivatedAt === null
+        ? null
+        : null;
+
+    if (!id || !userId || !scope || !name || !type || isActive === null || !createdAt || !updatedAt) {
+      return [];
+    }
+
+    if ((scope === 'shared' && projectId !== null) || (scope === 'project' && !projectId)) {
+      return [];
+    }
+
+    return [{
+      id,
+      userId,
+      projectId,
+      scope,
+      name,
+      type,
+      isActive,
+      createdAt,
+      updatedAt,
+      deactivatedAt,
+    }];
+  });
+}
+
+function normalizeTaskAssignments(
+  assignments: ProjectLoadResponse['snapshot']['assignments'] | undefined,
+  resources: ProjectLoadResponse['snapshot']['resources'],
+  currentProjectId: string,
+): ProjectLoadResponse['snapshot']['assignments'] {
+  if (!Array.isArray(assignments)) {
+    return [];
+  }
+
+  const visibleResourcesById = new Map(
+    resources
+      .filter((resource) => resource.scope === 'shared' || resource.projectId === currentProjectId)
+      .map((resource) => [resource.id, resource]),
+  );
+
+  return assignments.flatMap((assignment) => {
+    if (!assignment || typeof assignment !== 'object') {
+      return [];
+    }
+
+    const id = typeof assignment.id === 'string' ? assignment.id : '';
+    const projectId = typeof assignment.projectId === 'string' ? assignment.projectId : '';
+    const taskId = typeof assignment.taskId === 'string' ? assignment.taskId : '';
+    const resourceId = typeof assignment.resourceId === 'string' ? assignment.resourceId : '';
+    const createdAt = typeof assignment.createdAt === 'string' ? assignment.createdAt : '';
+
+    if (!id || !projectId || !taskId || !resourceId || !createdAt || !visibleResourcesById.has(resourceId)) {
+      return [];
+    }
+
+    return [{
+      id,
+      projectId,
+      taskId,
+      resourceId,
+      createdAt,
+    }];
+  });
+}
+
 interface LocalSnapshot {
   tasks: Task[];
   isDemoMode: boolean;
@@ -187,9 +283,14 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       }
 
       const normalizedTasks = normalizeTasks(project.snapshot.tasks);
+      const normalizedResources = normalizeProjectResources(project.snapshot.resources);
+      const normalizedAssignments = normalizeTaskAssignments(project.snapshot.assignments, normalizedResources, project.project.id);
       useProjectStore.getState().hydrateConfirmed(project.version, {
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,
+      }, {
+        resources: normalizedResources,
+        assignments: normalizedAssignments,
       });
       const authState = useAuthStore.getState();
       if (authState.project) {
@@ -227,6 +328,9 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     useProjectStore.getState().hydrateConfirmed(0, {
       tasks: snapshot.tasks,
       dependencies: [],
+    }, {
+      resources: [],
+      assignments: [],
     });
 
     set({
@@ -248,6 +352,9 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     useProjectStore.getState().hydrateConfirmed(0, {
       tasks: [],
       dependencies: [],
+    }, {
+      resources: [],
+      assignments: [],
     });
     set({
       activeSource: 'shared',

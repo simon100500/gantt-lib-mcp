@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Task, ProjectState, ProjectSnapshot, FrontendProjectCommand, PendingCommand } from '../types';
+import type { PlannerScope, ProjectResource, ResourcePlannerResult, TaskAssignmentRecord } from '../lib/apiTypes';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
 import { getDefaultProjectScheduleOptions } from '../lib/projectScheduleOptions';
 import type { ScheduleCommandOptions } from 'gantt-lib/core/scheduling';
@@ -31,9 +32,13 @@ export function deriveVisibleSnapshot(
 }
 
 interface ProjectStoreState extends ProjectState {
+  resources: ProjectResource[];
+  assignments: TaskAssignmentRecord[];
+  assignmentError: string | null;
+  resourcePlannerCache: Record<string, ResourcePlannerResult>;
   setConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
   mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
-  hydrateConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
+  hydrateConfirmed: (version: number, snapshot: ProjectSnapshot, extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[] }) => void;
   addPending: (pending: PendingCommand) => void;
   resolvePending: (requestId: string, newVersion: number, snapshot: ProjectSnapshot) => void;
   rejectPending: (requestId: string) => void;
@@ -41,10 +46,37 @@ interface ProjectStoreState extends ProjectState {
   clearTransientState: () => void;
   scheduleOptions: ProjectScheduleOptions;
   setScheduleOptions: (options: ProjectScheduleOptions) => void;
+  setResources: (resources: ProjectResource[]) => void;
+  upsertResource: (resource: ProjectResource) => void;
+  removeResource: (resourceId: string) => void;
+  setAssignments: (assignments: TaskAssignmentRecord[]) => void;
+  replaceAssignmentsForTask: (taskId: string, assignments: TaskAssignmentRecord[]) => void;
+  replaceAssignmentsForTasks: (taskIds: string[], assignments: TaskAssignmentRecord[]) => void;
+  removeAssignmentsByResource: (resourceId: string) => void;
+  setAssignmentError: (error: string | null) => void;
+  setResourcePlannerCache: (projectId: string, scope: PlannerScope, data: ResourcePlannerResult) => void;
+  mutateResourcePlannerCache: (projectId: string, scope: PlannerScope, mutate: (data: ResourcePlannerResult) => ResourcePlannerResult) => void;
+  clearResourcePlannerCache: () => void;
 }
 
-export const useProjectStore = create<ProjectStoreState>((set, get) => ({
+function getResourcePlannerCacheKey(projectId: string, scope: PlannerScope): string {
+  return `${projectId}:${scope}`;
+}
+
+function sortResources(resources: ProjectResource[]): ProjectResource[] {
+  return [...resources].sort((left, right) => (
+    Number(right.isActive) - Number(left.isActive)
+    || left.name.localeCompare(right.name)
+    || left.createdAt.localeCompare(right.createdAt)
+  ));
+}
+
+export const useProjectStore = create<ProjectStoreState>((set) => ({
   confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
+  resources: [],
+  assignments: [],
+  assignmentError: null,
+  resourcePlannerCache: {},
   pending: [],
   dragPreview: undefined,
   scheduleOptions: getDefaultProjectScheduleOptions(),
@@ -64,8 +96,12 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       confirmed: { version: nextVersion, snapshot },
     };
   }),
-  hydrateConfirmed: (version, snapshot) => set({
+  hydrateConfirmed: (version, snapshot, extras) => set({
     confirmed: { version, snapshot },
+    resources: extras?.resources ? sortResources(extras.resources) : [],
+    assignments: extras?.assignments ?? [],
+    assignmentError: null,
+    resourcePlannerCache: {},
     pending: [],
     dragPreview: undefined,
   }),
@@ -84,4 +120,55 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   setDragPreview: (preview) => set({ dragPreview: preview }),
   clearTransientState: () => set({ pending: [], dragPreview: undefined }),
   setScheduleOptions: (options) => set({ scheduleOptions: options }),
+  setResources: (resources) => set({ resources: sortResources(resources) }),
+  upsertResource: (resource) => set((state) => ({
+    resources: sortResources(
+      state.resources.some((entry) => entry.id === resource.id)
+        ? state.resources.map((entry) => (entry.id === resource.id ? resource : entry))
+        : [...state.resources, resource]
+    ),
+  })),
+  removeResource: (resourceId) => set((state) => ({
+    resources: state.resources.filter((resource) => resource.id !== resourceId),
+  })),
+  setAssignments: (assignments) => set({ assignments }),
+  replaceAssignmentsForTask: (taskId, assignments) => set((state) => ({
+    assignments: [
+      ...state.assignments.filter((assignment) => assignment.taskId !== taskId),
+      ...assignments,
+    ],
+  })),
+  replaceAssignmentsForTasks: (taskIds, assignments) => set((state) => {
+    const taskIdSet = new Set(taskIds);
+    return {
+      assignments: [
+        ...state.assignments.filter((assignment) => !taskIdSet.has(assignment.taskId)),
+        ...assignments,
+      ],
+    };
+  }),
+  removeAssignmentsByResource: (resourceId) => set((state) => ({
+    assignments: state.assignments.filter((assignment) => assignment.resourceId !== resourceId),
+  })),
+  setAssignmentError: (assignmentError) => set({ assignmentError }),
+  setResourcePlannerCache: (projectId, scope, data) => set((state) => ({
+    resourcePlannerCache: {
+      ...state.resourcePlannerCache,
+      [getResourcePlannerCacheKey(projectId, scope)]: data,
+    },
+  })),
+  mutateResourcePlannerCache: (projectId, scope, mutate) => set((state) => {
+    const key = getResourcePlannerCacheKey(projectId, scope);
+    const current = state.resourcePlannerCache[key];
+    if (!current) {
+      return state;
+    }
+    return {
+      resourcePlannerCache: {
+        ...state.resourcePlannerCache,
+        [key]: mutate(current),
+      },
+    };
+  }),
+  clearResourcePlannerCache: () => set({ resourcePlannerCache: {} }),
 }));

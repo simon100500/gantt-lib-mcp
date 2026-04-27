@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Eye, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, Plus, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -37,6 +37,7 @@ interface ProjectMenuProps {
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
+  onOpenChartMode?: () => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
@@ -58,6 +59,7 @@ export function ProjectMenu({
   onRestoreProject,
   onDeleteProject,
   onOpenResourcePool,
+  onOpenChartMode,
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
@@ -477,42 +479,120 @@ export function ProjectMenu({
                         {projectUsageLabel}
                       </span>
                     )}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => void onCreateProject()}
-                      disabled={createProjectDisabled}
-                      title={createProjectTitle ?? 'Новый проект'}
-                      className="h-7 w-7 shrink-0 rounded-md border-slate-300 bg-white hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-300"
-                      aria-label="Новый проект"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
                 )}
               </div>
 
-              <div className="hidden min-w-0 flex-1 items-center gap-3 px-4 lg:flex lg:px-8">
-                <TaskSearch
-                  onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
-                  readOnly={isReadOnlyContext}
-                />
-                {isReadOnlyContext && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => { void handleReadOnlyNewProject(); }}
-                    className="h-8 shrink-0 rounded-md px-3 text-sm font-medium"
-                  >
-                    Новый проект
-                  </Button>
-                )}
+              <div className="hidden min-w-0 flex-1 self-stretch grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
+                <div className="flex self-stretch justify-self-start">
+                  {!hasShareToken && auth.isAuthenticated && (
+                    <div
+                      className="inline-flex h-full shrink-0 items-stretch gap-4"
+                      data-testid="topbar-workspace-mode-switch"
+                      role="tablist"
+                      aria-label="Режим проекта"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenChartMode?.(); }}
+                        className={cn(
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind === 'planner'
+                            ? 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                            : 'border-primary text-primary',
+                        )}
+                        data-testid="topbar-mode-chart"
+                        role="tab"
+                        aria-selected={workspace.kind !== 'planner'}
+                      >
+                        <span>График</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenResourcePool?.(); }}
+                        className={cn(
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind === 'planner'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                        )}
+                        data-testid="topbar-mode-resources"
+                        role="tab"
+                        aria-selected={workspace.kind === 'planner'}
+                      >
+                        <span>Ресурсы</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 justify-self-center w-full max-w-xl">
+                  <TaskSearch
+                    onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
+                    readOnly={isReadOnlyContext}
+                  />
+                </div>
+                <div className="justify-self-end">
+                  {isReadOnlyContext && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => { void handleReadOnlyNewProject(); }}
+                      className="h-8 shrink-0 rounded-md px-3 text-sm font-medium"
+                    >
+                      Новый проект
+                    </Button>
+                  )}
+                </div>
               </div>
             </>
           )}
 
           {/* User menu */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+            {!hasShareToken && auth.isAuthenticated && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 lg:hidden"
+                    data-testid="topbar-workspace-mode-switch-mobile"
+                  >
+                    {workspace.kind === 'planner' ? (
+                      <Package className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
+                    )}
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : 'График'}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40 lg:hidden">
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenChartMode?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind !== 'planner' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-chart-mobile"
+                  >
+                    <ChartNoAxesGantt className="h-4 w-4" />
+                    <span>График</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenResourcePool?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind === 'planner' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-resources-mobile"
+                  >
+                    <Package className="h-4 w-4" />
+                    <span>Ресурсы</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />

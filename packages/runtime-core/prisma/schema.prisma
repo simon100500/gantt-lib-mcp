@@ -2,9 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider        = "prisma-client-js"
-  output          = "../dist/prisma-client"
-  binaryTargets   = ["native"]
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
 }
 
 datasource db {
@@ -23,6 +22,13 @@ enum DependencyType {
 enum TaskType {
   task
   milestone
+}
+
+enum ResourceType {
+  human
+  equipment
+  material
+  other
 }
 
 enum PaymentPeriod {
@@ -90,6 +96,11 @@ enum MutationGroupStatus {
   undone
 }
 
+enum BaselineSource {
+  current
+  history
+}
+
 enum BillingState {
   free
   trial_active
@@ -112,6 +123,7 @@ model User {
 
   // Relations
   projects        Project[]
+  resources       Resource[]
   sessions        Session[]
   subscriptions   Subscription[]
   payments        Payment[]
@@ -140,11 +152,14 @@ model Project {
   calendar      WorkCalendar?   @relation("ProjectSelectedCalendar", fields: [calendarId], references: [id], onDelete: SetNull)
   ownedCalendars WorkCalendar[] @relation("ProjectOwnedCalendars")
   sessions      Session[]
-  tasks         Task[]
-  messages      Message[]
-  shareLinks    ShareLink[]
-  projectEvents ProjectEvent[]
+  tasks          Task[]
+  resources      Resource[]
+  taskAssignments TaskAssignment[]
+  messages       Message[]
+  shareLinks     ShareLink[]
+  projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
+  baselines      Baseline[]
   agentDebugLogs AgentDebugLog[]
 
   @@map("projects")
@@ -174,6 +189,62 @@ model MutationGroup {
   @@map("mutation_groups")
   @@index([projectId, createdAt(sort: Desc)])
   @@index([projectId, newVersion(sort: Desc)])
+}
+
+model Baseline {
+  id                   String         @id @default(uuid())
+  projectId            String         @map("project_id")
+  name                 String
+  source               BaselineSource
+  sourceHistoryGroupId String?        @map("source_history_group_id")
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks        BaselineTask[]
+  dependencies BaselineDependency[]
+
+  @@map("baselines")
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([projectId, source])
+  @@index([sourceHistoryGroupId])
+}
+
+model BaselineTask {
+  id          String    @id @default(uuid())
+  baselineId  String    @map("baseline_id")
+  taskId      String    @map("task_id")
+  name        String
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime  @map("end_date")
+  type        TaskType  @default(task)
+  color       String?
+  progress    Float     @default(0)
+  parentId    String?   @map("parent_id")
+  sortOrder   Int       @default(0) @map("sort_order")
+
+  baseline Baseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+
+  @@map("baseline_tasks")
+  @@unique([baselineId, taskId])
+  @@index([baselineId, sortOrder])
+  @@index([baselineId, parentId])
+}
+
+model BaselineDependency {
+  id         String         @id @default(uuid())
+  baselineId String         @map("baseline_id")
+  dependencyId String       @map("dependency_id")
+  taskId     String         @map("task_id")
+  depTaskId  String         @map("dep_task_id")
+  type       DependencyType
+  lag        Float          @default(0)
+
+  baseline Baseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+
+  @@map("baseline_dependencies")
+  @@unique([baselineId, dependencyId])
+  @@index([baselineId, taskId])
+  @@index([baselineId, depTaskId])
 }
 
 model WorkCalendar {
@@ -264,6 +335,7 @@ model Task {
   children    Task[]        @relation("TaskHierarchy")
   dependencies Dependency[] @relation("TaskDependencies")
   dependsOn   Dependency[] @relation("DependsOnTasks")
+  assignments TaskAssignment[]
 
   @@map("tasks")
   @@index([projectId])
@@ -285,6 +357,48 @@ model Dependency {
   @@map("dependencies")
   @@index([taskId])
   @@index([depTaskId])
+}
+
+model Resource {
+  id             String       @id @default(uuid())
+  userId         String       @map("user_id")
+  projectId      String?      @map("project_id")
+  name           String
+  type           ResourceType @default(human)
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deactivatedAt  DateTime?    @map("deactivated_at")
+
+  // M003 uses Project.userId as the effective workspace owner boundary until a
+  // first-class workspace model exists. Shared resources have projectId = null;
+  // project-local resources keep their owning projectId.
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskAssignments TaskAssignment[]
+
+  @@map("resources")
+  @@index([userId])
+  @@index([projectId])
+  @@index([userId, isActive])
+  @@index([userId, projectId, isActive])
+}
+
+model TaskAssignment {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  taskId     String   @map("task_id")
+  resourceId String   @map("resource_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@map("task_assignments")
+  @@unique([taskId, resourceId])
+  @@index([projectId, taskId])
+  @@index([projectId, resourceId])
 }
 
 // Messages table

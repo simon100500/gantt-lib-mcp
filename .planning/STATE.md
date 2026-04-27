@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Plan Constraints
-status: verifying
-last_updated: "2026-04-18T10:26:53.097Z"
-last_activity: 2026-04-18
+status: active
+last_updated: "2026-04-25T11:35:00Z"
+last_activity: 2026-04-25
 progress:
-  total_phases: 16
-  completed_phases: 14
-  total_plans: 52
-  completed_plans: 52
+  total_phases: 18
+  completed_phases: 17
+  total_plans: 65
+  completed_plans: 65
   percent: 100
 ---
 
 # Project State: gantt-lib MCP Server
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-20
 **Current milestone:** v5.0 Plan Constraints
-**Status:** Phase complete — ready for verification
+**Status:** Milestone complete
 
 ---
 
@@ -26,16 +26,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** AI может программно управлять диаграммами Ганта с enforceable тарифными лимитами
-**Current focus:** Phase 45 — history-refactor
+**Current focus:** Milestone complete — next milestone not started
 
 ---
 
 ## Current Position
 
-Phase: 45 (history-refactor) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-04-18
+Phase: 48
+Plan: Complete
+Status: Phase 48 complete
+Last activity: 2026-04-25
 Last activity: 2026-04-18 -- Completed 45-05-PLAN.md
 
 Progress: [██████████] 100%
@@ -77,6 +77,10 @@ packages/
 
 ### Roadmap Evolution
 
+- Phase 48 added: resource-screen
+- Phase 48 Plan 01 completed: typed resource planner adapter and gantt-lib resource planner renderer swap
+- Phase 47 added: agent-routing-fast-path
+- Phase 46 added: mcp-replace
 - Phase 45 added: history-refactor
 - Phase 44 added: undo-redo
 - Phase 43 added: initial-gen-no-regexp
@@ -181,6 +185,20 @@ packages/
 - [Phase 45]: Preview mode composes on top of existing read-only guards and blocks chat, hotkeys, and task-state reflow from mutating live workspace state.
 - [Phase 45]: HistoryService now uses an explicit minimal Prisma contract instead of as-any casts on the version path.
 - [Phase 45]: Contract-cleanup regressions are locked with source-level tests that reject as-any shortcuts and legacy undo/redo names in the public web surface.
+- [Phase 47]: Mutation success/failure builders now accept route metadata so fast and specialized paths describe the actual route and failure step.
+- [Phase 47]: The isolated split executor keeps decompose_task as its route identity while still compiling through authoritative fragment-plan helpers.
+- [Phase 48]: ResourcePlannerWorkspace now uses GanttChart mode="resource-planner" as the primary timeline renderer instead of ResourceTimelineGrid.
+- [Phase 48]: Resource planner item metadata must flow through getPlannerItemMetadata before conflict correction callbacks.
+- [Phase 48]: Resource planner filters are client-only over mapped gantt-lib timeline resources; scope switching is the only filter path that refetches `/api/resources/planner`.
+- [Phase 48]: Assignment details actions derive PlannerCorrectionTarget from typed resource planner metadata instead of DOM text.
+- [Phase 48]: Resource catalog UI is split into ResourceCatalogPanel while ResourcePlannerWorkspace owns authenticated create/PATCH mutations and backend-authoritative reloads.
+- [Phase 48]: Catalog PATCH responses are normalized defensively as either ProjectResource or `{ resource }` before catalog/planner reload.
+- [Phase 48]: Failed catalog mutations show inline catalog alerts and preserve the last successful catalog/planner data.
+- [Phase 48]: Resource planner date moves persist through useCommandCommit with history title `Перенос назначения`.
+- [Phase 48]: Resource reassignment replaces only the moved resource in the full `resourceIds[]` payload while preserving other task assignments.
+- [Phase 48]: Combined date/resource moves persist dates first and report partial success if reassignment fails.
+- [Phase 48]: ResourceTimelineGrid is deprecated as fallback/test fixture only; ResourcePlannerWorkspace has no ResourceTimelineGrid reference.
+- [Phase 48]: Focused resource planner tests cover adapter, filters, moves, workspace integration, M004 flow, legacy fallback grid, and web build.
 
 ## Performance Metrics
 
@@ -216,12 +234,19 @@ packages/
 | Phase 45 P03 | 3min | 2 tasks | 4 files |
 | Phase 45 P04 | 8min | 2 tasks | 3 files |
 | Phase 45 P05 | 5min | 2 tasks | 4 files |
+| Phase 47 P03 | 18min | 2 tasks | 7 files |
+| 48-resource-screen | 01 | 5min | 2 | 4 | 2026-04-25 |
+| 48-resource-screen | 02 | 7min | 2 | 5 | 2026-04-25 |
+| 48-resource-screen | 03 | 8min | 2 | 3 | 2026-04-25 |
+| 48-resource-screen | 04 | 12min | 2 | 5 | 2026-04-25 |
+| 48-resource-screen | 05 | 4min | 3 | 2 | 2026-04-25 |
 
 ## Session
 
-- Last session: 2026-04-18T10:20:10Z
-- Stopped at: Completed 45-05-PLAN.md
+- Last session: 2026-04-25T14:35:00+03:00
+- Stopped at: Completed Phase 48
+- Resume file: .planning/phases/48-resource-screen/48-VERIFICATION.md
 
 ---
 
-*Last updated: 2026-04-18 — Phase 45 Plan 05 completed*
+*Last updated: 2026-04-25 — Phase 48 completed*

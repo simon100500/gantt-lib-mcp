@@ -1,6 +1,7 @@
 export type MutationIntentType =
   | 'add_single_task'
   | 'add_repeated_fragment'
+  | 'change_duration'
   | 'shift_relative'
   | 'move_to_date'
   | 'move_in_hierarchy'
@@ -9,12 +10,27 @@ export type MutationIntentType =
   | 'delete_task'
   | 'rename_task'
   | 'update_metadata'
+  | 'decompose_task'
   | 'expand_wbs'
   | 'restructure_branch'
   | 'validate_only'
   | 'unsupported_or_ambiguous';
 
+export type MutationRoute = 'fast_path' | 'specialized_fast_path' | 'agent_path' | 'clarify';
+
+export type MutationRiskLevel = 'S0' | 'S1' | 'S2' | 'S3';
+
 export type MutationExecutionMode = 'deterministic' | 'hybrid' | 'full_agent';
+
+export type MutationRouteEnvelope = {
+  route: MutationRoute;
+  intentFamily: string;
+  intentType: MutationIntentType;
+  confidence: number;
+  riskLevel: MutationRiskLevel;
+  params: Record<string, unknown>;
+  ambiguities: string[];
+};
 
 export type MutationFailureReason =
   | 'anchor_not_found'
@@ -28,6 +44,7 @@ export type MutationFailureReason =
   | 'expansion_anchor_not_resolved';
 
 export type MutationIntent = {
+  routeEnvelope: MutationRouteEnvelope;
   intentType: MutationIntentType;
   confidence: number;
   rawRequest: string;
@@ -39,6 +56,8 @@ export type MutationIntent = {
   taskTitle?: string;
   taskType?: 'task' | 'milestone';
   durationDays?: number;
+  durationDeltaDays?: number;
+  durationMultiplier?: number;
   deltaDays?: number;
   targetDate?: string;
   renamedTitle?: string;
@@ -84,7 +103,28 @@ export type ResolvedMutationContext = {
   selectedSuccessorTaskId: string | null;
   placementPolicy: PlacementPolicy;
   confidence: number;
+  ambiguities: string[];
+  specializedExecutor?: SpecializedExecutorResolution;
 };
+
+export type SpecializedExecutorResolution =
+  | {
+      executor: 'split_task';
+      targetTaskId: string;
+      targetTaskName: string;
+      mode: string;
+      rangeFrom?: number;
+      rangeTo?: number;
+      confidence: number;
+      ready: boolean;
+      reason?: string;
+    }
+  | {
+      executor: 'expand_wbs';
+      confidence: number;
+      ready: boolean;
+      reason?: string;
+    };
 
 export type MutationPlan = {
   planType: MutationIntentType;
@@ -93,6 +133,7 @@ export type MutationPlan = {
   expectedChangedTaskIds: string[];
   canExecuteDeterministically: boolean;
   needsAgentExecution: boolean;
+  skipChangedSetVerification?: boolean;
 };
 
 export type MutationExecutionStatus = 'completed' | 'failed' | 'deferred_to_legacy';
@@ -183,6 +224,12 @@ export type MutationPlanOperation =
       taskType?: 'task' | 'milestone';
       containerId: string;
       durationDays: number;
+    }
+  | {
+      kind: 'change_task_duration';
+      taskId: string;
+      durationDays: number;
+      anchor?: 'start' | 'end';
     }
   | {
       kind: 'shift_task_by_delta';

@@ -25,6 +25,15 @@ type GroupScope = {
 
 function buildIntent(overrides: Partial<MutationIntent> = {}): MutationIntent {
   return {
+    routeEnvelope: {
+      route: 'fast_path',
+      intentFamily: 'task_edit',
+      intentType: 'add_single_task',
+      confidence: 0.9,
+      riskLevel: 'S1',
+      params: {},
+      ambiguities: [],
+    },
     intentType: 'add_single_task',
     confidence: 0.9,
     rawRequest: 'добавь сдачу технадзору',
@@ -117,6 +126,85 @@ describe('resolveMutationContext', () => {
     assert.equal(result.selectedContainerId, 'container-closeout');
     assert.equal(result.placementPolicy, 'tail_of_container');
     assert.equal(result.confidence, 0.92);
+  });
+
+  it('resolves tail-of-container additions to the latest leaf task as predecessor when branch tasks exist', async () => {
+    const result = await resolveMutationContext({
+      projectId: 'project-1',
+      projectVersion: 7,
+      userMessage: 'добавь сдачу гасн в конце работ',
+      intent: buildIntent({
+        rawRequest: 'добавь сдачу гасн в конце работ',
+        normalizedRequest: 'добавь сдачу гасн в конце работ',
+        entitiesMentioned: ['сдача гасн'],
+        taskTitle: 'Сдача ГАСН',
+      }),
+      taskService: {
+        list: async () => ({ tasks: [] }),
+        findTasksByName: async () => [],
+        findContainerCandidates: async () => ([
+          {
+            taskId: 'container-closeout',
+            name: 'Благоустройство и сдача',
+            parentId: null,
+            path: ['Благоустройство и сдача'],
+            startDate: '2026-12-27',
+            endDate: '2027-05-04',
+            matchType: 'includes',
+            score: 0.72,
+          },
+        ] satisfies SearchMatch[]),
+        listBranchTasks: async () => ([
+          {
+            taskId: 'container-closeout',
+            name: 'Благоустройство и сдача',
+            parentId: null,
+            path: ['Благоустройство и сдача'],
+            startDate: '2026-12-27',
+            endDate: '2027-05-04',
+            matchType: 'exact',
+            score: 1,
+          },
+          {
+            taskId: 'task-landscaping',
+            name: 'Озеленение',
+            parentId: 'container-closeout',
+            path: ['Благоустройство и сдача', 'Озеленение'],
+            startDate: '2027-04-01',
+            endDate: '2027-04-10',
+            matchType: 'includes',
+            score: 0.8,
+          },
+          {
+            taskId: 'task-handover-docs',
+            name: 'Исполнительная документация',
+            parentId: 'container-closeout',
+            path: ['Благоустройство и сдача', 'Исполнительная документация'],
+            startDate: '2027-04-20',
+            endDate: '2027-04-28',
+            matchType: 'includes',
+            score: 0.82,
+          },
+          {
+            taskId: 'task-acceptance',
+            name: 'Акт приемки',
+            parentId: 'container-closeout',
+            path: ['Благоустройство и сдача', 'Акт приемки'],
+            startDate: '2027-04-29',
+            endDate: '2027-05-04',
+            matchType: 'includes',
+            score: 0.83,
+          },
+        ] satisfies SearchMatch[]),
+        findGroupScopes: async () => [],
+      },
+    });
+
+    assert.equal(result.selectedContainerId, 'container-closeout');
+    assert.equal(result.selectedPredecessorTaskId, 'task-acceptance');
+    assert.equal(result.predecessors[0]?.id, 'task-acceptance');
+    assert.equal(result.placementPolicy, 'after_predecessor');
+    assert.equal(result.confidence, 0.72);
   });
 
   it('resolves repeated group fan-out intents through group scopes', async () => {

@@ -4,7 +4,7 @@
  * Uses Prisma (PostgreSQL) for all database operations.
  */
 
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { PLAN_CATALOG, type LimitKey, type PlanId } from '@gantt/mcp/constraints';
 import { ConstraintService, type ConstraintUsageSnapshot } from './constraint-service.js';
 import { getPlanLimits, isPlanActive, type PlanKey } from './plan-config.js';

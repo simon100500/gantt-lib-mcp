@@ -7,10 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "patch-package",
+    "postinstall": "patch-package && npm run prisma:generate -w packages/runtime-core",
     "build": "npm run build --workspaces",
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
+    "prisma:generate": "npm run prisma:generate -w packages/runtime-core",
     "dump:db": "node scripts/dump-db.js",
     "dev:server": "npm run dev -w packages/server",
     "dev:web": "npm run dev -w packages/web",

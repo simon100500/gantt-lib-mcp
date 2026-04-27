@@ -6,6 +6,7 @@ export type SidebarMode = 'closed' | 'overlay' | 'sidebar';
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 export type ShareStatus = 'idle' | 'creating' | 'copied' | 'error';
 export type ViewMode = 'day' | 'week' | 'month';
+export type AiMutationStage = 'thinking' | 'preview' | 'failed';
 const SIDEBAR_STATE_KEY = 'gantt_sidebar_state';
 const PROJECT_CHAT_OPEN_KEY = 'gantt_project_chat_open';
 
@@ -52,6 +53,7 @@ export type WorkspaceMode =
   | { kind: 'guest' }
   | { kind: 'shared' }
   | { kind: 'project'; projectId: string; chatOpen: boolean }
+  | { kind: 'planner'; projectId: string }
   | {
     kind: 'draft';
     draftName: string;
@@ -67,9 +69,17 @@ export type PendingPostAuthAction =
   }
   | null;
 
+export interface PlannerCorrectionTarget {
+  projectId: string;
+  taskId: string;
+  assignmentId: string;
+  resourceId: string;
+}
+
 interface UIState {
   workspace: WorkspaceMode;
   pendingPostAuthAction: PendingPostAuthAction;
+  plannerCorrectionTarget: PlannerCorrectionTarget | null;
   showOtpModal: boolean;
   showEditProjectModal: boolean;
   showBillingPage: boolean;
@@ -84,10 +94,17 @@ interface UIState {
   shareStatus: ShareStatus;
   shareLinkUrl: string | null;
   savingState: SavingState;
+  chatComposerDraft: string;
+  aiMutationLock: {
+    active: boolean;
+    stage: AiMutationStage;
+    message: string | null;
+  };
   showHistoryPanel: boolean;
   historyRefreshRevision: number;
   // Filter state
   filterWithoutDeps: boolean;
+  filterWithoutParents: boolean;
   filterExpired: boolean;
   filterSearchText: string;
   filterDateFrom: string;
@@ -99,6 +116,8 @@ interface UIState {
   searchIndex: number;
   tempHighlightedTaskId: string | null;
   setWorkspace: (workspace: WorkspaceMode | ((current: WorkspaceMode) => WorkspaceMode)) => void;
+  setPlannerCorrectionTarget: (target: PlannerCorrectionTarget | null) => void;
+  consumePlannerCorrectionTarget: (predicate?: (target: PlannerCorrectionTarget) => boolean) => PlannerCorrectionTarget | null;
   setPendingPostAuthAction: (action: PendingPostAuthAction) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
@@ -114,10 +133,19 @@ interface UIState {
   setShareStatus: (status: ShareStatus) => void;
   setShareLinkUrl: (url: string | null) => void;
   setSavingState: (status: SavingState) => void;
+  setChatComposerDraft: (value: string) => void;
+  clearChatComposerDraft: () => void;
+  setAiMutationLock: (lock: {
+    active: boolean;
+    stage?: AiMutationStage;
+    message?: string | null;
+  }) => void;
+  clearAiMutationLock: () => void;
   setShowHistoryPanel: (visible: boolean) => void;
   bumpHistoryRefreshRevision: () => void;
   // Filter actions
   setFilterWithoutDeps: (value: boolean) => void;
+  setFilterWithoutParents: (value: boolean) => void;
   setFilterExpired: (value: boolean) => void;
   setFilterSearchText: (value: string) => void;
   setFilterDateFrom: (value: string) => void;
@@ -137,6 +165,7 @@ const initialWorkspace: WorkspaceMode = { kind: 'guest' };
 export const useUIStore = create<UIState>()((set, get) => ({
   workspace: initialWorkspace,
   pendingPostAuthAction: null,
+  plannerCorrectionTarget: null,
   showOtpModal: false,
   showEditProjectModal: false,
   showBillingPage: false,
@@ -151,9 +180,16 @@ export const useUIStore = create<UIState>()((set, get) => ({
   shareStatus: 'idle',
   shareLinkUrl: null,
   savingState: 'idle',
+  chatComposerDraft: '',
+  aiMutationLock: {
+    active: false,
+    stage: 'thinking',
+    message: null,
+  },
   showHistoryPanel: false,
   historyRefreshRevision: 0,
   filterWithoutDeps: false,
+  filterWithoutParents: false,
   filterExpired: false,
   filterSearchText: '',
   filterDateFrom: '',
@@ -175,6 +211,15 @@ export const useUIStore = create<UIState>()((set, get) => ({
     });
   },
   setPendingPostAuthAction: (pendingPostAuthAction) => set({ pendingPostAuthAction }),
+  setPlannerCorrectionTarget: (plannerCorrectionTarget) => set({ plannerCorrectionTarget }),
+  consumePlannerCorrectionTarget: (predicate) => {
+    const current = get().plannerCorrectionTarget;
+    if (!current || (predicate && !predicate(current))) {
+      return null;
+    }
+    set({ plannerCorrectionTarget: null });
+    return current;
+  },
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
   setShowBillingPage: (showBillingPage) => set({ showBillingPage }),
@@ -192,9 +237,26 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setShareLinkUrl: (shareLinkUrl) => set({ shareLinkUrl }),
   setSavingState: (savingState) => set({ savingState }),
+  setChatComposerDraft: (chatComposerDraft) => set({ chatComposerDraft }),
+  clearChatComposerDraft: () => set({ chatComposerDraft: '' }),
+  setAiMutationLock: (lock) => set((state) => ({
+    aiMutationLock: {
+      active: lock.active,
+      stage: lock.stage ?? state.aiMutationLock.stage,
+      message: lock.message ?? null,
+    },
+  })),
+  clearAiMutationLock: () => set({
+    aiMutationLock: {
+      active: false,
+      stage: 'thinking',
+      message: null,
+    },
+  }),
   setShowHistoryPanel: (showHistoryPanel) => set({ showHistoryPanel }),
   bumpHistoryRefreshRevision: () => set((state) => ({ historyRefreshRevision: state.historyRefreshRevision + 1 })),
   setFilterWithoutDeps: (filterWithoutDeps) => set({ filterWithoutDeps }),
+  setFilterWithoutParents: (filterWithoutParents) => set({ filterWithoutParents }),
   setFilterExpired: (filterExpired) => set({ filterExpired }),
   setFilterSearchText: (filterSearchText) => set({ filterSearchText }),
   setFilterDateFrom: (filterDateFrom) => set({ filterDateFrom }),
@@ -202,6 +264,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setFilterMode: (filterMode) => set({ filterMode }),
   resetFilters: () => set({
     filterWithoutDeps: false,
+    filterWithoutParents: false,
     filterExpired: false,
     filterSearchText: '',
     filterDateFrom: '',

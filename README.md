@@ -63,7 +63,7 @@ The dump script uses Docker by default and writes a custom-format backup file li
 Apply pending Prisma migrations:
 
 ```bash
-npx prisma migrate deploy --schema packages/mcp/prisma/schema.prisma
+npx prisma migrate deploy --schema packages/runtime-core/prisma/schema.prisma
 ```
 
 Recommended production order:
@@ -71,7 +71,7 @@ Recommended production order:
 1. Deploy the new application code.
 2. Verify `DATABASE_URL` points to the target server database.
 3. Run `npm run dump:db`.
-4. Run `npx prisma migrate deploy --schema packages/mcp/prisma/schema.prisma`.
+4. Run `npx prisma migrate deploy --schema packages/runtime-core/prisma/schema.prisma`.
 5. Restart the server if your deployment process does not already do that.
 
 ## Project Structure

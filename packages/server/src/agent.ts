@@ -16,10 +16,15 @@ import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
 import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
+import {
+  resolveOrdinaryAgentCompatibilityMode,
+  resolveOrdinaryAgentMcpServers,
+  type OrdinaryAgentCompatibilityMode,
+} from './agent/direct-tools.js';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
-import { runStagedMutation } from './mutation/orchestrator.js';
+import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,6 +46,19 @@ type AgentAttemptResult = {
   assistantResponse: string;
   streamedContent: boolean;
   mutationToolCalls: MutationToolCall[];
+  toolCallCount: number;
+  metrics: {
+    durationMs: number;
+    timeToFirstToolCallMs: number | null;
+    timeToFirstAssistantTextMs: number | null;
+    timeToResultMs: number | null;
+    partialEventCount: number;
+    assistantMessageCount: number;
+    textDeltaCount: number;
+    toolResultCount: number;
+    observedToolUseCount: number;
+    assistantResponseChars: number;
+  };
 };
 
 type VerificationResult = {
@@ -92,15 +110,47 @@ export type MutationOutcomeAssessment = {
   acceptedChangedTaskIdMismatch: boolean;
 };
 
-const MUTATION_HISTORY_MESSAGE_LIMIT = 6;
+export type OrdinaryAgentPathTelemetry = {
+  direct_tool_path: boolean;
+  legacy_subprocess_fallback: boolean;
+  embedded_tool_call: boolean;
+  tool_calls_per_request: number;
+  fallback_rate: number;
+  first_direct_pass_accepted: boolean;
+  authoritative_verification_accepted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  acceptedChangedTaskIds: string[];
+  actualChangedTaskIds: string[];
+  accepted_changed_task_id_mismatch: boolean;
+};
+
+const ORDINARY_AGENT_PATH_CONTRACT =
+  'Ordinary conversational mutations use the direct path by default with no external MCP subprocess; compatibility fallback remains explicit and bounded.';
+const ENABLE_STAGED_MUTATION_FALLBACK = false;
+const COMPACT_MUTATION_SYSTEM_PROMPT = [
+  'You edit a Gantt project through normalized tools.',
+  'For read-only requests, answer directly.',
+  'For mutation requests, act quickly and use as few tool calls as possible.',
+  'Use reads only when you truly need IDs, hierarchy, dates, or dependency context.',
+  'Never guess placement or dependencies for schedule edits.',
+  'Do not create standalone tasks when the request implies sequence, parent container, or semantic placement.',
+  'If placement or dependency semantics are unclear, gather the minimum context first.',
+  'Use only normalized tools: get_project_summary, get_task_context, get_schedule_slice, create_tasks, update_tasks, move_tasks, delete_tasks, link_tasks, unlink_tasks, shift_tasks, recalculate_project.',
+  'Never invent task IDs.',
+  'Reply briefly with only what changed.',
+  'Respond in the user language.',
+].join(' ');
+
+const MUTATION_HISTORY_MESSAGE_LIMIT = 2;
 const READONLY_HISTORY_MESSAGE_LIMIT = 12;
-const MUTATION_HISTORY_CHAR_LIMIT = 1_500;
+const MUTATION_HISTORY_CHAR_LIMIT = 300;
 const READONLY_HISTORY_CHAR_LIMIT = 4_000;
 const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
 const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
-const SIMPLE_MUTATION_MAX_SESSION_TURNS = 8;
-const DEFAULT_MUTATION_MAX_SESSION_TURNS = 16;
+const SIMPLE_MUTATION_MAX_SESSION_TURNS = 4;
+const DEFAULT_MUTATION_MAX_SESSION_TURNS = 6;
 const READONLY_MAX_SESSION_TURNS = 12;
+const ENABLE_RAW_SDK_EVENT_LOGGING = process.env.GANTT_DEBUG_RAW_SDK === 'true';
 const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
   'create_tasks',
   'update_tasks',
@@ -111,26 +161,45 @@ const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
   'shift_tasks',
   'recalculate_project',
 ]);
-
+const NORMALIZED_MUTATION_TOOL_NAME_LIST = [...NORMALIZED_MUTATION_TOOL_NAMES];
 type TaskServiceModule = typeof import('@gantt/mcp/services');
 type WsModule = typeof import('./ws.js');
-type PrismaModule = typeof import('@gantt/mcp/prisma');
+type PrismaModule = typeof import('@gantt/runtime-core/prisma');
 
 let servicesModulePromise: Promise<TaskServiceModule> | undefined;
 let wsModulePromise: Promise<WsModule> | undefined;
 let prismaModulePromise: Promise<PrismaModule> | undefined;
+
+function resolveNormalizedMutationToolName(name: unknown): NormalizedMutationToolName | undefined {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return undefined;
+  }
+
+  const trimmed = name.trim();
+  if (NORMALIZED_MUTATION_TOOL_NAMES.has(trimmed as NormalizedMutationToolName)) {
+    return trimmed as NormalizedMutationToolName;
+  }
+
+  return NORMALIZED_MUTATION_TOOL_NAME_LIST.find((candidate) => (
+    trimmed.endsWith(`__${candidate}`)
+    || trimmed.endsWith(`.${candidate}`)
+    || trimmed.endsWith(`/${candidate}`)
+  ));
+}
 
 function resolveEnv(): {
   OPENAI_API_KEY: string;
   OPENAI_BASE_URL: string;
   OPENAI_MODEL: string;
   OPENAI_CHEAP_MODEL?: string;
+  USE_SEMANTIC_PLANNER?: string;
 } {
   return {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',
     OPENAI_MODEL: process.env.OPENAI_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? 'glm-4.7',
     OPENAI_CHEAP_MODEL: process.env.OPENAI_CHEAP_MODEL ?? process.env.cheap_model ?? undefined,
+    USE_SEMANTIC_PLANNER: process.env.USE_SEMANTIC_PLANNER ?? 'true',
   };
 }
 
@@ -157,6 +226,25 @@ function extractAssistantText(content: Array<{ type: string; text?: string }>): 
     .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
     .map((block) => block.text ?? '')
     .join('');
+}
+
+function summarizeTextPayload(text: string): { chars: number; lines: number } {
+  if (!text) {
+    return { chars: 0, lines: 0 };
+  }
+
+  return {
+    chars: text.length,
+    lines: text.split('\n').length,
+  };
+}
+
+function sanitizeRawPayload(value: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return String(value);
+  }
 }
 
 async function executeInitialGenerationPlannerQuery(
@@ -295,6 +383,44 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort();
 }
 
+export function summarizeOrdinaryAgentPathTelemetry(input: {
+  initialCompatibilityMode: OrdinaryAgentCompatibilityMode;
+  finalCompatibilityMode?: OrdinaryAgentCompatibilityMode;
+  toolCallCount: number;
+  firstDirectPassAccepted: boolean;
+  authoritativeVerificationAccepted: boolean;
+  acceptedMutationCalls: MutationToolCall[];
+  actualChangedTaskIds: string[];
+}): OrdinaryAgentPathTelemetry {
+  const finalCompatibilityMode = input.finalCompatibilityMode ?? input.initialCompatibilityMode;
+  const acceptedChangedTaskIds = uniqueSorted(
+    input.acceptedMutationCalls.flatMap((call) => call.changedTaskIds ?? []),
+  );
+  const actualChangedTaskIds = uniqueSorted(input.actualChangedTaskIds);
+  const acceptedChangedTaskIdMismatch =
+    acceptedChangedTaskIds.length !== actualChangedTaskIds.length
+    || acceptedChangedTaskIds.some((taskId, index) => taskId !== actualChangedTaskIds[index]);
+  const legacySubprocessFallback =
+    input.initialCompatibilityMode === 'embedded-direct'
+    && finalCompatibilityMode === 'legacy-subprocess'
+    && !input.firstDirectPassAccepted;
+  const directToolPath = finalCompatibilityMode === 'embedded-direct';
+
+  return {
+    direct_tool_path: directToolPath,
+    legacy_subprocess_fallback: legacySubprocessFallback,
+    embedded_tool_call: directToolPath && input.toolCallCount > 0,
+    tool_calls_per_request: input.toolCallCount,
+    fallback_rate: legacySubprocessFallback ? 1 : 0,
+    first_direct_pass_accepted: input.firstDirectPassAccepted,
+    authoritative_verification_accepted: input.authoritativeVerificationAccepted,
+    acceptedMutationCalls: input.acceptedMutationCalls,
+    acceptedChangedTaskIds,
+    actualChangedTaskIds,
+    accepted_changed_task_id_mismatch: acceptedChangedTaskIdMismatch,
+  };
+}
+
 function normalizeName(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -360,8 +486,8 @@ async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number
       continue;
     }
 
-    const toolName = row.tool ?? payload.tool;
-    if (typeof toolName !== 'string' || !NORMALIZED_MUTATION_TOOL_NAMES.has(toolName as NormalizedMutationToolName)) {
+    const toolName = resolveNormalizedMutationToolName(row.tool ?? payload.tool);
+    if (!toolName) {
       continue;
     }
 
@@ -370,7 +496,7 @@ async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number
 
     const existing = toolCalls.get(toolUseId) ?? {
       toolUseId,
-      toolName: toolName as NormalizedMutationToolName,
+      toolName,
     };
 
     if (row.event === 'tool_call_failed') {
@@ -468,6 +594,15 @@ export function buildHistoryContext(
   return selectedLines.join('\n');
 }
 
+export function shouldPreferStagedMutation(userMessage: string): boolean {
+  const normalized = userMessage.trim();
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  return true;
+}
+
 function sanitizeAssistantResponse(userMessage: string, response: string): string {
   const trimmed = response.trim();
   const userHasCyrillic = /[\u0400-\u04FF]/.test(userMessage);
@@ -491,42 +626,16 @@ function sanitizeAssistantResponse(userMessage: string, response: string): strin
 }
 
 function buildPrompt(
-  systemPrompt: string,
   projectId: string,
-  simpleMutationRequested: boolean,
+  _simpleMutationRequested: boolean,
   historyContext: string,
   userMessage: string,
-  retryInstruction?: string,
+  _retryInstruction?: string,
 ): string {
   return [
-    systemPrompt,
-    `\n\n## State metadata:\n- projectId: ${projectId}\n- executionMode: unified`,
-    [
-      '\n\n## Mutation execution protocol:',
-      '- First decide whether the latest user request is read-only or requires a project change.',
-      '- If the request is read-only, answer directly and do not call mutation tools.',
-      '- If the request changes project state, you must use one or more normalized mutation tools before giving a success answer.',
-      '- Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
-      simpleMutationRequested
-        ? '- Prefer one compact targeted read. Do not expand to broader context unless the first read is insufficient.'
-        : '- Use targeted context first and avoid broad reads unless dependencies or hierarchy really require them.',
-      '- Make the smallest valid change that satisfies the request.',
-      '- If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
-      '- Use only normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, `recalculate_project`.',
-      '- Use `update_tasks` only for metadata and non-scheduling field edits.',
-      '- Use `move_tasks` for hierarchy and structural placement.',
-      '- Use `link_tasks` / `unlink_tasks` for dependency changes.',
-      '- Use `shift_tasks` for relative date changes instead of computing absolute dates manually.',
-      '- Never guess, synthesize, or paraphrase task IDs.',
-      simpleMutationRequested
-        ? '- For a small standalone block, keep the reasoning path minimal and create only the smallest coherent fragment.'
-        : '- For structured additions, prefer a small coherent fragment over one vague generic task.',
-      '- Do not spend extra turns on optional restructuring.',
-      '- Treat the mutation tool result as authoritative. If the tool rejects the request, say so.',
-    ].join('\n'),
+    `## Project context:\n- projectId: ${projectId}`,
     historyContext.length > 0 ? `\n\n## Conversation history:\n${historyContext}` : '',
-    retryInstruction ? `\n\n## Execution correction:\n${retryInstruction}` : '',
-    `\n\nUser: ${userMessage}`,
+    `\n\n## User request:\n${userMessage}`,
   ].join('');
 }
 
@@ -561,10 +670,13 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
   const toolUseById = new Map<string, MutationToolCall>();
 
   for (const block of blocks) {
-    if (block.type === 'tool_use' && NORMALIZED_MUTATION_TOOL_NAMES.has(block.name as NormalizedMutationToolName)) {
+    const toolName = block.type === 'tool_use'
+      ? resolveNormalizedMutationToolName(block.name)
+      : undefined;
+    if (block.type === 'tool_use' && toolName) {
       toolUseById.set(block.id, {
         toolUseId: block.id,
-        toolName: block.name as NormalizedMutationToolName,
+        toolName,
       });
     }
   }
@@ -596,6 +708,12 @@ function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
   return [...toolUseById.values()];
 }
 
+function collectToolUseIds(blocks: ContentBlock[]): string[] {
+  return blocks
+    .filter((block): block is Extract<ContentBlock, { type: 'tool_use'; id: string }> => block.type === 'tool_use')
+    .map((block) => block.id);
+}
+
 async function getServicesModule(): Promise<TaskServiceModule> {
   if (!servicesModulePromise) {
     servicesModulePromise = import('@gantt/mcp/services');
@@ -614,7 +732,7 @@ async function getWsModule(): Promise<WsModule> {
 
 async function getPrismaModule(): Promise<PrismaModule> {
   if (!prismaModulePromise) {
-    prismaModulePromise = import('@gantt/mcp/prisma');
+    prismaModulePromise = import('@gantt/runtime-core/prisma');
   }
 
   return prismaModulePromise;
@@ -636,25 +754,43 @@ async function getProjectBaseVersion(projectId: string): Promise<number> {
 
 async function executeAgentAttempt(
   prompt: string,
+  systemPrompt: string,
   runId: string,
   projectId: string,
   sessionId: string,
+  historyGroupId: string,
+  requestContextId: string,
+  historyTitle: string,
   userId: string | undefined,
   attempt: number,
   simpleMutationRequested: boolean,
-  mcpServerPath: string,
+  compatibilityMode: OrdinaryAgentCompatibilityMode | undefined,
   env: ReturnType<typeof resolveEnv>,
   model: string,
   broadcastToSession: WsModule['broadcastToSession'],
 ): Promise<AgentAttemptResult> {
   const abortController = new AbortController();
   const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
+  const mcpServers = resolveOrdinaryAgentMcpServers({
+    projectId,
+    runId,
+    sessionId,
+    attempt,
+    historyGroupId,
+    requestContextId,
+    historyTitle,
+    userId,
+    compatibilityMode,
+    projectRoot: PROJECT_ROOT,
+    databaseUrl: process.env.DATABASE_URL,
+  });
 
   const session = query({
     prompt,
     options: {
       authType: 'openai',
       model,
+      systemPrompt,
       cwd: PROJECT_ROOT,
       permissionMode: 'yolo',
       includePartialMessages: true,
@@ -662,21 +798,7 @@ async function executeAgentAttempt(
       abortController,  // HARD-02: Timeout protection
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
       env: buildSdkEnv(env),
-      mcpServers: {
-        gantt: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            DATABASE_URL: process.env.DATABASE_URL ?? '',
-            PROJECT_ID: projectId,
-            AI_USER_ID: userId ?? '',
-            AI_RUN_ID: runId,
-            AI_SESSION_ID: sessionId,
-            AI_MUTATION_SOURCE: 'agent',
-            AI_ATTEMPT: String(attempt),
-          },
-        },
-      },
+      mcpServers,
     },
   });
 
@@ -685,26 +807,53 @@ async function executeAgentAttempt(
   let capturedPartialContent = false;
   let timeoutHandle: NodeJS.Timeout | undefined;
   const mutationToolCalls = new Map<string, MutationToolCall>();
+  const observedToolUseIds = new Set<string>();
+  const startedAt = Date.now();
+  let firstToolCallAt: number | null = null;
+  let firstAssistantTextAt: number | null = null;
+  let resultAt: number | null = null;
+  let partialEventCount = 0;
+  let assistantMessageCount = 0;
+  let textDeltaCount = 0;
+  let toolResultCount = 0;
 
   try {
     const sessionPromise = (async () => {
       for await (const event of session) {
         if (isSDKPartialAssistantMessage(event)) {
+          partialEventCount += 1;
+          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
+            await writeServerDebugLog('sdk_raw_event', {
+              runId,
+              attempt,
+              sessionId,
+              projectId,
+              streamType: 'partial_assistant',
+              raw: sanitizeRawPayload(event),
+            });
+          }
           if (
             event.event.type === 'content_block_start'
             && event.event.content_block.type === 'tool_use'
-            && NORMALIZED_MUTATION_TOOL_NAMES.has(event.event.content_block.name as NormalizedMutationToolName)
           ) {
-            mutationToolCalls.set(event.event.content_block.id, {
-              toolUseId: event.event.content_block.id,
-              toolName: event.event.content_block.name as NormalizedMutationToolName,
-            });
+            observedToolUseIds.add(event.event.content_block.id);
+            if (firstToolCallAt === null) {
+              firstToolCallAt = Date.now();
+            }
+            const toolName = resolveNormalizedMutationToolName(event.event.content_block.name);
+            if (toolName) {
+              mutationToolCalls.set(event.event.content_block.id, {
+                toolUseId: event.event.content_block.id,
+                toolName,
+              });
+            }
           }
 
           if (
             event.event.type === 'content_block_start'
             && event.event.content_block.type === 'tool_result'
           ) {
+            toolResultCount += 1;
             const existing = mutationToolCalls.get(event.event.content_block.tool_use_id);
             if (existing) {
               const payload = tryParseToolResultPayload(event.event.content_block.content) as
@@ -726,8 +875,12 @@ async function executeAgentAttempt(
             && event.event.delta.type === 'text_delta'
             && event.event.delta.text
           ) {
+            textDeltaCount += 1;
             assistantResponse += event.event.delta.text;
             capturedPartialContent = true;
+            if (firstAssistantTextAt === null) {
+              firstAssistantTextAt = Date.now();
+            }
             await writeServerDebugLog('sdk_text_delta', {
               runId,
               attempt,
@@ -740,6 +893,23 @@ async function executeAgentAttempt(
         }
 
         if (isSDKAssistantMessage(event)) {
+          assistantMessageCount += 1;
+          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
+            await writeServerDebugLog('sdk_raw_event', {
+              runId,
+              attempt,
+              sessionId,
+              projectId,
+              streamType: 'assistant_message',
+              raw: sanitizeRawPayload(event),
+            });
+          }
+          for (const toolUseId of collectToolUseIds(event.message.content)) {
+            observedToolUseIds.add(toolUseId);
+            if (firstToolCallAt === null) {
+              firstToolCallAt = Date.now();
+            }
+          }
           for (const toolCall of collectMutationToolCalls(event.message.content)) {
             const existing = mutationToolCalls.get(toolCall.toolUseId);
             mutationToolCalls.set(toolCall.toolUseId, {
@@ -751,6 +921,9 @@ async function executeAgentAttempt(
           const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
           if (!capturedPartialContent && text) {
             assistantResponse += text;
+            if (firstAssistantTextAt === null) {
+              firstAssistantTextAt = Date.now();
+            }
           }
           await writeServerDebugLog('sdk_assistant_message', {
             runId,
@@ -763,6 +936,17 @@ async function executeAgentAttempt(
         }
 
         if (isSDKResultMessage(event)) {
+          resultAt = Date.now();
+          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
+            await writeServerDebugLog('sdk_raw_event', {
+              runId,
+              attempt,
+              sessionId,
+              projectId,
+              streamType: 'result_message',
+              raw: sanitizeRawPayload(event),
+            });
+          }
           const resultText = typeof event.result === 'string' ? event.result : '';
           if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
             assistantResponse = resultText;
@@ -803,10 +987,41 @@ async function executeAgentAttempt(
     }
   }
 
+  const durationMs = Date.now() - startedAt;
+  await writeServerDebugLog('agent_attempt_metrics', {
+    runId,
+    attempt,
+    projectId,
+    sessionId,
+    durationMs,
+    timeToFirstToolCallMs: firstToolCallAt === null ? null : firstToolCallAt - startedAt,
+    timeToFirstAssistantTextMs: firstAssistantTextAt === null ? null : firstAssistantTextAt - startedAt,
+    timeToResultMs: resultAt === null ? null : resultAt - startedAt,
+    partialEventCount,
+    assistantMessageCount,
+    textDeltaCount,
+    toolResultCount,
+    observedToolUseCount: observedToolUseIds.size,
+    assistantResponseChars: assistantResponse.length,
+  });
+
   return {
     assistantResponse,
     streamedContent,
     mutationToolCalls: [...mutationToolCalls.values()],
+    toolCallCount: observedToolUseIds.size,
+    metrics: {
+      durationMs,
+      timeToFirstToolCallMs: firstToolCallAt === null ? null : firstToolCallAt - startedAt,
+      timeToFirstAssistantTextMs: firstAssistantTextAt === null ? null : firstAssistantTextAt - startedAt,
+      timeToResultMs: resultAt === null ? null : resultAt - startedAt,
+      partialEventCount,
+      assistantMessageCount,
+      textDeltaCount,
+      toolResultCount,
+      observedToolUseCount: observedToolUseIds.size,
+      assistantResponseChars: assistantResponse.length,
+    },
   };
 }
 
@@ -982,128 +1197,6 @@ export async function runAgentWithHistory(
       return;
     }
 
-    if (likelyMutationRequest) {
-      const projectVersion = await getProjectBaseVersion(projectId);
-      const requestContextId = runId;
-      const groupId = crypto.randomUUID();
-      const historyTitle = buildAgentHistoryTitle(userMessage, true);
-      await writeServerDebugLog('mutation_lifecycle_started', {
-        runId,
-        projectId,
-        sessionId,
-        userMessage,
-      });
-
-      const stagedMutation = await runStagedMutation({
-        userMessage,
-        projectId,
-        projectVersion,
-        sessionId,
-        runId,
-        tasksBefore,
-        env,
-        messageService,
-        taskService,
-        commandService,
-        broadcastToSession,
-        groupId,
-        requestContextId,
-        historyTitle,
-        historyUndoable: true,
-        logger: {
-          debug: (event, payload) => writeServerDebugLog(event, payload),
-        },
-      });
-
-      await writeServerDebugLog('intent_classified', {
-        runId,
-        projectId,
-        sessionId,
-        intent: stagedMutation.intent,
-      });
-      await writeServerDebugLog('execution_mode_selected', {
-        runId,
-        projectId,
-        sessionId,
-        executionMode: stagedMutation.executionMode,
-      });
-
-      if (stagedMutation.handled) {
-        const stagedAssistantResponse = sanitizeAssistantResponse(
-          userMessage,
-          stagedMutation.assistantResponse ?? stagedMutation.result.userFacingMessage,
-        );
-        const stagedTasksAfter = stagedMutation.tasksAfter ?? tasksBefore;
-
-        if (stagedAssistantResponse) {
-          broadcastToSession(sessionId, { type: 'token', content: stagedAssistantResponse });
-          await messageService.add('assistant', stagedAssistantResponse, projectId, {
-            requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-            historyGroupId: stagedMutation.result.historyUndoable
-              ? checkpointGroupId
-              : undefined,
-          });
-        }
-
-        await writeServerDebugLog('agent_response_saved', {
-          runId,
-          projectId,
-          sessionId,
-          assistantResponse: stagedAssistantResponse,
-          streamedContent: Boolean(stagedAssistantResponse),
-          finalTasksChanged: stagedMutation.result.changedTaskIds.length > 0,
-          finalChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIds: stagedMutation.result.changedTaskIds,
-          finalAcceptedChangedTaskIdMismatch: false,
-        });
-
-        broadcastToSession(sessionId, { type: 'tasks', tasks: stagedTasksAfter });
-        await writeServerDebugLog('tasks_broadcast', {
-          runId,
-          projectId,
-          sessionId,
-          taskCount: stagedTasksAfter.length,
-          taskIds: stagedTasksAfter.map((task) => task.id),
-          taskNames: stagedTasksAfter.map((task) => task.name),
-        });
-
-        broadcastToSession(sessionId, { type: 'history_changed' });
-        broadcastToSession(sessionId, {
-          type: 'done',
-          chatMessage: stagedAssistantResponse
-            ? {
-                requestContextId: stagedMutation.result.requestContextId ?? requestContextId,
-                historyGroupId: stagedMutation.result.historyUndoable
-                  ? checkpointGroupId
-                  : null,
-              }
-            : undefined,
-        });
-        await writeServerDebugLog('agent_run_completed', {
-          runId,
-          projectId,
-          sessionId,
-          stagedMutationHandled: true,
-        });
-        return;
-      }
-
-      if (stagedMutation.status !== 'deferred_to_legacy' || !stagedMutation.legacyFallbackAllowed) {
-        throw new Error('Staged mutation shell returned an unhandled non-legacy outcome.');
-      }
-    }
-
-    const messages = await messageService.list(projectId, 20);
-
-    const systemPromptPath = process.env.GANTT_MCP_PROMPTS_DIR
-      ? join(process.env.GANTT_MCP_PROMPTS_DIR, 'system.md')
-      : join(PROJECT_ROOT, 'packages/mcp/agent/prompts/system.md');
-    const systemPrompt = existsSync(systemPromptPath)
-      ? await readFile(systemPromptPath, 'utf-8')
-      : 'You are a Gantt chart planning assistant. Use the available MCP tools to manage tasks.';
-
-    const historyContext = buildHistoryContext(messages.slice(0, -1), false);
-
     if (!env.OPENAI_API_KEY) {
       throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
     }
@@ -1119,166 +1212,46 @@ export async function runAgentWithHistory(
       projectRoot: PROJECT_ROOT,
     });
 
-    const modelRoutingDecision = resolveModelRoutingDecision({
-      route: 'mutation',
-      env,
+    const messages = await messageService.list(projectId, 20);
+    const piHistoryGroupId = checkpointGroupId ?? crypto.randomUUID();
+    const piResult = await runPiOrdinaryAgent({
+      userMessage,
+      projectId,
+      sessionId,
+      runId,
+      userId,
+      env: {
+        OPENAI_API_KEY: env.OPENAI_API_KEY,
+        OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+        OPENAI_MODEL: env.OPENAI_MODEL,
+      },
+      messages: messages.slice(0, -1),
+      historyGroupId: piHistoryGroupId,
+      requestContextId: runId,
+      historyTitle: buildAgentHistoryTitle(userMessage, true),
+      mutationRoute: likelyMutationRequest,
+      taskService,
+      broadcastToSession,
+      logger: {
+        debug: (event, payload) => writeServerDebugLog(event, payload),
+      },
     });
-    await writeServerDebugLog('model_routing_decision', {
+
+    const assistantResponse = sanitizeAssistantResponse(userMessage, piResult.assistantResponse);
+    let streamedContent = piResult.streamedContent;
+
+    await writeServerDebugLog('pi_ordinary_agent_summary', {
       runId,
       projectId,
       sessionId,
-      ...modelRoutingDecision,
+      toolCallCount: piResult.toolCallCount,
+      acceptedMutatingToolCalls: piResult.acceptedMutatingToolCalls,
+      rejectedMutatingToolCalls: piResult.rejectedMutatingToolCalls,
+      historyGroupId: piHistoryGroupId,
+      ...piResult.metrics,
     });
 
-    const mcpServerPath = process.env.GANTT_MCP_SERVER_PATH
-      ?? join(PROJECT_ROOT, 'packages/mcp/dist/index.js');
-
-    let assistantResponse = '';
-    let streamedContent = false;
-    let tasksAfter: ComparableTask[] = tasksBefore;
-    let finalVerification: VerificationResult = {
-      tasksAfter: tasksBefore,
-      tasksChanged: false,
-      actualChangedTaskIds: [],
-      mutationAttempted: false,
-      acceptedMutationCalls: [],
-      rejectedMutationCalls: [],
-      acceptedChangedTaskIds: [],
-      acceptedChangedTaskIdMismatch: false,
-    };
-
-    const maxAttempts = 2;
-    let retryInstruction: string | undefined;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const attemptPrompt = buildPrompt(
-        systemPrompt,
-        projectId,
-        simpleMutationRequested,
-        historyContext,
-        userMessage,
-        retryInstruction,
-      );
-
-      await writeServerDebugLog('agent_prompt_built', {
-        runId,
-        attempt,
-        projectId,
-        sessionId,
-        historyCount: messages.length,
-        simpleMutationRequested,
-        prompt: attemptPrompt,
-      });
-
-      let attemptResult: AgentAttemptResult;
-      try {
-        attemptResult = await executeAgentAttempt(
-          attemptPrompt,
-          runId,
-          projectId,
-          sessionId,
-          userId,
-          attempt,
-          simpleMutationRequested,
-          mcpServerPath,
-          env,
-          modelRoutingDecision.selectedModel,
-          broadcastToSession,
-        );
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await writeServerDebugLog('agent_attempt_failed', {
-          runId,
-          attempt,
-          projectId,
-          sessionId,
-          error: errorMessage,
-        });
-
-        if (attempt < maxAttempts && /timed out/i.test(errorMessage)) {
-          retryInstruction = buildTimeoutRetryInstruction();
-          continue;
-        }
-
-        throw error;
-      }
-      assistantResponse = sanitizeAssistantResponse(userMessage, attemptResult.assistantResponse);
-      streamedContent = streamedContent || attemptResult.streamedContent;
-
-      finalVerification = await verifyMutationAttempt(
-        runId,
-        projectId,
-        sessionId,
-        attempt,
-        tasksBefore,
-        assistantResponse,
-        attemptResult.mutationToolCalls,
-        taskService,
-      );
-      tasksAfter = finalVerification.tasksAfter as ComparableTask[];
-
-      const mutationObserved = finalVerification.mutationAttempted || finalVerification.tasksChanged;
-
-      if (!mutationObserved) {
-        break;
-      }
-
-      if (finalVerification.rejectedMutationCalls.length > 0) {
-        assistantResponse = buildRejectedMutationMessage(finalVerification.rejectedMutationCalls);
-        break;
-      }
-
-      if (finalVerification.tasksChanged && finalVerification.acceptedMutationCalls.length > 0) {
-        if (finalVerification.acceptedChangedTaskIdMismatch) {
-          assistantResponse = buildInconsistentMutationMessage();
-          break;
-        }
-        assistantResponse = sanitizeAssistantResponse(
-          userMessage,
-          assistantResponse.trim() || 'Изменения применены.',
-        );
-        break;
-      }
-
-      if (finalVerification.acceptedMutationCalls.length > 0 && (!finalVerification.tasksChanged || finalVerification.acceptedChangedTaskIdMismatch)) {
-        assistantResponse = buildInconsistentMutationMessage();
-        break;
-      }
-
-      if (attempt >= maxAttempts) {
-        assistantResponse = buildNoMutationMessage();
-        break;
-      }
-
-      retryInstruction = [
-        'The previous attempt did not perform a successful normalized mutation tool call.',
-        'Start this retry with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
-        'Identify the correct parent/container before mutating.',
-        'Then call one or more normalized mutation tools: `create_tasks`, `update_tasks`, `move_tasks`, `delete_tasks`, `link_tasks`, `unlink_tasks`, `shift_tasks`, or `recalculate_project`.',
-        'Use `move_tasks` for structural placement, `link_tasks` / `unlink_tasks` for dependency edits, and `shift_tasks` for relative date changes.',
-        'Reuse only real task IDs returned by tool results or reads. Never invent an ID.',
-        'Treat `changedTaskIds` and `changedTasks` as the authoritative success footprint.',
-        'If the user requested a broad phase or discipline, create a small structured fragment instead of one generic task.',
-        'The final user-visible answer must contain only the completed result, without analysis or narration.',
-        'Do not output English text if the user wrote in Russian.',
-        'A text-only success answer is invalid if no accepted mutation tool changed the project.',
-        'If the request cannot be completed with available tools, say that explicitly and do not claim success.',
-        assistantResponse.trim().length > 0 ? `Previous invalid answer: ${assistantResponse.trim()}` : '',
-      ].filter(Boolean).join('\n');
-
-      await writeServerDebugLog('mutation_retry_scheduled', {
-        runId,
-        attempt,
-        projectId,
-        sessionId,
-        reason: mutationObserved ? 'mutation_not_confirmed' : 'no_valid_mutation_observed',
-        previousAssistantResponse: assistantResponse,
-      });
-    }
-
-    assistantResponse = sanitizeAssistantResponse(userMessage, assistantResponse);
-
-      if (assistantResponse) {
+    if (assistantResponse && !streamedContent) {
       broadcastToSession(sessionId, { type: 'token', content: assistantResponse });
       streamedContent = true;
     }
@@ -1286,6 +1259,7 @@ export async function runAgentWithHistory(
     if (assistantResponse) {
       await messageService.add('assistant', assistantResponse, projectId, {
         requestContextId: runId,
+        historyGroupId: piHistoryGroupId,
       });
     }
     await writeServerDebugLog('agent_response_saved', {
@@ -1294,29 +1268,31 @@ export async function runAgentWithHistory(
       sessionId,
       assistantResponse,
       streamedContent,
-      finalTasksChanged: finalVerification.tasksChanged,
-      finalChangedTaskIds: finalVerification.actualChangedTaskIds,
-      finalAcceptedChangedTaskIds: finalVerification.acceptedChangedTaskIds,
-      finalAcceptedChangedTaskIdMismatch: finalVerification.acceptedChangedTaskIdMismatch,
+      finalTasksChanged: piResult.acceptedMutatingToolCalls.length > 0,
+      finalChangedTaskIds: piResult.acceptedMutatingToolCalls.flatMap((fact) => fact.changedTaskIds),
+      finalAcceptedChangedTaskIds: piResult.acceptedMutatingToolCalls.flatMap((fact) => fact.changedTaskIds),
+      finalAcceptedChangedTaskIdMismatch: false,
     });
 
-    broadcastToSession(sessionId, { type: 'tasks', tasks: tasksAfter });
-    await writeServerDebugLog('tasks_broadcast', {
-      runId,
-      projectId,
-      sessionId,
-      taskCount: tasksAfter.length,
-      taskIds: tasksAfter.map((task) => task.id),
-      taskNames: tasksAfter.map((task) => task.name),
-    });
+    if (piResult.tasksAfter) {
+      broadcastToSession(sessionId, { type: 'tasks', tasks: piResult.tasksAfter });
+      await writeServerDebugLog('tasks_broadcast', {
+        runId,
+        projectId,
+        sessionId,
+        taskCount: piResult.tasksAfter.length,
+      });
+    }
 
-    broadcastToSession(sessionId, { type: 'history_changed' });
+    if (piResult.acceptedMutatingToolCalls.length > 0) {
+      broadcastToSession(sessionId, { type: 'history_changed' });
+    }
     broadcastToSession(sessionId, {
       type: 'done',
       chatMessage: assistantResponse
         ? {
             requestContextId: runId,
-            historyGroupId: null,
+            historyGroupId: piHistoryGroupId ?? null,
           }
         : undefined,
     });

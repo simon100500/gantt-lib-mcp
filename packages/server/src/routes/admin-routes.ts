@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getPrisma } from '@gantt/mcp/prisma';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { PLAN_CATALOG, type BillingPeriod, type PlanId } from '@gantt/mcp/constraints';
 import { getProjectCalendarSettings } from '@gantt/mcp/services';
 import { authService } from '@gantt/mcp/services';

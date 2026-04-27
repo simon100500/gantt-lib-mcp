@@ -6,6 +6,15 @@ import type { MutationIntent, ResolvedMutationContext } from './types.js';
 
 function buildIntent(overrides: Partial<MutationIntent> = {}): MutationIntent {
   return {
+    routeEnvelope: {
+      route: 'fast_path',
+      intentFamily: 'task_edit',
+      intentType: 'add_single_task',
+      confidence: 0.92,
+      riskLevel: 'S1',
+      params: {},
+      ambiguities: [],
+    },
     intentType: 'add_single_task',
     confidence: 0.92,
     rawRequest: 'добавь сдачу технадзору',
@@ -35,6 +44,7 @@ function buildContext(overrides: Partial<ResolvedMutationContext> = {}): Resolve
     selectedSuccessorTaskId: null,
     placementPolicy: 'tail_of_container',
     confidence: 0.91,
+    ambiguities: [],
     ...overrides,
   };
 }
@@ -92,7 +102,113 @@ describe('buildMutationPlan', () => {
     assert.equal(plan.operations[0]?.title, 'Пусконаладка насосной станции');
   });
 
+  it('expects only the created task for append-after plans inside a container', async () => {
+    const plan = await buildMutationPlan({
+      intent: buildIntent({
+        rawRequest: 'добавь сдачу гасн в конце работ',
+        normalizedRequest: 'добавь сдачу гасн в конце работ',
+        entitiesMentioned: ['сдача гасн'],
+        taskTitle: 'Сдача ГАСН',
+        taskType: 'milestone',
+      }),
+      resolutionContext: buildContext({
+        selectedContainerId: 'container-closeout',
+        selectedPredecessorTaskId: 'task-permit',
+        placementPolicy: 'after_predecessor',
+      }),
+      userMessage: 'добавь сдачу ГАСН в конце работ',
+      tasksBefore: [],
+    });
+
+    assert.equal(plan.operations[0]?.kind, 'append_task_after');
+    assert.deepEqual(plan.expectedChangedTaskIds, ['task-permit:sdacha-gasn']);
+  });
+
   it('maps date moves and metadata edits to deterministic semantic operations', async () => {
+    const durationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь срок фундамента в 2 раза',
+        normalizedRequest: 'увеличь срок фундамента в 2 раза',
+        entitiesMentioned: ['фундамент'],
+        requiresSchedulingPlacement: false,
+        durationDays: undefined,
+        durationMultiplier: 2,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-foundation',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь срок фундамента в 2 раза',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }],
+    });
+
+    assert.equal(durationPlan.operations[0]?.kind, 'change_task_duration');
+    assert.equal(durationPlan.operations[0]?.durationDays, 6);
+    assert.equal(durationPlan.operations[0]?.anchor, 'end');
+    assert.deepEqual(durationPlan.expectedChangedTaskIds, ['task-foundation']);
+
+    const absoluteDurationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь срок фундамента до 10 дней',
+        normalizedRequest: 'увеличь срок фундамента до 10 дней',
+        entitiesMentioned: ['фундамент'],
+        requiresSchedulingPlacement: false,
+        durationDays: 10,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-foundation',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь срок фундамента до 10 дней',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }],
+    });
+
+    assert.equal(absoluteDurationPlan.operations[0]?.kind, 'change_task_duration');
+    assert.equal(absoluteDurationPlan.operations[0]?.durationDays, 10);
+    assert.equal(absoluteDurationPlan.operations[0]?.anchor, 'end');
+
+    const deltaDurationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь срок фундамента на 20 дней',
+        normalizedRequest: 'увеличь срок фундамента на 20 дней',
+        entitiesMentioned: ['фундамент'],
+        requiresSchedulingPlacement: false,
+        durationDays: undefined,
+        durationDeltaDays: 20,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-foundation', name: 'Фундамент', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-foundation',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь срок фундамента на 20 дней',
+      tasksBefore: [{
+        id: 'task-foundation',
+        name: 'Фундамент',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }],
+    });
+
+    assert.equal(deltaDurationPlan.operations[0]?.kind, 'change_task_duration');
+    assert.equal(deltaDurationPlan.operations[0]?.durationDays, 23);
+    assert.equal(deltaDurationPlan.operations[0]?.anchor, 'end');
+
     const movePlan = await buildMutationPlan({
       intent: buildIntent({
         intentType: 'move_to_date',
@@ -136,6 +252,62 @@ describe('buildMutationPlan', () => {
     assert.equal(metadataPlan.operations[0]?.kind, 'update_task_metadata');
     assert.deepEqual(metadataPlan.operations[0]?.fields, { color: '#ff4d4f' });
     assert.deepEqual(metadataPlan.expectedChangedTaskIds, ['task-cleaning']);
+  });
+
+  it('expands summary duration changes to leaf child tasks', async () => {
+    const durationPlan = await buildMutationPlan({
+      intent: buildIntent({
+        intentType: 'change_duration',
+        rawRequest: 'увеличь штукатурные работы в 2 раза',
+        normalizedRequest: 'увеличь штукатурные работы в 2 раза',
+        entitiesMentioned: ['штукатурные работы'],
+        requiresSchedulingPlacement: false,
+        durationDays: undefined,
+        durationMultiplier: 2,
+      }),
+      resolutionContext: buildContext({
+        tasks: [{ id: 'task-plaster-summary', name: 'Штукатурные работы', score: 0.99 }],
+        selectedPredecessorTaskId: 'task-plaster-summary',
+        placementPolicy: 'no_placement_required',
+      }),
+      userMessage: 'увеличь штукатурные работы в 2 раза',
+      tasksBefore: [
+        {
+          id: 'task-plaster-summary',
+          name: 'Штукатурные работы',
+          startDate: '2026-05-01',
+          endDate: '2026-05-07',
+        },
+        {
+          id: 'task-beacons',
+          name: 'Установка штукатурных маяков',
+          parentId: 'task-plaster-summary',
+          startDate: '2026-05-01',
+          endDate: '2026-05-02',
+        },
+        {
+          id: 'task-layer',
+          name: 'Нанесение штукатурного слоя',
+          parentId: 'task-plaster-summary',
+          startDate: '2026-05-03',
+          endDate: '2026-05-05',
+        },
+        {
+          id: 'task-dry',
+          name: 'Технологическая сушка',
+          parentId: 'task-plaster-summary',
+          startDate: '2026-05-06',
+          endDate: '2026-05-07',
+        },
+      ],
+    });
+
+    assert.deepEqual(durationPlan.operations, [
+      { kind: 'change_task_duration', taskId: 'task-beacons', durationDays: 4, anchor: 'end' },
+      { kind: 'change_task_duration', taskId: 'task-layer', durationDays: 6, anchor: 'end' },
+      { kind: 'change_task_duration', taskId: 'task-dry', durationDays: 4, anchor: 'end' },
+    ]);
+    assert.deepEqual(durationPlan.expectedChangedTaskIds, ['task-beacons', 'task-layer', 'task-dry']);
   });
 
   it('uses structured fragment plans for hybrid fan-out and WBS expansion', async () => {
@@ -211,6 +383,7 @@ describe('buildMutationPlan', () => {
         rawRequest: 'на каждом этаже добавь работу (веху) Сдача технадзору',
         normalizedRequest: 'на каждом этаже добавь работу (веху) сдача технадзору',
         entitiesMentioned: ['Сдача технадзору'],
+        executionMode: 'hybrid',
         groupScopeHint: 'этаж',
       }),
       resolutionContext: buildContext({

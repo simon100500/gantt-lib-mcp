@@ -1,5 +1,41 @@
 import type { AuthProject, AuthUser } from '../stores/useAuthStore.ts';
-import type { ProjectDependency, Task } from '../types.ts';
+import type {
+  ProjectDependency,
+  PlannerScope,
+  ResourceScope,
+  ResourceType,
+  Task,
+} from '../types.ts';
+
+export type {
+  PlannerScope,
+  ResourcePlannerInterval,
+  ResourcePlannerResource,
+  ResourcePlannerResult,
+  ResourceScope,
+  ResourceType,
+} from '../types.ts';
+
+export interface ProjectResource {
+  id: string;
+  userId: string;
+  projectId: string | null;
+  scope: ResourceScope;
+  name: string;
+  type: ResourceType;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deactivatedAt: string | null;
+}
+
+export interface TaskAssignmentRecord {
+  id: string;
+  projectId: string;
+  taskId: string;
+  resourceId: string;
+  createdAt: string;
+}
 
 export interface AuthSuccessResponse {
   accessToken: string;
@@ -14,6 +50,8 @@ export interface ProjectLoadResponse {
   snapshot: {
     tasks: Task[];
     dependencies: ProjectDependency[];
+    resources: ProjectResource[];
+    assignments: TaskAssignmentRecord[];
   };
 }
 
@@ -50,4 +88,29 @@ export interface HistoryRestoreResponse {
     deletedCount: number;
     deletedFromMessageId: string | null;
   };
+}
+
+export type BaselineSource = 'current' | 'history';
+
+export interface BaselineItem {
+  id: string;
+  projectId: string;
+  name: string;
+  source: BaselineSource;
+  sourceHistoryGroupId: string | null;
+  createdAt: string;
+}
+
+export interface BaselineListResponse {
+  baselines: BaselineItem[];
+}
+
+export interface BaselineSnapshotResponse extends BaselineItem {
+  snapshot: ProjectLoadResponse['snapshot'];
+}
+
+export type BaselineCreateResponse = BaselineSnapshotResponse;
+
+export interface BaselineDeleteResponse {
+  id: string;
 }

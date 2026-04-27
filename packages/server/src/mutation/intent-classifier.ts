@@ -1,11 +1,13 @@
-import {
-  query,
-  isSDKAssistantMessage,
-  isSDKResultMessage,
-} from '@qwen-code/sdk';
-
 import { selectMutationExecutionMode } from './execution-routing.js';
-import type { FragmentNode, MutationIntent, MutationIntentType, StructuredFragmentPlan } from './types.js';
+import type {
+  FragmentNode,
+  MutationIntent,
+  MutationIntentType,
+  MutationRiskLevel,
+  MutationRoute,
+  MutationRouteEnvelope,
+  StructuredFragmentPlan,
+} from './types.js';
 
 type MutationIntentQueryInput = {
   prompt: string;
@@ -23,12 +25,19 @@ type SemanticExtractionEnv = {
 };
 
 type RawMutationIntentPayload = {
+  route?: unknown;
+  intentFamily?: unknown;
   intentType?: unknown;
   confidence?: unknown;
+  riskLevel?: unknown;
+  params?: unknown;
+  ambiguities?: unknown;
   entitiesMentioned?: unknown;
   taskTitle?: unknown;
   taskType?: unknown;
   durationDays?: unknown;
+  durationDeltaDays?: unknown;
+  durationMultiplier?: unknown;
   deltaDays?: unknown;
   targetDate?: unknown;
   renamedTitle?: unknown;
@@ -47,6 +56,7 @@ export type ClassifyMutationIntentInput = {
 const VALID_INTENT_TYPES = new Set<MutationIntentType>([
   'add_single_task',
   'add_repeated_fragment',
+  'change_duration',
   'shift_relative',
   'move_to_date',
   'move_in_hierarchy',
@@ -55,32 +65,23 @@ const VALID_INTENT_TYPES = new Set<MutationIntentType>([
   'delete_task',
   'rename_task',
   'update_metadata',
+  'decompose_task',
   'expand_wbs',
   'restructure_branch',
   'validate_only',
   'unsupported_or_ambiguous',
 ]);
 
-function buildSdkEnv(env: SemanticExtractionEnv): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-  };
+const VALID_ROUTES = new Set<MutationRoute>([
+  'fast_path',
+  'specialized_fast_path',
+  'agent_path',
+  'clarify',
+]);
 
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
-  }
+const VALID_RISK_LEVELS = new Set<MutationRiskLevel>(['S0', 'S1', 'S2', 'S3']);
 
-  return sdkEnv;
-}
-
-function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
-  return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
-    .map((block) => block.text ?? '')
-    .join('');
-}
+const MUTATION_INTENT_HTTP_TIMEOUT_MS = 8_000;
 
 async function executeMutationSemanticQuery(
   input: MutationIntentQueryInput,
@@ -90,45 +91,66 @@ async function executeMutationSemanticQuery(
     throw new Error('API key not configured for mutation semantic extraction.');
   }
 
-  const session = query({
-    prompt: input.prompt,
-    options: {
-      authType: 'openai',
-      model: input.model,
-      cwd: process.cwd(),
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: 2,
-    },
-  });
+  const abortController = new AbortController();
+  const timeoutHandle = setTimeout(() => abortController.abort(), MUTATION_INTENT_HTTP_TIMEOUT_MS);
 
-  let content = '';
+  try {
+    const baseUrl = env.OPENAI_BASE_URL.endsWith('/')
+      ? env.OPENAI_BASE_URL
+      : `${env.OPENAI_BASE_URL}/`;
+    const response = await fetch(new URL('chat/completions', baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: input.model,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: 'Return strict JSON only. No markdown, no prose, no code fences.',
+          },
+          {
+            role: 'user',
+            content: input.prompt,
+          },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+      signal: abortController.signal,
+    });
 
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
+    if (!response.ok) {
+      throw new Error(`Mutation semantic extraction HTTP ${response.status}`);
     }
 
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Mutation semantic extraction failed');
-      }
+    const payload = await response.json() as {
+      choices?: Array<{
+        message?: {
+          content?: string | Array<{ type?: string; text?: string }>;
+        };
+      }>;
+    };
+    const rawContent = payload.choices?.[0]?.message?.content;
+    const content = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent
+          .filter((block) => block.type === 'text' && typeof block.text === 'string')
+          .map((block) => block.text ?? '')
+          .join('')
+        : '';
 
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
+    if (content.trim().length === 0) {
+      throw new Error('Mutation semantic extraction returned an empty response');
     }
-  }
 
-  if (content.trim().length === 0) {
-    throw new Error('Mutation semantic extraction returned an empty response');
+    return { content };
+  } finally {
+    clearTimeout(timeoutHandle);
   }
-
-  return { content };
 }
 
 function normalizeRequest(userMessage: string): string {
@@ -137,37 +159,51 @@ function normalizeRequest(userMessage: string): string {
 
 function buildPrompt(userMessage: string): string {
   return [
-    'Return strict JSON only. No markdown, no prose, no code fences.',
-    'Interpret the user request for a Gantt mutation pipeline.',
-    'Do not rely on fixed trigger words. Infer semantics from the request meaning.',
-    'The server will execute only deterministic operations after your extraction.',
-    'Allowed intentType values: "add_single_task", "add_repeated_fragment", "shift_relative", "move_to_date", "move_in_hierarchy", "link_tasks", "unlink_tasks", "delete_task", "rename_task", "update_metadata", "expand_wbs", "restructure_branch", "validate_only", "unsupported_or_ambiguous".',
+    'Interpret the user request for a Gantt mutation routing pipeline.',
+    'Return strict routing JSON only. Do not rely on fixed trigger words. Infer semantics from request meaning.',
+    'The router must be cheap and schema-constrained. Never generate DB payloads, task IDs, tool calls, or committed mutations.',
+    'Allowed route values: "fast_path", "specialized_fast_path", "agent_path", "clarify".',
+    'Allowed riskLevel values: "S0", "S1", "S2", "S3".',
+    'Allowed intentType values: "add_single_task", "add_repeated_fragment", "change_duration", "shift_relative", "move_to_date", "move_in_hierarchy", "link_tasks", "unlink_tasks", "delete_task", "rename_task", "update_metadata", "decompose_task", "expand_wbs", "restructure_branch", "validate_only", "unsupported_or_ambiguous".',
     'Schema:',
-    '{"intentType":"...","confidence":0.0-1.0,"entitiesMentioned":["..."],"taskTitle":"optional","taskType":"task|milestone","durationDays":1,"deltaDays":0,"targetDate":"YYYY-MM-DD","renamedTitle":"optional","metadataFields":{"color":"#RRGGBB","progress":0,"parentId":null},"groupScopeHint":"optional","dependency":{"taskId":"optional","type":"FS|SS|FF|SF","lag":0},"fragmentPlan":{"title":"...","nodes":[{"nodeKey":"stable-key","title":"...","taskType":"task|milestone","durationDays":1,"dependsOnNodeKeys":["..."]}]}}',
+    '{"route":"fast_path|specialized_fast_path|agent_path|clarify","intentFamily":"task_edit|structure|planning|validation","intentType":"...","confidence":0.0-1.0,"riskLevel":"S0|S1|S2|S3","params":{},"ambiguities":["..."],"entitiesMentioned":["..."],"taskTitle":"optional","taskType":"task|milestone","durationDays":1,"durationDeltaDays":5,"durationMultiplier":2,"deltaDays":0,"targetDate":"YYYY-MM-DD","renamedTitle":"optional","metadataFields":{"color":"#RRGGBB","progress":0,"parentId":null},"groupScopeHint":"optional","dependency":{"taskId":"optional","type":"FS|SS|FF|SF","lag":0},"fragmentPlan":{"title":"...","nodes":[{"nodeKey":"stable-key","title":"...","taskType":"task|milestone","durationDays":1,"dependsOnNodeKeys":["..."]}]}}',
     'Rules:',
-    '1. Put entity names that the server must resolve into entitiesMentioned.',
-    '2. For add_single_task, provide taskTitle and preferably durationDays.',
-    '3. For shift_relative, provide deltaDays.',
-    '4. For move_to_date, provide targetDate in ISO format.',
-    '5. For rename_task, provide renamedTitle.',
-    '6. For update_metadata, provide only the fields explicitly implied by the request.',
-    '7. For add_repeated_fragment, provide groupScopeHint and fragmentPlan.',
-    '8. For expand_wbs, provide fragmentPlan.',
-    '9. For link/unlink, include both endpoint names in entitiesMentioned. Use dependency.type when linking; default to FS if unsure.',
-    '10. If the request is too ambiguous for deterministic execution, return unsupported_or_ambiguous.',
+    '1. Always fill route, intentFamily, intentType, confidence, riskLevel, params, and ambiguities.',
+    '2. Put entity names that the server must resolve into entitiesMentioned.',
+    '3. For structural decomposition requests such as "разбей ... поэтажно", use route "specialized_fast_path", intentType "decompose_task", riskLevel "S2", and params.executor "split_task".',
+    '4. Use route "clarify" when the request is structurally ambiguous or target resolution is missing.',
+    '5. Use route "agent_path" only for broad planning, tradeoff, resource, or optimization requests.',
+    '6. Never guess task IDs, parent IDs, or DB payloads.',
+    '7. For add_single_task, provide taskTitle and preferably durationDays.',
+    '8. For change_duration, provide exactly one duration shape: durationMultiplier for relative scaling like "в 2 раза", "в 1.5 раза", "на 50%"; durationDeltaDays for additive/subtractive phrases like "на 20 дней", "еще на 5 дней", "уменьши на 3 дня"; durationDays only for explicit absolute target duration like "до 10 дней" or "сделай 10 дней".',
+    '9. For shift_relative, provide deltaDays.',
+    '10. For move_to_date, provide targetDate in ISO format.',
+    '11. For rename_task, provide renamedTitle.',
+    '12. For update_metadata, provide only the fields explicitly implied by the request.',
+    '13. For add_repeated_fragment, provide groupScopeHint and fragmentPlan.',
+    '14. For expand_wbs, provide fragmentPlan.',
+    '15. For link/unlink, include both endpoint names in entitiesMentioned. Use dependency.type when linking; default to FS if unsure.',
+    '16. If the request is too ambiguous for safe deterministic or specialized execution, return route "clarify" or "agent_path" instead of defaulting to fast_path.',
     `User request: ${userMessage}`,
   ].join('\n');
 }
 
-function requiresResolution(intentType: MutationIntentType): boolean {
-  return intentType !== 'unsupported_or_ambiguous' && intentType !== 'validate_only';
+function requiresResolution(routeEnvelope: MutationRouteEnvelope): boolean {
+  if (routeEnvelope.route === 'clarify') {
+    return false;
+  }
+
+  return routeEnvelope.intentType !== 'validate_only';
 }
 
-function requiresSchedulingPlacement(intentType: MutationIntentType): boolean {
-  return intentType === 'add_single_task'
-    || intentType === 'add_repeated_fragment'
-    || intentType === 'expand_wbs'
-    || intentType === 'restructure_branch';
+function requiresSchedulingPlacement(routeEnvelope: MutationRouteEnvelope): boolean {
+  return routeEnvelope.route !== 'clarify' && (
+    routeEnvelope.intentType === 'add_single_task'
+    || routeEnvelope.intentType === 'add_repeated_fragment'
+    || routeEnvelope.intentType === 'expand_wbs'
+    || routeEnvelope.intentType === 'restructure_branch'
+    || routeEnvelope.intentType === 'decompose_task'
+  );
 }
 
 function readQueryContent(result: MutationIntentQueryResult): string {
@@ -193,6 +229,58 @@ function asStringArray(value: unknown): string[] {
       .map((item) => item.trim())
       .filter(Boolean),
   )];
+}
+
+function readParamsRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return { ...(value as Record<string, unknown>) };
+}
+
+function deriveRouteEnvelope(parsed: RawMutationIntentPayload, intentType: MutationIntentType): MutationRouteEnvelope {
+  const route = typeof parsed.route === 'string' && VALID_ROUTES.has(parsed.route as MutationRoute)
+    ? parsed.route as MutationRoute
+    : intentType === 'decompose_task'
+      ? 'specialized_fast_path'
+      : intentType === 'unsupported_or_ambiguous'
+        ? 'clarify'
+        : 'fast_path';
+
+  const confidence = typeof parsed.confidence === 'number' && !Number.isNaN(parsed.confidence)
+    ? Math.max(0, Math.min(1, parsed.confidence))
+    : route === 'clarify'
+      ? 0.2
+      : 0.4;
+
+  const riskLevel = typeof parsed.riskLevel === 'string' && VALID_RISK_LEVELS.has(parsed.riskLevel as MutationRiskLevel)
+    ? parsed.riskLevel as MutationRiskLevel
+    : route === 'specialized_fast_path'
+      ? 'S2'
+      : route === 'agent_path'
+        ? 'S3'
+        : route === 'clarify'
+          ? 'S2'
+          : 'S1';
+
+  return {
+    route,
+    intentFamily: typeof parsed.intentFamily === 'string' && parsed.intentFamily.trim().length > 0
+      ? parsed.intentFamily.trim()
+      : route === 'specialized_fast_path'
+        ? 'structure'
+        : route === 'agent_path'
+          ? 'planning'
+          : route === 'clarify'
+            ? 'clarification'
+            : 'task_edit',
+    intentType,
+    confidence,
+    riskLevel,
+    params: readParamsRecord(parsed.params),
+    ambiguities: asStringArray(parsed.ambiguities),
+  };
 }
 
 function parseFragmentPlan(value: unknown): StructuredFragmentPlan | undefined {
@@ -266,9 +354,8 @@ function parseIntentPayload(userMessage: string, payload: string): MutationInten
   }
 
   const intentType = parsed.intentType as MutationIntentType;
-  const confidence = typeof parsed.confidence === 'number' && !Number.isNaN(parsed.confidence)
-    ? Math.max(0, Math.min(1, parsed.confidence))
-    : 0.4;
+  const routeEnvelope = deriveRouteEnvelope(parsed, intentType);
+  const confidence = routeEnvelope.confidence;
 
   const fragmentPlan = parseFragmentPlan(parsed.fragmentPlan);
   const dependencyRaw = parsed.dependency && typeof parsed.dependency === 'object'
@@ -279,17 +366,30 @@ function parseIntentPayload(userMessage: string, payload: string): MutationInten
     : null;
 
   const intentWithoutMode = {
+    routeEnvelope,
     intentType,
     confidence,
     rawRequest: userMessage.trim(),
     normalizedRequest: normalizeRequest(userMessage),
     entitiesMentioned: asStringArray(parsed.entitiesMentioned),
-    requiresResolution: requiresResolution(intentType),
-    requiresSchedulingPlacement: requiresSchedulingPlacement(intentType),
+    requiresResolution: requiresResolution(routeEnvelope),
+    requiresSchedulingPlacement: requiresSchedulingPlacement(routeEnvelope),
     executionMode: 'deterministic',
-    taskTitle: typeof parsed.taskTitle === 'string' ? parsed.taskTitle.trim() : undefined,
+    taskTitle: typeof parsed.taskTitle === 'string'
+      ? parsed.taskTitle.trim()
+      : typeof routeEnvelope.params.taskTitle === 'string'
+        ? routeEnvelope.params.taskTitle
+        : undefined,
     taskType: parsed.taskType === 'task' || parsed.taskType === 'milestone' ? parsed.taskType : undefined,
-    durationDays: typeof parsed.durationDays === 'number' ? Math.max(1, Math.round(parsed.durationDays)) : undefined,
+    durationDays: typeof parsed.durationDays === 'number'
+      ? Math.max(1, Math.round(parsed.durationDays))
+      : typeof routeEnvelope.params.durationDays === 'number'
+        ? Math.max(1, Math.round(routeEnvelope.params.durationDays))
+        : undefined,
+    durationDeltaDays: typeof parsed.durationDeltaDays === 'number' ? Math.round(parsed.durationDeltaDays) : undefined,
+    durationMultiplier: typeof parsed.durationMultiplier === 'number' && Number.isFinite(parsed.durationMultiplier)
+      ? Math.max(parsed.durationMultiplier, 0.1)
+      : undefined,
     deltaDays: typeof parsed.deltaDays === 'number' ? Math.round(parsed.deltaDays) : undefined,
     targetDate: typeof parsed.targetDate === 'string' ? parsed.targetDate.trim() : undefined,
     renamedTitle: typeof parsed.renamedTitle === 'string' ? parsed.renamedTitle.trim() : undefined,
@@ -323,13 +423,23 @@ function parseIntentPayload(userMessage: string, payload: string): MutationInten
 }
 
 function fallbackIntent(userMessage: string): MutationIntent {
+  const routeEnvelope: MutationRouteEnvelope = {
+    route: 'clarify',
+    intentFamily: 'clarification',
+    intentType: 'unsupported_or_ambiguous',
+    confidence: 0.2,
+    riskLevel: 'S2',
+    params: {},
+    ambiguities: ['route_schema_invalid'],
+  };
   const intentWithoutMode = {
+    routeEnvelope,
     intentType: 'unsupported_or_ambiguous' as const,
     confidence: 0.2,
     rawRequest: userMessage.trim(),
     normalizedRequest: normalizeRequest(userMessage),
     entitiesMentioned: [],
-    requiresResolution: false,
+    requiresResolution: requiresResolution(routeEnvelope),
     requiresSchedulingPlacement: false,
     executionMode: 'deterministic' as const,
   };

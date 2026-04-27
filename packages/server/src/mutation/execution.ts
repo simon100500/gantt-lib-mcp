@@ -80,54 +80,38 @@ function compileOperation(
     case 'append_task_after': {
       const predecessor = findTask(tasksBefore, operation.predecessorTaskId);
       const startDate = addDays(predecessor?.endDate ?? predecessor?.startDate ?? '2026-01-01', 1);
-      return [
-        {
-          type: 'create_task',
-          task: {
-            id: operation.taskId,
-            name: operation.title,
-            type: operation.taskType,
-            startDate,
-            endDate: toEndDate(startDate, operation.durationDays),
-            parentId: operation.parentId ?? undefined,
-          },
-        },
-        {
-          type: 'create_dependency',
-          taskId: operation.taskId,
-          dependency: {
+      return [{
+        type: 'create_task',
+        task: {
+          id: operation.taskId,
+          name: operation.title,
+          type: operation.taskType,
+          startDate,
+          endDate: toEndDate(startDate, operation.durationDays),
+          parentId: operation.parentId ?? undefined,
+          dependencies: [{
             taskId: operation.predecessorTaskId,
             type: 'FS',
-          },
+          }],
         },
-      ];
+      }];
     }
 
     case 'append_task_before': {
       const successor = findTask(tasksBefore, operation.successorTaskId);
       const endDate = addDays(successor?.startDate ?? '2026-01-02', -1);
       const startDate = addDays(endDate, -(Math.max(operation.durationDays, 1) - 1));
-      return [
-        {
-          type: 'create_task',
-          task: {
-            id: operation.taskId,
-            name: operation.title,
-            type: operation.taskType,
-            startDate,
-            endDate,
-            parentId: operation.parentId ?? undefined,
-          },
+      return [{
+        type: 'create_task',
+        task: {
+          id: operation.taskId,
+          name: operation.title,
+          type: operation.taskType,
+          startDate,
+          endDate,
+          parentId: operation.parentId ?? undefined,
         },
-        {
-          type: 'create_dependency',
-          taskId: operation.successorTaskId,
-          dependency: {
-            taskId: operation.taskId,
-            type: 'FS',
-          },
-        },
-      ];
+      }];
     }
 
     case 'append_task_to_container': {
@@ -151,6 +135,14 @@ function compileOperation(
       const startDate = addDays(task?.startDate ?? '2026-01-01', operation.deltaDays);
       return [{ type: 'move_task', taskId: operation.taskId, startDate }];
     }
+
+    case 'change_task_duration':
+      return [{
+        type: 'change_duration',
+        taskId: operation.taskId,
+        duration: operation.durationDays,
+        anchor: operation.anchor ?? 'end',
+      }];
 
     case 'move_task_to_date':
       return [{ type: 'move_task', taskId: operation.taskId, startDate: operation.targetDate }];
@@ -273,9 +265,11 @@ export async function executeMutationPlan(
     baseVersion = response.newVersion;
   }
 
-  const verificationVerdict = compareChangedSet(changedTaskIds, input.plan.expectedChangedTaskIds)
+  const verificationVerdict = input.plan.skipChangedSetVerification
     ? 'accepted'
-    : 'failed';
+    : compareChangedSet(changedTaskIds, input.plan.expectedChangedTaskIds)
+      ? 'accepted'
+      : 'failed';
 
   return {
     status: verificationVerdict === 'accepted' ? 'completed' : 'failed',

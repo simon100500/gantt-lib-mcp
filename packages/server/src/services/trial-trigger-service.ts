@@ -7,7 +7,7 @@
  *  - Has a project with tasks (premium feature attempt detected client-side)
  */
 
-import type { PrismaClient } from '@gantt/mcp/prisma';
+import type { PrismaClient } from '@gantt/runtime-core/prisma';
 
 export interface TriggerCheckResult {
   shouldOffer: boolean;
@@ -77,6 +77,6 @@ export class TrialTriggerService {
 }
 
 async function getDefaultTriggerPrisma(): Promise<TrialTriggerPrisma> {
-  const { getPrisma } = await import('@gantt/mcp/prisma');
+  const { getPrisma } = await import('@gantt/runtime-core/prisma');
   return getPrisma();
 }
