@@ -1273,8 +1273,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
             <div className={cn('h-full overflow-auto p-4', !showCatalogPanel && 'hidden')}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Каталог ресурсов</div>
-                  <div className="text-xs text-slate-500">Создание и правка ресурсов скрыты от основного canvas.</div>
+                  <div className="text-sm font-semibold text-slate-900">Пул ресурсов</div>
                 </div>
                 <Button
                   type="button"

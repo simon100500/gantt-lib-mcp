@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import type { ProjectResource, ResourceScope, ResourceType } from '../../lib/apiTypes.ts';
-import { cn } from '../../lib/utils.ts';
 
 export interface ResourceCatalogRowStats {
   assignmentCount: number;
@@ -58,11 +57,6 @@ export function ResourceCatalogPanel({
   onChangeResourceType,
   onSetResourceActive,
 }: ResourceCatalogPanelProps) {
-  const sharedResourceCount = resources.filter((resource) => resource.scope === 'shared').length;
-  const projectResourceCount = resources.filter((resource) => resource.scope === 'project').length;
-  const activeResourceCount = resources.filter((resource) => resource.isActive).length;
-  const totalAssignmentCount = resources.reduce((total, resource) => total + (rowStats.get(resource.id)?.assignmentCount ?? 0), 0);
-  const totalConflictCount = resources.reduce((total, resource) => total + (rowStats.get(resource.id)?.conflictCount ?? 0), 0);
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -90,30 +84,11 @@ export function ResourceCatalogPanel({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2 text-xs" data-testid="resource-catalog-summary">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400">Пул</div>
-            <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{resources.length}</div>
-            <div className="mt-1 text-[11px] text-slate-500">{activeResourceCount} активн.</div>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400">Назначения</div>
-            <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{totalAssignmentCount}</div>
-            <div className={cn('mt-1 text-[11px]', totalConflictCount > 0 ? 'text-amber-700' : 'text-slate-500')}>
-              {totalConflictCount} конфликт.
-            </div>
-          </div>
-          <div className="col-span-2 flex flex-wrap gap-1.5">
-            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600">Shared: {sharedResourceCount}</span>
-            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600">Project: {projectResourceCount}</span>
-          </div>
-        </div>
-
-        {loading && <div className="mt-3 text-xs text-slate-500">Загрузка списка ресурсов...</div>}
-        {error && <div className="mt-3 text-xs text-red-700" data-testid="resource-list-error" role="alert">{error}</div>}
+        {loading && <div className="text-xs text-slate-500">Загрузка списка ресурсов...</div>}
+        {error && <div className="text-xs text-red-700" data-testid="resource-list-error" role="alert">{error}</div>}
 
         {resources.length > 0 ? (
-          <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-auto pr-1" data-testid="resource-catalog-list">
+          <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1" data-testid="resource-catalog-list">
               {resources.map((resource) => {
                 const stats = rowStats.get(resource.id) ?? { assignmentCount: 0, conflictCount: 0 };
                 const isPending = pendingResourceId === resource.id;
@@ -121,32 +96,27 @@ export function ResourceCatalogPanel({
                 const renameDraft = renameDrafts[resource.id] ?? resource.name;
 
                 return (
-                  <div key={resource.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid={`resource-catalog-row-${resource.id}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
+                  <div key={resource.id} className="rounded-lg border border-slate-200 bg-white p-2.5" data-testid={`resource-catalog-row-${resource.id}`}>
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-slate-900">{resource.name}</div>
-                        <div className="mt-0.5 text-[11px] text-slate-500">{RESOURCE_SCOPE_LABELS[resource.scope]} · {formatResourceType(resource.type)}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
+                          <span>{RESOURCE_SCOPE_LABELS[resource.scope]}</span>
+                          <span>{formatResourceType(resource.type)}</span>
+                          <span>{stats.assignmentCount} назнач.</span>
+                          {stats.conflictCount > 0 && <span className="text-amber-700">{stats.conflictCount} конфликт.</span>}
+                        </div>
                       </div>
-                      <span className={cn(
-                        'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium',
-                        resource.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500',
-                      )}>
+                      <span className={resource.isActive ? 'shrink-0 text-[11px] font-medium text-emerald-700' : 'shrink-0 text-[11px] font-medium text-slate-500'}>
                         {resource.isActive ? 'Активен' : 'Неактивен'}
                       </span>
                     </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                      <span className="rounded-md bg-slate-50 px-2 py-1 text-slate-600">Назначений: {stats.assignmentCount}</span>
-                      <span className={stats.conflictCount > 0 ? 'rounded-md bg-amber-50 px-2 py-1 text-amber-700' : 'rounded-md bg-slate-50 px-2 py-1 text-slate-600'}>
-                        Конфликтов: {stats.conflictCount}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 grid gap-2">
+                    <div className="mt-2 flex gap-1.5">
                       <label className="sr-only" htmlFor={`resource-rename-${resource.id}`}>Новое название</label>
                       <input
                         id={`resource-rename-${resource.id}`}
-                        className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 outline-none transition-colors focus:border-primary disabled:bg-slate-100 disabled:text-slate-500"
                         data-testid={`resource-rename-input-${resource.id}`}
                         disabled={actionsDisabled}
                         value={renameDraft}
@@ -154,19 +124,19 @@ export function ResourceCatalogPanel({
                       />
                       <button
                         type="button"
-                        className="inline-flex h-8 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 hover:border-primary hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                         data-testid={`resource-rename-save-${resource.id}`}
                         disabled={actionsDisabled || renameDraft.trim().length === 0 || renameDraft.trim() === resource.name}
                         onClick={() => { void onRenameResource(resource, renameDraft); }}
                       >
-                        Переименовать
+                        Сохранить
                       </button>
                     </div>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="mt-2 flex gap-1.5">
                       <label className="sr-only" htmlFor={`resource-type-${resource.id}`}>Тип ресурса</label>
                       <select
                         id={`resource-type-${resource.id}`}
-                        className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 outline-none transition-colors focus:border-primary disabled:bg-slate-100 disabled:text-slate-500"
                         data-testid={`resource-type-select-${resource.id}`}
                         disabled={actionsDisabled}
                         value={resource.type}
@@ -183,7 +153,7 @@ export function ResourceCatalogPanel({
                       {resource.isActive ? (
                         <button
                           type="button"
-                          className="inline-flex h-8 w-full items-center justify-center rounded-md border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto"
+                          className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           data-testid={`resource-deactivate-${resource.id}`}
                           disabled={actionsDisabled}
                           onClick={() => {
@@ -197,7 +167,7 @@ export function ResourceCatalogPanel({
                       ) : (
                         <button
                           type="button"
-                          className="inline-flex h-8 w-full items-center justify-center rounded-md border border-emerald-200 bg-white px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto"
+                          className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-white px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           data-testid={`resource-activate-${resource.id}`}
                           disabled={actionsDisabled}
                           onClick={() => { void onSetResourceActive(resource, true); }}
