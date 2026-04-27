@@ -101,6 +101,50 @@ describe('pi ordinary agent tool adapter', () => {
     assert.equal(contexts[2]?.history, undefined);
   });
 
+  it('returns compact mutation details with changed task metadata but no snapshot', async () => {
+    const tools = buildPiAgentTools({
+      projectId: 'project-1',
+      runId: 'run-1',
+      historyGroupId: 'group-1',
+      requestContextId: 'request-1',
+      historyTitle: 'AI - compact',
+      createContext: (() => ({})) as any,
+      executeTool: (async () => ({
+        ok: true,
+        data: {
+          status: 'accepted',
+          changedTaskIds: ['task-1'],
+          changedTasks: [{
+            id: 'task-1',
+            name: 'Монтаж окон',
+            startDate: '2026-05-27',
+            endDate: '2026-05-27',
+            parentId: null,
+            dependencies: [],
+            color: '#000000',
+          }],
+          changedDependencyIds: ['dep-1'],
+          conflicts: [],
+          snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
+        },
+      })) as any,
+    });
+
+    const result = await tools.find((tool) => tool.name === 'create_tasks')!.execute('tool-1', {
+      tasks: [{ name: 'Монтаж окон', startDate: '2026-05-27', endDate: '2026-05-27' }],
+    }, undefined);
+
+    assert.deepEqual((result.details as any).changedTasks, [{
+      id: 'task-1',
+      name: 'Монтаж окон',
+      startDate: '2026-05-27',
+      endDate: '2026-05-27',
+      parentId: null,
+    }]);
+    assert.deepEqual((result.details as any).changedDependencyIds, ['dep-1']);
+    assert.equal('snapshot' in (result.details as any), false);
+  });
+
   it('builds the configured openai-completions model from current env values', () => {
     const model = buildPiOpenAICompletionsModel({
       OPENAI_API_KEY: 'secret',

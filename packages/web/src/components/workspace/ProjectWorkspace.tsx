@@ -31,7 +31,6 @@ import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
 import type { BaselineSnapshotResponse, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
 import {
-  assignedResourcesForTask,
   collectDescendantLeafIds,
   getAssignableResources,
   getInitialSelectedResourceIds,
@@ -461,14 +460,6 @@ export function ProjectWorkspace({
     () => getAssignableResources(resources, workspace.kind === 'project' ? workspace.projectId : null),
     [resources, workspace],
   );
-  const assignedTaskCount = useMemo(
-    () => new Set(assignments.map((assignment) => assignment.taskId)).size,
-    [assignments],
-  );
-  const assignedResourceCount = useMemo(
-    () => new Set(assignments.map((assignment) => assignment.resourceId)).size,
-    [assignments],
-  );
   const selectedAssignmentTask = useMemo(
     () => assignmentSelectionTaskId
       ? tasks.find((task) => task.id === assignmentSelectionTaskId) ?? null
@@ -881,25 +872,6 @@ export function ProjectWorkspace({
               <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="assignment-error-banner" role="alert">
                 {assignmentError}
               </div>
-            )}
-
-            {tasks.length > 0 && (
-              <details className="border-b border-slate-200 text-xs text-slate-600" data-testid="assignment-summary">
-                <summary className="cursor-pointer select-none px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">
-                  Назначенные ресурсы: {assignedTaskCount} задач, {assignedResourceCount} ресурсов
-                </summary>
-                <div className="px-3 pb-2">
-                  {tasks.map((task) => {
-                    const taskResources = assignedResourcesForTask(task.id, resources, assignments);
-                    const names = taskResources.map((resource) => resource.name).join(', ') || '—';
-                    return (
-                      <div key={task.id} data-task-id={task.id}>
-                        {task.name}: {names}
-                      </div>
-                    );
-                  })}
-                </div>
-              </details>
             )}
 
             {loading ? (

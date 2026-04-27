@@ -34,6 +34,7 @@ export type PiToolExecutionFact = {
   mutating: boolean;
   status: 'accepted' | 'rejected' | 'error' | 'ok';
   changedTaskIds: string[];
+  changedDependencyIds: string[];
   error?: string;
   durationMs?: number;
 };
@@ -103,12 +104,12 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- find_tasks: быстрый поиск задач по названию. Используй первым, когда пользователь называет задачу без ID.',
   '- get_task_context: одна задача, родители, дети, соседи, predecessor/successor связи.',
   '- get_schedule_slice: ветка, список задач или окно дат.',
-  '- create_tasks: создать одну задачу или небольшой фрагмент.',
+  '- create_tasks: создать одну задачу или небольшой фрагмент. Для контейнеров и обычных работ используй type "task"; type "project" запрещён.',
   '- update_tasks: изменить имя, цвет, прогресс; не использовать для дат и связей.',
   '- move_tasks: изменить родителя или порядок задач.',
   '- shift_tasks: сдвинуть даты на N календарных или рабочих дней.',
   '- delete_tasks: удалить задачи.',
-  '- link_tasks: создать predecessor-successor связь.',
+  '- link_tasks: создать predecessor-successor связь между существующими задачами; если тип не указан, используй FS.',
   '- unlink_tasks: удалить связь.',
   '- recalculate_project: пересчитать график, только когда пользователь просит пересчёт или это явно нужно после структурного изменения.',
   '- validate_schedule: проверить график, только когда пользователь просит проверку или диагностику.',
@@ -119,6 +120,10 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- Дату по умолчанию ставь в effectiveDateRange.endDate проекта; если endDate нет, используй сегодняшнюю дату.',
   '- Если пользователь сказал "туда же", "рядом", "после", "в блок", но объект неясен, используй короткую историю и find_tasks для ближайшего контекста.',
   '- Уточняй только когда неверный выбор может удалить, переместить, связать или массово изменить существующие задачи.',
+  '- Если пользователь просит добавить подробный/последовательный фрагмент работ, создавай реалистичные FS-зависимости между явно последовательными задачами.',
+  '- Для зависимостей внутри одного create_tasks вызова задай стабильные id новым задачам и указывай dependencies через эти id; не жди отдельного поиска.',
+  '- Если создаёшь задачу "после X", сначала найди X, затем создай новую задачу и свяжи X -> новая задача через link_tasks, если зависимость явно нужна.',
+  '- Если пользователь просит связать две существующие задачи, найди обе через find_tasks и вызови link_tasks; не заменяй это update_tasks или ручным редактированием dependencies.',
   '',
   'Процесс:',
   '1. Если запрос read-only, используй read tool или ответь из уже доступного контекста.',
@@ -135,6 +140,7 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- Не используй несколько инструментов там, где достаточно одного.',
   '- Не пересказывай внутренний план.',
   '- Если инструмент вернул rejected/error, не заявляй успех.',
+  '- Если один tool call был rejected, но следующий mutating tool call accepted, отвечай по успешному применённому изменению.',
   '- Если доступные инструменты не покрывают запрос, скажи это прямо.',
   '- Абсолютный перенос на дату сейчас не покрыт отдельным публичным инструментом; не имитируй его через ручной пересчёт.',
   '- Отвечай на языке пользователя.',
@@ -253,12 +259,30 @@ function removeVerboseMutationPayload(value: unknown): unknown {
       status: result.status,
       reason: result.reason,
       changedTaskIds: Array.isArray(result.changedTaskIds) ? result.changedTaskIds : [],
+      changedTasks: compactChangedTasks(result.changedTasks),
       changedDependencyIds: Array.isArray(result.changedDependencyIds) ? result.changedDependencyIds : [],
       conflicts: Array.isArray(result.conflicts) ? result.conflicts : [],
     };
   }
 
   return value;
+}
+
+function compactChangedTasks(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((task): task is Record<string, unknown> => Boolean(task) && typeof task === 'object')
+    .map((task) => ({
+      id: task.id,
+      name: task.name,
+      startDate: task.startDate,
+      endDate: task.endDate,
+      parentId: task.parentId ?? null,
+    }))
+    .filter((task) => typeof task.id === 'string' && typeof task.name === 'string');
 }
 
 function makeRejectedToolResult(reason: string, message: string) {
@@ -278,6 +302,17 @@ function extractChangedTaskIds(value: unknown): string[] {
   const changedTaskIds = (value as { changedTaskIds?: unknown }).changedTaskIds;
   return Array.isArray(changedTaskIds)
     ? changedTaskIds.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function extractChangedDependencyIds(value: unknown): string[] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const changedDependencyIds = (value as { changedDependencyIds?: unknown }).changedDependencyIds;
+  return Array.isArray(changedDependencyIds)
+    ? changedDependencyIds.filter((item): item is string => typeof item === 'string')
     : [];
 }
 
@@ -482,6 +517,7 @@ export async function runPiOrdinaryAgent(input: {
             mutating: MUTATING_TOOL_NAMES.has(event.toolName),
             status: 'ok',
             changedTaskIds: [],
+            changedDependencyIds: [],
           });
         }
         await input.logger?.debug('pi_tool_execution_start', {
@@ -501,6 +537,7 @@ export async function runPiOrdinaryAgent(input: {
         if (existing) {
           existing.status = event.isError ? 'error' : extractStatus(details);
           existing.changedTaskIds = extractChangedTaskIds(details);
+          existing.changedDependencyIds = extractChangedDependencyIds(details);
           existing.error = event.isError
             ? extractAssistantText({ role: 'assistant', content: (event.result as { content?: unknown })?.content })
             : (
@@ -551,7 +588,7 @@ export async function runPiOrdinaryAgent(input: {
   const acceptedMutatingToolCalls = facts.filter((fact) => fact.mutating && fact.status === 'accepted');
   const rejectedMutatingToolCalls = facts.filter((fact) => fact.mutating && (fact.status === 'rejected' || fact.status === 'error'));
 
-  if (rejectedMutatingToolCalls.length > 0) {
+  if (rejectedMutatingToolCalls.length > 0 && acceptedMutatingToolCalls.length === 0) {
     assistantResponse = buildRejectedMutationMessage(rejectedMutatingToolCalls);
     streamedContent = false;
   } else if (

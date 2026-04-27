@@ -84,6 +84,13 @@ describe('pi ordinary runtime integration surface', () => {
     assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /effectiveDateRange\.endDate/);
   });
 
+  it('locks prompt behavior for dependency creation without deterministic planning', () => {
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /type "project" запрещ/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /реалистичные FS-зависимости/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /стабильные id новым задачам/);
+    assert.match(GANTT_PI_AGENT_SYSTEM_PROMPT, /найди обе через find_tasks и вызови link_tasks/);
+  });
+
   it('detects mutating-looking requests only for failure fallback messaging', () => {
     assert.equal(looksLikeMutatingRequest('добавь сдачу технадзору'), true);
     assert.equal(looksLikeMutatingRequest('сдвинь штукатурку на 2 дня'), true);

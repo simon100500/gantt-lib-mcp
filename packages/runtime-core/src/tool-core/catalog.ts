@@ -70,7 +70,7 @@ export const NORMALIZED_TOOL_CATALOG = [
   },
   {
     name: 'create_tasks',
-    description: 'Create one or more tasks through the authoritative command pipeline.',
+    description: 'Create one or more tasks through the authoritative command pipeline. Use type "task" for containers and ordinary work; use "milestone" only for milestone items. When creating a sequential fragment, assign stable IDs to the new tasks and set FS dependencies to those IDs in the same call.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -211,7 +211,7 @@ export const NORMALIZED_TOOL_CATALOG = [
   },
   {
     name: 'link_tasks',
-    description: 'Create logical predecessor-successor links without exposing dependency-array rewrites.',
+    description: 'Create logical predecessor-successor links between existing tasks without exposing dependency-array rewrites. Default to FS when the user does not specify the dependency type.',
     inputSchema: {
       type: 'object',
       properties: {

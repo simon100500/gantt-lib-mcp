@@ -1213,7 +1213,7 @@ export async function runAgentWithHistory(
     });
 
     const messages = await messageService.list(projectId, 20);
-    const piHistoryGroupId = crypto.randomUUID();
+    const piHistoryGroupId = checkpointGroupId ?? crypto.randomUUID();
     const piResult = await runPiOrdinaryAgent({
       userMessage,
       projectId,
@@ -1259,7 +1259,7 @@ export async function runAgentWithHistory(
     if (assistantResponse) {
       await messageService.add('assistant', assistantResponse, projectId, {
         requestContextId: runId,
-        historyGroupId: checkpointGroupId,
+        historyGroupId: piHistoryGroupId,
       });
     }
     await writeServerDebugLog('agent_response_saved', {
@@ -1292,7 +1292,7 @@ export async function runAgentWithHistory(
       chatMessage: assistantResponse
         ? {
             requestContextId: runId,
-            historyGroupId: checkpointGroupId ?? null,
+            historyGroupId: piHistoryGroupId ?? null,
           }
         : undefined,
     });
