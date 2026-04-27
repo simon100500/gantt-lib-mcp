@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from 'react';
-import { Cuboid, Hammer, Package, Plus, Users, X } from 'lucide-react';
 
 import type { ResourceScope, ResourceType } from '../../types.ts';
+import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
 export interface CreateResourceModalProps {
   pending?: boolean;
@@ -10,11 +10,11 @@ export interface CreateResourceModalProps {
   onCancel: () => void;
 }
 
-const TYPE_OPTIONS: Array<{ value: ResourceType; label: string; icon: typeof Users }> = [
-  { value: 'human', label: 'Люди', icon: Users },
-  { value: 'equipment', label: 'Оборудование', icon: Hammer },
-  { value: 'material', label: 'Материалы', icon: Cuboid },
-  { value: 'other', label: 'Другое', icon: Package },
+const TYPE_OPTIONS: Array<{ value: ResourceType; label: string }> = [
+  { value: 'human', label: 'Люди' },
+  { value: 'equipment', label: 'Оборудование' },
+  { value: 'material', label: 'Материалы' },
+  { value: 'other', label: 'Другое' },
 ];
 
 const SCOPE_OPTIONS: Array<{ value: ResourceScope; label: string; description: string }> = [
@@ -85,7 +85,6 @@ export function CreateResourceModal({
             <legend className="text-[12px] font-bold uppercase text-[#44546f]">Тип</legend>
             <div className="flex flex-wrap gap-2">
               {TYPE_OPTIONS.map((option) => {
-                const Icon = option.icon;
                 const active = type === option.value;
                 return (
                   <button
@@ -97,7 +96,7 @@ export function CreateResourceModal({
                     disabled={pending}
                     onClick={() => setType(option.value)}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    <ResourceTypeIcon type={option.value} className="h-3.5 w-3.5" />
                     {option.label}
                   </button>
                 );

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Cuboid, Hammer, Package, Users, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import { cn } from '../../lib/utils.ts';
 import { getPlannerItemMetadata, type ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
+import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
 export interface AssignmentResourceView {
   assignmentId: string;
@@ -37,19 +38,6 @@ function getResourceTypeLabel(resource: ProjectResource): string {
   };
 
   return labels[resource.type];
-}
-
-function ResourceTypeIcon({ type, className }: { type: ProjectResource['type']; className?: string }) {
-  if (type === 'human') {
-    return <Users className={className} />;
-  }
-  if (type === 'equipment') {
-    return <Hammer className={className} />;
-  }
-  if (type === 'material') {
-    return <Cuboid className={className} />;
-  }
-  return <Package className={className} />;
 }
 
 export function ResourceAssignmentDetailsPanel({
@@ -196,7 +184,7 @@ export function ResourceAssignmentDetailsPanel({
                       disabled={readonly || !onAddResource}
                       onClick={() => onAddResource?.({ taskId: metadata.taskId, resourceId: candidate.id })}
                     >
-                      <ResourceTypeIcon type={candidate.type} className="h-4 w-4 shrink-0 text-[#0052cc]" />
+                      <ResourceTypeIcon type={candidate.type} className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 flex-1 break-words text-[13px] font-bold">{candidate.name}</span>
                     </button>
                   ))}

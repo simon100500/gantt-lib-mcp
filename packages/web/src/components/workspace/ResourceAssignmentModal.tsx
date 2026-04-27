@@ -4,6 +4,7 @@ import { Plus, X } from 'lucide-react';
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
 import type { TaskResourceAssignmentView } from './resourceAssignmentUtils.ts';
+import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
 export interface ResourceAssignmentModalProps {
   task: Task | null;
@@ -42,14 +43,24 @@ export function ResourceAssignmentModal({
   const taskName = task?.name?.trim() || 'Задача не выбрана';
   const availableResources = assignableResources.filter((resource) => !selectedIdSet.has(resource.id));
   const resourceLabelsById = new Map<string, string>();
+  const resourcesById = new Map<string, ProjectResource>();
 
   for (const { resource } of activeAssignedResources) {
     resourceLabelsById.set(resource.id, formatResourceLabel(resource));
+    resourcesById.set(resource.id, resource);
   }
 
   for (const resource of assignableResources) {
     resourceLabelsById.set(resource.id, formatResourceLabel(resource));
+    resourcesById.set(resource.id, resource);
   }
+
+  const resourceGroups = [
+    { type: 'human' as const, label: 'Люди', resources: availableResources.filter((resource) => resource.type === 'human') },
+    { type: 'equipment' as const, label: 'Оборудование', resources: availableResources.filter((resource) => resource.type === 'equipment') },
+    { type: 'material' as const, label: 'Материалы', resources: availableResources.filter((resource) => resource.type === 'material') },
+    { type: 'other' as const, label: 'Другое', resources: availableResources.filter((resource) => resource.type === 'other') },
+  ].filter((group) => group.resources.length > 0);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -80,15 +91,26 @@ export function ResourceAssignmentModal({
       role="dialog"
     >
       <form
-        className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+        className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#dfe1e6] bg-white text-[#172b4d] shadow-[0_24px_70px_rgba(9,30,66,0.22)]"
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={handleSubmit}
       >
-        <div className="border-b border-slate-200 px-5 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Назначение ресурсов</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900" data-testid="assignment-modal-task-name" id="resource-assignment-modal-title">
-            {taskName}
-          </h2>
+        <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase leading-none text-[#44546f]">Назначение ресурсов</p>
+            <h2 className="mt-1 break-words text-[15px] font-bold leading-snug text-[#172b4d]" data-testid="assignment-modal-task-name" id="resource-assignment-modal-title">
+              {taskName}
+            </h2>
+          </div>
+          <button
+            aria-label="Закрыть окно назначения ресурсов"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-[#6b778c] transition-colors hover:bg-[#f4f5f7] hover:text-[#172b4d] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={pending}
+            onClick={onCancel}
+            type="button"
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
           {!task && (
             <p className="mt-2 text-sm text-amber-700" data-testid="assignment-modal-empty-task">
               Выберите задачу, чтобы изменить назначения.
@@ -96,11 +118,11 @@ export function ResourceAssignmentModal({
           )}
         </div>
 
-        <div className="flex flex-col gap-4 overflow-y-auto px-5 py-4 text-sm text-slate-700">
+        <div className="flex flex-col gap-4 overflow-y-auto p-4 text-sm text-[#44546f]">
           {error && (
             <div
               aria-atomic="true"
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700"
               data-testid="assignment-modal-error"
               id="resource-assignment-modal-error"
               role="alert"
@@ -110,24 +132,26 @@ export function ResourceAssignmentModal({
           )}
 
           <section aria-labelledby="assignment-current-heading" className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-900" id="assignment-current-heading">
+            <h3 className="text-[11px] font-bold uppercase leading-none text-[#44546f]" id="assignment-current-heading">
               Текущие назначения
             </h3>
             {selectedIds.length > 0 ? (
               <div className="flex flex-wrap gap-2" data-testid="assignment-modal-selected-resources">
                 {selectedIds.map((resourceId) => {
                   const label = resourceLabelsById.get(resourceId) ?? resourceId;
+                  const resource = resourcesById.get(resourceId);
                   return (
                     <span
-                      className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md bg-violet-50 px-2.5 py-1 text-sm font-medium text-violet-800"
+                      className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-[#b3d4ff] bg-[#deebff] px-2 py-1 text-[12px] font-bold leading-none text-[#0747a6]"
                       data-testid={`assigned-selected-resource-${resourceId}`}
                       key={resourceId}
                       title={label}
                     >
+                      {resource && <ResourceTypeIcon type={resource.type} className="h-3.5 w-3.5 shrink-0" />}
                       <span className="min-w-0 truncate">{label}</span>
                       <button
                         aria-label={`Снять ресурс ${label}`}
-                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-violet-500 transition-colors hover:bg-violet-100 hover:text-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        className="ml-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] text-current opacity-70 hover:bg-white/70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
                         data-testid={`assignment-selected-resource-remove-${resourceId}`}
                         disabled={pending || !task}
                         onClick={() => removeSelectedResource(resourceId)}
@@ -140,7 +164,7 @@ export function ResourceAssignmentModal({
                 })}
               </div>
             ) : (
-              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-slate-500" data-testid="assignment-modal-no-selected-resources">
+              <p className="rounded-md border border-dashed border-[#dfe1e6] bg-[#f7f8fa] px-3 py-2 text-[12px] font-medium text-[#6b778c]" data-testid="assignment-modal-no-selected-resources">
                 Пока пусто.
               </p>
             )}
@@ -148,10 +172,10 @@ export function ResourceAssignmentModal({
 
           <fieldset className="space-y-2" disabled={pending || !task}>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-slate-900">Пул ресурсов</span>
+              <span className="text-[11px] font-bold uppercase leading-none text-[#44546f]">Добавить ресурс</span>
               {onCreateResource && (
                 <button
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="assignment-modal-create-resource"
                   disabled={pending || !task}
                   onClick={onCreateResource}
@@ -163,39 +187,49 @@ export function ResourceAssignmentModal({
               )}
             </div>
             {hasAssignableResources ? (
-              <div className="flex flex-wrap gap-2" data-testid="assignment-modal-resource-options">
-                {availableResources.length > 0 ? availableResources.map((resource) => {
-                  const label = formatResourceLabel(resource);
-                  return (
-                    <button
-                      className="inline-flex max-w-full items-center rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-testid={`assignment-resource-option-${resource.id}`}
-                      disabled={pending || !task}
-                      key={resource.id}
-                      onClick={() => onSelectionChange([...selectedIds, resource.id])}
-                      type="button"
-                    >
-                      <span className="min-w-0 truncate">{label}</span>
-                    </button>
-                  );
-                }) : (
-                  <p className="rounded-md bg-slate-50 px-3 py-2 text-slate-500" data-testid="assignment-modal-all-resources-selected">
+              <div className="max-h-72 overflow-auto rounded-md border border-[#dfe1e6] bg-white" data-testid="assignment-modal-resource-options">
+                {resourceGroups.length > 0 ? resourceGroups.map((group) => (
+                  <div key={group.type} className="border-b border-[#dfe1e6] last:border-b-0">
+                    <div className="flex items-center gap-1.5 bg-[#f7f8fa] px-3 py-1.5 text-[11px] font-bold text-[#44546f]">
+                      <span>{group.label}</span>
+                      <span className="ml-auto rounded-full bg-[#dfe1e6] px-1.5 py-0.5 text-[10px] text-[#42526e]">
+                        {group.resources.length}
+                      </span>
+                    </div>
+                    {group.resources.map((resource) => {
+                      const label = formatResourceLabel(resource);
+                      return (
+                        <button
+                          className="flex w-full min-w-0 items-center gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid={`assignment-resource-option-${resource.id}`}
+                          disabled={pending || !task}
+                          key={resource.id}
+                          onClick={() => onSelectionChange([...selectedIds, resource.id])}
+                          type="button"
+                        >
+                          <ResourceTypeIcon type={resource.type} className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 break-words text-[13px] font-bold">{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )) : (
+                  <p className="px-3 py-3 text-[12px] font-medium text-[#6b778c]" data-testid="assignment-modal-all-resources-selected">
                     Все доступные ресурсы назначены.
                   </p>
                 )}
               </div>
             ) : (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-800" data-testid="assignment-modal-no-assignable-resources">
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800" data-testid="assignment-modal-no-assignable-resources">
                 Нет активных ресурсов для назначения.
               </p>
             )}
           </fieldset>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#dfe1e6] bg-[#f7f8fa] px-4 py-3">
           <button
-            className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Закрыть окно назначения ресурсов"
+            className="inline-flex h-8 items-center justify-center rounded-md border border-[#dfe1e6] bg-white px-3 text-[12px] font-bold text-[#44546f] transition-colors hover:bg-[#f4f5f7] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={pending}
             onClick={onCancel}
             type="button"
@@ -203,7 +237,7 @@ export function ResourceAssignmentModal({
             Отмена
           </button>
           <button
-            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="assignment-modal-submit"
             aria-busy={pending}
             disabled={isSubmitDisabled}
