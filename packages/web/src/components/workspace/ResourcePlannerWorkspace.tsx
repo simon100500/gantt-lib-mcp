@@ -229,6 +229,27 @@ function countPlannerAssignments(data: ResourcePlannerResult | null): number {
   return data?.resources.reduce((total, resource) => total + resource.intervals.length, 0) ?? 0;
 }
 
+function patchPlannerResource(
+  data: ResourcePlannerResult,
+  resourceId: string,
+  updater: (resource: ResourcePlannerResult['resources'][number]) => ResourcePlannerResult['resources'][number],
+): ResourcePlannerResult {
+  return {
+    ...data,
+    resources: data.resources.map((resource) => (resource.resourceId === resourceId ? updater(resource) : resource)),
+  };
+}
+
+function removePlannerResource(
+  data: ResourcePlannerResult,
+  resourceId: string,
+): ResourcePlannerResult {
+  return {
+    ...data,
+    resources: data.resources.filter((resource) => resource.resourceId !== resourceId),
+  };
+}
+
 function refreshResourceConflictSummary(resource: ResourcePlannerResult['resources'][number]): ResourcePlannerResult['resources'][number] {
   const conflictCount = resource.intervals.filter((interval) => interval.hasConflict).length;
   return {
@@ -399,6 +420,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   const setResources = useProjectStore((store) => store.setResources);
   const setAssignments = useProjectStore((store) => store.setAssignments);
   const setConfirmed = useProjectStore((store) => store.setConfirmed);
+  const clearResourcePlannerCache = useProjectStore((store) => store.clearResourcePlannerCache);
   const { commitCommand } = useCommandCommit(accessToken);
   const [resourceListError, setResourceListError] = useState<string | null>(null);
   const [resourceMutationError, setResourceMutationError] = useState<string | null>(null);
@@ -521,6 +543,17 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     return project;
   }, [accessToken, setAssignments, setConfirmed, setResources]);
 
+  const syncPlannerResourceMutation = useCallback((resourceId: string, mutate: (data: ResourcePlannerResult) => ResourcePlannerResult) => {
+    setState((current) => {
+      if (current.status !== 'ready' || !current.data) {
+        return current;
+      }
+      const nextData = mutate(current.data);
+      setResourcePlannerCache(projectId, plannerScope, nextData);
+      return { status: 'ready', data: nextData, error: null };
+    });
+  }, [plannerScope, projectId, setResourcePlannerCache]);
+
   useEffect(() => {
     if (cachedPlannerData?.projectId === projectId && cachedPlannerData.scope === plannerScope) {
       setState({ status: 'ready', data: cachedPlannerData, error: null });
@@ -542,6 +575,42 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       setGlobalViewMode(projectState.viewMode);
     }
   }, [getProjectState, projectId, setGlobalViewMode]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let refreshInFlight = false;
+    const refreshFromServer = async () => {
+      if (refreshInFlight) {
+        return;
+      }
+      refreshInFlight = true;
+      try {
+        await reloadProjectSnapshot();
+        await loadPlanner(plannerScope, { keepData: true });
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+
+    const handleFocus = () => {
+      void refreshFromServer();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshFromServer();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [accessToken, loadPlanner, plannerScope, reloadProjectSnapshot]);
 
   const handleAddResource = useCallback(async (resource: ResourcePlannerTimelineResource) => {
     if (!accessToken || pendingCatalogResourceId) {
@@ -584,14 +653,18 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         throw new Error('Resource payload was malformed.');
       }
 
-      await loadResourceCatalog(created.projectId ?? projectId);
-      await loadPlanner(plannerScope, { keepData: true });
+      setResources([...resources, created].sort((left, right) => (
+        Number(right.isActive) - Number(left.isActive)
+        || left.name.localeCompare(right.name)
+        || left.createdAt.localeCompare(right.createdAt)
+      )));
+      clearResourcePlannerCache();
     } catch (error) {
       setResourceMutationError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
     } finally {
       setPendingCatalogResourceId(null);
     }
-  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
+  }, [accessToken, clearResourcePlannerCache, pendingCatalogResourceId, projectId, resources, setResources]);
 
   const patchCatalogResource = useCallback(async (resource: ProjectResource, payload: { name?: string; type?: ResourceType; scope?: 'shared' | 'project'; isActive?: boolean }) => {
     if (!accessToken || pendingCatalogResourceId) {
@@ -623,14 +696,23 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         throw new Error('Resource payload was malformed.');
       }
 
-      await loadResourceCatalog(updated.projectId ?? projectId);
-      await loadPlanner(plannerScope, { keepData: true });
+      setResources(resources
+        .map((entry) => (entry.id === updated.id ? updated : entry))
+        .sort((left, right) => (
+          Number(right.isActive) - Number(left.isActive)
+          || left.name.localeCompare(right.name)
+          || left.createdAt.localeCompare(right.createdAt)
+        )));
+      syncPlannerResourceMutation(updated.id, (data) => patchPlannerResource(data, updated.id, (plannerResource) => ({
+        ...plannerResource,
+        resourceName: updated.name,
+      })));
     } catch (error) {
       setResourceMutationError(error instanceof Error ? error.message : 'Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
     } finally {
       setPendingCatalogResourceId(null);
     }
-  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
+  }, [accessToken, pendingCatalogResourceId, resources, setResources, syncPlannerResourceMutation]);
 
   const handleSetResourceActive = useCallback(async (resource: ProjectResource, isActive: boolean) => {
     if (isActive === resource.isActive) {
@@ -663,9 +745,9 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         throw new Error(errorMessage);
       }
 
-      await loadResourceCatalog(resource.projectId ?? projectId);
-      await loadPlanner(plannerScope, { keepData: true });
-      await reloadProjectSnapshot();
+      setResources(resources.filter((entry) => entry.id !== resource.id));
+      setAssignments(assignments.filter((assignment) => assignment.resourceId !== resource.id));
+      syncPlannerResourceMutation(resource.id, (data) => removePlannerResource(data, resource.id));
       if (selectedItem?.resourceId === resource.id) {
         setSelectedItem(null);
       }
@@ -674,7 +756,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     } finally {
       setPendingCatalogResourceId(null);
     }
-  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId, reloadProjectSnapshot, selectedItem]);
+  }, [accessToken, assignments, pendingCatalogResourceId, resources, selectedItem, setAssignments, setResources, syncPlannerResourceMutation]);
 
   const handleCreateResource = useCallback(async (input: { name: string; type: ResourceType; scope: ResourceScope }) => {
     if (!accessToken || pendingCatalogResourceId) {
@@ -716,15 +798,19 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         throw new Error('Resource payload was malformed.');
       }
 
-      await loadResourceCatalog(created.projectId ?? projectId);
-      await loadPlanner(plannerScope, { keepData: true });
+      setResources([...resources, created].sort((left, right) => (
+        Number(right.isActive) - Number(left.isActive)
+        || left.name.localeCompare(right.name)
+        || left.createdAt.localeCompare(right.createdAt)
+      )));
+      clearResourcePlannerCache();
       setCreateModalOpen(false);
     } catch (error) {
       setResourceMutationError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
     } finally {
       setPendingCatalogResourceId(null);
     }
-  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
+  }, [accessToken, clearResourcePlannerCache, pendingCatalogResourceId, projectId, resources, setResources]);
 
   const handleResourceChange = useCallback(async (nextResource: ResourcePlannerTimelineResource) => {
     const resource = resources.find((candidate) => candidate.id === nextResource.id);
