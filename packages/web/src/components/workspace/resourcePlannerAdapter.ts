@@ -1,6 +1,6 @@
 import type { ResourceTimelineItem, ResourceTimelineResource } from 'gantt-lib';
 
-import type { ResourcePlannerInterval, ResourcePlannerResult } from '../../lib/apiTypes.ts';
+import type { ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType } from '../../lib/apiTypes.ts';
 
 export interface ResourcePlannerItemMetadata {
   projectId: string;
@@ -22,6 +22,70 @@ export interface ResourcePlannerTimelineItem extends ResourceTimelineItem {
 }
 
 export type ResourcePlannerTimelineResource = ResourceTimelineResource<ResourcePlannerTimelineItem>;
+
+const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
+  human: 'Люди',
+  equipment: 'Оборудование',
+  material: 'Материалы',
+  other: 'Другое',
+};
+
+const RESOURCE_SCOPE_LABELS: Record<ResourceScope, string> = {
+  shared: 'Shared',
+  project: 'Project',
+};
+
+export function mapApiResourceTypeToTimelineLabel(type: ResourceType): string {
+  return RESOURCE_TYPE_LABELS[type];
+}
+
+export function mapApiResourceScopeToTimelineLabel(scope: ResourceScope): string {
+  return RESOURCE_SCOPE_LABELS[scope];
+}
+
+export function mapTimelineResourceTypeToApiType(value: string | undefined): ResourceType {
+  const normalized = value?.trim().toLocaleLowerCase();
+  if (normalized === 'люди' || normalized === 'human') {
+    return 'human';
+  }
+  if (normalized === 'оборудование' || normalized === 'equipment') {
+    return 'equipment';
+  }
+  if (normalized === 'материалы' || normalized === 'material') {
+    return 'material';
+  }
+  return 'other';
+}
+
+export function mapTimelineResourceScopeToApiScope(value: string | undefined): ResourceScope {
+  return value?.trim().toLocaleLowerCase() === 'shared' ? 'shared' : 'project';
+}
+
+export function mapTimelineResourceStatusToActive(value: string | undefined): boolean {
+  return value?.trim().toLocaleLowerCase() !== 'inactive';
+}
+
+function enrichTimelineResource(
+  resource: ResourcePlannerTimelineResource,
+  catalogResource: ProjectResource | undefined,
+): ResourcePlannerTimelineResource {
+  if (!catalogResource) {
+    return {
+      ...resource,
+      type: resource.type ?? 'Другое',
+      scope: resource.scope ?? 'Project',
+      status: resource.status ?? 'Active',
+    };
+  }
+
+  return {
+    ...resource,
+    name: catalogResource.name,
+    type: mapApiResourceTypeToTimelineLabel(catalogResource.type),
+    scope: mapApiResourceScopeToTimelineLabel(catalogResource.scope),
+    status: catalogResource.isActive ? 'Active' : 'Inactive',
+  };
+}
 
 function mapIntervalToTimelineItem(interval: ResourcePlannerInterval): ResourcePlannerTimelineItem {
   return {
@@ -50,12 +114,35 @@ function mapIntervalToTimelineItem(interval: ResourcePlannerInterval): ResourceP
 
 export function mapResourcePlannerResultToTimelineResources(
   result: ResourcePlannerResult,
+  catalogResources: ProjectResource[] = [],
 ): ResourcePlannerTimelineResource[] {
-  return result.resources.map((resource) => ({
-    id: resource.resourceId,
-    name: resource.resourceName,
-    items: resource.intervals.map((interval) => mapIntervalToTimelineItem(interval)),
-  }));
+  const catalogById = new Map(catalogResources.map((resource) => [resource.id, resource]));
+  const plannerById = new Map(result.resources.map((resource) => [
+    resource.resourceId,
+    {
+      id: resource.resourceId,
+      name: resource.resourceName,
+      items: resource.intervals.map((interval) => mapIntervalToTimelineItem(interval)),
+    } satisfies ResourcePlannerTimelineResource,
+  ]));
+
+  const resources: ResourcePlannerTimelineResource[] = catalogResources.map((catalogResource) => {
+    const plannerResource = plannerById.get(catalogResource.id) ?? {
+      id: catalogResource.id,
+      name: catalogResource.name,
+      items: [],
+    };
+
+    return enrichTimelineResource(plannerResource, catalogResource);
+  });
+
+  for (const plannerResource of plannerById.values()) {
+    if (!catalogById.has(plannerResource.id)) {
+      resources.push(enrichTimelineResource(plannerResource, undefined));
+    }
+  }
+
+  return resources;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

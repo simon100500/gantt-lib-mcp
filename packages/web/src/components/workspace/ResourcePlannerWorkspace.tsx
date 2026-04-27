@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Package, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { Check, Funnel, LoaderCircle, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
-import type { ResourceTimelineMove } from 'gantt-lib';
+import type { ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
 import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { cn } from '../../lib/utils.ts';
-import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
-import { useUIStore, type PlannerCorrectionTarget, type ViewMode } from '../../stores/useUIStore.ts';
+import { useUIStore, type ViewMode } from '../../stores/useUIStore.ts';
 import { Button } from '../ui/button.tsx';
 import {
   DropdownMenu,
@@ -21,10 +20,12 @@ import {
 } from '../ui/dropdown-menu.tsx';
 import {
   getPlannerItemMetadata,
+  mapTimelineResourceScopeToApiScope,
+  mapTimelineResourceStatusToActive,
+  mapTimelineResourceTypeToApiType,
   mapResourcePlannerResultToTimelineResources,
 } from './resourcePlannerAdapter.ts';
-import type { ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
-import { ResourceCatalogPanel, type ResourceCatalogRowStats } from './ResourceCatalogPanel.tsx';
+import type { ResourcePlannerTimelineItem, ResourcePlannerTimelineResource } from './resourcePlannerAdapter.ts';
 import { ResourceAssignmentDetailsPanel } from './ResourceAssignmentDetailsPanel.tsx';
 import { filterResourceTimelineResources, type ResourcePlannerFilters } from './resourcePlannerFilters.ts';
 import { buildReplacementResourceIds, classifyResourcePlannerMove, type ResourcePlannerMoveClassification } from './resourcePlannerMoves.ts';
@@ -34,7 +35,7 @@ interface ResourcePlannerWorkspaceProps {
   projectId: string;
   ganttDayMode?: 'business' | 'calendar';
   onBackToProject: () => void;
-  onCorrectConflict: (target: PlannerCorrectionTarget) => void;
+  onCorrectConflict?: unknown;
 }
 
 type PlannerState =
@@ -61,10 +62,6 @@ const VIEW_MODE_OPTIONS: Array<{ mode: ViewMode; label: string }> = [
 
 function getPlannerDayWidth(viewMode: ViewMode): number {
   return viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24;
-}
-
-function isResourceType(value: string): value is ResourceType {
-  return value === 'human' || value === 'equipment' || value === 'material' || value === 'other';
 }
 
 function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null {
@@ -321,7 +318,7 @@ function applyPlannerAssignmentRecord(
   };
 }
 
-export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttDayMode = 'calendar', onBackToProject, onCorrectConflict }: ResourcePlannerWorkspaceProps) {
+export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttDayMode = 'calendar' }: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
   const setResourcePlannerCache = useProjectStore((store) => store.setResourcePlannerCache);
@@ -335,25 +332,17 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       ? { status: 'ready', data: cachedPlannerData, error: null }
       : { status: 'loading', data: null, error: null }
   ));
-  const projects = useAuthStore((store) => store.projects);
   const resources = useProjectStore((store) => store.resources);
   const setResources = useProjectStore((store) => store.setResources);
   const setAssignments = useProjectStore((store) => store.setAssignments);
   const setConfirmed = useProjectStore((store) => store.setConfirmed);
   const { commitCommand } = useCommandCommit(accessToken);
-  const [resourceNameDraft, setResourceNameDraft] = useState('');
-  const [resourceTargetDraft, setResourceTargetDraft] = useState('shared');
-  const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType>('human');
   const [resourceListError, setResourceListError] = useState<string | null>(null);
-  const [resourceCreateError, setResourceCreateError] = useState<string | null>(null);
   const [resourceMutationError, setResourceMutationError] = useState<string | null>(null);
   const [resourceListLoading, setResourceListLoading] = useState(false);
-  const [creatingResource, setCreatingResource] = useState(false);
   const [pendingCatalogResourceId, setPendingCatalogResourceId] = useState<string | null>(null);
   const [pendingMoveIds, setPendingMoveIds] = useState<Set<string>>(() => new Set());
   const [plannerSaveError, setPlannerSaveError] = useState<string | null>(null);
-  const [showCreateResourceModal, setShowCreateResourceModal] = useState(false);
-  const [showCatalogPanel, setShowCatalogPanel] = useState(false);
   const [filters, setFilters] = useState<ResourcePlannerFilters>({
     query: '',
     resourceTypes: [],
@@ -490,19 +479,18 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     }
   }, [getProjectState, projectId, setGlobalViewMode]);
 
-  const handleCreateResource = useCallback(async () => {
-    if (!accessToken || creatingResource) {
+  const handleAddResource = useCallback(async (resource: ResourcePlannerTimelineResource) => {
+    if (!accessToken || pendingCatalogResourceId) {
       return;
     }
 
-    const name = resourceNameDraft.trim();
+    const name = resource.name.trim();
     if (!name) {
-      setResourceCreateError('Введите название ресурса.');
+      setResourceMutationError('Введите название ресурса.');
       return;
     }
 
-    setCreatingResource(true);
-    setResourceCreateError(null);
+    setPendingCatalogResourceId(resource.id);
     setResourceMutationError(null);
 
     try {
@@ -512,9 +500,12 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(resourceTargetDraft === 'shared'
-          ? { name, type: resourceTypeDraft, scope: 'shared' }
-          : { name, type: resourceTypeDraft, scope: 'project', projectId: resourceTargetDraft }),
+        body: JSON.stringify({
+          name,
+          type: mapTimelineResourceTypeToApiType(resource.type),
+          scope: mapTimelineResourceScopeToApiScope(resource.scope),
+          projectId,
+        }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -529,18 +520,16 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         throw new Error('Resource payload was malformed.');
       }
 
-      setResourceNameDraft('');
-      setShowCreateResourceModal(false);
-      await loadResourceCatalog(resourceTargetDraft === 'shared' ? projectId : resourceTargetDraft);
+      await loadResourceCatalog(created.projectId ?? projectId);
       await loadPlanner(plannerScope, { keepData: true });
     } catch (error) {
-      setResourceCreateError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
+      setResourceMutationError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
     } finally {
-      setCreatingResource(false);
+      setPendingCatalogResourceId(null);
     }
-  }, [accessToken, creatingResource, loadPlanner, loadResourceCatalog, plannerScope, projectId, resourceNameDraft, resourceTargetDraft, resourceTypeDraft]);
+  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
 
-  const patchCatalogResource = useCallback(async (resource: ProjectResource, payload: { name?: string; type?: ResourceType; isActive?: boolean }) => {
+  const patchCatalogResource = useCallback(async (resource: ProjectResource, payload: { name?: string; type?: ResourceType; scope?: 'shared' | 'project'; isActive?: boolean }) => {
     if (!accessToken || pendingCatalogResourceId) {
       return;
     }
@@ -579,28 +568,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     }
   }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId]);
 
-  const handleRenameResource = useCallback(async (resource: ProjectResource, nameDraft: string) => {
-    const name = nameDraft.trim();
-    if (!name) {
-      setResourceMutationError('Введите название ресурса.');
-      return;
-    }
-
-    if (name === resource.name) {
-      return;
-    }
-
-    await patchCatalogResource(resource, { name });
-  }, [patchCatalogResource]);
-
-  const handleChangeResourceType = useCallback(async (resource: ProjectResource, type: ResourceType) => {
-    if (type === resource.type) {
-      return;
-    }
-
-    await patchCatalogResource(resource, { type });
-  }, [patchCatalogResource]);
-
   const handleSetResourceActive = useCallback(async (resource: ProjectResource, isActive: boolean) => {
     if (isActive === resource.isActive) {
       return;
@@ -608,6 +575,44 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
 
     await patchCatalogResource(resource, { isActive });
   }, [patchCatalogResource]);
+
+  const handleResourceChange = useCallback(async (nextResource: ResourcePlannerTimelineResource) => {
+    const resource = resources.find((candidate) => candidate.id === nextResource.id);
+    if (!resource) {
+      setResourceMutationError('Ресурс не найден в текущем пуле.');
+      return;
+    }
+
+    const name = nextResource.name.trim();
+    if (!name) {
+      setResourceMutationError('Введите название ресурса.');
+      return;
+    }
+
+    const nextType = mapTimelineResourceTypeToApiType(nextResource.type);
+    const nextScope = mapTimelineResourceScopeToApiScope(nextResource.scope);
+    const nextIsActive = mapTimelineResourceStatusToActive(nextResource.status);
+    const payload: { name?: string; type?: ResourceType; scope?: 'shared' | 'project'; isActive?: boolean } = {};
+
+    if (name !== resource.name) {
+      payload.name = name;
+    }
+    if (nextType !== resource.type) {
+      payload.type = nextType;
+    }
+    if (nextScope !== resource.scope) {
+      payload.scope = nextScope;
+    }
+    if (nextIsActive !== resource.isActive) {
+      payload.isActive = nextIsActive;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return;
+    }
+
+    await patchCatalogResource(resource, payload);
+  }, [patchCatalogResource, resources]);
 
   const getTaskResourceIds = useCallback(async (taskId: string): Promise<string[]> => {
     let currentAssignments = useProjectStore.getState().assignments;
@@ -786,21 +791,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     }
   }, [accessToken, commitCommand, loadPlanner, pendingMoveIds, persistResourceReplacement, plannerScope, projectId, setResourcePlannerCache, state.data]);
 
-  const handleDetailsDateChange = useCallback((input: { assignmentId: string; startDate: string; endDate: string }) => {
-    if (!selectedItem || input.assignmentId !== selectedItem.id) {
-      return;
-    }
-
-    void persistPlannerMove({
-      item: selectedItem,
-      itemId: selectedItem.id,
-      fromResourceId: selectedItem.resourceId,
-      toResourceId: selectedItem.resourceId,
-      startDate: new Date(`${input.startDate}T00:00:00.000Z`),
-      endDate: new Date(`${input.endDate}T00:00:00.000Z`),
-    });
-  }, [persistPlannerMove, selectedItem]);
-
   const handleDetailsResourceChange = useCallback((input: { assignmentId: string; resourceId: string }) => {
     if (!selectedItem || input.assignmentId !== selectedItem.id) {
       return;
@@ -869,8 +859,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
 
   const displayedPlannerData = state.data;
   const timelineResources = useMemo(
-    () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData) : [],
-    [displayedPlannerData],
+    () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData, resources) : [],
+    [displayedPlannerData, resources],
   );
   const filteredTimelineResources = useMemo(
     () => filterResourceTimelineResources(
@@ -885,22 +875,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
     [resources, selectedItem],
   );
-  const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
-  const catalogRowStats = useMemo(() => {
-    const stats = new Map<string, ResourceCatalogRowStats>();
-
-    for (const resource of timelineResources) {
-      stats.set(resource.id, {
-        assignmentCount: resource.items.length,
-        conflictCount: resource.items.filter((item) => getPlannerItemMetadata(item)?.hasConflict).length,
-      });
-    }
-
-    return stats;
-  }, [timelineResources]);
   const readonly = !accessToken;
-  const disableResourceReassignment = true;
-  const plannerResourceCount = displayedPlannerData?.resources.length ?? 0;
+  const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);
   const pendingMoveCount = pendingMoveIds.size;
   const viewMode = projectStates[projectId]?.viewMode ?? globalViewMode;
@@ -910,7 +886,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     || filters.conflictOnly
     || filters.includeInactive;
   const toolbarButtonClassName = 'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary';
-  const toolbarPrimaryButtonClassName = 'h-8 rounded-md border border-primary bg-primary px-2.5 text-[12px] font-medium text-primary-foreground hover:border-primary/90 hover:bg-primary/90 hover:text-primary-foreground';
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
     if (!metadata) {
@@ -924,44 +899,45 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       : `resource-planner-item resource-planner-item--normal${selectedClassName}${pendingClassName}`;
   }, [pendingMoveIds, selectedItem]);
   const handleSelectTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
-    setShowCatalogPanel(false);
     setSelectedItem(item);
-  }, []);
-  const handleOpenCreateResourceModal = useCallback(() => {
-    setSelectedItem(null);
-    setShowCreateResourceModal(true);
-    window.setTimeout(() => {
-      document.getElementById('resource-create-name')?.focus();
-    }, 0);
-  }, []);
-  const handleOpenCatalogPanel = useCallback(() => {
-    setSelectedItem(null);
-    setShowCatalogPanel(true);
   }, []);
   const handleViewModeChange = useCallback((nextViewMode: ViewMode) => {
     setGlobalViewMode(nextViewMode);
     setProjectState(projectId, { viewMode: nextViewMode });
   }, [projectId, setGlobalViewMode, setProjectState]);
-  const showSidePanel = Boolean(selectedItem || showCatalogPanel);
+  const resourceMenuCommands = useMemo<Array<ResourceTimelineResourceMenuCommand<ResourcePlannerTimelineItem>>>(() => [
+    {
+      id: 'deactivate',
+      label: 'Деактивировать',
+      isVisible: (resource) => mapTimelineResourceStatusToActive(resource.status),
+      isDisabled: (resource) => readonly || pendingCatalogResourceId === resource.id,
+      danger: true,
+      onSelect: (resource) => {
+        const catalogResource = resources.find((candidate) => candidate.id === resource.id);
+        if (catalogResource) {
+          void handleSetResourceActive(catalogResource, false);
+        }
+      },
+    },
+    {
+      id: 'activate',
+      label: 'Вернуть в пул',
+      isVisible: (resource) => !mapTimelineResourceStatusToActive(resource.status),
+      isDisabled: (resource) => readonly || pendingCatalogResourceId === resource.id,
+      onSelect: (resource) => {
+        const catalogResource = resources.find((candidate) => candidate.id === resource.id);
+        if (catalogResource) {
+          void handleSetResourceActive(catalogResource, true);
+        }
+      },
+    },
+  ], [handleSetResourceActive, pendingCatalogResourceId, readonly, resources]);
+  const showSidePanel = Boolean(selectedItem);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className={toolbarPrimaryButtonClassName}
-              onClick={handleOpenCreateResourceModal}
-            >
-              <Plus className="h-4 w-4" />
-              <span>Создать</span>
-            </Button>
-
-          </div>
-
           <div className="ml-auto flex items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1099,21 +1075,6 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               type="button"
               variant="outline"
               size="sm"
-              className={cn(toolbarButtonClassName, showCatalogPanel && !selectedItem && 'border-primary bg-primary/5 text-primary')}
-              data-testid="planner-open-catalog"
-              onClick={() => {
-                setSelectedItem(null);
-                setShowCatalogPanel((current) => !current);
-              }}
-            >
-              <Package className="h-4 w-4" />
-              <span>Ресурсы</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
               className={toolbarButtonClassName}
               onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
             >
@@ -1165,6 +1126,16 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               </div>
             )}
 
+            {(resourceListError || resourceMutationError) && (
+              <div
+                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                data-testid="resource-mutation-error"
+                role="alert"
+              >
+                {resourceMutationError ?? resourceListError}
+              </div>
+            )}
+
             {plannerSaveError && (
               <div
                 className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
@@ -1187,13 +1158,18 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                     resources={filteredTimelineResources}
                     dayWidth={plannerDayWidth}
                     laneHeight={42}
-                    rowHeaderWidth={220}
+                    rowHeaderWidth={420}
                     headerHeight={40}
                     viewMode={viewMode}
                     allowVerticalPan
                     businessDays={ganttDayMode !== 'calendar'}
                     readonly={readonly}
-                    disableResourceReassignment={disableResourceReassignment}
+                    disableResourceReassignment={false}
+                    resourceGrouping="type"
+                    onResourceChange={readonly ? undefined : handleResourceChange}
+                    onAddResource={readonly ? undefined : handleAddResource}
+                    enableAddResource={!readonly}
+                    resourceMenuCommands={resourceMenuCommands}
                     getItemClassName={getTimelineItemClassName}
                     onResourceItemClick={handleSelectTimelineItem}
                     onResourceItemMove={readonly ? undefined : persistPlannerMove}
@@ -1230,6 +1206,13 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                   </span>
                 )}
 
+                {!readonly && (resourceListLoading || pendingCatalogResourceId) && (
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
+                    <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
+                    Ресурсы...
+                  </span>
+                )}
+
                 {!readonly && plannerSaveError && (
                   <span className="flex items-center gap-1.5 font-mono text-[11px] text-red-600">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
@@ -1257,176 +1240,19 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         </div>
 
         <div className={cn('w-full max-w-[420px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]', !showSidePanel && 'hidden')}>
-          {selectedItem ? (
+          {selectedItem && (
             <ResourceAssignmentDetailsPanel
               item={selectedItem}
               resource={selectedResource}
               resources={resources}
               readonly={readonly}
               onClose={() => setSelectedItem(null)}
-              onCorrectConflict={onCorrectConflict}
-              onDateChange={handleDetailsDateChange}
               onResourceChange={handleDetailsResourceChange}
               onRemoveResource={handleRemoveResource}
             />
-          ) : (
-            <div className={cn('h-full overflow-auto p-4', !showCatalogPanel && 'hidden')}>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">Пул ресурсов</div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-slate-600"
-                  onClick={() => setShowCatalogPanel(false)}
-                >
-                  Закрыть
-                </Button>
-              </div>
-
-              <ResourceCatalogPanel
-                resources={resources}
-                readonly={readonly}
-                loading={resourceListLoading}
-                error={resourceListError}
-                mutationError={resourceMutationError}
-                pendingResourceId={pendingCatalogResourceId}
-                rowStats={catalogRowStats}
-                onRenameResource={handleRenameResource}
-                onChangeResourceType={handleChangeResourceType}
-                onSetResourceActive={handleSetResourceActive}
-              />
-            </div>
           )}
         </div>
       </div>
-
-      {showCreateResourceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
-          <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
-            <form
-              data-testid="resource-create-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleCreateResource();
-              }}
-            >
-              <div className="border-b border-slate-200 px-5 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-base font-semibold text-slate-900">Создать ресурс</div>
-                    <div className="mt-1 text-sm text-slate-500">Добавьте человека, технику, материал или другой ресурс в пул.</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                    disabled={creatingResource}
-                    onClick={() => setShowCreateResourceModal(false)}
-                  >
-                    Закрыть
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-4 px-5 py-4">
-                {readonly && (
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600" data-testid="resource-catalog-readonly">
-                    Войдите, чтобы изменять ресурсы. Сейчас календарь открыт только для просмотра.
-                  </div>
-                )}
-
-                <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
-                  Название
-                  <input
-                    id="resource-create-name"
-                    className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none transition-colors focus:border-primary disabled:bg-slate-100 disabled:text-slate-500"
-                    data-testid="resource-create-name-input"
-                    disabled={readonly || creatingResource}
-                    placeholder="Например: Бригада 1"
-                    value={resourceNameDraft}
-                    onChange={(event) => {
-                      setResourceNameDraft(event.target.value);
-                      setResourceCreateError(null);
-                    }}
-                  />
-                </label>
-
-                <div className="grid gap-4">
-                  <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
-                    Где создать
-                    <select
-                      className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none transition-colors focus:border-primary disabled:bg-slate-100 disabled:text-slate-500"
-                      data-testid="resource-create-target-select"
-                      disabled={readonly || creatingResource}
-                      value={resourceTargetDraft}
-                      onChange={(event) => {
-                        setResourceTargetDraft(event.target.value);
-                        setResourceCreateError(null);
-                      }}
-                    >
-                      <option value="shared">Shared workspace</option>
-                      {activeProjects.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          Проект: {project.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
-                    Тип
-                    <select
-                      className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none transition-colors focus:border-primary disabled:bg-slate-100 disabled:text-slate-500"
-                      data-testid="resource-create-type-select"
-                      disabled={readonly || creatingResource}
-                      value={resourceTypeDraft}
-                      onChange={(event) => {
-                        if (isResourceType(event.target.value)) {
-                          setResourceTypeDraft(event.target.value);
-                          setResourceCreateError(null);
-                        }
-                      }}
-                    >
-                      {RESOURCE_TYPE_OPTIONS.map((option) => (
-                        <option key={option.type} value={option.type}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                {resourceCreateError && (
-                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="resource-create-error" role="alert">
-                    {resourceCreateError}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                  disabled={creatingResource}
-                  onClick={() => setShowCreateResourceModal(false)}
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-white"
-                  data-testid="resource-create-submit"
-                  disabled={readonly || creatingResource || resourceNameDraft.trim().length === 0}
-                >
-                  {creatingResource ? 'Создание...' : 'Создать'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
