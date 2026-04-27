@@ -221,6 +221,44 @@ describe('tool-core handlers', () => {
     assert.deepEqual(result.data.changedTasks.map((task) => task.id), ['shift-1']);
   });
 
+  it('shift_tasks derives working-day shifts from project schedule options', async () => {
+    let committedCommand: ProjectCommand | undefined;
+    const isWeekend = (date: Date) => date.getUTCDay() === 0 || date.getUTCDay() === 6;
+
+    const result = await executeToolCall(
+      'shift_tasks',
+      {
+        projectId: 'project-1',
+        shifts: [{ taskId: 'shift-1', delta: 10 }],
+      },
+      createContext({
+        getTask: async () => createTask('shift-1', 'Release', '2026-07-24', '2026-07-30'),
+        getProjectScheduleOptions: async () => ({
+          businessDays: true,
+          weekendPredicate: isWeekend,
+        }),
+        commitCommand: async (_projectId: string, command: ProjectCommand) => {
+          committedCommand = command;
+          return {
+            baseVersion: 11,
+            response: acceptedResponse(12, createSnapshot([createTask('shift-1', 'Release', '2026-08-07', '2026-08-13')]), {
+              changedTaskIds: ['shift-1'],
+              changedDependencyIds: [],
+              conflicts: [],
+            }),
+          };
+        },
+      }),
+    );
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(committedCommand, {
+      type: 'move_task',
+      taskId: 'shift-1',
+      startDate: '2026-08-07',
+    });
+  });
+
   it('validate_schedule returns plain typed validation data', async () => {
     const invalidTask: Task = {
       ...createTask('broken', 'Broken', '2026-04-03', '2026-04-05'),

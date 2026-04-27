@@ -480,8 +480,7 @@ export function createToolHandlers(context: ToolCallContext): ToolHandlerMap {
         }
         const options = await context.getProjectScheduleOptions(projectId);
         const startDate = parseDateOnly(task.startDate);
-        const mode = shift.mode ?? (options.businessDays ? 'working' : 'calendar');
-        const nextStart = mode === 'working' && options.weekendPredicate
+        const nextStart = options.businessDays && options.weekendPredicate
           ? shiftBusinessDayOffset(startDate, shift.delta, options.weekendPredicate)
           : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + shift.delta));
         const { baseVersion, response } = await context.commitCommand(projectId, {

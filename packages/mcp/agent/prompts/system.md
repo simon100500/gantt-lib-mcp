@@ -44,7 +44,7 @@ Mutation tools:
    - Use `update_tasks` only for metadata and non-scheduling fields such as name, color, and progress.
    - Use `move_tasks` for structural placement under a parent, to root, or to a sibling position.
    - Use `link_tasks` and `unlink_tasks` for logical dependency changes.
-   - Use `shift_tasks` for relative date changes like “move by 2 working days”.
+   - Use `shift_tasks` for relative date changes. The server applies the project day mode and selected calendar; do not choose a calendar/working mode yourself.
    - Use `delete_tasks` for authoritative deletion.
    - Use `recalculate_project` when a full recomputation is explicitly needed.
    - Use `validate_schedule` when the user asks to check schedule integrity or when a result looks suspicious.

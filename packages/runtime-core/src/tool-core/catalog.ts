@@ -167,7 +167,7 @@ export const NORMALIZED_TOOL_CATALOG = [
   },
   {
     name: 'shift_tasks',
-    description: 'Shift task dates by relative calendar or working-day deltas.',
+    description: 'Shift task dates by relative deltas using the project day mode and selected calendar.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -180,7 +180,6 @@ export const NORMALIZED_TOOL_CATALOG = [
             properties: {
               taskId: { type: 'string' },
               delta: { type: 'number' },
-              mode: { type: 'string', enum: ['calendar', 'working'] },
             },
             required: ['taskId', 'delta'],
           },

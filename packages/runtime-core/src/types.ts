@@ -389,7 +389,6 @@ export interface ShiftTasksInput {
   shifts: Array<{
     taskId: string;
     delta: number;
-    mode?: 'calendar' | 'working';
   }>;
   includeSnapshot?: boolean;
 }

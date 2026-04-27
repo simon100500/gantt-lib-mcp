@@ -36,4 +36,14 @@ describe('tool-core catalog', () => {
     assert.equal(typeof context, 'object');
     assert.deepEqual(result, { ok: true, data: { status: 'ok' } });
   });
+
+  it('does not expose day mode selection on shift_tasks', () => {
+    const shiftTasks = NORMALIZED_TOOL_CATALOG.find((tool) => tool.name === 'shift_tasks');
+    assert.ok(shiftTasks);
+    const shifts = shiftTasks.inputSchema.properties.shifts as {
+      items: { properties: Record<string, unknown> };
+    };
+
+    assert.deepEqual(Object.keys(shifts.items.properties).sort(), ['delta', 'taskId']);
+  });
 });
