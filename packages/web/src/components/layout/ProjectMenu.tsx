@@ -486,17 +486,17 @@ export function ProjectMenu({
               <div className="hidden min-w-0 flex-1 items-center gap-2 px-4 lg:flex lg:px-6">
                 {!hasShareToken && auth.isAuthenticated && (
                   <div
-                    className="inline-flex shrink-0 items-center rounded-lg border border-slate-200 bg-slate-100 p-1"
+                    className="inline-flex shrink-0 items-center gap-1"
                     data-testid="topbar-workspace-mode-switch"
                   >
                     <button
                       type="button"
                       onClick={() => { void onOpenChartMode?.(); }}
                       className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         workspace.kind === 'planner'
-                          ? 'text-slate-500 hover:text-slate-700'
-                          : 'bg-white text-slate-900 shadow-sm',
+                          ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                          : 'bg-primary/10 text-primary hover:bg-primary/15',
                       )}
                       data-testid="topbar-mode-chart"
                     >
@@ -507,10 +507,10 @@ export function ProjectMenu({
                       type="button"
                       onClick={() => { void onOpenResourcePool?.(); }}
                       className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         workspace.kind === 'planner'
-                          ? 'bg-white text-slate-900 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700',
+                          ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
                       )}
                       data-testid="topbar-mode-resources"
                     >
