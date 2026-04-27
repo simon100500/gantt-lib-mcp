@@ -493,10 +493,10 @@ export function ProjectMenu({
                       type="button"
                       onClick={() => { void onOpenChartMode?.(); }}
                       className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-l-md rounded-r-none px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        'inline-flex h-7 items-center gap-1.5 rounded-l-md rounded-r-none border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         workspace.kind === 'planner'
-                          ? 'bg-violet-100/80 text-violet-700 hover:bg-violet-100'
-                          : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                          ? 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary'
+                          : 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10',
                       )}
                       data-testid="topbar-mode-chart"
                     >
@@ -507,10 +507,10 @@ export function ProjectMenu({
                       type="button"
                       onClick={() => { void onOpenResourcePool?.(); }}
                       className={cn(
-                        '-ml-px inline-flex h-7 items-center gap-1.5 rounded-l-none rounded-r-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        '-ml-px inline-flex h-7 items-center gap-1.5 rounded-l-none rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         workspace.kind === 'planner'
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                          : 'bg-violet-100/80 text-violet-700 hover:bg-violet-100',
+                          ? 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary',
                       )}
                       data-testid="topbar-mode-resources"
                     >
