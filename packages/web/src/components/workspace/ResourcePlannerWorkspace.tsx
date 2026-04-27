@@ -410,7 +410,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     query: '',
     resourceTypes: [],
     conflictOnly: false,
-    includeInactive: false,
+    includeInactive: true,
   });
   const [selectedItem, setSelectedItem] = useState<ResourcePlannerTimelineItem | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -639,6 +639,42 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
 
     await patchCatalogResource(resource, { isActive });
   }, [patchCatalogResource]);
+
+  const handleDeleteResource = useCallback(async (resource: ProjectResource) => {
+    if (!accessToken || pendingCatalogResourceId) {
+      return;
+    }
+
+    setPendingCatalogResourceId(resource.id);
+    setResourceMutationError(null);
+
+    try {
+      const response = await fetch(`/api/resources/${encodeURIComponent(resource.id)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      await loadResourceCatalog(resource.projectId ?? projectId);
+      await loadPlanner(plannerScope, { keepData: true });
+      await reloadProjectSnapshot();
+      if (selectedItem?.resourceId === resource.id) {
+        setSelectedItem(null);
+      }
+    } catch (error) {
+      setResourceMutationError(error instanceof Error ? error.message : 'Не удалось удалить ресурс.');
+    } finally {
+      setPendingCatalogResourceId(null);
+    }
+  }, [accessToken, loadPlanner, loadResourceCatalog, pendingCatalogResourceId, plannerScope, projectId, reloadProjectSnapshot, selectedItem]);
 
   const handleCreateResource = useCallback(async (input: { name: string; type: ResourceType; scope: ResourceScope }) => {
     if (!accessToken || pendingCatalogResourceId) {
@@ -1081,7 +1117,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   const hasActiveFilters = filters.query.trim().length > 0
     || filters.resourceTypes.length > 0
     || filters.conflictOnly
-    || filters.includeInactive;
+    || !filters.includeInactive;
   const toolbarButtonClassName = 'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary';
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
@@ -1128,7 +1164,22 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         }
       },
     },
-  ], [handleSetResourceActive, pendingCatalogResourceId, readonly, resources]);
+    {
+      id: 'delete',
+      label: 'Удалить',
+      danger: true,
+      isDisabled: (resource) => readonly || pendingCatalogResourceId === resource.id,
+      onSelect: (resource) => {
+        const catalogResource = resources.find((candidate) => candidate.id === resource.id);
+        if (!catalogResource) {
+          return;
+        }
+        if (window.confirm(`Удалить ресурс "${catalogResource.name}"? Назначения с ним тоже будут удалены.`)) {
+          void handleDeleteResource(catalogResource);
+        }
+      },
+    },
+  ], [handleDeleteResource, handleSetResourceActive, pendingCatalogResourceId, readonly, resources]);
   const showSidePanel = Boolean(selectedItem);
 
   return (
@@ -1164,7 +1215,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                   <span>Фильтр</span>
                   {hasActiveFilters ? (
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                      {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(filters.includeInactive)}
+                      {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(!filters.includeInactive)}
                     </span>
                   ) : null}
                 </Button>
@@ -1251,7 +1302,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                       query: '',
                       resourceTypes: [],
                       conflictOnly: false,
-                      includeInactive: false,
+                      includeInactive: true,
                     })}
                   >
                     Сбросить фильтр

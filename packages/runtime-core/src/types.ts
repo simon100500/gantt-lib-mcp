@@ -111,6 +111,15 @@ export interface ListProjectResourcesInput {
   includeInactive?: boolean;
 }
 
+export interface DeleteProjectResourceInput {
+  projectId: string;
+  resourceId: string;
+}
+
+export interface DeleteProjectResourceResponse {
+  id: string;
+}
+
 export interface ReplaceTaskAssignmentsInput {
   projectId: string;
   taskId: string;

@@ -23,6 +23,7 @@ interface ResourceCatalogPanelProps {
   onRenameResource: (resource: ProjectResource, name: string) => void | Promise<void>;
   onChangeResourceType: (resource: ProjectResource, type: ResourceType) => void | Promise<void>;
   onSetResourceActive: (resource: ProjectResource, isActive: boolean) => void | Promise<void>;
+  onDeleteResource: (resource: ProjectResource) => void | Promise<void>;
 }
 
 const RESOURCE_TYPE_OPTIONS: Array<{ type: ResourceType; label: string }> = [
@@ -56,6 +57,7 @@ export function ResourceCatalogPanel({
   onRenameResource,
   onChangeResourceType,
   onSetResourceActive,
+  onDeleteResource,
 }: ResourceCatalogPanelProps) {
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
 
@@ -175,6 +177,19 @@ export function ResourceCatalogPanel({
                           Активировать
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        data-testid={`resource-delete-${resource.id}`}
+                        disabled={actionsDisabled}
+                        onClick={() => {
+                          if (window.confirm(`Удалить ресурс "${resource.name}"? Назначения с ним тоже будут удалены.`)) {
+                            void onDeleteResource(resource);
+                          }
+                        }}
+                      >
+                        Удалить
+                      </button>
                     </div>
                   </div>
                 );

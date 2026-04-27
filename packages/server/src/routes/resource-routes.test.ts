@@ -18,6 +18,7 @@ describe('resource routes', () => {
     assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/resources', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.patch\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
+    assert.match(resourceRoutesSource, /fastify\.delete\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments\/materialize', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
   });

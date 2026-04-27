@@ -1060,6 +1060,164 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(root);
   });
 
+  it('shows inactive resources in planner by default when they are loaded from the catalog', async () => {
+    const catalogResources = [
+      {
+        id: 'resource-active',
+        userId: 'user-1',
+        projectId: null,
+        scope: 'shared' as const,
+        name: 'Active Crew',
+        type: 'human' as const,
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: null,
+      },
+      {
+        id: 'resource-inactive',
+        userId: 'user-1',
+        projectId: null,
+        scope: 'shared' as const,
+        name: 'Dormant Crew',
+        type: 'human' as const,
+        isActive: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: '2026-04-02T00:00:00.000Z',
+      },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'current-project',
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-active',
+                resourceName: 'Active Crew',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [],
+              },
+              {
+                resourceId: 'resource-inactive',
+                resourceName: 'Dormant Crew',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources')) {
+        return { ok: true, json: async () => ({ resources: catalogResources }) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    const props = ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as {
+      resources: Array<{ id: string; name: string; status?: string }>;
+    };
+
+    expect(props.resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'resource-active', name: 'Active Crew', status: 'Active' }),
+      expect.objectContaining({ id: 'resource-inactive', name: 'Dormant Crew', status: 'Inactive' }),
+    ]));
+
+    await unmountApp(root);
+  });
+
+  it('deletes a resource through the row menu command with confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'current-project',
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-1',
+                resourceName: 'Crew',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources?projectId=')) {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      if (url === '/api/resources/resource-1' && init?.method === 'DELETE') {
+        return { ok: true, json: async () => ({ id: 'resource-1' }) } as Response;
+      }
+      if (url === '/api/project') {
+        return {
+          ok: true,
+          json: async () => ({
+            version: 2,
+            project: { id: 'project-1', name: 'Demo', status: 'active', ganttDayMode: 'calendar', calendarId: null, calendarDays: [], taskCount: 0, archivedAt: null, deletedAt: null },
+            snapshot: { tasks: [], dependencies: [], resources: [], assignments: [] },
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({ resources: [{ id: 'resource-1', userId: 'user-1', projectId: null, scope: 'shared', name: 'Crew', type: 'human', isActive: true, createdAt: '2026-04-01T00:00:00.000Z', updatedAt: '2026-04-01T00:00:00.000Z', deactivatedAt: null }] }) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    const props = ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as {
+      resources: Array<{ id: string; name: string }>;
+      resourceMenuCommands?: Array<{
+        id: string;
+        onSelect: (resource: { id: string; name: string }) => void;
+      }>;
+    };
+    const deleteCommand = props.resourceMenuCommands?.find((command) => command.id === 'delete');
+    expect(deleteCommand).toBeDefined();
+
+    await act(async () => {
+      deleteCommand?.onSelect({ id: 'resource-1', name: 'Crew' });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Удалить ресурс "Crew"? Назначения с ним тоже будут удалены.');
+    expect(fetchMock).toHaveBeenCalledWith('/api/resources/resource-1', expect.objectContaining({
+      method: 'DELETE',
+    }));
+
+    await unmountApp(root);
+  });
+
   it('shows catalog resource type, scope, status, assignment count, conflict count, and blocks readonly creation', async () => {
     const catalogResources = [
       {

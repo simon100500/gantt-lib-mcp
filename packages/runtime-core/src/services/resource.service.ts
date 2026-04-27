@@ -3,6 +3,8 @@ import { getPrisma } from '../prisma.js';
 import type { PrismaClient, ResourceType as PrismaResourceType } from '../prisma.js';
 import type {
   CreateProjectResourceInput,
+  DeleteProjectResourceInput,
+  DeleteProjectResourceResponse,
   ListProjectResourcesInput,
   ProjectResource,
   ResourceAssignmentValidationIssue,
@@ -84,6 +86,9 @@ type ResourcePrismaClient = {
         projectId?: string | null;
         deactivatedAt?: Date | null;
       };
+    }): Promise<ResourceRow>;
+    delete(args: {
+      where: { id: string };
     }): Promise<ResourceRow>;
   };
 };
@@ -290,6 +295,34 @@ export class ResourceService {
 
   async deactivate(projectId: string, resourceId: string): Promise<ProjectResource> {
     return this.update({ projectId, resourceId, isActive: false });
+  }
+
+  async delete(input: DeleteProjectResourceInput): Promise<DeleteProjectResourceResponse> {
+    const projectId = requireTrimmed(input.projectId, 'projectId');
+    const resourceId = requireTrimmed(input.resourceId, 'resourceId');
+    const project = await this.getWorkspaceBoundaryProject(projectId);
+
+    const existing = await this.prisma.resource.findFirst({
+      where: {
+        id: resourceId,
+        userId: project.userId,
+        OR: [{ projectId: null }, { projectId: project.id }],
+      },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      throw new ResourceValidationError(`Resource ${resourceId} was not found for project ${projectId}`, {
+        code: 'resource_not_found',
+        field: 'resourceId',
+      });
+    }
+
+    const deleted = await this.prisma.resource.delete({
+      where: { id: existing.id },
+    });
+
+    return { id: deleted.id };
   }
 }
 

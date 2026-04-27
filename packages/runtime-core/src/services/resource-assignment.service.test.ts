@@ -146,6 +146,14 @@ class FakeRuntimeCorePrisma {
       this.resources.set(updated.id, updated);
       return { ...updated };
     },
+    delete: async ({ where }: { where: { id: string } }) => {
+      const existing = this.resources.get(where.id);
+      if (!existing) {
+        throw new Error(`Missing resource ${where.id}`);
+      }
+      this.resources.delete(where.id);
+      return { ...existing };
+    },
   };
 
   readonly taskAssignment = {
@@ -262,6 +270,27 @@ describe('resource and assignment service contracts', () => {
     const allResources = await resourceService.list({ projectId: 'project-1', includeInactive: true });
     assert.equal(allResources.resources.length, 1);
     assert.equal(allResources.resources[0]?.isActive, false);
+  });
+
+  it('deletes a resource inside the current workspace boundary', async () => {
+    const { resourceService } = createFixture();
+
+    const created = await resourceService.create({
+      projectId: 'project-1',
+      name: 'Delete crew',
+      type: 'human',
+      scope: 'project',
+    } satisfies CreateProjectResourceInput);
+
+    const deleted = await resourceService.delete({
+      projectId: 'project-1',
+      resourceId: created.id,
+    });
+
+    assert.equal(deleted.id, created.id);
+
+    const listed = await resourceService.list({ projectId: 'project-1', includeInactive: true });
+    assert.equal(listed.resources.some((resource) => resource.id === created.id), false);
   });
 
   it('lists shared resources across same-workspace projects while hiding foreign local resources', async () => {

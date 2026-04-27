@@ -223,6 +223,35 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
+  fastify.delete('/api/resources/:resourceId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const params = req.params as { resourceId?: string };
+    if (!params.resourceId?.trim()) {
+      return reply.status(400).send({
+        reason: 'validation_error',
+        error: 'resourceId required',
+      });
+    }
+
+    try {
+      const response = await resourceService.delete({
+        projectId: req.user!.projectId,
+        resourceId: params.resourceId,
+      });
+
+      return reply.send(response);
+    } catch (error) {
+      if (isResourceValidationError(error)) {
+        return reply.status(400).send({
+          reason: 'validation_error',
+          error: error.message,
+          issue: error.issue,
+        });
+      }
+
+      throw error;
+    }
+  });
+
   fastify.post('/api/tasks/:taskId/assignments', { preHandler: [authMiddleware] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     if (!params.taskId?.trim()) {
