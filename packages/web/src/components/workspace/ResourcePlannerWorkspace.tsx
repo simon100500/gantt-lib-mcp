@@ -318,6 +318,67 @@ function applyPlannerAssignmentRecord(
   };
 }
 
+function applyPlannerAssignmentAdded(
+  data: ResourcePlannerResult,
+  selectedItem: ResourcePlannerTimelineItem,
+  assignment: TaskAssignmentRecord,
+  resourceName: string,
+): ResourcePlannerResult {
+  const metadata = getPlannerItemMetadata(selectedItem);
+  if (!metadata) return data;
+
+  const newInterval: ResourcePlannerInterval = {
+    assignmentId: assignment.id,
+    resourceId: assignment.resourceId,
+    resourceName,
+    projectId: metadata.projectId,
+    projectName: metadata.projectName ?? '',
+    taskId: metadata.taskId,
+    taskName: selectedItem.title,
+    startDate: String(selectedItem.startDate).split('T')[0],
+    endDate: String(selectedItem.endDate).split('T')[0],
+    assignmentCreatedAt: assignment.createdAt,
+    hasConflict: false,
+    conflictCount: 0,
+    conflictAssignmentIds: [],
+  };
+
+  const resourceExists = data.resources.some((r) => r.resourceId === assignment.resourceId);
+  const resources = resourceExists
+    ? data.resources.map((r) => (
+      r.resourceId === assignment.resourceId
+        ? refreshResourceConflictSummary({ ...r, intervals: [...r.intervals, newInterval] })
+        : r
+    ))
+    : [
+      ...data.resources,
+      refreshResourceConflictSummary({
+        resourceId: assignment.resourceId,
+        resourceName,
+        hasConflicts: false,
+        conflictCount: 0,
+        intervals: [newInterval],
+      }),
+    ];
+
+  return { ...data, resources };
+}
+
+function applyPlannerAssignmentRemoved(
+  data: ResourcePlannerResult,
+  assignmentId: string,
+): ResourcePlannerResult {
+  return {
+    ...data,
+    resources: data.resources
+      .map((resource) => refreshResourceConflictSummary({
+        ...resource,
+        intervals: resource.intervals.filter((interval) => interval.assignmentId !== assignmentId),
+      }))
+      .filter((resource) => resource.intervals.length > 0),
+  };
+}
+
 export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttDayMode = 'calendar' }: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
@@ -837,11 +898,23 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           ...currentAssignments.filter((assignment) => assignment.taskId !== input.taskId),
           ...nextAssignments,
         ]);
+
+        const newAssignment = nextAssignments.find((a) => a.resourceId === input.resourceId);
+        if (newAssignment) {
+          const resourceName = resources.find((r) => r.id === input.resourceId)?.name ?? input.resourceId;
+          setState((current) => {
+            if (!current.data) return current;
+            const nextData = applyPlannerAssignmentAdded(current.data, selectedItem, newAssignment, resourceName);
+            setResourcePlannerCache(projectId, plannerScope, nextData);
+            return current.status === 'error'
+              ? { status: 'error', data: nextData, error: current.error }
+              : { status: 'ready', data: nextData, error: null };
+          });
+        }
       } else {
         await reloadProjectSnapshot();
+        await loadPlanner(plannerScope, { keepData: true });
       }
-
-      await loadPlanner(plannerScope, { keepData: true });
     } catch {
       setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
       await loadPlanner(plannerScope, { keepData: true });
@@ -852,7 +925,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         return next;
       });
     }
-  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, reloadProjectSnapshot, selectedItem, setAssignments]);
+  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, projectId, reloadProjectSnapshot, resources, selectedItem, setAssignments, setResourcePlannerCache]);
 
   const handleRemoveResource = useCallback(async (input: { assignmentId: string; resourceId: string }) => {
     if (!accessToken || !selectedItem) {
@@ -884,11 +957,19 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           ...currentAssignments.filter((assignment) => assignment.taskId !== selectedItem.taskId),
           ...nextAssignments,
         ]);
+
+        setState((current) => {
+          if (!current.data) return current;
+          const nextData = applyPlannerAssignmentRemoved(current.data, input.assignmentId);
+          setResourcePlannerCache(projectId, plannerScope, nextData);
+          return current.status === 'error'
+            ? { status: 'error', data: nextData, error: current.error }
+            : { status: 'ready', data: nextData, error: null };
+        });
       } else {
         await reloadProjectSnapshot();
+        await loadPlanner(plannerScope, { keepData: true });
       }
-
-      await loadPlanner(plannerScope, { keepData: true });
     } catch {
       setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
       await loadPlanner(plannerScope, { keepData: true });
@@ -899,7 +980,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
         return next;
       });
     }
-  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, reloadProjectSnapshot, selectedItem, setAssignments]);
+  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, projectId, reloadProjectSnapshot, selectedItem, setAssignments, setResourcePlannerCache]);
 
   const displayedPlannerData = state.data;
   const timelineResources = useMemo(
