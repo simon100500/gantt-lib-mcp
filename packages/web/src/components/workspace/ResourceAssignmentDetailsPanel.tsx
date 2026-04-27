@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { BrickWall, Hammer, Package, Users, X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import { cn } from '../../lib/utils.ts';
@@ -17,8 +17,9 @@ interface ResourceAssignmentDetailsPanelProps {
   assignedResources: AssignmentResourceView[];
   readonly: boolean;
   onClose: () => void;
-  onResourceChange?: (input: { assignmentId: string; resourceId: string }) => void;
+  onAddResource?: (input: { taskId: string; resourceId: string }) => void;
   onRemoveResource?: (input: { assignmentId: string; resourceId: string }) => void;
+  onResourceChange?: (input: { assignmentId: string; resourceId: string }) => void;
 }
 
 function formatDate(value: string | Date): string {
@@ -38,6 +39,19 @@ function getResourceTypeLabel(resource: ProjectResource): string {
   return labels[resource.type];
 }
 
+function ResourceTypeIcon({ type, className }: { type: ProjectResource['type']; className?: string }) {
+  if (type === 'human') {
+    return <Users className={className} />;
+  }
+  if (type === 'equipment') {
+    return <Hammer className={className} />;
+  }
+  if (type === 'material') {
+    return <BrickWall className={className} />;
+  }
+  return <Package className={className} />;
+}
+
 export function ResourceAssignmentDetailsPanel({
   item,
   resource,
@@ -45,16 +59,12 @@ export function ResourceAssignmentDetailsPanel({
   assignedResources,
   readonly,
   onClose,
-  onResourceChange,
+  onAddResource,
   onRemoveResource,
+  onResourceChange,
 }: ResourceAssignmentDetailsPanelProps) {
   const metadata = getPlannerItemMetadata(item);
-  const [selectedResourceId, setSelectedResourceId] = useState(metadata?.resourceId ?? item.resourceId);
   const [resourceToRemove, setResourceToRemove] = useState<AssignmentResourceView | null>(null);
-
-  useEffect(() => {
-    setSelectedResourceId(metadata?.resourceId ?? item.resourceId);
-  }, [item.resourceId, metadata?.resourceId]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -85,7 +95,15 @@ export function ResourceAssignmentDetailsPanel({
   const disabledReason = readonly
     ? 'Войдите, чтобы изменять ресурсы. Сейчас календарь открыт только для просмотра.'
     : null;
-  const selectableResources = resources.length > 0 ? resources : resource ? [resource] : [];
+  const assignedResourceIds = new Set(uniqueAssignedResources.map((entry) => entry.resource.id));
+  const addableResources = (resources.length > 0 ? resources : resource ? [resource] : [])
+    .filter((candidate) => !assignedResourceIds.has(candidate.id));
+  const resourceGroups = [
+    { type: 'human' as const, label: 'Люди', resources: addableResources.filter((candidate) => candidate.type === 'human') },
+    { type: 'equipment' as const, label: 'Оборудование', resources: addableResources.filter((candidate) => candidate.type === 'equipment') },
+    { type: 'material' as const, label: 'Материалы', resources: addableResources.filter((candidate) => candidate.type === 'material') },
+    { type: 'other' as const, label: 'Другое', resources: addableResources.filter((candidate) => candidate.type === 'other') },
+  ].filter((group) => group.resources.length > 0);
 
   return (
     <aside
@@ -135,8 +153,8 @@ export function ResourceAssignmentDetailsPanel({
                     : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#44546f]',
                 )}
               >
+                <ResourceTypeIcon type={assignedResource.type} className="h-3.5 w-3.5 shrink-0" />
                 <span className="min-w-0 truncate">{assignedResource.name}</span>
-                <span className="font-medium opacity-70">{getResourceTypeLabel(assignedResource)}</span>
                 {!readonly && onRemoveResource && (
                   <button
                     type="button"
@@ -153,62 +171,45 @@ export function ResourceAssignmentDetailsPanel({
           </div>
         </section>
 
-        <form
-          className="space-y-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onResourceChange?.({
-              assignmentId: metadata.assignmentId,
-              resourceId: selectedResourceId,
-            });
-          }}
-        >
+        <div className="space-y-3">
           <section className="space-y-2">
-            <div className="text-[11px] font-bold uppercase leading-none text-[#44546f]">Сменить на</div>
-            <div className="max-h-56 overflow-auto rounded-md border border-[#dfe1e6] bg-white">
-              {selectableResources.map((candidate) => {
-                const selected = candidate.id === selectedResourceId;
-                return (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    className={cn(
-                      'flex w-full min-w-0 items-center justify-between gap-3 border-b border-[#dfe1e6] px-3 py-2 text-left transition-colors last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60',
-                      selected
-                        ? 'bg-[#f4f8ff] text-[#0747a6]'
-                        : 'bg-white text-[#172b4d] hover:bg-[#f7f8fa]',
-                    )}
-                    disabled={readonly}
-                    onClick={() => setSelectedResourceId(candidate.id)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block break-words text-[13px] font-bold">{candidate.name}</span>
-                      <span className={cn('mt-1 block text-[11px] font-medium', selected ? 'text-[#0747a6]/80' : 'text-[#5e6c84]')}>
-                        {getResourceTypeLabel(candidate)}{candidate.isActive ? '' : ' · неактивен'}
-                      </span>
+            <div className="text-[11px] font-bold uppercase leading-none text-[#44546f]">Добавить ресурс</div>
+            <div className="max-h-64 overflow-auto rounded-md border border-[#dfe1e6] bg-white">
+              {resourceGroups.length > 0 ? resourceGroups.map((group) => (
+                <div key={group.type} className="border-b border-[#dfe1e6] last:border-b-0">
+                  <div className="flex items-center gap-1.5 bg-[#f7f8fa] px-3 py-1.5 text-[11px] font-bold text-[#44546f]">
+                    <ResourceTypeIcon type={group.type} className="h-3.5 w-3.5 shrink-0" />
+                    <span>{group.label}</span>
+                    <span className="ml-auto rounded-full bg-[#dfe1e6] px-1.5 py-0.5 text-[10px] text-[#42526e]">
+                      {group.resources.length}
                     </span>
-                    <span
-                      className={cn(
-                        'h-3 w-3 shrink-0 rounded-full border',
-                        selected ? 'border-[#0747a6] bg-[#0747a6] shadow-[inset_0_0_0_3px_white]' : 'border-[#c1c7d0]',
+                  </div>
+                  {group.resources.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      className="flex w-full min-w-0 items-center gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={readonly || !onAddResource}
+                      onClick={() => onAddResource?.({ taskId: metadata.taskId, resourceId: candidate.id })}
+                    >
+                      <ResourceTypeIcon type={candidate.type} className="h-4 w-4 shrink-0 text-[#0052cc]" />
+                      <span className="min-w-0 flex-1 break-words text-[13px] font-bold">{candidate.name}</span>
+                      {!candidate.isActive && (
+                        <span className="shrink-0 rounded-sm bg-[#f4f5f7] px-1.5 py-0.5 text-[10px] font-bold text-[#6b778c]">
+                          выкл.
+                        </span>
                       )}
-                    />
-                  </button>
-                );
-              })}
+                    </button>
+                  ))}
+                </div>
+              )) : (
+                <div className="px-3 py-3 text-[12px] font-medium text-[#6b778c]">
+                  Все ресурсы уже назначены.
+                </div>
+              )}
             </div>
           </section>
-
-          <div className="pt-1">
-            <button
-              type="submit"
-              className="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={readonly || !onResourceChange || selectedResourceId === metadata.resourceId}
-            >
-              Сохранить
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
 
       {resourceToRemove && (

@@ -807,6 +807,53 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     });
   }, [persistPlannerMove, selectedItem]);
 
+  const handleAddAssignment = useCallback(async (input: { taskId: string; resourceId: string }) => {
+    if (!accessToken || !selectedItem) {
+      return;
+    }
+
+    setPendingMoveIds((current) => new Set(current).add(selectedItem.id));
+    setPlannerSaveError(null);
+    try {
+      const currentResourceIds = await getTaskResourceIds(input.taskId);
+      const resourceIds = [...currentResourceIds, input.resourceId];
+      const response = await fetch(`/api/tasks/${encodeURIComponent(input.taskId)}/assignments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ resourceIds }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error('assignment_add_failed');
+      }
+
+      const nextAssignments = normalizeAssignmentMutationPayload(body);
+      if (nextAssignments) {
+        const currentAssignments = useProjectStore.getState().assignments;
+        setAssignments([
+          ...currentAssignments.filter((assignment) => assignment.taskId !== input.taskId),
+          ...nextAssignments,
+        ]);
+      } else {
+        await reloadProjectSnapshot();
+      }
+
+      await loadPlanner(plannerScope, { keepData: true });
+    } catch {
+      setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
+      await loadPlanner(plannerScope, { keepData: true });
+    } finally {
+      setPendingMoveIds((current) => {
+        const next = new Set(current);
+        next.delete(selectedItem.id);
+        return next;
+      });
+    }
+  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, reloadProjectSnapshot, selectedItem, setAssignments]);
+
   const handleRemoveResource = useCallback(async (input: { assignmentId: string; resourceId: string }) => {
     if (!accessToken || !selectedItem) {
       return;
@@ -1265,6 +1312,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               assignedResources={selectedAssignedResources}
               readonly={readonly}
               onClose={() => setSelectedItem(null)}
+              onAddResource={handleAddAssignment}
               onResourceChange={handleDetailsResourceChange}
               onRemoveResource={handleRemoveResource}
             />
