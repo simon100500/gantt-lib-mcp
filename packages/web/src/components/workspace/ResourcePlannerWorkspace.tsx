@@ -910,7 +910,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     || filters.conflictOnly
     || filters.includeInactive;
   const toolbarButtonClassName = 'h-8 rounded-md border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-slate-600 hover:border-primary hover:bg-primary/5 hover:text-primary';
-  const toolbarPrimaryButtonClassName = 'h-8 rounded-md border border-primary bg-primary px-2.5 text-[12px] font-medium text-primary-foreground hover:border-primary/90 hover:bg-primary/90';
+  const toolbarPrimaryButtonClassName = 'h-8 rounded-md border border-primary bg-primary px-2.5 text-[12px] font-medium text-primary-foreground hover:border-primary/90 hover:bg-primary/90 hover:text-primary-foreground';
   const getTimelineItemClassName = useCallback((item: ResourcePlannerTimelineItem) => {
     const metadata = getPlannerItemMetadata(item);
     if (!metadata) {
@@ -951,7 +951,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               size="sm"
               className={toolbarPrimaryButtonClassName}
               onClick={handleOpenCreateResourceModal}
