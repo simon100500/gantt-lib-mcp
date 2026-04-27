@@ -204,7 +204,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
             }
           }}
           placeholder={readOnly ? 'Поиск...' : 'Поиск или новая задача...'}
-          className="h-7 w-full rounded-lg border-transparent bg-slate-100 pl-9 pr-28 text-[13px] shadow-none focus-visible:border-transparent focus-visible:bg-slate-100 focus-visible:ring-1 focus-visible:ring-indigo-500/20 focus-visible:ring-offset-0"
+          className="h-9 w-full rounded-lg border-slate-200 bg-white pl-9 pr-28 text-[13px] shadow-none hover:border-slate-200 focus-visible:border-primary focus-visible:bg-white focus-visible:ring-0 focus-visible:ring-offset-0"
           aria-label="Поиск задач"
           title="Ctrl+K или +"
         />
@@ -274,7 +274,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
           size="sm"
           onClick={handleCreateTask}
           title="Создать задачу"
-          className="h-7 shrink-0 px-2.5 py-2.5 text-xs font-medium"
+          className="h-8 shrink-0 px-2.5 py-2 text-xs font-medium"
         >
           + Задача
         </Button>
