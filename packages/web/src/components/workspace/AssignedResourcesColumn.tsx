@@ -6,6 +6,7 @@ import type { ProjectResource, TaskAssignmentRecord } from '../../lib/apiTypes.t
 import type { Task } from '../../types.ts';
 import type { TaskAssignmentResourceGroups, TaskResourceAssignmentView } from './resourceAssignmentUtils.ts';
 import { getTaskAssignmentResourceGroups } from './resourceAssignmentUtils.ts';
+import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
 export interface AssignedResourcesColumnCellProps {
   task: Task;
@@ -64,15 +65,16 @@ function renderResourceChips(
   return resources.map(({ resource, assignment }) => {
     const label = formatResourceLabel(resource);
     const variantClasses = variant === 'active'
-      ? 'bg-violet-50 text-violet-800'
-      : 'bg-violet-50 text-violet-500';
-    const className = `inline-flex min-w-0 flex-1 basis-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-4 ${variantClasses} ${
-      onChipClick ? 'cursor-pointer transition-colors hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400' : ''
+      ? 'border-[#dfe1e6] bg-white text-[#172b4d]'
+      : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#6b778c] opacity-75';
+    const className = `inline-flex min-w-0 flex-1 basis-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${variantClasses} ${
+      onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
     }`;
     const children = (
       <>
+        <ResourceTypeIcon type={resource.type} className="h-3 w-3 shrink-0" />
         <span className="min-w-0 truncate">{label}</span>
-        {variant === 'inactive' && <span className="ml-1 shrink-0 text-violet-500">неактивен</span>}
+        {variant === 'inactive' && <span className="ml-0.5 shrink-0 text-[#6b778c]">неактивен</span>}
       </>
     );
 
