@@ -97,7 +97,7 @@ export function ResourceAssignmentDetailsPanel({
     : null;
   const assignedResourceIds = new Set(uniqueAssignedResources.map((entry) => entry.resource.id));
   const addableResources = (resources.length > 0 ? resources : resource ? [resource] : [])
-    .filter((candidate) => !assignedResourceIds.has(candidate.id));
+    .filter((candidate) => candidate.isActive && !assignedResourceIds.has(candidate.id));
   const resourceGroups = [
     { type: 'human' as const, label: 'Люди', resources: addableResources.filter((candidate) => candidate.type === 'human') },
     { type: 'equipment' as const, label: 'Оборудование', resources: addableResources.filter((candidate) => candidate.type === 'equipment') },
@@ -198,11 +198,6 @@ export function ResourceAssignmentDetailsPanel({
                     >
                       <ResourceTypeIcon type={candidate.type} className="h-4 w-4 shrink-0 text-[#0052cc]" />
                       <span className="min-w-0 flex-1 break-words text-[13px] font-bold">{candidate.name}</span>
-                      {!candidate.isActive && (
-                        <span className="shrink-0 rounded-sm bg-[#f4f5f7] px-1.5 py-0.5 text-[10px] font-bold text-[#6b778c]">
-                          выкл.
-                        </span>
-                      )}
                     </button>
                   ))}
                 </div>

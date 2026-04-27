@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -16,6 +16,7 @@ export interface ResourceAssignmentModalProps {
   onSelectionChange: (resourceIds: string[]) => void;
   onCancel: () => void;
   onSubmit: (resourceIds: string[]) => void;
+  onCreateResource?: () => void;
 }
 
 function formatResourceLabel(resource: ProjectResource): string {
@@ -32,6 +33,7 @@ export function ResourceAssignmentModal({
   onSelectionChange,
   onCancel,
   onSubmit,
+  onCreateResource,
 }: ResourceAssignmentModalProps) {
   const selectedIds = Array.isArray(selectedResourceIds) ? selectedResourceIds : [];
   const selectedIdSet = new Set(selectedIds);
@@ -145,7 +147,21 @@ export function ResourceAssignmentModal({
           </section>
 
           <fieldset className="space-y-2" disabled={pending || !task}>
-            <legend className="text-sm font-semibold text-slate-900">Пул ресурсов</legend>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-900">Пул ресурсов</span>
+              {onCreateResource && (
+                <button
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="assignment-modal-create-resource"
+                  disabled={pending || !task}
+                  onClick={onCreateResource}
+                  type="button"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Ресурс</span>
+                </button>
+              )}
+            </div>
             {hasAssignableResources ? (
               <div className="flex flex-wrap gap-2" data-testid="assignment-modal-resource-options">
                 {availableResources.length > 0 ? availableResources.map((resource) => {

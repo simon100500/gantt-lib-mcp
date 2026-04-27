@@ -47,9 +47,15 @@ interface ProjectStoreState extends ProjectState {
   scheduleOptions: ProjectScheduleOptions;
   setScheduleOptions: (options: ProjectScheduleOptions) => void;
   setResources: (resources: ProjectResource[]) => void;
+  upsertResource: (resource: ProjectResource) => void;
+  removeResource: (resourceId: string) => void;
   setAssignments: (assignments: TaskAssignmentRecord[]) => void;
+  replaceAssignmentsForTask: (taskId: string, assignments: TaskAssignmentRecord[]) => void;
+  replaceAssignmentsForTasks: (taskIds: string[], assignments: TaskAssignmentRecord[]) => void;
+  removeAssignmentsByResource: (resourceId: string) => void;
   setAssignmentError: (error: string | null) => void;
   setResourcePlannerCache: (projectId: string, scope: PlannerScope, data: ResourcePlannerResult) => void;
+  mutateResourcePlannerCache: (projectId: string, scope: PlannerScope, mutate: (data: ResourcePlannerResult) => ResourcePlannerResult) => void;
   clearResourcePlannerCache: () => void;
 }
 
@@ -57,7 +63,15 @@ function getResourcePlannerCacheKey(projectId: string, scope: PlannerScope): str
   return `${projectId}:${scope}`;
 }
 
-export const useProjectStore = create<ProjectStoreState>((set, get) => ({
+function sortResources(resources: ProjectResource[]): ProjectResource[] {
+  return [...resources].sort((left, right) => (
+    Number(right.isActive) - Number(left.isActive)
+    || left.name.localeCompare(right.name)
+    || left.createdAt.localeCompare(right.createdAt)
+  ));
+}
+
+export const useProjectStore = create<ProjectStoreState>((set) => ({
   confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
   resources: [],
   assignments: [],
@@ -84,7 +98,7 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   }),
   hydrateConfirmed: (version, snapshot, extras) => set({
     confirmed: { version, snapshot },
-    resources: extras?.resources ?? [],
+    resources: extras?.resources ? sortResources(extras.resources) : [],
     assignments: extras?.assignments ?? [],
     assignmentError: null,
     resourcePlannerCache: {},
@@ -106,8 +120,36 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
   setDragPreview: (preview) => set({ dragPreview: preview }),
   clearTransientState: () => set({ pending: [], dragPreview: undefined }),
   setScheduleOptions: (options) => set({ scheduleOptions: options }),
-  setResources: (resources) => set({ resources }),
+  setResources: (resources) => set({ resources: sortResources(resources) }),
+  upsertResource: (resource) => set((state) => ({
+    resources: sortResources(
+      state.resources.some((entry) => entry.id === resource.id)
+        ? state.resources.map((entry) => (entry.id === resource.id ? resource : entry))
+        : [...state.resources, resource]
+    ),
+  })),
+  removeResource: (resourceId) => set((state) => ({
+    resources: state.resources.filter((resource) => resource.id !== resourceId),
+  })),
   setAssignments: (assignments) => set({ assignments }),
+  replaceAssignmentsForTask: (taskId, assignments) => set((state) => ({
+    assignments: [
+      ...state.assignments.filter((assignment) => assignment.taskId !== taskId),
+      ...assignments,
+    ],
+  })),
+  replaceAssignmentsForTasks: (taskIds, assignments) => set((state) => {
+    const taskIdSet = new Set(taskIds);
+    return {
+      assignments: [
+        ...state.assignments.filter((assignment) => !taskIdSet.has(assignment.taskId)),
+        ...assignments,
+      ],
+    };
+  }),
+  removeAssignmentsByResource: (resourceId) => set((state) => ({
+    assignments: state.assignments.filter((assignment) => assignment.resourceId !== resourceId),
+  })),
   setAssignmentError: (assignmentError) => set({ assignmentError }),
   setResourcePlannerCache: (projectId, scope, data) => set((state) => ({
     resourcePlannerCache: {
@@ -115,5 +157,18 @@ export const useProjectStore = create<ProjectStoreState>((set, get) => ({
       [getResourcePlannerCacheKey(projectId, scope)]: data,
     },
   })),
+  mutateResourcePlannerCache: (projectId, scope, mutate) => set((state) => {
+    const key = getResourcePlannerCacheKey(projectId, scope);
+    const current = state.resourcePlannerCache[key];
+    if (!current) {
+      return state;
+    }
+    return {
+      resourcePlannerCache: {
+        ...state.resourcePlannerCache,
+        [key]: mutate(current),
+      },
+    };
+  }),
   clearResourcePlannerCache: () => set({ resourcePlannerCache: {} }),
 }));

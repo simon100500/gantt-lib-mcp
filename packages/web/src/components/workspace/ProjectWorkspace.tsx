@@ -9,6 +9,7 @@ import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { HistoryPanel } from '../HistoryPanel.tsx';
 import { SplitTaskModal } from '../SplitTaskModal.tsx';
 import { TaskChatModal } from '../TaskChatModal.tsx';
+import { CreateResourceModal } from './CreateResourceModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
 import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
@@ -28,7 +29,7 @@ import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
-import type { BaselineSnapshotResponse, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
 import {
   collectDescendantLeafIds,
@@ -94,6 +95,30 @@ function formatTaskCount(count: number) {
   }
 
   return `${count} задач`;
+}
+
+function normalizeProjectResource(payload: unknown): ProjectResource | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const resource = payload as Partial<ProjectResource>;
+  if (
+    typeof resource.id !== 'string'
+    || typeof resource.userId !== 'string'
+    || !(typeof resource.projectId === 'string' || resource.projectId === null)
+    || !(resource.scope === 'shared' || resource.scope === 'project')
+    || typeof resource.name !== 'string'
+    || !(resource.type === 'human' || resource.type === 'equipment' || resource.type === 'material' || resource.type === 'other')
+    || typeof resource.isActive !== 'boolean'
+    || typeof resource.createdAt !== 'string'
+    || typeof resource.updatedAt !== 'string'
+    || !(typeof resource.deactivatedAt === 'string' || resource.deactivatedAt === null)
+  ) {
+    return null;
+  }
+
+  return resource as ProjectResource;
 }
 
 function formatHistoryVersionTimestamp(value: string): string {
@@ -197,8 +222,11 @@ export function ProjectWorkspace({
   const resources = useProjectStore((state) => state.resources);
   const assignments = useProjectStore((state) => state.assignments);
   const assignmentError = useProjectStore((state) => state.assignmentError);
-  const setAssignments = useProjectStore((state) => state.setAssignments);
+  const replaceAssignmentsForTask = useProjectStore((state) => state.replaceAssignmentsForTask);
+  const replaceAssignmentsForTasks = useProjectStore((state) => state.replaceAssignmentsForTasks);
   const setAssignmentError = useProjectStore((state) => state.setAssignmentError);
+  const clearResourcePlannerCache = useProjectStore((state) => state.clearResourcePlannerCache);
+  const upsertResource = useProjectStore((state) => state.upsertResource);
   const collapsedParentIds = useMemo(() => {
     if (!projectId) return new Set<string>();
     const projectState = projectStates[projectId];
@@ -222,6 +250,9 @@ export function ProjectWorkspace({
   const [assignmentSelectionTaskId, setAssignmentSelectionTaskId] = useState<string | null>(null);
   const [selectedAssignmentResourceIds, setSelectedAssignmentResourceIds] = useState<string[]>([]);
   const [assignmentSubmitting, setAssignmentSubmitting] = useState(false);
+  const [createAssignmentResourceOpen, setCreateAssignmentResourceOpen] = useState(false);
+  const [createAssignmentResourcePending, setCreateAssignmentResourcePending] = useState(false);
+  const [createAssignmentResourceError, setCreateAssignmentResourceError] = useState<string | null>(null);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
@@ -491,12 +522,65 @@ export function ProjectWorkspace({
     setAssignmentSelectionTaskId(null);
     setSelectedAssignmentResourceIds([]);
     setAssignmentSubmitting(false);
+    setCreateAssignmentResourceOpen(false);
+    setCreateAssignmentResourcePending(false);
+    setCreateAssignmentResourceError(null);
   }, []);
 
   const handleAssignmentResourceChange = useCallback((resourceIds: string[]) => {
     setSelectedAssignmentResourceIds(resourceIds);
     setAssignmentError(null);
   }, [setAssignmentError]);
+
+  const handleCreateAssignmentResource = useCallback(async (input: { name: string; type: ResourceType; scope: ResourceScope }) => {
+    if (!accessToken || effectiveReadOnly || workspace.kind !== 'project') {
+      return;
+    }
+
+    setCreateAssignmentResourcePending(true);
+    setCreateAssignmentResourceError(null);
+
+    try {
+      const response = await fetch('/api/resources', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          name: input.name,
+          type: input.type,
+          scope: input.scope,
+          projectId: workspace.projectId,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorMessage = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+          ? body.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const created = normalizeProjectResource(body);
+      if (!created) {
+        throw new Error('Resource payload was malformed.');
+      }
+
+      upsertResource(created);
+      clearResourcePlannerCache();
+      setSelectedAssignmentResourceIds((current) => (
+        created.isActive && !current.includes(created.id)
+          ? [...current, created.id]
+          : current
+      ));
+      setCreateAssignmentResourceOpen(false);
+    } catch (error) {
+      setCreateAssignmentResourceError(error instanceof Error ? error.message : 'Не удалось создать ресурс.');
+    } finally {
+      setCreateAssignmentResourcePending(false);
+    }
+  }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, upsertResource, workspace]);
 
   const handleAssignResources = useCallback(async (task: Task, selectedResourceIds: string[]) => {
     if (!accessToken || effectiveReadOnly) {
@@ -554,16 +638,16 @@ export function ProjectWorkspace({
           setAssignmentError('malformed_assignment_response: Сервер вернул назначения в неизвестном формате.');
           return;
         }
-        const unaffectedAssignments = state.assignments.filter((assignment) => !childLeafIds.includes(assignment.taskId));
-        setAssignments([...unaffectedAssignments, ...nextAssignments]);
+        replaceAssignmentsForTasks(childLeafIds, nextAssignments);
+        clearResourcePlannerCache();
       } else {
         if (!Array.isArray(data.assignments)) {
           setAssignmentError('malformed_assignment_response: Сервер вернул назначения в неизвестном формате.');
           return;
         }
         const nextAssignments = data.assignments;
-        const unaffectedAssignments = state.assignments.filter((assignment) => assignment.taskId !== task.id);
-        setAssignments([...unaffectedAssignments, ...nextAssignments]);
+        replaceAssignmentsForTask(task.id, nextAssignments);
+        clearResourcePlannerCache();
       }
 
       setAssignmentError(null);
@@ -574,7 +658,7 @@ export function ProjectWorkspace({
     } finally {
       setAssignmentSubmitting(false);
     }
-  }, [accessToken, effectiveReadOnly, setAssignmentError, setAssignments, tasks, workspace]);
+  }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, replaceAssignmentsForTask, replaceAssignmentsForTasks, setAssignmentError, tasks, workspace]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
     if (effectiveReadOnly || chatDisabled || !showChat) {
@@ -858,6 +942,10 @@ export function ProjectWorkspace({
                 error={assignmentError}
                 inactiveAssignedResources={selectedAssignmentResourceGroups.inactiveAssignedResources}
                 onCancel={closeAssignmentSelector}
+                onCreateResource={() => {
+                  setCreateAssignmentResourceError(null);
+                  setCreateAssignmentResourceOpen(true);
+                }}
                 onSelectionChange={handleAssignmentResourceChange}
                 onSubmit={(resourceIds) => {
                   void handleAssignResources(selectedAssignmentTask, resourceIds);
@@ -865,6 +953,21 @@ export function ProjectWorkspace({
                 pending={assignmentSubmitting}
                 selectedResourceIds={selectedAssignmentResourceIds}
                 task={selectedAssignmentTask}
+              />
+            )}
+            {assignmentSelectionTaskId && selectedAssignmentTask && createAssignmentResourceOpen && (
+              <CreateResourceModal
+                error={createAssignmentResourceError}
+                pending={createAssignmentResourcePending}
+                onCancel={() => {
+                  if (!createAssignmentResourcePending) {
+                    setCreateAssignmentResourceOpen(false);
+                    setCreateAssignmentResourceError(null);
+                  }
+                }}
+                onSubmit={(input) => {
+                  void handleCreateAssignmentResource(input);
+                }}
               />
             )}
 
