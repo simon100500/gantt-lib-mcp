@@ -9,7 +9,7 @@ import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { cn } from '../../lib/utils.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
-import { useUIStore, type ViewMode } from '../../stores/useUIStore.ts';
+import { useUIStore, type PlannerCorrectionTarget, type ViewMode } from '../../stores/useUIStore.ts';
 import { Button } from '../ui/button.tsx';
 import {
   DropdownMenu,
@@ -35,7 +35,7 @@ interface ResourcePlannerWorkspaceProps {
   projectId: string;
   ganttDayMode?: 'business' | 'calendar';
   onBackToProject: () => void;
-  onCorrectConflict?: unknown;
+  onCorrectConflict: (target: PlannerCorrectionTarget) => void;
 }
 
 type PlannerState =
@@ -333,6 +333,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       : { status: 'loading', data: null, error: null }
   ));
   const resources = useProjectStore((store) => store.resources);
+  const assignments = useProjectStore((store) => store.assignments);
   const setResources = useProjectStore((store) => store.setResources);
   const setAssignments = useProjectStore((store) => store.setAssignments);
   const setConfirmed = useProjectStore((store) => store.setConfirmed);
@@ -875,6 +876,23 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
     [resources, selectedItem],
   );
+  const selectedAssignedResources = useMemo(() => {
+    if (!selectedItem) {
+      return [];
+    }
+
+    const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
+    const assigned = assignments
+      .filter((assignment) => assignment.taskId === selectedItem.taskId)
+      .map((assignment) => resourceById.get(assignment.resourceId))
+      .filter((resource): resource is ProjectResource => Boolean(resource));
+
+    if (assigned.length === 0 && selectedResource) {
+      return [selectedResource];
+    }
+
+    return assigned;
+  }, [assignments, resources, selectedItem, selectedResource]);
   const readonly = !accessToken;
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);
@@ -1245,6 +1263,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               item={selectedItem}
               resource={selectedResource}
               resources={resources}
+              assignedResources={selectedAssignedResources}
               readonly={readonly}
               onClose={() => setSelectedItem(null)}
               onResourceChange={handleDetailsResourceChange}
