@@ -486,17 +486,17 @@ export function ProjectMenu({
               <div className="hidden min-w-0 flex-1 items-center gap-2 px-4 lg:flex lg:px-6">
                 {!hasShareToken && auth.isAuthenticated && (
                   <div
-                    className="inline-flex shrink-0 items-center gap-0.5"
+                    className="inline-flex shrink-0 items-center"
                     data-testid="topbar-workspace-mode-switch"
                   >
                     <button
                       type="button"
                       onClick={() => { void onOpenChartMode?.(); }}
                       className={cn(
-                        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        'inline-flex h-7 items-center gap-1.5 rounded-l-md rounded-r-none px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         workspace.kind === 'planner'
-                          ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-                          : 'bg-primary/10 text-primary hover:bg-primary/15',
+                          ? 'bg-violet-100/80 text-violet-700 hover:bg-violet-100'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90',
                       )}
                       data-testid="topbar-mode-chart"
                     >
@@ -507,10 +507,10 @@ export function ProjectMenu({
                       type="button"
                       onClick={() => { void onOpenResourcePool?.(); }}
                       className={cn(
-                        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                        '-ml-px inline-flex h-7 items-center gap-1.5 rounded-l-none rounded-r-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                         workspace.kind === 'planner'
-                          ? 'bg-primary/10 text-primary hover:bg-primary/15'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : 'bg-violet-100/80 text-violet-700 hover:bg-violet-100',
                       )}
                       data-testid="topbar-mode-resources"
                     >
