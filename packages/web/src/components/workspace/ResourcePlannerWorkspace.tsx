@@ -1062,6 +1062,9 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               </DropdownMenuContent>
             </DropdownMenu>
 
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
             <div className="inline-flex rounded-md">
               {VIEW_MODE_OPTIONS.map((option, index) => (
                 <button
@@ -1081,9 +1084,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                 </button>
               ))}
             </div>
-          </div>
 
-          <div className="ml-auto flex items-center gap-2">
             <Button
               type="button"
               variant="outline"

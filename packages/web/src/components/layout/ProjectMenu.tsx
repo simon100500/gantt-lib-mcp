@@ -505,7 +505,6 @@ export function ProjectMenu({
                         role="tab"
                         aria-selected={workspace.kind !== 'planner'}
                       >
-                        <ChartNoAxesGantt className="h-3.5 w-3.5" />
                         <span>График</span>
                       </button>
                       <button
@@ -521,7 +520,6 @@ export function ProjectMenu({
                         role="tab"
                         aria-selected={workspace.kind === 'planner'}
                       >
-                        <Package className="h-3.5 w-3.5" />
                         <span>Ресурсы</span>
                       </button>
                     </div>
