@@ -486,7 +486,7 @@ export function ProjectMenu({
               <div className="hidden min-w-0 flex-1 items-center gap-2 px-4 lg:flex lg:px-6">
                 {!hasShareToken && auth.isAuthenticated && (
                   <div
-                    className="inline-flex shrink-0 items-center gap-1"
+                    className="inline-flex shrink-0 items-center gap-0.5"
                     data-testid="topbar-workspace-mode-switch"
                   >
                     <button
@@ -539,6 +539,50 @@ export function ProjectMenu({
 
           {/* User menu */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+            {!hasShareToken && auth.isAuthenticated && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 lg:hidden"
+                    data-testid="topbar-workspace-mode-switch-mobile"
+                  >
+                    {workspace.kind === 'planner' ? (
+                      <FolderKanban className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
+                    )}
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : 'График'}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40 lg:hidden">
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenChartMode?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind !== 'planner' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-chart-mobile"
+                  >
+                    <ChartNoAxesGantt className="h-4 w-4" />
+                    <span>График</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenResourcePool?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind === 'planner' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-resources-mobile"
+                  >
+                    <FolderKanban className="h-4 w-4" />
+                    <span>Ресурсы</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {hasShareToken ? (
               <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <Eye className="h-3.5 w-3.5" />
