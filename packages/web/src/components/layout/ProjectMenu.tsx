@@ -483,56 +483,64 @@ export function ProjectMenu({
                 )}
               </div>
 
-              <div className="hidden min-w-0 flex-1 items-center gap-2 px-4 lg:flex lg:px-6">
-                {!hasShareToken && auth.isAuthenticated && (
-                  <div
-                    className="inline-flex shrink-0 items-center"
-                    data-testid="topbar-workspace-mode-switch"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => { void onOpenChartMode?.(); }}
-                      className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-l-md rounded-r-none border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                        workspace.kind === 'planner'
-                          ? 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary'
-                          : 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10',
-                      )}
-                      data-testid="topbar-mode-chart"
+              <div className="hidden min-w-0 flex-1 grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
+                <div className="justify-self-start">
+                  {!hasShareToken && auth.isAuthenticated && (
+                    <div
+                      className="inline-flex shrink-0 items-center"
+                      data-testid="topbar-workspace-mode-switch"
                     >
-                      <ChartNoAxesGantt className="h-3.5 w-3.5" />
-                      <span>График</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { void onOpenResourcePool?.(); }}
-                      className={cn(
-                        '-ml-px inline-flex h-7 items-center gap-1.5 rounded-l-none rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                        workspace.kind === 'planner'
-                          ? 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary',
-                      )}
-                      data-testid="topbar-mode-resources"
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenChartMode?.(); }}
+                        className={cn(
+                          'inline-flex h-7 items-center gap-1.5 rounded-l-md rounded-r-none border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind !== 'planner' && 'relative z-10',
+                          workspace.kind === 'planner'
+                            ? 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary'
+                            : 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10',
+                        )}
+                        data-testid="topbar-mode-chart"
+                      >
+                        <ChartNoAxesGantt className="h-3.5 w-3.5" />
+                        <span>График</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenResourcePool?.(); }}
+                        className={cn(
+                          '-ml-px inline-flex h-7 items-center gap-1.5 rounded-l-none rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind === 'planner' && 'relative z-10',
+                          workspace.kind === 'planner'
+                            ? 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary',
+                        )}
+                        data-testid="topbar-mode-resources"
+                      >
+                        <FolderKanban className="h-3.5 w-3.5" />
+                        <span>Ресурсы</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 justify-self-center w-full max-w-xl">
+                  <TaskSearch
+                    onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
+                    readOnly={isReadOnlyContext}
+                  />
+                </div>
+                <div className="justify-self-end">
+                  {isReadOnlyContext && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => { void handleReadOnlyNewProject(); }}
+                      className="h-8 shrink-0 rounded-md px-3 text-sm font-medium"
                     >
-                      <FolderKanban className="h-3.5 w-3.5" />
-                      <span>Ресурсы</span>
-                    </button>
-                  </div>
-                )}
-                <TaskSearch
-                  onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
-                  readOnly={isReadOnlyContext}
-                />
-                {isReadOnlyContext && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => { void handleReadOnlyNewProject(); }}
-                    className="h-8 shrink-0 rounded-md px-3 text-sm font-medium"
-                  >
-                    Новый проект
-                  </Button>
-                )}
+                      Новый проект
+                    </Button>
+                  )}
+                </div>
               </div>
             </>
           )}
