@@ -483,24 +483,27 @@ export function ProjectMenu({
                 )}
               </div>
 
-              <div className="hidden min-w-0 flex-1 grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
-                <div className="justify-self-start">
+              <div className="hidden min-w-0 flex-1 self-stretch grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
+                <div className="flex self-stretch justify-self-start">
                   {!hasShareToken && auth.isAuthenticated && (
                     <div
-                      className="inline-flex shrink-0 items-center"
+                      className="inline-flex h-full shrink-0 items-stretch gap-4"
                       data-testid="topbar-workspace-mode-switch"
+                      role="tablist"
+                      aria-label="Режим проекта"
                     >
                       <button
                         type="button"
                         onClick={() => { void onOpenChartMode?.(); }}
                         className={cn(
-                          'inline-flex h-7 items-center gap-1.5 rounded-l-md rounded-r-none border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          workspace.kind !== 'planner' && 'relative z-10',
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                           workspace.kind === 'planner'
-                            ? 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary'
-                            : 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10',
+                            ? 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                            : 'border-primary text-primary',
                         )}
                         data-testid="topbar-mode-chart"
+                        role="tab"
+                        aria-selected={workspace.kind !== 'planner'}
                       >
                         <ChartNoAxesGantt className="h-3.5 w-3.5" />
                         <span>График</span>
@@ -509,13 +512,14 @@ export function ProjectMenu({
                         type="button"
                         onClick={() => { void onOpenResourcePool?.(); }}
                         className={cn(
-                          '-ml-px inline-flex h-7 items-center gap-1.5 rounded-l-none rounded-r-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          workspace.kind === 'planner' && 'relative z-10',
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                           workspace.kind === 'planner'
-                            ? 'border-primary/40 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary',
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
                         )}
                         data-testid="topbar-mode-resources"
+                        role="tab"
+                        aria-selected={workspace.kind === 'planner'}
                       >
                         <Package className="h-3.5 w-3.5" />
                         <span>Ресурсы</span>
