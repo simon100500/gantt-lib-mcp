@@ -796,7 +796,7 @@ describe('ProjectWorkspace resource assignments', () => {
     const { root } = await renderWorkspace();
 
     expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Dormant Crew');
-    expect(renderAssignedResourcesCellText(tasks[0]!)).toContain('Ресурсы не назначены');
+    expect(renderAssignedResourcesCellText(tasks[0]!)).not.toContain('Ресурсы не назначены');
     expect(renderAssignedResourcesCellText(tasks[0]!)).not.toContain('Dormant Crew');
 
     await unmountWorkspace(root);

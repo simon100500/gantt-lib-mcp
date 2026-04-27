@@ -274,8 +274,8 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
     const column = getAssignedResourcesColumn();
 
     expect(column.header).toBe('Ресурсы');
-    expect(column.width).toBeGreaterThanOrEqual(180);
-    expect('after' in column ? column.after : undefined).toBe('name');
+    expect(column.width).toBeLessThan(180);
+    expect('after' in column ? column.after : undefined).toBe('progress');
     expect(ganttPropsSpy?.taskListWidth).toBeGreaterThanOrEqual(650);
 
     await unmountWorkspace(root);
@@ -293,7 +293,8 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
 
     const emptyCell = renderColumnCell(column, tasks[2]!);
     expect(emptyCell.cellContainer.querySelector('[data-testid="assigned-resources-cell-leaf-2"]')?.getAttribute('data-assigned-resource-count')).toBe('0');
-    expect(emptyCell.cellContainer.querySelector('[data-testid="assigned-resources-empty-leaf-2"]')?.textContent).toContain('Ресурсы не назначены');
+    expect(emptyCell.cellContainer.querySelector('[data-testid="assigned-resources-empty-leaf-2"]')).toBeNull();
+    expect(emptyCell.cellContainer.textContent).not.toContain('Ресурсы не назначены');
 
     act(() => {
       assignedCell.cellRoot.unmount();

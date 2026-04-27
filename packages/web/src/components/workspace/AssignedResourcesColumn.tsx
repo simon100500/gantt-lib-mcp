@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { TaskListColumn } from 'gantt-lib';
+import { Pencil } from 'lucide-react';
 
 import type { ProjectResource, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -67,13 +68,13 @@ function renderResourceChips(
 
     return (
       <span
-        className={`inline-flex max-w-full items-center truncate rounded-full border px-2 py-0.5 text-[11px] font-medium ${variantClasses}`}
+        className={`inline-flex min-w-0 flex-1 basis-0 items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${variantClasses}`}
         data-testid={`assigned-resources-${variant}-${taskId}-${resource.id}`}
         key={`${variant}-${assignment.id}-${resource.id}`}
         title={variant === 'inactive' ? `${label} — неактивный ресурс` : label}
       >
-        {label}
-        {variant === 'inactive' && <span className="ml-1 text-amber-700">неактивен</span>}
+        <span className="min-w-0 truncate">{label}</span>
+        {variant === 'inactive' && <span className="ml-1 shrink-0 text-amber-700">неактивен</span>}
       </span>
     );
   });
@@ -94,22 +95,18 @@ export function AssignedResourcesColumnCell({
   const totalVisibleCount = assignedCount + unknownResourceIds.length;
   const canEdit = editable && !readOnly && Boolean(onEdit);
   const summaryLabel = totalVisibleCount === 0
-    ? 'Ресурсы не назначены'
+    ? 'Назначено ресурсов: 0'
     : `Назначено ресурсов: ${totalVisibleCount}`;
 
   return (
     <div
       aria-label={summaryLabel}
-      className="flex min-w-0 items-center gap-2 px-2 py-1 text-xs text-slate-700"
+      className="flex min-w-0 items-center gap-1 px-1.5 py-1 text-xs text-slate-700"
       data-assigned-resource-count={String(totalVisibleCount)}
       data-testid={`assigned-resources-cell-${task.id}`}
     >
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-        {totalVisibleCount === 0 ? (
-          <span className="text-slate-400" data-testid={`assigned-resources-empty-${task.id}`}>
-            Ресурсы не назначены
-          </span>
-        ) : (
+      <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
+        {totalVisibleCount === 0 ? null : (
           <>
             <span className="sr-only" data-testid={`assigned-resources-count-${task.id}`}>
               {summaryLabel}
@@ -118,13 +115,13 @@ export function AssignedResourcesColumnCell({
             {renderResourceChips(task.id, inactiveResources, 'inactive')}
             {unknownResourceIds.map((resourceId) => (
               <span
-                className="inline-flex max-w-full items-center truncate rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700"
+                className="inline-flex min-w-0 flex-1 basis-0 items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-red-700"
                 data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
                 key={`unknown-${resourceId}`}
                 title={`Неизвестный ресурс: ${resourceId}`}
               >
-                Неизвестный ресурс
-                <span className="ml-1 font-mono text-[10px]">{resourceId}</span>
+                <span className="min-w-0 truncate">Неизвестный ресурс</span>
+                <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
               </span>
             ))}
           </>
@@ -134,15 +131,16 @@ export function AssignedResourcesColumnCell({
       {canEdit ? (
         <button
           aria-label={`Изменить назначения ресурсов для задачи ${task.name || task.id}`}
-          className="inline-flex h-7 shrink-0 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+          className="assigned-resources-edit inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
           data-testid={`assigned-resources-edit-${task.id}`}
           onClick={(event) => {
             event.stopPropagation();
             onEdit?.(task);
           }}
+          title="Изменить назначения ресурсов"
           type="button"
         >
-          Изменить
+          <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
       ) : null}
     </div>
@@ -159,9 +157,9 @@ export function createAssignedResourcesColumn({
   return {
     id: 'assigned-resources',
     header: 'Ресурсы',
-    width: 240,
-    minWidth: 180,
-    after: 'name',
+    width: 132,
+    minWidth: 108,
+    after: 'progress',
     renderCell: ({ task }) => (
       <AssignedResourcesColumnCell
         editable={editable}

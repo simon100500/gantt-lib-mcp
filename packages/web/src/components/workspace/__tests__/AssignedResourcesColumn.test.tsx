@@ -102,7 +102,8 @@ describe('AssignedResourcesColumnCell', () => {
 
     expect(container.querySelector('[data-testid="assigned-resources-cell-task-1"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="assigned-resources-cell-task-1"]')?.getAttribute('data-assigned-resource-count')).toBe('0');
-    expect(container.querySelector('[data-testid="assigned-resources-empty-task-1"]')?.textContent).toContain('Ресурсы не назначены');
+    expect(container.querySelector('[data-testid="assigned-resources-empty-task-1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assigned-resources-cell-task-1"]')?.textContent).not.toContain('Ресурсы не назначены');
 
     act(() => {
       (container.querySelector('[data-testid="assigned-resources-edit-task-1"]') as HTMLButtonElement).click();
@@ -179,7 +180,9 @@ describe('createAssignedResourcesColumn', () => {
 
     expect(column.id).toBe('assigned-resources');
     expect(column.header).toBe('Ресурсы');
-    expect('after' in column ? column.after : undefined).toBe('name');
+    expect(column.width).toBe(132);
+    expect(column.minWidth).toBe(108);
+    expect('after' in column ? column.after : undefined).toBe('progress');
 
     act(() => {
       root.render(<>{column.renderCell({

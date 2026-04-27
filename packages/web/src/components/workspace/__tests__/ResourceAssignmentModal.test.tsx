@@ -71,11 +71,18 @@ const assignments: TaskAssignmentRecord[] = [
 
 function renderModal(
   overrides: Partial<React.ComponentProps<typeof ResourceAssignmentModal>> = {},
-): { container: HTMLDivElement; root: Root; onSelectionChange: ReturnType<typeof vi.fn>; onSubmit: ReturnType<typeof vi.fn> } {
+): {
+  container: HTMLDivElement;
+  root: Root;
+  onCancel: ReturnType<typeof vi.fn>;
+  onSelectionChange: ReturnType<typeof vi.fn>;
+  onSubmit: ReturnType<typeof vi.fn>;
+} {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   const groups = getTaskAssignmentResourceGroups(task.id, [activeResource, inactiveResource], assignments);
+  const onCancel = vi.fn();
   const onSelectionChange = vi.fn();
   const onSubmit = vi.fn();
 
@@ -86,7 +93,7 @@ function renderModal(
         assignableResources={[activeResource, secondActiveResource]}
         error={null}
         inactiveAssignedResources={groups.inactiveAssignedResources}
-        onCancel={() => {}}
+        onCancel={onCancel}
         onSelectionChange={onSelectionChange}
         onSubmit={onSubmit}
         pending={false}
@@ -97,7 +104,7 @@ function renderModal(
     );
   });
 
-  return { container, root, onSelectionChange, onSubmit };
+  return { container, root, onCancel, onSelectionChange, onSubmit };
 }
 
 function unmount(root: Root): void {
@@ -172,6 +179,25 @@ describe('ResourceAssignmentModal', () => {
 
     unmount(root);
   });
+
+  it('closes when the backdrop outside the form is clicked', () => {
+    const { container, root, onCancel } = renderModal();
+    const dialog = container.querySelector('[data-testid="resource-assignment-modal"]') as HTMLDivElement;
+    const form = dialog.querySelector('form') as HTMLFormElement;
+
+    act(() => {
+      form.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(onCancel).not.toHaveBeenCalled();
+
+    act(() => {
+      dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+
+    unmount(root);
+  });
+
   it('renders active resources as selectable choices and active assignments as context', () => {
     const { container, root } = renderModal();
 

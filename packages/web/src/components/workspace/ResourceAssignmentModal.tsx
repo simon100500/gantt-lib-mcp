@@ -64,10 +64,16 @@ export function ResourceAssignmentModal({
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6"
       data-testid="resource-assignment-modal"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !pending) {
+          onCancel();
+        }
+      }}
       role="dialog"
     >
       <form
         className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+        onMouseDown={(event) => event.stopPropagation()}
         onSubmit={handleSubmit}
       >
         <div className="border-b border-slate-200 px-5 py-4">

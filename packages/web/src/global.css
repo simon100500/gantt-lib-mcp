@@ -13,3 +13,14 @@
 .gantt-tl-row {
   border-bottom: 1px solid #f1f1f1 !important;
 }
+
+.gantt-tl-row .assigned-resources-edit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gantt-tl-row:hover .assigned-resources-edit,
+.gantt-tl-row:focus-within .assigned-resources-edit {
+  opacity: 1;
+  pointer-events: auto;
+}
