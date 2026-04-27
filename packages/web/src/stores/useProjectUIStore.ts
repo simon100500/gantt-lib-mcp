@@ -16,6 +16,7 @@ interface ProjectBaselineSelectionState {
 
 interface ProjectUIState {
   viewMode: ViewMode;
+  activeWorkspace: 'project' | 'planner';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   selectedBaseline: ProjectBaselineSelectionState | null;
@@ -30,6 +31,7 @@ interface ProjectUIStore {
 
 const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
+  activeWorkspace: 'project',
   collapsedParentIds: [],
   disableTaskDrag: false,
   selectedBaseline: null,

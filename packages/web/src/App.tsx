@@ -482,6 +482,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
+  const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
@@ -763,9 +764,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       if (current.kind === 'planner' && current.projectId === projectId) {
         return current;
       }
-      return { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
+      return (getProjectState(projectId)?.activeWorkspace ?? 'project') === 'planner'
+        ? { kind: 'planner', projectId }
+        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
     });
-  }, [auth.isAuthenticated, auth.project?.id, hasShareToken, setWorkspace]);
+  }, [auth.isAuthenticated, auth.project?.id, getProjectState, hasShareToken, setWorkspace]);
 
   useEffect(() => {
     setActiveEmptyProjectModeProjectId(null);
@@ -1100,8 +1103,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     useTaskStore.setState({ loading: true, error: null });
     useProjectStore.getState().clearTransientState();
     await auth.switchProject(projectId);
-    setWorkspace({ kind: 'project', projectId, chatOpen: readProjectChatOpenState() });
-  }, [auth, setWorkspace]);
+    setWorkspace(
+      (getProjectState(projectId)?.activeWorkspace ?? 'project') === 'planner'
+        ? { kind: 'planner', projectId }
+        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() }
+    );
+  }, [auth, getProjectState, setWorkspace]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
@@ -1183,6 +1190,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
     setWorkspace({ kind: 'planner', projectId: auth.project.id });
   }, [auth.project, billingStatus, openLimitModal, setWorkspace]);
+
+  useEffect(() => {
+    if (workspace.kind === 'project') {
+      setProjectState(workspace.projectId, { activeWorkspace: 'project' });
+    } else if (workspace.kind === 'planner') {
+      setProjectState(workspace.projectId, { activeWorkspace: 'planner' });
+    }
+  }, [setProjectState, workspace]);
 
   const handleDeleteProject = useCallback(async (projectId: string) => {
     const project = auth.projects.find((item) => item.id === projectId);
