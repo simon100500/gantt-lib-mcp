@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react';
+import { X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -17,14 +18,6 @@ export interface ResourceAssignmentModalProps {
   onSubmit: (resourceIds: string[]) => void;
 }
 
-function toggleSelection(current: string[], resourceId: string, checked: boolean): string[] {
-  if (checked) {
-    return current.includes(resourceId) ? current : [...current, resourceId];
-  }
-
-  return current.filter((id) => id !== resourceId);
-}
-
 function formatResourceLabel(resource: ProjectResource): string {
   return resource.name?.trim() || resource.id;
 }
@@ -32,7 +25,6 @@ function formatResourceLabel(resource: ProjectResource): string {
 export function ResourceAssignmentModal({
   task,
   activeAssignedResources,
-  inactiveAssignedResources,
   assignableResources,
   selectedResourceIds,
   pending = false,
@@ -46,6 +38,16 @@ export function ResourceAssignmentModal({
   const hasAssignableResources = assignableResources.length > 0;
   const isSubmitDisabled = pending || !task || !hasAssignableResources;
   const taskName = task?.name?.trim() || 'Задача не выбрана';
+  const availableResources = assignableResources.filter((resource) => !selectedIdSet.has(resource.id));
+  const resourceLabelsById = new Map<string, string>();
+
+  for (const { resource } of activeAssignedResources) {
+    resourceLabelsById.set(resource.id, formatResourceLabel(resource));
+  }
+
+  for (const resource of assignableResources) {
+    resourceLabelsById.set(resource.id, formatResourceLabel(resource));
+  }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,6 +57,10 @@ export function ResourceAssignmentModal({
     }
 
     onSubmit(selectedIds);
+  };
+
+  const removeSelectedResource = (resourceId: string) => {
+    onSelectionChange(selectedIds.filter((id) => id !== resourceId));
   };
 
   return (
@@ -101,69 +107,66 @@ export function ResourceAssignmentModal({
             </div>
           )}
 
-          <section aria-labelledby="assignment-active-heading" className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-900" id="assignment-active-heading">
-              Текущие активные назначения
+          <section aria-labelledby="assignment-current-heading" className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900" id="assignment-current-heading">
+              Текущие назначения
             </h3>
-            {activeAssignedResources.length > 0 ? (
-              <ul className="space-y-1" data-testid="assignment-modal-active-assigned">
-                {activeAssignedResources.map(({ resource, assignment }) => (
-                  <li className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-900" data-testid={`assigned-active-resource-${resource.id}`} key={assignment.id}>
-                    {formatResourceLabel(resource)}
-                  </li>
-                ))}
-              </ul>
+            {selectedIds.length > 0 ? (
+              <div className="flex flex-wrap gap-2" data-testid="assignment-modal-selected-resources">
+                {selectedIds.map((resourceId) => {
+                  const label = resourceLabelsById.get(resourceId) ?? resourceId;
+                  return (
+                    <span
+                      className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md bg-violet-50 px-2.5 py-1 text-sm font-medium text-violet-800"
+                      data-testid={`assigned-selected-resource-${resourceId}`}
+                      key={resourceId}
+                      title={label}
+                    >
+                      <span className="min-w-0 truncate">{label}</span>
+                      <button
+                        aria-label={`Снять ресурс ${label}`}
+                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-violet-500 transition-colors hover:bg-violet-100 hover:text-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        data-testid={`assignment-selected-resource-remove-${resourceId}`}
+                        disabled={pending || !task}
+                        onClick={() => removeSelectedResource(resourceId)}
+                        type="button"
+                      >
+                        <X aria-hidden="true" className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
             ) : (
-              <p className="rounded-md bg-slate-50 px-3 py-2 text-slate-500" data-testid="assignment-modal-no-active-assigned">
-                Активные ресурсы пока не назначены.
-              </p>
-            )}
-          </section>
-
-          <section aria-labelledby="assignment-historical-heading" className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-900" id="assignment-historical-heading">
-              Исторические неактивные назначения
-            </h3>
-            {inactiveAssignedResources.length > 0 ? (
-              <ul className="space-y-1" data-testid="assignment-modal-inactive-assigned">
-                {inactiveAssignedResources.map(({ resource, assignment }) => (
-                  <li className="rounded-md bg-amber-50 px-3 py-2 text-amber-900" data-testid={`assigned-inactive-resource-${resource.id}`} key={assignment.id}>
-                    {formatResourceLabel(resource)} недоступен для новых назначений
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="rounded-md bg-slate-50 px-3 py-2 text-slate-500" data-testid="assignment-modal-no-inactive-assigned">
-                Неактивных исторических назначений нет.
+              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-slate-500" data-testid="assignment-modal-no-selected-resources">
+                Пока пусто.
               </p>
             )}
           </section>
 
           <fieldset className="space-y-2" disabled={pending || !task}>
-            <legend className="text-sm font-semibold text-slate-900">Активные ресурсы для назначения</legend>
+            <legend className="text-sm font-semibold text-slate-900">Пул ресурсов</legend>
             {hasAssignableResources ? (
-              <div className="space-y-2" data-testid="assignment-modal-resource-options">
-                {assignableResources.map((resource) => {
-                  const checked = selectedIdSet.has(resource.id);
+              <div className="flex flex-wrap gap-2" data-testid="assignment-modal-resource-options">
+                {availableResources.length > 0 ? availableResources.map((resource) => {
+                  const label = formatResourceLabel(resource);
                   return (
-                    <label
-                      className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800 transition-colors hover:bg-slate-50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                    <button
+                      className="inline-flex max-w-full items-center rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                       data-testid={`assignment-resource-option-${resource.id}`}
+                      disabled={pending || !task}
                       key={resource.id}
+                      onClick={() => onSelectionChange([...selectedIds, resource.id])}
+                      type="button"
                     >
-                      <input
-                        checked={checked}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                        data-testid={`assignment-resource-checkbox-${resource.id}`}
-                        disabled={pending || !task}
-                        onChange={(event) => onSelectionChange(toggleSelection(selectedIds, resource.id, event.target.checked))}
-                        type="checkbox"
-                        value={resource.id}
-                      />
-                      <span>{formatResourceLabel(resource)}</span>
-                    </label>
+                      <span className="min-w-0 truncate">{label}</span>
+                    </button>
                   );
-                })}
+                }) : (
+                  <p className="rounded-md bg-slate-50 px-3 py-2 text-slate-500" data-testid="assignment-modal-all-resources-selected">
+                    Все доступные ресурсы назначены.
+                  </p>
+                )}
               </div>
             ) : (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-800" data-testid="assignment-modal-no-assignable-resources">

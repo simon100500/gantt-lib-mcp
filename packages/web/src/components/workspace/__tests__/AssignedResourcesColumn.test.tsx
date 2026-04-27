@@ -106,7 +106,7 @@ describe('AssignedResourcesColumnCell', () => {
     expect(container.querySelector('[data-testid="assigned-resources-cell-task-1"]')?.textContent).not.toContain('Ресурсы не назначены');
 
     act(() => {
-      (container.querySelector('[data-testid="assigned-resources-edit-task-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="assigned-resources-add-task-1"]') as HTMLButtonElement).click();
     });
     expect(onEdit).toHaveBeenCalledWith(task);
 
@@ -124,6 +124,8 @@ describe('AssignedResourcesColumnCell', () => {
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')?.textContent).toContain('Бригада монтажников');
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-second-active"]')?.textContent).toContain('Крановщик');
     expect(container.querySelectorAll('[data-testid="assigned-resources-active-task-1-resource-active"]')).toHaveLength(1);
+    expect(container.querySelector('[data-testid="assigned-resources-edit-task-1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assigned-resources-add-task-1"]')).toBeNull();
 
     unmount(root);
   });
@@ -199,7 +201,7 @@ describe('createAssignedResourcesColumn', () => {
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')?.textContent).toContain('Бригада монтажников');
 
     act(() => {
-      (container.querySelector('[data-testid="assigned-resources-edit-task-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]') as HTMLButtonElement).click();
     });
     expect(onEdit).toHaveBeenCalledWith(task);
 

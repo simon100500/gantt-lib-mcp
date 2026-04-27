@@ -143,11 +143,13 @@ describe('ResourceAssignmentModal', () => {
     const onCancel = vi.fn();
     const { container, root, onSelectionChange, onSubmit } = renderModal({ onCancel, pending: true });
 
-    const activeCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-active"]') as HTMLInputElement | null;
+    const secondOption = container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]') as HTMLButtonElement | null;
+    const removeButton = container.querySelector('[data-testid="assignment-selected-resource-remove-resource-active"]') as HTMLButtonElement | null;
     const submitButton = container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement | null;
     const cancelButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отмена')) as HTMLButtonElement | undefined;
 
-    expect(activeCheckbox?.disabled).toBe(true);
+    expect(secondOption?.disabled).toBe(true);
+    expect(removeButton?.disabled).toBe(true);
     expect(submitButton?.disabled).toBe(true);
     expect(submitButton?.getAttribute('aria-busy')).toBe('true');
     expect(submitButton?.textContent).toContain('Сохраняем назначение');
@@ -155,7 +157,8 @@ describe('ResourceAssignmentModal', () => {
     expect(cancelButton?.getAttribute('aria-label')).toBe('Закрыть окно назначения ресурсов');
 
     act(() => {
-      activeCheckbox?.click();
+      secondOption?.click();
+      removeButton?.click();
       submitButton?.click();
       cancelButton?.click();
     });
@@ -170,12 +173,30 @@ describe('ResourceAssignmentModal', () => {
   it('adds a newly checked resource id to the selected array deterministically', () => {
     const { container, root, onSelectionChange } = renderModal({ selectedResourceIds: [activeResource.id] });
 
-    const secondCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-second-active"]') as HTMLInputElement;
+    const secondOption = container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]') as HTMLButtonElement;
     act(() => {
-      secondCheckbox.click();
+      secondOption.click();
     });
 
     expect(onSelectionChange).toHaveBeenCalledWith([activeResource.id, secondActiveResource.id]);
+
+    unmount(root);
+  });
+
+  it('removes selected resources through current assignment chips', () => {
+    const { container, root, onSelectionChange } = renderModal({
+      selectedResourceIds: [activeResource.id, secondActiveResource.id],
+    });
+
+    expect(container.querySelector('[data-testid="assigned-selected-resource-resource-active"]')?.textContent).toContain('Active Crew');
+    expect(container.querySelector('[data-testid="assigned-selected-resource-resource-second-active"]')?.textContent).toContain('Second Active Crew');
+
+    const removeButton = container.querySelector('[data-testid="assignment-selected-resource-remove-resource-active"]') as HTMLButtonElement;
+    act(() => {
+      removeButton.click();
+    });
+
+    expect(onSelectionChange).toHaveBeenCalledWith([secondActiveResource.id]);
 
     unmount(root);
   });
@@ -198,27 +219,32 @@ describe('ResourceAssignmentModal', () => {
     unmount(root);
   });
 
-  it('renders active resources as selectable choices and active assignments as context', () => {
+  it('renders selected resources as removable chips and active resources as selectable choices', () => {
     const { container, root } = renderModal();
 
     expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain(task.name);
-    expect(container.querySelector('[data-testid="assigned-active-resource-resource-active"]')?.textContent).toContain('Active Crew');
+    expect(container.querySelector('[data-testid="assigned-selected-resource-resource-active"]')?.textContent).toContain('Active Crew');
+    expect(container.querySelector('[data-testid="assignment-selected-resource-remove-resource-active"]')).not.toBeNull();
 
-    const activeCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-active"]') as HTMLInputElement | null;
-    const secondCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-second-active"]') as HTMLInputElement | null;
+    const activeOption = container.querySelector('[data-testid="assignment-resource-option-resource-active"]') as HTMLButtonElement | null;
+    const secondOption = container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]') as HTMLButtonElement | null;
 
-    expect(activeCheckbox?.checked).toBe(true);
-    expect(secondCheckbox?.checked).toBe(false);
+    expect(activeOption).toBeNull();
+    expect(secondOption).not.toBeNull();
+    expect(container.querySelector('[data-testid^="assignment-resource-checkbox-"]')).toBeNull();
 
     unmount(root);
   });
 
-  it('keeps inactive assigned resources visible as historical context but not selectable', () => {
+  it('omits inactive historical assignments and keeps inactive resources non-selectable', () => {
     const { container, root } = renderModal();
 
-    expect(container.querySelector('[data-testid="assigned-inactive-resource-resource-inactive"]')?.textContent).toContain('Dormant Crew');
-    expect(container.querySelector('[data-testid="assignment-resource-checkbox-resource-inactive"]')).toBeNull();
+    expect(container.textContent).not.toContain('Исторические неактивные назначения');
+    expect(container.textContent).not.toContain('Неактивных исторических назначений нет');
+    expect(container.textContent).not.toContain('Dormant Crew');
+    expect(container.querySelector('[data-testid="assigned-inactive-resource-resource-inactive"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-inactive"]')).toBeNull();
 
     unmount(root);
   });
@@ -239,7 +265,8 @@ describe('ResourceAssignmentModal', () => {
     expect(alert?.getAttribute('data-testid')).toBe('assignment-modal-error');
     expect(alert?.textContent).toContain('task_has_no_leaf_descendants');
     expect(container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain(task.name);
-    expect(container.querySelector('[data-testid="assigned-inactive-resource-resource-inactive"]')?.textContent).toContain('Dormant Crew');
+    expect(container.querySelector('[data-testid="assigned-selected-resource-resource-active"]')?.textContent).toContain('Active Crew');
+    expect(container.querySelector('[data-testid="assignment-modal-resource-options"]')?.textContent).toContain('Second Active Crew');
 
     unmount(root);
   });
@@ -247,15 +274,13 @@ describe('ResourceAssignmentModal', () => {
   it('submits the full selected resource id array without fetching', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    const { container, root, onSelectionChange, onSubmit } = renderModal({
+    const { container, root, onSubmit } = renderModal({
       selectedResourceIds: [activeResource.id, secondActiveResource.id],
     });
 
-    const secondCheckbox = container.querySelector('[data-testid="assignment-resource-checkbox-resource-second-active"]') as HTMLInputElement;
-    act(() => {
-      secondCheckbox.click();
-    });
-    expect(onSelectionChange).toHaveBeenCalledWith([activeResource.id]);
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-modal-all-resources-selected"]')?.textContent).toContain('Все доступные ресурсы назначены');
 
     const submitButton = container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement;
     act(() => {
@@ -278,8 +303,8 @@ describe('ResourceAssignmentModal', () => {
     });
 
     expect(container.querySelector('[data-testid="assignment-modal-empty-task"]')?.textContent).toContain('Выберите задачу');
-    expect(container.querySelector('[data-testid="assignment-modal-no-active-assigned"]')?.textContent).toContain('Активные ресурсы пока не назначены');
-    expect(container.querySelector('[data-testid="assignment-modal-no-inactive-assigned"]')?.textContent).toContain('Неактивных исторических назначений нет');
+    expect(container.querySelector('[data-testid="assignment-modal-no-selected-resources"]')?.textContent).toContain('Пока пусто');
+    expect(container.querySelector('[data-testid="assignment-modal-no-inactive-assigned"]')).toBeNull();
     expect((container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement | null)?.disabled).toBe(true);
 
     unmount(root);

@@ -14,13 +14,13 @@
   border-bottom: 1px solid #f1f1f1 !important;
 }
 
-.gantt-tl-row .assigned-resources-edit {
+.gantt-tl-cell-custom[data-custom-column-id="assigned-resources"] .assigned-resources-add {
   opacity: 0;
   pointer-events: none;
 }
 
-.gantt-tl-row:hover .assigned-resources-edit,
-.gantt-tl-row:focus-within .assigned-resources-edit {
+.gantt-tl-cell-custom[data-custom-column-id="assigned-resources"]:hover .assigned-resources-add,
+.gantt-tl-cell-custom[data-custom-column-id="assigned-resources"]:focus-within .assigned-resources-add {
   opacity: 1;
   pointer-events: auto;
 }

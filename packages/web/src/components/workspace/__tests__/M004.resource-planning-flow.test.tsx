@@ -444,13 +444,13 @@ describe('M004 integrated resource-planning loop', () => {
     expect(assignedCell.cellContainer.querySelector(`[data-testid="assigned-resources-active-${fixture.taskId}-${fixture.resourceId}"]`)?.textContent).toContain(fixture.resourceName);
 
     await act(async () => {
-      (assignedCell.cellContainer.querySelector(`[data-testid="assigned-resources-edit-${fixture.taskId}"]`) as HTMLButtonElement).click();
+      (assignedCell.cellContainer.querySelector(`[data-testid="assigned-resources-active-${fixture.taskId}-${fixture.resourceId}"]`) as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
     expect(project.container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
     expect(project.container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain(fixture.taskName);
-    expect(project.container.querySelector(`[data-testid="assignment-resource-checkbox-${fixture.resourceId}"]`)).not.toBeNull();
+    expect(project.container.querySelector(`[data-testid="assigned-selected-resource-${fixture.resourceId}"]`)).not.toBeNull();
     expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining(`/api/tasks/${fixture.taskId}/assignments`), expect.anything());
 
     const emittedTargets: PlannerCorrectionTarget[] = [];

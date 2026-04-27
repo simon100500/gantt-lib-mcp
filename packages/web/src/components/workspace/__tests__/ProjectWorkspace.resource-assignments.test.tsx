@@ -221,8 +221,12 @@ function renderAssignedResourcesCellText(task: Task): string {
   return host.textContent ?? '';
 }
 
-function getCheckbox(container: HTMLElement, resourceId: string): HTMLInputElement | null {
-  return container.querySelector(`[data-testid="assignment-resource-checkbox-${resourceId}"]`) as HTMLInputElement | null;
+function getResourceOption(container: HTMLElement, resourceId: string): HTMLButtonElement | null {
+  return container.querySelector(`[data-testid="assignment-resource-option-${resourceId}"]`) as HTMLButtonElement | null;
+}
+
+function getRemoveResourceButton(container: HTMLElement, resourceId: string): HTMLButtonElement | null {
+  return container.querySelector(`[data-testid="assignment-selected-resource-remove-${resourceId}"]`) as HTMLButtonElement | null;
 }
 
 function getSubmitButton(container: HTMLElement): HTMLButtonElement | null {
@@ -716,16 +720,16 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    let alphaCheckbox = getCheckbox(container, 'resource-1');
-    let dormantCheckbox = getCheckbox(container, 'resource-2');
+    let alphaOption = getResourceOption(container, 'resource-1');
+    let dormantOption = getResourceOption(container, 'resource-2');
     let submitButton = getSubmitButton(container);
 
     expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
-    expect(alphaCheckbox).not.toBeNull();
-    expect(dormantCheckbox).not.toBeNull();
+    expect(alphaOption).not.toBeNull();
+    expect(dormantOption).not.toBeNull();
 
     await act(async () => {
-      dormantCheckbox!.click();
+      dormantOption!.click();
     });
 
     await act(async () => {
@@ -754,12 +758,12 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    alphaCheckbox = getCheckbox(container, 'resource-1');
-    dormantCheckbox = getCheckbox(container, 'resource-2');
+    alphaOption = getResourceOption(container, 'resource-1');
+    dormantOption = getResourceOption(container, 'resource-2');
     submitButton = getSubmitButton(container);
 
-    expect(alphaCheckbox).not.toBeNull();
-    expect(dormantCheckbox).toBeNull();
+    expect(alphaOption).not.toBeNull();
+    expect(dormantOption).toBeNull();
     expect(submitButton?.disabled).toBe(false);
     expect(renderAssignedResourcesCellText(tasks[2]!)).toContain('Dormant Crew');
 
@@ -815,14 +819,14 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     const modal = container.querySelector('[data-testid="resource-assignment-modal"]');
-    const alphaCheckbox = getCheckbox(container, 'resource-1');
-    const dormantCheckbox = getCheckbox(container, 'resource-2');
+    const alphaOption = getResourceOption(container, 'resource-1');
+    const dormantOption = getResourceOption(container, 'resource-2');
     const submitButton = getSubmitButton(container);
 
     expect(modal).not.toBeNull();
     expect(modal?.textContent).toContain('Parent');
-    expect(alphaCheckbox).not.toBeNull();
-    expect(dormantCheckbox).toBeNull();
+    expect(alphaOption).not.toBeNull();
+    expect(dormantOption).toBeNull();
     expect(submitButton?.disabled).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
 
@@ -873,11 +877,11 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    const alphaCheckbox = getCheckbox(container, 'resource-1');
+    const alphaOption = getResourceOption(container, 'resource-1');
     const submitButton = getSubmitButton(container)!;
 
     await act(async () => {
-      alphaCheckbox!.click();
+      alphaOption!.click();
     });
 
     expect(submitButton.disabled).toBe(false);
@@ -920,11 +924,11 @@ describe('ProjectWorkspace resource assignments', () => {
       await Promise.resolve();
     });
 
-    const alphaCheckbox = getCheckbox(container, 'resource-1');
+    const alphaOption = getResourceOption(container, 'resource-1');
     const submitButton = getSubmitButton(container)!;
 
     await act(async () => {
-      alphaCheckbox!.click();
+      alphaOption!.click();
     });
 
     await act(async () => {
@@ -960,7 +964,7 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     await act(async () => {
-      getCheckbox(container, 'resource-1')!.click();
+      getResourceOption(container, 'resource-1')!.click();
     });
 
     await act(async () => {
@@ -1055,8 +1059,13 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     await act(async () => {
-      getCheckbox(container, 'resource-1')!.click();
-      getCheckbox(container, 'resource-2')!.click();
+      getResourceOption(container, 'resource-1')!.click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      getResourceOption(container, 'resource-2')!.click();
+      await Promise.resolve();
     });
 
     await act(async () => {
@@ -1095,7 +1104,7 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     await act(async () => {
-      getCheckbox(container, 'resource-1')!.click();
+      getResourceOption(container, 'resource-1')!.click();
     });
 
     await act(async () => {
@@ -1125,7 +1134,7 @@ describe('ProjectWorkspace resource assignments', () => {
     });
 
     await act(async () => {
-      getCheckbox(container, 'resource-1')!.click();
+      getResourceOption(container, 'resource-1')!.click();
     });
 
     await act(async () => {

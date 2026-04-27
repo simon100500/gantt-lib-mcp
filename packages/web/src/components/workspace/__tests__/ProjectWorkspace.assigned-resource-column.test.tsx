@@ -311,14 +311,16 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
     const { cellContainer, cellRoot } = renderColumnCell(column, tasks[1]!);
 
     await act(async () => {
-      (cellContainer.querySelector('[data-testid="assigned-resources-edit-leaf-1"]') as HTMLButtonElement).click();
+      (cellContainer.querySelector('[data-testid="assigned-resources-active-leaf-1-resource-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
     expect(container.querySelector('[data-testid="resource-assignment-modal"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="assignment-modal-task-name"]')?.textContent).toContain('Leaf A');
-    expect(container.querySelector('[data-testid="assignment-resource-checkbox-resource-1"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="assignment-resource-checkbox-resource-2"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assigned-selected-resource-resource-1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-2"]')).toBeNull();
+    expect(container.querySelector('[data-testid^="assignment-resource-checkbox-"]')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
 
     act(() => {

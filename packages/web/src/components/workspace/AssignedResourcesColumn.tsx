@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { TaskListColumn } from 'gantt-lib';
-import { Pencil } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import type { ProjectResource, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -59,22 +59,50 @@ function renderResourceChips(
   taskId: string,
   resources: TaskResourceAssignmentView[],
   variant: 'active' | 'inactive',
+  onChipClick?: () => void,
 ): ReactNode {
   return resources.map(({ resource, assignment }) => {
     const label = formatResourceLabel(resource);
     const variantClasses = variant === 'active'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : 'border-amber-200 bg-amber-50 text-amber-800';
+      ? 'bg-violet-50 text-violet-800'
+      : 'bg-violet-50 text-violet-500';
+    const className = `inline-flex min-w-0 flex-1 basis-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-4 ${variantClasses} ${
+      onChipClick ? 'cursor-pointer transition-colors hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400' : ''
+    }`;
+    const children = (
+      <>
+        <span className="min-w-0 truncate">{label}</span>
+        {variant === 'inactive' && <span className="ml-1 shrink-0 text-violet-500">неактивен</span>}
+      </>
+    );
+
+    if (onChipClick) {
+      return (
+        <button
+          aria-label={`Изменить назначения ресурсов для задачи ${taskId}`}
+          className={className}
+          data-testid={`assigned-resources-${variant}-${taskId}-${resource.id}`}
+          key={`${variant}-${assignment.id}-${resource.id}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChipClick();
+          }}
+          title={variant === 'inactive' ? `${label} — неактивный ресурс` : label}
+          type="button"
+        >
+          {children}
+        </button>
+      );
+    }
 
     return (
       <span
-        className={`inline-flex min-w-0 flex-1 basis-0 items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${variantClasses}`}
+        className={className}
         data-testid={`assigned-resources-${variant}-${taskId}-${resource.id}`}
         key={`${variant}-${assignment.id}-${resource.id}`}
         title={variant === 'inactive' ? `${label} — неактивный ресурс` : label}
       >
-        <span className="min-w-0 truncate">{label}</span>
-        {variant === 'inactive' && <span className="ml-1 shrink-0 text-amber-700">неактивен</span>}
+        {children}
       </span>
     );
   });
@@ -97,6 +125,7 @@ export function AssignedResourcesColumnCell({
   const summaryLabel = totalVisibleCount === 0
     ? 'Назначено ресурсов: 0'
     : `Назначено ресурсов: ${totalVisibleCount}`;
+  const openEditor = canEdit ? () => onEdit?.(task) : undefined;
 
   return (
     <div
@@ -106,43 +135,61 @@ export function AssignedResourcesColumnCell({
       data-testid={`assigned-resources-cell-${task.id}`}
     >
       <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
-        {totalVisibleCount === 0 ? null : (
+        {totalVisibleCount === 0 ? (
+          canEdit ? (
+            <button
+              aria-label={`Назначить ресурсы для задачи ${task.name || task.id}`}
+              className="assigned-resources-add inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-violet-100 px-1 text-violet-700 transition-colors hover:bg-violet-200 hover:text-violet-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-1"
+              data-testid={`assigned-resources-add-${task.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit?.(task);
+              }}
+              title="Назначить ресурсы"
+              type="button"
+            >
+              <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+            </button>
+          ) : null
+        ) : (
           <>
             <span className="sr-only" data-testid={`assigned-resources-count-${task.id}`}>
               {summaryLabel}
             </span>
-            {renderResourceChips(task.id, activeResources, 'active')}
-            {renderResourceChips(task.id, inactiveResources, 'inactive')}
+            {renderResourceChips(task.id, activeResources, 'active', openEditor)}
+            {renderResourceChips(task.id, inactiveResources, 'inactive', openEditor)}
             {unknownResourceIds.map((resourceId) => (
-              <span
-                className="inline-flex min-w-0 flex-1 basis-0 items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-red-700"
-                data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
-                key={`unknown-${resourceId}`}
-                title={`Неизвестный ресурс: ${resourceId}`}
-              >
-                <span className="min-w-0 truncate">Неизвестный ресурс</span>
-                <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
-              </span>
+              openEditor ? (
+                <button
+                  aria-label={`Изменить назначения ресурсов для задачи ${task.name || task.id}`}
+                  className="inline-flex min-w-0 flex-1 basis-0 items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                  data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
+                  key={`unknown-${resourceId}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEditor();
+                  }}
+                  title={`Неизвестный ресурс: ${resourceId}`}
+                  type="button"
+                >
+                  <span className="min-w-0 truncate">Неизвестный ресурс</span>
+                  <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
+                </button>
+              ) : (
+                <span
+                  className="inline-flex min-w-0 flex-1 basis-0 items-center rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-red-700"
+                  data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
+                  key={`unknown-${resourceId}`}
+                  title={`Неизвестный ресурс: ${resourceId}`}
+                >
+                  <span className="min-w-0 truncate">Неизвестный ресурс</span>
+                  <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
+                </span>
+              )
             ))}
           </>
         )}
       </div>
-
-      {canEdit ? (
-        <button
-          aria-label={`Изменить назначения ресурсов для задачи ${task.name || task.id}`}
-          className="assigned-resources-edit inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-          data-testid={`assigned-resources-edit-${task.id}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onEdit?.(task);
-          }}
-          title="Изменить назначения ресурсов"
-          type="button"
-        >
-          <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
     </div>
   );
 }
