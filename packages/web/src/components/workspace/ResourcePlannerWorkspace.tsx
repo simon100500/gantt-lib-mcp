@@ -26,7 +26,7 @@ import {
   mapResourcePlannerResultToTimelineResources,
 } from './resourcePlannerAdapter.ts';
 import type { ResourcePlannerTimelineItem, ResourcePlannerTimelineResource } from './resourcePlannerAdapter.ts';
-import { ResourceAssignmentDetailsPanel } from './ResourceAssignmentDetailsPanel.tsx';
+import { ResourceAssignmentDetailsPanel, type AssignmentResourceView } from './ResourceAssignmentDetailsPanel.tsx';
 import { filterResourceTimelineResources, type ResourcePlannerFilters } from './resourcePlannerFilters.ts';
 import { buildReplacementResourceIds, classifyResourcePlannerMove, type ResourcePlannerMoveClassification } from './resourcePlannerMoves.ts';
 
@@ -808,11 +808,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   }, [persistPlannerMove, selectedItem]);
 
   const handleRemoveResource = useCallback(async (input: { assignmentId: string; resourceId: string }) => {
-    if (!accessToken || !selectedItem || input.assignmentId !== selectedItem.id) {
-      return;
-    }
-
-    if (!window.confirm('Ресурс будет снят с этой задачи. Продолжить?')) {
+    if (!accessToken || !selectedItem) {
       return;
     }
 
@@ -876,7 +872,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
     [resources, selectedItem],
   );
-  const selectedAssignedResources = useMemo(() => {
+  const selectedAssignedResources = useMemo<AssignmentResourceView[]>(() => {
     if (!selectedItem) {
       return [];
     }
@@ -884,11 +880,14 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
     const assigned = assignments
       .filter((assignment) => assignment.taskId === selectedItem.taskId)
-      .map((assignment) => resourceById.get(assignment.resourceId))
-      .filter((resource): resource is ProjectResource => Boolean(resource));
+      .map((assignment) => {
+        const assignedResource = resourceById.get(assignment.resourceId);
+        return assignedResource ? { assignmentId: assignment.id, resource: assignedResource } : null;
+      })
+      .filter((entry): entry is AssignmentResourceView => Boolean(entry));
 
     if (assigned.length === 0 && selectedResource) {
-      return [selectedResource];
+      return [{ assignmentId: selectedItem.id, resource: selectedResource }];
     }
 
     return assigned;
@@ -1257,7 +1256,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           </div>
         </div>
 
-        <div className={cn('w-full max-w-[420px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]', !showSidePanel && 'hidden')}>
+        <div className={cn('w-full min-w-0 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:w-[360px] lg:flex-none xl:w-[380px]', !showSidePanel && 'hidden')}>
           {selectedItem && (
             <ResourceAssignmentDetailsPanel
               item={selectedItem}
