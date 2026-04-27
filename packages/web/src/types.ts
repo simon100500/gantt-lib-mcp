@@ -24,14 +24,42 @@ export interface ValidationResult {
   errors: DependencyError[];
 }
 
-export type {
-  PlannerScope,
-  ResourcePlannerInterval,
-  ResourcePlannerResource,
-  ResourcePlannerResult,
-  ResourceScope,
-  ResourceType,
-} from '@gantt/mcp/types';
+export type ResourceType = 'human' | 'equipment' | 'material' | 'other';
+
+export type ResourceScope = 'shared' | 'project';
+
+export type PlannerScope = 'current-project' | 'all-projects';
+
+export interface ResourcePlannerInterval {
+  assignmentId: string;
+  resourceId: string;
+  resourceName: string;
+  projectId: string;
+  projectName: string;
+  taskId: string;
+  taskName: string;
+  startDate: string;
+  endDate: string;
+  assignmentCreatedAt: string;
+  hasConflict: boolean;
+  conflictCount: number;
+  conflictAssignmentIds: string[];
+}
+
+export interface ResourcePlannerResource {
+  resourceId: string;
+  resourceName: string;
+  hasConflicts: boolean;
+  conflictCount: number;
+  intervals: ResourcePlannerInterval[];
+}
+
+export interface ResourcePlannerResult {
+  projectId: string;
+  scope: PlannerScope;
+  workspaceUserId: string;
+  resources: ResourcePlannerResource[];
+}
 
 export interface CalendarDay {
   date: string;

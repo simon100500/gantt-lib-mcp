@@ -15,8 +15,7 @@
     "types": ["vite/client", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@gantt/mcp/types": ["../mcp/src/types.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"]
