@@ -9,7 +9,8 @@ import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { cn } from '../../lib/utils.ts';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useProjectStore } from '../../stores/useProjectStore.ts';
-import type { PlannerCorrectionTarget } from '../../stores/useUIStore.ts';
+import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
+import { useUIStore, type PlannerCorrectionTarget, type ViewMode } from '../../stores/useUIStore.ts';
 import { Button } from '../ui/button.tsx';
 import {
   DropdownMenu,
@@ -51,6 +52,16 @@ const RESOURCE_TYPE_OPTIONS: Array<{ type: ResourceType; label: string }> = [
   { type: 'material', label: 'Материалы' },
   { type: 'other', label: 'Другое' },
 ];
+
+const VIEW_MODE_OPTIONS: Array<{ mode: ViewMode; label: string }> = [
+  { mode: 'day', label: 'День' },
+  { mode: 'week', label: 'Неделя' },
+  { mode: 'month', label: 'Месяц' },
+];
+
+function getPlannerDayWidth(viewMode: ViewMode): number {
+  return viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24;
+}
 
 function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null {
   if (!payload || typeof payload !== 'object') {
@@ -310,6 +321,11 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   const plannerScope: PlannerScope = 'current-project';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
   const setResourcePlannerCache = useProjectStore((store) => store.setResourcePlannerCache);
+  const globalViewMode = useUIStore((store) => store.viewMode);
+  const setGlobalViewMode = useUIStore((store) => store.setViewMode);
+  const projectStates = useProjectUIStore((store) => store.projectStates);
+  const getProjectState = useProjectUIStore((store) => store.getProjectState);
+  const setProjectState = useProjectUIStore((store) => store.setProjectState);
   const [state, setState] = useState<PlannerState>(() => (
     cachedPlannerData
       ? { status: 'ready', data: cachedPlannerData, error: null }
@@ -461,6 +477,13 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       void loadResourceCatalog();
     }
   }, [loadResourceCatalog, resources.length]);
+
+  useEffect(() => {
+    const projectState = getProjectState(projectId);
+    if (projectState?.viewMode) {
+      setGlobalViewMode(projectState.viewMode);
+    }
+  }, [getProjectState, projectId, setGlobalViewMode]);
 
   const handleCreateResource = useCallback(async () => {
     if (!accessToken || creatingResource) {
@@ -874,6 +897,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   const plannerResourceCount = displayedPlannerData?.resources.length ?? 0;
   const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);
   const pendingMoveCount = pendingMoveIds.size;
+  const viewMode = projectStates[projectId]?.viewMode ?? globalViewMode;
+  const plannerDayWidth = getPlannerDayWidth(viewMode);
   const hasActiveFilters = filters.query.trim().length > 0
     || filters.resourceTypes.length > 0
     || filters.conflictOnly
@@ -903,51 +928,56 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       document.getElementById('resource-create-name')?.focus();
     }, 0);
   }, []);
+  const handleViewModeChange = useCallback((nextViewMode: ViewMode) => {
+    setGlobalViewMode(nextViewMode);
+    setProjectState(projectId, { viewMode: nextViewMode });
+  }, [projectId, setGlobalViewMode, setProjectState]);
   const showSidePanel = Boolean(selectedItem || showCatalogPanel);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={toolbarPrimaryButtonClassName}
-            onClick={handleOpenCatalogPanel}
-          >
-            <Plus className="h-4 w-4" />
-            <span>Создать</span>
-          </Button>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={toolbarPrimaryButtonClassName}
+              onClick={handleOpenCatalogPanel}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Создать</span>
+            </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(
-                  toolbarButtonClassName,
-                  hasActiveFilters && 'border-primary bg-primary/5 text-primary',
-                )}
-                data-testid="planner-open-filter"
-              >
-                <Funnel className="h-4 w-4" />
-                <span>Фильтр</span>
-                {hasActiveFilters ? (
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(filters.includeInactive)}
-                  </span>
-                ) : null}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80" data-testid="planner-filter-controls">
-              <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-slate-500">
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                Фильтр ресурсов
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="space-y-3 px-2 py-2" onKeyDownCapture={(event) => event.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    toolbarButtonClassName,
+                    hasActiveFilters && 'border-primary bg-primary/5 text-primary',
+                  )}
+                  data-testid="planner-open-filter"
+                >
+                  <Funnel className="h-4 w-4" />
+                  <span>Фильтр</span>
+                  {hasActiveFilters ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {Number(filters.query.trim().length > 0) + filters.resourceTypes.length + Number(filters.conflictOnly) + Number(filters.includeInactive)}
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80" data-testid="planner-filter-controls">
+                <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-slate-500">
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Фильтр ресурсов
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="space-y-3 px-2 py-2" onKeyDownCapture={(event) => event.stopPropagation()}>
                 <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-500">
                   Поиск
                   <div className="relative">
@@ -1028,39 +1058,62 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                 >
                   Сбросить фильтр
                 </Button>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={cn(toolbarButtonClassName, showCatalogPanel && !selectedItem && 'border-primary bg-primary/5 text-primary')}
-            data-testid="planner-open-catalog"
-            onClick={() => {
-              setSelectedItem(null);
-              setShowCatalogPanel((current) => !current);
-            }}
-          >
-            <Package className="h-4 w-4" />
-            <span>Ресурсы</span>
-          </Button>
+            <div className="inline-flex rounded-md">
+              {VIEW_MODE_OPTIONS.map((option, index) => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  className={cn(
+                    'flex h-8 items-center border px-3 text-xs font-medium transition-colors focus-visible:outline-none',
+                    index === 0 && 'rounded-l-md',
+                    index === VIEW_MODE_OPTIONS.length - 1 && 'rounded-r-md',
+                    viewMode === option.mode
+                      ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10'
+                      : 'border-slate-300 text-slate-600 hover:border-primary hover:text-primary',
+                  )}
+                  onClick={() => handleViewModeChange(option.mode)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={toolbarButtonClassName}
-            onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(toolbarButtonClassName, showCatalogPanel && !selectedItem && 'border-primary bg-primary/5 text-primary')}
+              data-testid="planner-open-catalog"
+              onClick={() => {
+                setSelectedItem(null);
+                setShowCatalogPanel((current) => !current);
+              }}
+            >
+              <Package className="h-4 w-4" />
+              <span>Ресурсы</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={toolbarButtonClassName}
+              onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
       <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 lg:flex-row lg:overflow-hidden">
-        <div className="flex min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto bg-white">
             <input
               className="sr-only"
@@ -1121,10 +1174,11 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                   <GanttChart
                     mode="resource-planner"
                     resources={filteredTimelineResources}
-                    dayWidth={30}
+                    dayWidth={plannerDayWidth}
                     laneHeight={42}
                     rowHeaderWidth={220}
                     headerHeight={40}
+                    viewMode={viewMode}
                     allowVerticalPan
                     businessDays={ganttDayMode !== 'calendar'}
                     readonly={readonly}
@@ -1191,7 +1245,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           </div>
         </div>
 
-        <div className={cn('w-full max-w-[420px] border-l border-slate-200 bg-white', !showSidePanel && 'hidden')}>
+        <div className={cn('w-full max-w-[420px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]', !showSidePanel && 'hidden')}>
           {selectedItem ? (
             <ResourceAssignmentDetailsPanel
               item={selectedItem}
@@ -1260,4 +1314,3 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
     </div>
   );
 }
-

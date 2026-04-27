@@ -257,6 +257,7 @@ import App from '../../../App.tsx';
 import { useUIStore } from '../../../stores/useUIStore.ts';
 import { useAuthStore } from '../../../stores/useAuthStore.ts';
 import { useBillingStore } from '../../../stores/useBillingStore.ts';
+import { useProjectUIStore } from '../../../stores/useProjectUIStore.ts';
 import { useProjectStore } from '../../../stores/useProjectStore.ts';
 import { ResourcePlannerWorkspace } from '../ResourcePlannerWorkspace.tsx';
 
@@ -425,6 +426,10 @@ beforeEach(() => {
     assignmentError: null,
     pending: [],
     dragPreview: undefined,
+  });
+
+  useProjectUIStore.setState({
+    projectStates: {},
   });
 
   useBillingStore.setState({
@@ -890,10 +895,11 @@ describe('ResourcePlanner workspace integration', () => {
     expect(container.querySelector('[data-testid="gantt-resource-item-assignment-1"]')?.className).toContain('resource-planner-item--conflict');
     expect(ganttLibChartSpy).toHaveBeenCalledWith(expect.objectContaining({
       mode: 'resource-planner',
-      dayWidth: 30,
+      dayWidth: 24,
       laneHeight: 42,
       rowHeaderWidth: 220,
       headerHeight: 40,
+      viewMode: 'day',
       readonly: false,
       disableResourceReassignment: true,
       resources: expect.arrayContaining([
