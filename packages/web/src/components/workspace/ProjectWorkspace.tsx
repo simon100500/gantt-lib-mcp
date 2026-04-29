@@ -751,7 +751,7 @@ export function ProjectWorkspace({
   }, [selectedBaselineState]);
   const selectedBaselineTaskCount = selectedBaselineSnapshot?.tasks.length ?? 0;
   const effectiveTasksWithBaseline = useMemo(() => {
-    if (previewModeActive || !selectedBaselineSnapshot || !selectedBaselineVisible) {
+    if (!selectedBaselineSnapshot || !selectedBaselineVisible) {
       return effectiveTasks;
     }
 
@@ -771,7 +771,7 @@ export function ProjectWorkspace({
         baselineEndDate: baselineTask.endDate,
       } satisfies Task;
     });
-  }, [effectiveTasks, previewModeActive, selectedBaselineSnapshot, selectedBaselineVisible]);
+  }, [effectiveTasks, selectedBaselineSnapshot, selectedBaselineVisible]);
   const baselineRows = useMemo(() => {
     const rows = baselineItems.map((item) => ({
       id: item.id,
@@ -1616,7 +1616,7 @@ export function ProjectWorkspace({
               <GanttChart
                 ref={ganttRef as Ref<GanttChartRef>}
                 tasks={effectiveTasksWithBaseline}
-                showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible && !previewHistoryItem)}
+                showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
                 taskFilter={taskFilter}
                 taskListMenuCommands={taskListMenuCommands}
                 additionalColumns={additionalColumns}

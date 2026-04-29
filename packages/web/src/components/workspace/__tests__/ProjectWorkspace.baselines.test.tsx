@@ -36,7 +36,7 @@ vi.mock('../../layout/Toolbar.tsx', () => ({
         <button type="button" data-testid="select-baseline" onClick={() => void (props.onSelectBaseline as ((id: string) => void) | undefined)?.('baseline-1')}>
           select baseline
         </button>
-        <button type="button" data-testid="hide-baseline" onClick={() => void (props.onHideBaseline as (() => void) | undefined)?.()}>
+        <button type="button" data-testid="hide-baseline" onClick={() => void (props.onToggleBaselineVisibility as (() => void) | undefined)?.()}>
           hide baseline
         </button>
         <button type="button" data-testid="delete-baseline" onClick={() => void (props.onDeleteBaseline as ((id: string) => void) | undefined)?.('baseline-1')}>
@@ -312,7 +312,7 @@ describe('ProjectWorkspace baseline wiring', () => {
     expect(latestProps.baselineRows).toEqual([
       { id: 'baseline-1', label: 'Baseline alpha', selected: true },
     ]);
-    expect(container.textContent).toContain('Baseline: Baseline alpha');
+    expect(container.textContent).toContain('Baseline alpha');
     expect(container.textContent).toContain('(1 задач)');
 
     root.unmount();
@@ -362,7 +362,7 @@ describe('ProjectWorkspace baseline wiring', () => {
 
     const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
     expect(latestProps.baselineActiveLabel).toBe('Базовый 23.04.2026 03:41');
-    expect(container.textContent).toContain('Baseline: Базовый 23.04.2026 03:41');
+    expect(container.textContent).toContain('Базовый 23.04.2026 03:41');
     expect(container.textContent).toContain('(1 задач)');
 
     root.unmount();
@@ -394,6 +394,7 @@ describe('ProjectWorkspace baseline wiring', () => {
         label: 'Existing baseline',
         snapshot: { tasks: [{ id: 'existing-task' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
     baselinesHookState.error = 'Не удалось создать baseline';
     createFromCurrentSpy.mockRejectedValueOnce(new Error('Не удалось создать baseline'));
@@ -414,18 +415,19 @@ describe('ProjectWorkspace baseline wiring', () => {
     const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
     expect(latestProps.baselineActiveLabel).toBe('Existing baseline');
     expect(latestProps.baselineError).toBe('Не удалось создать baseline');
-    expect(container.textContent).toContain('Baseline: Existing baseline');
+    expect(container.textContent).toContain('Existing baseline');
 
     root.unmount();
   });
 
-  it('hide clears stored baseline state without entering preview mode', async () => {
+  it('hide turns off baseline visibility without entering preview mode', async () => {
     useProjectUIStore.getState().setProjectState('project-1', {
       selectedBaseline: {
         id: 'baseline-1',
         label: 'Baseline alpha',
         snapshot: { tasks: [{ id: 'x' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
 
     const { container, root } = renderWorkspace();
@@ -436,11 +438,12 @@ describe('ProjectWorkspace baseline wiring', () => {
     });
 
     const projectState = useProjectUIStore.getState().projectStates['project-1'];
-    expect(projectState?.selectedBaseline).toBeNull();
+    expect(projectState?.selectedBaseline).toMatchObject({ id: 'baseline-1' });
+    expect(projectState?.selectedBaselineVisible).toBe(false);
     expect(useHistoryViewerStore.getState().historyViewer.mode).toBe('inactive');
 
     const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
-    expect(latestProps.baselineActiveLabel).toBeNull();
+    expect(latestProps.baselineActiveLabel).toBe('Baseline alpha');
 
     root.unmount();
   });
@@ -452,6 +455,7 @@ describe('ProjectWorkspace baseline wiring', () => {
         label: 'Baseline alpha',
         snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
 
     const { container, root } = renderWorkspace();
@@ -467,7 +471,7 @@ describe('ProjectWorkspace baseline wiring', () => {
 
     const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
     expect(latestProps.baselineActiveLabel).toBeNull();
-    expect(container.textContent).not.toContain('Baseline: Baseline alpha');
+    expect(container.textContent).not.toContain('Baseline alpha');
 
     root.unmount();
   });
@@ -480,6 +484,7 @@ describe('ProjectWorkspace baseline wiring', () => {
         label: 'Baseline alpha',
         snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
 
     const { container, root } = renderWorkspace();
@@ -495,7 +500,7 @@ describe('ProjectWorkspace baseline wiring', () => {
       id: 'baseline-1',
       label: 'Baseline alpha',
     });
-    expect(container.textContent).toContain('Baseline: Baseline alpha');
+    expect(container.textContent).toContain('Baseline alpha');
 
     root.unmount();
   });
@@ -508,6 +513,7 @@ describe('ProjectWorkspace baseline wiring', () => {
         label: 'Baseline alpha',
         snapshot: { tasks: [{ id: 'task-1' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
 
     const { container, root } = renderWorkspace();
@@ -528,13 +534,19 @@ describe('ProjectWorkspace baseline wiring', () => {
     root.unmount();
   });
 
-  it('keeps history preview authoritative over baseline badge rendering', () => {
+  it('keeps history preview as the task source while still rendering selected baseline bars', () => {
     useProjectUIStore.getState().setProjectState('project-1', {
       selectedBaseline: {
         id: 'baseline-1',
         label: 'Baseline alpha',
-        snapshot: { tasks: [{ id: 'x' }], dependencies: [] },
+        snapshot: {
+          tasks: [
+            { id: 'task-1', name: 'Baseline task', startDate: '2026-03-01', endDate: '2026-03-02', dependencies: [] },
+          ],
+          dependencies: [],
+        },
       },
+      selectedBaselineVisible: true,
     });
     historyItemsMock = [
       {
@@ -561,7 +573,11 @@ describe('ProjectWorkspace baseline wiring', () => {
     const { container, root } = renderWorkspace();
 
     expect(useHistoryViewerStore.getState().historyViewer.mode).toBe('preview');
-    expect(container.textContent).not.toContain('Baseline: Baseline alpha');
+    expect(container.textContent).not.toContain('Baseline alpha');
+    const ganttPayload = container.querySelector('[data-testid="gantt-chart"]')?.textContent ?? '';
+    expect(ganttPayload).toContain('"showBaseline":true');
+    expect(ganttPayload).toContain('"baselineStartDate":"2026-03-01"');
+    expect(ganttPayload).toContain('"baselineEndDate":"2026-03-02"');
 
     root.unmount();
   });
@@ -624,7 +640,7 @@ describe('ProjectWorkspace baseline wiring', () => {
       { id: 'baseline-history-1', label: 'Базовый 22.04.2026 10:00', selected: true },
       { id: 'baseline-1', label: 'Baseline alpha', selected: false },
     ]);
-    expect(container.textContent).toContain('Baseline: Базовый 22.04.2026 10:00');
+    expect(container.textContent).toContain('Базовый 22.04.2026 10:00');
 
     act(() => {
       useHistoryViewerStore.setState({
@@ -639,7 +655,7 @@ describe('ProjectWorkspace baseline wiring', () => {
 
     latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
     expect(latestProps.baselineActiveLabel).toBe('Базовый 22.04.2026 10:00');
-    expect(container.textContent).not.toContain('Baseline: Базовый 22.04.2026 10:00');
+    expect(container.textContent).not.toContain('Базовый 22.04.2026 10:00');
     expect(container.textContent).toContain('Версия от');
 
     root.unmount();
@@ -698,6 +714,7 @@ describe('ProjectWorkspace baseline wiring', () => {
         label: 'Existing baseline',
         snapshot: { tasks: [{ id: 'existing-task' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
     baselinesHookState.error = 'Не удалось создать baseline из истории';
     createFromHistorySpy.mockRejectedValueOnce(new Error('Не удалось создать baseline из истории'));
@@ -719,7 +736,7 @@ describe('ProjectWorkspace baseline wiring', () => {
     const latestProps = lastCallArg<Record<string, unknown>>(toolbarSpy)!;
     expect(latestProps.baselineActiveLabel).toBe('Existing baseline');
     expect(latestProps.baselineError).toBe('Не удалось создать baseline из истории');
-    expect(container.textContent).toContain('Baseline: Existing baseline');
+    expect(container.textContent).toContain('Existing baseline');
 
     root.unmount();
   });
@@ -746,6 +763,7 @@ describe('ProjectWorkspace baseline wiring', () => {
         label: 'Baseline alpha',
         snapshot: { tasks: [{ id: 'x' }], dependencies: [] },
       },
+      selectedBaselineVisible: true,
     });
     useHistoryViewerStore.setState({
       historyViewer: {
@@ -762,7 +780,7 @@ describe('ProjectWorkspace baseline wiring', () => {
     expect(historyPanelProps.creatingBaselineFromHistoryGroupId).toBe('history-1');
     expect(typeof historyPanelProps.onCreateBaselineFromHistory).toBe('function');
     expect(useHistoryViewerStore.getState().historyViewer.mode).toBe('preview');
-    expect(container.textContent).not.toContain('Baseline: Baseline alpha');
+    expect(container.textContent).not.toContain('Baseline alpha');
 
     root.unmount();
   });

@@ -202,9 +202,6 @@ export function HistoryPanel({
                         <span className="truncate text-[15px] font-semibold leading-5 text-slate-900">
                           {formatTimestamp(item.createdAt)}
                         </span>
-                        <span className="shrink-0 font-mono text-[11px] font-semibold leading-4 text-slate-400">
-                          #{item.newVersion}
-                        </span>
                         {item.isCurrent && (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
                             Текущая
@@ -274,7 +271,12 @@ export function HistoryPanel({
                   </div>
 
                   <div className="pl-6 pr-5">
-                    <p className="text-[13px] font-normal leading-4 text-slate-700">{humanizeHistoryTitle(item.title)}</p>
+                    <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-normal leading-4 text-slate-700">
+                      <span className="shrink-0 font-mono text-[11px] font-semibold leading-4 text-slate-400">
+                        #{item.newVersion}
+                      </span>
+                      <span className="min-w-0 truncate">{humanizeHistoryTitle(item.title)}</span>
+                    </p>
                   </div>
                 </article>
               );
