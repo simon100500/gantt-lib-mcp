@@ -840,21 +840,6 @@ export function Toolbar({
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
-              setAutoSchedule(!autoSchedule);
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={autoSchedule}
-              readOnly
-              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-            />
-            <span className="text-sm">Закрепить связи</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
               setHighlightExpiredTasks(!highlightExpiredTasks);
             }}
             className="flex cursor-pointer items-center gap-2"
@@ -897,21 +882,6 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              setAutoSchedule(!autoSchedule);
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={autoSchedule}
-              readOnly
-              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-            />
-            <span className="text-sm">Закрепить связи</span>
-          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
