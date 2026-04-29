@@ -148,15 +148,26 @@ function buildTaskChatMention(task: Task): string {
 
 const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
   { id: 'number', label: 'Номер' },
+  { id: 'name', label: 'Имя' },
   { id: 'startDate', label: 'Начало' },
   { id: 'endDate', label: 'Окончание' },
   { id: 'duration', label: 'Длительность' },
   { id: 'progress', label: 'Прогресс' },
-  { id: 'dependencies', label: 'Зависимости' },
   { id: 'assigned-resources', label: 'Ресурсы' },
+  { id: 'dependencies', label: 'Связи' },
 ];
 
 const KNOWN_TASK_LIST_COLUMN_IDS = new Set(TASK_LIST_COLUMN_ROWS.map((column) => column.id));
+const TASK_LIST_COLUMN_WIDTHS: Record<string, number> = {
+  number: 40,
+  name: 200,
+  startDate: 90,
+  endDate: 90,
+  duration: 60,
+  progress: 50,
+  dependencies: 128,
+  'assigned-resources': 132,
+};
 
 export function ProjectWorkspace({
   ganttRef,
@@ -281,6 +292,12 @@ export function ProjectWorkspace({
 
     return storedColumns.filter((columnId): columnId is TaskListColumnId => KNOWN_TASK_LIST_COLUMN_IDS.has(columnId));
   }, [projectId, projectStates]);
+  const taskListWidth = useMemo(() => (
+    Object.entries(TASK_LIST_COLUMN_WIDTHS).reduce(
+      (width, [columnId, columnWidth]) => hiddenTaskListColumns.includes(columnId) ? width : width + columnWidth,
+      0,
+    )
+  ), [hiddenTaskListColumns]);
   const selectedBaselineState = useMemo(() => {
     if (!projectId) {
       return null;
@@ -376,6 +393,16 @@ export function ProjectWorkspace({
       hiddenTaskListColumns: Array.from(currentSet).filter((id) => KNOWN_TASK_LIST_COLUMN_IDS.has(id)),
     });
   }, [getProjectState, projectId, setProjectState]);
+
+  const handleSetAllTaskListColumnsVisible = useCallback((visible: boolean) => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      hiddenTaskListColumns: visible ? [] : TASK_LIST_COLUMN_ROWS.map((column) => column.id),
+    });
+  }, [projectId, setProjectState]);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) return;
@@ -1223,6 +1250,7 @@ export function ProjectWorkspace({
           taskListColumnRows={TASK_LIST_COLUMN_ROWS}
           hiddenTaskListColumns={hiddenTaskListColumns}
           onToggleTaskListColumn={handleToggleTaskListColumn}
+          onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
         />
       </div>
 
@@ -1295,7 +1323,7 @@ export function ProjectWorkspace({
                 containerHeight="calc(100dvh - 132px)"
                 showTaskList={showTaskList}
                 showChart={showChart}
-                taskListWidth={650}
+                taskListWidth={taskListWidth}
                 onValidateDependencies={onValidation}
                 enableAutoSchedule={autoSchedule}
                 onCascade={effectiveReadOnly ? undefined : onCascade}

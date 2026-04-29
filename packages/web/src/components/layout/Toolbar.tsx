@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
+  Columns3Cog,
   Ellipsis,
   FileDown,
   FileSpreadsheet,
@@ -21,7 +22,6 @@ import {
   Plus,
   RefreshCw,
   Rows3,
-  SlidersHorizontal,
   TriangleAlert,
   Undo2,
   X,
@@ -100,6 +100,23 @@ interface ToolbarProps {
   taskListColumnRows?: ToolbarTaskListColumnRow[] | null;
   hiddenTaskListColumns?: string[] | null;
   onToggleTaskListColumn?: (columnId: string) => void;
+  onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
+}
+
+function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      ref={(element) => {
+        if (element) {
+          element.indeterminate = indeterminate;
+        }
+      }}
+      readOnly
+      className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+    />
+  );
 }
 
 interface BaselineMenuSectionProps {
@@ -311,6 +328,7 @@ export function Toolbar({
   taskListColumnRows = [],
   hiddenTaskListColumns = [],
   onToggleTaskListColumn,
+  onSetAllTaskListColumnsVisible,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -375,6 +393,9 @@ export function Toolbar({
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
+  const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
+  const allTaskListColumnsVisible = taskListColumnRows?.length ? visibleTaskListColumnCount === taskListColumnRows.length : true;
+  const someTaskListColumnsVisible = visibleTaskListColumnCount > 0;
 
   const handleToggleDragLock = () => {
     if (mutationLocked) {
@@ -505,7 +526,7 @@ export function Toolbar({
               )}
               title="Настроить столбцы списка задач"
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <Columns3Cog className="h-3.5 w-3.5" />
               <span className="hidden md:inline text-xs">Столбцы</span>
             </Button>
           </DropdownMenuTrigger>
@@ -513,6 +534,20 @@ export function Toolbar({
             <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
               Столбцы задач
             </DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                onSetAllTaskListColumnsVisible?.(!allTaskListColumnsVisible);
+              }}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <TriStateCheckbox
+                checked={allTaskListColumnsVisible}
+                indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
+              />
+              <span className="text-sm">Выбрать всё</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
             {taskListColumnRows.map((column) => {
               const checked = !hiddenTaskListColumnSet.has(column.id);
               return (
@@ -905,6 +940,20 @@ export function Toolbar({
               <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
                 Столбцы задач
               </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onSetAllTaskListColumnsVisible?.(!allTaskListColumnsVisible);
+                }}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <TriStateCheckbox
+                  checked={allTaskListColumnsVisible}
+                  indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
+                />
+                <span className="text-sm">Выбрать всё</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
               {taskListColumnRows.map((column) => {
                 const checked = !hiddenTaskListColumnSet.has(column.id);
                 return (
