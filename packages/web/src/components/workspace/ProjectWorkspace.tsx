@@ -213,7 +213,7 @@ function ProjectShiftModal({
       aria-describedby={error ? 'project-shift-modal-error' : undefined}
       aria-labelledby="project-shift-modal-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 px-4 py-4 md:py-8"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 px-4 py-4 md:py-8"
       data-testid="project-shift-modal"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !pending) {
@@ -232,7 +232,7 @@ function ProjectShiftModal({
           }
         }}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-[#dfe1e6] px-4 py-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-[15px] font-bold leading-snug text-[#172b4d]" id="project-shift-modal-title">
               Сдвинуть проект
@@ -301,7 +301,7 @@ function ProjectShiftModal({
             </p>
           </div>
 
-          <div className="min-h-0 overflow-hidden rounded-md border border-[#dfe1e6] bg-white [&_.gantt-cal-container]:max-h-[520px]">
+          <div className="min-h-0 overflow-hidden rounded-md border border-[#dfe1e6] bg-white [&_.gantt-cal-container]:max-h-[400px]">
             <Calendar
               initialDate={range.start}
               isWeekend={isWeekend}
