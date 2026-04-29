@@ -24,6 +24,108 @@ import { writeServerDebugLog } from '../debug-log.js';
 import { broadcastToSession } from '../ws.js';
 
 export async function registerCommandRoutes(fastify: FastifyInstance): Promise<void> {
+  fastify.post('/api/commands/shift-project', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+    const body = req.body as Partial<Omit<CommitProjectCommandRequest, 'command' | 'projectId'> & { deltaDays: number }>;
+
+    const deltaDays = body.deltaDays;
+    if (!body.clientRequestId || body.baseVersion === undefined || typeof deltaDays !== 'number' || !Number.isFinite(deltaDays)) {
+      return reply.status(400).send({
+        clientRequestId: body.clientRequestId ?? '',
+        accepted: false,
+        reason: 'validation_error',
+        currentVersion: -1,
+        error: 'Missing clientRequestId, baseVersion, or deltaDays',
+      });
+    }
+
+    const request: CommitProjectCommandRequest = {
+      projectId: req.user!.projectId,
+      clientRequestId: body.clientRequestId,
+      baseVersion: body.baseVersion,
+      command: {
+        type: 'shift_project',
+        deltaDays: Math.trunc(deltaDays),
+      },
+      history: body.history,
+      includeSnapshot: body.includeSnapshot,
+    };
+    const actorType: ActorType = 'user';
+    const actorId = req.user!.userId;
+
+    try {
+      await writeServerDebugLog('user_command_received', {
+        userId: req.user!.userId,
+        projectId: req.user!.projectId,
+        sessionId: req.user!.sessionId,
+        actorType,
+        actorId,
+        clientRequestId: request.clientRequestId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        command: request.command,
+        history: request.history,
+      });
+
+      const response = await commandService.commitCommand(request, actorType, actorId);
+
+      await writeServerDebugLog('user_command_completed', {
+        userId: req.user!.userId,
+        projectId: req.user!.projectId,
+        sessionId: req.user!.sessionId,
+        actorType,
+        actorId,
+        clientRequestId: request.clientRequestId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        accepted: response.accepted,
+        reason: response.accepted ? undefined : response.reason,
+        newVersion: response.accepted ? response.newVersion : undefined,
+        currentVersion: response.accepted ? undefined : response.currentVersion,
+        changedTaskIds: response.accepted ? response.result.changedTaskIds : [],
+        changedDependencyIds: response.accepted ? response.result.changedDependencyIds : [],
+        conflicts: response.accepted ? response.result.conflicts : [],
+        history: request.history,
+      });
+
+      if (response.accepted) {
+        broadcastToSession(req.user!.sessionId, { type: 'history_changed' });
+        return reply.status(200).send(response);
+      }
+
+      const statusCode = response.reason === 'version_conflict' ? 409 : 400;
+      return reply.status(statusCode).send(response);
+    } catch (error) {
+      await writeServerDebugLog('user_command_failed', {
+        userId: req.user!.userId,
+        projectId: req.user!.projectId,
+        sessionId: req.user!.sessionId,
+        actorType,
+        actorId,
+        clientRequestId: request.clientRequestId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        command: request.command,
+        history: request.history,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      fastify.log.error({
+        err: error,
+        clientRequestId: request.clientRequestId,
+        projectId: request.projectId,
+        baseVersion: request.baseVersion,
+        commandType: request.command.type,
+        command: request.command,
+      }, 'Project shift command failed');
+      return reply.status(500).send({
+        clientRequestId: request.clientRequestId,
+        accepted: false,
+        reason: 'validation_error',
+        currentVersion: -1,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   fastify.post('/api/commands/commit', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const body = req.body as Partial<CommitProjectCommandRequest>;
 

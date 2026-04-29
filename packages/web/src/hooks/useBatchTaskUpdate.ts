@@ -59,6 +59,13 @@ function resolveBatchHistoryTitle(commands: FrontendProjectCommand[]): string {
     return 'Пользователь — Удалил задачи';
   }
 
+  if (
+    commands.length === 1
+    && commands[0]?.type === 'shift_project'
+  ) {
+    return 'Пользователь — Сдвинул проект';
+  }
+
   return resolveApplyChangesTitle(commands);
 }
 
@@ -73,6 +80,7 @@ export interface UseBatchTaskUpdateOptions {
 
 export interface UseBatchTaskUpdateResult {
   handleTasksChange: (changedTasks: Task[]) => Promise<void>;
+  handleShiftProject: (deltaDays: number) => Promise<void>;
   handleGanttDayModeSwitch: (ganttDayMode: 'business' | 'calendar') => Promise<void>;
   handleAdd: (task: Task) => Promise<void>;
   handleDelete: (taskId: string) => Promise<void>;
@@ -107,6 +115,16 @@ export function useBatchTaskUpdate({
   const toDateString = useCallback((value: Task['startDate']) => (
     typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0]
   ), []);
+
+  const shiftDateString = useCallback((value: Task['startDate'], deltaDays: number): string | null => {
+    const date = new Date(`${toDateString(value)}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    date.setUTCDate(date.getUTCDate() + deltaDays);
+    return date.toISOString().split('T')[0];
+  }, [toDateString]);
 
   const areTasksPersistenceEqual = useCallback((left: Task, right: Task) => (
     left.name === right.name
@@ -544,6 +562,43 @@ export function useBatchTaskUpdate({
       setSavingStateWithReset('error');
     }
   }, [applyAuthoritativeTaskResult, applyTaskChanges, areTasksPersistenceEqual, commitAuthCommands, getCurrentAuthTasks, hasScheduleDiff, isAuthenticatedMode, persistAuthoritativeCascade, setSavingStateWithReset, setTasks, tasks, toDateString]);
+
+  const handleShiftProject = useCallback(async (deltaDays: number) => {
+    if (!Number.isFinite(deltaDays) || deltaDays === 0) {
+      return;
+    }
+
+    if (isAuthenticatedMode) {
+      if (getCurrentAuthTasks().length === 0) {
+        return;
+      }
+
+      try {
+        setSavingStateWithReset('saving');
+        await commitAuthCommands([{ type: 'shift_project', deltaDays }]);
+        setSavingStateWithReset('saved');
+      } catch (error) {
+        console.error('[useBatchTaskUpdate] Failed to shift project:', error);
+        setSavingStateWithReset('error');
+        throw error;
+      }
+      return;
+    }
+
+    setTasks((currentTasks) => currentTasks.map((task) => {
+      const nextStartDate = shiftDateString(task.startDate, deltaDays);
+      const nextEndDate = shiftDateString(task.endDate, deltaDays);
+      if (!nextStartDate || !nextEndDate) {
+        return task;
+      }
+
+      return {
+        ...task,
+        startDate: nextStartDate,
+        endDate: nextEndDate,
+      };
+    }));
+  }, [commitAuthCommands, getCurrentAuthTasks, isAuthenticatedMode, setSavingStateWithReset, setTasks, shiftDateString]);
 
   const handleGanttDayModeSwitch = useCallback(async (nextGanttDayMode: 'business' | 'calendar') => {
     if (!isAuthenticatedMode) {
@@ -1099,6 +1154,7 @@ export function useBatchTaskUpdate({
 
   return {
     handleTasksChange,
+    handleShiftProject,
     handleGanttDayModeSwitch,
     handleAdd,
     handleDelete,

@@ -63,6 +63,14 @@ function cloneSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot {
   };
 }
 
+function shiftDateOnly(value: string | Date, deltaDays: number): string {
+  const date = value instanceof Date
+    ? new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
+    : parseDateOnly(value);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().split('T')[0];
+}
+
 function computePatches(
   beforeTasks: Task[],
   afterTasks: Task[],
@@ -412,6 +420,17 @@ export function applyProjectCommandToSnapshot(
       workingSnapshot = reflowedTasks;
       break;
     }
+
+    case 'shift_project':
+      coreResult = {
+        changedTasks: workingSnapshot.map((task) => ({
+          ...task,
+          startDate: shiftDateOnly(task.startDate as string | Date, command.deltaDays),
+          endDate: shiftDateOnly(task.endDate as string | Date, command.deltaDays),
+        })),
+        changedIds: workingSnapshot.map((task) => task.id),
+      };
+      break;
 
     case 'move_task':
       coreResult = moveTaskWithCascade(command.taskId, parseDateOnly(command.startDate), workingSnapshot, options);

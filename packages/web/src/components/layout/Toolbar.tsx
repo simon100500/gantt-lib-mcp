@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   Bot,
+  CalendarClock,
   ChartNoAxesGantt,
   Check,
   ChevronDown,
@@ -101,6 +102,8 @@ interface ToolbarProps {
   hiddenTaskListColumns?: string[] | null;
   onToggleTaskListColumn?: (columnId: string) => void;
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
+  onOpenProjectShift?: (() => void) | null;
+  canShiftProject?: boolean;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -329,6 +332,8 @@ export function Toolbar({
   hiddenTaskListColumns = [],
   onToggleTaskListColumn,
   onSetAllTaskListColumnsVisible,
+  onOpenProjectShift = null,
+  canShiftProject = false,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -915,6 +920,16 @@ export function Toolbar({
               </DropdownMenuItem>
             </>
           )}
+          {onOpenProjectShift && (
+            <DropdownMenuItem
+              onClick={() => onOpenProjectShift()}
+              disabled={!canShiftProject}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <CalendarClock className="h-4 w-4" />
+              <span className="text-sm">Сдвинуть проект ...</span>
+            </DropdownMenuItem>
+          )}
           {onExportPdf && (
             <DropdownMenuItem
               onClick={onExportPdf}
@@ -1053,6 +1068,19 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
+          {onOpenProjectShift && (
+            <>
+              <DropdownMenuItem
+                onClick={() => onOpenProjectShift()}
+                disabled={!canShiftProject}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <CalendarClock className="h-4 w-4" />
+                <span className="text-sm">Сдвинуть проект ...</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+            </>
+          )}
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();

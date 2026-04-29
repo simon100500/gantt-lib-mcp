@@ -60,7 +60,8 @@ export function createHistoryGroup(title: string, finalizeGroup: boolean, seed?:
 }
 
 export function commandChangesSchedule(command: FrontendProjectCommand): boolean {
-  return command.type === 'move_task'
+  return command.type === 'shift_project'
+    || command.type === 'move_task'
     || command.type === 'resize_task'
     || command.type === 'set_task_start'
     || command.type === 'set_task_end'

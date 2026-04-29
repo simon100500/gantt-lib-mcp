@@ -27,6 +27,13 @@ describe('chat and command enforcement routes', () => {
     );
   });
 
+  it('exposes project shift as a dedicated batch command endpoint', () => {
+    assert.match(
+      commandRoutesSource,
+      /fastify\.post\('\/api\/commands\/shift-project', \{ preHandler: \[authMiddleware, requireActiveSubscriptionForMutation\] \}, async \(req, reply\) => \{[\s\S]*type: 'shift_project'[\s\S]*commandService\.commitCommand\(request, actorType, actorId\)/,
+    );
+  });
+
   it('logs manual user commands before and after commit execution', () => {
     assert.match(
       commandRoutesSource,

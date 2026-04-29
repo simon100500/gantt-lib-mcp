@@ -68,6 +68,14 @@ function normalizeTaskDatesForType<TTask extends { startDate: string | Date; end
   };
 }
 
+function shiftDateOnly(value: string | Date, deltaDays: number): string {
+  const date = value instanceof Date
+    ? new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
+    : parseDateOnly(value);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().split('T')[0];
+}
+
 function isVersionBumpRace(error: unknown): boolean {
   return error instanceof PrismaCompat.PrismaClientKnownRequestError && error.code === 'P2025';
 }
@@ -727,6 +735,9 @@ export class CommandService {
     switch (command.type) {
       case 'switch_gantt_day_mode':
         return null;
+
+      case 'shift_project':
+        return { type: 'shift_project', deltaDays: -command.deltaDays };
 
       case 'move_task': {
         const task = beforeTaskById.get(command.taskId);
@@ -1564,6 +1575,7 @@ export class CommandService {
   private getTargetTaskId(command: ProjectCommand): string | undefined {
     switch (command.type) {
       case 'switch_gantt_day_mode':
+      case 'shift_project':
         return undefined;
       case 'move_task':
       case 'resize_task':
@@ -1659,6 +1671,18 @@ export class CommandService {
         coreResult = {
           changedTasks,
           changedIds: changedTasks.map((task) => task.id),
+        };
+        break;
+      }
+
+      case 'shift_project': {
+        coreResult = {
+          changedTasks: coreSnapshot.map((task) => ({
+            ...task,
+            startDate: shiftDateOnly(task.startDate as string | Date, command.deltaDays),
+            endDate: shiftDateOnly(task.endDate as string | Date, command.deltaDays),
+          })),
+          changedIds: coreSnapshot.map((task) => task.id),
         };
         break;
       }

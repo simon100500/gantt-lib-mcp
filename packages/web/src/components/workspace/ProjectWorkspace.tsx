@@ -1,7 +1,7 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles } from 'lucide-react';
-import { reflowTasksOnModeSwitch } from 'gantt-lib';
+import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
@@ -95,6 +95,246 @@ function formatTaskCount(count: number) {
   }
 
   return `${count} задач`;
+}
+
+function parseTaskDate(value: string | Date): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatProjectRangeDate(date: Date): string {
+  return date.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function formatProjectDurationDays(days: number): string {
+  const mod10 = days % 10;
+  const mod100 = days % 100;
+
+  if (mod100 >= 11 && mod100 <= 14) {
+    return `${days} дней`;
+  }
+
+  if (mod10 === 1) {
+    return `${days} день`;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4) {
+    return `${days} дня`;
+  }
+
+  return `${days} дней`;
+}
+
+interface ProjectDateRange {
+  start: Date;
+  end: Date;
+  durationDays: number;
+}
+
+function getProjectDateRange(tasks: Task[]): ProjectDateRange | null {
+  let minStart: Date | null = null;
+  let maxEnd: Date | null = null;
+
+  for (const task of tasks) {
+    const start = parseTaskDate(task.startDate);
+    const end = parseTaskDate(task.endDate);
+    if (!start || !end) {
+      continue;
+    }
+
+    if (!minStart || start.getTime() < minStart.getTime()) {
+      minStart = start;
+    }
+    if (!maxEnd || end.getTime() > maxEnd.getTime()) {
+      maxEnd = end;
+    }
+  }
+
+  if (!minStart || !maxEnd) {
+    return null;
+  }
+
+  return {
+    start: minStart,
+    end: maxEnd,
+    durationDays: Math.max(1, Math.round((maxEnd.getTime() - minStart.getTime()) / 86_400_000) + 1),
+  };
+}
+
+function addDaysUtc(date: Date, days: number): Date {
+  const nextDate = new Date(date.getTime());
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  return nextDate;
+}
+
+function diffDaysUtc(left: Date, right: Date): number {
+  return Math.round((left.getTime() - right.getTime()) / 86_400_000);
+}
+
+interface ProjectShiftModalProps {
+  range: ProjectDateRange;
+  pending: boolean;
+  error: string | null;
+  isWeekend?: (date: Date) => boolean;
+  onCancel: () => void;
+  onSubmit: (deltaDays: number) => void;
+}
+
+function ProjectShiftModal({
+  range,
+  pending,
+  error,
+  isWeekend,
+  onCancel,
+  onSubmit,
+}: ProjectShiftModalProps) {
+  const [shiftDaysInput, setShiftDaysInput] = useState('0');
+  const shiftDays = Number.parseInt(shiftDaysInput, 10);
+  const effectiveShiftDays = Number.isFinite(shiftDays) ? shiftDays : 0;
+  const nextStart = addDaysUtc(range.start, effectiveShiftDays);
+  const nextEnd = addDaysUtc(range.end, effectiveShiftDays);
+  const canSubmit = !pending && Number.isFinite(shiftDays) && effectiveShiftDays !== 0;
+
+  useEffect(() => {
+    setShiftDaysInput('0');
+  }, [range.start.getTime(), range.end.getTime()]);
+
+  return (
+    <div
+      aria-describedby={error ? 'project-shift-modal-error' : undefined}
+      aria-labelledby="project-shift-modal-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/40 px-4 py-4 md:py-8"
+      data-testid="project-shift-modal"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !pending) {
+          onCancel();
+        }
+      }}
+      role="dialog"
+    >
+      <form
+        className="flex max-h-none w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[#dfe1e6] bg-white text-[#172b4d] shadow-[0_24px_70px_rgba(9,30,66,0.22)]"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) {
+            onSubmit(effectiveShiftDays);
+          }
+        }}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-bold leading-snug text-[#172b4d]" id="project-shift-modal-title">
+              Сдвинуть проект
+            </h2>
+          </div>
+          <button
+            aria-label="Закрыть окно сдвига проекта"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-[#6b778c] transition-colors hover:bg-[#f4f5f7] hover:text-[#172b4d] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={pending}
+            onClick={onCancel}
+            type="button"
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid min-h-0 gap-4 overflow-y-visible p-4 text-sm text-[#44546f] md:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="space-y-4">
+            {error && (
+              <div
+                aria-atomic="true"
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700"
+                data-testid="project-shift-modal-error"
+                id="project-shift-modal-error"
+                role="alert"
+              >
+                {error}
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-[#dfe1e6] bg-[#f7f8fa] px-3 py-2">
+                <div className="text-[11px] font-bold uppercase leading-none text-[#44546f]">Сейчас</div>
+                <div className="mt-1 text-[13px] font-bold text-[#172b4d]">
+                  {formatProjectRangeDate(range.start)} - {formatProjectRangeDate(range.end)}
+                </div>
+                <div className="mt-1 text-[12px] font-medium text-[#6b778c]">
+                  {formatProjectDurationDays(range.durationDays)}
+                </div>
+              </div>
+              <div className="rounded-md border border-[#b3d4ff] bg-[#deebff] px-3 py-2">
+                <div className="text-[11px] font-bold uppercase leading-none text-[#0747a6]">После сдвига</div>
+                <div className="mt-1 text-[13px] font-bold text-[#172b4d]">
+                  {formatProjectRangeDate(nextStart)} - {formatProjectRangeDate(nextEnd)}
+                </div>
+                <div className="mt-1 text-[12px] font-medium text-[#42526e]">
+                  {formatProjectDurationDays(range.durationDays)}
+                </div>
+              </div>
+            </div>
+
+            <label className="block space-y-1.5">
+              <span className="text-[11px] font-bold uppercase leading-none text-[#44546f]">На сколько дней</span>
+              <input
+                className="h-9 w-full rounded-md border border-[#dfe1e6] bg-white px-3 text-sm font-medium text-[#172b4d] outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-[#f4f5f7]"
+                disabled={pending}
+                inputMode="numeric"
+                onChange={(event) => setShiftDaysInput(event.target.value)}
+                type="number"
+                value={shiftDaysInput}
+              />
+            </label>
+
+            <p className="text-[12px] font-medium leading-5 text-[#6b778c]">
+              Выберите дату начала в календаре или введите число дней. Даты задач пересчитаются на одинаковый сдвиг.
+            </p>
+          </div>
+
+          <div className="min-h-0 overflow-hidden rounded-md border border-[#dfe1e6] bg-white [&_.gantt-cal-container]:max-h-[520px]">
+            <Calendar
+              initialDate={range.start}
+              isWeekend={isWeekend}
+              onSelect={(date) => {
+                setShiftDaysInput(String(diffDaysUtc(date, range.start)));
+              }}
+              selected={nextStart}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#dfe1e6] bg-[#f7f8fa] px-4 py-3">
+          <button
+            className="inline-flex h-8 items-center justify-center rounded-md border border-[#dfe1e6] bg-white px-3 text-[12px] font-bold text-[#44546f] transition-colors hover:bg-[#f4f5f7] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={pending}
+            onClick={onCancel}
+            type="button"
+          >
+            Отмена
+          </button>
+          <button
+            aria-busy={pending}
+            className="inline-flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!canSubmit}
+            type="submit"
+          >
+            {pending && <LoaderCircle className="h-4 w-4 animate-spin" />}
+            Сдвинуть
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function normalizeProjectResource(payload: unknown): ProjectResource | null {
@@ -350,6 +590,9 @@ export function ProjectWorkspace({
   const [createAssignmentResourceOpen, setCreateAssignmentResourceOpen] = useState(false);
   const [createAssignmentResourcePending, setCreateAssignmentResourcePending] = useState(false);
   const [createAssignmentResourceError, setCreateAssignmentResourceError] = useState<string | null>(null);
+  const [projectShiftOpen, setProjectShiftOpen] = useState(false);
+  const [projectShiftPending, setProjectShiftPending] = useState(false);
+  const [projectShiftError, setProjectShiftError] = useState<string | null>(null);
   const [undoPreviewEditMode, setUndoPreviewEditMode] = useState(false);
   const [historyBranchConfirmOpen, setHistoryBranchConfirmOpen] = useState(false);
   const [historyBranchConfirmPending, setHistoryBranchConfirmPending] = useState(false);
@@ -371,6 +614,14 @@ export function ProjectWorkspace({
   const effectiveChatDisabledReason = previewModeActive
     ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
     : chatDisabledReason;
+  const projectDateRange = useMemo(() => getProjectDateRange(effectiveTasks), [effectiveTasks]);
+  const projectDurationLabel = useMemo(() => {
+    if (!projectDateRange) {
+      return null;
+    }
+
+    return `${formatProjectRangeDate(projectDateRange.start)} - ${formatProjectRangeDate(projectDateRange.end)} (${formatProjectDurationDays(projectDateRange.durationDays)})`;
+  }, [projectDateRange]);
   const handleSetDisableTaskDrag = useCallback((enabled: boolean) => {
     if (!projectId || effectiveReadOnly) return;
     setProjectState(projectId, { disableTaskDrag: enabled });
@@ -963,6 +1214,12 @@ export function ProjectWorkspace({
         }
         await batchUpdate.handleTasksChange(changedTasks);
       },
+      handleShiftProject: async (deltaDays: number) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleShiftProject(deltaDays);
+      },
       handleAdd: async (task: Task) => {
         if (!(await prepareUndoPreviewForEdit())) {
           return;
@@ -995,6 +1252,34 @@ export function ProjectWorkspace({
       },
     };
   }, [batchUpdate, prepareUndoPreviewForEdit]);
+
+  const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
+  const handleOpenProjectShift = useCallback(() => {
+    if (!canShiftProject) {
+      return;
+    }
+
+    setProjectShiftError(null);
+    setProjectShiftOpen(true);
+  }, [canShiftProject]);
+
+  const handleSubmitProjectShift = useCallback(async (deltaDays: number) => {
+    if (!guardedBatchUpdate || !Number.isFinite(deltaDays) || deltaDays === 0) {
+      return;
+    }
+
+    setProjectShiftPending(true);
+    setProjectShiftError(null);
+    try {
+      await guardedBatchUpdate.handleShiftProject(deltaDays);
+      setProjectShiftOpen(false);
+    } catch (error) {
+      console.error('[ProjectWorkspace] Failed to shift project:', error);
+      setProjectShiftError('Не удалось сдвинуть проект. Попробуйте ещё раз.');
+    } finally {
+      setProjectShiftPending(false);
+    }
+  }, [guardedBatchUpdate]);
 
   useEffect(() => {
     // Block history shortcuts while preview/read-only modes are active.
@@ -1251,6 +1536,8 @@ export function ProjectWorkspace({
           hiddenTaskListColumns={hiddenTaskListColumns}
           onToggleTaskListColumn={handleToggleTaskListColumn}
           onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
+          onOpenProjectShift={handleOpenProjectShift}
+          canShiftProject={canShiftProject}
         />
       </div>
 
@@ -1262,6 +1549,23 @@ export function ProjectWorkspace({
           chatSidebarVisible && "hidden md:flex"
         )}>
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {projectShiftOpen && projectDateRange && (
+              <ProjectShiftModal
+                error={projectShiftError}
+                isWeekend={weekendPredicate}
+                onCancel={() => {
+                  if (!projectShiftPending) {
+                    setProjectShiftOpen(false);
+                    setProjectShiftError(null);
+                  }
+                }}
+                onSubmit={(deltaDays) => {
+                  void handleSubmitProjectShift(deltaDays);
+                }}
+                pending={projectShiftPending}
+                range={projectDateRange}
+              />
+            )}
             {assignmentSelectionTaskId && selectedAssignmentTask && (
               <ResourceAssignmentModal
                 activeAssignedResources={selectedAssignmentResourceGroups.activeAssignedResources}
@@ -1379,6 +1683,12 @@ export function ProjectWorkspace({
                 <span className="font-mono text-[11px] text-slate-400">
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
+
+                {projectDurationLabel && (
+                  <span className="font-mono text-[11px] text-slate-500">
+                    Срок: {projectDurationLabel}
+                  </span>
+                )}
 
                 {selectedBaselineLabel && selectedBaselineVisible && !previewHistoryItem && (
                   <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-primary">

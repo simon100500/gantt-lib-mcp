@@ -190,19 +190,30 @@ function scheduleRetry(projectId: string, accessToken: string): void {
 }
 
 async function postCommit(accessToken: string, entry: OutboxEntry): Promise<CommitResponse> {
-  const response = await fetch('/api/commands/commit', {
+  const command = entry.command;
+  const isProjectShift = command.type === 'shift_project';
+  const requestBody = isProjectShift
+    ? {
+        clientRequestId: entry.requestId,
+        baseVersion: entry.baseVersion,
+        deltaDays: command.deltaDays,
+        history: entry.history,
+        includeSnapshot: entry.includeSnapshot,
+      }
+    : {
+        clientRequestId: entry.requestId,
+        baseVersion: entry.baseVersion,
+        command,
+        history: entry.history,
+        includeSnapshot: entry.includeSnapshot,
+      };
+  const response = await fetch(isProjectShift ? '/api/commands/shift-project' : '/api/commands/commit', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      clientRequestId: entry.requestId,
-      baseVersion: entry.baseVersion,
-      command: entry.command,
-      history: entry.history,
-      includeSnapshot: entry.includeSnapshot,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok && response.status !== 409) {

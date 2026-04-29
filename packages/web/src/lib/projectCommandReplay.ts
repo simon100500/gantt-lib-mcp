@@ -143,6 +143,14 @@ function scheduleCreatedTasks(
   ]);
 }
 
+function shiftDateOnly(value: string | Date, deltaDays: number): string {
+  const date = value instanceof Date
+    ? new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
+    : parseDateOnly(value);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().split('T')[0];
+}
+
 export function replayProjectCommand(
   snapshot: ProjectSnapshot,
   command: FrontendProjectCommand,
@@ -160,6 +168,13 @@ export function replayProjectCommand(
         weekendPredicate,
       ));
     }
+
+    case 'shift_project':
+      return withTasks(toTaskArray(coreSnapshot).map((task) => ({
+        ...task,
+        startDate: shiftDateOnly(task.startDate as string | Date, command.deltaDays),
+        endDate: shiftDateOnly(task.endDate as string | Date, command.deltaDays),
+      })));
 
     case 'move_task':
       return withTasks(toTaskArray(
