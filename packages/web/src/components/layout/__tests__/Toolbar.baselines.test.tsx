@@ -136,7 +136,6 @@ interface RenderOptions {
   baselineMenuOpen?: boolean;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
-  onHideBaseline?: () => void;
   onDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
@@ -153,7 +152,6 @@ function renderToolbar({
   baselineMenuOpen = false,
   onCreateBaselineFromCurrent = vi.fn(),
   onSelectBaseline = vi.fn(),
-  onHideBaseline = vi.fn(),
   onDeleteBaseline = vi.fn(),
   onRefreshBaselines = vi.fn(),
 }: RenderOptions = {}): {
@@ -161,7 +159,6 @@ function renderToolbar({
   root: Root;
   onCreateBaselineFromCurrent: (() => void) | null;
   onSelectBaseline: (baselineId: string) => void;
-  onHideBaseline: () => void;
   onDeleteBaseline: (baselineId: string) => void;
   onRefreshBaselines: () => void;
 } {
@@ -187,14 +184,13 @@ function renderToolbar({
         onBaselineMenuOpenChange={() => {}}
         onCreateBaselineFromCurrent={onCreateBaselineFromCurrent}
         onSelectBaseline={onSelectBaseline}
-        onHideBaseline={onHideBaseline}
         onDeleteBaseline={onDeleteBaseline}
         onRefreshBaselines={onRefreshBaselines}
       />,
     );
   });
 
-  return { container, root, onCreateBaselineFromCurrent, onSelectBaseline, onHideBaseline, onDeleteBaseline, onRefreshBaselines };
+  return { container, root, onCreateBaselineFromCurrent, onSelectBaseline, onDeleteBaseline, onRefreshBaselines };
 }
 
 function menuText(): string {
@@ -205,7 +201,6 @@ describe('Toolbar baseline menu', () => {
   it('renders the desktop trigger with create, active baseline label, and selected-row marker', () => {
     const onCreateBaselineFromCurrent = vi.fn();
     const onSelectBaseline = vi.fn();
-    const onHideBaseline = vi.fn();
     const onDeleteBaseline = vi.fn();
     const onRefreshBaselines = vi.fn();
 
@@ -218,23 +213,18 @@ describe('Toolbar baseline menu', () => {
       ],
       onCreateBaselineFromCurrent,
       onSelectBaseline,
-      onHideBaseline,
       onDeleteBaseline,
       onRefreshBaselines,
     });
 
     expect(container.textContent).not.toContain('Baseline: Sprint plan v1');
-    const activeTrigger = container.querySelector('button[aria-pressed="true"]');
-    expect(activeTrigger?.getAttribute('title')).toBe('Baseline: Sprint plan v1');
-    expect(activeTrigger?.querySelector('svg + svg')).not.toBeNull();
+    const activeTrigger = container.querySelector('button[title="Выключить базовый план: Sprint plan v1"]');
+    expect(activeTrigger?.getAttribute('title')).toBe('Выключить базовый план: Sprint plan v1');
     expect(menuText()).toContain('Сохранить текущий график');
-    expect(menuText()).toContain('Активный baseline');
+    expect(menuText()).toContain('Базовые планы');
     expect(menuText()).toContain('Sprint plan v1');
     expect(menuText()).toContain('Forecast copy');
-    expect(menuText()).toContain('Активный');
-    expect(menuText()).toContain('Скрыть baseline');
-    expect(menuText()).toContain('Удалить baseline');
-    expect(menuText()).toContain('Обновить baseline-ы');
+    expect(menuText()).toContain('Обновить базовые планы');
 
     const createItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Сохранить текущий график'));
     act(() => {
@@ -242,33 +232,24 @@ describe('Toolbar baseline menu', () => {
     });
     expect(onCreateBaselineFromCurrent).toHaveBeenCalledTimes(1);
 
-    const selectedRow = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Sprint plan v1'));
-    expect(selectedRow?.textContent).toContain('Активный');
+    const selectedRow = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.includes('Sprint plan v1'));
+    expect(selectedRow?.getAttribute('aria-pressed')).toBe('true');
 
     act(() => {
       selectedRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onSelectBaseline).toHaveBeenCalledWith('baseline-1');
 
-    const hideItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
-      const text = node.textContent ?? '';
-      return text.includes('Скрыть baseline') && !text.includes('Sprint plan v1');
-    });
-    act(() => {
-      hideItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onHideBaseline).toHaveBeenCalledTimes(1);
-
-    const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
-      const text = node.textContent ?? '';
-      return text.includes('Удалить baseline');
+    const deleteItem = Array.from(document.body.querySelectorAll('button')).find((node) => {
+      const text = node.getAttribute('aria-label') ?? '';
+      return text.includes('Удалить базовый план');
     });
     act(() => {
       deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onDeleteBaseline).toHaveBeenCalledWith('baseline-1');
 
-    const refreshItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Обновить baseline-ы'));
+    const refreshItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Обновить базовые планы'));
     act(() => {
       refreshItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -281,7 +262,7 @@ describe('Toolbar baseline menu', () => {
 
   it('renders explicit loading, error, empty, create-in-flight, and delete-in-flight states without crashing', () => {
     const loadingRender = renderToolbar({ baselineMenuOpen: true, baselineLoading: true, baselineRows: null, baselineError: null });
-    expect(menuText()).toContain('Загрузка baseline-ов…');
+    expect(menuText()).toContain('Загрузка базовых планов…');
     expect(menuText()).toContain('Сохранить текущий график');
     loadingRender.root.unmount();
 
@@ -291,8 +272,6 @@ describe('Toolbar baseline menu', () => {
     errorRender.root.unmount();
 
     const emptyRender = renderToolbar({ baselineMenuOpen: true, baselineRows: [], baselineEmptyLabel: 'Сохранённых baseline-ов пока нет' });
-    expect(menuText()).toContain('Сохранённых baseline-ов пока нет');
-    expect(menuText()).not.toContain('Скрыть baseline');
     expect(menuText()).toContain('Сохранить текущий график');
     emptyRender.root.unmount();
 
@@ -319,12 +298,11 @@ describe('Toolbar baseline menu', () => {
       deletingBaselineId: 'baseline-delete',
       onDeleteBaseline: undefined,
     });
-    const deleteItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
-      const text = node.textContent ?? '';
-      return text.includes('Удаляем baseline…');
+    const deleteItem = Array.from(document.body.querySelectorAll('button')).find((node) => {
+      const text = node.getAttribute('aria-label') ?? '';
+      return text.includes('Удаляем базовый план…');
     });
-    expect(deleteItem?.getAttribute('data-disabled')).toBe('');
-    expect(menuText()).toContain('Удаляем baseline…');
+    expect(deleteItem?.hasAttribute('disabled')).toBe(true);
     act(() => {
       deletingRender.root.unmount();
     });
@@ -346,12 +324,10 @@ describe('Toolbar baseline menu', () => {
 
     expect(container.textContent).not.toContain('Baseline');
     const idleTrigger =
-      container.querySelector('button[title="Выбрать baseline"]') ??
-      container.querySelector('button[aria-label="Baseline menu"]');
-    expect(idleTrigger?.getAttribute('title')).toBe('Выбрать baseline');
-    expect(menuText()).not.toContain('Активный baseline');
+      container.querySelector('button[title="Выбрать базовый план"]') ??
+      container.querySelector('button[aria-label="Меню базовых планов"]');
+    expect(idleTrigger?.getAttribute('title')).toBe('Меню базовых планов');
     expect(menuText()).toContain('Без названия');
-    expect(menuText()).not.toContain('Скрыть baseline');
     expect(menuText()).toContain('Сохранить текущий график');
 
     const createItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
@@ -368,7 +344,6 @@ describe('Toolbar baseline menu', () => {
   it('mirrors baseline create/select actions in the mobile overflow menu', () => {
     const onCreateBaselineFromCurrent = vi.fn();
     const onSelectBaseline = vi.fn();
-    const onHideBaseline = vi.fn();
     const onRefreshBaselines = vi.fn();
 
     const { container, root } = renderToolbar({
@@ -376,7 +351,6 @@ describe('Toolbar baseline menu', () => {
       baselineActiveLabel: 'Mobile baseline',
       onCreateBaselineFromCurrent,
       onSelectBaseline,
-      onHideBaseline,
       onRefreshBaselines,
     });
 
@@ -388,12 +362,12 @@ describe('Toolbar baseline menu', () => {
       moreTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(document.body.textContent).toContain('Baselines');
+    expect(document.body.textContent).toContain('Базовые планы');
     expect(document.body.textContent).toContain('Сохранить текущий график');
     expect(document.body.textContent).toContain('Mobile baseline');
-    expect(document.body.textContent).toContain('Обновить baseline-ы');
+    expect(document.body.textContent).toContain('Обновить базовые планы');
 
-    const selectedRow = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => {
+    const selectedRow = Array.from(document.body.querySelectorAll('button')).find((node) => {
       const text = node.textContent ?? '';
       return text.includes('Mobile baseline');
     });

@@ -2,12 +2,10 @@ import {
   AlertCircle,
   Bot,
   ChartNoAxesGantt,
-  Check,
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
   Ellipsis,
-  EyeOff,
   FileDown,
   FileSpreadsheet,
   FlagTriangleRight,
@@ -67,8 +65,10 @@ interface ToolbarProps {
   baselineMenuOpen?: boolean;
   onBaselineMenuOpenChange?: (open: boolean) => void;
   baselineActiveLabel?: string | null;
+  baselineVisible?: boolean;
   baselineRows?: ToolbarBaselineRow[] | null;
   baselineLoading?: boolean | null;
+  baselineActiveRequestId?: string | null;
   baselineError?: string | null;
   baselineEmptyLabel?: string | null;
   baselineCreateLabel?: string | null;
@@ -76,6 +76,7 @@ interface ToolbarProps {
   deletingBaselineId?: string | null;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
+  onToggleBaselineVisibility?: () => void;
   onHideBaseline?: () => void;
   onDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
@@ -83,46 +84,72 @@ interface ToolbarProps {
 
 interface BaselineMenuSectionProps {
   activeLabel: string | null;
+  baselineVisible: boolean;
   rows: ToolbarBaselineRow[];
   loading: boolean;
+  activeRequestId: string | null;
   error: string | null;
-  emptyLabel: string;
   createLabel: string;
   creatingBaselineFromCurrent: boolean;
   deletingBaselineId: string | null;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
-  onHideBaseline?: () => void;
+  onToggleBaselineVisibility?: (() => void) | null;
   onDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
 
 function renderBaselineMenuSection({
   activeLabel,
+  baselineVisible,
   rows,
   loading,
+  activeRequestId,
   error,
-  emptyLabel,
   createLabel,
   creatingBaselineFromCurrent,
   deletingBaselineId,
   onCreateBaselineFromCurrent,
   onSelectBaseline,
-  onHideBaseline,
+  onToggleBaselineVisibility,
   onDeleteBaseline,
   onRefreshBaselines,
 }: BaselineMenuSectionProps) {
-  const hasActiveBaseline = Boolean(activeLabel?.trim());
-  const hasRows = rows.length > 0;
   const createActionDisabled = !onCreateBaselineFromCurrent || creatingBaselineFromCurrent;
-  const activeRow = rows.find((row) => row.selected) ?? null;
-  const activeBaselineDeleting = Boolean(activeRow && deletingBaselineId === activeRow.id);
+  const hasSelectedBaseline = Boolean(activeLabel?.trim());
 
   return (
     <>
-      <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
-        Baselines
-      </DropdownMenuLabel>
+      <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+        <DropdownMenuLabel className="p-0 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+          Базовый план
+        </DropdownMenuLabel>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={hasSelectedBaseline && baselineVisible}
+          onClick={() => onToggleBaselineVisibility?.()}
+          disabled={!hasSelectedBaseline || !onToggleBaselineVisibility}
+          className={cn(
+            'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-default disabled:opacity-50',
+            hasSelectedBaseline && baselineVisible ? 'bg-primary' : 'bg-slate-300',
+          )}
+          title={
+            hasSelectedBaseline
+              ? baselineVisible
+                ? `Выключить базовый план: ${activeLabel}`
+                : `Включить базовый план: ${activeLabel}`
+              : 'Сначала выберите базовый план'
+          }
+        >
+          <span
+            className={cn(
+              'inline-block h-4 w-4 rounded-full bg-white transition-transform',
+              hasSelectedBaseline && baselineVisible ? 'translate-x-4' : 'translate-x-0.5',
+            )}
+          />
+        </button>
+      </div>
 
       <DropdownMenuItem
         onClick={() => void onCreateBaselineFromCurrent?.()}
@@ -135,21 +162,10 @@ function renderBaselineMenuSection({
 
       <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
 
-      {hasActiveBaseline ? (
-        <div className="px-2 pb-1.5">
-          <div className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-xs text-primary">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.04em] text-primary/80">
-              Активный baseline
-            </span>
-            <span className="mt-1 block truncate font-medium text-primary">{activeLabel}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {loading ? (
+      {loading && !activeRequestId ? (
         <div className="px-2 pb-1">
           <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
-            Загрузка baseline-ов…
+            Загрузка базовых планов…
           </div>
         </div>
       ) : error ? (
@@ -161,64 +177,51 @@ function renderBaselineMenuSection({
             </div>
           </div>
         </div>
-      ) : hasRows ? (
+      ) : rows.length > 0 ? (
         <>
           {rows.map((row) => (
-            <DropdownMenuItem
-              key={row.id}
-              onClick={() => onSelectBaseline?.(row.id)}
-              disabled={!onSelectBaseline}
-              className={cn(
-                'flex cursor-pointer items-center gap-2 text-slate-700',
-                row.selected && 'bg-primary/5 text-primary focus:bg-primary/10 focus:text-primary',
-              )}
-            >
-              <span
+            <div key={row.id} className="flex items-center gap-1 px-1 pb-1 last:pb-0">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectBaseline?.(row.id);
+                }}
+                disabled={!onSelectBaseline || activeRequestId === row.id}
                 className={cn(
-                  'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-200',
-                  row.selected && 'border-primary/30 bg-primary/10 text-primary',
+                  'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-default disabled:opacity-60',
+                  row.selected && 'bg-primary/5 text-primary hover:bg-primary/10',
                 )}
-                aria-hidden="true"
+                title={row.selected ? 'Выбран текущий базовый план' : 'Выбрать базовый план'}
+                aria-pressed={row.selected}
               >
-                {row.selected ? <Check className="h-3 w-3" /> : null}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm">{row.label || 'Без названия'}</span>
-              {row.selected ? <span className="text-[11px] font-medium">Активный</span> : null}
-            </DropdownMenuItem>
+                <span className="min-w-0 flex-1 truncate text-sm">{row.label || 'Без названия'}</span>
+                {activeRequestId === row.id ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
+              </button>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  onDeleteBaseline?.(row.id);
+                }}
+                disabled={!onDeleteBaseline || deletingBaselineId === row.id}
+                className="h-8 w-8 shrink-0 rounded-md p-0 text-rose-700 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
+                title={deletingBaselineId === row.id ? 'Удаляем базовый план…' : 'Удалить базовый план'}
+                aria-label={deletingBaselineId === row.id ? 'Удаляем базовый план…' : 'Удалить базовый план'}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           ))}
         </>
-      ) : (
-        <div className="px-2 pb-1">
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
-            {emptyLabel}
-          </div>
-        </div>
-      )}
+      ) : null}
 
-      {(onRefreshBaselines || hasActiveBaseline) && <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />}
+      {onRefreshBaselines && <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />}
 
       {onRefreshBaselines ? (
         <DropdownMenuItem onClick={() => void onRefreshBaselines()} className="flex cursor-pointer items-center gap-2 text-slate-700">
           <RefreshCw className="h-4 w-4" />
-          <span className="text-sm">Обновить baseline-ы</span>
-        </DropdownMenuItem>
-      ) : null}
-
-      {hasActiveBaseline ? (
-        <DropdownMenuItem onClick={() => void onHideBaseline?.()} disabled={!onHideBaseline} className="flex cursor-pointer items-center gap-2 text-slate-700">
-          <EyeOff className="h-4 w-4" />
-          <span className="text-sm">Скрыть baseline</span>
-        </DropdownMenuItem>
-      ) : null}
-
-      {activeRow ? (
-        <DropdownMenuItem
-          onClick={() => void onDeleteBaseline?.(activeRow.id)}
-          disabled={!onDeleteBaseline || activeBaselineDeleting}
-          className="flex cursor-pointer items-center gap-2 text-rose-700 focus:text-rose-700"
-        >
-          <X className="h-4 w-4" />
-          <span className="text-sm">{activeBaselineDeleting ? 'Удаляем baseline…' : 'Удалить baseline'}</span>
+          <span className="text-sm">Обновить базовые планы</span>
         </DropdownMenuItem>
       ) : null}
     </>
@@ -249,16 +252,17 @@ export function Toolbar({
   baselineMenuOpen,
   onBaselineMenuOpenChange,
   baselineActiveLabel = null,
+  baselineVisible = false,
   baselineRows = [],
   baselineLoading = false,
+  baselineActiveRequestId = null,
   baselineError = null,
-  baselineEmptyLabel = 'Сохранённые baseline-ы пока не появились.',
   baselineCreateLabel = 'Сохранить текущий график',
   creatingBaselineFromCurrent = false,
   deletingBaselineId = null,
   onCreateBaselineFromCurrent = null,
   onSelectBaseline,
-  onHideBaseline,
+  onToggleBaselineVisibility,
   onDeleteBaseline,
   onRefreshBaselines,
 }: ToolbarProps) {
@@ -300,9 +304,6 @@ export function Toolbar({
   const normalizedBaselineError = typeof baselineError === 'string' && baselineError.trim().length > 0
     ? baselineError
     : null;
-  const normalizedBaselineEmptyLabel = typeof baselineEmptyLabel === 'string' && baselineEmptyLabel.trim().length > 0
-    ? baselineEmptyLabel
-    : 'Сохранённые baseline-ы пока не появились.';
   const normalizedBaselineCreateLabel = typeof baselineCreateLabel === 'string' && baselineCreateLabel.trim().length > 0
     ? baselineCreateLabel
     : 'Сохранить текущий график';
@@ -519,13 +520,13 @@ export function Toolbar({
             className={cn(
               actionButtonClassName,
               'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:text-slate-600',
-              normalizedBaselineActiveLabel
+              normalizedBaselineActiveLabel && baselineVisible
                 ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[state=open]:text-primary'
                 : 'data-[state=open]:bg-transparent',
             )}
-            title={normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Выбрать baseline'}
-            aria-label={normalizedBaselineActiveLabel ? `Baseline: ${normalizedBaselineActiveLabel}` : 'Baseline menu'}
-            aria-pressed={Boolean(normalizedBaselineActiveLabel)}
+            title={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
+            aria-label={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
+            aria-pressed={Boolean(normalizedBaselineActiveLabel && baselineVisible)}
           >
             <Layers3 className="h-3.5 w-3.5" />
             <ChevronDown className="h-3 w-3 text-current/70" />
@@ -534,16 +535,17 @@ export function Toolbar({
         <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
           {renderBaselineMenuSection({
             activeLabel: normalizedBaselineActiveLabel,
+            baselineVisible,
             rows: normalizedBaselineRows,
             loading: Boolean(baselineLoading),
+            activeRequestId: baselineActiveRequestId,
             error: normalizedBaselineError,
-            emptyLabel: normalizedBaselineEmptyLabel,
             createLabel: normalizedBaselineCreateLabel,
             creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
             deletingBaselineId,
             onCreateBaselineFromCurrent,
             onSelectBaseline,
-            onHideBaseline,
+            onToggleBaselineVisibility,
             onDeleteBaseline,
             onRefreshBaselines,
           })}
@@ -716,16 +718,17 @@ export function Toolbar({
 
           {renderBaselineMenuSection({
             activeLabel: normalizedBaselineActiveLabel,
+            baselineVisible,
             rows: normalizedBaselineRows,
             loading: Boolean(baselineLoading),
+            activeRequestId: baselineActiveRequestId,
             error: normalizedBaselineError,
-            emptyLabel: normalizedBaselineEmptyLabel,
             createLabel: normalizedBaselineCreateLabel,
             creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
             deletingBaselineId,
             onCreateBaselineFromCurrent,
             onSelectBaseline,
-            onHideBaseline,
+            onToggleBaselineVisibility,
             onDeleteBaseline,
             onRefreshBaselines,
           })}

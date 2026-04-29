@@ -20,6 +20,7 @@ interface ProjectUIState {
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   selectedBaseline: ProjectBaselineSelectionState | null;
+  selectedBaselineVisible: boolean;
 }
 
 interface ProjectUIStore {
@@ -35,6 +36,7 @@ const DEFAULT_STATE: ProjectUIState = {
   collapsedParentIds: [],
   disableTaskDrag: false,
   selectedBaseline: null,
+  selectedBaselineVisible: false,
 };
 
 export const useProjectUIStore = create<ProjectUIStore>()(

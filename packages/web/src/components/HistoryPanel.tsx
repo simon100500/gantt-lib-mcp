@@ -222,7 +222,7 @@ export function HistoryPanel({
                         {isCreatingBaseline && (
                           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-violet-700">
                             <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
-                            Сохранение baseline
+                            Сохранение базового плана
                           </span>
                         )}
                       </div>
@@ -251,7 +251,7 @@ export function HistoryPanel({
                             disabled={createBaselineDisabled}
                           >
                             <Plus className="h-4 w-4" />
-                            <span>{isCreatingBaseline ? 'Сохраняем baseline…' : 'Сохранить как baseline'}</span>
+                            <span>{isCreatingBaseline ? 'Сохраняем базовый план…' : 'Сохранить как базовый план'}</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(event) => {

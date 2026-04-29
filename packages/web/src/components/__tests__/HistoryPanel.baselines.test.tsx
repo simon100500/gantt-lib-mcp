@@ -92,11 +92,11 @@ describe('HistoryPanel baseline actions', () => {
 
     const actionButtons = Array.from(container.querySelectorAll('button[aria-label="Действия с версией"]')) as HTMLButtonElement[];
     expect(actionButtons).toHaveLength(1);
-    expect(container.textContent).toContain('Сохранить как baseline');
+    expect(container.textContent).toContain('Сохранить как базовый план');
     expect(container.textContent).toContain('Восстановить эту версию');
-    expect(container.textContent).not.toContain('history-currentСохранить как baseline');
+    expect(container.textContent).not.toContain('history-currentСохранить как базовый план');
 
-    const createButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить как baseline'));
+    const createButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить как базовый план'));
     expect(createButton).toBeTruthy();
 
     await act(async () => {
@@ -128,11 +128,11 @@ describe('HistoryPanel baseline actions', () => {
       onCreateBaselineFromHistory,
     });
 
-    expect(container.textContent).toContain('Сохранение baseline');
-    expect(container.textContent).toContain('Сохраняем baseline…');
+    expect(container.textContent).toContain('Сохранение базового плана');
+    expect(container.textContent).toContain('Сохраняем базовый план…');
 
-    const loadingCreateButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохраняем baseline…'));
-    const idleCreateButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить как baseline'));
+    const loadingCreateButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохраняем базовый план…'));
+    const idleCreateButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить как базовый план'));
 
     expect(loadingCreateButton?.hasAttribute('data-disabled')).toBe(true);
     expect(idleCreateButton?.hasAttribute('data-disabled')).toBe(false);
@@ -150,7 +150,7 @@ describe('HistoryPanel baseline actions', () => {
   it('respects global disabled state for create action without hiding the restore affordance', () => {
     const { container, root } = renderPanel({ disabled: true });
 
-    const createButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить как baseline'));
+    const createButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Сохранить как базовый план'));
     const restoreButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Восстановить эту версию'));
 
     expect(createButton).toBeTruthy();

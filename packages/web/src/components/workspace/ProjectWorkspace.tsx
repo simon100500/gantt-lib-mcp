@@ -246,6 +246,18 @@ export function ProjectWorkspace({
 
     return projectStates[projectId]?.selectedBaseline ?? null;
   }, [projectId, projectStates]);
+  const selectedBaselineVisible = useMemo(() => {
+    if (!projectId) {
+      return false;
+    }
+
+    const projectState = projectStates[projectId];
+    if (!projectState?.selectedBaseline) {
+      return false;
+    }
+
+    return projectState.selectedBaselineVisible !== false;
+  }, [projectId, projectStates]);
   const [baselineMenuOpen, setBaselineMenuOpen] = useState(false);
   const [assignmentSelectionTaskId, setAssignmentSelectionTaskId] = useState<string | null>(null);
   const [selectedAssignmentResourceIds, setSelectedAssignmentResourceIds] = useState<string[]>([]);
@@ -336,6 +348,7 @@ export function ProjectWorkspace({
     items: baselineItems,
     loading: baselinesLoading,
     error: baselinesError,
+    activeBaselineId,
     refreshBaselines,
     fetchBaseline,
     createFromCurrent,
@@ -369,7 +382,7 @@ export function ProjectWorkspace({
   }, [selectedBaselineState]);
   const selectedBaselineTaskCount = selectedBaselineSnapshot?.tasks.length ?? 0;
   const effectiveTasksWithBaseline = useMemo(() => {
-    if (previewModeActive || !selectedBaselineSnapshot) {
+    if (previewModeActive || !selectedBaselineSnapshot || !selectedBaselineVisible) {
       return effectiveTasks;
     }
 
@@ -389,7 +402,7 @@ export function ProjectWorkspace({
         baselineEndDate: baselineTask.endDate,
       } satisfies Task;
     });
-  }, [effectiveTasks, previewModeActive, selectedBaselineSnapshot]);
+  }, [effectiveTasks, previewModeActive, selectedBaselineSnapshot, selectedBaselineVisible]);
   const baselineRows = useMemo(() => {
     const rows = baselineItems.map((item) => ({
       id: item.id,
@@ -781,14 +794,6 @@ export function ProjectWorkspace({
     await refreshBaselines();
   }, [hasBaselineAccess, refreshBaselines]);
 
-  const handleHideBaseline = useCallback(() => {
-    if (!projectId) {
-      return;
-    }
-
-    setProjectState(projectId, { selectedBaseline: null });
-  }, [projectId, setProjectState]);
-
   const handleSelectBaseline = useCallback(async (baselineId: string) => {
     if (!projectId) {
       return;
@@ -799,6 +804,11 @@ export function ProjectWorkspace({
       return;
     }
 
+    if (selectedBaselineState?.id === trimmedBaselineId) {
+      setProjectState(projectId, { selectedBaselineVisible: true });
+      return;
+    }
+
     const baseline = await fetchBaseline(trimmedBaselineId);
     setProjectState(projectId, {
       selectedBaseline: {
@@ -806,8 +816,9 @@ export function ProjectWorkspace({
         label: baseline.name || 'Без названия',
         snapshot: baseline.snapshot,
       },
+      selectedBaselineVisible: true,
     });
-  }, [fetchBaseline, projectId, setProjectState]);
+  }, [fetchBaseline, projectId, selectedBaselineState?.id, setProjectState]);
 
   const handleCreateBaselineFromCurrent = useCallback(async () => {
     if (!projectId || creatingFromCurrent) {
@@ -822,6 +833,7 @@ export function ProjectWorkspace({
           label: baseline.name || 'Без названия',
           snapshot: baseline.snapshot,
         },
+        selectedBaselineVisible: true,
       });
     } catch {
       // Preserve the existing selected baseline; hook state already exposes the error.
@@ -841,6 +853,7 @@ export function ProjectWorkspace({
           label: baseline.name || 'Без названия',
           snapshot: baseline.snapshot,
         },
+        selectedBaselineVisible: true,
       });
     } catch {
       // Preserve the existing selected baseline; hook state already exposes the error.
@@ -860,12 +873,20 @@ export function ProjectWorkspace({
     try {
       const deleted = await deleteBaseline(trimmedBaselineId);
       if (selectedBaselineState?.id === deleted.id) {
-        setProjectState(projectId, { selectedBaseline: null });
+        setProjectState(projectId, { selectedBaseline: null, selectedBaselineVisible: false });
       }
     } catch {
       // Preserve the existing selected baseline; hook state already exposes the error.
     }
   }, [deleteBaseline, deletingBaselineId, projectId, selectedBaselineState?.id, setProjectState]);
+
+  const handleToggleBaselineVisibility = useCallback(() => {
+    if (!projectId || !selectedBaselineState) {
+      return;
+    }
+
+    setProjectState(projectId, { selectedBaselineVisible: !selectedBaselineVisible });
+  }, [projectId, selectedBaselineState, selectedBaselineVisible, setProjectState]);
 
 
   useEffect(() => {
@@ -904,10 +925,11 @@ export function ProjectWorkspace({
           baselineMenuOpen={baselineMenuOpen}
           onBaselineMenuOpenChange={setBaselineMenuOpen}
           baselineActiveLabel={selectedBaselineLabel}
+          baselineVisible={selectedBaselineVisible}
           baselineRows={baselineRows}
           baselineLoading={baselinesLoading}
+          baselineActiveRequestId={activeBaselineId}
           baselineError={baselinesError}
-          baselineEmptyLabel="Сохранённые baseline-ы пока не появились."
           baselineCreateLabel="Сохранить текущий график"
           creatingBaselineFromCurrent={creatingFromCurrent}
           deletingBaselineId={deletingBaselineId}
@@ -917,7 +939,7 @@ export function ProjectWorkspace({
           onSelectBaseline={(baselineId) => {
             void handleSelectBaseline(baselineId);
           }}
-          onHideBaseline={handleHideBaseline}
+          onToggleBaselineVisibility={handleToggleBaselineVisibility}
           onDeleteBaseline={(baselineId) => {
             void handleDeleteBaseline(baselineId);
           }}
@@ -985,7 +1007,7 @@ export function ProjectWorkspace({
               <GanttChart
                 ref={ganttRef as Ref<GanttChartRef>}
                 tasks={effectiveTasksWithBaseline}
-                showBaseline={Boolean(selectedBaselineLabel && !previewHistoryItem)}
+                showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible && !previewHistoryItem)}
                 taskFilter={taskFilter}
                 taskListMenuCommands={taskListMenuCommands}
                 additionalColumns={additionalColumns}
@@ -1052,9 +1074,9 @@ export function ProjectWorkspace({
                   {ganttDayMode === 'calendar' ? 'Календарные дни' : 'Рабочие дни'}
                 </span>
 
-                {selectedBaselineLabel && !previewHistoryItem && (
+                {selectedBaselineLabel && selectedBaselineVisible && !previewHistoryItem && (
                   <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-primary">
-                    Baseline: {selectedBaselineLabel}
+                    Базовый план: {selectedBaselineLabel}
                     <span className="ml-1 text-[10px] font-medium normal-case text-primary/80">
                       ({selectedBaselineTaskCount} задач)
                     </span>
