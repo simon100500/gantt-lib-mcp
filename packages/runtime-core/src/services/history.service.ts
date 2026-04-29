@@ -20,6 +20,7 @@ import { dateToDomain } from './types.js';
 import type { PrismaClient } from '../prisma.js';
 
 const TECHNICAL_RESTORE_ORIGIN: MutationGroupOrigin = 'undo';
+const TECHNICAL_REDO_ORIGIN: MutationGroupOrigin = 'redo';
 const INITIAL_CHECKPOINT_GROUP_ID = 'initial';
 
 export type HistoryGroupListItem = {
@@ -38,6 +39,13 @@ export type ListHistoryGroupsInput = {
   projectId: string;
   cursor?: string;
   limit?: number;
+};
+
+export type RedoHistoryGroupInput = {
+  projectId: string;
+  actorType: ActorType;
+  actorId?: string;
+  requestContextId?: string;
 };
 
 export type GetHistorySnapshotInput = {
@@ -141,7 +149,11 @@ type HistoryPrismaClient = {
   };
   mutationGroup: {
     findMany(args: {
-      where: { projectId: string; status: 'applied' };
+      where: {
+        projectId: string;
+        status?: 'applied' | 'undone';
+        undoable?: boolean;
+      };
       orderBy: Array<{ newVersion: 'desc' } | { createdAt: 'desc' }>;
     }): Promise<DbMutationGroup[]>;
     update(args: {
@@ -184,6 +196,12 @@ type RollbackTailPlan = {
   isCurrent: boolean;
   activeTailGroupIds: string[];
   inverseCommands: ProjectCommand[];
+};
+
+type RedoPlan = {
+  targetGroup: DbMutationGroup;
+  currentVersion: number;
+  commands: ProjectCommand[];
 };
 
 function toActorType(value: DbMutationGroup['actorType']): ActorType {
@@ -365,6 +383,31 @@ export class HistoryService {
     );
   }
 
+  private async getRedoCandidate(projectId: string): Promise<DbMutationGroup | null> {
+    const [visibleGroups, undoneGroups] = await Promise.all([
+      this.getVisibleGroups(projectId),
+      this.prisma.mutationGroup.findMany({
+        where: {
+          projectId,
+          status: 'undone',
+          undoable: true,
+        },
+        orderBy: [{ newVersion: 'desc' }, { createdAt: 'desc' }],
+      }),
+    ]);
+    const latestVisibleVersion = visibleGroups[0]?.newVersion ?? -1;
+    const redoCandidates = undoneGroups
+      .filter((group) => (
+        group.newVersion !== null
+        && group.newVersion > latestVisibleVersion
+        && group.origin !== 'undo'
+        && group.origin !== 'redo'
+      ))
+      .sort((left, right) => (left.newVersion ?? 0) - (right.newVersion ?? 0));
+
+    return redoCandidates[0] ?? null;
+  }
+
   private async getGroupEvents(groupId: string, order: 'asc' | 'desc'): Promise<DbProjectEvent[]> {
     return this.prisma.projectEvent.findMany({
       where: {
@@ -437,6 +480,25 @@ export class HistoryService {
     };
   }
 
+  private async resolveRedo(projectId: string): Promise<RedoPlan> {
+    const targetGroup = await this.getRedoCandidate(projectId);
+    if (!targetGroup) {
+      throw new HistoryValidationError('No redoable history group is available');
+    }
+
+    const events = await this.getGroupEvents(targetGroup.id, 'asc');
+    const commands = events.map((event) => event.command);
+    if (commands.length === 0) {
+      throw new HistoryValidationError(`Redo history group ${targetGroup.id} has no commands`);
+    }
+
+    return {
+      targetGroup,
+      currentVersion: await this.getProjectVersion(projectId),
+      commands,
+    };
+  }
+
   private async markGroupsUndone(groupIds: string[], rollbackGroupId: string): Promise<void> {
     for (const groupId of groupIds) {
       await this.prisma.mutationGroup.update({
@@ -494,6 +556,10 @@ export class HistoryService {
       })),
       nextCursor: pageGroups.length > safeLimit ? selectedGroups[selectedGroups.length - 1]?.id : undefined,
     };
+  }
+
+  async getRedoableGroupId(projectId: string): Promise<string | null> {
+    return (await this.getRedoCandidate(projectId))?.id ?? null;
   }
 
   async getHistorySnapshot({ projectId, groupId }: GetHistorySnapshotInput): Promise<HistoryGroupSnapshotResponse> {
@@ -573,6 +639,59 @@ export class HistoryService {
     return {
       groupId: rollbackGroupId,
       targetGroupId: plan.targetGroupId,
+      version,
+      snapshot,
+    };
+  }
+
+  async redoLatest(request: RedoHistoryGroupInput): Promise<RestoreHistoryGroupResponse> {
+    const plan = await this.resolveRedo(request.projectId);
+    const redoGroupId = randomUUID();
+    let baseVersion = plan.currentVersion;
+    let snapshot = await buildProjectSnapshot(request.projectId, this.prisma);
+    let version = baseVersion;
+
+    for (const [index, command] of plan.commands.entries()) {
+      const response = await this.commandService.commitCommand(
+        {
+          projectId: request.projectId,
+          clientRequestId: `redo-${redoGroupId}-${index + 1}`,
+          baseVersion,
+          command,
+          history: {
+            groupId: redoGroupId,
+            origin: TECHNICAL_REDO_ORIGIN,
+            title: `Redo ${plan.targetGroup.title}`,
+            requestContextId: request.requestContextId,
+            finalizeGroup: index === plan.commands.length - 1,
+            redoOfGroupId: plan.targetGroup.id,
+            targetGroupId: plan.targetGroup.id,
+          },
+        },
+        request.actorType,
+        request.actorId,
+      );
+
+      if (!response.accepted) {
+        throw this.mapCommitFailure(response);
+      }
+
+      baseVersion = response.newVersion;
+      version = response.newVersion;
+      snapshot = response.snapshot;
+    }
+
+    await this.prisma.mutationGroup.update({
+      where: { id: plan.targetGroup.id },
+      data: {
+        status: 'applied',
+        undoneByGroupId: null,
+      },
+    } as never);
+
+    return {
+      groupId: redoGroupId,
+      targetGroupId: plan.targetGroup.id,
       version,
       snapshot,
     };

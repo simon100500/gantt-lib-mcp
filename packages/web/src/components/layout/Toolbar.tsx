@@ -14,6 +14,7 @@ import {
   History,
   Layers3,
   Link,
+  LoaderCircle,
   Lock,
   LockOpen,
   Pencil,
@@ -21,6 +22,7 @@ import {
   RefreshCw,
   Rows3,
   TriangleAlert,
+  Undo2,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -66,6 +68,9 @@ interface ToolbarProps {
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   readOnly?: boolean;
   previewMode?: boolean;
+  canUndo?: boolean;
+  undoLoading?: boolean;
+  onUndo?: (() => void) | null;
   baselineMenuOpen?: boolean;
   onBaselineMenuOpenChange?: (open: boolean) => void;
   baselineActiveLabel?: string | null;
@@ -273,6 +278,9 @@ export function Toolbar({
   onGanttDayModeChange,
   readOnly = false,
   previewMode = false,
+  canUndo = false,
+  undoLoading = false,
+  onUndo = null,
   baselineMenuOpen,
   onBaselineMenuOpenChange,
   baselineActiveLabel = null,
@@ -351,6 +359,7 @@ export function Toolbar({
   const mutationLocked = readOnly || previewMode;
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
+  const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
 
   const handleToggleDragLock = () => {
@@ -469,6 +478,53 @@ export function Toolbar({
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
 
+      <DropdownMenu open={baselineMenuOpen} onOpenChange={onBaselineMenuOpenChange} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn(
+              actionButtonClassName,
+              'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:text-slate-600',
+              normalizedBaselineActiveLabel && baselineVisible
+                ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[state=open]:text-primary'
+                : 'data-[state=open]:bg-transparent',
+            )}
+            title={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
+            aria-label={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
+            aria-pressed={Boolean(normalizedBaselineActiveLabel && baselineVisible)}
+          >
+            <Layers3 className="h-3.5 w-3.5" />
+            <span className="hidden md:inline text-xs">Базовый</span>
+            <ChevronDown className="h-3 w-3 text-current/70" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+          {renderBaselineMenuSection({
+            activeLabel: normalizedBaselineActiveLabel,
+            baselineVisible,
+            rows: normalizedBaselineRows,
+            loading: Boolean(baselineLoading),
+            activeRequestId: baselineActiveRequestId,
+            error: normalizedBaselineError,
+            createLabel: normalizedBaselineCreateLabel,
+            creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+            deletingBaselineId,
+            renamingBaselineId,
+            onCreateBaselineFromCurrent,
+            onSelectBaseline,
+            onToggleBaselineVisibility,
+            onRequestRenameBaseline: (baselineId) => {
+              const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
+              setBaselineRenameCandidateId(baselineId);
+              setBaselineRenameDraft(row?.label ?? '');
+            },
+            onRequestDeleteBaseline: setBaselineDeleteCandidateId,
+            onRefreshBaselines,
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {hasShareMenuActions && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -547,51 +603,20 @@ export function Toolbar({
 
       <div className="flex-1" />
 
-      <DropdownMenu open={baselineMenuOpen} onOpenChange={onBaselineMenuOpenChange} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn(
-              actionButtonClassName,
-              'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:text-slate-600',
-              normalizedBaselineActiveLabel && baselineVisible
-                ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[state=open]:text-primary'
-                : 'data-[state=open]:bg-transparent',
-            )}
-            title={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
-            aria-label={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
-            aria-pressed={Boolean(normalizedBaselineActiveLabel && baselineVisible)}
-          >
-            <Layers3 className="h-3.5 w-3.5" />
-            <ChevronDown className="h-3 w-3 text-current/70" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-          {renderBaselineMenuSection({
-            activeLabel: normalizedBaselineActiveLabel,
-            baselineVisible,
-            rows: normalizedBaselineRows,
-            loading: Boolean(baselineLoading),
-            activeRequestId: baselineActiveRequestId,
-            error: normalizedBaselineError,
-            createLabel: normalizedBaselineCreateLabel,
-            creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
-            deletingBaselineId,
-            renamingBaselineId,
-            onCreateBaselineFromCurrent,
-            onSelectBaseline,
-            onToggleBaselineVisibility,
-            onRequestRenameBaseline: (baselineId) => {
-              const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
-              setBaselineRenameCandidateId(baselineId);
-              setBaselineRenameDraft(row?.label ?? '');
-            },
-            onRequestDeleteBaseline: setBaselineDeleteCandidateId,
-            onRefreshBaselines,
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => onUndo?.()}
+        disabled={!canTriggerUndo}
+        className={cn(
+          'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
+          !canTriggerUndo && 'cursor-not-allowed opacity-50',
+        )}
+        title={undoLoading ? 'Отменяем последнее действие...' : 'Отменить последнее действие (Ctrl+Z)'}
+        aria-label={undoLoading ? 'Отменяем последнее действие' : 'Отменить последнее действие'}
+      >
+        {undoLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
+      </Button>
 
       <Button
         size="sm"
@@ -815,6 +840,14 @@ export function Toolbar({
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+          <DropdownMenuItem
+            onClick={() => onUndo?.()}
+            disabled={!canTriggerUndo}
+            className="flex cursor-pointer items-center gap-2"
+          >
+            <Undo2 className="h-4 w-4" />
+            <span className="text-sm">{undoLoading ? 'Отменяем...' : 'Отменить'}</span>
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className="flex cursor-pointer items-center gap-2"

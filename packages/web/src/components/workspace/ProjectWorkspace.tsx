@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle, MessageSquare, WandSparkles } from 'lucide-react';
+import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskListColumn, TaskListMenuCommand } from 'gantt-lib';
 
@@ -265,6 +265,10 @@ export function ProjectWorkspace({
   const [createAssignmentResourceOpen, setCreateAssignmentResourceOpen] = useState(false);
   const [createAssignmentResourcePending, setCreateAssignmentResourcePending] = useState(false);
   const [createAssignmentResourceError, setCreateAssignmentResourceError] = useState<string | null>(null);
+  const [undoPreviewEditMode, setUndoPreviewEditMode] = useState(false);
+  const [historyBranchConfirmOpen, setHistoryBranchConfirmOpen] = useState(false);
+  const [historyBranchConfirmPending, setHistoryBranchConfirmPending] = useState(false);
+  const historyBranchConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
@@ -274,7 +278,7 @@ export function ProjectWorkspace({
   const previewFailed = previewState === 'failed';
   const aiMutationLocked = aiMutationLock.active;
   const canOpenChatFromLoader = showChat && !chatSidebarVisible && !hasShareToken && Boolean(onToggleChat);
-  const effectiveReadOnly = readOnly || aiMutationLocked || previewRendering || previewFailed || previewModeActive;
+  const effectiveReadOnly = readOnly || aiMutationLocked || previewRendering || previewFailed || (previewModeActive && !undoPreviewEditMode);
   const historyPanelDisabled = readOnly || aiMutationLocked || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
@@ -470,6 +474,11 @@ export function ProjectWorkspace({
       taskReferenceHighlightTimeoutRef.current = null;
     }, 2000);
   }, [ganttRef, setTempHighlightedTaskId]);
+
+  useEffect(() => () => {
+    historyBranchConfirmResolverRef.current?.(false);
+    historyBranchConfirmResolverRef.current = null;
+  }, []);
 
   useEffect(() => () => {
     if (taskReferenceHighlightTimeoutRef.current !== null) {
@@ -722,12 +731,16 @@ export function ProjectWorkspace({
     () => historyItems.find((item) => item.canRestore) ?? null,
     [historyItems],
   );
+  const undoLoading = Boolean(previewingGroupId);
   const previewHistoryItem = useMemo(
     () => historyViewer.mode === 'preview'
       ? historyItems.find((item) => item.id === historyViewer.groupId) ?? null
       : null,
     [historyItems, historyViewer],
   );
+  const previewHistoryLabel = previewHistoryItem
+    ? formatHistoryVersionTimestamp(previewHistoryItem.createdAt)
+    : null;
   const historyItemsById = useMemo(
     () => new Map(historyItems.map((item) => [item.id, item])),
     [historyItems],
@@ -749,10 +762,132 @@ export function ProjectWorkspace({
     [historyItemsById, messages, previewingGroupId, restoringGroupId],
   );
 
+  const previewHistoryIndex = useMemo(
+    () => historyViewer.mode === 'preview'
+      ? historyItems.findIndex((item) => item.id === historyViewer.groupId)
+      : -1,
+    [historyItems, historyViewer],
+  );
+  const nextUndoPreviewItem = useMemo(
+    () => previewHistoryIndex >= 0
+      ? historyItems.slice(previewHistoryIndex + 1).find((item) => item.canRestore) ?? null
+      : latestRestorableItem,
+    [historyItems, latestRestorableItem, previewHistoryIndex],
+  );
+
+  const handleUndoLatest = useCallback(() => {
+    if (!accessToken || readOnly || aiMutationLocked || previewRendering || previewFailed || historyLoading) {
+      return;
+    }
+
+    if (!nextUndoPreviewItem) {
+      return;
+    }
+
+    setUndoPreviewEditMode(true);
+    void showVersion(nextUndoPreviewItem);
+  }, [accessToken, aiMutationLocked, historyLoading, nextUndoPreviewItem, previewFailed, previewRendering, readOnly, showVersion]);
+
+  const handleRedoLatest = useCallback(() => {
+    if (!accessToken || readOnly || aiMutationLocked || previewRendering || previewFailed || historyLoading || previewHistoryIndex < 0) {
+      return;
+    }
+
+    const targetItem = historyItems[previewHistoryIndex - 1];
+    if (targetItem) {
+      setUndoPreviewEditMode(true);
+      void showVersion(targetItem);
+      return;
+    }
+
+    setUndoPreviewEditMode(false);
+    returnToCurrentVersion();
+  }, [accessToken, aiMutationLocked, historyItems, historyLoading, previewFailed, previewHistoryIndex, previewRendering, readOnly, returnToCurrentVersion, showVersion]);
+
+  const requestHistoryBranchConfirmation = useCallback(() => new Promise<boolean>((resolve) => {
+    historyBranchConfirmResolverRef.current = resolve;
+    setHistoryBranchConfirmOpen(true);
+  }), []);
+
+  const closeHistoryBranchConfirmation = useCallback((confirmed: boolean) => {
+    historyBranchConfirmResolverRef.current?.(confirmed);
+    historyBranchConfirmResolverRef.current = null;
+    if (!confirmed) {
+      setHistoryBranchConfirmOpen(false);
+    }
+  }, []);
+
+  const prepareUndoPreviewForEdit = useCallback(async () => {
+    if (!undoPreviewEditMode || historyViewer.mode !== 'preview') {
+      return true;
+    }
+
+    const confirmed = await requestHistoryBranchConfirmation();
+    if (!confirmed) {
+      return false;
+    }
+
+    try {
+      setHistoryBranchConfirmPending(true);
+      await restoreVersion(historyViewer.groupId);
+      setUndoPreviewEditMode(false);
+      return true;
+    } finally {
+      setHistoryBranchConfirmPending(false);
+      setHistoryBranchConfirmOpen(false);
+    }
+  }, [historyViewer, requestHistoryBranchConfirmation, restoreVersion, undoPreviewEditMode]);
+
+  const guardedBatchUpdate = useMemo(() => {
+    if (!batchUpdate) {
+      return null;
+    }
+
+    return {
+      ...batchUpdate,
+      handleTasksChange: async (changedTasks: Task[]) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleTasksChange(changedTasks);
+      },
+      handleAdd: async (task: Task) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleAdd(task);
+      },
+      handleDelete: async (taskId: string) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleDelete(taskId);
+      },
+      handleInsertAfter: async (taskId: string, newTask: Task) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleInsertAfter(taskId, newTask);
+      },
+      handleReorder: async (reorderedTasks: Task[], movedTaskId?: string, inferredParentId?: string) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleReorder(reorderedTasks, movedTaskId, inferredParentId);
+      },
+      handleUngroupTask: async (taskId: string) => {
+        if (!(await prepareUndoPreviewForEdit())) {
+          return;
+        }
+        await batchUpdate.handleUngroupTask(taskId);
+      },
+    };
+  }, [batchUpdate, prepareUndoPreviewForEdit]);
+
   useEffect(() => {
-    // Block Ctrl+Z / Ctrl+Shift+Z history shortcuts while preview mode is active.
+    // Block history shortcuts while preview/read-only modes are active.
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!accessToken || effectiveReadOnly || event.defaultPrevented || !event.ctrlKey) {
+      if (!accessToken || readOnly || aiMutationLocked || previewRendering || previewFailed || event.defaultPrevented || !event.ctrlKey) {
         return;
       }
 
@@ -764,21 +899,35 @@ export function ProjectWorkspace({
         || tagName === 'textarea',
       );
 
-      if (isEditable || event.key.toLowerCase() !== 'z') {
+      if (isEditable) {
         return;
       }
 
-      if (event.shiftKey || historyLoading || !latestRestorableItem) {
+      const key = event.key.toLowerCase();
+      const isUndo = (key === 'z' || key === 'я') && !event.shiftKey;
+      const isRedo = key === 'y' || key === 'н' || ((key === 'z' || key === 'я') && event.shiftKey);
+
+      if (isUndo) {
+        if (historyLoading || !nextUndoPreviewItem) {
+          return;
+        }
+        event.preventDefault();
+        handleUndoLatest();
         return;
       }
 
-      event.preventDefault();
-      void restoreVersion(latestRestorableItem.id);
+      if (isRedo) {
+        if (historyLoading || previewHistoryIndex < 0) {
+          return;
+        }
+        event.preventDefault();
+        handleRedoLatest();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [accessToken, effectiveReadOnly, historyLoading, latestRestorableItem, restoreVersion]);
+  }, [accessToken, aiMutationLocked, handleRedoLatest, handleUndoLatest, historyLoading, nextUndoPreviewItem, previewFailed, previewHistoryIndex, previewRendering, readOnly]);
 
   useEffect(() => {
     if (!hasBaselineAccess) {
@@ -950,7 +1099,10 @@ export function ProjectWorkspace({
           ganttDayMode={displayGanttDayMode ?? ganttDayMode}
           onGanttDayModeChange={onGanttDayModeChange}
           readOnly={readOnly || aiMutationLocked}
-          previewMode={previewModeActive}
+          previewMode={previewModeActive && !undoPreviewEditMode}
+          canUndo={Boolean(nextUndoPreviewItem)}
+          undoLoading={undoLoading}
+          onUndo={handleUndoLatest}
           baselineMenuOpen={baselineMenuOpen}
           onBaselineMenuOpenChange={setBaselineMenuOpen}
           baselineActiveLabel={selectedBaselineLabel}
@@ -1044,7 +1196,7 @@ export function ProjectWorkspace({
                 taskFilter={taskFilter}
                 taskListMenuCommands={taskListMenuCommands}
                 additionalColumns={additionalColumns}
-                onTasksChange={effectiveReadOnly ? undefined : batchUpdate?.handleTasksChange}
+                onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}
                 containerHeight="calc(100dvh - 132px)"
@@ -1062,11 +1214,11 @@ export function ProjectWorkspace({
                 viewMode={viewMode}
                 collapsedParentIds={collapsedParentIds}
                 onToggleCollapse={handleToggleCollapse}
-                onAdd={effectiveReadOnly ? undefined : batchUpdate?.handleAdd}
-                onDelete={effectiveReadOnly ? undefined : batchUpdate?.handleDelete}
-                onInsertAfter={effectiveReadOnly ? undefined : batchUpdate?.handleInsertAfter}
-                onReorder={effectiveReadOnly ? undefined : batchUpdate?.handleReorder}
-                onUngroupTask={effectiveReadOnly ? undefined : batchUpdate?.handleUngroupTask}
+                onAdd={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleAdd}
+                onDelete={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleDelete}
+                onInsertAfter={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                onReorder={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleReorder}
+                onUngroupTask={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleUngroupTask}
                 customDays={customDays}
                 highlightedTaskIds={highlightedSearchTaskIds}
                 filterMode={filterMode}
@@ -1203,12 +1355,21 @@ export function ProjectWorkspace({
             creatingBaselineFromHistoryGroupId={creatingFromHistoryGroupId}
             onClose={() => setShowHistoryPanel(false)}
             onRefresh={() => void refreshHistory()}
-            onPreviewVersion={showVersion}
-            onRestoreVersion={restoreVersion}
+            onPreviewVersion={(item) => {
+              setUndoPreviewEditMode(false);
+              return showVersion(item);
+            }}
+            onRestoreVersion={(groupId) => {
+              setUndoPreviewEditMode(false);
+              return restoreVersion(groupId);
+            }}
             onCreateBaselineFromHistory={(item) => {
               void handleCreateBaselineFromHistory(item);
             }}
-            onReturnToCurrentVersion={returnToCurrentVersion}
+            onReturnToCurrentVersion={() => {
+              setUndoPreviewEditMode(false);
+              returnToCurrentVersion();
+            }}
           />
         )}
 
@@ -1230,13 +1391,18 @@ export function ProjectWorkspace({
               showChartButton={hasRenderableChart}
               isAuthenticated={isAuthenticated}
               onLoginRequired={onLoginRequired}
-              onReturnToCurrentVersion={returnToCurrentVersion}
+              onReturnToCurrentVersion={() => {
+                setUndoPreviewEditMode(false);
+                returnToCurrentVersion();
+              }}
               showReturnToCurrentVersion={previewModeActive}
               activePreviewGroupId={historyViewer.mode === 'preview' ? historyViewer.groupId : null}
               onPreviewHistory={(groupId) => {
+                setUndoPreviewEditMode(false);
                 void showVersionById(groupId);
               }}
               onRestoreHistory={(groupId) => {
+                setUndoPreviewEditMode(false);
                 void restoreVersion(groupId);
               }}
             />
@@ -1250,6 +1416,67 @@ export function ProjectWorkspace({
           onClose={() => setSplitTaskDraft(null)}
           onSubmit={handleSplitTaskSubmit}
         />
+      )}
+
+      {historyBranchConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !historyBranchConfirmPending) {
+              closeHistoryBranchConfirmation(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-branch-confirm-title"
+            className="w-[460px] max-w-full rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <TriangleAlert className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="history-branch-confirm-title" className="text-lg font-semibold text-slate-900">
+                  Изменить старую версию?
+                </h2>
+                <div className="mt-2 space-y-2 text-sm leading-5 text-slate-600">
+                  <p>Вы изменяете версию от {previewHistoryLabel ?? 'выбранной даты'}.</p>
+                  <p>Все последующие версии будут перезаписаны. Продолжить?</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowHistoryPanel(true)}
+                    className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Открыть историю
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => closeHistoryBranchConfirmation(false)}
+                disabled={historyBranchConfirmPending}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => closeHistoryBranchConfirmation(true)}
+                disabled={historyBranchConfirmPending}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {historyBranchConfirmPending && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                Продолжить
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {taskChatDraft && (

@@ -67,10 +67,11 @@ type HarnessState = {
     command: ProjectCommand;
     history: {
       groupId: string;
-      origin: 'undo';
+      origin: 'undo' | 'redo';
       title: string;
       requestContextId?: string;
       finalizeGroup: boolean;
+      redoOfGroupId?: string | null;
       targetGroupId?: string | null;
     };
   }>;
@@ -446,6 +447,78 @@ describe('HistoryService version snapshots', () => {
     assert.deepEqual(response.items.map((item) => item.id), ['group-1']);
     assert.equal(response.items[0]?.isCurrent, true);
     assert.equal(response.items[0]?.canRestore, false);
+  });
+
+  it('redoLatest reapplies the next undone group and makes it visible again', async () => {
+    seedVisibleHistory();
+
+    await service.restoreToGroup({
+      projectId: 'project-1',
+      groupId: 'group-1',
+      actorType: 'user',
+      actorId: 'user-1',
+      requestContextId: 'restore for redo',
+    });
+
+    const response = await service.redoLatest({
+      projectId: 'project-1',
+      actorType: 'user',
+      actorId: 'user-1',
+      requestContextId: 'redo latest',
+    });
+
+    assert.equal(response.targetGroupId, 'group-2');
+    assert.deepEqual(
+      harness.state.commitCalls.slice(-2).map((call) => call.command),
+      [
+        { type: 'move_task', taskId: 'A', startDate: '2026-04-03' },
+        { type: 'move_task', taskId: 'B', startDate: '2026-04-07' },
+      ],
+    );
+    assert.equal(harness.state.commitCalls.at(-1)?.history.origin, 'redo');
+    assert.equal(harness.state.commitCalls.at(-1)?.history.redoOfGroupId, 'group-2');
+    assert.equal(harness.state.mutationGroups.find((group) => group.id === 'group-2')?.status, 'applied');
+    assert.equal(harness.state.mutationGroups.find((group) => group.id === 'group-3')?.status, 'undone');
+
+    const visible = await service.listHistoryGroups({ projectId: 'project-1', limit: 10 });
+    assert.deepEqual(visible.items.map((item) => item.id), ['group-2', 'group-1']);
+  });
+
+  it('redoLatest is unavailable after a new visible branch is created', async () => {
+    seedVisibleHistory();
+
+    await service.restoreToGroup({
+      projectId: 'project-1',
+      groupId: 'group-2',
+      actorType: 'user',
+      actorId: 'user-1',
+      requestContextId: 'restore one step',
+    });
+
+    harness.state.mutationGroups.push({
+      id: 'group-4',
+      projectId: 'project-1',
+      baseVersion: harness.state.version,
+      newVersion: harness.state.version + 1,
+      actorType: 'user',
+      actorId: 'user-1',
+      origin: 'user_ui',
+      title: 'Branch move',
+      status: 'applied',
+      undoable: true,
+      undoneByGroupId: null,
+      redoOfGroupId: null,
+      createdAt: new Date('2026-04-18T10:30:00.000Z'),
+    });
+
+    await assert.rejects(
+      () => service.redoLatest({
+        projectId: 'project-1',
+        actorType: 'user',
+        actorId: 'user-1',
+      }),
+      /No redoable history group/,
+    );
   });
 
   it('preview and restore resolve the same active tail and land on the same target snapshot', async () => {

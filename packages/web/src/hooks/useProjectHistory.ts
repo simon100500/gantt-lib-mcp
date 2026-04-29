@@ -60,6 +60,8 @@ export function useProjectHistory(accessToken: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
+  const [canRedo, setCanRedo] = useState(false);
+  const [redoGroupId, setRedoGroupId] = useState<string | null>(null);
   const [previewingGroupId, setPreviewingGroupId] = useState<string | null>(null);
   const [restoringGroupId, setRestoringGroupId] = useState<string | null>(null);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
@@ -104,6 +106,8 @@ export function useProjectHistory(accessToken: string | null) {
     if (!accessToken) {
       setItems([]);
       setNextCursor(undefined);
+      setCanRedo(false);
+      setRedoGroupId(null);
       setError(null);
       return { items: [], nextCursor: undefined };
     }
@@ -133,6 +137,8 @@ export function useProjectHistory(accessToken: string | null) {
       const data = await response.json() as HistoryListResponse;
       setItems((current) => cursor ? [...current, ...data.items] : data.items);
       setNextCursor(data.nextCursor);
+      setCanRedo(Boolean(data.canRedo));
+      setRedoGroupId(data.redoGroupId ?? null);
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load history';
@@ -278,6 +284,44 @@ export function useProjectHistory(accessToken: string | null) {
     }
   }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed, syncChatMessages]);
 
+  const redoLatest = useCallback(async () => {
+    if (!accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    setRestoringGroupId('redo');
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/history/redo', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const data = await parseHistoryRestoreResponse(response);
+      setConfirmed(data.version, data.snapshot);
+      clearTransientState();
+      clearAfterRestore();
+      await syncChatMessages();
+      await refreshHistory();
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to redo history version';
+      setError(message);
+      throw err;
+    } finally {
+      setRestoringGroupId((current) => (current === 'redo' ? null : current));
+      setLoading(false);
+    }
+  }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed, syncChatMessages]);
+
   useEffect(() => {
     void refreshHistory();
   }, [refreshHistory]);
@@ -287,6 +331,8 @@ export function useProjectHistory(accessToken: string | null) {
     loading,
     error,
     nextCursor,
+    canRedo,
+    redoGroupId,
     previewingGroupId,
     restoringGroupId,
     historyViewer,
@@ -297,6 +343,7 @@ export function useProjectHistory(accessToken: string | null) {
     showVersion,
     showVersionById,
     restoreVersion,
+    redoLatest,
     returnToCurrentVersion,
   };
 }

@@ -70,6 +70,8 @@ export interface HistoryItem {
 export interface HistoryListResponse {
   items: HistoryItem[];
   nextCursor?: string;
+  canRedo?: boolean;
+  redoGroupId?: string | null;
 }
 
 export interface HistorySnapshotResponse {

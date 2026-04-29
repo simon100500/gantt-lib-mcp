@@ -66,6 +66,7 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
       cursor: query.cursor,
       limit,
     });
+    const redoGroupId = await historyService.getRedoableGroupId(req.user!.projectId);
 
     return reply.send({
       items: response.items.map((item) => ({
@@ -80,6 +81,8 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
         canRestore: item.canRestore,
       })),
       nextCursor: response.nextCursor,
+      canRedo: Boolean(redoGroupId),
+      redoGroupId,
     });
   });
 
@@ -142,6 +145,33 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
         version: response.version,
         snapshot: response.snapshot,
         chatCleanup,
+      });
+    } catch (error) {
+      if (isHistoryValidationError(error)) {
+        return reply.status(getHistoryFailureStatus(error.code)).send({
+          reason: error.code,
+          error: error.message,
+        });
+      }
+
+      if (isHistoryFailure(error)) {
+        return reply.status(getHistoryFailureStatus(error.reason)).send(error);
+      }
+
+      throw error;
+    }
+  });
+
+  fastify.post('/api/history/redo', { preHandler: [authMiddleware] }, async (req, reply) => {
+    try {
+      const response = await historyService.redoLatest(getActorContext(req));
+      broadcastToSession(req.user!.sessionId, { type: 'history_changed' });
+
+      return reply.send({
+        groupId: response.groupId,
+        targetGroupId: response.targetGroupId,
+        version: response.version,
+        snapshot: response.snapshot,
       });
     } catch (error) {
       if (isHistoryValidationError(error)) {
