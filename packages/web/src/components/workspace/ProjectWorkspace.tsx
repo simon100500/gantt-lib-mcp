@@ -1076,7 +1076,7 @@ export function ProjectWorkspace({
 
                 {selectedBaselineLabel && selectedBaselineVisible && !previewHistoryItem && (
                   <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-primary">
-                    Базовый план: {selectedBaselineLabel}
+                    {selectedBaselineLabel}
                     <span className="ml-1 text-[10px] font-medium normal-case text-primary/80">
                       ({selectedBaselineTaskCount} задач)
                     </span>

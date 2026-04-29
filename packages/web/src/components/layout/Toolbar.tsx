@@ -18,9 +18,10 @@ import {
   Plus,
   RefreshCw,
   Rows3,
+  TriangleAlert,
   X,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '../ui/button.tsx';
 import {
@@ -95,7 +96,7 @@ interface BaselineMenuSectionProps {
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onToggleBaselineVisibility?: (() => void) | null;
-  onDeleteBaseline?: (baselineId: string) => void;
+  onRequestDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
 
@@ -112,7 +113,7 @@ function renderBaselineMenuSection({
   onCreateBaselineFromCurrent,
   onSelectBaseline,
   onToggleBaselineVisibility,
-  onDeleteBaseline,
+  onRequestDeleteBaseline,
   onRefreshBaselines,
 }: BaselineMenuSectionProps) {
   const createActionDisabled = !onCreateBaselineFromCurrent || creatingBaselineFromCurrent;
@@ -202,9 +203,9 @@ function renderBaselineMenuSection({
                 size="sm"
                 variant="ghost"
                 onClick={() => {
-                  onDeleteBaseline?.(row.id);
+                  onRequestDeleteBaseline?.(row.id);
                 }}
-                disabled={!onDeleteBaseline || deletingBaselineId === row.id}
+                disabled={!onRequestDeleteBaseline || deletingBaselineId === row.id}
                 className="h-8 w-8 shrink-0 rounded-md p-0 text-rose-700 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
                 title={deletingBaselineId === row.id ? 'Удаляем базовый план…' : 'Удалить базовый план'}
                 aria-label={deletingBaselineId === row.id ? 'Удаляем базовый план…' : 'Удалить базовый план'}
@@ -266,6 +267,7 @@ export function Toolbar({
   onDeleteBaseline,
   onRefreshBaselines,
 }: ToolbarProps) {
+  const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
   const viewMode = useUIStore((state) => state.viewMode);
@@ -309,6 +311,9 @@ export function Toolbar({
     : 'Сохранить текущий график';
   const normalizedBaselineActiveLabel = typeof baselineActiveLabel === 'string' && baselineActiveLabel.trim().length > 0
     ? baselineActiveLabel
+    : null;
+  const baselineDeleteCandidate = baselineDeleteCandidateId
+    ? normalizedBaselineRows.find((row) => row.id === baselineDeleteCandidateId) ?? null
     : null;
 
   const currentViewMode = externalViewMode ?? viewMode;
@@ -546,7 +551,7 @@ export function Toolbar({
             onCreateBaselineFromCurrent,
             onSelectBaseline,
             onToggleBaselineVisibility,
-            onDeleteBaseline,
+            onRequestDeleteBaseline: setBaselineDeleteCandidateId,
             onRefreshBaselines,
           })}
         </DropdownMenuContent>
@@ -729,7 +734,7 @@ export function Toolbar({
             onCreateBaselineFromCurrent,
             onSelectBaseline,
             onToggleBaselineVisibility,
-            onDeleteBaseline,
+            onRequestDeleteBaseline: setBaselineDeleteCandidateId,
             onRefreshBaselines,
           })}
 
@@ -940,6 +945,48 @@ export function Toolbar({
           <span className="ml-1 hidden sm:inline">Ассистент</span>
         </Button>
       )}
+
+      {baselineDeleteCandidate ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setBaselineDeleteCandidateId(null);
+            }
+          }}
+        >
+          <div
+            className="w-[420px] max-w-[calc(100vw-2rem)] rounded-xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <TriangleAlert className="h-6 w-6 shrink-0 text-amber-500" />
+              <h2 className="text-lg font-semibold text-slate-800">Удалить базовый план?</h2>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-600">
+              План <span className="font-semibold text-slate-800">{baselineDeleteCandidate.label || 'Без названия'}</span> будет удалён без возможности восстановления.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setBaselineDeleteCandidateId(null)}>
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deletingBaselineId === baselineDeleteCandidate.id}
+                onClick={() => {
+                  onDeleteBaseline?.(baselineDeleteCandidate.id);
+                  setBaselineDeleteCandidateId(null);
+                }}
+              >
+                {deletingBaselineId === baselineDeleteCandidate.id ? 'Удаление…' : 'Удалить'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
