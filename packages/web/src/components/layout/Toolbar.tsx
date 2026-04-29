@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Rows3,
+  SlidersHorizontal,
   TriangleAlert,
   Undo2,
   X,
@@ -45,6 +46,11 @@ export interface ToolbarBaselineRow {
   id: string;
   label: string;
   selected?: boolean;
+}
+
+export interface ToolbarTaskListColumnRow {
+  id: string;
+  label: string;
 }
 
 interface ToolbarProps {
@@ -91,6 +97,9 @@ interface ToolbarProps {
   onDeleteBaseline?: (baselineId: string) => void;
   onRenameBaseline?: (baselineId: string, name: string) => void;
   onRefreshBaselines?: () => void;
+  taskListColumnRows?: ToolbarTaskListColumnRow[] | null;
+  hiddenTaskListColumns?: string[] | null;
+  onToggleTaskListColumn?: (columnId: string) => void;
 }
 
 interface BaselineMenuSectionProps {
@@ -299,6 +308,9 @@ export function Toolbar({
   onDeleteBaseline,
   onRenameBaseline,
   onRefreshBaselines,
+  taskListColumnRows = [],
+  hiddenTaskListColumns = [],
+  onToggleTaskListColumn,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -317,6 +329,7 @@ export function Toolbar({
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
   const setDisableTaskDrag = onToggleDisableTaskDrag ?? useUIStore((state) => state.setDisableTaskDrag);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
+  const hiddenTaskListColumnSet = new Set(hiddenTaskListColumns ?? []);
 
   const filterWithoutDeps = useUIStore((state) => state.filterWithoutDeps);
   const filterWithoutParents = useUIStore((state) => state.filterWithoutParents);
@@ -361,6 +374,7 @@ export function Toolbar({
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
+  const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
 
   const handleToggleDragLock = () => {
     if (mutationLocked) {
@@ -477,6 +491,52 @@ export function Toolbar({
         <FlagTriangleRight className="h-3.5 w-3.5" />
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
+
+      {taskListColumnRows && taskListColumnRows.length > 0 && (
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant={hasHiddenTaskListColumns ? 'secondary' : 'ghost'}
+              className={cn(
+                actionButtonClassName,
+                hasHiddenTaskListColumns && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
+                'hidden gap-1.5 lg:flex focus-visible:ring-0 focus-visible:ring-offset-0',
+              )}
+              title="Настроить столбцы списка задач"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span className="hidden md:inline text-xs">Столбцы</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+              Столбцы задач
+            </DropdownMenuLabel>
+            {taskListColumnRows.map((column) => {
+              const checked = !hiddenTaskListColumnSet.has(column.id);
+              return (
+                <DropdownMenuItem
+                  key={column.id}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    onToggleTaskListColumn?.(column.id);
+                  }}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    readOnly
+                    className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                  />
+                  <span className="text-sm">{column.label}</span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       <DropdownMenu open={baselineMenuOpen} onOpenChange={onBaselineMenuOpenChange} modal={false}>
         <DropdownMenuTrigger asChild>
@@ -840,6 +900,35 @@ export function Toolbar({
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+          {taskListColumnRows && taskListColumnRows.length > 0 && (
+            <>
+              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                Столбцы задач
+              </DropdownMenuLabel>
+              {taskListColumnRows.map((column) => {
+                const checked = !hiddenTaskListColumnSet.has(column.id);
+                return (
+                  <DropdownMenuItem
+                    key={column.id}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onToggleTaskListColumn?.(column.id);
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      readOnly
+                      className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                    />
+                    <span className="text-sm">{column.label}</span>
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+            </>
+          )}
           <DropdownMenuItem
             onClick={() => onUndo?.()}
             disabled={!canTriggerUndo}

@@ -2,7 +2,7 @@ import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles } from 'lucide-react';
 import { reflowTasksOnModeSwitch } from 'gantt-lib';
-import type { TaskListColumn, TaskListMenuCommand } from 'gantt-lib';
+import type { TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -13,7 +13,7 @@ import { CreateResourceModal } from './CreateResourceModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
 import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
-import { Toolbar } from '../layout/Toolbar.tsx';
+import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
 import type { UseBatchTaskUpdateResult } from '../../hooks/useBatchTaskUpdate.ts';
 import { useFilterPersistence } from '../../hooks/useFilterPersistence';
@@ -146,6 +146,18 @@ function buildTaskChatMention(task: Task): string {
   return `[task:${task.id}|${task.name}]\n\n`;
 }
 
+const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
+  { id: 'number', label: 'Номер' },
+  { id: 'startDate', label: 'Начало' },
+  { id: 'endDate', label: 'Окончание' },
+  { id: 'duration', label: 'Длительность' },
+  { id: 'progress', label: 'Прогресс' },
+  { id: 'dependencies', label: 'Зависимости' },
+  { id: 'assigned-resources', label: 'Ресурсы' },
+];
+
+const KNOWN_TASK_LIST_COLUMN_IDS = new Set(TASK_LIST_COLUMN_ROWS.map((column) => column.id));
+
 export function ProjectWorkspace({
   ganttRef,
   tasks,
@@ -257,6 +269,18 @@ export function ProjectWorkspace({
     if (!projectId) return false;
     return projectStates[projectId]?.disableTaskDrag ?? false;
   }, [projectId, projectStates]);
+  const hiddenTaskListColumns = useMemo<TaskListColumnId[]>(() => {
+    if (!projectId) {
+      return [];
+    }
+
+    const storedColumns = projectStates[projectId]?.hiddenTaskListColumns;
+    if (!Array.isArray(storedColumns)) {
+      return [];
+    }
+
+    return storedColumns.filter((columnId): columnId is TaskListColumnId => KNOWN_TASK_LIST_COLUMN_IDS.has(columnId));
+  }, [projectId, projectStates]);
   const selectedBaselineState = useMemo(() => {
     if (!projectId) {
       return null;
@@ -334,6 +358,24 @@ export function ProjectWorkspace({
     if (!projectId || effectiveReadOnly) return;
     setProjectState(projectId, { disableTaskDrag: enabled });
   }, [effectiveReadOnly, projectId, setProjectState]);
+
+  const handleToggleTaskListColumn = useCallback((columnId: string) => {
+    if (!projectId || !KNOWN_TASK_LIST_COLUMN_IDS.has(columnId)) {
+      return;
+    }
+
+    const currentColumns = getProjectState(projectId)?.hiddenTaskListColumns ?? [];
+    const currentSet = new Set(Array.isArray(currentColumns) ? currentColumns : []);
+    if (currentSet.has(columnId)) {
+      currentSet.delete(columnId);
+    } else {
+      currentSet.add(columnId);
+    }
+
+    setProjectState(projectId, {
+      hiddenTaskListColumns: Array.from(currentSet).filter((id) => KNOWN_TASK_LIST_COLUMN_IDS.has(id)),
+    });
+  }, [getProjectState, projectId, setProjectState]);
 
   const handleToggleCollapse = useCallback((parentId: string) => {
     if (!projectId) return;
@@ -1178,6 +1220,9 @@ export function ProjectWorkspace({
           onRefreshBaselines={() => {
             void handleRefreshBaselines();
           }}
+          taskListColumnRows={TASK_LIST_COLUMN_ROWS}
+          hiddenTaskListColumns={hiddenTaskListColumns}
+          onToggleTaskListColumn={handleToggleTaskListColumn}
         />
       </div>
 
@@ -1243,6 +1288,7 @@ export function ProjectWorkspace({
                 taskFilter={taskFilter}
                 taskListMenuCommands={taskListMenuCommands}
                 additionalColumns={additionalColumns}
+                hiddenTaskListColumns={hiddenTaskListColumns}
                 onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
                 dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                 rowHeight={36}

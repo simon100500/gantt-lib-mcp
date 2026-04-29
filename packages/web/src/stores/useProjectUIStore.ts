@@ -19,6 +19,7 @@ interface ProjectUIState {
   activeWorkspace: 'project' | 'planner';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
+  hiddenTaskListColumns: string[];
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
 }
@@ -35,6 +36,7 @@ const DEFAULT_STATE: ProjectUIState = {
   activeWorkspace: 'project',
   collapsedParentIds: [],
   disableTaskDrag: false,
+  hiddenTaskListColumns: [],
   selectedBaseline: null,
   selectedBaselineVisible: false,
 };
