@@ -627,9 +627,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     aiMutationWatchdogRef.current = window.setTimeout(() => {
       aiMutationWatchdogRef.current = null;
       clearAiMutationLock();
-      setPreviewState((current) => current.mode === 'failed'
-        ? current
-        : { tasks: [], active: false, mode: 'rendering', message: null });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().finishStreaming();
     }, AI_MUTATION_LOCK_TIMEOUT_MS);
   }, [clearAiMutationLock]);
@@ -713,9 +711,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (msg.type === 'done') {
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
-      setPreviewState((current) => current.mode === 'failed'
-        ? current
-        : { tasks: [], active: false, mode: 'rendering', message: null });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
       useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
       useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
