@@ -40,7 +40,12 @@ interface ProjectStoreState extends ProjectState {
   mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
   hydrateConfirmed: (version: number, snapshot: ProjectSnapshot, extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[] }) => void;
   addPending: (pending: PendingCommand) => void;
-  resolvePending: (requestId: string, newVersion: number, snapshot: ProjectSnapshot) => void;
+  hydratePending: (pending: PendingCommand[]) => void;
+  updatePendingStatus: (requestId: string, status: NonNullable<PendingCommand['status']>) => void;
+  resolvePending: (requestId: string, newVersion: number, result: ProjectSnapshot | {
+    changedTasks?: Task[];
+    changedDependencyIds?: string[];
+  }) => void;
   rejectPending: (requestId: string) => void;
   setDragPreview: (preview: { commands: FrontendProjectCommand[]; snapshot: ProjectSnapshot } | undefined) => void;
   clearTransientState: () => void;
@@ -105,14 +110,90 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
     pending: [],
     dragPreview: undefined,
   }),
-  addPending: (pending) => set((state) => ({ pending: [...state.pending, pending] })),
-  resolvePending: (requestId, newVersion, snapshot) => set((state) => ({
-    ...(newVersion >= state.confirmed.version
-      ? { confirmed: { version: newVersion, snapshot } }
-      : {}),
-    pending: state.pending.filter((p) => p.requestId !== requestId),
-    dragPreview: undefined,
+  addPending: (pending) => set((state) => (
+    state.pending.some((entry) => entry.requestId === pending.requestId)
+      ? state
+      : { pending: [...state.pending, pending] }
+  )),
+  hydratePending: (pending) => set({ pending, dragPreview: undefined }),
+  updatePendingStatus: (requestId, status) => set((state) => ({
+    pending: state.pending.map((entry) => (
+      entry.requestId === requestId ? { ...entry, status } : entry
+    )),
   })),
+  resolvePending: (requestId, newVersion, result) => set((state) => {
+    const pendingCommand = state.pending.find((entry) => entry.requestId === requestId)?.command;
+    const isSnapshot = Array.isArray((result as ProjectSnapshot).tasks) && Array.isArray((result as ProjectSnapshot).dependencies);
+    const nextPending = state.pending.filter((p) => p.requestId !== requestId);
+
+    if (newVersion < state.confirmed.version) {
+      return { pending: nextPending, dragPreview: undefined };
+    }
+
+    if (isSnapshot) {
+      return {
+        confirmed: { version: newVersion, snapshot: result as ProjectSnapshot },
+        pending: nextPending,
+        dragPreview: undefined,
+      };
+    }
+
+    const changedTasks = (result as { changedTasks?: Task[] }).changedTasks ?? [];
+    const changedTaskById = new Map(changedTasks.map((task) => [task.id, task]));
+    const deleteIds = new Set<string>();
+
+    if (pendingCommand?.type === 'delete_task') {
+      deleteIds.add(pendingCommand.taskId);
+    } else if (pendingCommand?.type === 'delete_tasks') {
+      pendingCommand.taskIds.forEach((taskId) => deleteIds.add(taskId));
+    }
+
+    const nextTasks = state.confirmed.snapshot.tasks
+      .filter((task) => !deleteIds.has(task.id))
+      .map((task) => changedTaskById.get(task.id) ?? task);
+    for (const task of changedTasks) {
+      if (!nextTasks.some((candidate) => candidate.id === task.id)) {
+        nextTasks.push(task);
+      }
+    }
+    nextTasks.sort((left, right) => {
+      const leftSort = left.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const rightSort = right.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      return leftSort - rightSort || left.id.localeCompare(right.id);
+    });
+
+    const dependencyRows = new Map(state.confirmed.snapshot.dependencies.map((dependency) => [dependency.id, dependency]));
+    const changedTaskIds = new Set(changedTasks.map((task) => task.id));
+    for (const [id, dependency] of [...dependencyRows.entries()]) {
+      if (changedTaskIds.has(dependency.taskId) || deleteIds.has(dependency.taskId) || deleteIds.has(dependency.depTaskId)) {
+        dependencyRows.delete(id);
+      }
+    }
+    for (const task of changedTasks) {
+      for (const dependency of task.dependencies ?? []) {
+        const id = `${task.id}:${dependency.taskId}`;
+        dependencyRows.set(id, {
+          id,
+          taskId: task.id,
+          depTaskId: dependency.taskId,
+          type: dependency.type,
+          lag: dependency.lag ?? 0,
+        });
+      }
+    }
+
+    return {
+      confirmed: {
+        version: newVersion,
+        snapshot: {
+          tasks: nextTasks,
+          dependencies: [...dependencyRows.values()],
+        },
+      },
+      pending: nextPending,
+      dragPreview: undefined,
+    };
+  }),
   rejectPending: (requestId) => set((state) => ({
     pending: state.pending.filter((p) => p.requestId !== requestId),
     dragPreview: undefined,

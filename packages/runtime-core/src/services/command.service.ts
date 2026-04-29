@@ -72,6 +72,37 @@ function isVersionBumpRace(error: unknown): boolean {
   return error instanceof PrismaCompat.PrismaClientKnownRequestError && error.code === 'P2025';
 }
 
+type CommitTimingKey =
+  | 'loadProjectMs'
+  | 'loadSnapshotMs'
+  | 'executeCommandMs'
+  | 'persistDepsMs'
+  | 'persistTasksMs'
+  | 'bumpVersionMs'
+  | 'createEventMs'
+  | 'buildSnapshotMs';
+
+type CommitTimings = Partial<Record<CommitTimingKey, number>> & { totalMs?: number };
+
+function shouldReturnSnapshot(command: ProjectCommand, includeSnapshot?: boolean): boolean {
+  if (includeSnapshot) {
+    return true;
+  }
+
+  return command.type === 'create_tasks_batch'
+    || command.type === 'create_task'
+    || command.type === 'delete_task'
+    || command.type === 'delete_tasks'
+    || command.type === 'switch_gantt_day_mode';
+}
+
+function isSimpleTaskFieldUpdate(command: ProjectCommand): command is Extract<ProjectCommand, { type: 'update_task_fields' }> {
+  return command.type === 'update_task_fields'
+    && command.fields.parentId === undefined
+    && command.fields.type === undefined
+    && command.fields.dependencies === undefined;
+}
+
 /** Normalize MCP Task[] to gantt-lib-compatible Task[].
  *  Fills lag: 0 where undefined so gantt-lib strict types are satisfied. */
 function normalizeSnapshot(tasks: Task[]): CoreTask[] {
@@ -93,6 +124,26 @@ async function getScheduleOptions(projectId: string, prisma: any): Promise<CoreO
 }
 
 /** Load all tasks + dependencies for a project, return as Task[] */
+function taskRowToSnapshotTask(task: any): Task {
+  const deps: TaskDependency[] = task.dependencies.map((d: any) => ({
+    taskId: d.depTaskId,
+    type: d.type as DependencyType,
+    lag: d.lag,
+  }));
+  return {
+    id: task.id,
+    name: task.name,
+    startDate: dateToDomain(task.startDate),
+    endDate: dateToDomain(task.endDate),
+    type: task.type ?? 'task',
+    color: task.color || undefined,
+    parentId: task.parentId || undefined,
+    progress: task.progress,
+    dependencies: deps,
+    sortOrder: task.sortOrder,
+  };
+}
+
 async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<Task[]> {
   const tasks = await prismaClient.task.findMany({
     where: { projectId },
@@ -100,25 +151,7 @@ async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<T
     orderBy: { sortOrder: 'asc' },
   });
 
-  return tasks.map((task: any) => {
-    const deps: TaskDependency[] = task.dependencies.map((d: any) => ({
-      taskId: d.depTaskId,
-      type: d.type as DependencyType,
-      lag: d.lag,
-    }));
-    return {
-      id: task.id,
-      name: task.name,
-      startDate: dateToDomain(task.startDate),
-      endDate: dateToDomain(task.endDate),
-      type: task.type ?? 'task',
-      color: task.color || undefined,
-      parentId: task.parentId || undefined,
-      progress: task.progress,
-      dependencies: deps,
-      sortOrder: task.sortOrder,
-    };
-  });
+  return tasks.map(taskRowToSnapshotTask);
 }
 
 /** Load all dependency rows for a project */
@@ -910,16 +943,25 @@ export class CommandService {
     actorId?: string,
   ): Promise<CommitProjectCommandResponse> {
     const startTime = Date.now();
-    const { projectId, clientRequestId, baseVersion, command } = request;
+    const { projectId, clientRequestId, baseVersion, command, includeSnapshot } = request;
     const history = buildHistoryContext(request);
+    const timings: CommitTimings = {};
+    const time = async <T>(key: CommitTimingKey, fn: () => Promise<T>): Promise<T> => {
+      const segmentStart = Date.now();
+      try {
+        return await fn();
+      } finally {
+        timings[key] = (timings[key] ?? 0) + Date.now() - segmentStart;
+      }
+    };
 
     try {
       const result = await this.prisma.$transaction(async (tx: any) => {
         // Step 1: Load project with version
-        const project = await tx.project.findUnique({
-          where: { id: projectId },
-          select: { version: true, ganttDayMode: true },
-        });
+        const project = await time<any | null>('loadProjectMs', () => tx.project.findUnique({
+            where: { id: projectId },
+            select: { version: true, ganttDayMode: true },
+          }));
 
         if (!project) {
           return {
@@ -930,9 +972,57 @@ export class CommandService {
           };
         }
 
+        const existingEvent = await time<any | null>('loadProjectMs', () => tx.projectEvent.findFirst({
+          where: {
+            projectId,
+            clientRequestId,
+            applied: true,
+          },
+          select: {
+            baseVersion: true,
+            version: true,
+            result: true,
+            patches: true,
+          },
+        }));
+
+        if (existingEvent) {
+          const returnSnapshot = shouldReturnSnapshot(command, includeSnapshot);
+          const snapshot = returnSnapshot ? await time('buildSnapshotMs', () => buildProjectSnapshot(projectId, tx)) : undefined;
+          const eventResult = existingEvent.result as Partial<ScheduleExecutionResult> | null;
+          const changedTaskIds = eventResult?.changedTaskIds ?? [];
+          const changedTasks = eventResult?.changedTasks ?? (snapshot
+            ? changedTaskIds
+                .map((taskId) => snapshot.tasks.find((task) => task.id === taskId))
+                .filter((task): task is Task => Boolean(task))
+            : []);
+          const changedDependencyIds = eventResult?.changedDependencyIds ?? [];
+          const conflicts = eventResult?.conflicts ?? [];
+          return {
+            clientRequestId,
+            accepted: true as const,
+            baseVersion: existingEvent.baseVersion,
+            newVersion: Math.max(existingEvent.version, project.version),
+            result: {
+              snapshot,
+              changedTaskIds,
+              changedTasks,
+              changedDependencyIds,
+              conflicts,
+              patches: Array.isArray(existingEvent.patches) ? existingEvent.patches as Patch[] : [],
+            },
+            changedTaskIds,
+            changedTasks,
+            changedDependencyIds,
+            conflicts,
+            historyGroupId: history.groupId,
+            snapshot,
+          };
+        }
+
         // Step 2: Optimistic concurrency check
         if (project.version !== baseVersion) {
-          const snapshot = await buildProjectSnapshot(projectId, tx);
+          const snapshot = await time('buildSnapshotMs', () => buildProjectSnapshot(projectId, tx));
           return {
             clientRequestId,
             accepted: false as const,
@@ -942,9 +1032,130 @@ export class CommandService {
           };
         }
 
+        if (isSimpleTaskFieldUpdate(command)) {
+          const taskBeforeRow = await time<any | null>('loadSnapshotMs', () => tx.task.findFirst({
+            where: { id: command.taskId, projectId },
+            include: { dependencies: true },
+          }));
+
+          if (!taskBeforeRow) {
+            return {
+              clientRequestId,
+              accepted: false as const,
+              reason: 'validation_error' as const,
+              currentVersion: project.version,
+              error: `Task ${command.taskId} not found`,
+            };
+          }
+
+          const beforeTask = taskRowToSnapshotTask(taskBeforeRow);
+          const nextTask: Task = {
+            ...beforeTask,
+            ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
+            ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
+            ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+          };
+          const changedTaskIds = [nextTask.id];
+          const changedTasks = [nextTask];
+          const changedDependencyIds: string[] = [];
+          const conflicts: Conflict[] = [];
+          const patches: Patch[] = [];
+          const newVersion = baseVersion + 1;
+
+          await this.ensureMutationGroup(tx, projectId, baseVersion, history, actorType, actorId);
+          const ordinal = await this.allocateGroupOrdinal(tx, history.groupId);
+
+          const updateData = {
+            ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
+            ...(command.fields.color !== undefined ? { color: command.fields.color ?? null } : {}),
+            ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+          };
+          await time('persistTasksMs', async () => {
+            if (Object.keys(updateData).length > 0) {
+              await tx.task.update({
+                where: { id: command.taskId },
+                data: updateData,
+              });
+            }
+          });
+
+          await time('bumpVersionMs', () => tx.project.update({
+            where: { id: projectId, version: baseVersion },
+            data: { version: { increment: 1 } },
+          }));
+
+          const executionTimeMs = Date.now() - startTime;
+          await time('createEventMs', () => tx.projectEvent.create({
+            data: {
+              id: randomUUID(),
+              projectId,
+              clientRequestId,
+              groupId: history.groupId,
+              baseVersion,
+              version: newVersion,
+              ordinal,
+              applied: true,
+              actorType: toDbActorType(actorType),
+              actorId: actorId ?? null,
+              coreVersion: CORE_VERSION,
+              command: command as any,
+              inverseCommand: {
+                type: 'update_task_fields',
+                taskId: command.taskId,
+                fields: {
+                  ...('name' in command.fields ? { name: beforeTask.name } : {}),
+                  ...('color' in command.fields ? { color: beforeTask.color ?? null } : {}),
+                  ...('progress' in command.fields ? { progress: beforeTask.progress ?? 0 } : {}),
+                },
+              } as any,
+              result: {
+                changedTaskIds,
+                changedTasks,
+                changedDependencyIds,
+                conflicts,
+              },
+              patches: patches as any,
+              metadata: PrismaCompat.DbNull,
+              requestContextId: history.requestContextId ?? null,
+              executionTimeMs,
+            },
+          }));
+
+          if (history.finalizeGroup) {
+            await time('createEventMs', () => this.finalizeMutationGroup(tx, history.groupId, newVersion, history.undoable));
+          }
+
+          const snapshot = shouldReturnSnapshot(command, includeSnapshot)
+            ? await time('buildSnapshotMs', () => buildProjectSnapshot(projectId, tx))
+            : undefined;
+
+          return {
+            clientRequestId,
+            accepted: true as const,
+            baseVersion,
+            newVersion,
+            result: {
+              snapshot,
+              changedTaskIds,
+              changedTasks,
+              changedDependencyIds,
+              conflicts,
+              patches,
+            },
+            changedTaskIds,
+            changedTasks,
+            changedDependencyIds,
+            conflicts,
+            historyGroupId: history.groupId,
+            snapshot,
+          };
+        }
+
         // Step 3: Load current snapshot
-        const beforeTasks = await loadTaskSnapshot(projectId, tx);
-        const beforeDependencyRows = await loadDependencyRows(projectId, tx);
+        const [beforeTasks, beforeDependencyRows] = await time('loadSnapshotMs', () => Promise.all([
+          loadTaskSnapshot(projectId, tx),
+          loadDependencyRows(projectId, tx),
+        ]));
         const coreSnapshot = normalizeSnapshot(beforeTasks);
         const opts: CoreOptions = command.type === 'switch_gantt_day_mode'
           ? await getProjectScheduleOptionsForDayMode(tx, projectId, command.ganttDayMode)
@@ -955,7 +1166,7 @@ export class CommandService {
 
         // Step 4: Execute command through gantt-lib
         const newVersion = baseVersion + 1;
-        const executeResult = await this.executeCommand(command, coreSnapshot, opts, projectId, tx);
+        const executeResult = await time('executeCommandMs', () => this.executeCommand(command, coreSnapshot, opts, projectId, tx));
         const inverseCommand = command.type === 'switch_gantt_day_mode'
           ? { type: 'switch_gantt_day_mode', ganttDayMode: project.ganttDayMode as 'business' | 'calendar' }
           : this.buildInverseCommand(
@@ -968,6 +1179,7 @@ export class CommandService {
         const eventMetadata = this.buildEventMetadata(command, beforeTasks, beforeDependencyRows);
 
         // Step 5: Persist dependency changes if any
+        await time('persistDepsMs', async () => {
         for (const depChange of executeResult.dependencyChanges) {
           if (depChange.action === 'create') {
             await tx.dependency.create({
@@ -997,6 +1209,7 @@ export class CommandService {
             });
           }
         }
+        });
 
         // Step 6: Handle task creates/deletes
         const createdTasks = executeResult.taskChanges.filter((taskChange) => taskChange.action === 'create' && taskChange.task);
@@ -1008,6 +1221,7 @@ export class CommandService {
         const isBatchCreateCommand = command.type === 'create_tasks_batch';
         const isBatchDeleteCommand = command.type === 'delete_tasks';
 
+        await time('persistTasksMs', async () => {
         if (isBatchCreateCommand && createdTasks.length > 0) {
           const maxSort = await tx.task.aggregate({
             where: { projectId },
@@ -1206,6 +1420,7 @@ export class CommandService {
             await syncTaskDependencies(tx, task.id, task.dependencies);
           }
         }
+        });
 
         // Step 8: Build after-snapshot tasks in memory for patch computation
         const afterTasks = buildAfterTasksSnapshot(beforeTasks, executeResult);
@@ -1219,17 +1434,18 @@ export class CommandService {
         );
 
         // Step 10: Bump version atomically
-        await tx.project.update({
+        await time('bumpVersionMs', () => tx.project.update({
           where: { id: projectId, version: baseVersion },
           data: { version: { increment: 1 } },
-        });
+        }));
 
         // Step 11: Create ProjectEvent record
         const executionTimeMs = Date.now() - startTime;
-        await tx.projectEvent.create({
+        await time('createEventMs', () => tx.projectEvent.create({
           data: {
             id: randomUUID(),
             projectId,
+            clientRequestId,
             groupId: history.groupId,
             baseVersion,
             version: newVersion,
@@ -1242,6 +1458,7 @@ export class CommandService {
             inverseCommand: inverseCommand === null ? PrismaCompat.DbNull : inverseCommand as any,
             result: {
               changedTaskIds: executeResult.changedTasks.map(t => t.id),
+              changedTasks: executeResult.changedTasks,
               changedDependencyIds: executeResult.changedDependencyIds,
               conflicts: executeResult.conflicts,
             },
@@ -1250,17 +1467,24 @@ export class CommandService {
             requestContextId: history.requestContextId ?? null,
             executionTimeMs,
           },
-        });
+        }));
 
         if (history.finalizeGroup) {
-          await this.finalizeMutationGroup(tx, history.groupId, newVersion, history.undoable);
+          await time('createEventMs', () => this.finalizeMutationGroup(tx, history.groupId, newVersion, history.undoable));
         }
 
-        // Step 12: Build final snapshot with in-memory tasks plus authoritative dependency rows
-        const snapshot = {
-          tasks: afterTasks,
-          dependencies: await loadDependencyRows(projectId, tx),
-        };
+        // Step 12: Build final snapshot only when callers explicitly need it.
+        const returnSnapshot = shouldReturnSnapshot(command, includeSnapshot);
+        const snapshot = returnSnapshot
+          ? await time('buildSnapshotMs', async () => ({
+              tasks: afterTasks,
+              dependencies: await loadDependencyRows(projectId, tx),
+            }))
+          : undefined;
+        const changedTaskIds = executeResult.changedTasks.map(t => t.id);
+        const changedTasks = executeResult.changedTasks as Task[];
+        const changedDependencyIds = executeResult.changedDependencyIds;
+        const conflicts = executeResult.conflicts;
 
         return {
           clientRequestId,
@@ -1269,15 +1493,29 @@ export class CommandService {
           newVersion,
           result: {
             snapshot,
-            changedTaskIds: executeResult.changedTasks.map(t => t.id),
-            changedDependencyIds: executeResult.changedDependencyIds,
-            conflicts: executeResult.conflicts,
+            changedTaskIds,
+            changedTasks,
+            changedDependencyIds,
+            conflicts,
             patches,
           },
+          changedTaskIds,
+          changedTasks,
+          changedDependencyIds,
+          conflicts,
+          historyGroupId: history.groupId,
           snapshot,
         };
       }, INTERACTIVE_TRANSACTION_OPTIONS);
 
+      timings.totalMs = Date.now() - startTime;
+      // console.debug('[CommandService.commitCommand] timings', {
+      //   clientRequestId,
+      //   projectId,
+      //   baseVersion,
+      //   commandType: command.type,
+      //   ...timings,
+      // });
       return result;
     } catch (error: any) {
       console.error('[CommandService.commitCommand] failed', {

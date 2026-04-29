@@ -45,6 +45,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
       baseVersion: body.baseVersion,
       command: body.command,
       history: body.history,
+      includeSnapshot: body.includeSnapshot,
     };
 
     // REST API calls are always 'user' actor type; agent calls go through MCP

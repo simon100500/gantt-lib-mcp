@@ -195,7 +195,7 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
         throw new Error(`Command rejected: ${result.reason}`);
       }
 
-      latestSnapshotTasks = normalizeTasks(result.snapshot.tasks);
+      latestSnapshotTasks = normalizeTasks(result.snapshot?.tasks ?? result.changedTasks ?? result.result.changedTasks);
       result.result.changedTaskIds.forEach((id: string) => changedIds.add(id));
     }
 
@@ -223,7 +223,7 @@ export function useProjectCommands(accessToken: string | null): UseProjectComman
       throw new Error(`Failed to create task: ${result.reason}`);
     }
 
-    const normalizedTasks = normalizeTasks(result.snapshot.tasks);
+    const normalizedTasks = normalizeTasks(result.snapshot?.tasks ?? result.changedTasks ?? result.result.changedTasks);
     const createdTask = normalizedTasks.find((task) => result.result.changedTaskIds.includes(task.id));
     if (!createdTask) {
       throw new Error('Created task missing from authoritative snapshot');

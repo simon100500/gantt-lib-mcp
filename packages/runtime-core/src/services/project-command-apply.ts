@@ -382,7 +382,7 @@ export function applyProjectCommandToSnapshot(
   snapshot: ProjectSnapshot,
   command: ProjectCommand,
   options: CoreOptions,
-): ScheduleExecutionResult {
+): ScheduleExecutionResult & { snapshot: ProjectSnapshot } {
   const beforeSnapshot = cloneSnapshot(snapshot);
   const beforeTasks = beforeSnapshot.tasks.map(cloneTask);
   let workingSnapshot = normalizeSnapshot(beforeSnapshot.tasks);
@@ -670,6 +670,7 @@ export function applyProjectCommandToSnapshot(
   return {
     snapshot: updatedSnapshot,
     changedTaskIds: coreResult.changedIds,
+    changedTasks: updatedSnapshot.tasks.filter((task) => coreResult.changedIds.includes(task.id)),
     changedDependencyIds,
     conflicts,
     patches: computePatches(beforeTasks, updatedSnapshot.tasks, coreResult.changedIds, 'taskId' in command ? command.taskId : undefined),

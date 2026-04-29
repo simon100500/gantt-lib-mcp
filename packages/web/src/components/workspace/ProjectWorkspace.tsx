@@ -221,12 +221,30 @@ export function ProjectWorkspace({
   const projectStates = useProjectUIStore((state) => state.projectStates);
   const resources = useProjectStore((state) => state.resources);
   const assignments = useProjectStore((state) => state.assignments);
+  const pendingCommands = useProjectStore((state) => state.pending);
   const assignmentError = useProjectStore((state) => state.assignmentError);
   const replaceAssignmentsForTask = useProjectStore((state) => state.replaceAssignmentsForTask);
   const replaceAssignmentsForTasks = useProjectStore((state) => state.replaceAssignmentsForTasks);
   const setAssignmentError = useProjectStore((state) => state.setAssignmentError);
   const clearResourcePlannerCache = useProjectStore((state) => state.clearResourcePlannerCache);
   const upsertResource = useProjectStore((state) => state.upsertResource);
+  const pendingCommandCount = pendingCommands.length;
+  const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
+  const hasRetryingPendingCommand = pendingCommands.some((command) => command.status === 'retrying');
+  const showConnectionIssue = !hasShareToken && isAuthenticated && !displayConnected;
+  const [showDelayedSyncStatus, setShowDelayedSyncStatus] = useState(false);
+  const [showDelayedSavingStatus, setShowDelayedSavingStatus] = useState(false);
+  const showSyncStatus = !hasShareToken && isAuthenticated && (
+    showConnectionIssue
+    || hasBlockedPendingCommand
+    || hasRetryingPendingCommand
+    || (pendingCommandCount > 0 && showDelayedSyncStatus)
+  );
+  const showSavingStatus = !hasShareToken
+    && isAuthenticated
+    && pendingCommandCount === 0
+    && savingState === 'saving'
+    && showDelayedSavingStatus;
   const collapsedParentIds = useMemo(() => {
     if (!projectId) return new Set<string>();
     const projectState = projectStates[projectId];
@@ -246,6 +264,32 @@ export function ProjectWorkspace({
 
     return projectStates[projectId]?.selectedBaseline ?? null;
   }, [projectId, projectStates]);
+
+  useEffect(() => {
+    if (pendingCommandCount === 0 || hasBlockedPendingCommand || hasRetryingPendingCommand) {
+      setShowDelayedSyncStatus(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowDelayedSyncStatus(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [hasBlockedPendingCommand, hasRetryingPendingCommand, pendingCommandCount]);
+
+  useEffect(() => {
+    if (savingState !== 'saving' || pendingCommandCount > 0) {
+      setShowDelayedSavingStatus(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowDelayedSavingStatus(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [pendingCommandCount, savingState]);
   const selectedBaselineVisible = useMemo(() => {
     if (!projectId) {
       return false;
@@ -347,7 +391,7 @@ export function ProjectWorkspace({
     refreshHistorySilently,
     restoreVersion,
     returnToCurrentVersion,
-  } = useProjectHistory(accessToken);
+  } = useProjectHistory(accessToken, showHistoryPanel);
   const {
     items: baselineItems,
     loading: baselinesLoading,
@@ -1072,7 +1116,11 @@ export function ProjectWorkspace({
       return;
     }
 
-    void refreshHistorySilently();
+    const timer = window.setTimeout(() => {
+      void refreshHistorySilently();
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
   }, [accessToken, historyRefreshRevision, refreshHistorySilently]);
 
   return (
@@ -1299,43 +1347,42 @@ export function ProjectWorkspace({
                   </span>
                 )}
 
-                <span
-                  className={cn(
-                    'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                    displayConnected ? 'text-emerald-600' : 'text-amber-600',
-                  )}
-                >
-                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                  {hasShareToken ? 'Только для чтения' : displayConnected ? 'Подключено' : 'Переподключение...'}
-                </span>
+                {hasShareToken && (
+                  <span className="font-mono text-[11px] text-slate-500">
+                    Только для чтения
+                  </span>
+                )}
 
-                {!hasShareToken && isAuthenticated && savingState !== 'idle' && (
+                {showSyncStatus && (
                   <span
                     className={cn(
                       'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                      savingState === 'saving' && 'text-amber-600',
-                      savingState === 'saved' && 'text-emerald-600',
-                      savingState === 'error' && 'text-red-600',
+                      hasBlockedPendingCommand ? 'text-red-600' : 'text-amber-600',
                     )}
                   >
-                    {savingState === 'saving' && (
-                      <>
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
-                        Сохранение...
-                      </>
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        hasBlockedPendingCommand ? 'bg-red-400' : 'bg-amber-400 animate-pulse',
+                      )}
+                    />
+                    {hasBlockedPendingCommand
+                      ? 'Конфликт версии'
+                      : pendingCommandCount > 0
+                        ? 'Синхронизация...'
+                        : 'Офлайн'}
+                  </span>
+                )}
+
+                {showSavingStatus && (
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                      'text-amber-600',
                     )}
-                    {savingState === 'saved' && (
-                      <>
-                        <Check className="h-3 w-3 shrink-0" />
-                        Сохранено
-                      </>
-                    )}
-                    {savingState === 'error' && (
-                      <>
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                        Ошибка сохранения
-                      </>
-                    )}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
+                    Сохранение...
                   </span>
                 )}
               </footer>

@@ -122,7 +122,7 @@ export type ToolCallContext = {
     businessDays?: boolean;
     weekendPredicate?: (date: Date) => boolean;
   }>;
-  commitCommand(projectId: string, command: ProjectCommand): Promise<ToolCommandCommit>;
+  commitCommand(projectId: string, command: ProjectCommand, options?: { includeSnapshot?: boolean }): Promise<ToolCommandCommit>;
   resolveProjectId(projectId?: string | null): string | undefined;
 };
 

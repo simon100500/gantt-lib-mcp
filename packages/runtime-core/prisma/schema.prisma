@@ -520,6 +520,7 @@ model Payment {
 model ProjectEvent {
   id              String    @id @default(uuid())
   projectId       String    @map("project_id")
+  clientRequestId String?   @map("client_request_id")
   groupId         String?   @map("group_id")
   baseVersion     Int       @map("base_version")
   version         Int
@@ -543,6 +544,7 @@ model ProjectEvent {
   @@map("project_events")
   @@index([projectId])
   @@index([projectId, version])
+  @@unique([projectId, clientRequestId])
   @@index([groupId, ordinal])
   @@index([requestContextId])
 }
