@@ -997,9 +997,17 @@ export function Toolbar({
             }
           }}
         >
-          <div
+          <form
             className="w-[420px] max-w-[calc(100vw-2rem)] rounded-xl bg-white p-6 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (deletingBaselineId === baselineDeleteCandidate.id) {
+                return;
+              }
+              onDeleteBaseline?.(baselineDeleteCandidate.id);
+              setBaselineDeleteCandidateId(null);
+            }}
           >
             <div className="flex items-center gap-3">
               <TriangleAlert className="h-6 w-6 shrink-0 text-amber-500" />
@@ -1015,18 +1023,14 @@ export function Toolbar({
                 Отмена
               </Button>
               <Button
-                type="button"
+                type="submit"
                 variant="destructive"
                 disabled={deletingBaselineId === baselineDeleteCandidate.id}
-                onClick={() => {
-                  onDeleteBaseline?.(baselineDeleteCandidate.id);
-                  setBaselineDeleteCandidateId(null);
-                }}
               >
                 {deletingBaselineId === baselineDeleteCandidate.id ? 'Удаление…' : 'Удалить'}
               </Button>
             </div>
-          </div>
+          </form>
         </div>
       ) : null}
 
@@ -1040,9 +1044,18 @@ export function Toolbar({
             }
           }}
         >
-          <div
+          <form
             className="w-[420px] max-w-[calc(100vw-2rem)] rounded-xl bg-white p-6 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (baselineRenameDraft.trim().length === 0 || renamingBaselineId === baselineRenameCandidate.id) {
+                return;
+              }
+              onRenameBaseline?.(baselineRenameCandidate.id, baselineRenameDraft.trim());
+              setBaselineRenameCandidateId(null);
+              setBaselineRenameDraft('');
+            }}
           >
             <div className="flex items-center gap-3">
               <Pencil className="h-5 w-5 shrink-0 text-slate-500" />
@@ -1072,18 +1085,13 @@ export function Toolbar({
                 Отмена
               </Button>
               <Button
-                type="button"
+                type="submit"
                 disabled={baselineRenameDraft.trim().length === 0 || renamingBaselineId === baselineRenameCandidate.id}
-                onClick={() => {
-                  onRenameBaseline?.(baselineRenameCandidate.id, baselineRenameDraft.trim());
-                  setBaselineRenameCandidateId(null);
-                  setBaselineRenameDraft('');
-                }}
               >
                 {renamingBaselineId === baselineRenameCandidate.id ? 'Сохраняем…' : 'Сохранить'}
               </Button>
             </div>
-          </div>
+          </form>
         </div>
       ) : null}
     </div>

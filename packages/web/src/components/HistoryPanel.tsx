@@ -227,7 +227,7 @@ export function HistoryPanel({
                         )}
                       </div>
                     </div>
-                    {!item.isCurrent && (
+                    {(
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
@@ -253,16 +253,18 @@ export function HistoryPanel({
                             <Plus className="h-4 w-4" />
                             <span>{isCreatingBaseline ? 'Сохраняем базовый план…' : 'Сохранить как базовый план'}</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void onRestoreVersion(item.id);
-                            }}
-                            disabled={disabled || loading || !item.canRestore}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                            <span>Восстановить эту версию</span>
-                          </DropdownMenuItem>
+                          {!item.isCurrent ? (
+                            <DropdownMenuItem
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onRestoreVersion(item.id);
+                              }}
+                              disabled={disabled || loading || !item.canRestore}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              <span>Восстановить эту версию</span>
+                            </DropdownMenuItem>
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
