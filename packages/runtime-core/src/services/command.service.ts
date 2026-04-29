@@ -1509,13 +1509,13 @@ export class CommandService {
       }, INTERACTIVE_TRANSACTION_OPTIONS);
 
       timings.totalMs = Date.now() - startTime;
-      console.debug('[CommandService.commitCommand] timings', {
-        clientRequestId,
-        projectId,
-        baseVersion,
-        commandType: command.type,
-        ...timings,
-      });
+      // console.debug('[CommandService.commitCommand] timings', {
+      //   clientRequestId,
+      //   projectId,
+      //   baseVersion,
+      //   commandType: command.type,
+      //   ...timings,
+      // });
       return result;
     } catch (error: any) {
       console.error('[CommandService.commitCommand] failed', {
