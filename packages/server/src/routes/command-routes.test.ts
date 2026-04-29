@@ -5,6 +5,8 @@ import { describe, it } from 'node:test';
 
 const commandRoutesSource = readFileSync(resolve(process.cwd(), 'packages/server/src/routes/command-routes.ts'), 'utf8');
 const indexSource = readFileSync(resolve(process.cwd(), 'packages/server/src/index.ts'), 'utf8');
+const commandServiceSource = readFileSync(resolve(process.cwd(), 'packages/runtime-core/src/services/command.service.ts'), 'utf8');
+const prismaSchemaSource = readFileSync(resolve(process.cwd(), 'packages/runtime-core/prisma/schema.prisma'), 'utf8');
 
 describe('chat and command enforcement routes', () => {
   it('keeps chat guarded by auth, active-subscription, and ai_queries enforcement before usage increment', () => {
@@ -37,6 +39,15 @@ describe('chat and command enforcement routes', () => {
     assert.match(
       commandRoutesSource,
       /writeServerDebugLog\('user_command_failed'/,
+    );
+  });
+
+  it('keeps command commits idempotent by project and client request id', () => {
+    assert.match(prismaSchemaSource, /clientRequestId\s+String\?\s+@map\("client_request_id"\)/);
+    assert.match(prismaSchemaSource, /@@unique\(\[projectId, clientRequestId\]\)/);
+    assert.match(
+      commandServiceSource,
+      /tx\.projectEvent\.findFirst\(\{\s*where: \{\s*projectId,\s*clientRequestId,\s*applied: true,/,
     );
   });
 });

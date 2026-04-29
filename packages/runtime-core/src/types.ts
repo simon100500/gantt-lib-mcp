@@ -742,6 +742,7 @@ export type CommitProjectCommandResponse =
 export type ProjectEventRecord = {
   id: string;
   projectId: string;
+  clientRequestId?: string | null;
   baseVersion: number;
   version: number;
   applied: boolean;

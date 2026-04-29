@@ -221,12 +221,17 @@ export function ProjectWorkspace({
   const projectStates = useProjectUIStore((state) => state.projectStates);
   const resources = useProjectStore((state) => state.resources);
   const assignments = useProjectStore((state) => state.assignments);
+  const pendingCommands = useProjectStore((state) => state.pending);
   const assignmentError = useProjectStore((state) => state.assignmentError);
   const replaceAssignmentsForTask = useProjectStore((state) => state.replaceAssignmentsForTask);
   const replaceAssignmentsForTasks = useProjectStore((state) => state.replaceAssignmentsForTasks);
   const setAssignmentError = useProjectStore((state) => state.setAssignmentError);
   const clearResourcePlannerCache = useProjectStore((state) => state.clearResourcePlannerCache);
   const upsertResource = useProjectStore((state) => state.upsertResource);
+  const pendingCommandCount = pendingCommands.length;
+  const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
+  const showConnectionIssue = !hasShareToken && isAuthenticated && !displayConnected;
+  const showSyncStatus = !hasShareToken && isAuthenticated && (pendingCommandCount > 0 || showConnectionIssue);
   const collapsedParentIds = useMemo(() => {
     if (!projectId) return new Set<string>();
     const projectState = projectStates[projectId];
@@ -1299,17 +1304,34 @@ export function ProjectWorkspace({
                   </span>
                 )}
 
-                <span
-                  className={cn(
-                    'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                    displayConnected ? 'text-emerald-600' : 'text-amber-600',
-                  )}
-                >
-                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', displayConnected ? 'bg-emerald-500' : 'bg-amber-400')} />
-                  {hasShareToken ? 'Только для чтения' : displayConnected ? 'Подключено' : 'Переподключение...'}
-                </span>
+                {hasShareToken && (
+                  <span className="font-mono text-[11px] text-slate-500">
+                    Только для чтения
+                  </span>
+                )}
 
-                {!hasShareToken && isAuthenticated && savingState !== 'idle' && (
+                {showSyncStatus && (
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                      hasBlockedPendingCommand ? 'text-red-600' : 'text-amber-600',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        hasBlockedPendingCommand ? 'bg-red-400' : 'bg-amber-400 animate-pulse',
+                      )}
+                    />
+                    {hasBlockedPendingCommand
+                      ? 'Конфликт версии'
+                      : pendingCommandCount > 0
+                        ? 'Синхронизация...'
+                        : 'Офлайн'}
+                  </span>
+                )}
+
+                {!hasShareToken && isAuthenticated && pendingCommandCount === 0 && savingState !== 'idle' && (
                   <span
                     className={cn(
                       'flex items-center gap-1.5 font-mono text-[11px] transition-colors',

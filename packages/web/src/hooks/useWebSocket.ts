@@ -38,6 +38,7 @@ export function useWebSocket(
   const getAccessTokenRef = useRef(getAccessToken);
   const refreshAccessTokenRef = useRef(refreshAccessToken);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disconnectGraceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshingAuthRef = useRef(false);
   const pendingMessagesRef = useRef<ClientMessage[]>([]);
   onMessageRef.current = onMessage;
@@ -75,6 +76,10 @@ export function useWebSocket(
       try {
         const msg = JSON.parse(event.data as string) as ServerMessage;
         if (msg.type === 'connected') {
+          if (disconnectGraceTimeoutRef.current) {
+            clearTimeout(disconnectGraceTimeoutRef.current);
+            disconnectGraceTimeoutRef.current = null;
+          }
           const token = getAccessTokenRef.current();
           setConnectedToken(token);
           setConnected(true);
@@ -97,9 +102,14 @@ export function useWebSocket(
     };
 
     ws.onclose = () => {
-      setConnected(false);
       setConnectedToken(null);
       wsRef.current = null;
+      if (!disconnectGraceTimeoutRef.current) {
+        disconnectGraceTimeoutRef.current = setTimeout(() => {
+          setConnected(false);
+          disconnectGraceTimeoutRef.current = null;
+        }, 5000);
+      }
       if (refreshingAuthRef.current) {
         return;
       }
@@ -140,6 +150,7 @@ export function useWebSocket(
     if (!accessToken) {
       setConnectedToken(null);
       pendingMessagesRef.current = [];
+      setConnected(false);
       return;
     }
 
@@ -151,6 +162,11 @@ export function useWebSocket(
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (disconnectGraceTimeoutRef.current) {
+        clearTimeout(disconnectGraceTimeoutRef.current);
+        disconnectGraceTimeoutRef.current = null;
       }
     };
   }, [accessToken, connect]);

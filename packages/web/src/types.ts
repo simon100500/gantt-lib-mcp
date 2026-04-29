@@ -171,6 +171,7 @@ export interface PendingCommand {
   requestId: string;
   baseVersion: number;
   command: FrontendProjectCommand;
+  status?: 'pending' | 'retrying' | 'conflict' | 'failed';
 }
 
 export interface ProjectState {

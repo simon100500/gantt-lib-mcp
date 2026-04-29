@@ -40,6 +40,8 @@ interface ProjectStoreState extends ProjectState {
   mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
   hydrateConfirmed: (version: number, snapshot: ProjectSnapshot, extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[] }) => void;
   addPending: (pending: PendingCommand) => void;
+  hydratePending: (pending: PendingCommand[]) => void;
+  updatePendingStatus: (requestId: string, status: NonNullable<PendingCommand['status']>) => void;
   resolvePending: (requestId: string, newVersion: number, snapshot: ProjectSnapshot) => void;
   rejectPending: (requestId: string) => void;
   setDragPreview: (preview: { commands: FrontendProjectCommand[]; snapshot: ProjectSnapshot } | undefined) => void;
@@ -105,7 +107,17 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
     pending: [],
     dragPreview: undefined,
   }),
-  addPending: (pending) => set((state) => ({ pending: [...state.pending, pending] })),
+  addPending: (pending) => set((state) => (
+    state.pending.some((entry) => entry.requestId === pending.requestId)
+      ? state
+      : { pending: [...state.pending, pending] }
+  )),
+  hydratePending: (pending) => set({ pending, dragPreview: undefined }),
+  updatePendingStatus: (requestId, status) => set((state) => ({
+    pending: state.pending.map((entry) => (
+      entry.requestId === requestId ? { ...entry, status } : entry
+    )),
+  })),
   resolvePending: (requestId, newVersion, snapshot) => set((state) => ({
     ...(newVersion >= state.confirmed.version
       ? { confirmed: { version: newVersion, snapshot } }

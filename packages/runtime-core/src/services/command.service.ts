@@ -930,6 +930,39 @@ export class CommandService {
           };
         }
 
+        const existingEvent = await tx.projectEvent.findFirst({
+          where: {
+            projectId,
+            clientRequestId,
+            applied: true,
+          },
+          select: {
+            baseVersion: true,
+            version: true,
+            result: true,
+            patches: true,
+          },
+        });
+
+        if (existingEvent) {
+          const snapshot = await buildProjectSnapshot(projectId, tx);
+          const eventResult = existingEvent.result as Partial<ScheduleExecutionResult> | null;
+          return {
+            clientRequestId,
+            accepted: true as const,
+            baseVersion: existingEvent.baseVersion,
+            newVersion: Math.max(existingEvent.version, project.version),
+            result: {
+              snapshot,
+              changedTaskIds: eventResult?.changedTaskIds ?? [],
+              changedDependencyIds: eventResult?.changedDependencyIds ?? [],
+              conflicts: eventResult?.conflicts ?? [],
+              patches: Array.isArray(existingEvent.patches) ? existingEvent.patches as Patch[] : [],
+            },
+            snapshot,
+          };
+        }
+
         // Step 2: Optimistic concurrency check
         if (project.version !== baseVersion) {
           const snapshot = await buildProjectSnapshot(projectId, tx);
@@ -1230,6 +1263,7 @@ export class CommandService {
           data: {
             id: randomUUID(),
             projectId,
+            clientRequestId,
             groupId: history.groupId,
             baseVersion,
             version: newVersion,
