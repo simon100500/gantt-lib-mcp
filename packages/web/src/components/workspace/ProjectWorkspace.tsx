@@ -230,8 +230,21 @@ export function ProjectWorkspace({
   const upsertResource = useProjectStore((state) => state.upsertResource);
   const pendingCommandCount = pendingCommands.length;
   const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
+  const hasRetryingPendingCommand = pendingCommands.some((command) => command.status === 'retrying');
   const showConnectionIssue = !hasShareToken && isAuthenticated && !displayConnected;
-  const showSyncStatus = !hasShareToken && isAuthenticated && (pendingCommandCount > 0 || showConnectionIssue);
+  const [showDelayedSyncStatus, setShowDelayedSyncStatus] = useState(false);
+  const [showDelayedSavingStatus, setShowDelayedSavingStatus] = useState(false);
+  const showSyncStatus = !hasShareToken && isAuthenticated && (
+    showConnectionIssue
+    || hasBlockedPendingCommand
+    || hasRetryingPendingCommand
+    || (pendingCommandCount > 0 && showDelayedSyncStatus)
+  );
+  const showSavingStatus = !hasShareToken
+    && isAuthenticated
+    && pendingCommandCount === 0
+    && savingState === 'saving'
+    && showDelayedSavingStatus;
   const collapsedParentIds = useMemo(() => {
     if (!projectId) return new Set<string>();
     const projectState = projectStates[projectId];
@@ -251,6 +264,32 @@ export function ProjectWorkspace({
 
     return projectStates[projectId]?.selectedBaseline ?? null;
   }, [projectId, projectStates]);
+
+  useEffect(() => {
+    if (pendingCommandCount === 0 || hasBlockedPendingCommand || hasRetryingPendingCommand) {
+      setShowDelayedSyncStatus(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowDelayedSyncStatus(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [hasBlockedPendingCommand, hasRetryingPendingCommand, pendingCommandCount]);
+
+  useEffect(() => {
+    if (savingState !== 'saving' || pendingCommandCount > 0) {
+      setShowDelayedSavingStatus(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowDelayedSavingStatus(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [pendingCommandCount, savingState]);
   const selectedBaselineVisible = useMemo(() => {
     if (!projectId) {
       return false;
@@ -1331,33 +1370,15 @@ export function ProjectWorkspace({
                   </span>
                 )}
 
-                {!hasShareToken && isAuthenticated && pendingCommandCount === 0 && savingState !== 'idle' && (
+                {showSavingStatus && (
                   <span
                     className={cn(
                       'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
-                      savingState === 'saving' && 'text-amber-600',
-                      savingState === 'saved' && 'text-emerald-600',
-                      savingState === 'error' && 'text-red-600',
+                      'text-amber-600',
                     )}
                   >
-                    {savingState === 'saving' && (
-                      <>
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
-                        Сохранение...
-                      </>
-                    )}
-                    {savingState === 'saved' && (
-                      <>
-                        <Check className="h-3 w-3 shrink-0" />
-                        Сохранено
-                      </>
-                    )}
-                    {savingState === 'error' && (
-                      <>
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                        Ошибка сохранения
-                      </>
-                    )}
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
+                    Сохранение...
                   </span>
                 )}
               </footer>

@@ -37,6 +37,7 @@ type OutboxEntry = {
   history?: FrontendHistoryGroupContext;
   createdAt: number;
   attempts: number;
+  rebaseAttempts?: number;
   status: NonNullable<PendingCommand['status']>;
   lastError?: string;
 };
@@ -182,7 +183,7 @@ async function flushOutbox(projectId: string, accessToken: string): Promise<void
         useUIStore.getState().setSavingState('idle');
         return;
       }
-      if (entry.status === 'conflict' || entry.status === 'failed') {
+      if (entry.status === 'failed' || (entry.status === 'conflict' && (entry.rebaseAttempts ?? 0) >= 3)) {
         useProjectStore.getState().hydratePending(entries.map(toPending));
         useUIStore.getState().setSavingState('error');
         return;
@@ -216,6 +217,27 @@ async function flushOutbox(projectId: string, accessToken: string): Promise<void
         }
 
         if (data.reason === 'version_conflict') {
+          const rebaseAttempts = nextEntry.rebaseAttempts ?? 0;
+          if (data.snapshot && rebaseAttempts < 3) {
+            const rebasedEntries = readOutbox(projectId).map((candidate) => (
+              candidate.requestId === entry.requestId
+                ? {
+                    ...candidate,
+                    baseVersion: data.currentVersion,
+                    baseSnapshot: data.snapshot,
+                    attempts: 0,
+                    rebaseAttempts: rebaseAttempts + 1,
+                    status: 'pending' as const,
+                    lastError: undefined,
+                  }
+                : candidate
+            ));
+            writeOutbox(projectId, rebasedEntries);
+            useProjectStore.getState().setConfirmed(data.currentVersion, data.snapshot);
+            useProjectStore.getState().hydratePending(rebasedEntries.map(toPending));
+            continue;
+          }
+
           const conflicted = readOutbox(projectId).map((candidate) => (
             candidate.requestId === entry.requestId
               ? { ...candidate, status: 'conflict' as const, lastError: 'server_version_changed' }
