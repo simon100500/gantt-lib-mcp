@@ -96,6 +96,13 @@ function shouldReturnSnapshot(command: ProjectCommand, includeSnapshot?: boolean
     || command.type === 'switch_gantt_day_mode';
 }
 
+function isSimpleTaskFieldUpdate(command: ProjectCommand): command is Extract<ProjectCommand, { type: 'update_task_fields' }> {
+  return command.type === 'update_task_fields'
+    && command.fields.parentId === undefined
+    && command.fields.type === undefined
+    && command.fields.dependencies === undefined;
+}
+
 /** Normalize MCP Task[] to gantt-lib-compatible Task[].
  *  Fills lag: 0 where undefined so gantt-lib strict types are satisfied. */
 function normalizeSnapshot(tasks: Task[]): CoreTask[] {
@@ -117,6 +124,26 @@ async function getScheduleOptions(projectId: string, prisma: any): Promise<CoreO
 }
 
 /** Load all tasks + dependencies for a project, return as Task[] */
+function taskRowToSnapshotTask(task: any): Task {
+  const deps: TaskDependency[] = task.dependencies.map((d: any) => ({
+    taskId: d.depTaskId,
+    type: d.type as DependencyType,
+    lag: d.lag,
+  }));
+  return {
+    id: task.id,
+    name: task.name,
+    startDate: dateToDomain(task.startDate),
+    endDate: dateToDomain(task.endDate),
+    type: task.type ?? 'task',
+    color: task.color || undefined,
+    parentId: task.parentId || undefined,
+    progress: task.progress,
+    dependencies: deps,
+    sortOrder: task.sortOrder,
+  };
+}
+
 async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<Task[]> {
   const tasks = await prismaClient.task.findMany({
     where: { projectId },
@@ -124,25 +151,7 @@ async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<T
     orderBy: { sortOrder: 'asc' },
   });
 
-  return tasks.map((task: any) => {
-    const deps: TaskDependency[] = task.dependencies.map((d: any) => ({
-      taskId: d.depTaskId,
-      type: d.type as DependencyType,
-      lag: d.lag,
-    }));
-    return {
-      id: task.id,
-      name: task.name,
-      startDate: dateToDomain(task.startDate),
-      endDate: dateToDomain(task.endDate),
-      type: task.type ?? 'task',
-      color: task.color || undefined,
-      parentId: task.parentId || undefined,
-      progress: task.progress,
-      dependencies: deps,
-      sortOrder: task.sortOrder,
-    };
-  });
+  return tasks.map(taskRowToSnapshotTask);
 }
 
 /** Load all dependency rows for a project */
@@ -1019,6 +1028,125 @@ export class CommandService {
             accepted: false as const,
             reason: 'version_conflict' as const,
             currentVersion: project.version,
+            snapshot,
+          };
+        }
+
+        if (isSimpleTaskFieldUpdate(command)) {
+          const taskBeforeRow = await time<any | null>('loadSnapshotMs', () => tx.task.findFirst({
+            where: { id: command.taskId, projectId },
+            include: { dependencies: true },
+          }));
+
+          if (!taskBeforeRow) {
+            return {
+              clientRequestId,
+              accepted: false as const,
+              reason: 'validation_error' as const,
+              currentVersion: project.version,
+              error: `Task ${command.taskId} not found`,
+            };
+          }
+
+          const beforeTask = taskRowToSnapshotTask(taskBeforeRow);
+          const nextTask: Task = {
+            ...beforeTask,
+            ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
+            ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
+            ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+          };
+          const changedTaskIds = [nextTask.id];
+          const changedTasks = [nextTask];
+          const changedDependencyIds: string[] = [];
+          const conflicts: Conflict[] = [];
+          const patches: Patch[] = [];
+          const newVersion = baseVersion + 1;
+
+          await this.ensureMutationGroup(tx, projectId, baseVersion, history, actorType, actorId);
+          const ordinal = await this.allocateGroupOrdinal(tx, history.groupId);
+
+          const updateData = {
+            ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
+            ...(command.fields.color !== undefined ? { color: command.fields.color ?? null } : {}),
+            ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+          };
+          await time('persistTasksMs', async () => {
+            if (Object.keys(updateData).length > 0) {
+              await tx.task.update({
+                where: { id: command.taskId },
+                data: updateData,
+              });
+            }
+          });
+
+          await time('bumpVersionMs', () => tx.project.update({
+            where: { id: projectId, version: baseVersion },
+            data: { version: { increment: 1 } },
+          }));
+
+          const executionTimeMs = Date.now() - startTime;
+          await time('createEventMs', () => tx.projectEvent.create({
+            data: {
+              id: randomUUID(),
+              projectId,
+              clientRequestId,
+              groupId: history.groupId,
+              baseVersion,
+              version: newVersion,
+              ordinal,
+              applied: true,
+              actorType: toDbActorType(actorType),
+              actorId: actorId ?? null,
+              coreVersion: CORE_VERSION,
+              command: command as any,
+              inverseCommand: {
+                type: 'update_task_fields',
+                taskId: command.taskId,
+                fields: {
+                  ...('name' in command.fields ? { name: beforeTask.name } : {}),
+                  ...('color' in command.fields ? { color: beforeTask.color ?? null } : {}),
+                  ...('progress' in command.fields ? { progress: beforeTask.progress ?? 0 } : {}),
+                },
+              } as any,
+              result: {
+                changedTaskIds,
+                changedTasks,
+                changedDependencyIds,
+                conflicts,
+              },
+              patches: patches as any,
+              metadata: PrismaCompat.DbNull,
+              requestContextId: history.requestContextId ?? null,
+              executionTimeMs,
+            },
+          }));
+
+          if (history.finalizeGroup) {
+            await time('createEventMs', () => this.finalizeMutationGroup(tx, history.groupId, newVersion, history.undoable));
+          }
+
+          const snapshot = shouldReturnSnapshot(command, includeSnapshot)
+            ? await time('buildSnapshotMs', () => buildProjectSnapshot(projectId, tx))
+            : undefined;
+
+          return {
+            clientRequestId,
+            accepted: true as const,
+            baseVersion,
+            newVersion,
+            result: {
+              snapshot,
+              changedTaskIds,
+              changedTasks,
+              changedDependencyIds,
+              conflicts,
+              patches,
+            },
+            changedTaskIds,
+            changedTasks,
+            changedDependencyIds,
+            conflicts,
+            historyGroupId: history.groupId,
             snapshot,
           };
         }
