@@ -194,8 +194,12 @@ async function flushOutbox(projectId: string, accessToken: string): Promise<void
         return;
       }
 
+      const confirmed = useProjectStore.getState().confirmed;
+      const sendBaseVersion = confirmed.version;
       const nextEntry: OutboxEntry = {
         ...entry,
+        baseVersion: sendBaseVersion,
+        baseSnapshot: confirmed.snapshot,
         attempts: entry.attempts + 1,
         status: entry.attempts > 0 ? 'retrying' : 'pending',
         lastError: undefined,

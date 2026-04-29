@@ -1116,7 +1116,11 @@ export function ProjectWorkspace({
       return;
     }
 
-    void refreshHistorySilently();
+    const timer = window.setTimeout(() => {
+      void refreshHistorySilently();
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
   }, [accessToken, historyRefreshRevision, refreshHistorySilently]);
 
   return (
