@@ -140,6 +140,7 @@ async function commitCommand(
   history: ToolContextOptions['history'] | undefined,
   projectId: string,
   command: Parameters<ToolCallContext['commitCommand']>[1],
+  options?: Parameters<ToolCallContext['commitCommand']>[2],
 ): Promise<{ baseVersion: number; response: CommitProjectCommandResponse }> {
   const summary = await getProjectSummary(prisma, projectId);
   const response = await service.commitCommand(
@@ -148,6 +149,7 @@ async function commitCommand(
       clientRequestId: `tool-core-${randomUUID()}`,
       baseVersion: summary.version,
       command,
+      includeSnapshot: options?.includeSnapshot,
       ...(history
         ? {
             history: {
@@ -184,7 +186,7 @@ export function createToolContext(options: ToolContextOptions = {}): ToolCallCon
     listAllProjectTasks: async (projectId) => listAllProjectTasks(taskApi, projectId),
     getTask: async (_projectId, taskId) => taskApi.get(taskId),
     getProjectScheduleOptions: async (projectId) => getProjectScheduleOptionsForProject(prisma, projectId),
-    commitCommand: async (projectId, command) => commitCommand(
+    commitCommand: async (projectId, command, commitOptions) => commitCommand(
       commandApi,
       prisma,
       options.actorType ?? 'agent',
@@ -192,6 +194,7 @@ export function createToolContext(options: ToolContextOptions = {}): ToolCallCon
       options.history,
       projectId,
       command,
+      commitOptions,
     ),
     resolveProjectId: (projectId) => resolveProjectId(options.defaultProjectId, projectId),
   };

@@ -74,10 +74,14 @@ function mutationFromCommit(
     };
   }
 
-  const changedTaskIds = response.result.changedTaskIds;
-  const changedTasks = changedTaskIds
-    .map((taskId) => response.snapshot.tasks.find((task) => task.id === taskId))
-    .filter((task): task is Task => Boolean(task));
+  const changedTaskIds = response.result.changedTaskIds ?? response.changedTaskIds ?? [];
+  const changedTasks = response.result.changedTasks ?? response.changedTasks ?? (
+    response.snapshot
+      ? changedTaskIds
+          .map((taskId) => response.snapshot!.tasks.find((task) => task.id === taskId))
+          .filter((task): task is Task => Boolean(task))
+      : []
+  );
 
   return {
     status: 'accepted',
@@ -85,8 +89,8 @@ function mutationFromCommit(
     newVersion: response.newVersion,
     changedTaskIds,
     changedTasks,
-    changedDependencyIds: response.result.changedDependencyIds,
-    conflicts: response.result.conflicts,
+    changedDependencyIds: response.result.changedDependencyIds ?? response.changedDependencyIds ?? [],
+    conflicts: response.result.conflicts ?? response.conflicts ?? [],
     ...(includeSnapshot ? { snapshot: response.snapshot } : {}),
   };
 }
@@ -104,9 +108,11 @@ function mergeConflicts(
 
 function toPartialAggregate(aggregation: MutationAggregation): Pick<NormalizedMutationResult, 'changedTaskIds' | 'changedTasks' | 'changedDependencyIds' | 'conflicts'> {
   const changedTaskIds = [...aggregation.changedTaskIds].sort();
-  const changedTasks = changedTaskIds
-    .map((taskId) => aggregation.snapshot?.tasks.find((task) => task.id === taskId))
-    .filter((task): task is Task => Boolean(task));
+  const changedTasks = aggregation.snapshot
+    ? changedTaskIds
+        .map((taskId) => aggregation.snapshot?.tasks.find((task) => task.id === taskId))
+        .filter((task): task is Task => Boolean(task))
+    : aggregation.changedTasks;
 
   return {
     changedTaskIds,
@@ -144,10 +150,17 @@ function addCommitToAggregation(
   }
 
   aggregation.newVersion = response.newVersion;
-  aggregation.snapshot = response.snapshot;
-  aggregation.changedTaskIds = [...new Set([...aggregation.changedTaskIds, ...response.result.changedTaskIds])];
-  aggregation.changedDependencyIds = [...new Set([...aggregation.changedDependencyIds, ...response.result.changedDependencyIds])];
-  aggregation.conflicts = mergeConflicts(aggregation.conflicts, response.result.conflicts);
+  if (response.snapshot) {
+    aggregation.snapshot = response.snapshot;
+  }
+  const changedTasks = response.result.changedTasks ?? response.changedTasks ?? [];
+  aggregation.changedTaskIds = [...new Set([...aggregation.changedTaskIds, ...(response.result.changedTaskIds ?? response.changedTaskIds ?? [])])];
+  aggregation.changedTasks = [
+    ...aggregation.changedTasks.filter((task) => !new Set(changedTasks.map((changedTask) => changedTask.id)).has(task.id)),
+    ...changedTasks,
+  ];
+  aggregation.changedDependencyIds = [...new Set([...aggregation.changedDependencyIds, ...(response.result.changedDependencyIds ?? response.changedDependencyIds ?? [])])];
+  aggregation.conflicts = mergeConflicts(aggregation.conflicts, response.result.conflicts ?? response.conflicts ?? []);
 }
 
 function finalizeAccepted(aggregation: MutationAggregation, includeSnapshot: boolean): NormalizedMutationResult {
@@ -186,7 +199,7 @@ async function runBatch(
   const aggregation = createAggregation();
 
   for (const command of commands) {
-    const { baseVersion, response } = await context.commitCommand(projectId, command);
+    const { baseVersion, response } = await context.commitCommand(projectId, command, { includeSnapshot });
     addCommitToAggregation(aggregation, baseVersion, response);
     if (!response.accepted) {
       return finalizeRejected(
@@ -416,6 +429,7 @@ export function createToolHandlers(context: ToolCallContext): ToolHandlerMap {
       const { baseVersion, response } = await context.commitCommand(
         projectId,
         input.tasks.length === 1 ? { type: 'create_task', task: input.tasks[0] } : { type: 'create_tasks_batch', tasks: input.tasks },
+        { includeSnapshot: input.includeSnapshot ?? false },
       );
       return mutationFromCommit(baseVersion, response, input.includeSnapshot ?? false);
     },
@@ -483,11 +497,15 @@ export function createToolHandlers(context: ToolCallContext): ToolHandlerMap {
         const nextStart = options.businessDays && options.weekendPredicate
           ? shiftBusinessDayOffset(startDate, shift.delta, options.weekendPredicate)
           : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + shift.delta));
-        const { baseVersion, response } = await context.commitCommand(projectId, {
-          type: 'move_task',
-          taskId: shift.taskId,
-          startDate: formatDateOnly(nextStart),
-        });
+        const { baseVersion, response } = await context.commitCommand(
+          projectId,
+          {
+            type: 'move_task',
+            taskId: shift.taskId,
+            startDate: formatDateOnly(nextStart),
+          },
+          { includeSnapshot: input.includeSnapshot ?? false },
+        );
         addCommitToAggregation(aggregation, baseVersion, response);
         if (!response.accepted) {
           return finalizeRejected(
@@ -509,6 +527,7 @@ export function createToolHandlers(context: ToolCallContext): ToolHandlerMap {
       const { baseVersion, response } = await context.commitCommand(
         projectId,
         input.taskIds.length === 1 ? { type: 'delete_task', taskId: input.taskIds[0] } : { type: 'delete_tasks', taskIds: input.taskIds },
+        { includeSnapshot: input.includeSnapshot ?? false },
       );
       return mutationFromCommit(baseVersion, response, input.includeSnapshot ?? false);
     },
@@ -557,7 +576,7 @@ export function createToolHandlers(context: ToolCallContext): ToolHandlerMap {
     },
     recalculate_project: async (input) => {
       const projectId = resolveProjectIdOrThrow(context, input.projectId, 'Project recalculation requires a project ID');
-      const { baseVersion, response } = await context.commitCommand(projectId, { type: 'recalculate_schedule' });
+      const { baseVersion, response } = await context.commitCommand(projectId, { type: 'recalculate_schedule' }, { includeSnapshot: input.includeSnapshot ?? false });
       return mutationFromCommit(baseVersion, response, input.includeSnapshot ?? false);
     },
     validate_schedule: async (input) => {

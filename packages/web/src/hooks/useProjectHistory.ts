@@ -11,6 +11,7 @@ import { useChatStore } from '../stores/useChatStore.ts';
 import { useProjectStore } from '../stores/useProjectStore.ts';
 
 const DEFAULT_HISTORY_LIMIT = 50;
+const OPEN_PANEL_REFRESH_THROTTLE_MS = 2500;
 
 async function readErrorMessage(response: Response): Promise<string> {
   const fallback = `HTTP ${response.status}`;
@@ -55,7 +56,7 @@ async function parseHistorySnapshotResponse(response: Response): Promise<History
   };
 }
 
-export function useProjectHistory(accessToken: string | null) {
+export function useProjectHistory(accessToken: string | null, enabled = true) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +65,8 @@ export function useProjectHistory(accessToken: string | null) {
   const [redoGroupId, setRedoGroupId] = useState<string | null>(null);
   const [previewingGroupId, setPreviewingGroupId] = useState<string | null>(null);
   const [restoringGroupId, setRestoringGroupId] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState(0);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
   const enterPreview = useHistoryViewerStore((state) => state.enterPreview);
   const exitPreview = useHistoryViewerStore((state) => state.exitPreview);
@@ -139,6 +142,10 @@ export function useProjectHistory(accessToken: string | null) {
       setNextCursor(data.nextCursor);
       setCanRedo(Boolean(data.canRedo));
       setRedoGroupId(data.redoGroupId ?? null);
+      if (!cursor) {
+        setStale(false);
+        setLastRefreshAt(Date.now());
+      }
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load history';
@@ -156,8 +163,17 @@ export function useProjectHistory(accessToken: string | null) {
   }, [loadHistory]);
 
   const refreshHistorySilently = useCallback(async () => {
+    if (!enabled) {
+      setStale(true);
+      return { items, nextCursor };
+    }
+
+    if (Date.now() - lastRefreshAt < OPEN_PANEL_REFRESH_THROTTLE_MS) {
+      return { items, nextCursor };
+    }
+
     return loadHistory(undefined, { silent: true });
-  }, [loadHistory]);
+  }, [enabled, items, lastRefreshAt, loadHistory, nextCursor]);
 
   const fetchSnapshot = useCallback(async (groupId: string) => {
     if (!accessToken) {
@@ -323,8 +339,14 @@ export function useProjectHistory(accessToken: string | null) {
   }, [accessToken, clearAfterRestore, clearTransientState, refreshHistory, setConfirmed, syncChatMessages]);
 
   useEffect(() => {
-    void refreshHistory();
-  }, [refreshHistory]);
+    if (!enabled) {
+      return;
+    }
+
+    if (items.length === 0 || stale) {
+      void refreshHistory();
+    }
+  }, [enabled, items.length, refreshHistory, stale]);
 
   return {
     items,

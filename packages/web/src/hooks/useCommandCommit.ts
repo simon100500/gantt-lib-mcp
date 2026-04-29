@@ -11,13 +11,19 @@ type CommitResponse =
       baseVersion: number;
       newVersion: number;
       result: {
-        snapshot: ProjectSnapshot;
+        snapshot?: ProjectSnapshot;
         changedTaskIds: string[];
+        changedTasks: ProjectSnapshot['tasks'];
         changedDependencyIds: string[];
         conflicts: unknown[];
         patches: unknown[];
       };
-      snapshot: ProjectSnapshot;
+      snapshot?: ProjectSnapshot;
+      changedTaskIds: string[];
+      changedTasks: ProjectSnapshot['tasks'];
+      changedDependencyIds: string[];
+      conflicts: unknown[];
+      historyGroupId: string;
     }
   | {
       clientRequestId: string;
@@ -35,6 +41,7 @@ type OutboxEntry = {
   baseSnapshot?: ProjectSnapshot;
   command: FrontendProjectCommand;
   history?: FrontendHistoryGroupContext;
+  includeSnapshot?: boolean;
   createdAt: number;
   attempts: number;
   rebaseAttempts?: number;
@@ -51,7 +58,7 @@ const OUTBOX_PREFIX = 'gantt_command_outbox:v1:';
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 30_000;
 
-const callbacks = new Map<string, PendingCallbacks>();
+const callbacks = new Map<string, PendingCallbacks[]>();
 let flushPromise: Promise<void> | null = null;
 let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -108,6 +115,44 @@ function toPending(entry: OutboxEntry): PendingCommand {
   };
 }
 
+function coalesceCommands(
+  previous: FrontendProjectCommand,
+  next: FrontendProjectCommand,
+): FrontendProjectCommand | null {
+  if (previous.type === 'update_task_fields' && next.type === 'update_task_fields' && previous.taskId === next.taskId) {
+    return {
+      type: 'update_task_fields',
+      taskId: next.taskId,
+      fields: {
+        ...previous.fields,
+        ...next.fields,
+      },
+    };
+  }
+
+  if (previous.type === 'reorder_tasks' && next.type === 'reorder_tasks') {
+    return next;
+  }
+
+  if (
+    (previous.type === 'move_task' || previous.type === 'resize_task' || previous.type === 'set_task_start' || previous.type === 'set_task_end')
+    && previous.type === next.type
+    && 'taskId' in next
+    && previous.taskId === next.taskId
+  ) {
+    return next;
+  }
+
+  return null;
+}
+
+function resolveCallbacks(requestId: string, data: CommitResponse): void {
+  for (const callback of callbacks.get(requestId) ?? []) {
+    callback.resolve(data);
+  }
+  callbacks.delete(requestId);
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   const fallback = `HTTP ${response.status}`;
 
@@ -156,6 +201,7 @@ async function postCommit(accessToken: string, entry: OutboxEntry): Promise<Comm
       baseVersion: entry.baseVersion,
       command: entry.command,
       history: entry.history,
+      includeSnapshot: entry.includeSnapshot,
     }),
   });
 
@@ -214,9 +260,15 @@ async function flushOutbox(projectId: string, accessToken: string): Promise<void
         if (data.accepted) {
           const remaining = readOutbox(projectId).filter((candidate) => candidate.requestId !== entry.requestId);
           writeOutbox(projectId, remaining);
-          useProjectStore.getState().resolvePending(entry.requestId, data.newVersion, data.snapshot);
-          callbacks.get(entry.requestId)?.resolve(data);
-          callbacks.delete(entry.requestId);
+          useProjectStore.getState().resolvePending(
+            entry.requestId,
+            data.newVersion,
+            data.snapshot ?? {
+              changedTasks: data.changedTasks ?? data.result.changedTasks,
+              changedDependencyIds: data.changedDependencyIds ?? data.result.changedDependencyIds,
+            },
+          );
+          resolveCallbacks(entry.requestId, data);
           continue;
         }
 
@@ -250,8 +302,7 @@ async function flushOutbox(projectId: string, accessToken: string): Promise<void
           writeOutbox(projectId, conflicted);
           useProjectStore.getState().hydratePending(conflicted.map(toPending));
           useUIStore.getState().setSavingState('error');
-          callbacks.get(entry.requestId)?.resolve(data);
-          callbacks.delete(entry.requestId);
+          resolveCallbacks(entry.requestId, data);
           return;
         }
 
@@ -263,8 +314,7 @@ async function flushOutbox(projectId: string, accessToken: string): Promise<void
         writeOutbox(projectId, failed);
         useProjectStore.getState().hydratePending(failed.map(toPending));
         useUIStore.getState().setSavingState('error');
-        callbacks.get(entry.requestId)?.resolve(data);
-        callbacks.delete(entry.requestId);
+        resolveCallbacks(entry.requestId, data);
         return;
       } catch (error) {
         const failedEntries = readOutbox(projectId).map((candidate) => (
@@ -328,6 +378,7 @@ export function useCommandCommit(accessToken: string | null) {
   const commitCommand = useCallback(async (
     command: FrontendProjectCommand,
     history?: FrontendHistoryGroupContext,
+    options?: { includeSnapshot?: boolean },
   ): Promise<CommitResponse> => {
     const aiMutationLock = useUIStore.getState().aiMutationLock;
     if (aiMutationLock.active) {
@@ -342,26 +393,39 @@ export function useCommandCommit(accessToken: string | null) {
     }
 
     const currentEntries = readOutbox(projectId);
-    const requestId = generateRequestId();
-    const baseVersion = useProjectStore.getState().confirmed.version + currentEntries.length;
+    const lastEntry = currentEntries[currentEntries.length - 1];
+    const coalescedCommand = !flushPromise && lastEntry && lastEntry.attempts === 0 && lastEntry.status === 'pending'
+      ? coalesceCommands(lastEntry.command, command)
+      : null;
+    const requestId = coalescedCommand ? lastEntry!.requestId : generateRequestId();
+    const baseVersion = coalescedCommand
+      ? lastEntry!.baseVersion
+      : useProjectStore.getState().confirmed.version + currentEntries.length;
     const entry: OutboxEntry = {
       projectId,
       requestId,
       baseVersion,
       baseSnapshot: useProjectStore.getState().confirmed.snapshot,
-      command,
-      history,
+      command: coalescedCommand ?? command,
+      history: coalescedCommand ? lastEntry!.history : history,
+      includeSnapshot: options?.includeSnapshot,
       createdAt: Date.now(),
       attempts: 0,
       status: 'pending',
     };
 
-    writeOutbox(projectId, [...currentEntries, entry]);
-    addPending(toPending(entry));
-
     const resultPromise = new Promise<CommitResponse>((resolve, reject) => {
-      callbacks.set(requestId, { resolve, reject });
+      callbacks.set(requestId, [...(callbacks.get(requestId) ?? []), { resolve, reject }]);
     });
+
+    if (coalescedCommand) {
+      const nextEntries = [...currentEntries.slice(0, -1), entry];
+      writeOutbox(projectId, nextEntries);
+      hydratePending(nextEntries.map(toPending));
+    } else {
+      writeOutbox(projectId, [...currentEntries, entry]);
+      addPending(toPending(entry));
+    }
 
     void flushOutbox(projectId, accessToken);
     return resultPromise;

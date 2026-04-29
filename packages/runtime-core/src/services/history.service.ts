@@ -576,8 +576,8 @@ export class HistoryService {
     }
 
     const scheduleOptions = await this.getScheduleOptions(projectId, this.prisma);
-    const snapshot = plan.inverseCommands.reduce(
-      (workingSnapshot, command) => applyProjectCommandToSnapshot(workingSnapshot, command, scheduleOptions).snapshot,
+    const snapshot = plan.inverseCommands.reduce<ProjectSnapshot>(
+      (workingSnapshot, command) => applyProjectCommandToSnapshot(workingSnapshot, command, scheduleOptions).snapshot ?? workingSnapshot,
       currentSnapshot,
     );
 
@@ -612,6 +612,7 @@ export class HistoryService {
           clientRequestId: `restore-${rollbackGroupId}-${index + 1}`,
           baseVersion,
           command: inverseCommand,
+          includeSnapshot: true,
           history: {
             groupId: rollbackGroupId,
             origin: TECHNICAL_RESTORE_ORIGIN,
@@ -631,6 +632,9 @@ export class HistoryService {
 
       baseVersion = response.newVersion;
       version = response.newVersion;
+      if (!response.snapshot) {
+        throw new Error('Restore commit did not return a snapshot');
+      }
       snapshot = response.snapshot;
     }
 
@@ -658,6 +662,7 @@ export class HistoryService {
           clientRequestId: `redo-${redoGroupId}-${index + 1}`,
           baseVersion,
           command,
+          includeSnapshot: true,
           history: {
             groupId: redoGroupId,
             origin: TECHNICAL_REDO_ORIGIN,
@@ -678,6 +683,9 @@ export class HistoryService {
 
       baseVersion = response.newVersion;
       version = response.newVersion;
+      if (!response.snapshot) {
+        throw new Error('Redo commit did not return a snapshot');
+      }
       snapshot = response.snapshot;
     }
 

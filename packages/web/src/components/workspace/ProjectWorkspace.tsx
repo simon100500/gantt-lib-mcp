@@ -391,7 +391,7 @@ export function ProjectWorkspace({
     refreshHistorySilently,
     restoreVersion,
     returnToCurrentVersion,
-  } = useProjectHistory(accessToken);
+  } = useProjectHistory(accessToken, showHistoryPanel);
   const {
     items: baselineItems,
     loading: baselinesLoading,

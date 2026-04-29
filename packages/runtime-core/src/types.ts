@@ -705,8 +705,9 @@ export type RestoreHistoryGroupResponse = {
 };
 
 export type ScheduleExecutionResult = {
-  snapshot: ProjectSnapshot;
+  snapshot?: ProjectSnapshot;
   changedTaskIds: string[];
+  changedTasks?: Task[];
   changedDependencyIds: string[];
   conflicts: Conflict[];
   patches: Patch[];
@@ -718,6 +719,7 @@ export type CommitProjectCommandRequest = {
   baseVersion: number;
   command: ProjectCommand;
   history?: HistoryGroupContext;
+  includeSnapshot?: boolean;
 };
 
 export type CommitProjectCommandResponse =
@@ -727,7 +729,12 @@ export type CommitProjectCommandResponse =
       baseVersion: number;
       newVersion: number;
       result: ScheduleExecutionResult;
-      snapshot: ProjectSnapshot;
+      snapshot?: ProjectSnapshot;
+      changedTaskIds?: string[];
+      changedTasks?: Task[];
+      changedDependencyIds?: string[];
+      conflicts?: Conflict[];
+      historyGroupId?: string;
     }
   | {
       clientRequestId: string;
