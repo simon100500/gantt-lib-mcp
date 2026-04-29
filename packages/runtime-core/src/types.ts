@@ -588,6 +588,12 @@ export type DeleteBaselineInput = {
   baselineId: string;
 };
 
+export type UpdateBaselineInput = {
+  projectId: string;
+  baselineId: string;
+  name: string;
+};
+
 export type DeleteBaselineResponse = {
   id: string;
 };

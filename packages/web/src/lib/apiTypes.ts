@@ -110,6 +110,7 @@ export interface BaselineSnapshotResponse extends BaselineItem {
 }
 
 export type BaselineCreateResponse = BaselineSnapshotResponse;
+export type BaselineUpdateResponse = BaselineSnapshotResponse;
 
 export interface BaselineDeleteResponse {
   id: string;

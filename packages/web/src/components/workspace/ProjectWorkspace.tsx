@@ -357,6 +357,8 @@ export function ProjectWorkspace({
     deleteBaseline,
     deletingBaselineId,
     createFromHistory,
+    renamingBaselineId,
+    updateBaseline,
   } = useProjectBaselines(accessToken);
   const hasBaselineAccess = Boolean(accessToken && workspace.kind === 'project');
   const selectedBaselineLabel = selectedBaselineState?.label ?? null;
@@ -880,6 +882,33 @@ export function ProjectWorkspace({
     }
   }, [deleteBaseline, deletingBaselineId, projectId, selectedBaselineState?.id, setProjectState]);
 
+  const handleRenameBaseline = useCallback(async (baselineId: string, name: string) => {
+    if (!projectId) {
+      return;
+    }
+
+    const trimmedBaselineId = baselineId.trim();
+    const trimmedName = name.trim();
+    if (!trimmedBaselineId || !trimmedName) {
+      return;
+    }
+
+    try {
+      const updated = await updateBaseline(trimmedBaselineId, trimmedName);
+      if (selectedBaselineState?.id === updated.id) {
+        setProjectState(projectId, {
+          selectedBaseline: {
+            ...selectedBaselineState,
+            label: updated.name || 'Без названия',
+            snapshot: updated.snapshot,
+          },
+        });
+      }
+    } catch {
+      // Hook already exposes the error state.
+    }
+  }, [projectId, selectedBaselineState, setProjectState, updateBaseline]);
+
   const handleToggleBaselineVisibility = useCallback(() => {
     if (!projectId || !selectedBaselineState) {
       return;
@@ -933,6 +962,7 @@ export function ProjectWorkspace({
           baselineCreateLabel="Сохранить текущий график"
           creatingBaselineFromCurrent={creatingFromCurrent}
           deletingBaselineId={deletingBaselineId}
+          renamingBaselineId={renamingBaselineId}
           onCreateBaselineFromCurrent={() => {
             void handleCreateBaselineFromCurrent();
           }}
@@ -942,6 +972,9 @@ export function ProjectWorkspace({
           onToggleBaselineVisibility={handleToggleBaselineVisibility}
           onDeleteBaseline={(baselineId) => {
             void handleDeleteBaseline(baselineId);
+          }}
+          onRenameBaseline={(baselineId, name) => {
+            void handleRenameBaseline(baselineId, name);
           }}
           onRefreshBaselines={() => {
             void handleRefreshBaselines();

@@ -6,6 +6,7 @@ import type {
   BaselineItem,
   BaselineListResponse,
   BaselineSnapshotResponse,
+  BaselineUpdateResponse,
 } from '../lib/apiTypes.ts';
 
 const BASELINE_REQUEST_TIMEOUT_MS = 10_000;
@@ -110,6 +111,7 @@ export function useProjectBaselines(accessToken: string | null) {
   const [creatingFromCurrent, setCreatingFromCurrent] = useState(false);
   const [creatingFromHistoryGroupId, setCreatingFromHistoryGroupId] = useState<string | null>(null);
   const [deletingBaselineId, setDeletingBaselineId] = useState<string | null>(null);
+  const [renamingBaselineId, setRenamingBaselineId] = useState<string | null>(null);
 
   const loadBaselines = useCallback(async () => {
     if (!accessToken) {
@@ -325,6 +327,53 @@ export function useProjectBaselines(accessToken: string | null) {
     }
   }, [accessToken, deletingBaselineId]);
 
+  const updateBaseline = useCallback(async (baselineId: string, name: string): Promise<BaselineUpdateResponse> => {
+    if (!accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const trimmedBaselineId = baselineId.trim();
+    if (!trimmedBaselineId) {
+      throw new Error('baselineId required');
+    }
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error('name required');
+    }
+
+    setRenamingBaselineId(trimmedBaselineId);
+    setError(null);
+    const { signal, cleanup } = createRequestSignal();
+
+    try {
+      const response = await fetch(`/api/baselines/${encodeURIComponent(trimmedBaselineId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name: trimmedName }),
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const data = await parseBaselineSnapshotResponse(response);
+      setItems((current) => current.map((item) => item.id === data.id ? normalizeBaselineItem(data) : item));
+      return data;
+    } catch (err) {
+      const normalizedError = normalizeRequestError(err, 'Failed to rename baseline');
+      setError(normalizedError.message);
+      throw normalizedError;
+    } finally {
+      cleanup();
+      setRenamingBaselineId((current) => (current === trimmedBaselineId ? null : current));
+    }
+  }, [accessToken]);
+
   return {
     items,
     loading,
@@ -333,12 +382,14 @@ export function useProjectBaselines(accessToken: string | null) {
     creatingFromCurrent,
     creatingFromHistoryGroupId,
     deletingBaselineId,
+    renamingBaselineId,
     loadBaselines,
     refreshBaselines: loadBaselines,
     fetchBaseline,
     createFromCurrent,
     createFromHistory,
     deleteBaseline,
+    updateBaseline,
   };
 }
 

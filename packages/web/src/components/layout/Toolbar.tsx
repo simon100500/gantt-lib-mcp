@@ -2,6 +2,7 @@ import {
   AlertCircle,
   Bot,
   ChartNoAxesGantt,
+  Check,
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -15,6 +16,7 @@ import {
   Link,
   Lock,
   LockOpen,
+  Pencil,
   Plus,
   RefreshCw,
   Rows3,
@@ -24,6 +26,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import { Button } from '../ui/button.tsx';
+import { Input } from '../ui/input.tsx';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,11 +78,13 @@ interface ToolbarProps {
   baselineCreateLabel?: string | null;
   creatingBaselineFromCurrent?: boolean | null;
   deletingBaselineId?: string | null;
+  renamingBaselineId?: string | null;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onToggleBaselineVisibility?: () => void;
   onHideBaseline?: () => void;
   onDeleteBaseline?: (baselineId: string) => void;
+  onRenameBaseline?: (baselineId: string, name: string) => void;
   onRefreshBaselines?: () => void;
 }
 
@@ -93,9 +98,11 @@ interface BaselineMenuSectionProps {
   createLabel: string;
   creatingBaselineFromCurrent: boolean;
   deletingBaselineId: string | null;
+  renamingBaselineId: string | null;
   onCreateBaselineFromCurrent?: (() => void) | null;
   onSelectBaseline?: (baselineId: string) => void;
   onToggleBaselineVisibility?: (() => void) | null;
+  onRequestRenameBaseline?: (baselineId: string) => void;
   onRequestDeleteBaseline?: (baselineId: string) => void;
   onRefreshBaselines?: () => void;
 }
@@ -110,9 +117,11 @@ function renderBaselineMenuSection({
   createLabel,
   creatingBaselineFromCurrent,
   deletingBaselineId,
+  renamingBaselineId,
   onCreateBaselineFromCurrent,
   onSelectBaseline,
   onToggleBaselineVisibility,
+  onRequestRenameBaseline,
   onRequestDeleteBaseline,
   onRefreshBaselines,
 }: BaselineMenuSectionProps) {
@@ -203,6 +212,20 @@ function renderBaselineMenuSection({
                 size="sm"
                 variant="ghost"
                 onClick={() => {
+                  onRequestRenameBaseline?.(row.id);
+                }}
+                disabled={!onRequestRenameBaseline || renamingBaselineId === row.id || deletingBaselineId === row.id}
+                className="h-8 w-8 shrink-0 rounded-md p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-60"
+                title={renamingBaselineId === row.id ? 'Переименовываем базовый план…' : 'Переименовать базовый план'}
+                aria-label={renamingBaselineId === row.id ? 'Переименовываем базовый план…' : 'Переименовать базовый план'}
+              >
+                {renamingBaselineId === row.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+              </Button>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
                   onRequestDeleteBaseline?.(row.id);
                 }}
                 disabled={!onRequestDeleteBaseline || deletingBaselineId === row.id}
@@ -261,13 +284,17 @@ export function Toolbar({
   baselineCreateLabel = 'Сохранить текущий график',
   creatingBaselineFromCurrent = false,
   deletingBaselineId = null,
+  renamingBaselineId = null,
   onCreateBaselineFromCurrent = null,
   onSelectBaseline,
   onToggleBaselineVisibility,
   onDeleteBaseline,
+  onRenameBaseline,
   onRefreshBaselines,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
+  const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
+  const [baselineRenameDraft, setBaselineRenameDraft] = useState('');
   const showTaskList = useUIStore((state) => state.showTaskList);
   const showChart = useUIStore((state) => state.showChart);
   const viewMode = useUIStore((state) => state.viewMode);
@@ -314,6 +341,9 @@ export function Toolbar({
     : null;
   const baselineDeleteCandidate = baselineDeleteCandidateId
     ? normalizedBaselineRows.find((row) => row.id === baselineDeleteCandidateId) ?? null
+    : null;
+  const baselineRenameCandidate = baselineRenameCandidateId
+    ? normalizedBaselineRows.find((row) => row.id === baselineRenameCandidateId) ?? null
     : null;
 
   const currentViewMode = externalViewMode ?? viewMode;
@@ -548,9 +578,15 @@ export function Toolbar({
             createLabel: normalizedBaselineCreateLabel,
             creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
             deletingBaselineId,
+            renamingBaselineId,
             onCreateBaselineFromCurrent,
             onSelectBaseline,
             onToggleBaselineVisibility,
+            onRequestRenameBaseline: (baselineId) => {
+              const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
+              setBaselineRenameCandidateId(baselineId);
+              setBaselineRenameDraft(row?.label ?? '');
+            },
             onRequestDeleteBaseline: setBaselineDeleteCandidateId,
             onRefreshBaselines,
           })}
@@ -731,9 +767,15 @@ export function Toolbar({
             createLabel: normalizedBaselineCreateLabel,
             creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
             deletingBaselineId,
+            renamingBaselineId,
             onCreateBaselineFromCurrent,
             onSelectBaseline,
             onToggleBaselineVisibility,
+            onRequestRenameBaseline: (baselineId) => {
+              const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
+              setBaselineRenameCandidateId(baselineId);
+              setBaselineRenameDraft(row?.label ?? '');
+            },
             onRequestDeleteBaseline: setBaselineDeleteCandidateId,
             onRefreshBaselines,
           })}
@@ -982,6 +1024,63 @@ export function Toolbar({
                 }}
               >
                 {deletingBaselineId === baselineDeleteCandidate.id ? 'Удаление…' : 'Удалить'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {baselineRenameCandidate ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setBaselineRenameCandidateId(null);
+              setBaselineRenameDraft('');
+            }
+          }}
+        >
+          <div
+            className="w-[420px] max-w-[calc(100vw-2rem)] rounded-xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <Pencil className="h-5 w-5 shrink-0 text-slate-500" />
+              <h2 className="text-lg font-semibold text-slate-800">Переименовать базовый план</h2>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-slate-600">Новое название</p>
+              <Input
+                value={baselineRenameDraft}
+                onChange={(event) => setBaselineRenameDraft(event.target.value)}
+                autoFocus
+                disabled={renamingBaselineId === baselineRenameCandidate.id}
+              />
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setBaselineRenameCandidateId(null);
+                  setBaselineRenameDraft('');
+                }}
+                disabled={renamingBaselineId === baselineRenameCandidate.id}
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                disabled={baselineRenameDraft.trim().length === 0 || renamingBaselineId === baselineRenameCandidate.id}
+                onClick={() => {
+                  onRenameBaseline?.(baselineRenameCandidate.id, baselineRenameDraft.trim());
+                  setBaselineRenameCandidateId(null);
+                  setBaselineRenameDraft('');
+                }}
+              >
+                {renamingBaselineId === baselineRenameCandidate.id ? 'Сохраняем…' : 'Сохранить'}
               </Button>
             </div>
           </div>

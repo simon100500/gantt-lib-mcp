@@ -14,6 +14,7 @@ import type {
   ProjectSnapshot,
   Task,
   TaskType,
+  UpdateBaselineInput,
 } from '../types.js';
 import { HistoryService, HistoryValidationError, historyService, type GetHistorySnapshotInput } from './history.service.js';
 import { dateToDomain, domainToDate } from './types.js';
@@ -127,6 +128,10 @@ type BaselinePrismaClient = {
         source: BaselineSource;
         sourceHistoryGroupId: string | null;
       };
+    }): Promise<BaselineRecord>;
+    update(args: {
+      where: { id: string };
+      data: { name: string };
     }): Promise<BaselineRecord>;
     delete(args: {
       where: { id: string };
@@ -527,6 +532,49 @@ export class BaselineService {
       });
 
       return { id: deleted.id };
+    };
+
+    return this.prisma.$transaction ? this.prisma.$transaction((tx) => run(tx)) : run(this.prisma);
+  }
+
+  async updateBaseline({ projectId, baselineId, name }: UpdateBaselineInput): Promise<BaselineSnapshot> {
+    assertProjectId(projectId);
+    assertBaselineId(baselineId);
+    assertBaselineName(name);
+
+    const run = async (prismaClient: BaselinePrismaClient): Promise<BaselineSnapshot> => {
+      await this.assertProjectExists(projectId, prismaClient);
+
+      const baseline = await prismaClient.baseline.findFirst({
+        where: { id: baselineId, projectId },
+        include: {
+          tasks: { orderBy: { sortOrder: 'asc' } },
+          dependencies: true,
+        },
+      });
+
+      if (!baseline) {
+        throw new BaselineValidationError(`Baseline ${baselineId} was not found`);
+      }
+
+      await prismaClient.baseline.update({
+        where: { id: baseline.id },
+        data: { name: name.trim() },
+      });
+
+      const updated = await prismaClient.baseline.findFirst({
+        where: { id: baseline.id, projectId },
+        include: {
+          tasks: { orderBy: { sortOrder: 'asc' } },
+          dependencies: true,
+        },
+      });
+
+      if (!updated) {
+        throw new BaselineValidationError(`Baseline ${baselineId} was not found after update`);
+      }
+
+      return this.toSnapshot(updated);
     };
 
     return this.prisma.$transaction ? this.prisma.$transaction((tx) => run(tx)) : run(this.prisma);

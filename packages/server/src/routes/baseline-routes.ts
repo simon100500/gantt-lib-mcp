@@ -201,4 +201,49 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
       throw error;
     }
   });
+
+  fastify.patch('/api/baselines/:baselineId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const params = req.params as { baselineId?: string };
+    if (!params.baselineId?.trim()) {
+      return reply.status(400).send({
+        reason: 'validation_error',
+        error: 'baselineId required',
+      });
+    }
+
+    const name = parseBaselineName(req.body);
+    if (!name) {
+      return reply.status(400).send({
+        reason: 'validation_error',
+        error: 'name required',
+      });
+    }
+
+    try {
+      const response = await baselineService.updateBaseline({
+        projectId: req.user!.projectId,
+        baselineId: params.baselineId,
+        name,
+      });
+
+      return reply.send({
+        id: response.id,
+        projectId: response.projectId,
+        name: response.name,
+        source: response.source,
+        sourceHistoryGroupId: response.sourceHistoryGroupId,
+        createdAt: response.createdAt,
+        snapshot: response.snapshot,
+      });
+    } catch (error) {
+      if (isBaselineValidationError(error)) {
+        return reply.status(400).send({
+          reason: 'validation_error',
+          error: error.message,
+        });
+      }
+
+      throw error;
+    }
+  });
 }

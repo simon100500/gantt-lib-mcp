@@ -193,6 +193,15 @@ function createHarness(): { prisma: any; state: HarnessState } {
         state.baselines.push(record);
         return record;
       },
+      update: async ({ where, data }: any) => {
+        const baseline = state.baselines.find((candidate) => candidate.id === where.id);
+        if (!baseline) {
+          throw new Error(`Baseline ${where.id} not found in harness`);
+        }
+
+        baseline.name = data.name;
+        return baseline;
+      },
       delete: async ({ where }: any) => {
         const index = state.baselines.findIndex((baseline) => baseline.id === where.id);
         if (index < 0) {
@@ -354,6 +363,21 @@ describe('BaselineService', () => {
     assert.equal(harness.state.baselineTasks.some((task) => task.baselineId === historical.id), true);
   });
 
+  it('renames the targeted project baseline without mutating its snapshot payload', async () => {
+    const created = await service.createFromCurrent({ projectId: 'project-1', name: 'Before rename' });
+
+    const updated = await service.updateBaseline({
+      projectId: 'project-1',
+      baselineId: created.id,
+      name: 'After rename',
+    });
+
+    assert.equal(updated.id, created.id);
+    assert.equal(updated.name, 'After rename');
+    assert.deepEqual(updated.snapshot, created.snapshot);
+    assert.equal(harness.state.baselines[0]?.name, 'After rename');
+  });
+
   it('rejects malformed inputs and unknown ids with typed validation errors', async () => {
     await assert.rejects(
       () => service.createFromCurrent({ projectId: 'project-1', name: '   ' }),
@@ -367,6 +391,11 @@ describe('BaselineService', () => {
 
     await assert.rejects(
       () => service.deleteBaseline({ projectId: 'project-1', baselineId: 'missing-baseline' }),
+      (error: unknown) => error instanceof BaselineValidationError && /missing-baseline/.test((error as Error).message),
+    );
+
+    await assert.rejects(
+      () => service.updateBaseline({ projectId: 'project-1', baselineId: 'missing-baseline', name: 'Renamed' }),
       (error: unknown) => error instanceof BaselineValidationError && /missing-baseline/.test((error as Error).message),
     );
 
