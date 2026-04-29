@@ -202,6 +202,9 @@ export function HistoryPanel({
                         <span className="truncate text-[15px] font-semibold leading-5 text-slate-900">
                           {formatTimestamp(item.createdAt)}
                         </span>
+                        <span className="shrink-0 font-mono text-[11px] font-semibold leading-4 text-slate-400">
+                          #{item.newVersion}
+                        </span>
                         {item.isCurrent && (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-emerald-700">
                             Текущая

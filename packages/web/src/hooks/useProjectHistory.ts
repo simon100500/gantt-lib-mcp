@@ -10,7 +10,7 @@ import { useHistoryViewerStore } from '../stores/useHistoryViewerStore.ts';
 import { useChatStore } from '../stores/useChatStore.ts';
 import { useProjectStore } from '../stores/useProjectStore.ts';
 
-const DEFAULT_HISTORY_LIMIT = 50;
+const DEFAULT_HISTORY_LIMIT = 20;
 const OPEN_PANEL_REFRESH_THROTTLE_MS = 2500;
 
 async function readErrorMessage(response: Response): Promise<string> {

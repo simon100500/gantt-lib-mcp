@@ -388,10 +388,9 @@ export function ProjectWorkspace({
     showVersion,
     showVersionById,
     refreshHistory,
-    refreshHistorySilently,
     restoreVersion,
     returnToCurrentVersion,
-  } = useProjectHistory(accessToken, showHistoryPanel);
+  } = useProjectHistory(accessToken, Boolean(accessToken && workspace.kind === 'project'));
   const {
     items: baselineItems,
     loading: baselinesLoading,
@@ -1117,11 +1116,11 @@ export function ProjectWorkspace({
     }
 
     const timer = window.setTimeout(() => {
-      void refreshHistorySilently();
+      void refreshHistory();
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, [accessToken, historyRefreshRevision, refreshHistorySilently]);
+  }, [accessToken, historyRefreshRevision, refreshHistory]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
