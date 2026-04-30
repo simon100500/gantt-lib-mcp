@@ -279,7 +279,7 @@ export class ProjectService {
   async update(
     projectId: string,
     userId: string,
-    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null },
+    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string },
   ): Promise<Project | null> {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
@@ -309,12 +309,27 @@ export class ProjectService {
       resolvedCalendarId = calendar.id;
     }
 
+    let resolvedGroupId = updates.groupId;
+    if (updates.groupId !== undefined) {
+      const group = await this.prisma.projectGroup.findFirst({
+        where: { id: updates.groupId, userId },
+        select: { id: true },
+      });
+
+      if (!group) {
+        return null;
+      }
+
+      resolvedGroupId = group.id;
+    }
+
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         ...(updates.name !== undefined ? { name: updates.name } : {}),
         ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
         ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
+        ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
       },
     });
 

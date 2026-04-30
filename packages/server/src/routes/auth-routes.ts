@@ -487,12 +487,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   fastify.patch<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const body = req.body as { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null };
+    const body = req.body as { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string };
     const name = body.name?.trim();
+    const groupId = body.groupId?.trim();
     const hasName = body.name !== undefined;
     const hasGanttDayMode = body.ganttDayMode === 'business' || body.ganttDayMode === 'calendar';
+    const hasGroupId = body.groupId !== undefined;
 
-    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined) {
+    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasGroupId) {
       return reply.status(400).send({ error: 'No project fields provided' });
     }
 
@@ -504,10 +506,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'Invalid ganttDayMode' });
     }
 
+    if (hasGroupId && !groupId) {
+      return reply.status(400).send({ error: 'groupId required' });
+    }
+
     const project = await authService.updateProject(projectId, req.user!.userId, {
       ...(hasName ? { name } : {}),
       ...(hasGanttDayMode ? { ganttDayMode: body.ganttDayMode } : {}),
       ...(body.calendarId !== undefined ? { calendarId: body.calendarId } : {}),
+      ...(hasGroupId ? { groupId } : {}),
     });
 
     if (!project) {

@@ -1724,6 +1724,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onRenameProject={async (projectId, name) => {
         await auth.updateProject(projectId, { name });
       }}
+      onMoveProject={async (projectId, groupId) => {
+        await auth.updateProject(projectId, { groupId });
+      }}
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}

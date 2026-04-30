@@ -71,7 +71,7 @@ export interface UseAuthResult extends AuthState {
   createProjectGroup(name: string): Promise<ProjectGroup | null>;
   updateProjectGroup(groupId: string, updates: { name: string }): Promise<ProjectGroup>;
   deleteProjectGroup(groupId: string): Promise<void>;
-  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null }): Promise<AuthProject>;
+  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
   restoreProject(projectId: string): Promise<AuthProject>;
   deleteProject(projectId: string): Promise<void>;
