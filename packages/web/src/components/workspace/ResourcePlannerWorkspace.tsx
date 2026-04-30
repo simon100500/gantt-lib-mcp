@@ -8,8 +8,9 @@ import { buildCustomDays } from '../../lib/projectScheduleOptions.ts';
 import type { CalendarDay } from '../../types.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
+import { normalizeDateOnly } from '../../lib/scheduleMutationUtils.ts';
 import { cn } from '../../lib/utils.ts';
-import { useProjectStore } from '../../stores/useProjectStore.ts';
+import { deriveVisibleSnapshot, useProjectStore } from '../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { useUIStore, type PlannerCorrectionTarget, type ViewMode } from '../../stores/useUIStore.ts';
 import { Button } from '../ui/button.tsx';
@@ -22,6 +23,7 @@ import {
 } from '../ui/dropdown-menu.tsx';
 import {
   getPlannerItemMetadata,
+  applyVisibleTaskDatesToPlannerResult,
   mapTimelineResourceScopeToApiScope,
   mapTimelineResourceStatusToActive,
   mapTimelineResourceTypeToApiType,
@@ -460,6 +462,10 @@ export function ResourcePlannerWorkspace({
   ));
   const resources = useProjectStore((store) => store.resources);
   const assignments = useProjectStore((store) => store.assignments);
+  const confirmedSnapshot = useProjectStore((store) => store.confirmed.snapshot);
+  const pendingCommands = useProjectStore((store) => store.pending);
+  const dragPreview = useProjectStore((store) => store.dragPreview);
+  const scheduleOptions = useProjectStore((store) => store.scheduleOptions);
   const setResources = useProjectStore((store) => store.setResources);
   const setAssignments = useProjectStore((store) => store.setAssignments);
   const upsertResource = useProjectStore((store) => store.upsertResource);
@@ -975,17 +981,19 @@ export function ResourcePlannerWorkspace({
 
     setPendingMoveIds((current) => new Set(current).add(classification.itemId));
     setPlannerSaveError(null);
-    setState((current) => {
-      if (!current.data) {
-        return current;
-      }
+    if (classification.kind !== 'date-only') {
+      setState((current) => {
+        if (!current.data) {
+          return current;
+        }
 
-      const nextData = applyOptimisticPlannerMove(current.data, classification);
-      mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-      return current.status === 'error'
-        ? { status: 'error', data: nextData, error: current.error }
-        : { status: 'ready', data: nextData, error: null };
-    });
+        const nextData = applyOptimisticPlannerMove(current.data, classification);
+        mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
+        return current.status === 'error'
+          ? { status: 'error', data: nextData, error: current.error }
+          : { status: 'ready', data: nextData, error: null };
+      });
+    }
     setSelectedItem((current) => {
       if (!current || current.id !== classification.assignmentId) {
         return current;
@@ -1213,7 +1221,14 @@ export function ResourcePlannerWorkspace({
     }
   }, [accessToken, getTaskResourceIds, loadPlanner, mutateResourcePlannerCache, plannerScope, projectId, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
 
-  const displayedPlannerData = state.data;
+  const visibleProjectSnapshot = useMemo(
+    () => deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions),
+    [confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions],
+  );
+  const displayedPlannerData = useMemo(
+    () => state.data ? applyVisibleTaskDatesToPlannerResult(state.data, visibleProjectSnapshot.tasks) : null,
+    [state.data, visibleProjectSnapshot.tasks],
+  );
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const timelineResources = useMemo(
     () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData, resources) : [],
@@ -1252,6 +1267,32 @@ export function ResourcePlannerWorkspace({
 
     return assigned;
   }, [assignments, resources, selectedItem, selectedResource]);
+  useEffect(() => {
+    if (!selectedItem) {
+      return;
+    }
+
+    const visibleTask = visibleProjectSnapshot.tasks.find((task) => task.id === selectedItem.taskId);
+    if (!visibleTask) {
+      return;
+    }
+
+    const nextStartDate = normalizeDateOnly(visibleTask.startDate);
+    const nextEndDate = normalizeDateOnly(visibleTask.endDate);
+    if (selectedItem.startDate === nextStartDate && selectedItem.endDate === nextEndDate) {
+      return;
+    }
+
+    setSelectedItem((current) => (
+      current?.id === selectedItem.id
+        ? {
+          ...current,
+          startDate: nextStartDate,
+          endDate: nextEndDate,
+        }
+        : current
+    ));
+  }, [selectedItem, visibleProjectSnapshot.tasks]);
   const readonly = !accessToken;
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);

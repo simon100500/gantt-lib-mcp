@@ -6,6 +6,7 @@ import {
   type TaskDependency,
 } from '../types';
 import type { ProjectLoadResponse } from '../lib/apiTypes';
+import { buildScheduleDateCommands, normalizeDateOnly } from '../lib/scheduleMutationUtils';
 import { useCommandCommit } from './useCommandCommit';
 
 export interface CreateTaskInput {
@@ -35,7 +36,7 @@ export interface TaskCommandResult {
 }
 
 function toDateString(value: Task['startDate']): string {
-  return typeof value === 'string' ? value.split('T')[0] : value.toISOString().split('T')[0];
+  return normalizeDateOnly(value);
 }
 
 function normalizeDependencies(dependencies: TaskDependency[] | undefined): TaskDependency[] {
@@ -105,13 +106,13 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   // If dependencies changed in the same interaction, let the server recalculate dates
   // from the authoritative dependency graph instead of sending an extra schedule command.
   if (!dependenciesChanged) {
-    if (startChanged && endChanged) {
-      commands.push({ type: 'move_task', taskId: nextTask.id, startDate: nextStartDate });
-    } else if (startChanged) {
-      commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'start', date: nextStartDate });
-    } else if (endChanged) {
-      commands.push({ type: 'resize_task', taskId: nextTask.id, anchor: 'end', date: nextEndDate });
-    }
+    commands.push(...buildScheduleDateCommands({
+      taskId: nextTask.id,
+      originalStartDate,
+      originalEndDate,
+      nextStartDate,
+      nextEndDate,
+    }));
   }
 
   const fieldUpdates: Extract<FrontendProjectCommand, { type: 'update_task_fields' }>['fields'] = {};

@@ -361,6 +361,7 @@ interface ResourcePlannerItemMetadata {
 
 ## 17. References
 
+- `RESOURCE-PLANNER-REFACTOR-PRD.md` — рабочий документ для архитектурного рефакторинга и выравнивания с Gantt pipeline.
 - `RESOURCE-PLANNER-MODE-PRD.md` — исходный PRD миграции resource planner mode в `gantt-lib`.
 - `D:\Projects\gantt-lib\docs\reference\15-resource-planner.md` — публичный contract resource planner mode.
 - `D:\Projects\gantt-lib\docs\reference\04-props.md` — общие props `GanttChart`.

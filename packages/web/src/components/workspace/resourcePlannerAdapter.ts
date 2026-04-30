@@ -1,6 +1,8 @@
 import type { ResourceTimelineItem, ResourceTimelineResource } from 'gantt-lib';
 
 import type { ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType } from '../../lib/apiTypes.ts';
+import type { Task } from '../../types.ts';
+import { normalizeDateOnly } from '../../lib/scheduleMutationUtils.ts';
 
 export interface ResourcePlannerItemMetadata {
   projectId: string;
@@ -110,6 +112,46 @@ function mapIntervalToTimelineItem(interval: ResourcePlannerInterval): ResourceP
       assignmentCreatedAt: interval.assignmentCreatedAt,
     },
   };
+}
+
+export function applyVisibleTaskDatesToPlannerResult(
+  result: ResourcePlannerResult,
+  visibleTasks: Task[],
+): ResourcePlannerResult {
+  const visibleTaskDatesById = new Map(visibleTasks.map((task) => ([
+    task.id,
+    {
+      startDate: normalizeDateOnly(task.startDate),
+      endDate: normalizeDateOnly(task.endDate),
+    },
+  ])));
+
+  let changed = false;
+  const resources = result.resources.map((resource) => ({
+    ...resource,
+    intervals: resource.intervals.map((interval) => {
+      const visibleTaskDates = visibleTaskDatesById.get(interval.taskId);
+      if (!visibleTaskDates) {
+        return interval;
+      }
+
+      if (
+        visibleTaskDates.startDate === interval.startDate
+        && visibleTaskDates.endDate === interval.endDate
+      ) {
+        return interval;
+      }
+
+      changed = true;
+      return {
+        ...interval,
+        startDate: visibleTaskDates.startDate,
+        endDate: visibleTaskDates.endDate,
+      };
+    }),
+  }));
+
+  return changed ? { ...result, resources } : result;
 }
 
 export function mapResourcePlannerResultToTimelineResources(

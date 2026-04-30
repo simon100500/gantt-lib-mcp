@@ -1,5 +1,6 @@
 import type { ResourceTimelineMove } from 'gantt-lib';
 
+import { buildScheduleDateCommands, normalizeDateOnly } from '../../lib/scheduleMutationUtils.ts';
 import type { FrontendProjectCommand } from '../../types.ts';
 import { getPlannerItemMetadata, type ResourcePlannerTimelineItem } from './resourcePlannerAdapter.ts';
 
@@ -29,66 +30,7 @@ export type ResourcePlannerMoveClassification =
   | ({ kind: ResourcePlannerMoveKind } & ResourcePlannerMoveBase)
   | { kind: 'rejected'; reason: ResourcePlannerMoveRejectionReason };
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-export function normalizePlannerMoveDate(value: string | Date): string {
-  if (value instanceof Date) {
-    return value.toISOString().slice(0, 10);
-  }
-
-  return value.split('T')[0];
-}
-
-function utcDayIndex(value: string): number {
-  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10));
-  return Date.UTC(year, month - 1, day) / MS_PER_DAY;
-}
-
-function durationDays(startDate: string, endDate: string): number {
-  return utcDayIndex(endDate) - utcDayIndex(startDate) + 1;
-}
-
-function buildDateCommands(
-  taskId: string,
-  originalStartDate: string,
-  originalEndDate: string,
-  nextStartDate: string,
-  nextEndDate: string,
-): FrontendProjectCommand[] {
-  const startChanged = originalStartDate !== nextStartDate;
-  const endChanged = originalEndDate !== nextEndDate;
-
-  if (!startChanged && !endChanged) {
-    return [];
-  }
-
-  if (
-    startChanged
-    && endChanged
-    && durationDays(originalStartDate, originalEndDate) === durationDays(nextStartDate, nextEndDate)
-  ) {
-    return [{ type: 'move_task', taskId, startDate: nextStartDate }];
-  }
-
-  if (startChanged && !endChanged) {
-    return [{ type: 'resize_task', taskId, anchor: 'start', date: nextStartDate }];
-  }
-
-  if (!startChanged && endChanged) {
-    return [{ type: 'resize_task', taskId, anchor: 'end', date: nextEndDate }];
-  }
-
-  const commands: FrontendProjectCommand[] = [];
-  if (utcDayIndex(nextStartDate) < utcDayIndex(originalStartDate)) {
-    commands.push({ type: 'resize_task', taskId, anchor: 'end', date: nextEndDate });
-    commands.push({ type: 'resize_task', taskId, anchor: 'start', date: nextStartDate });
-  } else {
-    commands.push({ type: 'resize_task', taskId, anchor: 'start', date: nextStartDate });
-    commands.push({ type: 'resize_task', taskId, anchor: 'end', date: nextEndDate });
-  }
-
-  return commands;
-}
+export const normalizePlannerMoveDate = normalizeDateOnly;
 
 export function classifyResourcePlannerMove(
   move: ResourceTimelineMove<ResourcePlannerTimelineItem>,
@@ -113,7 +55,13 @@ export function classifyResourcePlannerMove(
   const originalEndDate = normalizePlannerMoveDate(move.item.endDate);
   const fromResourceId = move.fromResourceId || metadata.resourceId;
   const toResourceId = move.toResourceId || fromResourceId;
-  const commands = buildDateCommands(taskId, originalStartDate, originalEndDate, startDate, endDate);
+  const commands = buildScheduleDateCommands({
+    taskId,
+    originalStartDate,
+    originalEndDate,
+    nextStartDate: startDate,
+    nextEndDate: endDate,
+  });
   const dateChanged = commands.length > 0;
   const resourceChanged = fromResourceId !== toResourceId;
   const kind: ResourcePlannerMoveKind = dateChanged && resourceChanged

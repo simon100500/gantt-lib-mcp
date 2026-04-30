@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ResourcePlannerResult } from '../../../lib/apiTypes.ts';
 import {
+  applyVisibleTaskDatesToPlannerResult,
   getPlannerItemMetadata,
   mapResourcePlannerResultToTimelineResources,
 } from '../resourcePlannerAdapter.ts';
@@ -72,6 +73,9 @@ describe('resourcePlannerAdapter', () => {
       id: 'resource-empty',
       name: 'Empty Crane',
       items: [],
+      type: 'Другое',
+      scope: 'Project',
+      status: 'Active',
     });
   });
 
@@ -112,5 +116,19 @@ describe('resourcePlannerAdapter', () => {
 
     expect(getPlannerItemMetadata(unknownItem)).toBeNull();
     expect(getPlannerItemMetadata({ ...unknownItem, metadata: null })).toBeNull();
+  });
+
+  it('overlays current-project visible task dates onto planner intervals without changing assignment topology', () => {
+    const projected = applyVisibleTaskDatesToPlannerResult(plannerResult, [
+      { id: 'task-2', name: 'Landing', startDate: '2026-04-04', endDate: '2026-04-06', dependencies: [] },
+    ]);
+
+    expect(projected.resources[0]?.intervals[0]).toMatchObject({
+      assignmentId: 'assignment-1',
+      resourceId: 'resource-1',
+      startDate: '2026-04-04',
+      endDate: '2026-04-06',
+    });
+    expect(projected.resources[1]?.intervals).toEqual([]);
   });
 });
