@@ -1721,6 +1721,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       currentProjectLabel={currentProjectLabel}
       onCreateProject={handleCreateProject}
       onSwitchProject={handleSwitchProject}
+      onRenameProject={async (projectId, name) => {
+        await auth.updateProject(projectId, { name });
+      }}
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}
@@ -1786,8 +1789,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
     {showCreateProjectModal && (
       <CreateProjectModal
-        onSave={async (name) => {
-          return createProjectAndActivate(name, pendingProjectCreation ?? {});
+        projectGroups={auth.projectGroups}
+        initialGroupId={pendingProjectCreation?.groupId ?? auth.project?.groupId ?? auth.projectGroups[0]?.id}
+        onSave={async (name, groupId) => {
+          return createProjectAndActivate(name, { ...(pendingProjectCreation ?? {}), groupId });
+        }}
+        onCreateGroup={async (name) => {
+          return auth.createProjectGroup(name);
         }}
         onClose={() => {
           setPendingProjectCreation(null);

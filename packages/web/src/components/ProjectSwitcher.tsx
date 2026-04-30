@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Archive, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EditProjectModal } from './EditProjectModal.tsx';
 import { ProjectGroupModal } from './ProjectGroupModal.tsx';
 import { Button } from './ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
@@ -19,6 +20,7 @@ interface ProjectSwitcherProps {
   createDisabled?: boolean;
   createTitle?: string;
   projectsUsageLabel?: string | null;
+  onRenameProject?: (projectId: string, name: string) => void | Promise<void>;
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
@@ -33,6 +35,7 @@ interface ProjectRowProps {
   isCurrent: boolean;
   menuActive: boolean;
   onSwitch: (projectId: string) => void | Promise<void>;
+  onRename?: (projectId: string, name: string) => void | Promise<void>;
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
@@ -40,9 +43,10 @@ interface ProjectRowProps {
   setOpenMenuProjectId: (projectId: string | null) => void;
 }
 
-function ProjectRow({ project, isCurrent, menuActive, onSwitch, onArchive, onRestore, onDelete, onMenuOpenChange, setOpenMenuProjectId }: ProjectRowProps) {
+function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onArchive, onRestore, onDelete, onMenuOpenChange, setOpenMenuProjectId }: ProjectRowProps) {
   const isArchived = project.status === 'archived';
   const taskCountLabel = project.taskCount === undefined ? '—' : project.taskCount > 0 ? String(project.taskCount) : '';
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
 
   return (
     <div className={cn('group flex items-center rounded-md transition-colors', isCurrent ? 'bg-slate-100' : 'hover:bg-slate-100')}>
@@ -88,6 +92,12 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onArchive, onRes
           <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
             {!isArchived ? (
               <>
+                {onRename && (
+                  <DropdownMenuItem onClick={() => setRenameModalOpen(true)}>
+                    <Pencil className="h-4 w-4" />
+                    <span>Переименовать</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => void onArchive(project.id)}>
                   <Archive className="h-4 w-4" />
                   <span>В архив</span>
@@ -112,6 +122,15 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onArchive, onRes
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {renameModalOpen && onRename ? (
+        <EditProjectModal
+          projectName={project.name}
+          onSave={async (newName) => {
+            await onRename(project.id, newName);
+          }}
+          onClose={() => setRenameModalOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -213,6 +232,7 @@ export function ProjectSwitcher({
   createDisabled = false,
   createTitle,
   projectsUsageLabel,
+  onRenameProject,
   onArchive,
   onRestore,
   onDelete,
@@ -372,7 +392,7 @@ export function ProjectSwitcher({
                 onDeleteGroup={onDeleteGroup}
               >
                 {groupProjects.map((project) => (
-                  <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
+                  <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onRename={onRenameProject} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
                 ))}
               </ProjectSection>
             );
@@ -381,7 +401,7 @@ export function ProjectSwitcher({
           {archivedProjects.length > 0 ? (
             <ProjectSection title={archiveTitle} icon={<Archive className="h-4 w-4" />} open={archiveOpen} onToggle={() => setArchiveOpen((value) => !value)}>
               {archivedProjects.map((project) => (
-                <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
+                <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onRename={onRenameProject} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
               ))}
             </ProjectSection>
           ) : null}

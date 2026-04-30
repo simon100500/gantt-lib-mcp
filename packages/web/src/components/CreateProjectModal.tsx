@@ -1,20 +1,33 @@
-import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FolderPlus, Plus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { ProjectGroupModal } from './ProjectGroupModal.tsx';
+import type { ProjectGroup } from '../types.ts';
 
 interface CreateProjectModalProps {
-  onSave: (name: string) => Promise<{ id: string; name: string } | null>;
+  projectGroups: ProjectGroup[];
+  initialGroupId?: string;
+  onSave: (name: string, groupId: string) => Promise<{ id: string; name: string } | null>;
+  onCreateGroup: (name: string) => Promise<ProjectGroup | null>;
   onClose: () => void;
 }
 
-export function CreateProjectModal({ onSave, onClose }: CreateProjectModalProps) {
+export function CreateProjectModal({ projectGroups, initialGroupId, onSave, onCreateGroup, onClose }: CreateProjectModalProps) {
   const [name, setName] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState(initialGroupId ?? projectGroups[0]?.id ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!projectGroups.some((group) => group.id === selectedGroupId)) {
+      setSelectedGroupId(initialGroupId ?? projectGroups[0]?.id ?? '');
+    }
+  }, [initialGroupId, projectGroups, selectedGroupId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,9 +39,14 @@ export function CreateProjectModal({ onSave, onClose }: CreateProjectModalProps)
       return;
     }
 
+    if (!selectedGroupId) {
+      setError('Выберите группу проектов');
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await onSave(trimmedName);
+      const result = await onSave(trimmedName, selectedGroupId);
       if (result) {
         onClose();
       } else {
@@ -59,6 +77,7 @@ export function CreateProjectModal({ onSave, onClose }: CreateProjectModalProps)
             <Plus className="w-5 h-5" />
             Новый проект
           </CardTitle>
+          <CardDescription>Выберите группу, в которой будут жить проект и его общие ресурсы.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
@@ -79,6 +98,43 @@ export function CreateProjectModal({ onSave, onClose }: CreateProjectModalProps)
               />
               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="new-project-group">Группа проектов</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setGroupModalOpen(true)}
+                  disabled={loading}
+                  className="h-8 px-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  <span>Новая группа</span>
+                </Button>
+              </div>
+              <select
+                id="new-project-group"
+                value={selectedGroupId}
+                onChange={(event) => setSelectedGroupId(event.target.value)}
+                disabled={loading || projectGroups.length === 0}
+                className={cn(
+                  'flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  error && !selectedGroupId && 'border-destructive focus-visible:ring-destructive',
+                )}
+              >
+                {projectGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+              {projectGroups.length === 0 ? (
+                <p className="text-sm text-slate-500">Сначала создайте группу проектов.</p>
+              ) : null}
+            </div>
           </CardContent>
           <CardFooter className="flex gap-2">
             <Button
@@ -93,13 +149,26 @@ export function CreateProjectModal({ onSave, onClose }: CreateProjectModalProps)
             <Button
               type="submit"
               className="flex-1"
-              disabled={loading}
+              disabled={loading || projectGroups.length === 0}
             >
               {loading ? 'Создание...' : 'Создать'}
             </Button>
           </CardFooter>
         </form>
       </Card>
+      {groupModalOpen && (
+        <ProjectGroupModal
+          mode="create"
+          initialName="Новая группа"
+          onSave={async (groupName) => {
+            const createdGroup = await onCreateGroup(groupName);
+            if (createdGroup) {
+              setSelectedGroupId(createdGroup.id);
+            }
+          }}
+          onClose={() => setGroupModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

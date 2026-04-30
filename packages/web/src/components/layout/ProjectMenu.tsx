@@ -33,6 +33,7 @@ interface ProjectMenuProps {
   createProjectTitle?: string;
   projectUsageLabel?: string | null;
   onSwitchProject: (projectId: string) => void | Promise<void>;
+  onRenameProject?: (projectId: string, name: string) => void | Promise<void>;
   onArchiveProject: (projectId: string) => void | Promise<void>;
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
@@ -58,6 +59,7 @@ export function ProjectMenu({
   createProjectTitle,
   projectUsageLabel,
   onSwitchProject,
+  onRenameProject,
   onArchiveProject,
   onRestoreProject,
   onDeleteProject,
@@ -372,6 +374,7 @@ export function ProjectMenu({
             onCreateGroup={onCreateProjectGroup}
             onRenameGroup={onRenameProjectGroup}
             onDeleteGroup={onDeleteProjectGroup}
+            onRenameProject={onRenameProject}
             createDisabled={createProjectDisabled}
             createTitle={createProjectTitle}
             projectsUsageLabel={projectUsageLabel}
@@ -691,6 +694,7 @@ export function ProjectMenu({
               onCreateGroup={onCreateProjectGroup}
               onRenameGroup={onRenameProjectGroup}
               onDeleteGroup={onDeleteProjectGroup}
+              onRenameProject={onRenameProject}
               createDisabled={createProjectDisabled}
               createTitle={createProjectTitle}
               projectsUsageLabel={projectUsageLabel}
