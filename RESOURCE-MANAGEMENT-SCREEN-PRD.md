@@ -2,7 +2,7 @@
 
 ## 1. Контекст
 
-В `gantt-lib-mcp` уже есть базовая ресурсная область: `ResourcePlannerWorkspace` загружает `/api/resources/planner`, показывает scope `current-project` / `all-projects`, даёт создать ресурс и рендерит интервалы через локальный `ResourceTimelineGrid`. Этот экран полезен как диагностический planner, но пока не является полноценным рабочим экраном управления ресурсами: календарь ограничен самописной сеткой, drag отсутствует, управление назначениями вынесено в другие места, а пользователь не может быстро перераспределить работу и увидеть результат как авторитетное состояние backend.
+В `gantt-lib-mcp` уже есть базовая ресурсная область: `ResourcePlannerWorkspace` загружает `/api/resources/planner`, работает в рамках текущего проекта, даёт создать ресурс и рендерит интервалы через `gantt-lib`. Экран уже полезен как рабочий planner, но его архитектура всё ещё расходится с основным Gantt screen: для части операций он живёт на отдельном optimistic state и reload flow, а не на общем command/outbox/store pipeline проекта. Из-за этого ресурсный экран и экран задач могут показывать разное промежуточное состояние, хотя опираются на одну и ту же project base.
 
 В `gantt-lib` уже реализован `Resource Planner Mode`: `GanttChart mode="resource-planner"` и прямой `ResourceTimelineChart` рендерят строки ресурсов, интервалы назначений, lanes для пересечений, controlled drag по датам и опциональный перенос между ресурсами через `onResourceItemMove`. Это должно стать визуальной основой нового экрана.
 
@@ -11,12 +11,14 @@
 Сделать единый экран управления ресурсами, где пользователь может:
 
 - видеть загрузку людей, техники, материалов и прочих ресурсов на календарной шкале;
-- переключаться между текущим проектом и общим workspace-планированием;
+- работать с ресурсами текущего проекта через тот же source of truth, что и основной Gantt;
 - создавать, переименовывать, активировать/деактивировать ресурсы;
 - назначать ресурсы на задачи и менять назначение прямо из planner;
 - переносить назначение по датам и между ресурсами через возможности `gantt-lib`;
 - быстро находить и исправлять конфликты пересечения назначений;
 - после каждого изменения видеть авторитетные данные backend, а не локальную догадку UI.
+
+Следующий верхний scope для развития продукта — не возврат к `all-projects`, а отдельный экран загрузки общих ресурсов на уровне группы проектов.
 
 ## 3. Пользователи и Jobs To Be Done
 
@@ -43,9 +45,10 @@
 - Сохранение переназначения ресурса через assignment endpoint.
 - Панель каталога ресурсов: создание, редактирование имени, scope/type/status.
 - Панель деталей выбранного назначения: задача, проект, ресурс, даты, конфликты, быстрые действия.
-- Фильтры: scope, тип ресурса, текстовый поиск, только конфликты, активные/архивные ресурсы.
+- Фильтры: тип ресурса, текстовый поиск, только конфликты, активные/архивные ресурсы.
 - Состояния загрузки, ошибки, empty state, readonly/locked state.
 - Тесты на адаптер данных, основной UI, drag callback и сохранение.
+- Выравнивание resource screen с общим command/outbox/store pipeline, который уже используется в основном Gantt.
 
 ### Out of Scope
 
@@ -55,6 +58,8 @@
 - Автоматическое разрешение конфликтов без подтверждения пользователя.
 - Новые backend-алгоритмы capacity planning, если они не нужны для отображения текущих конфликтов.
 - Почасовое планирование: первая версия работает в дневной шкале `gantt-lib`.
+- Возврат screen-level scope `all-projects`.
+- Мультипроектный resource planner по группе проектов внутри текущего экрана. Для этого будет отдельный экран и отдельный transport contract.
 
 ## 5. Возможности `gantt-lib`, которые нужно использовать
 
@@ -62,10 +67,10 @@
 - `ResourceTimelineResource`: строка ресурса с `id`, `name`, `items`.
 - `ResourceTimelineItem`: bar назначения с `id`, `resourceId`, `taskId`, `title`, `subtitle`, `startDate`, `endDate`, `color`, `locked`, `metadata`.
 - `onResourceItemMove(move)` как controlled событие, которое срабатывает один раз на mouseup.
-- `disableResourceReassignment`, если в выбранном scope или состоянии проекта перенос между ресурсами запрещён.
+- `disableResourceReassignment`, если в текущем состоянии проекта перенос между ресурсами запрещён.
 - `readonly` для гостевого/недоступного режима.
 - `renderItem` для внутреннего содержимого bar: задача, проект, даты, conflict badge, locked marker.
-- `getItemClassName` для конфликтных, выбранных, locked и cross-project интервалов.
+- `getItemClassName` для конфликтных, выбранных, locked и pending интервалов.
 - `dayWidth`, `rowHeaderWidth`, `laneHeight`, `headerHeight` для плотного planner layout.
 - Встроенные lanes: пересекающиеся интервалы одного ресурса складываются в несколько lane, а не накладываются друг на друга.
 
@@ -74,13 +79,12 @@
 ### 6.1 Верхняя панель
 
 - Заголовок: `Ресурсы`.
-- Подзаголовок меняется от scope: `Текущий проект` или `Все проекты workspace`.
+- Подзаголовок: `Текущий проект`.
 - Основные действия: `Создать ресурс`, `Обновить`, `Вернуться в проект`.
 - Индикатор состояния: `Загружается`, `Сохранение...`, `Есть несохранённая операция`, `Ошибка`.
 
 ### 6.2 Фильтры и summary
 
-- Scope switch: `Текущий проект` / `Все проекты`.
 - Поиск по названию ресурса, задаче и проекту.
 - Фильтр типа ресурса: `human`, `equipment`, `material`, `other`.
 - Toggle `Только конфликты`.
@@ -111,7 +115,7 @@
 - Открываются справа или в drawer.
 - Поля: задача, проект, текущий ресурс, даты, assignment id, conflict assignment ids.
 - Действия: `Открыть задачу`, `Исправить конфликт`, `Сменить ресурс`, `Убрать ресурс с задачи`.
-- Для `all-projects` cross-project интервалов действия изменения доступны только если backend и permissions позволяют менять соответствующий проект; иначе readonly с объяснением.
+- Внутри текущего экрана доступны только интервалы текущего проекта; cross-project group planning в эту версию не входит.
 
 ### 6.6 Исправление конфликтов
 
@@ -126,7 +130,7 @@
 Экран продолжает использовать текущие типы:
 
 ```ts
-type PlannerScope = 'current-project' | 'all-projects';
+type PlannerScope = 'current-project';
 
 interface ResourcePlannerResult {
   projectId: string;
@@ -192,7 +196,7 @@ interface ResourcePlannerItemMetadata {
 3. Если изменилась дата начала и длительность сохранена — отправляет `move_task` с новой `startDate`.
 4. Если изменилась длительность или только один край — отправляет `resize_task` для нужного anchor; если изменились оба края и длительность тоже изменилась, выполняет согласованный sequence команд или использует существующий helper, который уже поддерживает такую операцию.
 5. После успешного command response обновляет project store из snapshot, если response его содержит.
-6. Всегда перезагружает `/api/resources/planner?scope=...`.
+6. Всегда перезагружает `/api/resources/planner?scope=current-project`.
 7. При ошибке показывает toast/inline alert, снимает pending state и оставляет данные из последней успешной загрузки.
 
 ### 8.2 Перенос между ресурсами
@@ -218,7 +222,6 @@ interface ResourcePlannerItemMetadata {
 ### 8.4 Readonly и permissions
 
 - Без `accessToken` экран readonly и показывает сообщение авторизации.
-- В `all-projects` изменения cross-project items разрешены только для проектов, доступных текущему пользователю.
 - Locked items не начинают drag и не показывают destructive actions.
 - Неактивные ресурсы видимы только при включённом фильтре; назначения на них можно показывать readonly, если backend запрещает изменение.
 
@@ -226,7 +229,7 @@ interface ResourcePlannerItemMetadata {
 
 ### Existing endpoints to reuse
 
-- `GET /api/resources/planner?scope=current-project|all-projects` — авторитетные planner данные.
+- `GET /api/resources/planner?scope=current-project` — авторитетные planner данные для текущего экрана.
 - `GET /api/resources?projectId=...` — каталог ресурсов.
 - `POST /api/resources` — создание ресурса.
 - `PATCH /api/resources/:resourceId` — редактирование ресурса.
@@ -238,16 +241,32 @@ interface ResourcePlannerItemMetadata {
 - Возвращает ли `PATCH /api/resources/:resourceId` обновлённый ресурс в форме, удобной для web store.
 - Есть ли в web layer единый helper для commit project command, который можно безопасно использовать вне основного Gantt экрана.
 - Достаточно ли `/api/project` snapshot для восстановления assignments после изменения, или нужен отдельный reload assignments.
-- Нужен ли endpoint `GET /api/tasks/:taskId/assignments`, если store не всегда содержит назначения cross-project item.
+- Нужен ли endpoint `GET /api/tasks/:taskId/assignments`, если store не всегда содержит достаточные assignment metadata для resource reassignment.
 
-## 10. State management
+## 10. State management and source of truth
 
-- `plannerState`: loading/error/ready + последняя успешная data.
+### 10.1 Канонический источник истины
+
+- Ресурсный экран не должен жить на отдельной модели optimistic schedule state.
+- Канонический источник для дат задач — тот же, что и у основного Gantt: `confirmed.snapshot` + `pending` outbox commands + `dragPreview`.
+- Ресурсный экран должен отображать projection от этого состояния, а не параллельную локальную копию графика.
+- Для изменений по датам ресурсный экран обязан использовать тот же command pipeline, что и `useBatchTaskUpdate`.
+
+### 10.2 Допустимые отдельные client-state слои
+
+- `plannerState`: loading/error/ready + последняя успешная backend data для resource projection.
 - `catalogState`: loading/error + resources из project store.
-- `pendingMoveIds: Set<string>` для optimistic-blocking состояния bar.
+- `pendingMoveIds: Set<string>` только как локальный UI-guard для bars, но не как замена общему pending command state.
 - `selectedItemId` и `selectedResourceId` для деталей.
-- `filters`: scope, query, resourceTypes, conflictOnly, includeInactive.
+- `filters`: query, resourceTypes, conflictOnly, includeInactive.
 - Planner reload должен поддерживать `keepData`, чтобы экран не мигал при сохранении.
+
+### 10.3 Архитектурное выравнивание с Gantt
+
+- Изменение дат из resource screen должно читать и отражать `deriveVisibleSnapshot`, а не отдельный schedule cache.
+- Отдельные reload вызовы допустимы как authoritative reconciliation layer, но не как primary state model.
+- Перенос ресурса через assignments пока может оставаться отдельной mutation-веткой, но её UI-состояние должно быть согласовано с общим pending/saving flow проекта.
+- Целевое состояние: resource screen и Gantt screen различаются renderer-ом и interaction surface, но не принципом записи project mutations.
 
 ## 11. Error handling
 
@@ -269,7 +288,7 @@ interface ResourcePlannerItemMetadata {
 ## 13. Visual requirements
 
 - Использовать CSS импорт `gantt-lib/styles.css` и не дублировать календарную геометрию.
-- Resource bars должны визуально отличать: normal, conflict, selected, pending, locked, cross-project.
+- Resource bars должны визуально отличать: normal, conflict, selected, pending, locked.
 - Header и side panels должны оставаться в стиле текущего workspace UI на Tailwind.
 - Для плотного расписания стартовые параметры: `dayWidth=36`, `laneHeight=40`, `rowHeaderWidth=220`, `headerHeight=40`.
 - При большом количестве ресурсов экран должен скроллиться без поломки header/row alignment.
@@ -277,59 +296,68 @@ interface ResourcePlannerItemMetadata {
 ## 14. Acceptance criteria
 
 - Экран ресурсов использует `GanttChart mode="resource-planner"` или `ResourceTimelineChart`, а локальная календарная сетка больше не является основным renderer.
-- `current-project` показывает shared + project ресурсы текущего проекта; `all-projects` показывает workspace shared ресурсы и интервалы доступных проектов.
+- `current-project` показывает shared + project ресурсы текущего проекта.
 - Пустые ресурсы отображаются в timeline и доступны как drop target.
 - Конфликтные назначения отображаются с badge и кнопкой/действием `Исправить`.
 - Drag assignment по датам сохраняет изменение через project command flow и после успеха перезагружает planner.
 - Drag assignment на другой ресурс сохраняет полный список `resourceIds` задачи и после успеха перезагружает planner.
 - При ошибке сохранения UI не оставляет ложное optimistic состояние.
 - Создание, редактирование и деактивация ресурса обновляют каталог и planner без ручного refresh страницы.
-- Фильтры работают без повторного запроса, кроме scope switch, который загружает planner заново.
+- Фильтры работают без повторного запроса.
 - Readonly/locked states прокинуты в `gantt-lib` и не эмитят изменение.
 - Тесты покрывают mapper, фильтры, renderItem metadata, conflict action, move date flow, reassignment flow и error rollback.
+- Resource screen и Gantt screen используют один и тот же mutation pipeline для schedule changes.
 
 ## 15. Implementation plan
 
-### Phase 1 — Adapter and renderer swap
+### Phase 1 — Pipeline alignment for schedule changes
+
+- Зафиксировать правило source of truth: schedule changes идут только через общий command/outbox/store pipeline.
+- Вынести общий helper для schedule mutations, чтобы его использовали и Gantt, и resource screen.
+- Перестать опираться на отдельный optimistic schedule cache как на primary UI state в resource screen.
+- Привязать timeline projection к visible project state там, где это возможно без потери текущего UX.
+
+### Phase 2 — Adapter and renderer hardening
 
 - Добавить mapper `ResourcePlannerResult` → `ResourceTimelineResource[]`.
 - Добавить typed metadata и helpers `getPlannerItemMetadata`.
-- Заменить `ResourceTimelineGrid` в `ResourcePlannerWorkspace` на `gantt-lib` renderer.
-- Сохранить существующие summary cards, scope switch и `onCorrectConflict`.
+- Держать `gantt-lib` renderer как единственный основной timeline renderer.
+- Сохранить существующие summary cards и `onCorrectConflict`.
 
-### Phase 2 — Details and filters
+### Phase 3 — Details and filters
 
 - Добавить поиск, type filter, conflict-only и include-inactive.
 - Добавить selected item/resource state.
 - Реализовать details drawer с действиями и fallback формами для accessibility.
 
-### Phase 3 — Resource catalog management
+### Phase 4 — Resource catalog management
 
 - Расширить форму создания: type + scope/project.
 - Добавить edit resource name/type/status.
 - Синхронизировать catalog reload и planner reload после изменений.
 
-### Phase 4 — Move persistence
+### Phase 5 — Assignment mutation alignment
 
 - Подключить `onResourceItemMove`.
-- Реализовать date move через command commit.
-- Реализовать reassignment через `POST /api/tasks/:taskId/assignments`.
+- Держать date move строго через общий command commit flow.
+- Реализовать reassignment через `POST /api/tasks/:taskId/assignments`, но выровнять saving/pending UX с общим project pipeline.
 - Добавить pending/error handling и reload strategy.
+- Подготовить интерфейс для будущей унификации assignment mutations в тот же commit pipeline, если backend добавит соответствующие команды.
 
-### Phase 5 — Hardening
+### Phase 6 — Hardening and future group scope prep
 
 - Добавить tests.
 - Проверить keyboard доступность details actions.
 - Проверить large data performance на десятках ресурсов и сотнях интервалов.
-- Удалить или оставить `ResourceTimelineGrid` только как deprecated fallback/test fixture.
+- Зафиксировать, какие части текущего planner state можно переиспользовать для будущего group-level resource screen.
 
 ## 16. Open questions
 
-- Нужно ли в `all-projects` разрешать перенос назначения между shared ресурсами разных проектов, если задача принадлежит не текущему проекту?
 - Должен ли drag по датам менять только `startDate` с сохранением длительности или поддерживать resize через отдельные handles в future версии?
 - Требуется ли показывать capacity/availability ресурса, или на первой версии достаточно conflict overlap?
 - Нужен ли отдельный audit/history label для операций, инициированных из resource screen?
-- Нужно ли сохранять filters/scope в URL query, чтобы экран можно было шарить ссылкой?
+- Нужен ли для будущего group-level screen отдельный planner endpoint или можно собирать projection по группе проектов из существующих transport contracts?
+- Нужно ли сохранять filters в URL query, чтобы экран можно было шарить ссылкой?
 
 ## 17. References
 
