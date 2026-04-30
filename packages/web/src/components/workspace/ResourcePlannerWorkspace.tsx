@@ -22,8 +22,8 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx';
 import {
+  buildCurrentProjectResourceTimeline,
   getPlannerItemMetadata,
-  applyVisibleTaskDatesToPlannerResult,
   mapTimelineResourceScopeToApiScope,
   mapTimelineResourceStatusToActive,
   mapTimelineResourceTypeToApiType,
@@ -350,94 +350,6 @@ function applyOptimisticPlannerMove(
   return {
     ...data,
     resources: nextResources,
-  };
-}
-
-function applyPlannerAssignmentRecord(
-  data: ResourcePlannerResult,
-  oldAssignmentId: string,
-  assignment: TaskAssignmentRecord,
-): ResourcePlannerResult {
-  return {
-    ...data,
-    resources: data.resources.map((resource) => refreshResourceConflictSummary({
-      ...resource,
-      intervals: resource.intervals.map((interval) => (
-        interval.assignmentId === oldAssignmentId
-          ? {
-            ...interval,
-            assignmentId: assignment.id,
-            resourceId: assignment.resourceId,
-            assignmentCreatedAt: assignment.createdAt,
-          }
-          : interval
-      )),
-    })),
-  };
-}
-
-function buildPlannerAssignmentInterval(
-  selectedItem: ResourcePlannerTimelineItem,
-  assignment: TaskAssignmentRecord,
-  resourceName: string,
-): ResourcePlannerInterval | null {
-  const metadata = getPlannerItemMetadata(selectedItem);
-  if (!metadata) return null;
-
-  return {
-    assignmentId: assignment.id,
-    resourceId: assignment.resourceId,
-    resourceName,
-    projectId: metadata.projectId,
-    projectName: metadata.projectName ?? '',
-    taskId: metadata.taskId,
-    taskName: selectedItem.title,
-    startDate: String(selectedItem.startDate).split('T')[0],
-    endDate: String(selectedItem.endDate).split('T')[0],
-    assignmentCreatedAt: assignment.createdAt,
-    hasConflict: false,
-    conflictCount: 0,
-    conflictAssignmentIds: [],
-  };
-}
-
-function applyPlannerAssignmentAdded(
-  data: ResourcePlannerResult,
-  interval: ResourcePlannerInterval,
-): ResourcePlannerResult {
-  const resourceExists = data.resources.some((resource) => resource.resourceId === interval.resourceId);
-  const resources = resourceExists
-    ? data.resources.map((resource) => (
-      resource.resourceId === interval.resourceId
-        ? refreshResourceConflictSummary({ ...resource, intervals: [...resource.intervals, interval] })
-        : resource
-    ))
-    : [
-      ...data.resources,
-      refreshResourceConflictSummary({
-        resourceId: interval.resourceId,
-        resourceName: interval.resourceName,
-        hasConflicts: false,
-        conflictCount: 0,
-        intervals: [interval],
-      }),
-    ];
-
-  return { ...data, resources };
-}
-
-function applyPlannerAssignmentRemoved(
-  data: ResourcePlannerResult,
-  assignmentId: string,
-): ResourcePlannerResult {
-  return {
-    ...data,
-    resources: data.resources
-      .map((resource) => refreshResourceConflictSummary({
-        ...resource,
-        intervals: resource.intervals.filter((interval) => interval.assignmentId !== assignmentId),
-      }))
-      .filter((resource) => resource.intervals.length > 0),
   };
 }
 
@@ -1047,17 +959,6 @@ export function ResourcePlannerWorkspace({
       return false;
     }
 
-    setState((current) => {
-      if (!current.data) {
-        return current;
-      }
-
-      const nextData = applyPlannerAssignmentRecord(current.data, classification.assignmentId, replacementAssignment);
-      mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-      return current.status === 'error'
-        ? { status: 'error', data: nextData, error: current.error }
-        : { status: 'ready', data: nextData, error: null };
-    });
     setSelectedItem((current) => (
       current?.id === classification.assignmentId
         ? {
@@ -1071,9 +972,10 @@ export function ResourcePlannerWorkspace({
         }
         : current
     ));
+    void loadPlanner(plannerScope, { keepData: true });
 
     return true;
-  }, [loadPlanner, mutateResourcePlannerCache, persistResourceReplacement, plannerScope, projectId]);
+  }, [loadPlanner, persistResourceReplacement, plannerScope]);
 
   const persistPlannerMove = useCallback(async (move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
     if (!accessToken || pendingMoveIds.has(move.itemId) || move.item.locked) {
@@ -1172,20 +1074,7 @@ export function ResourcePlannerWorkspace({
       const nextAssignments = normalizeAssignmentMutationPayload(body);
       if (nextAssignments) {
         replaceAssignmentsForTask(input.taskId, nextAssignments);
-
-        const newAssignment = nextAssignments.find((a) => a.resourceId === input.resourceId);
-        if (newAssignment) {
-          const resourceName = resources.find((r) => r.id === input.resourceId)?.name ?? input.resourceId;
-          const interval = buildPlannerAssignmentInterval(selectedItem, newAssignment, resourceName);
-          setState((current) => {
-            if (!current.data || !interval) return current;
-            const nextData = applyPlannerAssignmentAdded(current.data, interval);
-            mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-            return current.status === 'error'
-              ? { status: 'error', data: nextData, error: current.error }
-              : { status: 'ready', data: nextData, error: null };
-          });
-        }
+        void loadPlanner(plannerScope, { keepData: true });
       } else {
         await reloadProjectSnapshot();
         await loadPlanner(plannerScope, { keepData: true });
@@ -1203,7 +1092,7 @@ export function ResourcePlannerWorkspace({
         return next;
       });
     }
-  }, [accessToken, getTaskResourceIds, isActiveAssignableResource, loadPlanner, mutateResourcePlannerCache, plannerScope, projectId, reloadProjectSnapshot, replaceAssignmentsForTask, resources, selectedItem]);
+  }, [accessToken, getTaskResourceIds, isActiveAssignableResource, loadPlanner, plannerScope, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
 
   const handleRemoveResource = useCallback(async (input: { assignmentId: string; resourceId: string }) => {
     if (!accessToken || !selectedItem) {
@@ -1231,15 +1120,10 @@ export function ResourcePlannerWorkspace({
       const nextAssignments = normalizeAssignmentMutationPayload(body);
       if (nextAssignments) {
         replaceAssignmentsForTask(selectedItem.taskId, nextAssignments);
-
-        setState((current) => {
-          if (!current.data) return current;
-          const nextData = applyPlannerAssignmentRemoved(current.data, input.assignmentId);
-          mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-          return current.status === 'error'
-            ? { status: 'error', data: nextData, error: current.error }
-            : { status: 'ready', data: nextData, error: null };
-        });
+        setSelectedItem((current) => (
+          current?.id === input.assignmentId ? null : current
+        ));
+        void loadPlanner(plannerScope, { keepData: true });
       } else {
         await reloadProjectSnapshot();
         await loadPlanner(plannerScope, { keepData: true });
@@ -1254,20 +1138,25 @@ export function ResourcePlannerWorkspace({
         return next;
       });
     }
-  }, [accessToken, getTaskResourceIds, loadPlanner, mutateResourcePlannerCache, plannerScope, projectId, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
+  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
 
   const visibleProjectSnapshot = useMemo(
     () => deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions),
     [confirmedSnapshot, dragPreview, pendingCommands, scheduleOptions],
   );
-  const displayedPlannerData = useMemo(
-    () => state.data ? applyVisibleTaskDatesToPlannerResult(state.data, visibleProjectSnapshot.tasks) : null,
-    [state.data, visibleProjectSnapshot.tasks],
-  );
+  const displayedPlannerData = state.data;
   const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const timelineResources = useMemo(
-    () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData, resources) : [],
-    [displayedPlannerData, resources],
+    () => (
+      buildCurrentProjectResourceTimeline(
+        projectId,
+        visibleProjectSnapshot.tasks,
+        resources,
+        assignments,
+        displayedPlannerData,
+      )
+    ),
+    [assignments, displayedPlannerData, projectId, resources, visibleProjectSnapshot.tasks],
   );
   const filteredTimelineResources = useMemo(
     () => filterResourceTimelineResources(
@@ -1278,6 +1167,32 @@ export function ResourcePlannerWorkspace({
     ),
     [filters, resources, selectedItem, timelineResources],
   );
+  useEffect(() => {
+    if (!selectedItem) {
+      return;
+    }
+
+    const timelineItem = timelineResources
+      .flatMap((resource) => resource.items)
+      .find((item) => item.id === selectedItem.id);
+
+    if (!timelineItem) {
+      setSelectedItem(null);
+      return;
+    }
+
+    if (
+      timelineItem.resourceId === selectedItem.resourceId
+      && timelineItem.startDate === selectedItem.startDate
+      && timelineItem.endDate === selectedItem.endDate
+      && timelineItem.title === selectedItem.title
+      && timelineItem.metadata.assignmentId === selectedItem.metadata.assignmentId
+    ) {
+      return;
+    }
+
+    setSelectedItem(timelineItem);
+  }, [selectedItem, timelineResources]);
   const selectedResource = useMemo(
     () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
     [resources, selectedItem],
@@ -1330,7 +1245,7 @@ export function ResourcePlannerWorkspace({
   }, [selectedItem, visibleProjectSnapshot.tasks]);
   const readonly = !accessToken;
   const plannerResourceCount = timelineResources.length;
-  const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);
+  const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
   const pendingMoveCount = pendingMoveIds.size;
   const isBackgroundRefreshing = state.status === 'loading' && Boolean(displayedPlannerData);
   const viewMode = projectStates[projectId]?.viewMode ?? globalViewMode;
