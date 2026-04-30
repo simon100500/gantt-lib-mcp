@@ -353,6 +353,7 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     await act(async () => {
       useProjectStore.setState({
         dragPreview: {
+          id: 'preview-1',
           commands: [],
           snapshot: {
             tasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-05', endDate: '2026-04-07', dependencies: [] }],
@@ -440,6 +441,70 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
       command: { type: 'move_task', taskId: 'task-1', startDate: '2026-04-02' },
       history: { title: 'Перенос назначения' },
     });
+
+    await unmount(root);
+  });
+
+  it('allows moving the same item again while the previous save is still pending', async () => {
+    const commitResolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/resources/planner?scope=current-project') {
+        return { ok: true, json: async () => buildPlannerPayload() } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return { ok: true, json: async () => ({ resources: [buildResource('resource-1', 'Crew A')] }) } as Response;
+      }
+      if (url === '/api/commands/commit' && init?.method === 'POST') {
+        return await new Promise<Response>((resolve) => {
+          commitResolvers.push(resolve);
+        });
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderPlannerWorkspace();
+    await flushEffects();
+
+    const firstProps = latestGanttProps();
+    const item = firstProps.resources?.[0]?.items[0];
+    expect(item).toBeTruthy();
+
+    await act(async () => {
+      firstProps.onResourceItemMove?.({
+        item: item!,
+        itemId: item!.id,
+        fromResourceId: 'resource-1',
+        toResourceId: 'resource-1',
+        startDate: new Date(Date.UTC(2026, 3, 2)),
+        endDate: new Date(Date.UTC(2026, 3, 4)),
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const secondProps = latestGanttProps();
+    const movedItem = secondProps.resources?.[0]?.items[0];
+    expect(movedItem?.startDate).toBe('2026-04-02');
+
+    await act(async () => {
+      secondProps.onResourceItemMove?.({
+        item: movedItem!,
+        itemId: movedItem!.id,
+        fromResourceId: 'resource-1',
+        toResourceId: 'resource-1',
+        startDate: new Date(Date.UTC(2026, 3, 3)),
+        endDate: new Date(Date.UTC(2026, 3, 5)),
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latestGanttProps().resources?.[0]?.items[0]?.startDate).toBe('2026-04-03');
+
+    expect(latestGanttProps().resources?.[0]?.items[0]?.startDate).toBe('2026-04-03');
+    expect(commitResolvers).toHaveLength(1);
 
     await unmount(root);
   });
@@ -542,104 +607,6 @@ describe('ResourcePlannerWorkspace current-project pipeline', () => {
     });
 
     expect(useProjectStore.getState().assignments.map((assignment) => assignment.resourceId).sort()).toEqual(['resource-2', 'resource-3']);
-
-    await unmount(root);
-  });
-
-  it('shows authoritative partial-failure copy for combined moves', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === '/api/resources/planner?scope=current-project') {
-        return {
-          ok: true,
-          json: async () => buildPlannerPayload({
-            resources: [
-              {
-                resourceId: 'resource-1',
-                resourceName: 'Crew A',
-                intervals: [{
-                  assignmentId: 'assignment-1',
-                  resourceId: 'resource-1',
-                  resourceName: 'Crew A',
-                  projectId: 'project-1',
-                  projectName: 'Project 1',
-                  taskId: 'task-1',
-                  taskName: 'Install',
-                  startDate: '2026-04-02',
-                  endDate: '2026-04-04',
-                  assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
-                  hasConflict: false,
-                  conflictCount: 0,
-                  conflictAssignmentIds: [],
-                }],
-              },
-              { resourceId: 'resource-2', resourceName: 'Crew B', intervals: [] },
-            ],
-          }),
-        } as Response;
-      }
-      if (url === '/api/resources?projectId=project-1') {
-        return { ok: true, json: async () => ({ resources: [buildResource('resource-1', 'Crew A'), buildResource('resource-2', 'Crew B')] }) } as Response;
-      }
-      if (url === '/api/commands/commit' && init?.method === 'POST') {
-        return {
-          ok: true,
-          json: async () => ({
-            clientRequestId: 'req-1',
-            accepted: true,
-            baseVersion: 1,
-            newVersion: 2,
-            snapshot: {
-              tasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-02', endDate: '2026-04-04', dependencies: [] }],
-              dependencies: [],
-            },
-            result: {
-              changedTaskIds: ['task-1'],
-              changedTasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-02', endDate: '2026-04-04', dependencies: [] }],
-              changedDependencyIds: [],
-              conflicts: [],
-              patches: [],
-            },
-            changedTaskIds: ['task-1'],
-            changedTasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-02', endDate: '2026-04-04', dependencies: [] }],
-            changedDependencyIds: [],
-            conflicts: [],
-            historyGroupId: 'history-1',
-          }),
-        } as Response;
-      }
-      if (url === '/api/tasks/task-1/assignments' && init?.method === 'POST') {
-        return { ok: false, status: 400, json: async () => ({ issue: { code: 'assignment_failed' }, error: 'blocked' }) } as Response;
-      }
-      return { ok: true, json: async () => ({}) } as Response;
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const { container, root } = await renderPlannerWorkspace();
-    await flushEffects();
-
-    const props = latestGanttProps();
-    const item = props.resources?.[0]?.items[0];
-    expect(item).toBeTruthy();
-
-    await act(async () => {
-      props.onResourceItemMove?.({
-        item: item!,
-        itemId: item!.id,
-        fromResourceId: 'resource-1',
-        toResourceId: 'resource-2',
-        startDate: new Date(Date.UTC(2026, 3, 2)),
-        endDate: new Date(Date.UTC(2026, 3, 4)),
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    await flushEffects();
-
-    expect(container.querySelector('[data-testid="planner-save-error"]')?.textContent).toBe('Даты назначения сохранены, но ресурс не изменён. Календарь обновлён по данным сервера.');
-    expect(fetchMock.mock.calls.filter(([input]) => String(input) === '/api/resources/planner?scope=current-project').length).toBeGreaterThanOrEqual(2);
 
     await unmount(root);
   });

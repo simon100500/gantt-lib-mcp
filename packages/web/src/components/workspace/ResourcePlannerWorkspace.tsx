@@ -336,7 +336,7 @@ export function ResourcePlannerWorkspace({
   const [resourceMutationError, setResourceMutationError] = useState<string | null>(null);
   const [resourceListLoading, setResourceListLoading] = useState(false);
   const [pendingCatalogResourceId, setPendingCatalogResourceId] = useState<string | null>(null);
-  const [pendingMoveIds, setPendingMoveIds] = useState<Set<string>>(() => new Set());
+  const [pendingMoveCounts, setPendingMoveCounts] = useState<Record<string, number>>({});
   const [plannerSaveError, setPlannerSaveError] = useState<string | null>(null);
   const [showDelayedSyncStatus, setShowDelayedSyncStatus] = useState(false);
   const [showDelayedSavingStatus, setShowDelayedSavingStatus] = useState(false);
@@ -899,6 +899,7 @@ export function ResourcePlannerWorkspace({
       return () => {};
     }
 
+    const previewId = crypto.randomUUID();
     const projectState = useProjectStore.getState();
     const baseSnapshot = deriveOptimisticSnapshot(
       projectState.confirmed.snapshot,
@@ -910,11 +911,36 @@ export function ResourcePlannerWorkspace({
       baseSnapshot,
     );
 
-    setDragPreview({ commands, snapshot: previewSnapshot });
+    setDragPreview({ id: previewId, commands, snapshot: previewSnapshot });
     return () => {
-      useProjectStore.getState().setDragPreview(undefined);
+      const currentPreview = useProjectStore.getState().dragPreview;
+      if (currentPreview?.id === previewId) {
+        useProjectStore.getState().setDragPreview(undefined);
+      }
     };
   }, [accessToken, scheduleOptions, setDragPreview]);
+
+  const incrementPendingMove = useCallback((itemId: string) => {
+    setPendingMoveCounts((current) => ({
+      ...current,
+      [itemId]: (current[itemId] ?? 0) + 1,
+    }));
+  }, []);
+
+  const decrementPendingMove = useCallback((itemId: string) => {
+    setPendingMoveCounts((current) => {
+      const nextCount = (current[itemId] ?? 0) - 1;
+      if (nextCount > 0) {
+        return {
+          ...current,
+          [itemId]: nextCount,
+        };
+      }
+
+      const { [itemId]: _removed, ...rest } = current;
+      return rest;
+    });
+  }, []);
 
   const commitPlannerScheduleMove = useCallback(async (classification: OptimisticPlannerMove): Promise<boolean> => {
     if (classification.commands.length === 0) {
@@ -984,7 +1010,7 @@ export function ResourcePlannerWorkspace({
   }, [loadPlanner, persistResourceReplacement, plannerScope]);
 
   const persistPlannerMove = useCallback(async (move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
-    if (!accessToken || pendingMoveIds.has(move.itemId) || move.item.locked) {
+    if (!accessToken || move.item.locked) {
       return;
     }
 
@@ -1002,7 +1028,7 @@ export function ResourcePlannerWorkspace({
     const previousTaskAssignments = assignments.filter((assignment) => assignment.taskId === classification.taskId);
     const previousSelectedItem = selectedItem?.id === classification.assignmentId ? selectedItem : null;
 
-    setPendingMoveIds((current) => new Set(current).add(classification.itemId));
+    incrementPendingMove(classification.itemId);
     setPlannerSaveError(null);
     applyOptimisticAssignmentPreview(classification);
     applyPlannerMoveSelectionPreview(classification);
@@ -1045,13 +1071,9 @@ export function ResourcePlannerWorkspace({
       setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
       await loadPlanner(plannerScope, { keepData: true });
     } finally {
-      setPendingMoveIds((current) => {
-        const next = new Set(current);
-        next.delete(classification.itemId);
-        return next;
-      });
+      decrementPendingMove(classification.itemId);
     }
-  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, assignments, commitPlannerScheduleMove, isActiveAssignableResource, loadPlanner, pendingMoveIds, plannerScope, reconcilePlannerAssignmentPreview, replaceAssignmentsForTask, selectedItem]);
+  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, assignments, commitPlannerScheduleMove, decrementPendingMove, incrementPendingMove, isActiveAssignableResource, loadPlanner, plannerScope, reconcilePlannerAssignmentPreview, replaceAssignmentsForTask, selectedItem]);
 
   const handleDetailsResourceChange = useCallback((input: { assignmentId: string; resourceId: string }) => {
     if (!selectedItem || input.assignmentId !== selectedItem.id) {
@@ -1076,7 +1098,7 @@ export function ResourcePlannerWorkspace({
       return;
     }
 
-    setPendingMoveIds((current) => new Set(current).add(selectedItem.id));
+    incrementPendingMove(selectedItem.id);
     setPlannerSaveError(null);
     try {
       const currentResourceIds = await getTaskResourceIds(input.taskId);
@@ -1109,20 +1131,16 @@ export function ResourcePlannerWorkspace({
       setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
       await loadPlanner(plannerScope, { keepData: true });
     } finally {
-      setPendingMoveIds((current) => {
-        const next = new Set(current);
-        next.delete(selectedItem.id);
-        return next;
-      });
+      decrementPendingMove(selectedItem.id);
     }
-  }, [accessToken, getTaskResourceIds, isActiveAssignableResource, loadPlanner, plannerScope, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
+  }, [accessToken, decrementPendingMove, getTaskResourceIds, incrementPendingMove, isActiveAssignableResource, loadPlanner, plannerScope, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
 
   const handleRemoveResource = useCallback(async (input: { assignmentId: string; resourceId: string }) => {
     if (!accessToken || !selectedItem) {
       return;
     }
 
-    setPendingMoveIds((current) => new Set(current).add(selectedItem.id));
+    incrementPendingMove(selectedItem.id);
     setPlannerSaveError(null);
     try {
       const currentResourceIds = await getTaskResourceIds(selectedItem.taskId);
@@ -1155,13 +1173,9 @@ export function ResourcePlannerWorkspace({
       setPlannerSaveError('Не удалось сохранить изменение. Данные возвращены к последнему состоянию сервера.');
       await loadPlanner(plannerScope, { keepData: true });
     } finally {
-      setPendingMoveIds((current) => {
-        const next = new Set(current);
-        next.delete(selectedItem.id);
-        return next;
-      });
+      decrementPendingMove(selectedItem.id);
     }
-  }, [accessToken, getTaskResourceIds, loadPlanner, plannerScope, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
+  }, [accessToken, decrementPendingMove, getTaskResourceIds, incrementPendingMove, loadPlanner, plannerScope, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
 
   const visibleProjectSnapshot = useMemo(
     () => deriveVisibleSnapshot(confirmedSnapshot, pendingCommands, dragPreview, scheduleOptions),
@@ -1298,7 +1312,7 @@ export function ResourcePlannerWorkspace({
   const readonly = !accessToken;
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
-  const pendingMoveCount = pendingMoveIds.size;
+  const pendingMoveCount = Object.keys(pendingMoveCounts).length;
   const pendingCommandCount = pendingCommands.length;
   const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
   const hasRetryingPendingCommand = pendingCommands.some((command) => command.status === 'retrying');
@@ -1326,11 +1340,11 @@ export function ResourcePlannerWorkspace({
     }
 
     const selectedClassName = selectedItem?.id === item.id ? ' resource-planner-item--selected' : '';
-    const pendingClassName = pendingMoveIds.has(item.id) ? ' resource-planner-item--pending' : '';
+    const pendingClassName = (pendingMoveCounts[item.id] ?? 0) > 0 ? ' resource-planner-item--pending' : '';
     return metadata.hasConflict
       ? `resource-planner-item resource-planner-item--conflict${selectedClassName}${pendingClassName}`
       : `resource-planner-item resource-planner-item--normal${selectedClassName}${pendingClassName}`;
-  }, [pendingMoveIds, selectedItem]);
+  }, [pendingMoveCounts, selectedItem]);
   const handleOpenTimelineItemDetails = useCallback((item: ResourcePlannerTimelineItem) => {
     setSelectedItem(item);
   }, []);
