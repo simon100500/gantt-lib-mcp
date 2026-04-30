@@ -47,7 +47,7 @@ interface ProjectStoreState extends ProjectState {
     changedDependencyIds?: string[];
   }) => void;
   rejectPending: (requestId: string) => void;
-  setDragPreview: (preview: { commands: FrontendProjectCommand[]; snapshot: ProjectSnapshot } | undefined) => void;
+  setDragPreview: (preview: ProjectState['dragPreview']) => void;
   clearTransientState: () => void;
   scheduleOptions: ProjectScheduleOptions;
   setScheduleOptions: (options: ProjectScheduleOptions) => void;
