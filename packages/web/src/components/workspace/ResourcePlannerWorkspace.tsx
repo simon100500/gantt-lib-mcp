@@ -963,37 +963,7 @@ export function ResourcePlannerWorkspace({
     return nextAssignments;
   }, [accessToken, getTaskResourceIds, reloadProjectSnapshot, replaceAssignmentsForTask]);
 
-  const persistPlannerMove = useCallback(async (move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
-    if (!accessToken || pendingMoveIds.has(move.itemId) || move.item.locked) {
-      return;
-    }
-
-    const classification = classifyResourcePlannerMove(move);
-    if (!isOptimisticPlannerMove(classification)) {
-      return;
-    }
-    if (
-      (classification.kind === 'resource-only' || classification.kind === 'combined')
-      && !isActiveAssignableResource(classification.toResourceId)
-    ) {
-      return;
-    }
-
-    setPendingMoveIds((current) => new Set(current).add(classification.itemId));
-    setPlannerSaveError(null);
-    if (classification.kind !== 'date-only') {
-      setState((current) => {
-        if (!current.data) {
-          return current;
-        }
-
-        const nextData = applyOptimisticPlannerMove(current.data, classification);
-        mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-        return current.status === 'error'
-          ? { status: 'error', data: nextData, error: current.error }
-          : { status: 'ready', data: nextData, error: null };
-      });
-    }
+  const applyPlannerMoveSelectionPreview = useCallback((classification: OptimisticPlannerMove) => {
     setSelectedItem((current) => {
       if (!current || current.id !== classification.assignmentId) {
         return current;
@@ -1013,61 +983,126 @@ export function ResourcePlannerWorkspace({
         },
       };
     });
+  }, [state.data]);
+
+  const applyOptimisticAssignmentPreview = useCallback((classification: OptimisticPlannerMove) => {
+    if (classification.kind === 'date-only') {
+      return;
+    }
+
+    setState((current) => {
+      if (!current.data) {
+        return current;
+      }
+
+      const nextData = applyOptimisticPlannerMove(current.data, classification);
+      mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
+      return current.status === 'error'
+        ? { status: 'error', data: nextData, error: current.error }
+        : { status: 'ready', data: nextData, error: null };
+    });
+  }, [mutateResourcePlannerCache, plannerScope, projectId]);
+
+  const commitPlannerScheduleMove = useCallback(async (classification: OptimisticPlannerMove): Promise<boolean> => {
+    if (classification.commands.length === 0) {
+      return false;
+    }
+
+    const historySeed = {
+      groupId: crypto.randomUUID(),
+      requestContextId: crypto.randomUUID(),
+    };
+
+    for (const [index, command] of classification.commands.entries()) {
+      const result = await commitCommand(
+        command,
+        createHistoryGroup('Перенос назначения', index === classification.commands.length - 1, historySeed),
+      );
+      if (!result.accepted) {
+        throw new Error('date_command_rejected');
+      }
+    }
+
+    return true;
+  }, [commitCommand]);
+
+  const reconcilePlannerAssignmentPreview = useCallback(async (
+    classification: OptimisticPlannerMove,
+  ): Promise<boolean> => {
+    const replacementAssignments = await persistResourceReplacement(
+      classification.taskId,
+      classification.fromResourceId,
+      classification.toResourceId,
+    );
+    const replacementAssignment = replacementAssignments?.find((assignment) => (
+      assignment.taskId === classification.taskId && assignment.resourceId === classification.toResourceId
+    ));
+
+    if (!replacementAssignments) {
+      await loadPlanner(plannerScope, { keepData: true });
+      return false;
+    }
+
+    if (!replacementAssignment) {
+      return false;
+    }
+
+    setState((current) => {
+      if (!current.data) {
+        return current;
+      }
+
+      const nextData = applyPlannerAssignmentRecord(current.data, classification.assignmentId, replacementAssignment);
+      mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
+      return current.status === 'error'
+        ? { status: 'error', data: nextData, error: current.error }
+        : { status: 'ready', data: nextData, error: null };
+    });
+    setSelectedItem((current) => (
+      current?.id === classification.assignmentId
+        ? {
+          ...current,
+          id: replacementAssignment.id,
+          metadata: {
+            ...current.metadata,
+            assignmentId: replacementAssignment.id,
+            assignmentCreatedAt: replacementAssignment.createdAt,
+          },
+        }
+        : current
+    ));
+
+    return true;
+  }, [loadPlanner, mutateResourcePlannerCache, persistResourceReplacement, plannerScope, projectId]);
+
+  const persistPlannerMove = useCallback(async (move: ResourceTimelineMove<ResourcePlannerTimelineItem>) => {
+    if (!accessToken || pendingMoveIds.has(move.itemId) || move.item.locked) {
+      return;
+    }
+
+    const classification = classifyResourcePlannerMove(move);
+    if (!isOptimisticPlannerMove(classification)) {
+      return;
+    }
+    if (
+      (classification.kind === 'resource-only' || classification.kind === 'combined')
+      && !isActiveAssignableResource(classification.toResourceId)
+    ) {
+      return;
+    }
+
+    setPendingMoveIds((current) => new Set(current).add(classification.itemId));
+    setPlannerSaveError(null);
+    applyOptimisticAssignmentPreview(classification);
+    applyPlannerMoveSelectionPreview(classification);
 
     let datePersisted = false;
     try {
-      if (classification.commands.length > 0) {
-        const historySeed = {
-          groupId: crypto.randomUUID(),
-          requestContextId: crypto.randomUUID(),
-        };
-
-        for (const [index, command] of classification.commands.entries()) {
-          const result = await commitCommand(
-            command,
-            createHistoryGroup('Перенос назначения', index === classification.commands.length - 1, historySeed),
-          );
-          if (!result.accepted) {
-            throw new Error('date_command_rejected');
-          }
-        }
-        datePersisted = true;
-      }
+      datePersisted = await commitPlannerScheduleMove(classification);
 
       if (classification.kind === 'resource-only' || classification.kind === 'combined') {
         try {
-          const replacementAssignments = await persistResourceReplacement(classification.taskId, classification.fromResourceId, classification.toResourceId);
-          const replacementAssignment = replacementAssignments?.find((assignment) => (
-            assignment.taskId === classification.taskId && assignment.resourceId === classification.toResourceId
-          ));
-          if (!replacementAssignments) {
-            await loadPlanner(plannerScope, { keepData: true });
-          } else if (replacementAssignment) {
-            setState((current) => {
-              if (!current.data) {
-                return current;
-              }
-
-              const nextData = applyPlannerAssignmentRecord(current.data, classification.assignmentId, replacementAssignment);
-              mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-              return current.status === 'error'
-                ? { status: 'error', data: nextData, error: current.error }
-                : { status: 'ready', data: nextData, error: null };
-            });
-            setSelectedItem((current) => (
-              current?.id === classification.assignmentId
-                ? {
-                  ...current,
-                  id: replacementAssignment.id,
-                  metadata: {
-                    ...current.metadata,
-                    assignmentId: replacementAssignment.id,
-                    assignmentCreatedAt: replacementAssignment.createdAt,
-                  },
-                }
-                : current
-            ));
-          }
+          await reconcilePlannerAssignmentPreview(classification);
         } catch (error) {
           if (classification.kind === 'combined' && datePersisted) {
             setPlannerSaveError('Даты назначения сохранены, но ресурс не изменён. Календарь обновлён по данным сервера.');
@@ -1091,7 +1126,7 @@ export function ResourcePlannerWorkspace({
         return next;
       });
     }
-  }, [accessToken, commitCommand, isActiveAssignableResource, loadPlanner, mutateResourcePlannerCache, pendingMoveIds, persistResourceReplacement, plannerScope, projectId, state.data]);
+  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, commitPlannerScheduleMove, isActiveAssignableResource, loadPlanner, pendingMoveIds, plannerScope, reconcilePlannerAssignmentPreview]);
 
   const handleDetailsResourceChange = useCallback((input: { assignmentId: string; resourceId: string }) => {
     if (!selectedItem || input.assignmentId !== selectedItem.id) {
