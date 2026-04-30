@@ -1605,6 +1605,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
           ganttDayMode={effectiveAuthGanttDayMode}
+          calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
           onBackToProject={() => {
             setPlannerCorrectionTarget(null);
             setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });

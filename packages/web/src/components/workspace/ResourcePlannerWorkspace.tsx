@@ -4,6 +4,8 @@ import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
 import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import { buildCustomDays } from '../../lib/projectScheduleOptions.ts';
+import type { CalendarDay } from '../../types.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { cn } from '../../lib/utils.ts';
@@ -35,6 +37,7 @@ interface ResourcePlannerWorkspaceProps {
   accessToken?: string | null;
   projectId: string;
   ganttDayMode?: 'business' | 'calendar';
+  calendarDays?: CalendarDay[];
   onBackToProject: () => void;
   onCorrectConflict: (target: PlannerCorrectionTarget) => void;
 }
@@ -436,7 +439,12 @@ function applyPlannerAssignmentRemoved(
   };
 }
 
-export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttDayMode = 'calendar' }: ResourcePlannerWorkspaceProps) {
+export function ResourcePlannerWorkspace({
+  accessToken = null,
+  projectId,
+  ganttDayMode = 'calendar',
+  calendarDays = [],
+}: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
   const setResourcePlannerCache = useProjectStore((store) => store.setResourcePlannerCache);
@@ -1206,6 +1214,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   }, [accessToken, getTaskResourceIds, loadPlanner, mutateResourcePlannerCache, plannerScope, projectId, reloadProjectSnapshot, replaceAssignmentsForTask, selectedItem]);
 
   const displayedPlannerData = state.data;
+  const customDays = useMemo(() => buildCustomDays(calendarDays), [calendarDays]);
   const timelineResources = useMemo(
     () => displayedPlannerData ? mapResourcePlannerResultToTimelineResources(displayedPlannerData, resources) : [],
     [displayedPlannerData, resources],
@@ -1584,6 +1593,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                     viewMode={viewMode}
                     allowVerticalPan
                     businessDays={ganttDayMode !== 'calendar'}
+                    customDays={customDays}
                     readonly={readonly}
                     disableResourceReassignment={false}
                     resourceGrouping="type"
