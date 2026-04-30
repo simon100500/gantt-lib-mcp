@@ -1089,26 +1089,12 @@ export function useBatchTaskUpdate({
       return;
     }
 
-    const changedTasks = tasks.flatMap((task) => {
-      if (task.id === taskId) {
-        return [];
-      }
-
-      const nextParentId = task.parentId === taskId ? parentTask.parentId : task.parentId;
-      const nextDependencies = task.dependencies?.filter((dependency) => dependency.taskId !== taskId);
-      const parentChanged = (nextParentId ?? null) !== (task.parentId ?? null);
-      const dependenciesChanged = JSON.stringify(nextDependencies ?? []) !== JSON.stringify(task.dependencies ?? []);
-
-      if (!parentChanged && !dependenciesChanged) {
-        return [];
-      }
-
-      return [{
+    const changedTasks = tasks
+      .filter((task) => task.parentId === taskId)
+      .map((task) => ({
         ...task,
-        parentId: nextParentId,
-        dependencies: nextDependencies,
-      }];
-    });
+        parentId: parentTask.parentId,
+      }));
 
     if (changedTasks.length === 0) {
       return;
@@ -1120,7 +1106,6 @@ export function useBatchTaskUpdate({
         taskId: task.id,
         fields: {
           parentId: task.parentId ?? null,
-          dependencies: task.dependencies ?? [],
         },
       }));
       const commands: FrontendProjectCommand[] = updateCommands.length > 1
@@ -1130,14 +1115,8 @@ export function useBatchTaskUpdate({
               taskId: command.taskId,
               fields: command.fields,
             })),
-          }, {
-            type: 'delete_task',
-            taskId,
           }]
-        : [
-            updateCommands[0],
-            { type: 'delete_task', taskId },
-          ];
+        : [updateCommands[0]];
 
       try {
         setSavingStateWithReset('saving');
@@ -1151,9 +1130,7 @@ export function useBatchTaskUpdate({
     }
 
     const changedTaskMap = new Map(changedTasks.map((task) => [task.id, task]));
-    setTasks((currentTasks) => currentTasks
-      .filter((task) => task.id !== taskId)
-      .map((task) => changedTaskMap.get(task.id) ?? task));
+    setTasks((currentTasks) => currentTasks.map((task) => changedTaskMap.get(task.id) ?? task));
   }, [commitAuthCommands, isAuthenticatedMode, setSavingStateWithReset, setTasks, tasks]);
 
   return {
