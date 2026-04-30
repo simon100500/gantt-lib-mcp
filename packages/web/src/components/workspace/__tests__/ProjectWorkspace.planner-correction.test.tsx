@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const scrollToRowSpy = vi.fn();
+const scrollToTaskSpy = vi.fn();
 let exposeGanttRef = true;
 let ganttPropsSpy: Record<string, unknown> | null = null;
 const ganttPropsHistory: Array<Record<string, unknown>> = [];
@@ -20,8 +21,12 @@ vi.mock('../../GanttChart.tsx', () => ({
   GanttChart: React.forwardRef((_props: Record<string, unknown>, ref) => {
     ganttPropsSpy = _props;
     ganttPropsHistory.push(_props);
-    useImperativeHandle(ref, () => exposeGanttRef ? { scrollToRow: scrollToRowSpy } : null);
-    return <div data-testid="gantt-chart">chart</div>;
+    useImperativeHandle(ref, () => exposeGanttRef ? { scrollToRow: scrollToRowSpy, scrollToTask: scrollToTaskSpy } : null);
+    return (
+      <div data-testid="gantt-chart">
+        <div className="gantt-scrollContainer">chart</div>
+      </div>
+    );
   }),
 }));
 
@@ -196,6 +201,7 @@ beforeEach(() => {
   vi.unstubAllGlobals();
   exposeGanttRef = true;
   scrollToRowSpy.mockClear();
+  scrollToTaskSpy.mockClear();
   ganttPropsSpy = null;
   ganttPropsHistory.length = 0;
 
@@ -262,25 +268,21 @@ describe('ProjectWorkspace planner correction focus', () => {
     });
 
     const { root } = await renderWorkspace();
-
-    expect(scrollToRowSpy).toHaveBeenCalledTimes(1);
-    expect(scrollToRowSpy).toHaveBeenCalledWith('task-2');
-    expect(useUIStore.getState().plannerCorrectionTarget).toBeNull();
-    expect(useUIStore.getState().tempHighlightedTaskId).toBe('task-2');
-    expect(latestHighlightedTaskIds().has('task-2')).toBe(true);
-    expect(ganttPropsSpy?.filterMode).toBe('highlight');
-
-    await rerenderWorkspace(root);
-
-    expect(scrollToRowSpy).toHaveBeenCalledTimes(1);
-
     await act(async () => {
-      vi.advanceTimersByTime(2000);
+      vi.runOnlyPendingTimers();
       await Promise.resolve();
     });
 
+    expect(scrollToTaskSpy).toHaveBeenCalledTimes(1);
+    expect(scrollToTaskSpy).toHaveBeenCalledWith('task-2');
+    expect(useUIStore.getState().plannerCorrectionTarget).toBeNull();
+    expect(scrollToRowSpy).toHaveBeenCalledWith('task-2', { behavior: 'auto' });
     expect(useUIStore.getState().tempHighlightedTaskId).toBeNull();
     expect(latestHighlightedTaskIds().has('task-2')).toBe(false);
+
+    await rerenderWorkspace(root);
+
+    expect(scrollToTaskSpy).toHaveBeenCalledTimes(1);
 
     await unmountWorkspace(root);
   });
@@ -296,7 +298,7 @@ describe('ProjectWorkspace planner correction focus', () => {
 
     const { root } = await renderWorkspace();
 
-    expect(scrollToRowSpy).not.toHaveBeenCalled();
+    expect(scrollToTaskSpy).not.toHaveBeenCalled();
     expect(useUIStore.getState().plannerCorrectionTarget).toEqual(target);
     expect(useUIStore.getState().tempHighlightedTaskId).toBeNull();
     expect(latestHighlightedTaskIds().size).toBe(0);
@@ -307,7 +309,7 @@ describe('ProjectWorkspace planner correction focus', () => {
   it('ignores an empty planner correction target without scrolling', async () => {
     const { root } = await renderWorkspace();
 
-    expect(scrollToRowSpy).not.toHaveBeenCalled();
+    expect(scrollToTaskSpy).not.toHaveBeenCalled();
     expect(useUIStore.getState().plannerCorrectionTarget).toBeNull();
     expect(useUIStore.getState().tempHighlightedTaskId).toBeNull();
     expect(latestHighlightedTaskIds().size).toBe(0);
@@ -328,11 +330,37 @@ describe('ProjectWorkspace planner correction focus', () => {
 
     const { root } = await renderWorkspace();
 
-    expect(scrollToRowSpy).not.toHaveBeenCalled();
+    expect(scrollToTaskSpy).not.toHaveBeenCalled();
     expect(useUIStore.getState().plannerCorrectionTarget).toBeNull();
-    expect(useUIStore.getState().tempHighlightedTaskId).toBe('task-1');
-    expect(latestHighlightedTaskIds().has('task-1')).toBe(true);
+    expect(scrollToRowSpy).not.toHaveBeenCalled();
+    expect(useUIStore.getState().tempHighlightedTaskId).toBeNull();
+    expect(latestHighlightedTaskIds().has('task-1')).toBe(false);
 
     await unmountWorkspace(root);
+  });
+
+  it('persists gantt scroll position and restores it on the next mount', async () => {
+    const firstRender = await renderWorkspace();
+    const firstScrollContainer = firstRender.container.querySelector('.gantt-scrollContainer') as HTMLDivElement | null;
+
+    expect(firstScrollContainer).not.toBeNull();
+
+    firstScrollContainer!.scrollLeft = 240;
+    firstScrollContainer!.scrollTop = 96;
+    firstScrollContainer!.dispatchEvent(new Event('scroll'));
+
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.ganttScrollLeft).toBe(240);
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.ganttScrollTop).toBe(96);
+
+    await unmountWorkspace(firstRender.root);
+
+    const secondRender = await renderWorkspace();
+    const secondScrollContainer = secondRender.container.querySelector('.gantt-scrollContainer') as HTMLDivElement | null;
+
+    expect(secondScrollContainer).not.toBeNull();
+    expect(secondScrollContainer!.scrollLeft).toBe(240);
+    expect(secondScrollContainer!.scrollTop).toBe(96);
+
+    await unmountWorkspace(secondRender.root);
   });
 });

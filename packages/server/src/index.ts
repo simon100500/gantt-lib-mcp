@@ -40,6 +40,7 @@ import { registerBillingRoutes } from './routes/billing-routes.js';
 import { registerBaselineRoutes } from './routes/baseline-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
 import { registerExcelExportRoutes } from './routes/excel-export-routes.js';
+import { registerFeedbackRoutes } from './routes/feedback-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
 import { registerResourceRoutes } from './routes/resource-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
@@ -59,6 +60,7 @@ await registerBillingRoutes(fastify);
 await registerBaselineRoutes(fastify);
 await registerCommandRoutes(fastify);
 await registerExcelExportRoutes(fastify);
+await registerFeedbackRoutes(fastify);
 await registerHistoryRoutes(fastify);
 await registerResourceRoutes(fastify);
 

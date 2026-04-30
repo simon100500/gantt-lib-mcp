@@ -593,6 +593,7 @@ export function ProjectWorkspace({
   const [createAssignmentResourceOpen, setCreateAssignmentResourceOpen] = useState(false);
   const [createAssignmentResourcePending, setCreateAssignmentResourcePending] = useState(false);
   const [createAssignmentResourceError, setCreateAssignmentResourceError] = useState<string | null>(null);
+  const ganttSectionRef = useRef<HTMLDivElement | null>(null);
   const [projectShiftOpen, setProjectShiftOpen] = useState(false);
   const [projectShiftPending, setProjectShiftPending] = useState(false);
   const [projectShiftError, setProjectShiftError] = useState<string | null>(null);
@@ -701,7 +702,6 @@ export function ProjectWorkspace({
   const previousGanttDayModeRef = useRef(ganttDayMode);
   const [splitTaskDraft, setSplitTaskDraft] = useState<Task | null>(null);
   const [taskChatDraft, setTaskChatDraft] = useState<Task | null>(null);
-  const taskReferenceHighlightTimeoutRef = useRef<number | null>(null);
   const {
     items: historyItems,
     loading: historyLoading,
@@ -828,28 +828,19 @@ export function ProjectWorkspace({
   }, [setChatComposerDraft, setWorkspace]);
 
   const handleTaskReferenceClick = useCallback((taskId: string) => {
-    ganttRef.current?.scrollToRow(taskId);
-    setTempHighlightedTaskId(taskId);
-
-    if (taskReferenceHighlightTimeoutRef.current !== null) {
-      window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
+    if (typeof ganttRef.current?.scrollToRow === 'function') {
+      ganttRef.current.scrollToRow(taskId, { behavior: 'auto' });
     }
-
-    taskReferenceHighlightTimeoutRef.current = window.setTimeout(() => {
-      setTempHighlightedTaskId(null);
-      taskReferenceHighlightTimeoutRef.current = null;
-    }, 2000);
-  }, [ganttRef, setTempHighlightedTaskId]);
+    if (typeof ganttRef.current?.scrollToTask === 'function') {
+      window.requestAnimationFrame(() => {
+        ganttRef.current?.scrollToTask(taskId);
+      });
+    }
+  }, [ganttRef]);
 
   useEffect(() => () => {
     historyBranchConfirmResolverRef.current?.(false);
     historyBranchConfirmResolverRef.current = null;
-  }, []);
-
-  useEffect(() => () => {
-    if (taskReferenceHighlightTimeoutRef.current !== null) {
-      window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
-    }
   }, []);
 
   useEffect(() => {
@@ -921,6 +912,18 @@ export function ProjectWorkspace({
     setSelectedAssignmentResourceIds(resourceIds);
     setAssignmentError(null);
   }, [setAssignmentError]);
+
+  const handleOpenPlannerAssignment = useCallback((assignmentView: { assignment: { id: string } }) => {
+    if (!projectId || workspace.kind !== 'project') {
+      return;
+    }
+
+    setProjectState(projectId, {
+      activeWorkspace: 'planner',
+      plannerSelectedAssignmentId: assignmentView.assignment.id,
+    });
+    setWorkspace({ kind: 'planner', projectId });
+  }, [projectId, setProjectState, setWorkspace, workspace.kind]);
 
   const handleCreateAssignmentResource = useCallback(async (input: { name: string; type: ResourceType; scope: ResourceScope }) => {
     if (!accessToken || effectiveReadOnly || workspace.kind !== 'project') {
@@ -1479,6 +1482,35 @@ export function ProjectWorkspace({
     return () => window.clearTimeout(timer);
   }, [accessToken, historyRefreshRevision, refreshHistory]);
 
+  useEffect(() => {
+    if (!projectId || loading) {
+      return;
+    }
+
+    const ganttScrollElement = ganttSectionRef.current?.querySelector('.gantt-scrollContainer');
+    if (!(ganttScrollElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const persistedState = getProjectState(projectId);
+    if (persistedState && (persistedState.ganttScrollLeft !== 0 || persistedState.ganttScrollTop !== 0)) {
+      ganttScrollElement.scrollLeft = persistedState.ganttScrollLeft;
+      ganttScrollElement.scrollTop = persistedState.ganttScrollTop;
+    }
+
+    const handleScroll = () => {
+      setProjectState(projectId, {
+        ganttScrollLeft: ganttScrollElement.scrollLeft,
+        ganttScrollTop: ganttScrollElement.scrollTop,
+      });
+    };
+
+    ganttScrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      ganttScrollElement.removeEventListener('scroll', handleScroll);
+    };
+  }, [effectiveTasksWithBaseline, getProjectState, loading, projectId, setProjectState]);
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
@@ -1580,6 +1612,7 @@ export function ProjectWorkspace({
                   setCreateAssignmentResourceError(null);
                   setCreateAssignmentResourceOpen(true);
                 }}
+                onOpenPlannerAssignment={handleOpenPlannerAssignment}
                 onSelectionChange={handleAssignmentResourceChange}
                 onSubmit={(resourceIds) => {
                   void handleAssignResources(selectedAssignmentTask, resourceIds);
@@ -1611,48 +1644,50 @@ export function ProjectWorkspace({
               </div>
             )}
 
-            {loading ? (
-              <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
-                Загрузка...
-              </div>
-            ) : (
-              <GanttChart
-                ref={ganttRef as Ref<GanttChartRef>}
-                tasks={effectiveTasksWithBaseline}
-                showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
-                taskFilter={taskFilter}
-                taskListMenuCommands={taskListMenuCommands}
-                additionalColumns={additionalColumns}
-                hiddenTaskListColumns={hiddenTaskListColumns}
-                onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
-                dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
-                rowHeight={36}
-                containerHeight="calc(100dvh - 132px)"
-                showTaskList={showTaskList}
-                showChart={showChart}
-                taskListWidth={taskListWidth}
-                onValidateDependencies={onValidation}
-                enableAutoSchedule={autoSchedule}
-                onCascade={effectiveReadOnly ? undefined : onCascade}
-                disableTaskNameEditing={effectiveReadOnly}
-                disableDependencyEditing={effectiveReadOnly}
-                disableTaskDrag={effectiveDisableTaskDrag}
-                highlightExpiredTasks={highlightExpiredTasks}
-                headerHeight={40}
-                viewMode={viewMode}
-                collapsedParentIds={collapsedParentIds}
-                onToggleCollapse={handleToggleCollapse}
-                onAdd={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleAdd}
-                onDelete={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleDelete}
-                onInsertAfter={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleInsertAfter}
-                onReorder={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleReorder}
-                onUngroupTask={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleUngroupTask}
-                customDays={customDays}
-                highlightedTaskIds={highlightedSearchTaskIds}
-                filterMode={filterMode}
-                businessDays={ganttDayMode !== 'calendar'}
-              />
-            )}
+            <div className="min-h-0 flex-1 overflow-hidden bg-white" ref={ganttSectionRef}>
+              {loading ? (
+                <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
+                  Загрузка...
+                </div>
+              ) : (
+                <GanttChart
+                  ref={ganttRef as Ref<GanttChartRef>}
+                  tasks={effectiveTasksWithBaseline}
+                  showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
+                  taskFilter={taskFilter}
+                  taskListMenuCommands={taskListMenuCommands}
+                  additionalColumns={additionalColumns}
+                  hiddenTaskListColumns={hiddenTaskListColumns}
+                  onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
+                  dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
+                  rowHeight={36}
+                  containerHeight="calc(100dvh - 132px)"
+                  showTaskList={showTaskList}
+                  showChart={showChart}
+                  taskListWidth={taskListWidth}
+                  onValidateDependencies={onValidation}
+                  enableAutoSchedule={autoSchedule}
+                  onCascade={effectiveReadOnly ? undefined : onCascade}
+                  disableTaskNameEditing={effectiveReadOnly}
+                  disableDependencyEditing={effectiveReadOnly}
+                  disableTaskDrag={effectiveDisableTaskDrag}
+                  highlightExpiredTasks={highlightExpiredTasks}
+                  headerHeight={40}
+                  viewMode={viewMode}
+                  collapsedParentIds={collapsedParentIds}
+                  onToggleCollapse={handleToggleCollapse}
+                  onAdd={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleAdd}
+                  onDelete={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleDelete}
+                  onInsertAfter={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                  onReorder={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleReorder}
+                  onUngroupTask={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleUngroupTask}
+                  customDays={customDays}
+                  highlightedTaskIds={highlightedSearchTaskIds}
+                  filterMode={filterMode}
+                  businessDays={ganttDayMode !== 'calendar'}
+                />
+              )}
+            </div>
 
             {aiMutationLocked && (
               <div className="pointer-events-none absolute bottom-9 left-1/2 z-20 -translate-x-1/2">

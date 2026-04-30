@@ -282,7 +282,7 @@ const EXPORT_ACCESS_DESCRIPTIONS: Record<string, string> = {
 };
 
 const EXPORT_UPGRADE_TIERS: Record<string, string> = {
-  none: 'pdf',
+  none: 'pdf_excel',
   pdf: 'pdf_excel',
   pdf_excel: 'pdf_excel_api',
 };
@@ -303,7 +303,7 @@ function buildFeatureGateDescription(denial: ConstraintDenialPayload, planLabel:
 function getExportTierFromPlan(plan: PlanId): string {
   const tiers: Record<PlanId, string> = {
     free: 'none',
-    start: 'pdf',
+    start: 'pdf_excel',
     team: 'pdf_excel',
     enterprise: 'pdf_excel_api',
   };
@@ -328,7 +328,7 @@ function defaultUpgradeHint(limitKey: ConstraintLimitKey | null): string {
   }
 
   if (limitKey === 'export') {
-    return 'Экспорт доступен на платных тарифах.';
+    return 'Экспорт PDF + Excel доступен на платных тарифах.';
   }
 
   return 'Обновите тариф, чтобы продолжить работу без ограничений.';

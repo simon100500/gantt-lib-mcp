@@ -243,6 +243,7 @@ export function useBatchTaskUpdate({
       return () => {};
     }
 
+    const previewId = crypto.randomUUID();
     const projectState = useProjectStore.getState();
     const baseSnapshot = deriveOptimisticSnapshot(
       projectState.confirmed.snapshot,
@@ -254,9 +255,12 @@ export function useBatchTaskUpdate({
       baseSnapshot,
     );
 
-    projectState.setDragPreview({ commands, snapshot: previewSnapshot });
+    projectState.setDragPreview({ id: previewId, commands, snapshot: previewSnapshot });
     return () => {
-      useProjectStore.getState().setDragPreview(undefined);
+      const currentPreview = useProjectStore.getState().dragPreview;
+      if (currentPreview?.id === previewId) {
+        useProjectStore.getState().setDragPreview(undefined);
+      }
     };
   }, [isAuthenticatedMode, scheduleOptions]);
 

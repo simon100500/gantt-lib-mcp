@@ -195,6 +195,7 @@ export interface ProjectState {
   pending: PendingCommand[];
   // Pointer-time preview shown during an active interaction before commit.
   dragPreview?: {
+    id: string;
     commands: FrontendProjectCommand[];
     snapshot: ProjectSnapshot;
   };

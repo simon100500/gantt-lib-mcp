@@ -110,7 +110,7 @@ function buildProactiveConstraintDenial(
       remaining: null,
       plan,
       planLabel,
-      upgradeHint: 'Экспорт в PDF доступен на тарифе Старт и выше.',
+      upgradeHint: 'Экспорт PDF + Excel доступен на любом платном тарифе.',
     };
   }
 
@@ -478,6 +478,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const consumePlannerCorrectionTarget = useUIStore((state) => state.consumePlannerCorrectionTarget);
   const setPendingPostAuthAction = useUIStore((state) => state.setPendingPostAuthAction);
   const setSidebarState = useUIStore((state) => state.setSidebarState);
+  const setShowChart = useUIStore((state) => state.setShowChart);
   const showBillingPage = useUIStore((state) => state.showBillingPage);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
@@ -1521,7 +1522,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         remaining: null,
         plan: ((billingStatus?.plan as PlanId | undefined) ?? 'free'),
         planLabel: billingStatus?.planMeta.label ?? PLAN_LABELS[((billingStatus?.plan as PlanId | undefined) ?? 'free')],
-        upgradeHint: 'Экспорт PDF + Excel доступен на тарифе Команда и выше.',
+        upgradeHint: 'Экспорт PDF + Excel доступен на любом платном тарифе.',
       });
       return;
     }
@@ -1611,6 +1612,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
             setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
           }}
           onCorrectConflict={(target) => {
+            setPlannerCorrectionTarget(target);
+            setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+          onOpenTask={(target) => {
+            setShowChart(true);
             setPlannerCorrectionTarget(target);
             setWorkspace({ kind: 'project', projectId: target.projectId, chatOpen: readProjectChatOpenState() });
           }}

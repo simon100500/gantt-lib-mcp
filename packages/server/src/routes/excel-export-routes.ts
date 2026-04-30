@@ -55,7 +55,7 @@ export async function registerExcelExportRoutes(fastify: FastifyInstance): Promi
         remaining: null,
         plan: status.plan,
         planLabel: status.planMeta.label,
-        upgradeHint: 'Экспорт PDF + Excel доступен на тарифе Команда и выше.',
+        upgradeHint: 'Экспорт PDF + Excel доступен на любом платном тарифе.',
       });
     }
 

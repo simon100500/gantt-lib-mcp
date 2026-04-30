@@ -68,9 +68,9 @@ describe('getExportAccessLevel', () => {
     expect(getExportAccessLevel(status)).toBe('none');
   });
 
-  it('returns "pdf" for start plan with export "pdf"', () => {
-    const status = makeUsageStatus({ export: 'pdf' }, 'start');
-    expect(getExportAccessLevel(status)).toBe('pdf');
+  it('returns "pdf_excel" for start plan with export "pdf_excel"', () => {
+    const status = makeUsageStatus({ export: 'pdf_excel' }, 'start');
+    expect(getExportAccessLevel(status)).toBe('pdf_excel');
   });
 
   it('returns "pdf_excel" for team plan', () => {

@@ -22,6 +22,11 @@ interface ProjectUIState {
   hiddenTaskListColumns: string[];
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
+  plannerSelectedAssignmentId: string | null;
+  ganttScrollLeft: number;
+  ganttScrollTop: number;
+  plannerScrollLeft: number;
+  plannerScrollTop: number;
 }
 
 interface ProjectUIStore {
@@ -39,6 +44,11 @@ const DEFAULT_STATE: ProjectUIState = {
   hiddenTaskListColumns: [],
   selectedBaseline: null,
   selectedBaselineVisible: false,
+  plannerSelectedAssignmentId: null,
+  ganttScrollLeft: 0,
+  ganttScrollTop: 0,
+  plannerScrollLeft: 0,
+  plannerScrollTop: 0,
 };
 
 export const useProjectUIStore = create<ProjectUIStore>()(

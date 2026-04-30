@@ -64,7 +64,7 @@ export const PLAN_FEATURES: Record<'start' | 'team' | 'enterprise', string[]> = 
     'до 5 участников команды',
     'Архив проектов',
     'Пул ресурсов',
-    'Экспорт в PDF',
+    'Экспорт PDF + Excel',
     'Гостевые ссылки',
   ],
   team: [

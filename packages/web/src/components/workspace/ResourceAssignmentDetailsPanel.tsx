@@ -18,6 +18,7 @@ interface ResourceAssignmentDetailsPanelProps {
   assignedResources: AssignmentResourceView[];
   readonly: boolean;
   onClose: () => void;
+  onOpenTask?: (input: { projectId: string; taskId: string; assignmentId: string; resourceId: string }) => void;
   onAddResource?: (input: { taskId: string; resourceId: string }) => void;
   onRemoveResource?: (input: { assignmentId: string; resourceId: string }) => void;
   onResourceChange?: (input: { assignmentId: string; resourceId: string }) => void;
@@ -47,6 +48,7 @@ export function ResourceAssignmentDetailsPanel({
   assignedResources,
   readonly,
   onClose,
+  onOpenTask,
   onAddResource,
   onRemoveResource,
   onResourceChange,
@@ -110,6 +112,21 @@ export function ResourceAssignmentDetailsPanel({
             <span className="text-[12px] font-medium tabular-nums text-[#5e6c84]">
               {formatDate(item.startDate)} - {formatDate(item.endDate)}
             </span>
+            {onOpenTask && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm text-[12px] font-medium text-primary underline-offset-2 transition-colors hover:text-primary/80 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
+                data-testid="assignment-details-open-task"
+                onClick={() => onOpenTask({
+                  projectId: metadata.projectId,
+                  taskId: metadata.taskId,
+                  assignmentId: metadata.assignmentId,
+                  resourceId: metadata.resourceId,
+                })}
+              >
+                Перейти
+              </button>
+            )}
           </div>
         </div>
         <button
