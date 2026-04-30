@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
+import { Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
 import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import { replayProjectCommand } from '../../lib/projectCommandReplay.ts';
 import { buildCustomDays } from '../../lib/projectScheduleOptions.ts';
-import type { CalendarDay } from '../../types.ts';
+import type { CalendarDay, FrontendProjectCommand } from '../../types.ts';
 import { useCommandCommit } from '../../hooks/useCommandCommit.ts';
 import { createHistoryGroup } from '../../hooks/useProjectCommands.ts';
 import { normalizeDateOnly } from '../../lib/scheduleMutationUtils.ts';
 import { cn } from '../../lib/utils.ts';
-import { deriveVisibleSnapshot, useProjectStore } from '../../stores/useProjectStore.ts';
+import { deriveOptimisticSnapshot, deriveVisibleSnapshot, useProjectStore } from '../../stores/useProjectStore.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { useUIStore, type PlannerCorrectionTarget, type ViewMode } from '../../stores/useUIStore.ts';
 import { Button } from '../ui/button.tsx';
@@ -42,6 +43,7 @@ interface ResourcePlannerWorkspaceProps {
   calendarDays?: CalendarDay[];
   onBackToProject: () => void;
   onCorrectConflict: (target: PlannerCorrectionTarget) => void;
+  onOpenTask?: (target: PlannerCorrectionTarget) => void;
 }
 
 type PlannerState =
@@ -292,72 +294,12 @@ function removePlannerResource(
   };
 }
 
-function refreshResourceConflictSummary(resource: ResourcePlannerResult['resources'][number]): ResourcePlannerResult['resources'][number] {
-  const conflictCount = resource.intervals.filter((interval) => interval.hasConflict).length;
-  return {
-    ...resource,
-    hasConflicts: conflictCount > 0,
-    conflictCount,
-  };
-}
-
-function applyOptimisticPlannerMove(
-  data: ResourcePlannerResult,
-  move: OptimisticPlannerMove,
-): ResourcePlannerResult {
-  const sourceResource = data.resources.find((resource) => (
-    resource.intervals.some((interval) => interval.assignmentId === move.assignmentId)
-  ));
-  const sourceInterval = sourceResource?.intervals.find((interval) => interval.assignmentId === move.assignmentId);
-  if (!sourceInterval) {
-    return data;
-  }
-
-  const targetResource = data.resources.find((resource) => resource.resourceId === move.toResourceId);
-  const targetResourceName = targetResource?.resourceName ?? move.toResourceId;
-  const placedInterval: ResourcePlannerInterval = {
-    ...sourceInterval,
-    resourceId: move.toResourceId,
-    resourceName: targetResourceName,
-    startDate: move.startDate,
-    endDate: move.endDate,
-  };
-
-  const resourcesWithoutMovedInterval = data.resources.map((resource) => {
-    const nextIntervals = resource.intervals.filter((interval) => interval.assignmentId !== move.assignmentId);
-
-    return refreshResourceConflictSummary({ ...resource, intervals: nextIntervals });
-  });
-
-  const resourceExists = resourcesWithoutMovedInterval.some((resource) => resource.resourceId === move.toResourceId);
-  const nextResources = resourceExists
-    ? resourcesWithoutMovedInterval.map((resource) => (
-      resource.resourceId === move.toResourceId
-        ? refreshResourceConflictSummary({ ...resource, intervals: [...resource.intervals, placedInterval] })
-        : resource
-    ))
-    : [
-      ...resourcesWithoutMovedInterval,
-      refreshResourceConflictSummary({
-        resourceId: move.toResourceId,
-        resourceName: targetResourceName,
-        hasConflicts: Boolean(placedInterval.hasConflict),
-        conflictCount: placedInterval.hasConflict ? 1 : 0,
-        intervals: [placedInterval],
-      }),
-    ];
-
-  return {
-    ...data,
-    resources: nextResources,
-  };
-}
-
 export function ResourcePlannerWorkspace({
   accessToken = null,
   projectId,
   ganttDayMode = 'calendar',
   calendarDays = [],
+  onOpenTask,
 }: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
   const cachedPlannerData = useProjectStore((store) => store.resourcePlannerCache[`${projectId}:${plannerScope}`] ?? null);
@@ -374,10 +316,11 @@ export function ResourcePlannerWorkspace({
   ));
   const resources = useProjectStore((store) => store.resources);
   const assignments = useProjectStore((store) => store.assignments);
-  const confirmedSnapshot = useProjectStore((store) => store.confirmed.snapshot);
   const pendingCommands = useProjectStore((store) => store.pending);
+  const confirmedSnapshot = useProjectStore((store) => store.confirmed.snapshot);
   const dragPreview = useProjectStore((store) => store.dragPreview);
   const scheduleOptions = useProjectStore((store) => store.scheduleOptions);
+  const savingState = useUIStore((store) => store.savingState);
   const setResources = useProjectStore((store) => store.setResources);
   const setAssignments = useProjectStore((store) => store.setAssignments);
   const upsertResource = useProjectStore((store) => store.upsertResource);
@@ -385,6 +328,7 @@ export function ResourcePlannerWorkspace({
   const replaceAssignmentsForTask = useProjectStore((store) => store.replaceAssignmentsForTask);
   const removeAssignmentsByResource = useProjectStore((store) => store.removeAssignmentsByResource);
   const setConfirmed = useProjectStore((store) => store.setConfirmed);
+  const setDragPreview = useProjectStore((store) => store.setDragPreview);
   const clearResourcePlannerCache = useProjectStore((store) => store.clearResourcePlannerCache);
   const mutateResourcePlannerCache = useProjectStore((store) => store.mutateResourcePlannerCache);
   const { commitCommand } = useCommandCommit(accessToken);
@@ -394,6 +338,8 @@ export function ResourcePlannerWorkspace({
   const [pendingCatalogResourceId, setPendingCatalogResourceId] = useState<string | null>(null);
   const [pendingMoveIds, setPendingMoveIds] = useState<Set<string>>(() => new Set());
   const [plannerSaveError, setPlannerSaveError] = useState<string | null>(null);
+  const [showDelayedSyncStatus, setShowDelayedSyncStatus] = useState(false);
+  const [showDelayedSavingStatus, setShowDelayedSavingStatus] = useState(false);
   const [filters, setFilters] = useState<ResourcePlannerFilters>({
     query: '',
     resourceTypes: [],
@@ -404,6 +350,8 @@ export function ResourcePlannerWorkspace({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const lastHiddenAtRef = useRef<number | null>(null);
   const lastAutoRefreshAtRef = useRef(0);
+  const plannerSectionRef = useRef<HTMLElement | null>(null);
+  const selectionHydratedRef = useRef(false);
 
   const loadResourceCatalog = useCallback(async (catalogProjectId = projectId) => {
     if (!accessToken) {
@@ -816,9 +764,14 @@ export function ResourcePlannerWorkspace({
     await patchCatalogResource(resource, payload);
   }, [patchCatalogResource, resources]);
 
-  const isActiveAssignableResource = useCallback((resourceId: string) => (
-    resources.some((resource) => resource.id === resourceId && resource.isActive)
-  ), [resources]);
+  const isActiveAssignableResource = useCallback((resourceId: string) => {
+    const catalogResource = resources.find((resource) => resource.id === resourceId);
+    if (catalogResource) {
+      return catalogResource.isActive;
+    }
+
+    return state.data?.resources.some((resource) => resource.resourceId === resourceId) ?? false;
+  }, [resources, state.data]);
 
   const getTaskResourceIds = useCallback(async (taskId: string): Promise<string[]> => {
     let currentAssignments = useProjectStore.getState().assignments;
@@ -875,6 +828,35 @@ export function ResourcePlannerWorkspace({
     return nextAssignments;
   }, [accessToken, getTaskResourceIds, reloadProjectSnapshot, replaceAssignmentsForTask]);
 
+  const buildOptimisticReplacementAssignments = useCallback((
+    taskId: string,
+    fromResourceId: string,
+    toResourceId: string,
+  ): TaskAssignmentRecord[] => {
+    const currentTaskAssignments = assignments.filter((assignment) => assignment.taskId === taskId);
+    const nextResourceIds = buildReplacementResourceIds(
+      currentTaskAssignments.map((assignment) => assignment.resourceId),
+      fromResourceId,
+      toResourceId,
+    );
+
+    return nextResourceIds.map((resourceId) => {
+      const currentAssignment = currentTaskAssignments.find((assignment) => assignment.resourceId === resourceId);
+      if (currentAssignment) {
+        return currentAssignment;
+      }
+
+      const movedAssignment = currentTaskAssignments.find((assignment) => assignment.resourceId === fromResourceId);
+      return {
+        id: movedAssignment?.id ?? `optimistic:${taskId}:${resourceId}`,
+        projectId: movedAssignment?.projectId ?? projectId,
+        taskId,
+        resourceId,
+        createdAt: movedAssignment?.createdAt ?? new Date().toISOString(),
+      };
+    });
+  }, [assignments, projectId]);
+
   const applyPlannerMoveSelectionPreview = useCallback((classification: OptimisticPlannerMove) => {
     setSelectedItem((current) => {
       if (!current || current.id !== classification.assignmentId) {
@@ -902,18 +884,37 @@ export function ResourcePlannerWorkspace({
       return;
     }
 
-    setState((current) => {
-      if (!current.data) {
-        return current;
-      }
+    replaceAssignmentsForTask(
+      classification.taskId,
+      buildOptimisticReplacementAssignments(
+        classification.taskId,
+        classification.fromResourceId,
+        classification.toResourceId,
+      ),
+    );
+  }, [buildOptimisticReplacementAssignments, replaceAssignmentsForTask]);
 
-      const nextData = applyOptimisticPlannerMove(current.data, classification);
-      mutateResourcePlannerCache(projectId, plannerScope, () => nextData);
-      return current.status === 'error'
-        ? { status: 'error', data: nextData, error: current.error }
-        : { status: 'ready', data: nextData, error: null };
-    });
-  }, [mutateResourcePlannerCache, plannerScope, projectId]);
+  const setPlannerSchedulePreview = useCallback((commands: FrontendProjectCommand[]) => {
+    if (!accessToken || commands.length === 0) {
+      return () => {};
+    }
+
+    const projectState = useProjectStore.getState();
+    const baseSnapshot = deriveOptimisticSnapshot(
+      projectState.confirmed.snapshot,
+      projectState.pending,
+      scheduleOptions,
+    );
+    const previewSnapshot = commands.reduce(
+      (snapshot, command, index) => replayProjectCommand(snapshot, command, scheduleOptions, `planner-preview:${index}`),
+      baseSnapshot,
+    );
+
+    setDragPreview({ commands, snapshot: previewSnapshot });
+    return () => {
+      useProjectStore.getState().setDragPreview(undefined);
+    };
+  }, [accessToken, scheduleOptions, setDragPreview]);
 
   const commitPlannerScheduleMove = useCallback(async (classification: OptimisticPlannerMove): Promise<boolean> => {
     if (classification.commands.length === 0) {
@@ -925,18 +926,23 @@ export function ResourcePlannerWorkspace({
       requestContextId: crypto.randomUUID(),
     };
 
-    for (const [index, command] of classification.commands.entries()) {
-      const result = await commitCommand(
-        command,
-        createHistoryGroup('Перенос назначения', index === classification.commands.length - 1, historySeed),
-      );
-      if (!result.accepted) {
-        throw new Error('date_command_rejected');
+    const clearPreview = setPlannerSchedulePreview(classification.commands);
+    try {
+      for (const [index, command] of classification.commands.entries()) {
+        const result = await commitCommand(
+          command,
+          createHistoryGroup('Перенос назначения', index === classification.commands.length - 1, historySeed),
+        );
+        if (!result.accepted) {
+          throw new Error('date_command_rejected');
+        }
       }
+    } finally {
+      clearPreview();
     }
 
     return true;
-  }, [commitCommand]);
+  }, [commitCommand, setPlannerSchedulePreview]);
 
   const reconcilePlannerAssignmentPreview = useCallback(async (
     classification: OptimisticPlannerMove,
@@ -993,6 +999,9 @@ export function ResourcePlannerWorkspace({
       return;
     }
 
+    const previousTaskAssignments = assignments.filter((assignment) => assignment.taskId === classification.taskId);
+    const previousSelectedItem = selectedItem?.id === classification.assignmentId ? selectedItem : null;
+
     setPendingMoveIds((current) => new Set(current).add(classification.itemId));
     setPlannerSaveError(null);
     applyOptimisticAssignmentPreview(classification);
@@ -1007,6 +1016,14 @@ export function ResourcePlannerWorkspace({
           await reconcilePlannerAssignmentPreview(classification);
         } catch (error) {
           if (classification.kind === 'combined' && datePersisted) {
+            replaceAssignmentsForTask(classification.taskId, previousTaskAssignments);
+            if (previousSelectedItem) {
+              setSelectedItem({
+                ...previousSelectedItem,
+                startDate: classification.startDate,
+                endDate: classification.endDate,
+              });
+            }
             setPlannerSaveError('Даты назначения сохранены, но ресурс не изменён. Календарь обновлён по данным сервера.');
             await loadPlanner(plannerScope, { keepData: true });
             return;
@@ -1015,6 +1032,12 @@ export function ResourcePlannerWorkspace({
         }
       }
     } catch (error) {
+      if (classification.kind === 'resource-only' || classification.kind === 'combined') {
+        replaceAssignmentsForTask(classification.taskId, previousTaskAssignments);
+      }
+      if (previousSelectedItem) {
+        setSelectedItem(previousSelectedItem);
+      }
       if (error instanceof AssignmentRequestError && error.code === 'resource_inactive') {
         await loadPlanner(plannerScope, { keepData: true });
         return;
@@ -1028,7 +1051,7 @@ export function ResourcePlannerWorkspace({
         return next;
       });
     }
-  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, commitPlannerScheduleMove, isActiveAssignableResource, loadPlanner, pendingMoveIds, plannerScope, reconcilePlannerAssignmentPreview]);
+  }, [accessToken, applyOptimisticAssignmentPreview, applyPlannerMoveSelectionPreview, assignments, commitPlannerScheduleMove, isActiveAssignableResource, loadPlanner, pendingMoveIds, plannerScope, reconcilePlannerAssignmentPreview, replaceAssignmentsForTask, selectedItem]);
 
   const handleDetailsResourceChange = useCallback((input: { assignmentId: string; resourceId: string }) => {
     if (!selectedItem || input.assignmentId !== selectedItem.id) {
@@ -1168,6 +1191,9 @@ export function ResourcePlannerWorkspace({
     [filters, resources, selectedItem, timelineResources],
   );
   useEffect(() => {
+    selectionHydratedRef.current = false;
+  }, [projectId]);
+  useEffect(() => {
     if (!selectedItem) {
       return;
     }
@@ -1193,6 +1219,32 @@ export function ResourcePlannerWorkspace({
 
     setSelectedItem(timelineItem);
   }, [selectedItem, timelineResources]);
+  useEffect(() => {
+    if (!selectionHydratedRef.current) {
+      return;
+    }
+    setProjectState(projectId, { plannerSelectedAssignmentId: selectedItem?.id ?? null });
+  }, [projectId, selectedItem?.id, setProjectState]);
+  useEffect(() => {
+    if (selectionHydratedRef.current || selectedItem) {
+      return;
+    }
+
+    const persistedAssignmentId = getProjectState(projectId)?.plannerSelectedAssignmentId;
+    if (!persistedAssignmentId) {
+      selectionHydratedRef.current = true;
+      return;
+    }
+
+    const persistedItem = timelineResources
+      .flatMap((resource) => resource.items)
+      .find((item) => item.id === persistedAssignmentId);
+
+    if (persistedItem) {
+      setSelectedItem(persistedItem);
+    }
+    selectionHydratedRef.current = true;
+  }, [getProjectState, projectId, selectedItem, timelineResources]);
   const selectedResource = useMemo(
     () => selectedItem ? resources.find((resource) => resource.id === selectedItem.resourceId) ?? null : null,
     [resources, selectedItem],
@@ -1247,7 +1299,19 @@ export function ResourcePlannerWorkspace({
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
   const pendingMoveCount = pendingMoveIds.size;
+  const pendingCommandCount = pendingCommands.length;
+  const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
+  const hasRetryingPendingCommand = pendingCommands.some((command) => command.status === 'retrying');
   const isBackgroundRefreshing = state.status === 'loading' && Boolean(displayedPlannerData);
+  const showSyncStatus = !readonly && (
+    hasBlockedPendingCommand
+    || hasRetryingPendingCommand
+    || (pendingCommandCount > 0 && showDelayedSyncStatus)
+  );
+  const showSavingStatus = !readonly
+    && pendingCommandCount === 0
+    && savingState === 'saving'
+    && showDelayedSavingStatus;
   const viewMode = projectStates[projectId]?.viewMode ?? globalViewMode;
   const plannerDayWidth = getPlannerDayWidth(viewMode);
   const hasActiveFilters = filters.query.trim().length > 0
@@ -1267,7 +1331,7 @@ export function ResourcePlannerWorkspace({
       ? `resource-planner-item resource-planner-item--conflict${selectedClassName}${pendingClassName}`
       : `resource-planner-item resource-planner-item--normal${selectedClassName}${pendingClassName}`;
   }, [pendingMoveIds, selectedItem]);
-  const handleSelectTimelineItem = useCallback((item: ResourcePlannerTimelineItem) => {
+  const handleOpenTimelineItemDetails = useCallback((item: ResourcePlannerTimelineItem) => {
     setSelectedItem(item);
   }, []);
   const handleViewModeChange = useCallback((nextViewMode: ViewMode) => {
@@ -1317,6 +1381,57 @@ export function ResourcePlannerWorkspace({
     },
   ], [handleDeleteResource, handleSetResourceActive, pendingCatalogResourceId, readonly, resources]);
   const showSidePanel = Boolean(selectedItem);
+
+  useEffect(() => {
+    if (pendingCommandCount === 0 || hasBlockedPendingCommand || hasRetryingPendingCommand) {
+      setShowDelayedSyncStatus(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowDelayedSyncStatus(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [hasBlockedPendingCommand, hasRetryingPendingCommand, pendingCommandCount]);
+
+  useEffect(() => {
+    if (savingState !== 'saving' || pendingCommandCount > 0) {
+      setShowDelayedSavingStatus(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowDelayedSavingStatus(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [pendingCommandCount, savingState]);
+
+  useEffect(() => {
+    const plannerScrollElement = plannerSectionRef.current?.querySelector('.gantt-resourceTimeline-scrollContainer');
+    if (!(plannerScrollElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const persistedState = getProjectState(projectId);
+    if (persistedState && (persistedState.plannerScrollLeft !== 0 || persistedState.plannerScrollTop !== 0)) {
+      plannerScrollElement.scrollLeft = persistedState.plannerScrollLeft;
+      plannerScrollElement.scrollTop = persistedState.plannerScrollTop;
+    }
+
+    const handleScroll = () => {
+      setProjectState(projectId, {
+        plannerScrollLeft: plannerScrollElement.scrollLeft,
+        plannerScrollTop: plannerScrollElement.scrollTop,
+      });
+    };
+
+    plannerScrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      plannerScrollElement.removeEventListener('scroll', handleScroll);
+    };
+  }, [displayedPlannerData, getProjectState, projectId, setProjectState]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
@@ -1573,6 +1688,9 @@ export function ResourcePlannerWorkspace({
                   aria-label="Ресурсный календарь"
                   className="min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
                   data-testid="resource-planner-gantt-section"
+                  ref={(element) => {
+                    plannerSectionRef.current = element;
+                  }}
                 >
                   <GanttChart
                     mode="resource-planner"
@@ -1593,7 +1711,8 @@ export function ResourcePlannerWorkspace({
                     enableAddResource={!readonly}
                     resourceMenuCommands={resourceMenuCommands}
                     getItemClassName={getTimelineItemClassName}
-                    onResourceItemClick={handleSelectTimelineItem}
+                    activeResourceItemId={selectedItem?.id ?? null}
+                    onResourceItemMenuClick={handleOpenTimelineItemDetails}
                     onResourceItemMove={readonly ? undefined : persistPlannerMove}
                   />
                 </section>
@@ -1649,17 +1768,35 @@ export function ResourcePlannerWorkspace({
                   </span>
                 )}
 
-                {!readonly && !plannerSaveError && pendingMoveCount > 0 && (
-                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
-                    <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
-                    Сохранение...
+                {!plannerSaveError && showSyncStatus && (
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5 font-mono text-[11px] transition-colors',
+                      hasBlockedPendingCommand ? 'text-red-600' : 'text-amber-600',
+                    )}
+                    data-testid="planner-sync-status"
+                  >
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        hasBlockedPendingCommand ? 'bg-red-400' : 'bg-amber-400 animate-pulse',
+                      )}
+                    />
+                    {hasBlockedPendingCommand
+                      ? 'Конфликт версии'
+                      : pendingCommandCount > 0
+                        ? 'Синхронизация...'
+                        : 'Офлайн'}
                   </span>
                 )}
 
-                {!readonly && !plannerSaveError && pendingMoveCount === 0 && (
-                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-600">
-                    <Check className="h-3 w-3 shrink-0" />
-                    Сохранено
+                {!plannerSaveError && showSavingStatus && (
+                  <span
+                    className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600 transition-colors"
+                    data-testid="planner-saving-status"
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
+                    Сохранение...
                   </span>
                 )}
               </footer>
@@ -1677,6 +1814,7 @@ export function ResourcePlannerWorkspace({
               assignedResources={selectedAssignedResources}
               readonly={readonly}
               onClose={() => setSelectedItem(null)}
+              onOpenTask={onOpenTask}
               onAddResource={handleAddAssignment}
               onResourceChange={handleDetailsResourceChange}
               onRemoveResource={handleRemoveResource}

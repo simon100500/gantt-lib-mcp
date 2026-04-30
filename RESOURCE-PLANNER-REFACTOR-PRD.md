@@ -281,7 +281,7 @@ buildScheduleDateCommands({
 - Подключить Resource Planner date move к тому же helper-у.
 - Исключить отдельную optimistic schedule truth внутри planner для date-only moves.
 
-### Status on 2026-04-30
+### Status on 2026-05-01
 
 Текущий статус нужно читать как фактический прогресс по коду, а не как декларацию полной готовности refactor PRD.
 
@@ -292,34 +292,62 @@ buildScheduleDateCommands({
   - projection boundary зафиксирован;
   - общий helper для schedule date commands выделен.
 - Общий helper уже используется и в Gantt diff flow, и в Resource Planner move classification.
-- Для `current-project` date-visible часть Resource Planner переведена на overlay от `deriveVisibleSnapshot(...)`.
+- Для `current-project` date-visible часть Resource Planner больше не берётся из planner cache как primary source.
 - Для `date-only` moves Resource Planner больше не должен опираться на отдельный локальный optimistic planner patch как на primary source дат.
+- Внутри `ResourcePlannerWorkspace` отделены:
+  - schedule command path;
+  - assignment mutation path;
+  - reconciliation path.
+- Для `current-project` собран явный projection builder `visible tasks + resources + assignments -> timeline`.
+- Assignment success-path больше не обязан локально патчить planner timeline для UI; UI строится от store-driven projection.
+- Resource Planner statusbar по поведению выровнен с Gantt:
+  - delayed `Синхронизация...`;
+  - delayed `Сохранение...`;
+  - `Конфликт версии` из shared pending command state.
+- Optimistic reassignment больше не живёт на planner-local overlay:
+  - reassignment preview пишет в `assignments` store;
+  - projection перестраивается из store-driven state;
+  - rollback для reassignment делается через restore task assignments, а не через старый planner patch source.
+- Для schedule moves в Resource Planner добавлен атомарный preview на весь command batch:
+  - planner использует `dragPreview` snapshot на время commit loop;
+  - intermediate pending-step state больше не должен быть primary visible source для date move внутри planner.
+- Projection builder сохраняет planner rows как fallback topology source даже для пустых строк после optimistic move.
+- Добавлены targeted tests на:
+  - delayed sync status в planner footer;
+  - optimistic reassignment между ресурсами до ответа backend;
+  - стабильный lag-aware drag preview до завершения schedule save.
 
 #### Partial
 
-- Phase 2 начат, но не завершён целиком.
-- `persistPlannerMove(...)` всё ещё остаётся смешанной точкой, где рядом живут:
-  - общий schedule command pipeline;
-  - отдельный assignment mutation flow;
-  - reconciliation через planner reload.
-- `resourcePlannerCache` всё ещё участвует в UI как источник topology/conflict metadata и части assignment-state.
+- Phase 2 в основном закрыт по текущему `current-project` scope, но ещё не доведён до полного hardening.
+- Phase 3 и Phase 4 существенно продвинуты, но ещё не завершены.
+- `resourcePlannerCache` всё ещё участвует в экране как источник:
+  - conflict metadata;
+  - planner hydration/reconciliation;
+  - fallback topology/details в тех местах, где store пока не несёт полный authoritative contract.
 
 #### Not done yet
 
-- Не завершён Phase 3:
-  - нет полного projection layer `visible project state + resources + assignments -> resource timeline`;
-  - `resourcePlannerCache` ещё не сведен только к hydration/reconciliation роли.
-- Не завершён Phase 4:
-  - assignment add/remove/reassign всё ещё идут по отдельной backend-ветке с локальными planner patch/reload semantics.
+- Не завершён Phase 3 полностью:
+  - `resourcePlannerCache` ещё не сведен только к hydration/reconciliation роли;
+  - conflict/topology fallback всё ещё частично читается из planner payload.
+- Не завершён Phase 4 полностью:
+  - assignment add/remove/reassign всё ещё идут по отдельной backend-ветке;
+  - saving/error semantics ещё не сведены к полностью одинаковому поведению с command pipeline.
 - Не завершён Phase 5:
   - нет полного hardening по retry/offline/conflict/combined partial failure.
+  - нет отдельного набора integration-level tests на store/projection/reload invariants поверх текущего refactor.
+- Отдельно вне этого PRD восстановлен ожидаемый контракт в `gantt-lib`:
+  - `FS` снова допускает отрицательный lag;
+  - нижняя граница снова ограничена длительностью predecessor;
+  - логика удаления менее жёсткого ограничения при противоречии не менялась.
 
 #### Next implementation step
 
-- Добить Phase 2 до конца:
-  - окончательно отделить schedule mutation path от assignment mutation path;
-  - убрать оставшуюся зависимость date moves от локального planner optimistic state;
-  - оставить planner payload только как hydration/conflict/topology source, а не как источник видимых task dates.
+- Идти в hardening:
+  - добавить тесты на согласованность Gantt visible state и Resource Planner projection после pending schedule mutations;
+  - добавить тесты на assignment mutation reconciliation без локального planner patch source;
+  - проверить partial failure и reload semantics после combined move.
 
 ### Phase 3 — Resource projection from visible state
 

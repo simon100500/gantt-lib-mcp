@@ -701,7 +701,6 @@ export function ProjectWorkspace({
   const previousGanttDayModeRef = useRef(ganttDayMode);
   const [splitTaskDraft, setSplitTaskDraft] = useState<Task | null>(null);
   const [taskChatDraft, setTaskChatDraft] = useState<Task | null>(null);
-  const taskReferenceHighlightTimeoutRef = useRef<number | null>(null);
   const {
     items: historyItems,
     loading: historyLoading,
@@ -828,28 +827,19 @@ export function ProjectWorkspace({
   }, [setChatComposerDraft, setWorkspace]);
 
   const handleTaskReferenceClick = useCallback((taskId: string) => {
-    ganttRef.current?.scrollToRow(taskId);
-    setTempHighlightedTaskId(taskId);
-
-    if (taskReferenceHighlightTimeoutRef.current !== null) {
-      window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
+    if (typeof ganttRef.current?.scrollToRow === 'function') {
+      ganttRef.current.scrollToRow(taskId, { behavior: 'auto' });
     }
-
-    taskReferenceHighlightTimeoutRef.current = window.setTimeout(() => {
-      setTempHighlightedTaskId(null);
-      taskReferenceHighlightTimeoutRef.current = null;
-    }, 2000);
-  }, [ganttRef, setTempHighlightedTaskId]);
+    if (typeof ganttRef.current?.scrollToTask === 'function') {
+      window.requestAnimationFrame(() => {
+        ganttRef.current?.scrollToTask(taskId);
+      });
+    }
+  }, [ganttRef]);
 
   useEffect(() => () => {
     historyBranchConfirmResolverRef.current?.(false);
     historyBranchConfirmResolverRef.current = null;
-  }, []);
-
-  useEffect(() => () => {
-    if (taskReferenceHighlightTimeoutRef.current !== null) {
-      window.clearTimeout(taskReferenceHighlightTimeoutRef.current);
-    }
   }, []);
 
   useEffect(() => {

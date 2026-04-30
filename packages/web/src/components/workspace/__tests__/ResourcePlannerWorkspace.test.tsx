@@ -21,6 +21,8 @@ vi.mock('gantt-lib', async () => {
       renderItem?: (item: { id: string; title: string }) => React.ReactNode;
       getItemClassName?: (item: { id: string; title: string }) => string | undefined;
       onResourceItemClick?: (item: { id: string; title: string; subtitle?: string }) => void;
+      onResourceItemMenuClick?: (item: { id: string; title: string; subtitle?: string }) => void;
+      activeResourceItemId?: string | null;
     }) => {
       ganttLibChartSpy(props);
       return (
@@ -49,6 +51,19 @@ vi.mock('gantt-lib', async () => {
                       {item.subtitle ? <span>{item.subtitle}</span> : null}
                     </>
                   )}
+                  {props.onResourceItemMenuClick ? (
+                    <button
+                      type="button"
+                      data-testid={`gantt-resource-item-menu-${item.id}`}
+                      aria-pressed={props.activeResourceItemId === item.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onResourceItemMenuClick?.(item);
+                      }}
+                    >
+                      Menu
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1157,7 +1172,7 @@ describe('ResourcePlanner workspace integration', () => {
     }));
 
     await act(async () => {
-      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="gantt-resource-item-menu-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
@@ -1902,7 +1917,7 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
-      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="gantt-resource-item-menu-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
@@ -1936,7 +1951,7 @@ describe('ResourcePlanner workspace integration', () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[data-testid="assignment-details-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assignment-details-panel"]')).toBeNull();
 
     await unmountApp(root);
   });
@@ -2211,6 +2226,122 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(root);
   });
 
+  it('moves the bar to the target resource optimistically before assignment replacement resolves', async () => {
+    let resolveAssignments: ((value: Response) => void) | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'current-project',
+            workspaceUserId: 'user-1',
+            resources: [{
+              resourceId: 'resource-1',
+              resourceName: 'Crew',
+              hasConflicts: false,
+              conflictCount: 0,
+              intervals: [{
+                assignmentId: 'assignment-1',
+                resourceId: 'resource-1',
+                resourceName: 'Crew',
+                projectId: 'project-1',
+                projectName: 'Project 1',
+                taskId: 'task-1',
+                taskName: 'Install',
+                startDate: '2026-04-01',
+                endDate: '2026-04-03',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }],
+            }, {
+              resourceId: 'resource-2',
+              resourceName: 'QA',
+              hasConflicts: false,
+              conflictCount: 0,
+              intervals: [],
+            }],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources') {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      if (url === '/api/tasks/task-1/assignments' && init?.method === 'POST') {
+        return await new Promise<Response>((resolve) => {
+          resolveAssignments = resolve;
+        });
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({
+      assignments: [
+        { id: 'assignment-1', projectId: 'project-1', taskId: 'task-1', resourceId: 'resource-1', createdAt: '2026-04-01T00:00:00.000Z' },
+      ],
+      confirmed: {
+        version: 1,
+        snapshot: {
+          tasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-01', endDate: '2026-04-03', dependencies: [] }],
+          dependencies: [],
+        },
+      },
+    });
+
+    const { root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    const initialProps = ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as {
+      resources: Array<{ id: string; items: Array<Record<string, unknown>> }>;
+      onResourceItemMove?: (move: Record<string, unknown>) => void;
+    };
+
+    await act(async () => {
+      initialProps.onResourceItemMove?.({
+        item: initialProps.resources[0].items[0],
+        itemId: 'assignment-1',
+        taskId: 'task-1',
+        fromResourceId: 'resource-1',
+        toResourceId: 'resource-2',
+        startDate: new Date(Date.UTC(2026, 3, 1)),
+        endDate: new Date(Date.UTC(2026, 3, 3)),
+        changeType: 'move',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    const optimisticProps = ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as {
+      resources: Array<{ id: string; items: Array<{ id: string }> }>;
+    };
+    expect(optimisticProps.resources.find((resource) => resource.id === 'resource-1')?.items).toHaveLength(0);
+    expect(optimisticProps.resources.find((resource) => resource.id === 'resource-2')?.items[0]?.id).toBe('assignment-1');
+
+    await act(async () => {
+      resolveAssignments?.({
+        ok: true,
+        json: async () => ({
+          assignments: [
+            { id: 'assignment-new', projectId: 'project-1', taskId: 'task-1', resourceId: 'resource-2', createdAt: '2026-04-01T00:00:00.000Z' },
+          ],
+        }),
+      } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await unmountApp(root);
+  });
+
   it('reports exact partial failure copy for combined moves and reloads planner', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -2481,7 +2612,7 @@ describe('ResourcePlanner workspace integration', () => {
     await flushPlannerEffects();
 
     await act(async () => {
-      (container.querySelector('[data-testid="gantt-resource-item-assignment-1"]') as HTMLButtonElement).click();
+      (container.querySelector('[data-testid="gantt-resource-item-menu-assignment-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
@@ -2503,6 +2634,273 @@ describe('ResourcePlanner workspace integration', () => {
       command: { type: 'move_task', taskId: 'task-1', startDate: '2026-04-02' },
       history: { title: 'Перенос назначения' },
     });
+
+    await unmountApp(root);
+  });
+
+  it('shows delayed sync status from shared pending command state in the planner footer', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/resources/planner')) {
+          return {
+            ok: true,
+            json: async () => ({
+              projectId: 'project-1',
+              scope: 'current-project',
+              workspaceUserId: 'user-1',
+              resources: [{
+                resourceId: 'resource-1',
+                resourceName: 'Crew',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [{
+                  assignmentId: 'assignment-1',
+                  resourceId: 'resource-1',
+                  resourceName: 'Crew',
+                  projectId: 'project-1',
+                  projectName: 'Project 1',
+                  taskId: 'task-1',
+                  taskName: 'Install',
+                  startDate: '2026-04-01',
+                  endDate: '2026-04-03',
+                  assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                  hasConflict: false,
+                  conflictCount: 0,
+                  conflictAssignmentIds: [],
+                }],
+              }],
+            }),
+          } as Response;
+        }
+        if (url === '/api/resources?projectId=project-1') {
+          return {
+            ok: true,
+            json: async () => ({
+              resources: [{
+                id: 'resource-1',
+                userId: 'user-1',
+                projectId: null,
+                projectGroupId: null,
+                scope: 'shared',
+                name: 'Crew',
+                type: 'human',
+                isActive: true,
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-01T00:00:00.000Z',
+                deactivatedAt: null,
+              }],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      useProjectStore.setState({
+        confirmed: {
+          version: 1,
+          snapshot: {
+            tasks: [{ id: 'task-1', name: 'Install', startDate: '2026-04-01', endDate: '2026-04-03', dependencies: [] }],
+            dependencies: [],
+          },
+        },
+      });
+
+      const { container, root } = await renderPlannerWorkspace({
+        accessToken: 'token',
+        projectId: 'project-1',
+        onBackToProject: vi.fn(),
+        onCorrectConflict: vi.fn(),
+      });
+      await flushPlannerEffects();
+
+      await act(async () => {
+        useProjectStore.setState({
+          pending: [{
+            requestId: 'req-1',
+            baseVersion: 1,
+            command: { type: 'move_task', taskId: 'task-1', startDate: '2026-04-02' },
+            status: 'pending',
+          }],
+        });
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('[data-testid="planner-sync-status"]')).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector('[data-testid="planner-sync-status"]')?.textContent).toContain('Синхронизация...');
+
+      await unmountApp(root);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a stable drag preview for lagged successor bars until the schedule move finishes', async () => {
+    let resolveCommit: ((value: Response) => void) | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'current-project',
+            workspaceUserId: 'user-1',
+            resources: [{
+              resourceId: 'resource-1',
+              resourceName: 'Crew',
+              hasConflicts: false,
+              conflictCount: 0,
+              intervals: [{
+                assignmentId: 'assignment-a',
+                resourceId: 'resource-1',
+                resourceName: 'Crew',
+                projectId: 'project-1',
+                projectName: 'Project 1',
+                taskId: 'task-a',
+                taskName: 'A',
+                startDate: '2026-04-01',
+                endDate: '2026-04-03',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }, {
+                assignmentId: 'assignment-b',
+                resourceId: 'resource-1',
+                resourceName: 'Crew',
+                projectId: 'project-1',
+                projectName: 'Project 1',
+                taskId: 'task-b',
+                taskName: 'B',
+                startDate: '2026-04-14',
+                endDate: '2026-04-16',
+                assignmentCreatedAt: '2026-04-01T00:00:00.000Z',
+                hasConflict: false,
+                conflictCount: 0,
+                conflictAssignmentIds: [],
+              }],
+            }],
+          }),
+        } as Response;
+      }
+      if (url === '/api/resources?projectId=project-1') {
+        return { ok: true, json: async () => ({ resources: [] }) } as Response;
+      }
+      if (url === '/api/commands/commit' && init?.method === 'POST') {
+        return await new Promise<Response>((resolve) => {
+          resolveCommit = resolve;
+        });
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    useProjectStore.setState({
+      confirmed: {
+        version: 1,
+        snapshot: {
+          tasks: [
+            { id: 'task-a', name: 'A', startDate: '2026-04-01', endDate: '2026-04-03', dependencies: [] },
+            { id: 'task-b', name: 'B', startDate: '2026-04-14', endDate: '2026-04-16', dependencies: [{ taskId: 'task-a', type: 'FS', lag: 10 }] },
+          ],
+          dependencies: [],
+        },
+      },
+      assignments: [
+        { id: 'assignment-a', projectId: 'project-1', taskId: 'task-a', resourceId: 'resource-1', createdAt: '2026-04-01T00:00:00.000Z' },
+        { id: 'assignment-b', projectId: 'project-1', taskId: 'task-b', resourceId: 'resource-1', createdAt: '2026-04-01T00:00:00.000Z' },
+      ],
+    });
+
+    const { root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    const initialProps = ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as {
+      resources: Array<{ id: string; items: Array<Record<string, unknown>> }>;
+      onResourceItemMove?: (move: Record<string, unknown>) => void;
+    };
+
+    await act(async () => {
+      initialProps.onResourceItemMove?.({
+        item: initialProps.resources[0].items[0],
+        itemId: 'assignment-a',
+        taskId: 'task-a',
+        fromResourceId: 'resource-1',
+        toResourceId: 'resource-1',
+        startDate: new Date(Date.UTC(2026, 3, 5)),
+        endDate: new Date(Date.UTC(2026, 3, 7)),
+        changeType: 'move',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    const previewSnapshot = useProjectStore.getState().dragPreview?.snapshot;
+    expect(previewSnapshot).toBeDefined();
+
+    const previewTaskB = previewSnapshot?.tasks.find((task) => task.id === 'task-b');
+    expect(previewTaskB?.startDate).not.toBe('2026-04-14');
+
+    const previewProps = ganttLibChartSpy.mock.calls[ganttLibChartSpy.mock.calls.length - 1]?.[0] as {
+      resources: Array<{ items: Array<{ taskId?: string; startDate?: string; endDate?: string }> }>;
+    };
+    const previewItemB = previewProps.resources.flatMap((resource) => resource.items).find((item) => item.taskId === 'task-b');
+    expect(previewItemB?.startDate).toBe(previewTaskB?.startDate);
+    expect(previewItemB?.endDate).toBe(previewTaskB?.endDate);
+
+    await act(async () => {
+      resolveCommit?.({
+        ok: true,
+        json: async () => ({
+          clientRequestId: 'req-1',
+          accepted: true,
+          baseVersion: 1,
+          newVersion: 2,
+          snapshot: {
+            tasks: [
+              { id: 'task-a', name: 'A', startDate: '2026-04-05', endDate: '2026-04-07', dependencies: [] },
+              { id: 'task-b', name: 'B', startDate: previewTaskB?.startDate, endDate: previewTaskB?.endDate, dependencies: [{ taskId: 'task-a', type: 'FS', lag: 10 }] },
+            ],
+            dependencies: [],
+          },
+          result: {
+            changedTaskIds: ['task-a', 'task-b'],
+            changedTasks: [
+              { id: 'task-a', name: 'A', startDate: '2026-04-05', endDate: '2026-04-07', dependencies: [] },
+              { id: 'task-b', name: 'B', startDate: previewTaskB?.startDate, endDate: previewTaskB?.endDate, dependencies: [{ taskId: 'task-a', type: 'FS', lag: 10 }] },
+            ],
+            changedDependencyIds: [],
+            conflicts: [],
+            patches: [],
+          },
+          changedTaskIds: ['task-a', 'task-b'],
+          changedTasks: [
+            { id: 'task-a', name: 'A', startDate: '2026-04-05', endDate: '2026-04-07', dependencies: [] },
+            { id: 'task-b', name: 'B', startDate: previewTaskB?.startDate, endDate: previewTaskB?.endDate, dependencies: [{ taskId: 'task-a', type: 'FS', lag: 10 }] },
+          ],
+          changedDependencyIds: [],
+          conflicts: [],
+          historyGroupId: 'history-1',
+        }),
+      } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(useProjectStore.getState().dragPreview).toBeUndefined();
 
     await unmountApp(root);
   });

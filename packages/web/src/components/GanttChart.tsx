@@ -60,10 +60,16 @@ export interface GanttChartProps {
   hiddenTaskListColumns?: TaskListColumnId[];
 }
 
+export interface ScrollToRowOptions {
+  select?: boolean;
+  behavior?: ScrollBehavior;
+  clearSelectionAfterMs?: number;
+}
+
 export interface GanttChartRef {
   scrollToToday: () => void;
   scrollToTask: (taskId: string) => void;
-  scrollToRow: (taskId: string) => void;
+  scrollToRow: (taskId: string, options?: ScrollToRowOptions) => void;
   collapseAll: () => void;
   expandAll: () => void;
   exportToPdf: (options?: ExportToPdfOptions) => Promise<void>;
@@ -110,7 +116,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
     scrollToTask: (taskId: string) => void;
-    scrollToRow: (taskId: string) => void;
+    scrollToRow: (taskId: string, options?: ScrollToRowOptions) => void;
     collapseAll: () => void;
     expandAll: () => void;
     exportToPdf: (options?: ExportToPdfOptions) => Promise<void>;
@@ -119,7 +125,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   useImperativeHandle(ref, () => ({
     scrollToToday: () => ganttLibRef.current?.scrollToToday(),
     scrollToTask: (taskId: string) => ganttLibRef.current?.scrollToTask(taskId),
-    scrollToRow: (taskId: string) => ganttLibRef.current?.scrollToRow(taskId),
+    scrollToRow: (taskId: string, options?: ScrollToRowOptions) => ganttLibRef.current?.scrollToRow(taskId, options),
     collapseAll: () => ganttLibRef.current?.collapseAll(),
     expandAll: () => ganttLibRef.current?.expandAll(),
     exportToPdf: (options) => ganttLibRef.current?.exportToPdf(options) ?? Promise.resolve(),

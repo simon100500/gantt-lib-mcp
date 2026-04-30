@@ -2,6 +2,8 @@ import type { ResourceTimelineItem } from 'gantt-lib';
 import { describe, expect, it } from 'vitest';
 
 import type { ProjectResource, ResourcePlannerResult, TaskAssignmentRecord } from '../../../lib/apiTypes.ts';
+import { getDefaultProjectScheduleOptions } from '../../../lib/projectScheduleOptions.ts';
+import { deriveVisibleSnapshot } from '../../../stores/useProjectStore.ts';
 import {
   buildCurrentProjectResourceTimeline,
   getPlannerItemMetadata,
@@ -180,6 +182,66 @@ describe('resourcePlannerAdapter', () => {
     expect(projected[1]).toMatchObject({
       id: 'resource-empty',
       items: [],
+    });
+  });
+
+  it('keeps resource planner bars in sync with pending visible schedule state', () => {
+    const resources: ProjectResource[] = [
+      {
+        id: 'resource-1',
+        userId: 'user-1',
+        projectId: null,
+        projectGroupId: null,
+        scope: 'shared',
+        name: 'Shared Designer',
+        type: 'human',
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        deactivatedAt: null,
+      },
+    ];
+    const assignments: TaskAssignmentRecord[] = [
+      {
+        id: 'assignment-1',
+        projectId: 'project-1',
+        taskId: 'task-2',
+        resourceId: 'resource-1',
+        createdAt: '2026-04-01T00:00:00.000Z',
+      },
+    ];
+    const visibleSnapshot = deriveVisibleSnapshot(
+      {
+        tasks: [{ id: 'task-2', name: 'Landing', startDate: '2026-04-01', endDate: '2026-04-03', dependencies: [] }],
+        dependencies: [],
+      },
+      [{
+        requestId: 'req-1',
+        baseVersion: 1,
+        command: { type: 'move_task', taskId: 'task-2', startDate: '2026-04-02' },
+        status: 'pending',
+      }],
+      undefined,
+      getDefaultProjectScheduleOptions(),
+    );
+
+    const projected = buildCurrentProjectResourceTimeline(
+      'project-1',
+      visibleSnapshot.tasks,
+      resources,
+      assignments,
+      plannerResult,
+    );
+
+    expect(visibleSnapshot.tasks[0]).toMatchObject({
+      id: 'task-2',
+      startDate: '2026-04-02',
+      endDate: '2026-04-04',
+    });
+    expect(projected[0]?.items[0]).toMatchObject({
+      id: 'assignment-1',
+      startDate: '2026-04-02',
+      endDate: '2026-04-04',
     });
   });
 });

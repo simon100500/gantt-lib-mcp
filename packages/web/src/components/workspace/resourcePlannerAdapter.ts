@@ -262,6 +262,19 @@ export function buildCurrentProjectResourceTimeline(
     }, resourceById.get(resourceId)));
   }
 
+  const renderedResourceIds = new Set(timelineResources.map((resource) => resource.id));
+  for (const plannerResource of plannerResult?.resources ?? []) {
+    if (renderedResourceIds.has(plannerResource.resourceId)) {
+      continue;
+    }
+
+    timelineResources.push(enrichTimelineResource({
+      id: plannerResource.resourceId,
+      name: plannerResource.resourceName,
+      items: projectedItemsByResourceId.get(plannerResource.resourceId) ?? [],
+    }, resourceById.get(plannerResource.resourceId)));
+  }
+
   return timelineResources;
 }
 
