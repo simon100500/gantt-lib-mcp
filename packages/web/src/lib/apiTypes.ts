@@ -5,6 +5,7 @@ import type {
   ResourceScope,
   ResourceType,
   Task,
+  ProjectGroup,
 } from '../types.ts';
 
 export type {
@@ -14,12 +15,14 @@ export type {
   ResourcePlannerResult,
   ResourceScope,
   ResourceType,
+  ProjectGroup,
 } from '../types.ts';
 
 export interface ProjectResource {
   id: string;
   userId: string;
   projectId: string | null;
+  projectGroupId?: string | null;
   scope: ResourceScope;
   name: string;
   type: ResourceType;

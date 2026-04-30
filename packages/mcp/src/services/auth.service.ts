@@ -177,8 +177,8 @@ export class AuthService {
    * @param name - Project name
    * @returns Newly created Project
    */
-  async createProject(userId: string, name: string): Promise<Project> {
-    return projectService.create(userId, name);
+  async createProject(userId: string, name: string, groupId?: string): Promise<Project> {
+    return projectService.create(userId, name, groupId);
   }
 
   /**

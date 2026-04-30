@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConstraintDenialPayload } from '../lib/constraintUi';
-import type { CalendarDay } from '../types';
+import type { CalendarDay, ProjectGroup } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -17,8 +17,9 @@ const REFRESH_TOKEN_KEY = 'gantt_refresh_token';
 const USER_KEY = 'gantt_user';
 const PROJECT_KEY = 'gantt_project';
 const PROJECTS_KEY = 'gantt_projects';
+const PROJECT_GROUPS_KEY = 'gantt_project_groups';
 const ADMIN_CONTEXT_KEY = 'gantt_admin_context';
-const AUTH_STORAGE_KEYS = [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PROJECT_KEY, PROJECTS_KEY, ADMIN_CONTEXT_KEY] as const;
+const AUTH_STORAGE_KEYS = [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PROJECT_KEY, PROJECTS_KEY, PROJECT_GROUPS_KEY, ADMIN_CONTEXT_KEY] as const;
 
 export interface AuthUser {
   id: string;
@@ -30,6 +31,7 @@ export type ProjectStatus = 'active' | 'archived';
 
 export interface AuthProject {
   id: string;
+  groupId?: string;
   name: string;
   status: ProjectStatus;
   ganttDayMode: GanttDayMode;
@@ -51,6 +53,7 @@ export interface AuthState {
   project: AuthProject | null;
   accessToken: string | null;
   projects: AuthProject[];
+  projectGroups: ProjectGroup[];
   adminContext: AdminContext | null;
   constraintDenial: Partial<ConstraintDenialPayload> | null;
 }
@@ -64,7 +67,10 @@ export interface UseAuthResult extends AuthState {
     adminContext: AdminContext,
   ): void;
   switchProject(projectId: string): Promise<void>;
-  createProject(name: string): Promise<AuthProject | null>;
+  createProject(name: string, groupId?: string): Promise<AuthProject | null>;
+  createProjectGroup(name: string): Promise<ProjectGroup | null>;
+  updateProjectGroup(groupId: string, updates: { name: string }): Promise<ProjectGroup>;
+  deleteProjectGroup(groupId: string): Promise<void>;
   updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
   restoreProject(projectId: string): Promise<AuthProject>;
@@ -80,6 +86,7 @@ interface StoredAuthState {
   user: AuthUser | null;
   project: AuthProject | null;
   projects: AuthProject[];
+  projectGroups?: ProjectGroup[];
   adminContext: AdminContext | null;
 }
 
@@ -91,6 +98,7 @@ const INITIAL_AUTH_STATE: AuthState = {
   project: null,
   accessToken: null,
   projects: [],
+  projectGroups: [],
   adminContext: null,
   constraintDenial: null,
 };
@@ -111,13 +119,14 @@ function clearStoredAuth(): void {
   window.localStorage.removeItem(USER_KEY);
   window.localStorage.removeItem(PROJECT_KEY);
   window.localStorage.removeItem(PROJECTS_KEY);
+  window.localStorage.removeItem(PROJECT_GROUPS_KEY);
   window.localStorage.removeItem(ADMIN_CONTEXT_KEY);
 }
 
 function persistStoredAuth(nextState: StoredAuthState): void {
   if (!canUseDOM()) return;
 
-  const { accessToken, refreshToken, user, project, projects, adminContext } = nextState;
+  const { accessToken, refreshToken, user, project, projects, projectGroups = [], adminContext } = nextState;
 
   if (accessToken) {
     window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
@@ -144,6 +153,7 @@ function persistStoredAuth(nextState: StoredAuthState): void {
   }
 
   window.localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  window.localStorage.setItem(PROJECT_GROUPS_KEY, JSON.stringify(projectGroups));
 
   if (adminContext) {
     window.localStorage.setItem(ADMIN_CONTEXT_KEY, JSON.stringify(adminContext));
@@ -160,6 +170,7 @@ function readStoredAuth(): StoredAuthState | null {
   const userStr = window.localStorage.getItem(USER_KEY);
   const projectStr = window.localStorage.getItem(PROJECT_KEY);
   const projectsStr = window.localStorage.getItem(PROJECTS_KEY);
+  const projectGroupsStr = window.localStorage.getItem(PROJECT_GROUPS_KEY);
   const adminContextStr = window.localStorage.getItem(ADMIN_CONTEXT_KEY);
 
   if (!accessToken || !userStr) {
@@ -170,6 +181,7 @@ function readStoredAuth(): StoredAuthState | null {
     const user = JSON.parse(userStr) as AuthUser;
     const normalizeProject = (value: AuthProject): AuthProject => ({
       ...value,
+      groupId: value.groupId ?? '',
       status: value.status ?? 'active',
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
@@ -178,6 +190,7 @@ function readStoredAuth(): StoredAuthState | null {
     const projects = projectsStr
       ? (JSON.parse(projectsStr) as AuthProject[]).map(normalizeProject)
       : project ? [project] : [];
+    const projectGroups = projectGroupsStr ? JSON.parse(projectGroupsStr) as ProjectGroup[] : [];
 
     return {
       accessToken,
@@ -185,6 +198,7 @@ function readStoredAuth(): StoredAuthState | null {
       user,
       project,
       projects,
+      projectGroups,
       adminContext: adminContextStr ? JSON.parse(adminContextStr) as AdminContext : null,
     };
   } catch {
@@ -204,6 +218,7 @@ function toAuthState(storedState: StoredAuthState | null): AuthState {
     project: storedState.project,
     accessToken: storedState.accessToken,
     projects: storedState.projects.length > 0 ? storedState.projects : (storedState.project ? [storedState.project] : []),
+    projectGroups: storedState.projectGroups ?? [],
     adminContext: storedState.adminContext,
     constraintDenial: null,
   };
@@ -226,6 +241,21 @@ async function fetchProjects(accessToken: string): Promise<AuthProject[]> {
 
   const data = await response.json() as { projects: AuthProject[] };
   return data.projects;
+}
+
+async function fetchProjectGroups(accessToken: string): Promise<ProjectGroup[]> {
+  const response = await fetch('/api/project-groups', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const data = await response.json() as { groups: ProjectGroup[] };
+  return data.groups;
 }
 
 async function fetchWithAuthRetry(
@@ -334,6 +364,7 @@ function persistAuthSnapshot(state: {
   user: AuthUser | null;
   project: AuthProject | null;
   projects: AuthProject[];
+  projectGroups?: ProjectGroup[];
   adminContext: AdminContext | null;
 }): void {
   persistStoredAuth({
@@ -342,6 +373,7 @@ function persistAuthSnapshot(state: {
     user: state.user,
     project: state.project,
     projects: state.projects,
+    projectGroups: state.projectGroups ?? useAuthStore.getState().projectGroups,
     adminContext: state.adminContext,
   });
 }
@@ -365,6 +397,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   login(tokens, user, project) {
     const fallbackProjects = [project];
+    const fallbackGroups: ProjectGroup[] = project.groupId ? [{
+      id: project.groupId,
+      userId: user.id,
+      name: 'Проекты',
+      isDefault: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      projectCount: fallbackProjects.length,
+    }] : [];
 
     persistStoredAuth({
       accessToken: tokens.accessToken,
@@ -372,6 +413,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user,
       project,
       projects: fallbackProjects,
+      projectGroups: fallbackGroups,
       adminContext: null,
     });
 
@@ -381,18 +423,21 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       project,
       accessToken: tokens.accessToken,
       projects: fallbackProjects,
+      projectGroups: fallbackGroups,
       adminContext: null,
     });
 
-    void fetchProjects(tokens.accessToken)
-      .then((projects) => {
+    void Promise.all([fetchProjects(tokens.accessToken), fetchProjectGroups(tokens.accessToken)])
+      .then(([projects, projectGroups]) => {
         const nextProjects = projects.length > 0 ? projects : fallbackProjects;
+        const nextProjectGroups = projectGroups.length > 0 ? projectGroups : fallbackGroups;
         persistStoredAuth({
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
           user,
           project,
           projects: nextProjects,
+          projectGroups: nextProjectGroups,
           adminContext: null,
         });
 
@@ -402,6 +447,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           project,
           accessToken: tokens.accessToken,
           projects: nextProjects,
+          projectGroups: nextProjectGroups,
           adminContext: null,
         });
       })
@@ -418,6 +464,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   assumeAdminProjectSession(tokens, project, adminContext) {
     const state = get();
     const projects = [project];
+    const projectGroups: ProjectGroup[] = project.groupId ? [{
+      id: project.groupId,
+      userId: adminContext.targetUserId ?? '',
+      name: 'Проекты',
+      isDefault: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      projectCount: projects.length,
+    }] : [];
 
     persistStoredAuth({
       accessToken: tokens.accessToken,
@@ -425,6 +480,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project,
       projects,
+      projectGroups,
       adminContext,
     });
 
@@ -433,6 +489,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       accessToken: tokens.accessToken,
       project,
       projects,
+      projectGroups,
       adminContext,
     });
   },
@@ -472,6 +529,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           user: state.user,
           project: state.project,
           projects: state.projects,
+          projectGroups: state.projectGroups,
           adminContext: state.adminContext,
         });
 
@@ -517,9 +575,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     };
 
     let projects = get().projects;
+    let projectGroups = get().projectGroups;
     try {
-      const fetchedProjects = await fetchProjects(data.accessToken);
+      const [fetchedProjects, fetchedGroups] = await Promise.all([fetchProjects(data.accessToken), fetchProjectGroups(data.accessToken)]);
       projects = fetchedProjects.length > 0 ? fetchedProjects : projects;
+      projectGroups = fetchedGroups.length > 0 ? fetchedGroups : projectGroups;
     } catch (error) {
       console.error('Failed to refresh projects after switch:', error);
     }
@@ -531,6 +591,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       user: state.user,
       project: data.project,
       projects,
+      projectGroups,
       adminContext: null,
     });
 
@@ -538,12 +599,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       accessToken: data.accessToken,
       project: data.project,
       projects,
+      projectGroups,
       isAuthenticated: true,
       adminContext: null,
     });
   },
 
-  async createProject(name) {
+  async createProject(name, groupId) {
     if (!get().accessToken) {
       return null;
     }
@@ -554,7 +616,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, ...(groupId ? { groupId } : {}) }),
       });
 
       if (response.status === 403) {
@@ -578,6 +640,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: state.user,
         project: state.project,
         projects,
+        projectGroups: state.projectGroups,
         adminContext: state.adminContext,
       });
 
@@ -587,6 +650,106 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       console.error('Failed to create project:', error);
       return null;
     }
+  },
+
+  async createProjectGroup(name) {
+    const state = get();
+    if (!state.accessToken) {
+      return null;
+    }
+
+    const { response, token } = await fetchWithAuthRetry('/api/project-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json() as { group: ProjectGroup };
+    const nextState = get();
+    const projectGroups = [...nextState.projectGroups, data.group];
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: nextState.user,
+      project: nextState.project,
+      projects: nextState.projects,
+      projectGroups,
+      adminContext: nextState.adminContext,
+    });
+
+    set({ accessToken, projectGroups });
+    return data.group;
+  },
+
+  async updateProjectGroup(groupId, updates) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response, token } = await fetchWithAuthRetry(`/api/project-groups/${groupId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to update project group');
+    }
+
+    const data = await response.json() as { group: ProjectGroup };
+    const nextState = get();
+    const projectGroups = nextState.projectGroups.map((group) => (group.id === data.group.id ? data.group : group));
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: nextState.user,
+      project: nextState.project,
+      projects: nextState.projects,
+      projectGroups,
+      adminContext: nextState.adminContext,
+    });
+
+    set({ accessToken, projectGroups });
+    return data.group;
+  },
+
+  async deleteProjectGroup(groupId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response, token } = await fetchWithAuthRetry(`/api/project-groups/${groupId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to delete project group');
+    }
+
+    const nextState = get();
+    const projectGroups = nextState.projectGroups.filter((group) => group.id !== groupId);
+    const accessToken = token ?? state.accessToken;
+
+    persistAuthSnapshot({
+      accessToken,
+      refreshToken: getRefreshToken(),
+      user: nextState.user,
+      project: nextState.project,
+      projects: nextState.projects,
+      projectGroups,
+      adminContext: nextState.adminContext,
+    });
+
+    set({ accessToken, projectGroups });
   },
 
   async updateProject(projectId, updates) {
@@ -792,7 +955,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
 
     try {
-      const projects = await fetchProjects(token);
+      const [projects, projectGroups] = await Promise.all([fetchProjects(token), fetchProjectGroups(token)]);
       const state = get();
       const nextProjects = projects;
       const nextProject = mergeCurrentProject(nextProjects, state.project);
@@ -803,10 +966,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: state.user,
         project: nextProject,
         projects: nextProjects,
+        projectGroups,
         adminContext: state.adminContext,
       });
 
-      set({ project: nextProject, projects: nextProjects });
+      set({ project: nextProject, projects: nextProjects, projectGroups });
     } catch (error) {
       console.error('Failed to refresh projects:', error);
     }

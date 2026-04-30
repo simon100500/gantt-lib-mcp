@@ -23,12 +23,14 @@ export class PlannerValidationError extends Error {
 type ProjectOwnerRow = {
   id: string;
   userId: string;
+  groupId: string;
 };
 
 type PlannerProjectRow = {
   id: string;
   name: string;
   userId: string;
+  groupId: string;
 };
 
 type PlannerAssignmentRow = {
@@ -39,6 +41,7 @@ type PlannerAssignmentRow = {
   resource: {
     id: string;
     projectId: string | null;
+    projectGroupId: string | null;
     userId: string;
     name: string;
     isActive: boolean;
@@ -59,10 +62,10 @@ type PlannerAssignmentRow = {
 
 type PlannerPrismaClient = {
   project: {
-    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerRow | null>;
+    findUnique(args: { where: { id: string }; select: { id: true; userId: true; groupId: true } }): Promise<ProjectOwnerRow | null>;
     findMany(args: {
-      where: { userId: string; status?: { not: 'deleted' }; id?: { in: string[] } };
-      select: { id: true; name: true; userId: true };
+      where: { userId: string; groupId?: string; status?: { not: 'deleted' }; id?: { in: string[] } };
+      select: { id: true; name: true; userId: true; groupId: true };
       orderBy?: Array<{ createdAt?: 'asc' | 'desc' } | { name?: 'asc' | 'desc' }>;
     }): Promise<PlannerProjectRow[]>;
   };
@@ -73,7 +76,8 @@ type PlannerPrismaClient = {
         resource: {
           userId: string;
           projectId?: null | string | { in: Array<string | null> };
-          OR?: Array<{ projectId: null } | { projectId: { in: string[] } }>;
+          projectGroupId?: string;
+          OR?: Array<{ projectGroupId: string } | { projectId: { in: string[] } }>;
         };
       };
       select: {
@@ -81,7 +85,7 @@ type PlannerPrismaClient = {
         createdAt: true;
         projectId: true;
         taskId: true;
-        resource: { select: { id: true; projectId: true; userId: true; name: true; isActive: true } };
+        resource: { select: { id: true; projectId: true; projectGroupId: true; userId: true; name: true; isActive: true } };
         task: {
           select: {
             id: true;
@@ -209,7 +213,7 @@ export class PlannerService {
   private async getWorkspaceBoundaryProject(projectId: string): Promise<ProjectOwnerRow> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, groupId: true },
     });
 
     if (!project) {
@@ -231,10 +235,11 @@ export class PlannerService {
     const workspaceProjects = await this.prisma.project.findMany({
       where: {
         userId: currentProject.userId,
+        groupId: currentProject.groupId,
         status: { not: 'deleted' },
         ...(scopedProjectIds ? { id: { in: scopedProjectIds } } : {}),
       },
-      select: { id: true, name: true, userId: true },
+      select: { id: true, name: true, userId: true, groupId: true },
       orderBy: [{ name: 'asc' }, { id: 'asc' } as never],
     });
 
@@ -248,8 +253,8 @@ export class PlannerService {
     }
 
     const resourceProjectFilter = scope === 'current-project'
-      ? { OR: [{ projectId: null }, { projectId: { in: workspaceProjectIds } }] }
-      : { projectId: null };
+      ? { OR: [{ projectGroupId: currentProject.groupId }, { projectId: { in: workspaceProjectIds } }] }
+      : { projectGroupId: currentProject.groupId };
 
     const plannerRows = await this.prisma.taskAssignment.findMany({
       where: {
@@ -268,6 +273,7 @@ export class PlannerService {
           select: {
             id: true,
             projectId: true,
+            projectGroupId: true,
             userId: true,
             name: true,
             isActive: true,
@@ -308,7 +314,15 @@ export class PlannerService {
         continue;
       }
 
+      if (scope === 'all-projects' && resource.projectGroupId !== currentProject.groupId) {
+        continue;
+      }
+
       if (scope === 'current-project' && resource.projectId !== null && resource.projectId !== projectId) {
+        continue;
+      }
+
+      if (scope === 'current-project' && resource.projectId === null && resource.projectGroupId !== currentProject.groupId) {
         continue;
       }
 
@@ -372,6 +386,7 @@ export class PlannerService {
 
     return {
       projectId,
+      projectGroupId: currentProject.groupId,
       scope,
       workspaceUserId: currentProject.userId,
       resources,

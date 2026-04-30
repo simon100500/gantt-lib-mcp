@@ -358,7 +358,10 @@ function normalizeProjectResource(payload: unknown): ProjectResource | null {
     return null;
   }
 
-  return resource as ProjectResource;
+  return {
+    ...resource,
+    projectGroupId: typeof resource.projectGroupId === 'string' ? resource.projectGroupId : null,
+  } as ProjectResource;
 }
 
 function formatHistoryVersionTimestamp(value: string): string {

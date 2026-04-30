@@ -27,12 +27,14 @@ export class ResourceValidationError extends Error {
 type ProjectOwnerRow = {
   id: string;
   userId: string;
+  groupId: string;
 };
 
 type ResourceRow = {
   id: string;
   userId: string;
   projectId: string | null;
+  projectGroupId: string | null;
   name: string;
   type: PrismaResourceType | ResourceType;
   isActive: boolean;
@@ -41,7 +43,7 @@ type ResourceRow = {
   deactivatedAt: Date | null;
 };
 
-type ProjectOwnerSelection = { id: string; userId: string };
+type ProjectOwnerSelection = { id: string; userId: string; groupId: string };
 type ResourceIdSelection = { id: string };
 
 type ResourceFindFirstArgs = {
@@ -49,21 +51,23 @@ type ResourceFindFirstArgs = {
     id?: string;
     userId?: string;
     name?: string;
-    OR?: Array<{ projectId: null } | { projectId: string }>;
+    OR?: Array<{ projectGroupId: string } | { projectId: string }>;
+    projectId?: string | null;
+    projectGroupId?: string | null;
   };
   select?: { id: true };
 };
 
 type ResourcePrismaClient = {
   project: {
-    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectOwnerSelection | null>;
+    findUnique(args: { where: { id: string }; select: { id: true; userId: true; groupId: true } }): Promise<ProjectOwnerSelection | null>;
   };
   resource: {
     findMany(args: {
       where: {
         userId: string;
         isActive?: boolean;
-        OR: Array<{ projectId: null } | { projectId: string }>;
+        OR: Array<{ projectGroupId: string } | { projectId: string }>;
       };
       orderBy: Array<{ isActive?: 'asc' | 'desc' } | { name?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }>;
     }): Promise<ResourceRow[]>;
@@ -73,6 +77,7 @@ type ResourcePrismaClient = {
         id: string;
         userId: string;
         projectId: string | null;
+        projectGroupId: string | null;
         name: string;
         type: PrismaResourceType;
       };
@@ -84,6 +89,7 @@ type ResourcePrismaClient = {
         type?: PrismaResourceType;
         isActive?: boolean;
         projectId?: string | null;
+        projectGroupId?: string | null;
         deactivatedAt?: Date | null;
       };
     }): Promise<ResourceRow>;
@@ -137,6 +143,7 @@ function toDomain(row: ResourceRow): ProjectResource {
     id: row.id,
     userId: row.userId,
     projectId: row.projectId,
+    projectGroupId: row.projectGroupId,
     scope: row.projectId === null ? 'shared' : 'project',
     name: row.name,
     type: row.type as ResourceType,
@@ -175,7 +182,7 @@ export class ResourceService {
   private async getWorkspaceBoundaryProject(projectId: string): Promise<ProjectOwnerRow> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, groupId: true },
     });
 
     if (!project) {
@@ -188,12 +195,18 @@ export class ResourceService {
     return project;
   }
 
-  private async assertNameAvailable(userId: string, projectId: string | null, name: string, resourceId?: string): Promise<void> {
+  private async assertNameAvailable(
+    userId: string,
+    ownership: { projectId: string; projectGroupId: null } | { projectId: null; projectGroupId: string },
+    name: string,
+    resourceId?: string,
+  ): Promise<void> {
     const existing = await this.prisma.resource.findFirst({
       where: {
         userId,
         name,
-        OR: [{ projectId }, ...(projectId === null ? [] : [])],
+        projectId: ownership.projectId,
+        projectGroupId: ownership.projectGroupId,
       },
       select: { id: true },
     });
@@ -213,8 +226,8 @@ export class ResourceService {
 
     const resources = await this.prisma.resource.findMany({
       where: includeInactive
-        ? { userId: project.userId, OR: [{ projectId: null }, { projectId: normalizedProjectId }] }
-        : { userId: project.userId, isActive: true, OR: [{ projectId: null }, { projectId: normalizedProjectId }] },
+        ? { userId: project.userId, OR: [{ projectGroupId: project.groupId }, { projectId: normalizedProjectId }] }
+        : { userId: project.userId, isActive: true, OR: [{ projectGroupId: project.groupId }, { projectId: normalizedProjectId }] },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }, { createdAt: 'asc' }],
     });
 
@@ -228,14 +241,17 @@ export class ResourceService {
     const scope = normalizeScope(input.scope);
 
     const project = await this.getWorkspaceBoundaryProject(projectId);
-    const owningProjectId = scope === 'shared' ? null : project.id;
-    await this.assertNameAvailable(project.userId, owningProjectId, name);
+    const ownership = scope === 'shared'
+      ? { projectId: null, projectGroupId: project.groupId }
+      : { projectId: project.id, projectGroupId: null };
+    await this.assertNameAvailable(project.userId, ownership, name);
 
     const created = await this.prisma.resource.create({
       data: {
         id: randomUUID(),
         userId: project.userId,
-        projectId: owningProjectId,
+        projectId: ownership.projectId,
+        projectGroupId: ownership.projectGroupId,
         name,
         type,
       },
@@ -257,7 +273,7 @@ export class ResourceService {
       where: {
         id: resourceId,
         userId: project.userId,
-        OR: [{ projectId: null }, { projectId: project.id }],
+        OR: [{ projectGroupId: project.groupId }, { projectId: project.id }],
       },
     }) as ResourceRow | null;
 
@@ -268,10 +284,21 @@ export class ResourceService {
       });
     }
 
-    const nextProjectOwnership = nextScope === undefined ? existing.projectId : nextScope === 'shared' ? null : project.id;
+    const nextOwnership = nextScope === undefined
+      ? { projectId: existing.projectId, projectGroupId: existing.projectGroupId }
+      : nextScope === 'shared'
+        ? { projectId: null, projectGroupId: project.groupId }
+        : { projectId: project.id, projectGroupId: null };
 
     if (nextName !== undefined) {
-      await this.assertNameAvailable(project.userId, nextProjectOwnership, nextName, existing.id);
+      await this.assertNameAvailable(
+        project.userId,
+        nextOwnership.projectId === null
+          ? { projectId: null, projectGroupId: nextOwnership.projectGroupId! }
+          : { projectId: nextOwnership.projectId, projectGroupId: null },
+        nextName,
+        existing.id,
+      );
     }
 
     const nextIsActive = input.isActive;
@@ -280,7 +307,7 @@ export class ResourceService {
       data: {
         ...(nextName !== undefined ? { name: nextName } : {}),
         ...(nextType !== undefined ? { type: nextType } : {}),
-        ...(nextScope !== undefined ? { projectId: nextProjectOwnership } : {}),
+        ...(nextScope !== undefined ? { projectId: nextOwnership.projectId, projectGroupId: nextOwnership.projectGroupId } : {}),
         ...(nextIsActive !== undefined
           ? {
               isActive: nextIsActive,
@@ -306,7 +333,7 @@ export class ResourceService {
       where: {
         id: resourceId,
         userId: project.userId,
-        OR: [{ projectId: null }, { projectId: project.id }],
+        OR: [{ projectGroupId: project.groupId }, { projectId: project.id }],
       },
       select: { id: true },
     });

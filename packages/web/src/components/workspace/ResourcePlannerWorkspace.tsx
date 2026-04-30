@@ -153,6 +153,7 @@ function normalizePlannerPayload(payload: unknown): ResourcePlannerResult | null
 
   return {
     projectId: candidate.projectId,
+    projectGroupId: typeof candidate.projectGroupId === 'string' ? candidate.projectGroupId : '',
     scope: candidate.scope,
     workspaceUserId: candidate.workspaceUserId,
     resources,
@@ -180,7 +181,10 @@ function normalizeProjectResource(payload: unknown): ProjectResource | null {
     return null;
   }
 
-  return resource as ProjectResource;
+  return {
+    ...resource,
+    projectGroupId: typeof resource.projectGroupId === 'string' ? resource.projectGroupId : null,
+  } as ProjectResource;
 }
 
 function normalizeResourceListPayload(payload: unknown): ProjectResource[] | null {

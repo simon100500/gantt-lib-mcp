@@ -6,7 +6,7 @@
  */
 
 import { getPrisma } from '../prisma.js';
-import type { Project } from '../types.js';
+import type { Project, ProjectGroup } from '../types.js';
 import { randomUUID } from 'node:crypto';
 import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
 
@@ -25,6 +25,142 @@ export type SoftDeleteProjectResult =
 export class ProjectService {
   private prisma = getPrisma();
 
+  private groupToDomain(group: any): ProjectGroup {
+    return {
+      id: group.id,
+      userId: group.userId,
+      name: group.name,
+      isDefault: group.isDefault,
+      createdAt: group.createdAt.toISOString(),
+      updatedAt: group.updatedAt.toISOString(),
+      projectCount: group._count?.projects,
+    };
+  }
+
+  async ensureDefaultGroup(userId: string): Promise<ProjectGroup> {
+    const existing = await this.prisma.projectGroup.findFirst({
+      where: { userId, isDefault: true },
+    });
+
+    if (existing) {
+      return this.groupToDomain(existing);
+    }
+
+    const created = await this.prisma.projectGroup.create({
+      data: {
+        id: randomUUID(),
+        userId,
+        name: 'Проекты',
+        isDefault: true,
+      },
+    });
+
+    return this.groupToDomain(created);
+  }
+
+  async listGroupsByUser(userId: string): Promise<ProjectGroup[]> {
+    const groups = await this.prisma.projectGroup.findMany({
+      where: { userId },
+      include: {
+        _count: {
+          select: { projects: true },
+        },
+      },
+      orderBy: [
+        { isDefault: 'desc' },
+        { createdAt: 'asc' },
+      ],
+    });
+
+    if (groups.length > 0) {
+      return groups.map((group) => this.groupToDomain(group));
+    }
+
+    const defaultGroup = await this.ensureDefaultGroup(userId);
+    return [defaultGroup];
+  }
+
+  async createGroup(userId: string, name: string): Promise<ProjectGroup> {
+    const group = await this.prisma.projectGroup.create({
+      data: {
+        id: randomUUID(),
+        userId,
+        name,
+        isDefault: false,
+      },
+      include: {
+        _count: {
+          select: { projects: true },
+        },
+      },
+    });
+
+    return this.groupToDomain(group);
+  }
+
+  async updateGroup(groupId: string, userId: string, updates: { name: string }): Promise<ProjectGroup | null> {
+    const existing = await this.prisma.projectGroup.findFirst({
+      where: { id: groupId, userId },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const group = await this.prisma.projectGroup.update({
+      where: { id: groupId },
+      data: { name: updates.name },
+      include: {
+        _count: {
+          select: { projects: true },
+        },
+      },
+    });
+
+    return this.groupToDomain(group);
+  }
+
+  async deleteGroup(groupId: string, userId: string): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'default_group' | 'not_empty' }> {
+    const existing = await this.prisma.projectGroup.findFirst({
+      where: { id: groupId, userId },
+      include: {
+        _count: {
+          select: { projects: true },
+        },
+      },
+    });
+
+    if (!existing) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    if (existing.isDefault) {
+      return { ok: false, reason: 'default_group' };
+    }
+
+    if (existing._count.projects > 0) {
+      return { ok: false, reason: 'not_empty' };
+    }
+
+    await this.prisma.projectGroup.delete({ where: { id: groupId } });
+    return { ok: true };
+  }
+
+  private async resolveCreateGroupId(userId: string, groupId?: string): Promise<string> {
+    if (groupId?.trim()) {
+      const group = await this.prisma.projectGroup.findFirst({
+        where: { id: groupId.trim(), userId },
+        select: { id: true },
+      });
+      if (group) {
+        return group.id;
+      }
+    }
+
+    return (await this.ensureDefaultGroup(userId)).id;
+  }
+
   /**
    * Convert Prisma Project to domain Project
    * Handles DateTime → string conversion for createdAt
@@ -34,6 +170,7 @@ export class ProjectService {
     return {
       id: project.id,
       userId: project.userId,
+      groupId: project.groupId,
       name: project.name,
       status: project.status,
       ganttDayMode: project.ganttDayMode,
@@ -52,12 +189,14 @@ export class ProjectService {
    * @param name - Project name
    * @returns Newly created Project
    */
-  async create(userId: string, name: string): Promise<Project> {
+  async create(userId: string, name: string, groupId?: string): Promise<Project> {
     const calendarId = await ensureSystemDefaultCalendar(this.prisma);
+    const resolvedGroupId = await this.resolveCreateGroupId(userId, groupId);
     const project = await this.prisma.project.create({
       data: {
         id: randomUUID(),
         userId,
+        groupId: resolvedGroupId,
         name,
         ganttDayMode: 'calendar',
         calendarId,

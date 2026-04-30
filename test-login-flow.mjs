@@ -16,6 +16,7 @@ const { createClient } = await import('@libsql/client');
 const userId = crypto.randomUUID();
 const email = 'test@example.com';
 const projectId = crypto.randomUUID();
+const groupId = crypto.randomUUID();
 const sessionId = crypto.randomUUID();
 
 const tokenPayload = {
@@ -30,6 +31,7 @@ const refreshToken = signRefreshToken(tokenPayload);
 
 console.log('userId:', userId);
 console.log('projectId:', projectId);
+console.log('groupId:', groupId);
 console.log('accessToken:', accessToken.substring(0, 50) + '...');
 
 // Create user, project, session directly in DB
@@ -43,8 +45,13 @@ await db.execute({
 
 // Insert project
 await db.execute({
-  sql: 'INSERT INTO projects (id, user_id, name, created_at) VALUES (?, ?, ?, ?)',
-  args: [projectId, userId, 'Test Project', new Date().toISOString()]
+  sql: 'INSERT INTO project_groups (id, user_id, name, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  args: [groupId, userId, 'Проекты', true, new Date().toISOString(), new Date().toISOString()]
+});
+
+await db.execute({
+  sql: 'INSERT INTO projects (id, user_id, group_id, name, created_at) VALUES (?, ?, ?, ?, ?)',
+  args: [projectId, userId, groupId, 'Test Project', new Date().toISOString()]
 });
 
 // Insert session

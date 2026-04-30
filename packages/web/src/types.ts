@@ -56,9 +56,20 @@ export interface ResourcePlannerResource {
 
 export interface ResourcePlannerResult {
   projectId: string;
+  projectGroupId?: string;
   scope: PlannerScope;
   workspaceUserId: string;
   resources: ResourcePlannerResource[];
+}
+
+export interface ProjectGroup {
+  id: string;
+  userId: string;
+  name: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+  projectCount?: number;
 }
 
 export interface CalendarDay {

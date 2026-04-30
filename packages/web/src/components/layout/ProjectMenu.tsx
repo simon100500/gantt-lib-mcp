@@ -28,7 +28,7 @@ interface ProjectMenuProps {
   hasShareToken: boolean;
   isArchivedProject?: boolean;
   currentProjectLabel: string | undefined;
-  onCreateProject: () => void | Promise<void>;
+  onCreateProject: (groupId?: string) => void | Promise<void>;
   createProjectDisabled?: boolean;
   createProjectTitle?: string;
   projectUsageLabel?: string | null;
@@ -36,6 +36,9 @@ interface ProjectMenuProps {
   onArchiveProject: (projectId: string) => void | Promise<void>;
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
+  onCreateProjectGroup?: () => void | Promise<void>;
+  onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
+  onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
@@ -58,6 +61,9 @@ export function ProjectMenu({
   onArchiveProject,
   onRestoreProject,
   onDeleteProject,
+  onCreateProjectGroup,
+  onRenameProjectGroup,
+  onDeleteProjectGroup,
   onOpenResourcePool,
   onOpenChartMode,
   onSaveProjectName,
@@ -206,7 +212,7 @@ export function ProjectMenu({
 
   const currentProject = useMemo(() => {
     if (workspace.kind === 'draft') {
-      return { id: 'draft', name: workspace.draftName, status: 'active' as const, kind: 'draft' as const };
+      return { id: 'draft', groupId: auth.project?.groupId ?? '', name: workspace.draftName, status: 'active' as const, kind: 'draft' as const };
     }
 
     if (auth.isAuthenticated && auth.project) {
@@ -215,6 +221,7 @@ export function ProjectMenu({
 
     return {
       id: 'demo',
+      groupId: auth.project?.groupId ?? '',
       name: localProjectName || 'Мой проект',
       status: 'active' as const,
       kind: 'project' as const,
@@ -359,8 +366,12 @@ export function ProjectMenu({
           <ProjectSwitcher
             currentProject={currentProject}
             projects={auth.isAuthenticated && auth.project ? auth.projects : []}
+            projectGroups={auth.projectGroups}
             onSwitch={handleSwitchInSidebar}
-            onCreateNew={() => { void onCreateProject(); }}
+            onCreateNew={(groupId) => { void onCreateProject(groupId); }}
+            onCreateGroup={onCreateProjectGroup}
+            onRenameGroup={onRenameProjectGroup}
+            onDeleteGroup={onDeleteProjectGroup}
             createDisabled={createProjectDisabled}
             createTitle={createProjectTitle}
             projectsUsageLabel={projectUsageLabel}
@@ -674,8 +685,12 @@ export function ProjectMenu({
             <ProjectSwitcher
               currentProject={currentProject}
               projects={auth.isAuthenticated && auth.project ? auth.projects : []}
+              projectGroups={auth.projectGroups}
               onSwitch={handleSwitchInOverlay}
-              onCreateNew={() => { void onCreateProject(); }}
+              onCreateNew={(groupId) => { void onCreateProject(groupId); }}
+              onCreateGroup={onCreateProjectGroup}
+              onRenameGroup={onRenameProjectGroup}
+              onDeleteGroup={onDeleteProjectGroup}
               createDisabled={createProjectDisabled}
               createTitle={createProjectTitle}
               projectsUsageLabel={projectUsageLabel}

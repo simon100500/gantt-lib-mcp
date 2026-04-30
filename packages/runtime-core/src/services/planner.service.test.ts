@@ -6,6 +6,7 @@ import type { GetResourcePlannerInput } from '../types.js';
 type ProjectRow = {
   id: string;
   userId: string;
+  groupId: string;
   name: string;
   status: 'active' | 'archived' | 'deleted';
   createdAt: Date;
@@ -15,6 +16,7 @@ type ResourceRow = {
   id: string;
   userId: string;
   projectId: string | null;
+  projectGroupId: string | null;
   name: string;
   isActive: boolean;
 };
@@ -47,25 +49,29 @@ class FakePlannerPrisma {
       if (!project) {
         return null;
       }
-      return { id: project.id, userId: project.userId };
+      return { id: project.id, userId: project.userId, groupId: project.groupId };
     },
-    findMany: async ({ where }: { where: { userId: string; status?: { not: 'deleted' }; id?: { in: string[] } }; select: { id: true; name: true; userId: true } }) => {
+    findMany: async ({ where }: { where: { userId: string; groupId?: string; status?: { not: 'deleted' }; id?: { in: string[] } }; select: { id: true; name: true; userId: true; groupId: true } }) => {
       return Array.from(this.projects.values())
         .filter((project) => project.userId === where.userId)
+        .filter((project) => (where.groupId ? project.groupId === where.groupId : true))
         .filter((project) => (where.status?.not ? project.status !== where.status.not : true))
         .filter((project) => (where.id?.in ? where.id.in.includes(project.id) : true))
         .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
-        .map((project) => ({ id: project.id, name: project.name, userId: project.userId }));
+        .map((project) => ({ id: project.id, name: project.name, userId: project.userId, groupId: project.groupId }));
     },
   };
 
   readonly taskAssignment = {
-    findMany: async ({ where }: { where: { projectId: { in: string[] }; resource: { userId: string; projectId?: null | string | { in: Array<string | null> }; OR?: Array<{ projectId: null } | { projectId: { in: string[] } }> } } }) => {
+    findMany: async ({ where }: { where: { projectId: { in: string[] }; resource: { userId: string; projectId?: null | string | { in: Array<string | null> }; projectGroupId?: string; OR?: Array<{ projectGroupId: string } | { projectId: null } | { projectId: { in: string[] } }> } } }) => {
       const resourceProjectMatches = (resource: ResourceRow): boolean => {
         if (where.resource.OR) {
           return where.resource.OR.some((branch) => {
             if ('projectId' in branch && branch.projectId === null) {
               return resource.projectId === null;
+            }
+            if ('projectGroupId' in branch) {
+              return resource.projectGroupId === branch.projectGroupId;
             }
             if ('projectId' in branch && typeof branch.projectId === 'object' && 'in' in branch.projectId) {
               return resource.projectId !== null && branch.projectId.in.includes(resource.projectId);
@@ -81,6 +87,10 @@ class FakePlannerPrisma {
           }
 
           return resource.projectId === projectIdFilter;
+        }
+
+        if ('projectGroupId' in where.resource && where.resource.projectGroupId !== undefined) {
+          return resource.projectGroupId === where.resource.projectGroupId;
         }
 
         return true;
@@ -105,6 +115,7 @@ class FakePlannerPrisma {
             resource: {
               id: resource.id,
               projectId: resource.projectId,
+              projectGroupId: resource.projectGroupId,
               userId: resource.userId,
               name: resource.name,
               isActive: resource.isActive,
@@ -147,6 +158,7 @@ function createFixture() {
   prisma.projects.set('project-alpha', {
     id: 'project-alpha',
     userId: 'workspace-1',
+    groupId: 'group-1',
     name: 'Alpha Project',
     status: 'active',
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -154,6 +166,7 @@ function createFixture() {
   prisma.projects.set('project-beta', {
     id: 'project-beta',
     userId: 'workspace-1',
+    groupId: 'group-1',
     name: 'Beta Project',
     status: 'active',
     createdAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -161,6 +174,7 @@ function createFixture() {
   prisma.projects.set('project-deleted', {
     id: 'project-deleted',
     userId: 'workspace-1',
+    groupId: 'group-1',
     name: 'Deleted Project',
     status: 'deleted',
     createdAt: new Date('2026-01-03T00:00:00.000Z'),
@@ -168,15 +182,25 @@ function createFixture() {
   prisma.projects.set('project-foreign', {
     id: 'project-foreign',
     userId: 'workspace-2',
+    groupId: 'group-foreign',
     name: 'Foreign Project',
     status: 'active',
     createdAt: new Date('2026-01-04T00:00:00.000Z'),
+  });
+  prisma.projects.set('project-gamma', {
+    id: 'project-gamma',
+    userId: 'workspace-1',
+    groupId: 'group-2',
+    name: 'Gamma Project',
+    status: 'active',
+    createdAt: new Date('2026-01-05T00:00:00.000Z'),
   });
 
   prisma.resources.set('shared-designer', {
     id: 'shared-designer',
     userId: 'workspace-1',
     projectId: null,
+    projectGroupId: 'group-1',
     name: 'Shared Designer',
     isActive: true,
   });
@@ -184,6 +208,7 @@ function createFixture() {
     id: 'shared-qa',
     userId: 'workspace-1',
     projectId: null,
+    projectGroupId: 'group-1',
     name: 'Shared QA',
     isActive: true,
   });
@@ -191,6 +216,7 @@ function createFixture() {
     id: 'local-alpha-only',
     userId: 'workspace-1',
     projectId: 'project-alpha',
+    projectGroupId: null,
     name: 'Alpha Local Crew',
     isActive: true,
   });
@@ -198,6 +224,7 @@ function createFixture() {
     id: 'local-beta-only',
     userId: 'workspace-1',
     projectId: 'project-beta',
+    projectGroupId: null,
     name: 'Beta Local Crew',
     isActive: true,
   });
@@ -205,6 +232,7 @@ function createFixture() {
     id: 'foreign-local',
     userId: 'workspace-2',
     projectId: 'project-foreign',
+    projectGroupId: null,
     name: 'Foreign Local Crew',
     isActive: true,
   });
@@ -212,7 +240,16 @@ function createFixture() {
     id: 'foreign-shared',
     userId: 'workspace-2',
     projectId: null,
+    projectGroupId: 'group-foreign',
     name: 'Foreign Shared Crew',
+    isActive: true,
+  });
+  prisma.resources.set('other-group-shared', {
+    id: 'other-group-shared',
+    userId: 'workspace-1',
+    projectId: null,
+    projectGroupId: 'group-2',
+    name: 'Other Group Shared Crew',
     isActive: true,
   });
 
@@ -243,6 +280,13 @@ function createFixture() {
     name: 'Foreign task',
     startDate: new Date('2026-06-01T00:00:00.000Z'),
     endDate: new Date('2026-06-02T00:00:00.000Z'),
+  });
+  prisma.tasks.set('task-gamma', {
+    id: 'task-gamma',
+    projectId: 'project-gamma',
+    name: 'Gamma task',
+    startDate: new Date('2026-05-03T00:00:00.000Z'),
+    endDate: new Date('2026-05-05T00:00:00.000Z'),
   });
 
   prisma.assignments.set('assignment-alpha', {
@@ -286,6 +330,13 @@ function createFixture() {
     taskId: 'task-foreign',
     resourceId: 'foreign-shared',
     createdAt: new Date(now.getTime() + 6_000),
+  });
+  prisma.assignments.set('assignment-other-group-shared', {
+    id: 'assignment-other-group-shared',
+    projectId: 'project-gamma',
+    taskId: 'task-gamma',
+    resourceId: 'other-group-shared',
+    createdAt: new Date(now.getTime() + 6_500),
   });
   prisma.assignments.set('assignment-missing-task', {
     id: 'assignment-missing-task',
@@ -451,6 +502,7 @@ describe('planner service contracts', () => {
     assert.equal(allIntervalIds.includes('assignment-alpha'), true);
     assert.equal(allIntervalIds.includes('assignment-beta-build'), true);
     assert.equal(allIntervalIds.includes('assignment-beta-review'), true);
+    assert.equal(allIntervalIds.includes('assignment-other-group-shared'), false, 'all-projects scope must exclude shared resources from sibling groups');
     assert.equal(allIntervalIds.includes('assignment-alpha-local'), false, 'all-projects scope must exclude current project-local resources');
     assert.equal(allIntervalIds.includes('assignment-local-leak'), false, 'all-projects scope must exclude sibling project-local resources');
   });
@@ -500,6 +552,7 @@ describe('planner service contracts', () => {
 
     assert.deepEqual(result, {
       projectId: 'project-alpha',
+      projectGroupId: 'group-1',
       scope: 'all-projects',
       workspaceUserId: 'workspace-1',
       resources: [],

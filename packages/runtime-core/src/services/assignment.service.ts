@@ -23,7 +23,7 @@ export class AssignmentValidationError extends Error {
   }
 }
 
-type ProjectRow = { id: string; userId: string };
+type ProjectRow = { id: string; userId: string; groupId: string };
 type TaskRow = {
   id: string;
   projectId: string;
@@ -34,6 +34,7 @@ type ResourceRow = {
   id: string;
   userId: string;
   projectId: string | null;
+  projectGroupId: string | null;
   name: string;
   type: ProjectResource['type'];
   isActive: boolean;
@@ -52,7 +53,7 @@ type AssignmentRow = {
 
 type AssignmentPrismaClient = {
   project: {
-    findUnique(args: { where: { id: string }; select: { id: true; userId: true } }): Promise<ProjectRow | null>;
+    findUnique(args: { where: { id: string }; select: { id: true; userId: true; groupId: true } }): Promise<ProjectRow | null>;
   };
   task: {
     findUnique(args: {
@@ -66,7 +67,7 @@ type AssignmentPrismaClient = {
       where: {
         userId: string;
         id?: { in: string[] };
-        OR: Array<{ projectId: null } | { projectId: string }>;
+        OR: Array<{ projectGroupId: string } | { projectId: string }>;
       };
       orderBy?: Array<{ name?: 'asc' | 'desc' }>;
     }): Promise<ResourceRow[]>;
@@ -107,6 +108,7 @@ function toResource(resource: ResourceRow): ProjectResource {
     id: resource.id,
     userId: resource.userId,
     projectId: resource.projectId,
+    projectGroupId: resource.projectGroupId,
     scope: resource.projectId === null ? 'shared' : 'project',
     name: resource.name,
     type: resource.type,
@@ -144,7 +146,7 @@ export class AssignmentService {
   private async getWorkspaceBoundaryProject(projectId: string, prismaClient: AssignmentPrismaClient): Promise<ProjectRow> {
     const project = await prismaClient.project.findUnique({
       where: { id: projectId },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, groupId: true },
     });
 
     if (!project) {
@@ -237,7 +239,7 @@ export class AssignmentService {
       where: {
         userId: project.userId,
         id: { in: resourceIds },
-        OR: [{ projectId: null }, { projectId: project.id }],
+        OR: [{ projectGroupId: project.groupId }, { projectId: project.id }],
       },
     });
 
@@ -263,6 +265,14 @@ export class AssignmentService {
 
       if (resource.projectId !== null && resource.projectId !== project.id) {
         throw new AssignmentValidationError(`Resource ${resourceId} is local to another project`, {
+          code: 'resource_not_found',
+          field: 'resourceId',
+          detail: resourceId,
+        });
+      }
+
+      if (resource.projectId === null && resource.projectGroupId !== project.groupId) {
+        throw new AssignmentValidationError(`Resource ${resourceId} is shared with another project group`, {
           code: 'resource_not_found',
           field: 'resourceId',
           detail: resourceId,

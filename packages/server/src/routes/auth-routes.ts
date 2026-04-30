@@ -9,7 +9,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { authService, taskService } from '@gantt/mcp/services';
+import { authService, projectService, taskService } from '@gantt/mcp/services';
 import { sendOtpEmail } from '../email.js';
 import {
   generateOtp,
@@ -31,10 +31,11 @@ type AuthSuccessResponse = {
   accessToken: string;
   refreshToken: string;
   user: { id: string; email: string };
-  project: {
-    id: string;
-    name: string;
-    status: 'active' | 'archived' | 'deleted';
+    project: {
+      id: string;
+      name: string;
+      groupId: string;
+      status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
@@ -67,6 +68,7 @@ async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse
     project: {
       id: project.id,
       name: project.name,
+      groupId: project.groupId ?? '',
       status: project.status,
       ganttDayMode: project.ganttDayMode,
       calendarId: project.calendarId,
@@ -337,6 +339,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         id: project.id,
         name: project.name,
+        groupId: project.groupId,
         status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
@@ -368,6 +371,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         id: project.id,
         name: project.name,
+        groupId: project.groupId,
         status: project.status,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
@@ -399,6 +403,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         id: project.id,
         name: project.name,
+        groupId: project.groupId,
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
@@ -415,18 +420,65 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({ projects });
   });
 
+  fastify.get('/api/project-groups', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const groups = await projectService.listGroupsByUser(req.user!.userId);
+    return reply.send({ groups });
+  });
+
+  fastify.post('/api/project-groups', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const body = req.body as { name?: string };
+    const name = body.name?.trim();
+    if (!name) {
+      return reply.status(400).send({ error: 'name required' });
+    }
+
+    const group = await projectService.createGroup(req.user!.userId, name);
+    return reply.status(201).send({ group });
+  });
+
+  fastify.patch<{ Params: { id: string } }>('/api/project-groups/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const body = req.body as { name?: string };
+    const name = body.name?.trim();
+    if (!name) {
+      return reply.status(400).send({ error: 'name required' });
+    }
+
+    const group = await projectService.updateGroup(req.params.id, req.user!.userId, { name });
+    if (!group) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+
+    return reply.send({ group });
+  });
+
+  fastify.delete<{ Params: { id: string } }>('/api/project-groups/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const result = await projectService.deleteGroup(req.params.id, req.user!.userId);
+    if (result.ok) {
+      return reply.send({ ok: true });
+    }
+    if (result.reason === 'default_group') {
+      return reply.status(409).send({ error: 'Default project group cannot be deleted' });
+    }
+    if (result.reason === 'not_empty') {
+      return reply.status(409).send({ error: 'Project group is not empty' });
+    }
+    return reply.status(404).send({ error: 'Project group not found' });
+  });
+
   // ---------------------------------------------------------------------------
   // POST /api/projects
   // ---------------------------------------------------------------------------
   fastify.post('/api/projects', { preHandler: [authMiddleware, requireProjectLimit] }, async (req, reply) => {
-    const body = req.body as { name?: string };
+    const body = req.body as { name?: string; groupId?: string };
     const { name } = body;
 
     if (!name || !name.trim()) {
       return reply.status(400).send({ error: 'name required' });
     }
 
-    const project = await authService.createProject(req.user!.userId, name.trim());
+    const currentProject = await authService.findProjectById(req.user!.projectId);
+    const groupId = body.groupId?.trim() || currentProject?.groupId;
+    const project = await authService.createProject(req.user!.userId, name.trim(), groupId);
     return reply.send({ project });
   });
 

@@ -123,6 +123,7 @@ model User {
 
   // Relations
   projects        Project[]
+  projectGroups   ProjectGroup[]
   resources       Resource[]
   sessions        Session[]
   subscriptions   Subscription[]
@@ -134,10 +135,27 @@ model User {
   @@map("users")
 }
 
+model ProjectGroup {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects  Project[]
+  resources Resource[]
+
+  @@map("project_groups")
+  @@index([userId])
+}
+
 // Projects table
 model Project {
   id           String       @id @default(uuid())
   userId       String       @map("user_id")
+  groupId      String       @map("group_id")
   name         String
   status       ProjectStatus @default(active)
   ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
@@ -149,6 +167,7 @@ model Project {
 
   // Relations
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group         ProjectGroup    @relation(fields: [groupId], references: [id], onDelete: Restrict)
   calendar      WorkCalendar?   @relation("ProjectSelectedCalendar", fields: [calendarId], references: [id], onDelete: SetNull)
   ownedCalendars WorkCalendar[] @relation("ProjectOwnedCalendars")
   sessions      Session[]
@@ -164,6 +183,7 @@ model Project {
 
   @@map("projects")
   @@index([userId])
+  @@index([groupId])
   @@index([userId, status])
   @@index([calendarId])
 }
@@ -363,6 +383,7 @@ model Resource {
   id             String       @id @default(uuid())
   userId         String       @map("user_id")
   projectId      String?      @map("project_id")
+  projectGroupId String?      @map("project_group_id")
   name           String
   type           ResourceType @default(human)
   isActive       Boolean      @default(true) @map("is_active")
@@ -370,18 +391,20 @@ model Resource {
   updatedAt      DateTime     @updatedAt @map("updated_at")
   deactivatedAt  DateTime?    @map("deactivated_at")
 
-  // M003 uses Project.userId as the effective workspace owner boundary until a
-  // first-class workspace model exists. Shared resources have projectId = null;
-  // project-local resources keep their owning projectId.
+  // Project-local resources keep projectId. Shared resources have projectId =
+  // null and projectGroupId set to the owning group.
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   project         Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectGroup    ProjectGroup?    @relation(fields: [projectGroupId], references: [id], onDelete: Cascade)
   taskAssignments TaskAssignment[]
 
   @@map("resources")
   @@index([userId])
   @@index([projectId])
+  @@index([projectGroupId])
   @@index([userId, isActive])
   @@index([userId, projectId, isActive])
+  @@index([userId, projectGroupId, isActive])
 }
 
 model TaskAssignment {

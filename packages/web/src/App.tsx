@@ -465,6 +465,7 @@ interface WorkspaceAppProps {
 interface PendingProjectCreation {
   firstPrompt?: string;
   createEmptyChart?: boolean;
+  groupId?: string;
 }
 
 function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) {
@@ -811,7 +812,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     resetWorkspacePresentation();
 
     try {
-      const newProject = await auth.createProject(name.trim());
+      const newProject = await auth.createProject(name.trim(), options.groupId ?? auth.project?.groupId);
       if (!newProject) {
         queuedPromptRef.current = null;
         createEmptyChartAfterActivationRef.current = false;
@@ -1140,7 +1141,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     workspace,
   ]);
 
-  const handleCreateProject = useCallback(async () => {
+  const handleCreateProject = useCallback(async (groupId?: string) => {
     if (hasShareToken) {
       window.location.assign(window.location.origin);
       return;
@@ -1151,13 +1152,29 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         await openLimitModal(proactiveProjectDenial);
         return;
       }
-      openCreateProjectModal();
+      openCreateProjectModal({ groupId: groupId ?? auth.project?.groupId });
       return;
     }
     queuedPromptRef.current = null;
     setPendingPostAuthAction(null);
     onLoginRequired();
-  }, [auth.isAuthenticated, hasShareToken, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
+  }, [auth.isAuthenticated, auth.project?.groupId, hasShareToken, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
+
+  const handleCreateProjectGroup = useCallback(async () => {
+    const name = window.prompt('Название группы', 'Новая группа')?.trim();
+    if (!name) {
+      return;
+    }
+    await auth.createProjectGroup(name);
+  }, [auth]);
+
+  const handleRenameProjectGroup = useCallback(async (groupId: string, name: string) => {
+    await auth.updateProjectGroup(groupId, { name });
+  }, [auth]);
+
+  const handleDeleteProjectGroup = useCallback(async (groupId: string) => {
+    await auth.deleteProjectGroup(groupId);
+  }, [auth]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
@@ -1711,6 +1728,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}
+      onCreateProjectGroup={handleCreateProjectGroup}
+      onRenameProjectGroup={handleRenameProjectGroup}
+      onDeleteProjectGroup={handleDeleteProjectGroup}
       onOpenResourcePool={handleOpenResourcePool}
       onOpenChartMode={async () => {
         const targetProjectId = workspace.kind === 'planner'

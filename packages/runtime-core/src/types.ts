@@ -73,6 +73,7 @@ export interface ProjectResource {
   id: string;
   userId: string;
   projectId: string | null;
+  projectGroupId?: string | null;
   scope: ResourceScope;
   name: string;
   type: ResourceType;
@@ -168,6 +169,7 @@ export interface ResourcePlannerResource {
 
 export interface ResourcePlannerResult {
   projectId: string;
+  projectGroupId?: string;
   scope: PlannerScope;
   workspaceUserId: string;
   resources: ResourcePlannerResource[];
@@ -477,6 +479,7 @@ export interface User {
 export interface Project {
   id: string;
   userId: string;
+  groupId?: string;
   name: string;
   status: ProjectStatus;
   ganttDayMode: GanttDayMode;
@@ -485,6 +488,16 @@ export interface Project {
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
+}
+
+export interface ProjectGroup {
+  id: string;
+  userId: string;
+  name: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+  projectCount?: number;
 }
 
 export interface WorkCalendar {

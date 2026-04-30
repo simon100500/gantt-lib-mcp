@@ -10,12 +10,13 @@ import type {
   UpdateProjectResourceInput,
 } from '../types.js';
 
-type ProjectRow = { id: string; userId: string };
+type ProjectRow = { id: string; userId: string; groupId: string };
 type TaskRow = { id: string; projectId: string; parentId: string | null };
 type ResourceRow = {
   id: string;
   userId: string;
   projectId: string | null;
+  projectGroupId: string | null;
   name: string;
   type: 'human' | 'equipment' | 'material' | 'other';
   isActive: boolean;
@@ -38,7 +39,7 @@ class FakeRuntimeCorePrisma {
   readonly assignments = new Map<string, AssignmentRow>();
 
   readonly project = {
-    findUnique: async ({ where, select }: { where: { id: string }; select?: { id?: true; userId?: true } }): Promise<ProjectRow | null> => {
+    findUnique: async ({ where, select }: { where: { id: string }; select?: { id?: true; userId?: true; groupId?: true } }): Promise<ProjectRow | null> => {
       const project = this.projects.get(where.id) ?? null;
       if (!project) {
         return null;
@@ -49,6 +50,7 @@ class FakeRuntimeCorePrisma {
       return {
         id: project.id,
         userId: project.userId,
+        groupId: project.groupId,
       };
     },
   };
@@ -76,27 +78,33 @@ class FakeRuntimeCorePrisma {
   };
 
   readonly resource = {
-    findMany: async ({ where }: { where: { userId?: string; projectId?: string | null; isActive?: boolean; id?: { in: string[] }; OR?: Array<{ projectId: string | null } | { projectId: string }> } }) => {
+    findMany: async ({ where }: { where: { userId?: string; projectId?: string | null; projectGroupId?: string | null; isActive?: boolean; id?: { in: string[] }; OR?: Array<{ projectId: string | null } | { projectId: string } | { projectGroupId: string }> } }) => {
       return Array.from(this.resources.values())
         .filter((resource) => (where.userId === undefined ? true : resource.userId === where.userId))
         .filter((resource) => (where.projectId === undefined ? true : resource.projectId === where.projectId))
+        .filter((resource) => (where.projectGroupId === undefined ? true : resource.projectGroupId === where.projectGroupId))
         .filter((resource) => (where.isActive === undefined ? true : resource.isActive === where.isActive))
         .filter((resource) => (where.id?.in ? where.id.in.includes(resource.id) : true))
         .filter((resource) => {
           if (!where.OR || where.OR.length === 0) {
             return true;
           }
-          return where.OR.some((clause) => resource.projectId === clause.projectId);
+          return where.OR.some((clause) => (
+            'projectGroupId' in clause ? resource.projectGroupId === clause.projectGroupId : resource.projectId === clause.projectId
+          ));
         })
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((resource) => ({ ...resource }));
     },
-    findFirst: async ({ where, select }: { where: { id?: string; userId?: string; projectId?: string | null; name?: string; OR?: Array<{ projectId: string | null } | { projectId: string }> }; select?: { id: true } }) => {
+    findFirst: async ({ where, select }: { where: { id?: string; userId?: string; projectId?: string | null; projectGroupId?: string | null; name?: string; OR?: Array<{ projectId: string | null } | { projectId: string } | { projectGroupId: string }> }; select?: { id: true } }) => {
       const found = Array.from(this.resources.values()).find((resource) => {
         if (where.userId !== undefined && resource.userId !== where.userId) {
           return false;
         }
         if (where.projectId !== undefined && resource.projectId !== where.projectId) {
+          return false;
+        }
+        if (where.projectGroupId !== undefined && resource.projectGroupId !== where.projectGroupId) {
           return false;
         }
         if (where.id !== undefined && resource.id !== where.id) {
@@ -105,7 +113,9 @@ class FakeRuntimeCorePrisma {
         if (where.name !== undefined && resource.name !== where.name) {
           return false;
         }
-        if (where.OR && where.OR.length > 0 && !where.OR.some((clause) => resource.projectId === clause.projectId)) {
+        if (where.OR && where.OR.length > 0 && !where.OR.some((clause) => (
+          'projectGroupId' in clause ? resource.projectGroupId === clause.projectGroupId : resource.projectId === clause.projectId
+        ))) {
           return false;
         }
         return true;
@@ -117,12 +127,13 @@ class FakeRuntimeCorePrisma {
 
       return select?.id ? { id: found.id } : { ...found };
     },
-    create: async ({ data }: { data: { id: string; userId: string; projectId: string | null; name: string; type: ResourceRow['type'] } }) => {
+    create: async ({ data }: { data: { id: string; userId: string; projectId: string | null; projectGroupId: string | null; name: string; type: ResourceRow['type'] } }) => {
       const now = new Date();
       const row: ResourceRow = {
         id: data.id,
         userId: data.userId,
         projectId: data.projectId,
+        projectGroupId: data.projectGroupId,
         name: data.name,
         type: data.type,
         isActive: true,
@@ -133,7 +144,7 @@ class FakeRuntimeCorePrisma {
       this.resources.set(row.id, row);
       return { ...row };
     },
-    update: async ({ where, data }: { where: { id: string }; data: Partial<Pick<ResourceRow, 'name' | 'type' | 'isActive' | 'deactivatedAt' | 'projectId'>> }) => {
+    update: async ({ where, data }: { where: { id: string }; data: Partial<Pick<ResourceRow, 'name' | 'type' | 'isActive' | 'deactivatedAt' | 'projectId' | 'projectGroupId'>> }) => {
       const existing = this.resources.get(where.id);
       if (!existing) {
         throw new Error(`Missing resource ${where.id}`);
@@ -206,14 +217,16 @@ class FakeRuntimeCorePrisma {
 
 function createFixture() {
   const prisma = new FakeRuntimeCorePrisma();
-  prisma.projects.set('project-1', { id: 'project-1', userId: 'workspace-user-1' });
-  prisma.projects.set('project-2', { id: 'project-2', userId: 'workspace-user-1' });
-  prisma.projects.set('project-3', { id: 'project-3', userId: 'workspace-user-2' });
+  prisma.projects.set('project-1', { id: 'project-1', userId: 'workspace-user-1', groupId: 'group-1' });
+  prisma.projects.set('project-2', { id: 'project-2', userId: 'workspace-user-1', groupId: 'group-1' });
+  prisma.projects.set('project-3', { id: 'project-3', userId: 'workspace-user-2', groupId: 'group-3' });
+  prisma.projects.set('project-4', { id: 'project-4', userId: 'workspace-user-1', groupId: 'group-2' });
 
   prisma.tasks.set('parent-task', { id: 'parent-task', projectId: 'project-1', parentId: null });
   prisma.tasks.set('leaf-task', { id: 'leaf-task', projectId: 'project-1', parentId: 'parent-task' });
   prisma.tasks.set('project-2-leaf-task', { id: 'project-2-leaf-task', projectId: 'project-2', parentId: null });
   prisma.tasks.set('project-3-leaf-task', { id: 'project-3-leaf-task', projectId: 'project-3', parentId: null });
+  prisma.tasks.set('project-4-leaf-task', { id: 'project-4-leaf-task', projectId: 'project-4', parentId: null });
   prisma.tasks.set('branch-parent', { id: 'branch-parent', projectId: 'project-1', parentId: null });
   prisma.tasks.set('branch-mid', { id: 'branch-mid', projectId: 'project-1', parentId: 'branch-parent' });
   prisma.tasks.set('branch-leaf-a', { id: 'branch-leaf-a', projectId: 'project-1', parentId: 'branch-mid' });
@@ -314,6 +327,11 @@ describe('resource and assignment service contracts', () => {
     await resourceService.create({
       projectId: 'project-3',
       name: 'Other workspace shared',
+      scope: 'shared',
+    });
+    await resourceService.create({
+      projectId: 'project-4',
+      name: 'Other group shared',
       scope: 'shared',
     });
 
@@ -603,6 +621,7 @@ describe('resource and assignment service contracts', () => {
     const shared = await resourceService.create({ projectId: 'project-1', name: 'Shared Alpha', scope: 'shared' });
     const foreignLocal = await resourceService.create({ projectId: 'project-2', name: 'External local crew', scope: 'project' });
     const foreignWorkspaceShared = await resourceService.create({ projectId: 'project-3', name: 'Other workspace shared', scope: 'shared' });
+    const foreignGroupShared = await resourceService.create({ projectId: 'project-4', name: 'Other group shared', scope: 'shared' });
     const inactive = await resourceService.create({ projectId: 'project-1', name: 'Inactive crew', scope: 'project' });
     await resourceService.deactivate('project-1', inactive.id);
 
@@ -682,6 +701,20 @@ describe('resource and assignment service contracts', () => {
         assert.ok(error instanceof AssignmentValidationError);
         assert.equal(error.issue.code, 'resource_not_found');
         assert.equal(error.issue.detail, foreignWorkspaceShared.id);
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      () => assignmentService.replaceForTask({
+        projectId: 'project-1',
+        taskId: 'leaf-task',
+        resourceIds: [foreignGroupShared.id],
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AssignmentValidationError);
+        assert.equal(error.issue.code, 'resource_not_found');
+        assert.equal(error.issue.detail, foreignGroupShared.id);
         return true;
       },
     );
