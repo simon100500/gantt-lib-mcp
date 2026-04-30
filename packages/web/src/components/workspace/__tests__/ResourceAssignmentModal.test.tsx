@@ -75,6 +75,7 @@ function renderModal(
   container: HTMLDivElement;
   root: Root;
   onCancel: ReturnType<typeof vi.fn>;
+  onOpenPlannerAssignment: ReturnType<typeof vi.fn>;
   onSelectionChange: ReturnType<typeof vi.fn>;
   onSubmit: ReturnType<typeof vi.fn>;
 } {
@@ -83,6 +84,7 @@ function renderModal(
   const root = createRoot(container);
   const groups = getTaskAssignmentResourceGroups(task.id, [activeResource, inactiveResource], assignments);
   const onCancel = vi.fn();
+  const onOpenPlannerAssignment = vi.fn();
   const onSelectionChange = vi.fn();
   const onSubmit = vi.fn();
 
@@ -94,6 +96,7 @@ function renderModal(
         error={null}
         inactiveAssignedResources={groups.inactiveAssignedResources}
         onCancel={onCancel}
+        onOpenPlannerAssignment={onOpenPlannerAssignment}
         onSelectionChange={onSelectionChange}
         onSubmit={onSubmit}
         pending={false}
@@ -104,7 +107,7 @@ function renderModal(
     );
   });
 
-  return { container, root, onCancel, onSelectionChange, onSubmit };
+  return { container, root, onCancel, onOpenPlannerAssignment, onSelectionChange, onSubmit };
 }
 
 function unmount(root: Root): void {
@@ -146,21 +149,23 @@ describe('ResourceAssignmentModal', () => {
     const secondOption = container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]') as HTMLButtonElement | null;
     const removeButton = container.querySelector('[data-testid="assignment-selected-resource-remove-resource-active"]') as HTMLButtonElement | null;
     const submitButton = container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement | null;
-    const cancelButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отмена')) as HTMLButtonElement | undefined;
+    const footerCancelButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отмена')) as HTMLButtonElement | undefined;
+    const closeButton = Array.from(container.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Закрыть окно назначения ресурсов') as HTMLButtonElement | undefined;
 
     expect(secondOption?.disabled).toBe(true);
     expect(removeButton?.disabled).toBe(true);
     expect(submitButton?.disabled).toBe(true);
     expect(submitButton?.getAttribute('aria-busy')).toBe('true');
     expect(submitButton?.textContent).toContain('Сохраняем назначение');
-    expect(cancelButton?.disabled).toBe(true);
-    expect(cancelButton?.getAttribute('aria-label')).toBe('Закрыть окно назначения ресурсов');
+    expect(footerCancelButton?.disabled).toBe(true);
+    expect(closeButton?.disabled).toBe(true);
 
     act(() => {
       secondOption?.click();
       removeButton?.click();
       submitButton?.click();
-      cancelButton?.click();
+      footerCancelButton?.click();
+      closeButton?.click();
     });
 
     expect(onSelectionChange).not.toHaveBeenCalled();
@@ -197,6 +202,35 @@ describe('ResourceAssignmentModal', () => {
     });
 
     expect(onSelectionChange).toHaveBeenCalledWith([secondActiveResource.id]);
+
+    unmount(root);
+  });
+
+  it('opens the saved assignment in planner only from persisted active chips', () => {
+    const { container, root, onOpenPlannerAssignment } = renderModal({
+      selectedResourceIds: [activeResource.id, secondActiveResource.id],
+    });
+
+    const persistedChipButton = container.querySelector('[data-testid="assignment-selected-resource-chip-resource-active"]') as HTMLButtonElement | null;
+    const unsavedChipButton = container.querySelector('[data-testid="assignment-selected-resource-chip-resource-second-active"]') as HTMLButtonElement | null;
+    const persistedCard = container.querySelector('[data-testid="assigned-selected-resource-resource-active"]');
+    const unsavedCard = container.querySelector('[data-testid="assigned-selected-resource-resource-second-active"]');
+
+    expect(persistedCard?.textContent).toContain('Active Crew');
+    expect(persistedChipButton?.textContent).toContain('Перейти');
+    expect(persistedChipButton?.disabled).toBe(false);
+    expect(unsavedCard?.textContent).toContain('Second Active Crew');
+    expect(unsavedChipButton).toBeNull();
+
+    act(() => {
+      persistedChipButton?.click();
+    });
+
+    expect(onOpenPlannerAssignment).toHaveBeenCalledTimes(1);
+    expect(onOpenPlannerAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      assignment: expect.objectContaining({ id: 'assignment-active' }),
+      resource: expect.objectContaining({ id: activeResource.id }),
+    }));
 
     unmount(root);
   });

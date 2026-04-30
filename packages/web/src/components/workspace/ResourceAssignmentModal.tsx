@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { Plus, X } from 'lucide-react';
+import { ExternalLink, Plus, X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -18,6 +18,7 @@ export interface ResourceAssignmentModalProps {
   onCancel: () => void;
   onSubmit: (resourceIds: string[]) => void;
   onCreateResource?: () => void;
+  onOpenPlannerAssignment?: (assignment: TaskResourceAssignmentView) => void;
 }
 
 function formatResourceLabel(resource: ProjectResource): string {
@@ -35,6 +36,7 @@ export function ResourceAssignmentModal({
   onCancel,
   onSubmit,
   onCreateResource,
+  onOpenPlannerAssignment,
 }: ResourceAssignmentModalProps) {
   const selectedIds = Array.isArray(selectedResourceIds) ? selectedResourceIds : [];
   const selectedIdSet = new Set(selectedIds);
@@ -44,10 +46,12 @@ export function ResourceAssignmentModal({
   const availableResources = assignableResources.filter((resource) => !selectedIdSet.has(resource.id));
   const resourceLabelsById = new Map<string, string>();
   const resourcesById = new Map<string, ProjectResource>();
+  const activeAssignmentsByResourceId = new Map<string, TaskResourceAssignmentView>();
 
-  for (const { resource } of activeAssignedResources) {
-    resourceLabelsById.set(resource.id, formatResourceLabel(resource));
-    resourcesById.set(resource.id, resource);
+  for (const assignmentView of activeAssignedResources) {
+    resourceLabelsById.set(assignmentView.resource.id, formatResourceLabel(assignmentView.resource));
+    resourcesById.set(assignmentView.resource.id, assignmentView.resource);
+    activeAssignmentsByResourceId.set(assignmentView.resource.id, assignmentView);
   }
 
   for (const resource of assignableResources) {
@@ -140,18 +144,35 @@ export function ResourceAssignmentModal({
                 {selectedIds.map((resourceId) => {
                   const label = resourceLabelsById.get(resourceId) ?? resourceId;
                   const resource = resourcesById.get(resourceId);
+                  const activeAssignment = activeAssignmentsByResourceId.get(resourceId);
                   return (
-                    <span
-                      className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-[#b3d4ff] bg-[#deebff] px-2 py-1 text-[12px] font-bold leading-none text-[#0747a6]"
+                    <div
+                      className="flex min-w-[220px] max-w-full items-start justify-between gap-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-3 py-2.5 text-[#172b4d]"
                       data-testid={`assigned-selected-resource-${resourceId}`}
                       key={resourceId}
-                      title={label}
                     >
-                      {resource && <ResourceTypeIcon type={resource.type} className="h-3.5 w-3.5 shrink-0" />}
-                      <span className="min-w-0 truncate">{label}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          {resource && <ResourceTypeIcon type={resource.type} className="h-4 w-4 shrink-0" />}
+                          <span className="min-w-0 truncate text-[13px] font-semibold leading-5 text-[#172b4d]">{label}</span>
+                        </div>
+                        {activeAssignment && onOpenPlannerAssignment && (
+                          <button
+                            className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium leading-none text-[#6b778c] transition-colors hover:text-[#44546f] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
+                            data-testid={`assignment-selected-resource-chip-${resourceId}`}
+                            disabled={pending}
+                            onClick={() => onOpenPlannerAssignment(activeAssignment)}
+                            title={`${label}. Открыть назначение в ресурсах`}
+                            type="button"
+                          >
+                            <span>Перейти</span>
+                            <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                          </button>
+                        )}
+                      </div>
                       <button
                         aria-label={`Снять ресурс ${label}`}
-                        className="ml-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] text-current opacity-70 hover:bg-white/70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-[#6b778c] transition-colors hover:bg-white hover:text-[#172b4d] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
                         data-testid={`assignment-selected-resource-remove-${resourceId}`}
                         disabled={pending || !task}
                         onClick={() => removeSelectedResource(resourceId)}
@@ -159,7 +180,7 @@ export function ResourceAssignmentModal({
                       >
                         <X aria-hidden="true" className="h-3.5 w-3.5" />
                       </button>
-                    </span>
+                    </div>
                   );
                 })}
               </div>

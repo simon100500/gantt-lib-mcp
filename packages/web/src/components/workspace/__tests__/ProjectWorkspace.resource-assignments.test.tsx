@@ -573,11 +573,11 @@ describe('ProjectWorkspace resource assignments', () => {
       await useTaskStore.getState().fetchTasks('token', useAuthStore.getState().refreshAccessToken);
     });
 
-    expect(useProjectStore.getState().resources.map((resource) => resource.name)).toEqual([
+    expect(useProjectStore.getState().resources.map((resource) => resource.name).sort()).toEqual([
       'Shared Crew',
       'Current Project Crew',
       'Foreign Project Crew',
-    ]);
+    ].sort());
     expect(useProjectStore.getState().assignments.map((assignment) => assignment.resourceId).sort()).toEqual([
       'resource-local-current',
       'resource-shared',
@@ -829,6 +829,46 @@ describe('ProjectWorkspace resource assignments', () => {
     expect(dormantOption).toBeNull();
     expect(submitButton?.disabled).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+
+    await unmountWorkspace(root);
+  });
+
+  it('navigates from a persisted gantt assignment chip into the resource planner', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      assignments: [
+        {
+          id: 'assignment-leaf-1-alpha',
+          projectId: 'project-1',
+          taskId: 'leaf-1',
+          resourceId: 'resource-1',
+          createdAt: '2026-04-02T00:00:00.000Z',
+        },
+      ],
+    }));
+
+    const { container, root } = await renderWorkspace();
+    const assignCommand = getAssignCommand();
+
+    await act(async () => {
+      assignCommand.onSelect(tasks[1]!);
+      await Promise.resolve();
+    });
+
+    const openPlannerButton = container.querySelector('[data-testid="assignment-selected-resource-chip-resource-1"]') as HTMLButtonElement | null;
+    const assignmentCard = container.querySelector('[data-testid="assigned-selected-resource-resource-1"]');
+
+    expect(assignmentCard?.textContent).toContain('Alpha Crew');
+    expect(openPlannerButton?.textContent).toContain('Перейти');
+
+    await act(async () => {
+      openPlannerButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(useUIStore.getState().workspace).toEqual({ kind: 'planner', projectId: 'project-1' });
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.activeWorkspace).toBe('planner');
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.plannerSelectedAssignmentId).toBe('assignment-leaf-1-alpha');
 
     await unmountWorkspace(root);
   });

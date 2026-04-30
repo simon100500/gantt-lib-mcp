@@ -912,6 +912,18 @@ export function ProjectWorkspace({
     setAssignmentError(null);
   }, [setAssignmentError]);
 
+  const handleOpenPlannerAssignment = useCallback((assignmentView: { assignment: { id: string } }) => {
+    if (!projectId || workspace.kind !== 'project') {
+      return;
+    }
+
+    setProjectState(projectId, {
+      activeWorkspace: 'planner',
+      plannerSelectedAssignmentId: assignmentView.assignment.id,
+    });
+    setWorkspace({ kind: 'planner', projectId });
+  }, [projectId, setProjectState, setWorkspace, workspace.kind]);
+
   const handleCreateAssignmentResource = useCallback(async (input: { name: string; type: ResourceType; scope: ResourceScope }) => {
     if (!accessToken || effectiveReadOnly || workspace.kind !== 'project') {
       return;
@@ -1570,6 +1582,7 @@ export function ProjectWorkspace({
                   setCreateAssignmentResourceError(null);
                   setCreateAssignmentResourceOpen(true);
                 }}
+                onOpenPlannerAssignment={handleOpenPlannerAssignment}
                 onSelectionChange={handleAssignmentResourceChange}
                 onSubmit={(resourceIds) => {
                   void handleAssignResources(selectedAssignmentTask, resourceIds);
