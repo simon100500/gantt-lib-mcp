@@ -1160,11 +1160,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     onLoginRequired();
   }, [auth.isAuthenticated, auth.project?.groupId, hasShareToken, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
 
-  const handleCreateProjectGroup = useCallback(async () => {
-    const name = window.prompt('Название группы', 'Новая группа')?.trim();
-    if (!name) {
-      return;
-    }
+  const handleCreateProjectGroup = useCallback(async (name: string) => {
     await auth.createProjectGroup(name);
   }, [auth]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Archive, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProjectGroupModal } from './ProjectGroupModal.tsx';
 import { Button } from './ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
 import type { AuthProject } from '../stores/useAuthStore.ts';
@@ -12,7 +13,7 @@ interface ProjectSwitcherProps {
   projectGroups?: ProjectGroup[];
   onSwitch: (projectId: string) => void | Promise<void>;
   onCreateNew: (groupId?: string) => void;
-  onCreateGroup?: () => void | Promise<void>;
+  onCreateGroup?: (name: string) => void | Promise<void>;
   onRenameGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteGroup?: (groupId: string) => void | Promise<void>;
   createDisabled?: boolean;
@@ -131,6 +132,7 @@ interface ProjectSectionProps {
 
 function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projectCount = 0, onCreateProject, onRenameGroup, onDeleteGroup, children }: ProjectSectionProps) {
   const canDeleteGroup = Boolean(group && !group.isDefault && projectCount === 0 && onDeleteGroup);
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -169,10 +171,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
                 </DropdownMenuItem>
               )}
               {onRenameGroup && (
-                <DropdownMenuItem onClick={() => {
-                  const name = window.prompt('Название группы', group.name)?.trim();
-                  if (name && name !== group.name) void onRenameGroup(group.id, name);
-                }}>
+                <DropdownMenuItem onClick={() => setRenameModalOpen(true)}>
                   <Pencil className="h-4 w-4" />
                   <span>Переименовать</span>
                 </DropdownMenuItem>
@@ -188,6 +187,16 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
         ) : <span className="h-6 w-6 shrink-0" />}
       </div>
       {open && <div className="pl-1.5">{children}</div>}
+      {group && renameModalOpen && onRenameGroup ? (
+        <ProjectGroupModal
+          mode="rename"
+          initialName={group.name}
+          onSave={async (name) => {
+            await onRenameGroup(group.id, name);
+          }}
+          onClose={() => setRenameModalOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -220,6 +229,7 @@ export function ProjectSwitcher({
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const selectedProjectId = pendingProjectId ?? currentProject.id;
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
+  const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
 
   const effectiveGroups = useMemo<ProjectGroup[]>(() => {
     if (projectGroups.length > 0) return projectGroups;
@@ -327,7 +337,7 @@ export function ProjectSwitcher({
 
       {onCreateGroup && (
         <div className="shrink-0 px-3 pb-2">
-          <Button variant="outline" size="sm" onClick={() => { void onCreateGroup(); }} className="h-8 w-full rounded-md px-3 text-sm font-medium sm:h-8">
+          <Button variant="outline" size="sm" onClick={() => setCreateGroupModalOpen(true)} className="h-8 w-full rounded-md px-3 text-sm font-medium sm:h-8">
             <Plus className="h-4 w-4" />
             <span>Новая группа</span>
           </Button>
@@ -380,6 +390,17 @@ export function ProjectSwitcher({
       </div>
 
       {footer && <div className="shrink-0">{footer}</div>}
+
+      {createGroupModalOpen && onCreateGroup ? (
+        <ProjectGroupModal
+          mode="create"
+          initialName="Новая группа"
+          onSave={async (name) => {
+            await onCreateGroup(name);
+          }}
+          onClose={() => setCreateGroupModalOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -36,7 +36,7 @@ interface ProjectMenuProps {
   onArchiveProject: (projectId: string) => void | Promise<void>;
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
-  onCreateProjectGroup?: () => void | Promise<void>;
+  onCreateProjectGroup?: (name: string) => void | Promise<void>;
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
