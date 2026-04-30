@@ -609,14 +609,6 @@ export function ProjectMenu({
               </div>
             ) : !auth.isAuthenticated ? (
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={onLoginRequired}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 underline-offset-4 transition hover:text-primary hover:underline"
-                >
-                  <MessageSquareText className="h-3.5 w-3.5" />
-                  <span>Обратная связь</span>
-                </button>
                 <span className="hidden text-sm font-medium text-slate-600 lg:inline">
                   Войдите, чтобы сохранить график
                 </span>
