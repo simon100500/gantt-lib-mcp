@@ -1,11 +1,75 @@
-/**
- * Email service for sending OTP codes
- *
- * Uses nodemailer for SMTP delivery. Falls back to console logging
- * when EMAIL_HOST is not configured (useful for development).
- */
-
 import nodemailer from 'nodemailer';
+import type Mail from 'nodemailer/lib/mailer/index.js';
+
+export interface FeedbackEmailAttachment {
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+}
+
+export interface SendFeedbackEmailInput {
+  to: string;
+  authorEmail: string;
+  subject: string;
+  message: string;
+  projectName?: string | null;
+  pagePath?: string | null;
+  attachments?: FeedbackEmailAttachment[];
+}
+
+function getEmailConfig() {
+  const emailHost = process.env.EMAIL_HOST;
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+  const emailPort = Number(process.env.EMAIL_PORT ?? '587');
+  const emailSecure = process.env.EMAIL_SECURE === 'true' || emailPort === 465;
+  const fromAddress = process.env.EMAIL_FROM ?? 'GetGantt <noreply@example.com>';
+
+  return {
+    emailHost,
+    emailUser,
+    emailPass,
+    emailPort,
+    emailSecure,
+    fromAddress,
+  };
+}
+
+async function createTransport(): Promise<{ transporter: Mail; fromAddress: string } | null> {
+  const config = getEmailConfig();
+  if (!config.emailHost) {
+    return null;
+  }
+
+  if (!config.emailUser || !config.emailPass) {
+    throw new Error('EMAIL_USER and EMAIL_PASS are required when EMAIL_HOST is configured');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: config.emailHost,
+    port: config.emailPort,
+    secure: config.emailSecure,
+    auth: {
+      user: config.emailUser,
+      pass: config.emailPass,
+    },
+  });
+
+  await transporter.verify();
+  return {
+    transporter,
+    fromAddress: config.fromAddress,
+  };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /**
  * Send an OTP code via email
@@ -18,40 +82,14 @@ import nodemailer from 'nodemailer';
  * @throws Error if email sending fails (and EMAIL_HOST is configured)
  */
 export async function sendOtpEmail(email: string, code: string): Promise<void> {
-  const emailHost = process.env.EMAIL_HOST;
-
-  // Development fallback: log OTP to console
-  if (!emailHost) {
+  const transport = await createTransport();
+  if (!transport) {
     console.log(`[DEV] OTP for ${email}: ${code}`);
     return;
   }
 
-  const emailUser = process.env.EMAIL_USER;
-  const emailPass = process.env.EMAIL_PASS;
-  if (!emailUser || !emailPass) {
-    throw new Error('EMAIL_USER and EMAIL_PASS are required when EMAIL_HOST is configured');
-  }
-
-  const emailPort = Number(process.env.EMAIL_PORT ?? '587');
-  const emailSecure = process.env.EMAIL_SECURE === 'true' || emailPort === 465;
-
-  // Production: send real email via SMTP
-  const transporter = nodemailer.createTransport({
-    host: emailHost,
-    port: emailPort,
-    secure: emailSecure,
-    auth: {
-      user: emailUser,
-      pass: emailPass,
-    },
-  });
-
-  const fromAddress = process.env.EMAIL_FROM ?? 'Gantt App <noreply@example.com>';
-
-  await transporter.verify();
-
-  await transporter.sendMail({
-    from: fromAddress,
+  await transport.transporter.sendMail({
+    from: transport.fromAddress,
     to: email,
     subject: 'Код для входа',
     html: `
@@ -70,5 +108,60 @@ export async function sendOtpEmail(email: string, code: string): Promise<void> {
         </p>
       </div>
     `,
+  });
+}
+
+export async function sendFeedbackEmail(input: SendFeedbackEmailInput): Promise<void> {
+  const attachments = input.attachments ?? [];
+  const transport = await createTransport();
+
+  if (!transport) {
+    console.log('[DEV] Feedback email', {
+      to: input.to,
+      authorEmail: input.authorEmail,
+      subject: input.subject,
+      projectName: input.projectName ?? null,
+      pagePath: input.pagePath ?? null,
+      attachmentNames: attachments.map((attachment) => attachment.fileName),
+      messagePreview: input.message.slice(0, 280),
+    });
+    return;
+  }
+
+  const projectLine = input.projectName ? `Проект: ${input.projectName}` : 'Проект: —';
+  const pageLine = input.pagePath ? `Страница: ${input.pagePath}` : 'Страница: —';
+  const textBody = [
+    `Автор: ${input.authorEmail}`,
+    projectLine,
+    pageLine,
+    '',
+    input.message,
+  ].join('\n');
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a;">
+      <h2 style="margin: 0 0 16px;">Обратная связь из GetGantt</h2>
+      <p style="margin: 0 0 8px;"><strong>Автор:</strong> ${escapeHtml(input.authorEmail)}</p>
+      <p style="margin: 0 0 8px;"><strong>Проект:</strong> ${escapeHtml(input.projectName ?? '—')}</p>
+      <p style="margin: 0 0 16px;"><strong>Страница:</strong> ${escapeHtml(input.pagePath ?? '—')}</p>
+      <div style="white-space: pre-wrap; line-height: 1.5; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+        ${escapeHtml(input.message)}
+      </div>
+    </div>
+  `;
+
+  await transport.transporter.sendMail({
+    from: transport.fromAddress,
+    to: input.to,
+    cc: input.authorEmail,
+    replyTo: input.authorEmail,
+    subject: `[GetGantt] ${input.subject}`,
+    text: textBody,
+    html: htmlBody,
+    attachments: attachments.map((attachment) => ({
+      filename: attachment.fileName,
+      content: Buffer.from(attachment.contentBase64, 'base64'),
+      contentType: attachment.mimeType,
+    })),
   });
 }

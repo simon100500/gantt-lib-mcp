@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
 import { ProjectSwitcher } from '../ProjectSwitcher.tsx';
 import { TaskSearch } from '../TaskSearch';
+import { FeedbackModal } from '../FeedbackModal.tsx';
 import { Button } from '../ui/button.tsx';
 import {
   DropdownMenu,
@@ -89,6 +90,7 @@ export function ProjectMenu({
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [projectActionsMenuOpen, setProjectActionsMenuOpen] = useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
   const isReadOnlyContext = hasShareToken || isArchivedProject;
@@ -607,6 +609,14 @@ export function ProjectMenu({
               </div>
             ) : !auth.isAuthenticated ? (
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onLoginRequired}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 underline-offset-4 transition hover:text-primary hover:underline"
+                >
+                  <MessageSquareText className="h-3.5 w-3.5" />
+                  <span>Обратная связь</span>
+                </button>
                 <span className="hidden text-sm font-medium text-slate-600 lg:inline">
                   Войдите, чтобы сохранить график
                 </span>
@@ -614,6 +624,14 @@ export function ProjectMenu({
               </div>
             ) : (
               <>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackModalOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-slate-600 underline-offset-4 transition hover:text-primary hover:underline"
+                >
+                  <MessageSquareText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Обратная связь</span>
+                </button>
                 {shouldShowUpgradeButton && (
                   <Button
                     variant="outline"
@@ -706,6 +724,11 @@ export function ProjectMenu({
           {children}
         </div>
       </div>
+      <FeedbackModal
+        open={feedbackModalOpen}
+        onClose={() => setFeedbackModalOpen(false)}
+        projectName={currentProjectLabel ?? currentProject?.name ?? null}
+      />
     </div>
   );
 }
