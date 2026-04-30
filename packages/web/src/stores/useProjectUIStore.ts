@@ -23,6 +23,8 @@ interface ProjectUIState {
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
   plannerSelectedAssignmentId: string | null;
+  ganttScrollLeft: number;
+  ganttScrollTop: number;
   plannerScrollLeft: number;
   plannerScrollTop: number;
 }
@@ -43,6 +45,8 @@ const DEFAULT_STATE: ProjectUIState = {
   selectedBaseline: null,
   selectedBaselineVisible: false,
   plannerSelectedAssignmentId: null,
+  ganttScrollLeft: 0,
+  ganttScrollTop: 0,
   plannerScrollLeft: 0,
   plannerScrollTop: 0,
 };

@@ -593,6 +593,7 @@ export function ProjectWorkspace({
   const [createAssignmentResourceOpen, setCreateAssignmentResourceOpen] = useState(false);
   const [createAssignmentResourcePending, setCreateAssignmentResourcePending] = useState(false);
   const [createAssignmentResourceError, setCreateAssignmentResourceError] = useState<string | null>(null);
+  const ganttSectionRef = useRef<HTMLDivElement | null>(null);
   const [projectShiftOpen, setProjectShiftOpen] = useState(false);
   const [projectShiftPending, setProjectShiftPending] = useState(false);
   const [projectShiftError, setProjectShiftError] = useState<string | null>(null);
@@ -1481,6 +1482,35 @@ export function ProjectWorkspace({
     return () => window.clearTimeout(timer);
   }, [accessToken, historyRefreshRevision, refreshHistory]);
 
+  useEffect(() => {
+    if (!projectId || loading) {
+      return;
+    }
+
+    const ganttScrollElement = ganttSectionRef.current?.querySelector('.gantt-scrollContainer');
+    if (!(ganttScrollElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const persistedState = getProjectState(projectId);
+    if (persistedState && (persistedState.ganttScrollLeft !== 0 || persistedState.ganttScrollTop !== 0)) {
+      ganttScrollElement.scrollLeft = persistedState.ganttScrollLeft;
+      ganttScrollElement.scrollTop = persistedState.ganttScrollTop;
+    }
+
+    const handleScroll = () => {
+      setProjectState(projectId, {
+        ganttScrollLeft: ganttScrollElement.scrollLeft,
+        ganttScrollTop: ganttScrollElement.scrollTop,
+      });
+    };
+
+    ganttScrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      ganttScrollElement.removeEventListener('scroll', handleScroll);
+    };
+  }, [effectiveTasksWithBaseline, getProjectState, loading, projectId, setProjectState]);
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       {/* Toolbar on full width */}
@@ -1614,48 +1644,50 @@ export function ProjectWorkspace({
               </div>
             )}
 
-            {loading ? (
-              <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
-                Загрузка...
-              </div>
-            ) : (
-              <GanttChart
-                ref={ganttRef as Ref<GanttChartRef>}
-                tasks={effectiveTasksWithBaseline}
-                showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
-                taskFilter={taskFilter}
-                taskListMenuCommands={taskListMenuCommands}
-                additionalColumns={additionalColumns}
-                hiddenTaskListColumns={hiddenTaskListColumns}
-                onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
-                dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
-                rowHeight={36}
-                containerHeight="calc(100dvh - 132px)"
-                showTaskList={showTaskList}
-                showChart={showChart}
-                taskListWidth={taskListWidth}
-                onValidateDependencies={onValidation}
-                enableAutoSchedule={autoSchedule}
-                onCascade={effectiveReadOnly ? undefined : onCascade}
-                disableTaskNameEditing={effectiveReadOnly}
-                disableDependencyEditing={effectiveReadOnly}
-                disableTaskDrag={effectiveDisableTaskDrag}
-                highlightExpiredTasks={highlightExpiredTasks}
-                headerHeight={40}
-                viewMode={viewMode}
-                collapsedParentIds={collapsedParentIds}
-                onToggleCollapse={handleToggleCollapse}
-                onAdd={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleAdd}
-                onDelete={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleDelete}
-                onInsertAfter={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleInsertAfter}
-                onReorder={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleReorder}
-                onUngroupTask={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleUngroupTask}
-                customDays={customDays}
-                highlightedTaskIds={highlightedSearchTaskIds}
-                filterMode={filterMode}
-                businessDays={ganttDayMode !== 'calendar'}
-              />
-            )}
+            <div className="min-h-0 flex-1 overflow-hidden bg-white" ref={ganttSectionRef}>
+              {loading ? (
+                <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
+                  Загрузка...
+                </div>
+              ) : (
+                <GanttChart
+                  ref={ganttRef as Ref<GanttChartRef>}
+                  tasks={effectiveTasksWithBaseline}
+                  showBaseline={Boolean(selectedBaselineState && selectedBaselineVisible)}
+                  taskFilter={taskFilter}
+                  taskListMenuCommands={taskListMenuCommands}
+                  additionalColumns={additionalColumns}
+                  hiddenTaskListColumns={hiddenTaskListColumns}
+                  onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
+                  dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
+                  rowHeight={36}
+                  containerHeight="calc(100dvh - 132px)"
+                  showTaskList={showTaskList}
+                  showChart={showChart}
+                  taskListWidth={taskListWidth}
+                  onValidateDependencies={onValidation}
+                  enableAutoSchedule={autoSchedule}
+                  onCascade={effectiveReadOnly ? undefined : onCascade}
+                  disableTaskNameEditing={effectiveReadOnly}
+                  disableDependencyEditing={effectiveReadOnly}
+                  disableTaskDrag={effectiveDisableTaskDrag}
+                  highlightExpiredTasks={highlightExpiredTasks}
+                  headerHeight={40}
+                  viewMode={viewMode}
+                  collapsedParentIds={collapsedParentIds}
+                  onToggleCollapse={handleToggleCollapse}
+                  onAdd={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleAdd}
+                  onDelete={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleDelete}
+                  onInsertAfter={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                  onReorder={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleReorder}
+                  onUngroupTask={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleUngroupTask}
+                  customDays={customDays}
+                  highlightedTaskIds={highlightedSearchTaskIds}
+                  filterMode={filterMode}
+                  businessDays={ganttDayMode !== 'calendar'}
+                />
+              )}
+            </div>
 
             {aiMutationLocked && (
               <div className="pointer-events-none absolute bottom-9 left-1/2 z-20 -translate-x-1/2">

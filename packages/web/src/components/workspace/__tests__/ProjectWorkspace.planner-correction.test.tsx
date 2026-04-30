@@ -22,7 +22,11 @@ vi.mock('../../GanttChart.tsx', () => ({
     ganttPropsSpy = _props;
     ganttPropsHistory.push(_props);
     useImperativeHandle(ref, () => exposeGanttRef ? { scrollToRow: scrollToRowSpy, scrollToTask: scrollToTaskSpy } : null);
-    return <div data-testid="gantt-chart">chart</div>;
+    return (
+      <div data-testid="gantt-chart">
+        <div className="gantt-scrollContainer">chart</div>
+      </div>
+    );
   }),
 }));
 
@@ -333,5 +337,30 @@ describe('ProjectWorkspace planner correction focus', () => {
     expect(latestHighlightedTaskIds().has('task-1')).toBe(false);
 
     await unmountWorkspace(root);
+  });
+
+  it('persists gantt scroll position and restores it on the next mount', async () => {
+    const firstRender = await renderWorkspace();
+    const firstScrollContainer = firstRender.container.querySelector('.gantt-scrollContainer') as HTMLDivElement | null;
+
+    expect(firstScrollContainer).not.toBeNull();
+
+    firstScrollContainer!.scrollLeft = 240;
+    firstScrollContainer!.scrollTop = 96;
+    firstScrollContainer!.dispatchEvent(new Event('scroll'));
+
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.ganttScrollLeft).toBe(240);
+    expect(useProjectUIStore.getState().getProjectState('project-1')?.ganttScrollTop).toBe(96);
+
+    await unmountWorkspace(firstRender.root);
+
+    const secondRender = await renderWorkspace();
+    const secondScrollContainer = secondRender.container.querySelector('.gantt-scrollContainer') as HTMLDivElement | null;
+
+    expect(secondScrollContainer).not.toBeNull();
+    expect(secondScrollContainer!.scrollLeft).toBe(240);
+    expect(secondScrollContainer!.scrollTop).toBe(96);
+
+    await unmountWorkspace(secondRender.root);
   });
 });
