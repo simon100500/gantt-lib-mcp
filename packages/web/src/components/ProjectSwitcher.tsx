@@ -120,16 +120,16 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
                 </DropdownMenuItem>
               </>
             ) : (
-            <>
-              {onMove && projectGroups.length > 1 ? (
-                <DropdownMenuItem onClick={() => setMoveModalOpen(true)}>
-                  <ArrowRightLeft className="h-4 w-4" />
-                  <span>Переместить</span>
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem onClick={() => void onRestore(project.id)}>
-                <RotateCcw className="h-4 w-4" />
-                <span>Вернуть</span>
+              <>
+                {onMove && projectGroups.length > 1 ? (
+                  <DropdownMenuItem onClick={() => setMoveModalOpen(true)}>
+                    <ArrowRightLeft className="h-4 w-4" />
+                    <span>Переместить</span>
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onClick={() => void onRestore(project.id)}>
+                  <RotateCcw className="h-4 w-4" />
+                  <span>Вернуть</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void onDelete(project.id)} className="text-red-600 focus:text-red-700">
                   <Trash2 className="h-4 w-4" />
@@ -396,15 +396,6 @@ export function ProjectSwitcher({
         </Button>
       </div>
 
-      {onCreateGroup && (
-        <div className="shrink-0 px-3 pb-2">
-          <Button variant="outline" size="sm" onClick={() => setCreateGroupModalOpen(true)} className="h-8 w-full rounded-md px-3 text-sm font-medium sm:h-8">
-            <Plus className="h-4 w-4" />
-            <span>Новая группа</span>
-          </Button>
-        </div>
-      )}
-
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pt-2">
         <div className="flex flex-col gap-2">
           {effectiveGroups.map((group) => {
@@ -439,12 +430,28 @@ export function ProjectSwitcher({
             );
           })}
 
+          {onCreateGroup ? (
+            <div className="px-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setCreateGroupModalOpen(true)}
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Группа проектов</span>
+              </button>
+            </div>
+          ) : null}
+
           {archivedProjects.length > 0 ? (
-            <ProjectSection title={archiveTitle} icon={<Archive className="h-4 w-4" />} open={archiveOpen} onToggle={() => setArchiveOpen((value) => !value)}>
-              {archivedProjects.map((project) => (
-                <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onRename={onRenameProject} onMove={onMoveProject} projectGroups={effectiveGroups} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
-              ))}
-            </ProjectSection>
+            <div className="pt-3">
+              <div className="mx-3 mb-2 border-t border-slate-200" />
+              <ProjectSection title={archiveTitle} icon={<Archive className="h-4 w-4" />} open={archiveOpen} onToggle={() => setArchiveOpen((value) => !value)}>
+                {archivedProjects.map((project) => (
+                  <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onRename={onRenameProject} onMove={onMoveProject} projectGroups={effectiveGroups} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
+                ))}
+              </ProjectSection>
+            </div>
           ) : null}
         </div>
         <div className="h-16 shrink-0" />
