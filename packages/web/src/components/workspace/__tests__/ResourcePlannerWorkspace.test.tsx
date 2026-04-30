@@ -628,6 +628,255 @@ describe('ResourcePlanner workspace integration', () => {
     await unmountApp(root);
   });
 
+  it('does not auto-refresh the planner on plain window focus or quick tab returns', async () => {
+    const originalVisibilityState = document.visibilityState;
+    let now = 1_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner?scope=current-project')) {
+        return {
+          ok: true,
+          json: async () => ({
+            projectId: 'project-1',
+            scope: 'current-project',
+            workspaceUserId: 'user-1',
+            resources: [
+              {
+                resourceId: 'resource-1',
+                resourceName: 'Shared Designer',
+                hasConflicts: false,
+                conflictCount: 0,
+                intervals: [],
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url.startsWith('/api/resources?projectId=')) {
+        return {
+          ok: true,
+          json: async () => ({
+            resources: [
+              {
+                id: 'resource-1',
+                userId: 'user-1',
+                projectId: 'project-1',
+                projectGroupId: null,
+                scope: 'project',
+                name: 'Shared Designer',
+                type: 'human',
+                isActive: true,
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-01T00:00:00.000Z',
+                deactivatedAt: null,
+              },
+            ],
+          }),
+        } as Response;
+      }
+      if (url === '/api/project') {
+        return {
+          ok: true,
+          json: async () => ({
+            version: 1,
+            snapshot: {
+              tasks: [],
+              dependencies: [],
+              resources: [],
+              assignments: [],
+            },
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner?scope=current-project'))).toHaveLength(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner?scope=current-project'))).toHaveLength(1);
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+
+    now += 5_000;
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+    await flushPlannerEffects();
+
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/resources/planner?scope=current-project'))).toHaveLength(1);
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: originalVisibilityState,
+    });
+    dateNowSpy.mockRestore();
+    await unmountApp(root);
+  });
+
+  it('keeps planner data visible during a background refresh', async () => {
+    let plannerCalls = 0;
+    let resolveRefresh: ((response: Response) => void) | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/resources/planner?scope=current-project')) {
+        plannerCalls += 1;
+        if (plannerCalls === 1) {
+          return {
+            ok: true,
+            json: async () => ({
+              projectId: 'project-1',
+              scope: 'current-project',
+              workspaceUserId: 'user-1',
+              resources: [
+                {
+                  resourceId: 'resource-1',
+                  resourceName: 'Shared Designer',
+                  hasConflicts: false,
+                  conflictCount: 0,
+                  intervals: [
+                    {
+                      assignmentId: 'assignment-1',
+                      resourceId: 'resource-1',
+                      resourceName: 'Shared Designer',
+                      projectId: 'project-1',
+                      projectName: 'Project 1',
+                      taskId: 'task-1',
+                      taskName: 'Spec',
+                      startDate: '2026-04-04',
+                      endDate: '2026-04-04',
+                      assignmentCreatedAt: '2026-04-02T00:00:00.000Z',
+                      hasConflict: false,
+                      conflictCount: 0,
+                      conflictAssignmentIds: [],
+                    },
+                  ],
+                },
+              ],
+            }),
+          } as Response;
+        }
+
+        return new Promise<Response>((resolve) => {
+          resolveRefresh = resolve;
+        });
+      }
+      if (url.startsWith('/api/resources?projectId=')) {
+        return {
+          ok: true,
+          json: async () => ({
+            resources: [
+              {
+                id: 'resource-1',
+                userId: 'user-1',
+                projectId: 'project-1',
+                projectGroupId: null,
+                scope: 'project',
+                name: 'Shared Designer',
+                type: 'human',
+                isActive: true,
+                createdAt: '2026-04-01T00:00:00.000Z',
+                updatedAt: '2026-04-01T00:00:00.000Z',
+                deactivatedAt: null,
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, root } = await renderPlannerWorkspace({
+      accessToken: 'token',
+      projectId: 'project-1',
+      onBackToProject: vi.fn(),
+      onCorrectConflict: vi.fn(),
+    });
+    await flushPlannerEffects();
+
+    expect(container.querySelector('[data-testid="planner-data-state"]')).not.toBeNull();
+
+    await act(async () => {
+      (container.querySelector('[data-testid="planner-refresh-button"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="planner-loading-state"]')).toBeNull();
+    expect(container.querySelector('[data-testid="planner-data-state"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="planner-refreshing-state"]')?.textContent).toContain('Обновляем');
+
+    await act(async () => {
+      resolveRefresh?.({
+        ok: true,
+        json: async () => ({
+          projectId: 'project-1',
+          scope: 'current-project',
+          workspaceUserId: 'user-1',
+          resources: [
+            {
+              resourceId: 'resource-1',
+              resourceName: 'Shared Designer',
+              hasConflicts: false,
+              conflictCount: 0,
+              intervals: [
+                {
+                  assignmentId: 'assignment-1',
+                  resourceId: 'resource-1',
+                  resourceName: 'Shared Designer',
+                  projectId: 'project-1',
+                  projectName: 'Project 1',
+                  taskId: 'task-1',
+                  taskName: 'Spec',
+                  startDate: '2026-04-04',
+                  endDate: '2026-04-04',
+                  assignmentCreatedAt: '2026-04-02T00:00:00.000Z',
+                  hasConflict: false,
+                  conflictCount: 0,
+                  conflictAssignmentIds: [],
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="planner-refreshing-state"]')).toBeNull();
+    expect(container.querySelector('[data-testid="planner-data-state"]')).not.toBeNull();
+
+    await unmountApp(root);
+  });
+
   it('surfaces mismatched planner scopes as malformed payload errors', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

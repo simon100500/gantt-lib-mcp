@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
 import type { ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
@@ -70,6 +70,9 @@ const VIEW_MODE_OPTIONS: Array<{ mode: ViewMode; label: string }> = [
   { mode: 'week', label: 'Неделя' },
   { mode: 'month', label: 'Месяц' },
 ];
+
+const AUTO_REFRESH_MIN_INTERVAL_MS = 60_000;
+const AUTO_REFRESH_MIN_HIDDEN_MS = 15_000;
 
 function getPlannerDayWidth(viewMode: ViewMode): number {
   return viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24;
@@ -473,6 +476,8 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   });
   const [selectedItem, setSelectedItem] = useState<ResourcePlannerTimelineItem | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const lastHiddenAtRef = useRef<number | null>(null);
+  const lastAutoRefreshAtRef = useRef(0);
 
   const loadResourceCatalog = useCallback(async (catalogProjectId = projectId) => {
     if (!accessToken) {
@@ -633,19 +638,30 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
       }
     };
 
-    const handleFocus = () => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        lastHiddenAtRef.current = Date.now();
+        return;
+      }
+
+      const now = Date.now();
+      const hiddenAt = lastHiddenAtRef.current;
+      lastHiddenAtRef.current = null;
+
+      if (hiddenAt !== null && now - hiddenAt < AUTO_REFRESH_MIN_HIDDEN_MS) {
+        return;
+      }
+
+      if (now - lastAutoRefreshAtRef.current < AUTO_REFRESH_MIN_INTERVAL_MS) {
+        return;
+      }
+
+      lastAutoRefreshAtRef.current = now;
       void refreshFromServer();
     };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshFromServer();
-      }
-    };
 
-    window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [accessToken, loadPlanner, plannerScope, reloadProjectSnapshot]);
@@ -1231,6 +1247,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = countPlannerAssignments(displayedPlannerData ?? null);
   const pendingMoveCount = pendingMoveIds.size;
+  const isBackgroundRefreshing = state.status === 'loading' && Boolean(displayedPlannerData);
   const viewMode = projectStates[projectId]?.viewMode ?? globalViewMode;
   const plannerDayWidth = getPlannerDayWidth(viewMode);
   const hasActiveFilters = filters.query.trim().length > 0
@@ -1455,16 +1472,17 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               variant="outline"
               size="sm"
               className={toolbarButtonClassName}
+              data-testid="planner-refresh-button"
               onClick={() => { void loadPlanner(plannerScope, { keepData: true }); void loadResourceCatalog(); }}
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={cn('h-4 w-4', isBackgroundRefreshing && 'animate-spin')} />
             </Button>
           </div>
         </div>
       </div>
 
       <div className="mt-0.5 flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-3 md:px-4 lg:flex-row lg:overflow-hidden">
-        <div className="flex min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-t-xl rounded-b-none border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto bg-white">
             <input
               className="sr-only"
@@ -1474,7 +1492,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               value={filters.query}
               onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
             />
-            {state.status === 'loading' && (
+            {state.status === 'loading' && !displayedPlannerData && (
               <div className="bg-white px-4 py-3 text-sm text-slate-600" data-testid="planner-loading-state">
                 Загружаем ресурсный календарь…
               </div>
@@ -1498,10 +1516,34 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               </div>
             )}
 
-            {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length === 0 && (
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-600" data-testid="planner-empty-state">
-                <div className="font-semibold text-slate-900">Нет ресурсов для отображения</div>
-                <div className="mt-1">Создайте ресурс или скорректируйте фильтр.</div>
+            {displayedPlannerData && filteredTimelineResources.length === 0 && (
+              <div
+                className="flex min-h-[320px] flex-1 items-start justify-center bg-white px-6 pt-12 pb-10"
+                data-testid="planner-empty-state"
+              >
+                <div className="mx-auto flex max-w-md flex-col items-center text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
+                    <Users className="h-6 w-6 text-slate-500" />
+                  </div>
+                  <div className="mt-5 text-lg font-semibold text-slate-900">Ресурсов пока нет</div>
+                  <div className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+                    {hasActiveFilters
+                      ? 'По текущим фильтрам ничего не найдено. Добавьте новый ресурс и он сразу появится в календаре.'
+                      : 'Добавьте первый ресурс в проект, чтобы начать планирование загрузки и назначений.'}
+                  </div>
+                  {!readonly && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-6 h-10 rounded-md px-4"
+                      data-testid="planner-empty-create-resource"
+                      onClick={() => { setCreateModalOpen(true); setResourceMutationError(null); }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Создать ресурс
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1525,7 +1567,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
               </div>
             )}
 
-            {state.status === 'ready' && displayedPlannerData && filteredTimelineResources.length > 0 && (
+            {displayedPlannerData && filteredTimelineResources.length > 0 && (
               <div className="flex min-h-0 flex-1" data-testid="planner-data-state">
                 <section
                   aria-label="Ресурсный календарь"
@@ -1578,6 +1620,13 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
                   {plannerScope === 'current-project' ? 'Текущий проект' : 'Все проекты'}
                 </span>
 
+                {isBackgroundRefreshing && (
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-slate-400" data-testid="planner-refreshing-state">
+                    <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
+                    Обновляем...
+                  </span>
+                )}
+
                 {readonly && (
                   <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
@@ -1618,7 +1667,7 @@ export function ResourcePlannerWorkspace({ accessToken = null, projectId, ganttD
           </div>
         </div>
 
-        <div className={cn('w-full min-w-0 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:w-[360px] lg:flex-none xl:w-[380px]', !showSidePanel && 'hidden')}>
+        <div className={cn('w-full min-w-0 overflow-hidden rounded-t-xl rounded-b-none border border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)] lg:w-[360px] lg:flex-none xl:w-[380px]', !showSidePanel && 'hidden')}>
           {selectedItem && (
             <ResourceAssignmentDetailsPanel
               item={selectedItem}
