@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Pencil, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -477,18 +477,8 @@ export function ProjectMenu({
                     >
                       {currentProjectLabel}
                     </span>
-                    {!hasShareToken && !isArchivedProject && auth.isAuthenticated && workspace.kind !== 'draft' && (
-                      <button
-                        type="button"
-                        onClick={() => setShowEditProjectModal(true)}
-                        className="shrink-0 rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                        aria-label="Переименовать проект"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </>
-                )}
+                    </>
+                  )}
                 {!hasShareToken && auth.isAuthenticated && (
                   <div className="hidden items-center gap-2 sm:flex">
                     {projectUsageLabel && (

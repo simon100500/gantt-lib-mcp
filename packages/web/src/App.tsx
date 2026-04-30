@@ -110,7 +110,7 @@ function buildProactiveConstraintDenial(
       remaining: null,
       plan,
       planLabel,
-      upgradeHint: 'Экспорт в PDF доступен на тарифе Старт и выше.',
+      upgradeHint: 'Экспорт PDF + Excel доступен на любом платном тарифе.',
     };
   }
 
@@ -1522,7 +1522,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         remaining: null,
         plan: ((billingStatus?.plan as PlanId | undefined) ?? 'free'),
         planLabel: billingStatus?.planMeta.label ?? PLAN_LABELS[((billingStatus?.plan as PlanId | undefined) ?? 'free')],
-        upgradeHint: 'Экспорт PDF + Excel доступен на тарифе Команда и выше.',
+        upgradeHint: 'Экспорт PDF + Excel доступен на любом платном тарифе.',
       });
       return;
     }

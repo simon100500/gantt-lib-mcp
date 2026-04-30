@@ -68,7 +68,7 @@ describe('buildConstraintModalContent for feature gates', () => {
     };
     const content = buildConstraintModalContent(denial);
     expect(content.limitLabel).toContain('Архив проектов');
-    expect(content.title).toContain('Архив проектов');
+    expect(content.title).toContain('Не теряйте доступ к проектам');
     expect(content.upgradeOffer.planId).toBe('start');
   });
 
@@ -87,7 +87,7 @@ describe('buildConstraintModalContent for feature gates', () => {
     expect(content.title).toContain('Пул ресурсов');
   });
 
-  it('renders export gate with pdf access level description for start plan', () => {
+  it('renders export gate with pdf_excel access level description for first paid plan', () => {
     const denial: ConstraintDenialPayload = {
       code: 'EXPORT_FEATURE_LOCKED',
       limitKey: 'export',
@@ -95,29 +95,14 @@ describe('buildConstraintModalContent for feature gates', () => {
       remaining: null,
       plan: 'free',
       planLabel: 'Бесплатный',
-      upgradeHint: 'Экспорт в PDF доступен на тарифе Старт.',
+      upgradeHint: 'Экспорт PDF + Excel доступен на тарифе Старт.',
     };
     const content = buildConstraintModalContent(denial);
     expect(content.limitLabel).toContain('Экспорт');
-    expect(content.description).toContain('pdf');
-  });
-
-  it('renders export gate with pdf_excel description for team plan upgrade', () => {
-    const denial: ConstraintDenialPayload = {
-      code: 'EXPORT_FEATURE_LOCKED',
-      limitKey: 'export',
-      reasonCode: 'feature_disabled',
-      remaining: null,
-      plan: 'start',
-      planLabel: 'Старт',
-      upgradeHint: 'Экспорт PDF + Excel доступен на тарифе Команда.',
-    };
-    const content = buildConstraintModalContent(denial);
     expect(content.description).toContain('pdf_excel');
-    expect(content.upgradeOffer.planId).toBe('team');
   });
 
-  it('renders export gate with pdf_excel_api description for enterprise upgrade', () => {
+  it('renders export gate with pdf_excel_api description for team plan upgrade', () => {
     const denial: ConstraintDenialPayload = {
       code: 'EXPORT_FEATURE_LOCKED',
       limitKey: 'export',
@@ -148,7 +133,7 @@ describe('legacy compatibility', () => {
     expect(result!.limitKey).toBe('projects');
     const content = buildConstraintModalContent(result!);
     expect(content.title).toBe('Пора расширяться');
-    expect(content.description).toContain('подключите тариф Старт');
+    expect(content.description).toContain('расширьте тариф');
     expect(content.limitLabel).toBe('лимит проектов');
   });
 

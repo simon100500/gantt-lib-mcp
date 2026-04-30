@@ -369,10 +369,10 @@ export function Toolbar({
 
   const normalizedBaselineRows = Array.isArray(baselineRows)
     ? baselineRows.map((row) => ({
-        id: typeof row?.id === 'string' ? row.id : '',
-        label: typeof row?.label === 'string' ? row.label : '',
-        selected: Boolean(row?.selected),
-      }))
+      id: typeof row?.id === 'string' ? row.id : '',
+      label: typeof row?.label === 'string' ? row.label : '',
+      selected: Boolean(row?.selected),
+    }))
     : [];
   const normalizedBaselineError = typeof baselineError === 'string' && baselineError.trim().length > 0
     ? baselineError
@@ -639,20 +639,20 @@ export function Toolbar({
                 isExportExcelLoading
                   ? 'Генерируем Excel...'
                   : shareStatus === 'creating'
-                  ? 'Создаём ссылку...'
-                  : shareStatus === 'copied'
-                    ? 'Ссылка скопирована'
-                    : shareStatus === 'error'
-                      ? 'Ошибка ссылки'
-                      : 'Поделиться'
+                    ? 'Создаём ссылку...'
+                    : shareStatus === 'copied'
+                      ? 'Ссылка скопирована'
+                      : shareStatus === 'error'
+                        ? 'Ошибка ссылки'
+                        : 'Поделиться'
               }
             >
               <span className="text-xs">
                 {isExportExcelLoading
                   ? 'Генерируем Excel...'
                   : shareStatus === 'creating'
-                  ? 'Создаём ссылку...'
-                  : 'Поделиться'}
+                    ? 'Создаём ссылку...'
+                    : 'Поделиться'}
               </span>
               <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             </Button>
@@ -779,7 +779,6 @@ export function Toolbar({
               <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
             )}
           </div>
-          <span className="hidden md:inline text-xs">Фильтры</span>
         </Button>
       </FilterPopup>
 

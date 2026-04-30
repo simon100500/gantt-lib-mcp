@@ -114,7 +114,7 @@ export const PLAN_CATALOG: Record<PlanId, PlanDefinition> = {
       ai_queries: { period: 'daily', value: 25 },
       archive: true,
       resource_pool: true,
-      export: 'pdf',
+      export: 'pdf_excel',
     },
   },
   team: {
