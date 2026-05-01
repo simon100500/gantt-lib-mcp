@@ -30,6 +30,7 @@ import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
+import { collectTaskSubtreeIds } from './lib/shareLinkSelection.ts';
 import { useAuthStore } from './stores/useAuthStore.ts';
 import { getExportAccessLevel, useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
@@ -1277,6 +1278,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [clearAiDoneGraceTimer, releaseAiMutationLock]);
 
   useEffect(() => {
+    setSelectedShareTaskIds(new Set());
+    setShareSelectionMode(false);
+  }, [auth.project?.id, hasShareToken]);
+
+  useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || !auth.project?.id || hasShareToken || workspace.kind !== 'project') {
       return;
     }
@@ -1433,7 +1439,86 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const showShareManager = useUIStore((state) => state.showShareManager);
   const { updateAvailable, reloadApp } = useAppUpdateCheck();
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
+  const [shareSelectionMode, setShareSelectionMode] = useState(false);
+  const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
+  const handleStartPartialShareSelection = useCallback(() => {
+    setSelectedShareTaskIds(new Set());
+    setShareSelectionMode(true);
+    useUIStore.getState().setShowShareManager(false);
+    setShareStatus('idle');
+  }, [setShareStatus]);
+  const handlePartialShareSelectionChange = useCallback((nextSelectedTaskIds: Set<string>) => {
+    setSelectedShareTaskIds((previousSelectedTaskIds) => {
+      const added = Array.from(nextSelectedTaskIds).filter((id) => !previousSelectedTaskIds.has(id));
+      const removed = Array.from(previousSelectedTaskIds).filter((id) => !nextSelectedTaskIds.has(id));
+      if (added.length + removed.length !== 1) {
+        return nextSelectedTaskIds;
+      }
+
+      const changedTaskId = added[0] ?? removed[0];
+      if (!changedTaskId) {
+        return nextSelectedTaskIds;
+      }
+
+      const subtreeIds = collectTaskSubtreeIds(visibleTasks, changedTaskId);
+      if (subtreeIds.length <= 1) {
+        return nextSelectedTaskIds;
+      }
+
+      const normalized = new Set(nextSelectedTaskIds);
+      const shouldSelect = added.length === 1;
+      for (const taskId of subtreeIds) {
+        if (shouldSelect) {
+          normalized.add(taskId);
+        } else {
+          normalized.delete(taskId);
+        }
+      }
+      return normalized;
+    });
+  }, [visibleTasks]);
+  const handleCancelPartialShareSelection = useCallback(() => {
+    setSelectedShareTaskIds(new Set());
+    setShareSelectionMode(false);
+    setShareStatus('idle');
+  }, [setShareStatus]);
+  const handleSubmitPartialShareSelection = useCallback(async () => {
+    if (!auth.accessToken || !auth.project || selectedShareTaskIds.size === 0) {
+      return;
+    }
+
+    try {
+      setShareStatus('creating');
+      const response = await fetch(`/api/projects/${auth.project.id}/share-links`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scope: 'task_selection',
+          includedTaskIds: Array.from(selectedShareTaskIds),
+          label: `${auth.project.name} · часть графика`,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setSelectedShareTaskIds(new Set());
+      setShareSelectionMode(false);
+      useUIStore.getState().setShowShareManager(true);
+      setShareStatus('idle');
+    } catch (error) {
+      console.error('Failed to create partial share link:', error);
+      setShareStatus('error');
+      window.setTimeout(() => {
+        if (useUIStore.getState().shareStatus === 'error') {
+          useUIStore.getState().setShareStatus('idle');
+        }
+      }, 2500);
+    }
+  }, [auth.accessToken, auth.project, selectedShareTaskIds, setShareStatus]);
   const currentProjectTaskCount = workspace.kind === 'project'
     ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
     : undefined;
@@ -1643,6 +1728,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onCascade={handleCascade}
               shareStatus={shareStatus}
               onCreateShareLink={handleCreateShareLink}
+              shareSelectionMode={shareSelectionMode}
+              selectedShareTaskIds={selectedShareTaskIds}
+              onSelectedShareTaskIdsChange={handlePartialShareSelectionChange}
+              onCancelShareSelection={handleCancelPartialShareSelection}
+              onConfirmShareSelection={handleSubmitPartialShareSelection}
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
               calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
@@ -1808,8 +1898,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         accessToken={auth.accessToken}
         projectId={auth.project.id}
         projectName={auth.project.name}
-        tasks={visibleTasks}
-        ganttDayMode={effectiveAuthGanttDayMode}
+        selectionActive={shareSelectionMode}
+        selectedTaskCount={selectedShareTaskIds.size}
+        onStartPartialSelection={handleStartPartialShareSelection}
         onStatusChange={setShareStatus}
         onClose={() => {
           useUIStore.getState().setShowShareManager(false);
