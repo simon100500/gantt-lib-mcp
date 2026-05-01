@@ -526,6 +526,10 @@ export interface WorkCalendarDay {
 export interface ShareLink {
   id: string;
   projectId: string;
+  label: string;
+  scope: 'project' | 'task_selection';
+  includedTaskIds: string[];
+  revokedAt: string | null;
   createdAt: string;
 }
 

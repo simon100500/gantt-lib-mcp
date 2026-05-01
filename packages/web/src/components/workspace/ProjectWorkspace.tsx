@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { Users, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
@@ -69,6 +69,11 @@ interface ProjectWorkspaceProps {
   showChat?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
+  shareSelectionMode?: boolean;
+  selectedShareTaskIds?: Set<string>;
+  onSelectedShareTaskIdsChange?: (taskIds: Set<string>) => void;
+  onCancelShareSelection?: () => void;
+  onConfirmShareSelection?: () => void | Promise<void>;
   ganttDayMode: 'business' | 'calendar';
   displayGanttDayMode?: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
@@ -443,6 +448,11 @@ export function ProjectWorkspace({
   showChat = true,
   shareStatus = 'idle',
   onCreateShareLink,
+  shareSelectionMode = false,
+  selectedShareTaskIds = new Set(),
+  onSelectedShareTaskIdsChange,
+  onCancelShareSelection,
+  onConfirmShareSelection,
   ganttDayMode,
   displayGanttDayMode,
   calendarDays = [],
@@ -621,6 +631,7 @@ export function ProjectWorkspace({
   const historyPanelDisabled = readOnly || aiMutationLocked || previewRendering || previewFailed || !accessToken;
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
+  const shareSelectionActive = shareSelectionMode && !effectiveReadOnly;
   const effectiveChatDisabled = chatDisabled || previewModeActive;
   const effectiveChatDisabledReason = previewModeActive
     ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
@@ -1071,7 +1082,7 @@ export function ProjectWorkspace({
   }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, replaceAssignmentsForTask, replaceAssignmentsForTasks, setAssignmentError, tasks, workspace]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
-    if (effectiveReadOnly || chatDisabled || !showChat) {
+    if (effectiveReadOnly || shareSelectionActive || chatDisabled || !showChat) {
       return [];
     }
 
@@ -1079,7 +1090,7 @@ export function ProjectWorkspace({
       {
         id: 'assign-resource',
         label: 'Назначить ресурс',
-        icon: <Check className="h-4 w-4" />,
+        icon: <Users className="h-4 w-4" />,
         onSelect: (row) => openAssignmentSelector(row),
       },
       {
@@ -1101,17 +1112,17 @@ export function ProjectWorkspace({
     }
 
     return commands;
-  }, [chatDisabled, effectiveReadOnly, onSplitTask, showChat, openAssignmentSelector]);
+  }, [chatDisabled, effectiveReadOnly, onSplitTask, shareSelectionActive, showChat, openAssignmentSelector]);
 
   const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
     createAssignedResourcesColumn({
       resources,
       assignments,
-      editable: !effectiveReadOnly,
-      readOnly: effectiveReadOnly,
+      editable: !effectiveReadOnly && !shareSelectionActive,
+      readOnly: effectiveReadOnly || shareSelectionActive,
       onEdit: openAssignmentSelector,
     }),
-  ], [assignments, effectiveReadOnly, openAssignmentSelector, resources]);
+  ], [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
@@ -1354,7 +1365,7 @@ export function ProjectWorkspace({
       return;
     }
 
-    void refreshBaselines().catch(() => {});
+    void refreshBaselines().catch(() => { });
   }, [hasBaselineAccess, refreshBaselines]);
 
   const handleRefreshBaselines = useCallback(async () => {
@@ -1661,6 +1672,35 @@ export function ProjectWorkspace({
               </div>
             )}
 
+            {shareSelectionActive && (
+              <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <div className="min-w-0">
+                  <span className="font-semibold">Режим выбора для ссылки.</span>
+                  <span className="ml-2 text-amber-800">Выбрано: {selectedShareTaskIds.size}. Отмечайте задачи прямо в текущем графике.</span>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={onCancelShareSelection}
+                    className="inline-flex h-8 items-center rounded-md border border-amber-300 bg-white px-3 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void onConfirmShareSelection?.(); }}
+                    disabled={selectedShareTaskIds.size === 0 || shareStatus === 'creating'}
+                    className={cn(
+                      'inline-flex h-8 items-center rounded-md bg-amber-900 px-3 text-xs font-medium text-white transition-colors hover:bg-amber-950',
+                      (selectedShareTaskIds.size === 0 || shareStatus === 'creating') && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    {shareStatus === 'creating' ? 'Создаём ссылку...' : 'Создать ссылку'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="min-h-0 flex-1 overflow-hidden bg-white" ref={ganttSectionRef}>
               {loading ? (
                 <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
@@ -1677,7 +1717,7 @@ export function ProjectWorkspace({
                   hiddenTaskListColumns={hiddenTaskListColumns}
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
-                  onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
+                  onTasksChange={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}
                   containerHeight="calc(100dvh - 132px)"
@@ -1686,22 +1726,25 @@ export function ProjectWorkspace({
                   taskListWidth={taskListWidth}
                   onValidateDependencies={onValidation}
                   enableAutoSchedule={autoSchedule}
-                  onCascade={effectiveReadOnly ? undefined : onCascade}
-                  disableTaskNameEditing={effectiveReadOnly}
-                  disableDependencyEditing={effectiveReadOnly}
-                  disableTaskDrag={effectiveDisableTaskDrag}
+                  onCascade={effectiveReadOnly || shareSelectionActive ? undefined : onCascade}
+                  disableTaskNameEditing={effectiveReadOnly || shareSelectionActive}
+                  disableDependencyEditing={effectiveReadOnly || shareSelectionActive}
+                  disableTaskDrag={effectiveDisableTaskDrag || shareSelectionActive}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
                   viewMode={viewMode}
                   collapsedParentIds={collapsedParentIds}
                   onToggleCollapse={handleToggleCollapse}
-                  onAdd={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleAdd}
-                  onDelete={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleDelete}
-                  onInsertAfter={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleInsertAfter}
-                  onReorder={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleReorder}
-                  onUngroupTask={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleUngroupTask}
+                  onAdd={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
+                  onDelete={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
+                  onInsertAfter={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                  onReorder={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
+                  onUngroupTask={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
                   customDays={customDays}
                   highlightedTaskIds={highlightedSearchTaskIds}
+                  enableTaskMultiSelect={shareSelectionActive}
+                  selectedTaskIds={selectedShareTaskIds}
+                  onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : undefined}
                   filterMode={filterMode}
                   businessDays={ganttDayMode !== 'calendar'}
                 />

@@ -673,7 +673,7 @@ export function Toolbar({
                         ? 'Скопировано'
                         : shareStatus === 'error'
                           ? 'Ошибка ссылки'
-                          : 'Отправить ссылку'}
+                          : 'Отправить ссылку...'}
                   </span>
                 </DropdownMenuItem>
               </>
@@ -914,7 +914,7 @@ export function Toolbar({
               >
                 {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
                 <span className="text-sm">
-                  {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку'}
+                  {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку...'}
                 </span>
               </DropdownMenuItem>
             </>

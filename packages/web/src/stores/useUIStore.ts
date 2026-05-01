@@ -93,6 +93,7 @@ interface UIState {
   validationErrors: DependencyError[];
   shareStatus: ShareStatus;
   shareLinkUrl: string | null;
+  showShareManager: boolean;
   savingState: SavingState;
   chatComposerDraft: string;
   aiMutationLock: {
@@ -132,6 +133,7 @@ interface UIState {
   setValidationErrors: (errors: DependencyError[]) => void;
   setShareStatus: (status: ShareStatus) => void;
   setShareLinkUrl: (url: string | null) => void;
+  setShowShareManager: (visible: boolean) => void;
   setSavingState: (status: SavingState) => void;
   setChatComposerDraft: (value: string) => void;
   clearChatComposerDraft: () => void;
@@ -179,6 +181,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   validationErrors: [],
   shareStatus: 'idle',
   shareLinkUrl: null,
+  showShareManager: false,
   savingState: 'idle',
   chatComposerDraft: '',
   aiMutationLock: {
@@ -236,6 +239,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setValidationErrors: (validationErrors) => set({ validationErrors }),
   setShareStatus: (shareStatus) => set({ shareStatus }),
   setShareLinkUrl: (shareLinkUrl) => set({ shareLinkUrl }),
+  setShowShareManager: (showShareManager) => set({ showShareManager }),
   setSavingState: (savingState) => set({ savingState }),
   setChatComposerDraft: (chatComposerDraft) => set({ chatComposerDraft }),
   clearChatComposerDraft: () => set({ chatComposerDraft: '' }),

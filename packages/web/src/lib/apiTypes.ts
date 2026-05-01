@@ -40,6 +40,18 @@ export interface TaskAssignmentRecord {
   createdAt: string;
 }
 
+export interface ShareLinkListItem {
+  id: string;
+  projectId: string;
+  label: string;
+  scope: 'project' | 'task_selection';
+  includedTaskIds: string[];
+  previewTitles?: string[];
+  revokedAt: string | null;
+  createdAt: string;
+  url: string;
+}
+
 export interface AuthSuccessResponse {
   accessToken: string;
   refreshToken: string;

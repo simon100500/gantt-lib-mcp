@@ -53,7 +53,7 @@ export function ShareLinkModal({ url, onClose }: ShareLinkModalProps) {
         <CardHeader className="space-y-1 pb-4">
           <CardTitle className="flex items-center gap-2 text-xl font-semibold">
             <Send className="h-5 w-5" />
-            Отправить ссылку
+            Отправить ссылку...
           </CardTitle>
           <CardDescription>
             Скопируйте ссылку и отправьте её тому, кому нужен доступ к графику.

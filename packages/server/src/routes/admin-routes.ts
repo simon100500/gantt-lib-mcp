@@ -621,7 +621,11 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const shareLink = await authService.createShareLink(projectId);
+    const shareLink = await authService.createShareLink({
+      projectId,
+      scope: 'project',
+      label: 'Admin share link',
+    });
     const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
     const host = req.headers.host ?? 'localhost:3000';
     const origin = req.headers.origin ?? `${proto}://${host}`;

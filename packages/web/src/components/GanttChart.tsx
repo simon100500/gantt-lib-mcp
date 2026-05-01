@@ -53,6 +53,9 @@ export interface GanttChartProps {
   onUngroupTask?: (taskId: string) => void;
   taskFilter?: import('gantt-lib').TaskPredicate;
   highlightedTaskIds?: Set<string>;
+  enableTaskMultiSelect?: boolean;
+  selectedTaskIds?: Set<string>;
+  onSelectedTaskIdsChange?: (taskIds: Set<string>) => void;
   filterMode?: 'highlight' | 'hide';
   businessDays?: boolean;
   taskListMenuCommands?: TaskListMenuCommand<Task>[];
@@ -109,6 +112,9 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onUngroupTask,
   taskFilter,
   highlightedTaskIds,
+  enableTaskMultiSelect,
+  selectedTaskIds,
+  onSelectedTaskIdsChange,
   filterMode,
   businessDays,
   taskListMenuCommands,
@@ -169,6 +175,9 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       customDays={customDays}
       taskFilter={taskFilter}
       highlightedTaskIds={highlightedTaskIds}
+      enableTaskMultiSelect={enableTaskMultiSelect}
+      selectedTaskIds={selectedTaskIds}
+      onSelectedTaskIdsChange={onSelectedTaskIdsChange}
       filterMode={filterMode}
       businessDays={businessDays}
       taskListMenuCommands={taskListMenuCommands}
