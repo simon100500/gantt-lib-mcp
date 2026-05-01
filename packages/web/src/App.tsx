@@ -9,7 +9,7 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
-import { ShareLinkModal } from './components/ShareLinkModal.tsx';
+import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
@@ -1259,30 +1259,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!auth.accessToken || !auth.project) {
       return;
     }
-    try {
-      setShareStatus('creating');
-      const response = await fetch(`/api/projects/${auth.project.id}/share`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${auth.accessToken}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json() as { url: string };
-      useUIStore.getState().setShareLinkUrl(data.url);
-      setShareStatus('idle');
-    } catch (createError) {
-      console.error('Failed to create share link:', createError);
-      setShareStatus('error');
-      window.setTimeout(() => {
-        if (useUIStore.getState().shareStatus === 'error') {
-          useUIStore.getState().setShareStatus('idle');
-        }
-      }, 2500);
-    }
-  }, [auth.accessToken, auth.project, setShareStatus]);
+    useUIStore.getState().setShowShareManager(true);
+  }, [auth.accessToken, auth.project]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken) {
@@ -1452,7 +1430,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [workspace, workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
-  const shareLink = useUIStore((state) => state.shareLinkUrl);
+  const showShareManager = useUIStore((state) => state.showShareManager);
   const { updateAvailable, reloadApp } = useAppUpdateCheck();
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
@@ -1825,10 +1803,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       />
     )}
 
-    {shareLink && (
-      <ShareLinkModal
-        url={shareLink}
+    {showShareManager && auth.accessToken && auth.project && (
+      <ShareLinksManagerModal
+        accessToken={auth.accessToken}
+        projectId={auth.project.id}
+        projectName={auth.project.name}
+        tasks={visibleTasks}
+        ganttDayMode={effectiveAuthGanttDayMode}
+        onStatusChange={setShareStatus}
         onClose={() => {
+          useUIStore.getState().setShowShareManager(false);
           useUIStore.getState().setShareLinkUrl(null);
           setShareStatus('idle');
         }}

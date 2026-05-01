@@ -19,6 +19,13 @@ interface CachedSession {
   expiresAt: number;
 }
 
+export interface CreateShareLinkInput {
+  projectId: string;
+  label: string;
+  scope: ShareLink['scope'];
+  includedTaskIds?: string[];
+}
+
 export class AuthService {
   private prisma = getPrisma();
   private sessionCache = new Map<string, CachedSession>();
@@ -179,6 +186,20 @@ export class AuthService {
    */
   async createProject(userId: string, name: string, groupId?: string): Promise<Project> {
     return projectService.create(userId, name, groupId);
+  }
+
+  private shareLinkToDomain(link: any): ShareLink {
+    return {
+      id: link.id,
+      projectId: link.projectId,
+      label: link.label ?? '',
+      scope: link.scope === 'task_selection' ? 'task_selection' : 'project',
+      includedTaskIds: Array.isArray(link.includedTaskIds)
+        ? link.includedTaskIds.filter((taskId: unknown): taskId is string => typeof taskId === 'string')
+        : [],
+      revokedAt: link.revokedAt ? link.revokedAt.toISOString() : null,
+      createdAt: link.createdAt.toISOString(),
+    };
   }
 
   /**
@@ -401,45 +422,42 @@ export class AuthService {
     });
   }
 
-  /**
-   * Create a share link for a project
-   *
-   * Returns an existing link when present so the project keeps
-   * a stable share URL across repeated "share" actions.
-   * Retries on collision when creating a new ID.
-   *
-   * @param projectId - Project ID to create share link for
-   * @returns Existing or newly created ShareLink
-   */
-  async createShareLink(projectId: string): Promise<ShareLink> {
-    const existingLink = await this.prisma.shareLink.findFirst({
+  async listShareLinks(projectId: string): Promise<ShareLink[]> {
+    const shareLinkModel = this.prisma.shareLink as any;
+    const links = await shareLinkModel.findMany({
       where: { projectId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
     });
 
-    if (existingLink) {
-      return {
-        id: existingLink.id,
-        projectId: existingLink.projectId,
-        createdAt: existingLink.createdAt.toISOString(),
-      };
-    }
+    return links.map((link: any) => this.shareLinkToDomain(link));
+  }
 
+  /**
+   * Create a share link for a project.
+   *
+   * Retries on collision when creating a new ID.
+   */
+  async createShareLink(input: CreateShareLinkInput): Promise<ShareLink> {
+    const shareLinkModel = this.prisma.shareLink as any;
     for (let attempt = 0; attempt < 5; attempt++) {
       const id = this.generateShareId();
       try {
-        const link = await this.prisma.shareLink.create({
+        const link = await shareLinkModel.create({
           data: {
             id,
-            projectId,
+            projectId: input.projectId,
+            label: input.label.trim(),
+            scope: input.scope,
+            includedTaskIds: input.scope === 'task_selection'
+              ? Array.from(new Set((input.includedTaskIds ?? []).filter(Boolean)))
+              : [],
           },
         });
 
-        return {
-          id: link.id,
-          projectId: link.projectId,
-          createdAt: link.createdAt.toISOString(),
-        };
+        return this.shareLinkToDomain(link);
       } catch {
         // Retry on primary key collision
       }
@@ -449,13 +467,14 @@ export class AuthService {
   }
 
   /**
-   * Find share link by ID
+   * Find share link by ID, including revoked links.
    *
    * @param id - Share link ID to find
    * @returns ShareLink if found, null otherwise
    */
   async findShareLinkById(id: string): Promise<ShareLink | null> {
-    const link = await this.prisma.shareLink.findUnique({
+    const shareLinkModel = this.prisma.shareLink as any;
+    const link = await shareLinkModel.findUnique({
       where: { id },
     });
 
@@ -463,11 +482,42 @@ export class AuthService {
       return null;
     }
 
-    return {
-      id: link.id,
-      projectId: link.projectId,
-      createdAt: link.createdAt.toISOString(),
-    };
+    return this.shareLinkToDomain(link);
+  }
+
+  async findActiveShareLinkById(id: string): Promise<ShareLink | null> {
+    const shareLinkModel = this.prisma.shareLink as any;
+    const link = await shareLinkModel.findFirst({
+      where: {
+        id,
+        revokedAt: null,
+      },
+    });
+
+    return link ? this.shareLinkToDomain(link) : null;
+  }
+
+  async revokeShareLink(id: string, projectId: string): Promise<ShareLink | null> {
+    const shareLinkModel = this.prisma.shareLink as any;
+    const existing = await shareLinkModel.findFirst({
+      where: {
+        id,
+        projectId,
+      },
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const revoked = existing.revokedAt
+      ? existing
+      : await shareLinkModel.update({
+        where: { id },
+        data: { revokedAt: new Date() },
+      });
+
+    return this.shareLinkToDomain(revoked);
   }
 }
 

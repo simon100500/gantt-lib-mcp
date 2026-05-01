@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { Users, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
@@ -1079,7 +1079,7 @@ export function ProjectWorkspace({
       {
         id: 'assign-resource',
         label: 'Назначить ресурс',
-        icon: <Check className="h-4 w-4" />,
+        icon: <Users className="h-4 w-4" />,
         onSelect: (row) => openAssignmentSelector(row),
       },
       {
@@ -1354,7 +1354,7 @@ export function ProjectWorkspace({
       return;
     }
 
-    void refreshBaselines().catch(() => {});
+    void refreshBaselines().catch(() => { });
   }, [hasBaselineAccess, refreshBaselines]);
 
   const handleRefreshBaselines = useCallback(async () => {

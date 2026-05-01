@@ -10,6 +10,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { authService, projectService, taskService } from '@gantt/mcp/services';
+import type { Task } from '@gantt/mcp/types';
 import { sendOtpEmail } from '../email.js';
 import {
   generateOtp,
@@ -96,6 +97,70 @@ function mapYandexAuthError(error: unknown): { status: number; body: { error: st
     default:
       return { status: 502, body: { error: error.message } };
   }
+}
+
+type CreateShareLinkBody = {
+  scope?: 'project' | 'task_selection';
+  includedTaskIds?: string[];
+  label?: string;
+};
+
+function buildShareOrigin(req: {
+  headers: Record<string, unknown>;
+}): string {
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
+  const host = (req.headers.host as string | undefined) ?? 'localhost:3000';
+  return (req.headers.origin as string | undefined) ?? `${proto}://${host}`;
+}
+
+function buildShareUrl(origin: string, token: string): string {
+  return `${origin}/?share=${encodeURIComponent(token)}`;
+}
+
+function sanitizeShareLabel(label: string | undefined, fallback: string): string {
+  const trimmed = label?.trim();
+  return trimmed ? trimmed.slice(0, 120) : fallback;
+}
+
+async function listAllProjectTasks(projectId: string): Promise<Task[]> {
+  const tasks: Task[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const page = await taskService.list(projectId, undefined, pageSize, offset);
+    tasks.push(...page.tasks);
+    if (!page.hasMore) {
+      break;
+    }
+    offset += pageSize;
+  }
+
+  return tasks;
+}
+
+function buildScopedShareTasks(tasks: Task[], includedTaskIds: string[]): Task[] {
+  const taskMap = new Map(tasks.map((task) => [task.id, task]));
+  const selectedTaskIds = Array.from(new Set(includedTaskIds.filter((taskId) => taskMap.has(taskId))));
+  const visibleIds = new Set<string>();
+
+  for (const taskId of selectedTaskIds) {
+    let currentId: string | undefined = taskId;
+    while (currentId) {
+      if (visibleIds.has(currentId)) {
+        break;
+      }
+      visibleIds.add(currentId);
+      currentId = taskMap.get(currentId)?.parentId;
+    }
+  }
+
+  return tasks
+    .filter((task) => visibleIds.has(task.id))
+    .map((task) => ({
+      ...task,
+      dependencies: (task.dependencies ?? []).filter((dependency) => visibleIds.has(dependency.taskId)),
+    }));
 }
 
 /**
@@ -350,6 +415,94 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     });
   });
 
+  fastify.get<{ Params: { id: string } }>('/api/projects/:id/share-links', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const projects = await authService.listProjects(req.user!.userId);
+    const project = projects.find((item) => item.id === projectId);
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const origin = buildShareOrigin(req);
+    const links = await authService.listShareLinks(projectId);
+
+    return reply.send({
+      links: links.map((link) => ({
+        ...link,
+        url: buildShareUrl(origin, link.id),
+      })),
+    });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/projects/:id/share-links', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId } = req.params;
+    const body = (req.body ?? {}) as CreateShareLinkBody;
+    const projects = await authService.listProjects(req.user!.userId);
+    const project = projects.find((item) => item.id === projectId);
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const scope = body.scope === 'task_selection' ? 'task_selection' : 'project';
+    const allTasks = scope === 'task_selection' ? await listAllProjectTasks(projectId) : [];
+    const taskMap = new Map(allTasks.map((task) => [task.id, task]));
+    const includedTaskIds = scope === 'task_selection'
+      ? Array.from(new Set((body.includedTaskIds ?? []).filter((taskId): taskId is string => typeof taskId === 'string' && taskMap.has(taskId))))
+      : [];
+
+    if (scope === 'task_selection' && includedTaskIds.length === 0) {
+      return reply.status(400).send({ error: 'includedTaskIds required for task_selection share links' });
+    }
+
+    const fallbackLabel = scope === 'project'
+      ? `${project.name} · весь график`
+      : `${project.name} · часть графика`;
+    const shareLink = await authService.createShareLink({
+      projectId,
+      label: sanitizeShareLabel(body.label, fallbackLabel),
+      scope,
+      includedTaskIds,
+    });
+    const origin = buildShareOrigin(req);
+
+    return reply.send({
+      link: {
+        ...shareLink,
+        url: buildShareUrl(origin, shareLink.id),
+      },
+      project: {
+        id: project.id,
+        name: project.name,
+        groupId: project.groupId,
+        status: project.status,
+        ganttDayMode: project.ganttDayMode,
+        calendarId: project.calendarId,
+        calendarDays: project.calendarDays,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
+      },
+    });
+  });
+
+  fastify.post<{ Params: { id: string; shareLinkId: string } }>('/api/projects/:id/share-links/:shareLinkId/revoke', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId, shareLinkId } = req.params;
+    const projects = await authService.listProjects(req.user!.userId);
+    const project = projects.find((item) => item.id === projectId);
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const link = await authService.revokeShareLink(shareLinkId, projectId);
+    if (!link) {
+      return reply.status(404).send({ error: 'Share link not found' });
+    }
+
+    return reply.send({ link });
+  });
+
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/share', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
     const projects = await authService.listProjects(req.user!.userId);
@@ -359,15 +512,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const shareLink = await authService.createShareLink(projectId);
-    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http';
-    const host = req.headers.host ?? 'localhost:3000';
-    const origin = req.headers.origin ?? `${proto}://${host}`;
-    const url = `${origin}/?share=${encodeURIComponent(shareLink.id)}`;
+    const shareLink = await authService.createShareLink({
+      projectId,
+      scope: 'project',
+      label: `${project.name} · весь график`,
+    });
+    const origin = buildShareOrigin(req);
 
     return reply.send({
       token: shareLink.id,
-      url,
+      url: buildShareUrl(origin, shareLink.id),
       project: {
         id: project.id,
         name: project.name,
@@ -388,7 +542,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'token required' });
     }
 
-    const shareLink = await authService.findShareLinkById(token);
+    const shareLink = await authService.findActiveShareLinkById(token);
     if (!shareLink) {
       return reply.status(404).send({ error: 'Share link not found' });
     }
@@ -398,8 +552,21 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const { tasks } = await taskService.list(project.id);
+    const allTasks = await listAllProjectTasks(project.id);
+    const tasks = shareLink.scope === 'task_selection'
+      ? buildScopedShareTasks(allTasks, shareLink.includedTaskIds)
+      : allTasks;
+
+    if (shareLink.scope === 'task_selection' && tasks.length === 0) {
+      return reply.status(404).send({ error: 'Share link content not found' });
+    }
+
     return reply.send({
+      shareLink: {
+        id: shareLink.id,
+        label: shareLink.label,
+        scope: shareLink.scope,
+      },
       project: {
         id: project.id,
         name: project.name,
