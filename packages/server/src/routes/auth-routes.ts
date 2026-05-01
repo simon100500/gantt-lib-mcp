@@ -456,9 +456,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'includedTaskIds required for task_selection share links' });
     }
 
-    const fallbackLabel = scope === 'project'
-      ? `${project.name} · весь график`
-      : `${project.name} · часть графика`;
+    const fallbackLabel = project.name;
     const shareLink = await authService.createShareLink({
       projectId,
       label: sanitizeShareLabel(body.label, fallbackLabel),
@@ -515,7 +513,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const shareLink = await authService.createShareLink({
       projectId,
       scope: 'project',
-      label: `${project.name} · весь график`,
+      label: project.name,
     });
     const origin = buildShareOrigin(req);
 

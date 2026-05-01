@@ -29,6 +29,19 @@ function formatCreatedAt(value: string): string {
   return new Date(value).toLocaleString('ru-RU');
 }
 
+function getShareScopeLabel(scope: ShareLinkListItem['scope']): string {
+  return scope === 'project' ? 'Весь график' : 'Часть графика';
+}
+
+function getShareDisplayTitle(link: ShareLinkListItem): string {
+  const normalizedLabel = link.label
+    .replace(/\s*[·-]\s*весь график$/i, '')
+    .replace(/\s*[·-]\s*часть графика$/i, '')
+    .trim();
+
+  return normalizedLabel || link.label;
+}
+
 function resolveShareUrl(token: string): string {
   if (typeof window === 'undefined') {
     return `/?share=${encodeURIComponent(token)}`;
@@ -109,7 +122,7 @@ export function ShareLinksManagerModal({
         },
         body: JSON.stringify({
           scope: 'project',
-          label: `${projectName} · весь график`,
+          label: projectName,
         }),
       });
       if (!response.ok) {
@@ -250,7 +263,20 @@ export function ShareLinksManagerModal({
                             : <SquareChartGantt className="h-3.5 w-3.5" />}
                         </div>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-bold leading-none text-slate-700">{link.label}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="truncate text-sm font-bold leading-none text-slate-700">
+                              {getShareDisplayTitle(link)}
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${
+                                link.scope === 'project'
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              {getShareScopeLabel(link.scope)}
+                            </span>
+                          </div>
                           <div className="mt-1 text-[10px] font-medium text-slate-400">{formatCreatedAt(link.createdAt)}</div>
                         </div>
                       </div>

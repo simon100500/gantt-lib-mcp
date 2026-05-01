@@ -1499,7 +1499,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         body: JSON.stringify({
           scope: 'task_selection',
           includedTaskIds: Array.from(selectedShareTaskIds),
-          label: `${auth.project.name} · часть графика`,
+          label: auth.project.name,
         }),
       });
       if (!response.ok) {
