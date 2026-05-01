@@ -87,6 +87,7 @@ interface ProjectWorkspaceProps {
   previewMessage?: string | null;
   onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   showResourceAssignments?: boolean;
+  onCreateTemplateFromTask?: (task: Task) => void | Promise<void>;
   onInsertTemplateAtTask?: (task: Task) => void | Promise<void>;
   onCreateTemplateFromProject?: () => void | Promise<void>;
   onStartTemplateSelection?: () => void | Promise<void>;
@@ -475,6 +476,7 @@ export function ProjectWorkspace({
   previewMessage = null,
   onSplitTask,
   showResourceAssignments = true,
+  onCreateTemplateFromTask,
   onInsertTemplateAtTask,
   onCreateTemplateFromProject,
   onStartTemplateSelection,
@@ -1148,8 +1150,17 @@ export function ProjectWorkspace({
       });
     }
 
+    if (onCreateTemplateFromTask) {
+      commands.push({
+        id: 'create-template-from-task',
+        label: 'В шаблон...',
+        icon: <ListTree className="h-4 w-4" />,
+        onSelect: (row) => { void onCreateTemplateFromTask(row); },
+      });
+    }
+
     return commands;
-  }, [chatDisabled, effectiveReadOnly, externalSelectionActive, onInsertTemplateAtTask, onSplitTask, showChat, openAssignmentSelector]);
+  }, [chatDisabled, effectiveReadOnly, externalSelectionActive, onCreateTemplateFromTask, onInsertTemplateAtTask, onSplitTask, showChat, openAssignmentSelector]);
 
   const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
     showResourceAssignments
@@ -1758,6 +1769,13 @@ export function ProjectWorkspace({
                     className="inline-flex h-8 items-center rounded-md border border-sky-300 bg-white px-3 text-xs font-medium text-sky-900 transition-colors hover:bg-sky-100"
                   >
                     Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void onCreateTemplateFromProject?.(); }}
+                    className="inline-flex h-8 items-center rounded-md border border-sky-300 bg-white px-3 text-xs font-medium text-sky-900 transition-colors hover:bg-sky-100"
+                  >
+                    Весь график
                   </button>
                   <button
                     type="button"

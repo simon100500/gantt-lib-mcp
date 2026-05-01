@@ -506,24 +506,11 @@ export function ProjectMenu({
                     </span>
                     </>
                   )}
-                {!hasShareToken && auth.isAuthenticated && (
+                {!hasShareToken && auth.isAuthenticated && projectUsageLabel && (
                   <div className="hidden items-center gap-2 sm:flex">
-                    {projectUsageLabel && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                        {projectUsageLabel}
-                      </span>
-                    )}
-                    {!hasShareToken && auth.isAuthenticated && workspace.kind === 'project' && !isArchivedProject && onCreateProjectTemplate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { void onCreateProjectTemplate(); }}
-                        className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                      >
-                        <Package className="mr-1.5 h-3.5 w-3.5" />
-                        В шаблон
-                      </Button>
-                    )}
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                      {projectUsageLabel}
+                    </span>
                   </div>
                 )}
               </div>

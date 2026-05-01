@@ -1676,6 +1676,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       rootTaskIds: Array.from(selectedTemplateTaskIds),
     });
   }, [selectedTemplateTaskIds, visibleTasks]);
+  const handleCreateTemplateFromTask = useCallback((task: Task) => {
+    const rootTaskIds = collectTaskSubtreeIds(visibleTasks, task.id);
+    setSaveTemplateDraft({
+      mode: 'selection',
+      initialName: task.name?.trim() || 'Новый шаблон',
+      taskCount: rootTaskIds.length,
+      rootTaskIds,
+    });
+  }, [visibleTasks]);
   const handleSubmitPartialShareSelection = useCallback(async () => {
     if (!auth.accessToken || !auth.project || selectedShareTaskIds.size === 0) {
       return;
@@ -1960,6 +1969,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
                   console.error('Failed to update gantt day mode:', error);
                 });
               }}
+              onCreateTemplateFromTask={handleCreateTemplateFromTask}
               onInsertTemplateAtTask={handleInsertTemplateAtTask}
               onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
               onStartTemplateSelection={handleStartTemplateSelection}
