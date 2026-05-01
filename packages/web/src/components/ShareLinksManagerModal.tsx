@@ -40,6 +40,22 @@ function getShareDisplayTitle(link: ShareLinkListItem): string {
   return normalizedLabel || link.label;
 }
 
+function getSharePreviewText(link: ShareLinkListItem): string | null {
+  if (link.scope !== 'task_selection') {
+    return null;
+  }
+
+  const titles = Array.isArray(link.previewTitles)
+    ? link.previewTitles.map((title) => title.trim()).filter(Boolean)
+    : [];
+
+  if (titles.length === 0) {
+    return null;
+  }
+
+  return titles.join(', ');
+}
+
 function resolveShareUrl(token: string): string {
   if (typeof window === 'undefined') {
     return `/?share=${encodeURIComponent(token)}`;
@@ -308,6 +324,13 @@ export function ShareLinksManagerModal({
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
+
+                    {getSharePreviewText(link) && (
+                      <div className="mt-2 truncate text-[11px] text-slate-500">
+                        <span className="font-medium text-slate-600">Разделы:</span>{' '}
+                        {getSharePreviewText(link)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

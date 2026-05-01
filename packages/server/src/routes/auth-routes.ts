@@ -163,6 +163,52 @@ function buildScopedShareTasks(tasks: Task[], includedTaskIds: string[]): Task[]
     }));
 }
 
+function buildSharePreviewTitles(tasks: Task[], scope: 'project' | 'task_selection', includedTaskIds: string[]): string[] {
+  if (tasks.length === 0) {
+    return [];
+  }
+
+  const taskMap = new Map(tasks.map((task) => [task.id, task]));
+  const orderedIds = tasks.map((task) => task.id);
+  const visibleTaskIds = scope === 'task_selection'
+    ? Array.from(new Set(includedTaskIds.filter((taskId) => taskMap.has(taskId))))
+    : orderedIds;
+  const visibleIdSet = new Set(visibleTaskIds);
+  const childCounts = new Map<string, number>();
+
+  for (const task of tasks) {
+    if (task.parentId && visibleIdSet.has(task.id) && visibleIdSet.has(task.parentId)) {
+      childCounts.set(task.parentId, (childCounts.get(task.parentId) ?? 0) + 1);
+    }
+  }
+
+  const rootCandidates = visibleTaskIds.filter((taskId) => {
+    const task = taskMap.get(taskId);
+    return task && (!task.parentId || !visibleIdSet.has(task.parentId));
+  });
+
+  const preferredIds = rootCandidates.filter((taskId) => (childCounts.get(taskId) ?? 0) > 0);
+  const fallbackIds = rootCandidates.filter((taskId) => (childCounts.get(taskId) ?? 0) === 0);
+  const orderedPreviewIds = [...preferredIds, ...fallbackIds];
+  const titles: string[] = [];
+  const seenNames = new Set<string>();
+
+  for (const taskId of orderedPreviewIds) {
+    const name = taskMap.get(taskId)?.name?.trim();
+    if (!name || seenNames.has(name)) {
+      continue;
+    }
+
+    seenNames.add(name);
+    titles.push(name);
+    if (titles.length >= 5) {
+      break;
+    }
+  }
+
+  return titles;
+}
+
 /**
  * Register all authentication routes with Fastify
  *
@@ -426,10 +472,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     const origin = buildShareOrigin(req);
     const links = await authService.listShareLinks(projectId);
+    const allTasks = links.length > 0 ? await listAllProjectTasks(projectId) : [];
 
     return reply.send({
       links: links.map((link) => ({
         ...link,
+        previewTitles: buildSharePreviewTitles(allTasks, link.scope, link.includedTaskIds),
         url: buildShareUrl(origin, link.id),
       })),
     });

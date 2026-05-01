@@ -46,6 +46,7 @@ export interface ShareLinkListItem {
   label: string;
   scope: 'project' | 'task_selection';
   includedTaskIds: string[];
+  previewTitles?: string[];
   revokedAt: string | null;
   createdAt: string;
   url: string;
