@@ -179,7 +179,7 @@ export function ShareLinksManagerModal({
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-800">Мастер ссылок</h2>
             <p className="text-sm text-slate-500">
-              Создавайте и управляйте общими доступами
+              Отправьте весь график или только его часть
             </p>
           </div>
         </div>
@@ -196,7 +196,7 @@ export function ShareLinksManagerModal({
               type="button"
               onClick={() => { void handleCreateWholeProjectLink(); }}
               disabled={submitting}
-              className="h-10 flex-1 justify-center rounded-xl"
+              className="h-10 flex-1 justify-center rounded-lg"
             >
               {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Весь график
@@ -208,7 +208,7 @@ export function ShareLinksManagerModal({
                 onStartPartialSelection();
                 onClose();
               }}
-              className="h-10 flex-1 justify-center rounded-xl border-slate-300 bg-white"
+              className="h-10 flex-1 justify-center rounded-lg border-slate-300 bg-white"
             >
               {selectionActive ? 'Вернуться к выбору' : 'Часть графика'}
             </Button>
@@ -254,18 +254,17 @@ export function ShareLinksManagerModal({
                         <div className="mt-1 text-[10px] font-medium text-slate-400">{formatCreatedAt(link.createdAt)}</div>
                       </div>
                       <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${
-                          link.scope === 'project'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${link.scope === 'project'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-slate-200 text-slate-700'
+                          }`}
                       >
                         {getShareScopeLabel(link.scope)}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <div className="relative min-w-0 flex-1">
+                      <div className="relative min-w-0 flex-1">
                         <input
                           readOnly
                           onClick={() => void handleCopy(link)}
@@ -279,11 +278,10 @@ export function ShareLinksManagerModal({
                         type="button"
                         variant="outline"
                         onClick={() => void handleCopy(link)}
-                        className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold ${
-                          copiedLinkId === link.id
-                            ? 'border-green-200 bg-green-50 text-green-600'
-                            : ''
-                        }`}
+                        className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold ${copiedLinkId === link.id
+                          ? 'border-green-200 bg-green-50 text-green-600'
+                          : ''
+                          }`}
                       >
                         {copiedLinkId === link.id ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                         <span>{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
