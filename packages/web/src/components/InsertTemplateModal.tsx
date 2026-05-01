@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Layers3, Search } from 'lucide-react';
+import { Search, ToyBrick } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,7 +59,7 @@ export function InsertTemplateModal({
 
         <CardHeader className="space-y-1 pb-4">
           <CardTitle className="flex items-center gap-2 text-xl font-semibold">
-            <Layers3 className="h-5 w-5" />
+            <ToyBrick className="h-5 w-5" />
             Вставить шаблон
           </CardTitle>
           <CardDescription>

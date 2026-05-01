@@ -23,6 +23,7 @@ import {
   Plus,
   RefreshCw,
   Rows3,
+  ToyBrick,
   TriangleAlert,
   Undo2,
   X,
@@ -644,7 +645,7 @@ export function Toolbar({
           )}
           title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
         >
-          <Layers3 className="h-3.5 w-3.5" />
+          <ToyBrick className="h-3.5 w-3.5" />
           <span className="text-xs">Сохранить шаблон</span>
         </Button>
       )}

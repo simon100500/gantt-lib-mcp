@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Users, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { Users, ListTree, LoaderCircle, MessageSquare, ToyBrick, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
@@ -1144,7 +1144,7 @@ export function ProjectWorkspace({
       commands.push({
         id: 'insert-template-at-task',
         label: 'Вставить шаблон...',
-        icon: <WandSparkles className="h-4 w-4" />,
+        icon: <ToyBrick className="h-4 w-4" />,
         scope: 'linear',
         onSelect: (row) => { void onInsertTemplateAtTask(row); },
       });
@@ -1154,7 +1154,7 @@ export function ProjectWorkspace({
       commands.push({
         id: 'create-template-from-task',
         label: 'В шаблон...',
-        icon: <ListTree className="h-4 w-4" />,
+        icon: <ToyBrick className="h-4 w-4" />,
         onSelect: (row) => { void onCreateTemplateFromTask(row); },
       });
     }
@@ -1165,14 +1165,14 @@ export function ProjectWorkspace({
   const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
     showResourceAssignments
       ? [
-          createAssignedResourcesColumn({
-            resources,
-            assignments,
-            editable: !effectiveReadOnly && !shareSelectionActive,
-            readOnly: effectiveReadOnly || shareSelectionActive,
-            onEdit: openAssignmentSelector,
-          }),
-        ]
+        createAssignedResourcesColumn({
+          resources,
+          assignments,
+          editable: !effectiveReadOnly && !shareSelectionActive,
+          readOnly: effectiveReadOnly || shareSelectionActive,
+          onEdit: openAssignmentSelector,
+        }),
+      ]
       : []
   ), [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive, showResourceAssignments]);
 
@@ -1606,12 +1606,12 @@ export function ProjectWorkspace({
           onExportExcel={onExportExcel}
           isExportExcelLoading={isExportExcelLoading}
           shareStatus={shareStatus}
-            onCreateShareLink={onCreateShareLink}
-            showShareButton={!hasShareToken && isAuthenticated}
-            templateSelectionActive={templateSelectionActive}
-            onCreateTemplateFromProject={effectiveReadOnly || hasShareToken ? null : onCreateTemplateFromProject}
-            onStartTemplateSelection={effectiveReadOnly || hasShareToken ? null : onStartTemplateSelection}
-            viewMode={viewMode}
+          onCreateShareLink={onCreateShareLink}
+          showShareButton={!hasShareToken && isAuthenticated}
+          templateSelectionActive={templateSelectionActive}
+          onCreateTemplateFromProject={effectiveReadOnly || hasShareToken ? null : onCreateTemplateFromProject}
+          onStartTemplateSelection={effectiveReadOnly || hasShareToken ? null : onStartTemplateSelection}
+          viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           disableTaskDrag={effectiveDisableTaskDrag}
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
@@ -1757,23 +1757,23 @@ export function ProjectWorkspace({
             )}
 
             {templateSelectionActive && (
-              <div className="flex items-center justify-between gap-3 border-b border-sky-300 bg-sky-100 px-3 py-2.5 text-sm text-sky-950 shadow-[inset_0_-1px_0_rgba(14,116,144,0.12)]">
+              <div className="flex items-center justify-between gap-3 border-b border-primary/30 bg-primary/20 px-3 py-2.5 text-sm text-slate-900">
                 <div className="min-w-0">
-                  <span className="text-[13px] font-bold uppercase tracking-[0.04em] text-sky-950">Режим выбора шаблона.</span>
-                  <span className="ml-2 font-medium text-sky-900">Выбрано: {selectedTemplateTaskIds.size}. Отмечайте задачи прямо в текущем графике.</span>
+                  <span className="text-[13px] font-bold uppercase tracking-[0.04em] text-primary">Режим выбора шаблона.</span>
+                  <span className="ml-2 font-medium text-slate-700">Выбрано: {selectedTemplateTaskIds.size}.</span>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
                     onClick={onCancelTemplateSelection}
-                    className="inline-flex h-8 items-center rounded-md border border-sky-300 bg-white px-3 text-xs font-medium text-sky-900 transition-colors hover:bg-sky-100"
+                    className="inline-flex h-8 items-center rounded-md border border-primary/20 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
                   >
                     Отмена
                   </button>
                   <button
                     type="button"
                     onClick={() => { void onCreateTemplateFromProject?.(); }}
-                    className="inline-flex h-8 items-center rounded-md border border-sky-300 bg-white px-3 text-xs font-medium text-sky-900 transition-colors hover:bg-sky-100"
+                    className="inline-flex h-8 items-center rounded-md border border-primary/20 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
                   >
                     Весь график
                   </button>
@@ -1782,10 +1782,11 @@ export function ProjectWorkspace({
                     onClick={() => { void onConfirmTemplateSelection?.(); }}
                     disabled={selectedTemplateTaskIds.size === 0}
                     className={cn(
-                      'inline-flex h-8 items-center rounded-md bg-sky-900 px-3 text-xs font-medium text-white transition-colors hover:bg-sky-950',
+                      'inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90',
                       selectedTemplateTaskIds.size === 0 && 'cursor-not-allowed opacity-60',
                     )}
                   >
+                    <ToyBrick className="h-3.5 w-3.5" />
                     Сохранить шаблон
                   </button>
                 </div>

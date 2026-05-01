@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, Package, PanelRightOpen, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeleteProjectGroupModal } from './DeleteProjectGroupModal.tsx';
 import { EditProjectModal } from './EditProjectModal.tsx';
@@ -201,7 +201,7 @@ function TemplateRow({
         )}
       >
         <span className="flex min-w-0 items-center gap-2">
-          <Package className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <ToyBrick className="h-3.5 w-3.5 shrink-0 text-slate-400" />
           <span className="truncate text-sm sm:text-xs">{template.name}</span>
         </span>
       </button>
@@ -545,7 +545,7 @@ export function ProjectSwitcher({
           {onSwitchTemplate ? (
             <ProjectSection
               title={`Шаблоны (${templates.length})`}
-              icon={<Package className="h-4 w-4" />}
+              icon={<ToyBrick className="h-4 w-4" />}
               open={templatesOpen}
               onToggle={() => setTemplatesOpen((value) => !value)}
             >
