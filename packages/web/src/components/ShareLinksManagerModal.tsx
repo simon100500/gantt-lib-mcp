@@ -42,6 +42,7 @@ export function ShareLinksManagerModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const visibleLinks = links.filter((link) => !link.revokedAt);
 
   const loadLinks = useCallback(async () => {
     setLoading(true);
@@ -139,7 +140,7 @@ export function ShareLinksManagerModal({
         }
       }}
     >
-      <div className="relative flex h-[min(92vh,920px)] w-[min(1200px,100%)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="relative flex h-[min(88vh,760px)] w-[min(760px,100%)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <button
           type="button"
           onClick={onClose}
@@ -164,8 +165,8 @@ export function ShareLinksManagerModal({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col px-6 py-5">
-          <div className="mb-4 flex flex-wrap gap-3">
+        <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+          <div className="mb-3 flex flex-wrap gap-2">
             <Button type="button" onClick={() => { void handleCreateWholeProjectLink(); }} disabled={submitting}>
               {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
               Весь график
@@ -194,39 +195,35 @@ export function ShareLinksManagerModal({
                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                 Загружаем ссылки...
               </div>
-            ) : links.length === 0 ? (
+            ) : visibleLinks.length === 0 ? (
               <div className="flex h-40 items-center justify-center text-sm text-slate-500">
                 Ссылок пока нет.
               </div>
             ) : (
               <div className="divide-y divide-slate-200">
-                {links.map((link) => (
-                  <div key={link.id} className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                {visibleLinks.map((link) => (
+                  <div key={link.id} className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-600">
                             {link.scope === 'project' ? 'Весь график' : 'Часть графика'}
                           </span>
-                          {link.revokedAt && (
-                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-red-700">
-                              Отозвана
-                            </span>
-                          )}
                         </div>
-                        <div className="mt-1 truncate text-sm font-medium text-slate-900">{link.label}</div>
-                        <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                          <span>Создана {formatCreatedAt(link.createdAt)}</span>
-                          <span className="truncate font-mono text-slate-400">{resolveShareUrl(link.id)}</span>
+                        <div className="mt-1 flex items-center gap-2">
+                          <div className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{link.label}</div>
+                          <div className="shrink-0 text-[11px] text-slate-400">{formatCreatedAt(link.createdAt)}</div>
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-[11px] text-slate-400">
+                          {resolveShareUrl(link.id)}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-8 px-2.5"
+                          className="h-8 px-2"
                           onClick={() => void handleCopy(link)}
-                          disabled={Boolean(link.revokedAt)}
                         >
                           {copiedLinkId === link.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                           <span className="hidden sm:inline">{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
@@ -234,9 +231,9 @@ export function ShareLinksManagerModal({
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-8 px-2.5"
+                          className="h-8 px-2"
                           onClick={() => void handleRevoke(link)}
-                          disabled={Boolean(link.revokedAt) || submitting}
+                          disabled={submitting}
                         >
                           <Trash2 className="h-4 w-4" />
                           <span className="hidden sm:inline">Отозвать</span>
