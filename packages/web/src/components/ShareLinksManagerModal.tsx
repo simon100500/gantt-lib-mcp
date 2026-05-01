@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ChartNoAxesGantt,
   CheckCircle2,
   Copy,
   ExternalLink,
   LoaderCircle,
   Plus,
-  SquareChartGantt,
   Trash2,
   X,
 } from 'lucide-react';
@@ -212,7 +210,6 @@ export function ShareLinksManagerModal({
               }}
               className="h-10 flex-1 justify-center rounded-xl border-slate-300 bg-white"
             >
-              <SquareChartGantt className="h-4 w-4" />
               {selectionActive ? 'Вернуться к выбору' : 'Часть графика'}
             </Button>
             {selectionActive && (
@@ -250,36 +247,21 @@ export function ShareLinksManagerModal({
                     className="rounded-xl bg-slate-100 p-2.5 transition-colors"
                   >
                     <div className="mb-2 flex items-start justify-between gap-4">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div
-                          className={`rounded-lg p-1.5 ${
-                            link.scope === 'project'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {link.scope === 'project'
-                            ? <ChartNoAxesGantt className="h-3.5 w-3.5" />
-                            : <SquareChartGantt className="h-3.5 w-3.5" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold leading-none text-slate-700">
+                          {getShareDisplayTitle(link)}
                         </div>
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <div className="truncate text-sm font-bold leading-none text-slate-700">
-                              {getShareDisplayTitle(link)}
-                            </div>
-                            <span
-                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${
-                                link.scope === 'project'
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'bg-slate-200 text-slate-700'
-                              }`}
-                            >
-                              {getShareScopeLabel(link.scope)}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-[10px] font-medium text-slate-400">{formatCreatedAt(link.createdAt)}</div>
-                        </div>
+                        <div className="mt-1 text-[10px] font-medium text-slate-400">{formatCreatedAt(link.createdAt)}</div>
                       </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${
+                          link.scope === 'project'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {getShareScopeLabel(link.scope)}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2">
