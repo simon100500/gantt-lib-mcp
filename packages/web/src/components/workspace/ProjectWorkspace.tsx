@@ -1757,10 +1757,10 @@ export function ProjectWorkspace({
             )}
 
             {templateSelectionActive && (
-              <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+              <div className="flex items-center justify-between gap-3 border-b border-sky-300 bg-sky-100 px-3 py-2.5 text-sm text-sky-950 shadow-[inset_0_-1px_0_rgba(14,116,144,0.12)]">
                 <div className="min-w-0">
-                  <span className="font-semibold">Режим выбора для шаблона.</span>
-                  <span className="ml-2 text-sky-800">Выбрано: {selectedTemplateTaskIds.size}. Отмечайте задачи прямо в текущем графике.</span>
+                  <span className="text-[13px] font-bold uppercase tracking-[0.04em] text-sky-950">Режим выбора шаблона.</span>
+                  <span className="ml-2 font-medium text-sky-900">Выбрано: {selectedTemplateTaskIds.size}. Отмечайте задачи прямо в текущем графике.</span>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button

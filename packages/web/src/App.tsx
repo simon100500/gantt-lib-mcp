@@ -1677,13 +1677,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     });
   }, [selectedTemplateTaskIds, visibleTasks]);
   const handleCreateTemplateFromTask = useCallback((task: Task) => {
-    const rootTaskIds = collectTaskSubtreeIds(visibleTasks, task.id);
-    setSaveTemplateDraft({
-      mode: 'selection',
-      initialName: task.name?.trim() || 'Новый шаблон',
-      taskCount: rootTaskIds.length,
-      rootTaskIds,
-    });
+    setShareSelectionMode(false);
+    setSelectedShareTaskIds(new Set());
+    setSelectedTemplateTaskIds(new Set(collectTaskSubtreeIds(visibleTasks, task.id)));
+    setTemplateSelectionMode(true);
   }, [visibleTasks]);
   const handleSubmitPartialShareSelection = useCallback(async () => {
     if (!auth.accessToken || !auth.project || selectedShareTaskIds.size === 0) {
