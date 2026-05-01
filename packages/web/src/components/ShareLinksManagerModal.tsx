@@ -4,6 +4,7 @@ import {
   Copy,
   ExternalLink,
   LoaderCircle,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -79,6 +80,9 @@ export function ShareLinksManagerModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState('');
+  const [renamingLinkId, setRenamingLinkId] = useState<string | null>(null);
   const visibleLinks = links.filter((link) => !link.revokedAt);
 
   const loadLinks = useCallback(async () => {
@@ -123,6 +127,58 @@ export function ShareLinksManagerModal({
   const handleOpen = useCallback((link: ShareLinkListItem) => {
     window.open(resolveShareUrl(link.id), '_blank', 'noopener,noreferrer');
   }, []);
+
+  const handleStartRename = useCallback((link: ShareLinkListItem) => {
+    setEditingLinkId(link.id);
+    setEditingLabel(getShareDisplayTitle(link));
+    setError(null);
+  }, []);
+
+  const handleRename = useCallback(async (link: ShareLinkListItem) => {
+    if (renamingLinkId === link.id) {
+      return;
+    }
+
+    const nextLabel = editingLabel.trim();
+    const currentLabel = getShareDisplayTitle(link);
+
+    if (!nextLabel || nextLabel === currentLabel) {
+      setEditingLinkId(null);
+      setEditingLabel('');
+      return;
+    }
+
+    setRenamingLinkId(link.id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/share-links/${link.id}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          label: nextLabel,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as { link?: ShareLinkListItem };
+      if (data.link) {
+        setLinks((current) => current.map((item) => item.id === data.link!.id ? data.link! : item));
+      } else {
+        await loadLinks();
+      }
+      setEditingLinkId(null);
+      setEditingLabel('');
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : String(renameError));
+    } finally {
+      setRenamingLinkId(null);
+    }
+  }, [accessToken, editingLabel, loadLinks, projectId, renamingLinkId]);
 
   const handleCreateWholeProjectLink = useCallback(async () => {
     setSubmitting(true);
@@ -264,9 +320,41 @@ export function ShareLinksManagerModal({
                   >
                     <div className="mb-2 flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold leading-none text-slate-700">
-                          {getShareDisplayTitle(link)}
-                        </div>
+                        {editingLinkId === link.id ? (
+                          <input
+                            autoFocus
+                            value={editingLabel}
+                            disabled={renamingLinkId === link.id}
+                            onChange={(event) => setEditingLabel(event.target.value)}
+                            onBlur={() => { void handleRename(link); }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                void handleRename(link);
+                              }
+                              if (event.key === 'Escape') {
+                                setEditingLinkId(null);
+                                setEditingLabel('');
+                              }
+                            }}
+                            className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-bold text-slate-700 outline-none ring-0 transition-colors focus:border-primary"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <div className="truncate text-sm font-bold leading-none text-slate-700">
+                              {getShareDisplayTitle(link)}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleStartRename(link)}
+                              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-white hover:text-slate-700"
+                              title="Переименовать"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            {renamingLinkId === link.id && <LoaderCircle className="h-3 w-3 shrink-0 animate-spin text-slate-400" />}
+                          </div>
+                        )}
                         <div className="mt-1 text-[10px] font-medium text-slate-400">{formatCreatedAt(link.createdAt)}</div>
                       </div>
                       <span
@@ -317,7 +405,7 @@ export function ShareLinksManagerModal({
                         type="button"
                         variant="outline"
                         onClick={() => void handleRevoke(link)}
-                        disabled={submitting}
+                        disabled={submitting || renamingLinkId === link.id}
                         className="h-9 w-9 shrink-0 rounded-lg p-0 text-slate-500 hover:border-red-200 hover:text-red-500"
                         title="Отозвать доступ"
                       >

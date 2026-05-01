@@ -26,6 +26,10 @@ export interface CreateShareLinkInput {
   includedTaskIds?: string[];
 }
 
+export interface UpdateShareLinkInput {
+  label: string;
+}
+
 export class AuthService {
   private prisma = getPrisma();
   private sessionCache = new Map<string, CachedSession>();
@@ -518,6 +522,29 @@ export class AuthService {
       });
 
     return this.shareLinkToDomain(revoked);
+  }
+
+  async updateShareLink(id: string, projectId: string, input: UpdateShareLinkInput): Promise<ShareLink | null> {
+    const shareLinkModel = this.prisma.shareLink as any;
+    const existing = await shareLinkModel.findFirst({
+      where: {
+        id,
+        projectId,
+      },
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = await shareLinkModel.update({
+      where: { id },
+      data: {
+        label: input.label.trim(),
+      },
+    });
+
+    return this.shareLinkToDomain(updated);
   }
 }
 

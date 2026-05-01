@@ -105,6 +105,10 @@ type CreateShareLinkBody = {
   label?: string;
 };
 
+type UpdateShareLinkBody = {
+  label?: string;
+};
+
 function buildShareOrigin(req: {
   headers: Record<string, unknown>;
 }): string {
@@ -547,6 +551,36 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
 
     return reply.send({ link });
+  });
+
+  fastify.patch<{ Params: { id: string; shareLinkId: string } }>('/api/projects/:id/share-links/:shareLinkId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const { id: projectId, shareLinkId } = req.params;
+    const body = (req.body ?? {}) as UpdateShareLinkBody;
+    const projects = await authService.listProjects(req.user!.userId);
+    const project = projects.find((item) => item.id === projectId);
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    const updated = await authService.updateShareLink(shareLinkId, projectId, {
+      label: sanitizeShareLabel(body.label, project.name),
+    });
+
+    if (!updated) {
+      return reply.status(404).send({ error: 'Share link not found' });
+    }
+
+    const origin = buildShareOrigin(req);
+    const allTasks = updated.scope === 'task_selection' ? await listAllProjectTasks(projectId) : [];
+
+    return reply.send({
+      link: {
+        ...updated,
+        previewTitles: buildSharePreviewTitles(allTasks, updated.scope, updated.includedTaskIds),
+        url: buildShareUrl(origin, updated.id),
+      },
+    });
   });
 
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/share', { preHandler: [authMiddleware] }, async (req, reply) => {
