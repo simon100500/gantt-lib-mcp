@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '../../stores/useAuthStore.ts';
 import { useBillingStore } from '../../stores/useBillingStore.ts';
 import { useTaskStore } from '../../stores/useTaskStore.ts';
+import { useTemplateStore } from '../../stores/useTemplateStore.ts';
 import { useUIStore } from '../../stores/useUIStore.ts';
 import type { SidebarMode } from '../../stores/useUIStore.ts';
 
@@ -39,11 +40,15 @@ interface ProjectMenuProps {
   onArchiveProject: (projectId: string) => void | Promise<void>;
   onRestoreProject: (projectId: string) => void | Promise<void>;
   onDeleteProject: (projectId: string) => void | Promise<void>;
+  onSwitchTemplate?: (templateId: string) => void | Promise<void>;
+  onRenameTemplate?: (templateId: string, name: string) => void | Promise<void>;
+  onDeleteTemplate?: (templateId: string) => void | Promise<void>;
   onCreateProjectGroup?: (name: string) => void | Promise<void>;
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
+  onCreateProjectTemplate?: () => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
@@ -66,11 +71,15 @@ export function ProjectMenu({
   onArchiveProject,
   onRestoreProject,
   onDeleteProject,
+  onSwitchTemplate,
+  onRenameTemplate,
+  onDeleteTemplate,
   onCreateProjectGroup,
   onRenameProjectGroup,
   onDeleteProjectGroup,
   onOpenResourcePool,
   onOpenChartMode,
+  onCreateProjectTemplate,
   onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
@@ -80,6 +89,8 @@ export function ProjectMenu({
   const localProjectName = useTaskStore((state) => state.projectName);
   const tasksLoading = useTaskStore((state) => state.loading);
   const workspace = useUIStore((state) => state.workspace);
+  const templates = useTemplateStore((state) => state.templates);
+  const activeTemplate = useTemplateStore((state) => state.activeTemplate);
   const sidebarState = useUIStore((state) => state.sidebarState);
   const setSidebarState = useUIStore((state) => state.setSidebarState);
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
@@ -221,6 +232,16 @@ export function ProjectMenu({
       return { id: 'draft', groupId: auth.project?.groupId ?? '', name: workspace.draftName, status: 'active' as const, kind: 'draft' as const };
     }
 
+    if (workspace.kind === 'template') {
+      return {
+        id: workspace.templateId,
+        groupId: auth.project?.groupId ?? '',
+        name: activeTemplate?.metadata.name ?? 'Шаблон',
+        status: 'active' as const,
+        kind: 'template' as const,
+      };
+    }
+
     if (auth.isAuthenticated && auth.project) {
       return { ...auth.project, kind: 'project' as const };
     }
@@ -232,7 +253,7 @@ export function ProjectMenu({
       status: 'active' as const,
       kind: 'project' as const,
     };
-  }, [auth.isAuthenticated, auth.project, localProjectName, workspace]);
+  }, [activeTemplate?.metadata.name, auth.isAuthenticated, auth.project, localProjectName, workspace]);
 
   const commitInlineRename = async () => {
     if (!isRenamingProject || isArchivedProject) {
@@ -372,8 +393,10 @@ export function ProjectMenu({
           <ProjectSwitcher
             currentProject={currentProject}
             projects={auth.isAuthenticated && auth.project ? auth.projects : []}
+            templates={templates}
             projectGroups={auth.projectGroups}
             onSwitch={handleSwitchInSidebar}
+            onSwitchTemplate={onSwitchTemplate}
             onCreateNew={(groupId) => { void onCreateProject(groupId); }}
             onCreateGroup={onCreateProjectGroup}
             onRenameGroup={onRenameProjectGroup}
@@ -386,6 +409,8 @@ export function ProjectMenu({
             onArchive={(projectId) => { void onArchiveProject(projectId); }}
             onRestore={(projectId) => { void onRestoreProject(projectId); }}
             onDelete={(projectId) => { void onDeleteProject(projectId); }}
+            onRenameTemplate={onRenameTemplate}
+            onDeleteTemplate={onDeleteTemplate}
             onOpenResourcePool={onOpenResourcePool}
             onMenuOpenChange={setProjectActionsMenuOpen}
             onClose={() => setSidebarState('closed')}
@@ -488,13 +513,24 @@ export function ProjectMenu({
                         {projectUsageLabel}
                       </span>
                     )}
+                    {!hasShareToken && auth.isAuthenticated && workspace.kind === 'project' && !isArchivedProject && onCreateProjectTemplate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { void onCreateProjectTemplate(); }}
+                        className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Package className="mr-1.5 h-3.5 w-3.5" />
+                        В шаблон
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
 
               <div className="hidden min-w-0 flex-1 self-stretch grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
                 <div className="flex self-stretch justify-self-start">
-                  {!hasShareToken && auth.isAuthenticated && (
+                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (
                     <div
                       className="inline-flex h-full shrink-0 items-stretch gap-4"
                       data-testid="topbar-workspace-mode-switch"
@@ -558,7 +594,7 @@ export function ProjectMenu({
 
           {/* User menu */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            {!hasShareToken && auth.isAuthenticated && (
+            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -691,8 +727,10 @@ export function ProjectMenu({
             <ProjectSwitcher
               currentProject={currentProject}
               projects={auth.isAuthenticated && auth.project ? auth.projects : []}
+              templates={templates}
               projectGroups={auth.projectGroups}
               onSwitch={handleSwitchInOverlay}
+              onSwitchTemplate={onSwitchTemplate}
               onCreateNew={(groupId) => { void onCreateProject(groupId); }}
               onCreateGroup={onCreateProjectGroup}
               onRenameGroup={onRenameProjectGroup}
@@ -705,6 +743,8 @@ export function ProjectMenu({
               onArchive={(projectId) => { void onArchiveProject(projectId); }}
               onRestore={(projectId) => { void onRestoreProject(projectId); }}
               onDelete={(projectId) => { void onDeleteProject(projectId); }}
+              onRenameTemplate={onRenameTemplate}
+              onDeleteTemplate={onDeleteTemplate}
               onOpenResourcePool={onOpenResourcePool}
               onMenuOpenChange={setProjectActionsMenuOpen}
               footer={billingFooter}

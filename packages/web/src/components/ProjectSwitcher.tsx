@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, Package, PanelRightOpen, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeleteProjectGroupModal } from './DeleteProjectGroupModal.tsx';
 import { EditProjectModal } from './EditProjectModal.tsx';
@@ -9,12 +9,15 @@ import { Button } from './ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
 import type { AuthProject } from '../stores/useAuthStore.ts';
 import type { ProjectGroup } from '../types.ts';
+import type { TemplateItem } from '../lib/apiTypes.ts';
 
 interface ProjectSwitcherProps {
-  currentProject: Pick<AuthProject, 'id' | 'name' | 'status' | 'taskCount' | 'groupId'> & { kind?: 'project' | 'draft' };
+  currentProject: Pick<AuthProject, 'id' | 'name' | 'status' | 'taskCount' | 'groupId'> & { kind?: 'project' | 'draft' | 'template' };
   projects: AuthProject[];
+  templates?: TemplateItem[];
   projectGroups?: ProjectGroup[];
   onSwitch: (projectId: string) => void | Promise<void>;
+  onSwitchTemplate?: (templateId: string) => void | Promise<void>;
   onCreateNew: (groupId?: string) => void;
   onCreateGroup?: (name: string) => void | Promise<void>;
   onRenameGroup?: (groupId: string, name: string) => void | Promise<void>;
@@ -27,6 +30,8 @@ interface ProjectSwitcherProps {
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
+  onRenameTemplate?: (templateId: string, name: string) => void | Promise<void>;
+  onDeleteTemplate?: (templateId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
   onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
@@ -164,6 +169,94 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
   );
 }
 
+function TemplateRow({
+  template,
+  isCurrent,
+  menuActive,
+  onSwitch,
+  onRename,
+  onDelete,
+  onMenuOpenChange,
+  setOpenMenuTemplateId,
+}: {
+  template: TemplateItem;
+  isCurrent: boolean;
+  menuActive: boolean;
+  onSwitch: (templateId: string) => void | Promise<void>;
+  onRename?: (templateId: string, name: string) => void | Promise<void>;
+  onDelete?: (templateId: string) => void | Promise<void>;
+  onMenuOpenChange?: (open: boolean) => void;
+  setOpenMenuTemplateId: (templateId: string | null) => void;
+}) {
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+
+  return (
+    <div className={cn('group flex items-center rounded-md transition-colors', isCurrent ? 'bg-slate-100' : 'hover:bg-slate-100')}>
+      <button
+        type="button"
+        onClick={() => onSwitch(template.id)}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
+          isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Package className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span className="truncate text-sm sm:text-xs">{template.name}</span>
+        </span>
+      </button>
+
+      <div className="relative mr-2 flex h-5 w-11 shrink-0 items-center justify-end">
+        {template.taskCount > 0 ? <span className="pr-1 text-xs text-slate-400 transition-opacity group-hover:opacity-0">{template.taskCount}</span> : null}
+        <DropdownMenu
+          onOpenChange={(open) => {
+            setOpenMenuTemplateId(open ? template.id : null);
+            onMenuOpenChange?.(open);
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                menuActive ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700',
+                'opacity-0 group-hover:opacity-100',
+              )}
+              aria-label="Действия шаблона"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
+            {onRename && (
+              <DropdownMenuItem onClick={() => setRenameModalOpen(true)}>
+                <Pencil className="h-4 w-4" />
+                <span>Переименовать</span>
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem onClick={() => void onDelete(template.id)} className="text-red-600 focus:text-red-700">
+                <Trash2 className="h-4 w-4" />
+                <span>Удалить</span>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {renameModalOpen && onRename ? (
+        <EditProjectModal
+          projectName={template.name}
+          onSave={async (newName) => {
+            await onRename(template.id, newName);
+          }}
+          onClose={() => setRenameModalOpen(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 interface ProjectSectionProps {
   title: string;
   icon: ReactNode;
@@ -263,8 +356,10 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
 export function ProjectSwitcher({
   currentProject,
   projects,
+  templates = [],
   projectGroups = [],
   onSwitch,
+  onSwitchTemplate,
   onCreateNew,
   onCreateGroup,
   onRenameGroup,
@@ -277,6 +372,8 @@ export function ProjectSwitcher({
   onArchive,
   onRestore,
   onDelete,
+  onRenameTemplate,
+  onDeleteTemplate,
   onMenuOpenChange,
   onClose,
   footer,
@@ -290,7 +387,9 @@ export function ProjectSwitcher({
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const selectedProjectId = pendingProjectId ?? currentProject.id;
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
+  const [openMenuTemplateId, setOpenMenuTemplateId] = useState<string | null>(null);
   const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(true);
 
   const effectiveGroups = useMemo<ProjectGroup[]>(() => {
     if (projectGroups.length > 0) return projectGroups;
@@ -353,6 +452,19 @@ export function ProjectSwitcher({
     setPendingProjectId(projectId);
     try {
       await onSwitch(projectId);
+    } catch (error) {
+      setPendingProjectId(null);
+      throw error;
+    }
+  };
+
+  const handleSwitchTemplate = async (templateId: string) => {
+    if (!onSwitchTemplate || templateId === selectedProjectId) return;
+    setOpenMenuTemplateId(null);
+    onMenuOpenChange?.(false);
+    setPendingProjectId(templateId);
+    try {
+      await onSwitchTemplate(templateId);
     } catch (error) {
       setPendingProjectId(null);
       throw error;
@@ -429,6 +541,31 @@ export function ProjectSwitcher({
               </ProjectSection>
             );
           })}
+
+          {onSwitchTemplate ? (
+            <ProjectSection
+              title={`Шаблоны (${templates.length})`}
+              icon={<Package className="h-4 w-4" />}
+              open={templatesOpen}
+              onToggle={() => setTemplatesOpen((value) => !value)}
+            >
+              {templates.length > 0 ? templates.map((template) => (
+                <TemplateRow
+                  key={template.id}
+                  template={template}
+                  isCurrent={template.id === selectedProjectId}
+                  menuActive={openMenuTemplateId === template.id}
+                  onSwitch={handleSwitchTemplate}
+                  onRename={onRenameTemplate}
+                  onDelete={onDeleteTemplate}
+                  onMenuOpenChange={onMenuOpenChange}
+                  setOpenMenuTemplateId={setOpenMenuTemplateId}
+                />
+              )) : (
+                <div className="px-3 py-2 text-xs text-slate-400">Нет шаблонов</div>
+              )}
+            </ProjectSection>
+          ) : null}
 
           {onCreateGroup ? (
             <div className="px-3 pt-1">

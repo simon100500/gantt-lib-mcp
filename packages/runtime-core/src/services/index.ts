@@ -16,6 +16,8 @@ export { assignmentService } from './assignment.service.js';
 export { AssignmentService, AssignmentValidationError } from './assignment.service.js';
 export { plannerService } from './planner.service.js';
 export { PlannerService, PlannerValidationError } from './planner.service.js';
+export { templateService } from './template.service.js';
+export { TemplateService, TemplateValidationError } from './template.service.js';
 export {
   enforcementService,
   createEnforcementService,

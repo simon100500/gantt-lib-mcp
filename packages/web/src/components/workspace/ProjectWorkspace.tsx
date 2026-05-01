@@ -81,6 +81,9 @@ interface ProjectWorkspaceProps {
   previewState?: 'idle' | 'rendering' | 'failed';
   previewMessage?: string | null;
   onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
+  showResourceAssignments?: boolean;
+  onSaveTaskAsTemplate?: (task: Task) => void | Promise<void>;
+  onInsertTemplateAtTask?: (task: Task) => void | Promise<void>;
 }
 
 function formatTaskCount(count: number) {
@@ -460,6 +463,9 @@ export function ProjectWorkspace({
   previewState = 'idle',
   previewMessage = null,
   onSplitTask,
+  showResourceAssignments = true,
+  onSaveTaskAsTemplate,
+  onInsertTemplateAtTask,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -1115,18 +1121,42 @@ export function ProjectWorkspace({
       });
     }
 
-    return commands;
-  }, [chatDisabled, effectiveReadOnly, onSplitTask, shareSelectionActive, showChat, openAssignmentSelector]);
+    if (onSaveTaskAsTemplate) {
+      commands.push({
+        id: 'save-task-as-template',
+        label: 'Сохранить как шаблон',
+        icon: <ListTree className="h-4 w-4" />,
+        scope: 'linear',
+        onSelect: (row) => { void onSaveTaskAsTemplate(row); },
+      });
+    }
 
-  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
-    createAssignedResourcesColumn({
-      resources,
-      assignments,
-      editable: !effectiveReadOnly && !shareSelectionActive,
-      readOnly: effectiveReadOnly || shareSelectionActive,
-      onEdit: openAssignmentSelector,
-    }),
-  ], [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive]);
+    if (onInsertTemplateAtTask) {
+      commands.push({
+        id: 'insert-template-at-task',
+        label: 'Вставить шаблон...',
+        icon: <WandSparkles className="h-4 w-4" />,
+        scope: 'linear',
+        onSelect: (row) => { void onInsertTemplateAtTask(row); },
+      });
+    }
+
+    return commands;
+  }, [chatDisabled, effectiveReadOnly, onInsertTemplateAtTask, onSaveTaskAsTemplate, onSplitTask, shareSelectionActive, showChat, openAssignmentSelector]);
+
+  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
+    showResourceAssignments
+      ? [
+          createAssignedResourcesColumn({
+            resources,
+            assignments,
+            editable: !effectiveReadOnly && !shareSelectionActive,
+            readOnly: effectiveReadOnly || shareSelectionActive,
+            onEdit: openAssignmentSelector,
+          }),
+        ]
+      : []
+  ), [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive, showResourceAssignments]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,

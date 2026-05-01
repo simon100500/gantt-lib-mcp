@@ -556,6 +556,103 @@ export interface AuthToken {
   refreshToken: string;
 }
 
+export type TemplateSourceKind = 'project' | 'task_selection';
+
+export interface TemplateTask {
+  id: string;
+  name: string;
+  type: TaskType;
+  color?: string | null;
+  parentId?: string | null;
+  sortOrder: number;
+  relativeStartOffset: number;
+  durationDays: number;
+}
+
+export interface TemplateDependency {
+  id: string;
+  sourceTaskId: string;
+  targetTaskId: string;
+  type: DependencyType;
+  lag: number;
+}
+
+export interface TemplateMetadata {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  sourceKind: TemplateSourceKind;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+}
+
+export interface TemplateSnapshot extends TemplateMetadata {
+  tasks: TemplateTask[];
+  dependencies: TemplateDependency[];
+}
+
+export interface TemplateWorkspaceSnapshot {
+  tasks: Task[];
+  dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number }>;
+}
+
+export interface ListTemplatesInput {
+  ownerUserId: string;
+}
+
+export interface ListTemplatesResponse {
+  templates: TemplateMetadata[];
+}
+
+export interface GetTemplateInput {
+  ownerUserId: string;
+  templateId: string;
+}
+
+export interface CreateTemplateFromProjectInput {
+  ownerUserId: string;
+  projectId: string;
+  name: string;
+}
+
+export interface CreateTemplateFromSelectionInput {
+  ownerUserId: string;
+  projectId: string;
+  name: string;
+  rootTaskIds: string[];
+}
+
+export interface UpdateTemplateSnapshotInput {
+  ownerUserId: string;
+  templateId: string;
+  name?: string;
+  snapshot: TemplateWorkspaceSnapshot;
+}
+
+export interface UpdateTemplateMetadataInput {
+  ownerUserId: string;
+  templateId: string;
+  name: string;
+}
+
+export interface DeleteTemplateInput {
+  ownerUserId: string;
+  templateId: string;
+}
+
+export interface DeleteTemplateResponse {
+  id: string;
+}
+
+export interface InsertTemplateInput {
+  ownerUserId: string;
+  projectId: string;
+  templateId: string;
+  anchorTaskId: string;
+  placement: 'after' | 'inside';
+}
+
 export type ProjectSnapshot = {
   tasks: Task[];
   dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number }>;
