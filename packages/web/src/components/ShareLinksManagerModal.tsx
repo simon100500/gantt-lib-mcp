@@ -19,6 +19,14 @@ function formatCreatedAt(value: string): string {
   return new Date(value).toLocaleString('ru-RU');
 }
 
+function resolveShareUrl(token: string): string {
+  if (typeof window === 'undefined') {
+    return `/?share=${encodeURIComponent(token)}`;
+  }
+
+  return `${window.location.origin}/?share=${encodeURIComponent(token)}`;
+}
+
 export function ShareLinksManagerModal({
   accessToken,
   projectId,
@@ -62,7 +70,7 @@ export function ShareLinksManagerModal({
 
   const handleCopy = useCallback(async (link: ShareLinkListItem) => {
     try {
-      await navigator.clipboard.writeText(link.url);
+      await navigator.clipboard.writeText(resolveShareUrl(link.id));
       setCopiedLinkId(link.id);
       onStatusChange?.('copied');
       window.setTimeout(() => {
@@ -193,9 +201,9 @@ export function ShareLinksManagerModal({
             ) : (
               <div className="divide-y divide-slate-200">
                 {links.map((link) => (
-                  <div key={link.id} className="space-y-3 px-4 py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
+                  <div key={link.id} className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-600">
                             {link.scope === 'project' ? 'Весь график' : 'Часть графика'}
@@ -206,22 +214,34 @@ export function ShareLinksManagerModal({
                             </span>
                           )}
                         </div>
-                        <div className="mt-2 truncate text-sm font-medium text-slate-900">{link.label}</div>
-                        <div className="mt-1 text-xs text-slate-500">Создана {formatCreatedAt(link.createdAt)}</div>
+                        <div className="mt-1 truncate text-sm font-medium text-slate-900">{link.label}</div>
+                        <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                          <span>Создана {formatCreatedAt(link.createdAt)}</span>
+                          <span className="truncate font-mono text-slate-400">{resolveShareUrl(link.id)}</span>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button type="button" variant="outline" onClick={() => void handleCopy(link)} disabled={Boolean(link.revokedAt)}>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-2.5"
+                          onClick={() => void handleCopy(link)}
+                          disabled={Boolean(link.revokedAt)}
+                        >
                           {copiedLinkId === link.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                          {copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}
+                          <span className="hidden sm:inline">{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => void handleRevoke(link)} disabled={Boolean(link.revokedAt) || submitting}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-2.5"
+                          onClick={() => void handleRevoke(link)}
+                          disabled={Boolean(link.revokedAt) || submitting}
+                        >
                           <Trash2 className="h-4 w-4" />
-                          Отозвать
+                          <span className="hidden sm:inline">Отозвать</span>
                         </Button>
                       </div>
-                    </div>
-                    <div className="truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600">
-                      {link.url}
                     </div>
                   </div>
                 ))}
