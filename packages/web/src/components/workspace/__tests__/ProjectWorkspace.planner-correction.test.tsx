@@ -112,40 +112,48 @@ function createGanttRef() {
   return { current: null };
 }
 
+interface RenderWorkspaceOptions {
+  ganttRef?: { current: unknown };
+  projectId?: string;
+  ganttDayMode?: 'business' | 'calendar';
+  readOnly?: boolean;
+  setTasks?: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
+}
+
 async function renderWorkspace({
   ganttRef = createGanttRef(),
   projectId = 'project-1',
-}: {
-  ganttRef?: { current: unknown };
-  projectId?: string;
-} = {}): Promise<{ container: HTMLDivElement; root: Root }> {
+  ganttDayMode = 'calendar',
+  readOnly = false,
+  setTasks = () => {},
+}: RenderWorkspaceOptions = {}): Promise<{ container: HTMLDivElement; root: Root }> {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
   const root = createRoot(container);
   await act(async () => {
     root.render(
-      <ProjectWorkspace
-        accessToken="token"
-        displayConnected={true}
-        ganttDayMode="calendar"
-        ganttRef={ganttRef as never}
-        hasShareToken={false}
-        isAuthenticated={true}
-        loading={false}
-        onCollapseAll={() => {}}
+        <ProjectWorkspace
+          accessToken="token"
+          displayConnected={true}
+          ganttDayMode={ganttDayMode}
+          ganttRef={ganttRef as never}
+          hasShareToken={false}
+          isAuthenticated={true}
+          loading={false}
+          onCollapseAll={() => {}}
         onExpandAll={() => {}}
-        onLoginRequired={() => {}}
-        onScrollToToday={() => {}}
-        onSend={async () => ({ accepted: true })}
-        onValidation={(_result: ValidationResult) => {}}
-        readOnly={false}
-        setTasks={() => {}}
-        shareStatus="idle"
-        shareToken={null}
-        sharedProject={null}
-        showChat={true}
-        tasks={tasks}
+          onLoginRequired={() => {}}
+          onScrollToToday={() => {}}
+          onSend={async () => ({ accepted: true })}
+          onValidation={(_result: ValidationResult) => {}}
+          readOnly={readOnly}
+          setTasks={setTasks}
+          shareStatus="idle"
+          shareToken={null}
+          sharedProject={null}
+          showChat={true}
+          tasks={tasks}
       />,
     );
     await Promise.resolve();
@@ -155,13 +163,18 @@ async function renderWorkspace({
   return { container, root };
 }
 
-async function rerenderWorkspace(root: Root, ganttRef = createGanttRef()): Promise<void> {
+async function rerenderWorkspace(root: Root, {
+  ganttRef = createGanttRef(),
+  ganttDayMode = 'calendar',
+  readOnly = false,
+  setTasks = () => {},
+}: Omit<RenderWorkspaceOptions, 'projectId'> = {}): Promise<void> {
   await act(async () => {
     root.render(
       <ProjectWorkspace
         accessToken="token"
         displayConnected={true}
-        ganttDayMode="calendar"
+        ganttDayMode={ganttDayMode}
         ganttRef={ganttRef as never}
         hasShareToken={false}
         isAuthenticated={true}
@@ -172,8 +185,8 @@ async function rerenderWorkspace(root: Root, ganttRef = createGanttRef()): Promi
         onScrollToToday={() => {}}
         onSend={async () => ({ accepted: true })}
         onValidation={(_result: ValidationResult) => {}}
-        readOnly={false}
-        setTasks={() => {}}
+        readOnly={readOnly}
+        setTasks={setTasks}
         shareStatus="idle"
         shareToken={null}
         sharedProject={null}
@@ -362,5 +375,16 @@ describe('ProjectWorkspace planner correction focus', () => {
     expect(secondScrollContainer!.scrollTop).toBe(96);
 
     await unmountWorkspace(secondRender.root);
+  });
+
+  it('does not reflow shared read-only tasks when the loaded share mode switches to business', async () => {
+    const setTasks = vi.fn();
+    const { root } = await renderWorkspace({ ganttDayMode: 'calendar', readOnly: true, setTasks });
+
+    await rerenderWorkspace(root, { ganttDayMode: 'business', readOnly: true, setTasks });
+
+    expect(setTasks).not.toHaveBeenCalled();
+
+    await unmountWorkspace(root);
   });
 });

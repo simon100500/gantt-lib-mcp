@@ -834,6 +834,10 @@ export function ProjectWorkspace({
 
     previousGanttDayModeRef.current = ganttDayMode;
 
+    if (effectiveReadOnly) {
+      return;
+    }
+
     if (previewModeActive) {
       return;
     }
@@ -844,7 +848,7 @@ export function ProjectWorkspace({
 
     const reflowedTasks = reflowTasksOnModeSwitch(tasks, ganttDayMode === 'business', weekendPredicate) as Task[];
 
-    if (effectiveReadOnly || !batchUpdate) {
+    if (!batchUpdate) {
       setTasks(reflowedTasks);
       return;
     }
