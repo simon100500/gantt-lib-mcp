@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ChartGantt,
+  ChartNoAxesGantt,
   CheckCircle2,
   Copy,
   ExternalLink,
@@ -154,7 +154,7 @@ export function ShareLinksManagerModal({
         }
       }}
     >
-      <div className="relative flex h-[min(86vh,720px)] w-[min(680px,100%)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="relative flex h-[min(86vh,720px)] w-[min(620px,100%)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <button
           type="button"
           onClick={onClose}
@@ -187,7 +187,7 @@ export function ShareLinksManagerModal({
               disabled={submitting}
               className="h-10 flex-1 justify-center rounded-xl"
             >
-              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ChartGantt className="h-4 w-4" />}
+              {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Весь график
             </Button>
             <Button
@@ -211,7 +211,15 @@ export function ShareLinksManagerModal({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col px-5 py-5">
-          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200">
+          {!loading && visibleLinks.length > 0 && (
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Активные ссылки ({visibleLinks.length})
+              </h3>
+            </div>
+          )}
+
+          <div className="min-h-0 flex-1 overflow-auto">
             {loading ? (
               <div className="flex h-40 items-center justify-center text-sm text-slate-500">
                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -222,34 +230,23 @@ export function ShareLinksManagerModal({
                 Ссылок пока нет.
               </div>
             ) : (
-              <div className="p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">
-                    Активные ссылки ({visibleLinks.length})
-                  </h3>
-                </div>
-
-                <div className="space-y-3">
+              <div className="space-y-2 pr-1">
                 {visibleLinks.map((link) => (
                   <div
                     key={link.id}
-                    className={`rounded-xl border bg-white p-3 transition-colors ${
-                      link.scope === 'project'
-                        ? 'border-slate-200'
-                        : 'border-amber-200/80'
-                    }`}
+                    className="rounded-xl bg-slate-100 p-2.5 transition-colors"
                   >
-                    <div className="mb-3 flex items-start justify-between gap-4">
+                    <div className="mb-2 flex items-start justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-2">
                         <div
                           className={`rounded-lg p-1.5 ${
                             link.scope === 'project'
-                              ? 'bg-slate-100 text-slate-600'
-                              : 'bg-amber-100 text-amber-700'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-slate-200 text-slate-700'
                           }`}
                         >
                           {link.scope === 'project'
-                            ? <ChartGantt className="h-3.5 w-3.5" />
+                            ? <ChartNoAxesGantt className="h-3.5 w-3.5" />
                             : <SquareChartGantt className="h-3.5 w-3.5" />}
                         </div>
                         <div className="min-w-0">
@@ -259,16 +256,16 @@ export function ShareLinksManagerModal({
                       </div>
                     </div>
 
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                         <div className="relative min-w-0 flex-1">
-                          <input
-                            readOnly
-                            onClick={() => void handleCopy(link)}
-                            value={resolveShareUrl(link.id)}
-                            title="Нажмите, чтобы скопировать"
-                            className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-500 outline-none transition-colors hover:border-slate-300"
-                          />
-                        </div>
+                        <input
+                          readOnly
+                          onClick={() => void handleCopy(link)}
+                          value={resolveShareUrl(link.id)}
+                          title="Нажмите, чтобы скопировать"
+                          className="w-full cursor-pointer rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-500 outline-none ring-1 ring-inset ring-slate-200 transition-colors hover:ring-slate-300"
+                        />
+                      </div>
 
                       <Button
                         type="button"
@@ -281,7 +278,7 @@ export function ShareLinksManagerModal({
                         }`}
                       >
                         {copiedLinkId === link.id ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                        <span>{copiedLinkId === link.id ? 'Ок!' : 'Копировать'}</span>
+                        <span>{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
                       </Button>
 
                       <Button
@@ -307,7 +304,6 @@ export function ShareLinksManagerModal({
                     </div>
                   </div>
                 ))}
-                </div>
               </div>
             )}
           </div>
