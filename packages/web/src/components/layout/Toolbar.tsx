@@ -104,6 +104,9 @@ interface ToolbarProps {
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
   onOpenProjectShift?: (() => void) | null;
   canShiftProject?: boolean;
+  templateSelectionActive?: boolean;
+  onCreateTemplateFromProject?: (() => void) | null;
+  onStartTemplateSelection?: (() => void) | null;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -334,6 +337,9 @@ export function Toolbar({
   onSetAllTaskListColumnsVisible,
   onOpenProjectShift = null,
   canShiftProject = false,
+  templateSelectionActive = false,
+  onCreateTemplateFromProject = null,
+  onStartTemplateSelection = null,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -397,6 +403,7 @@ export function Toolbar({
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
+  const hasTemplateActions = Boolean(onCreateTemplateFromProject || onStartTemplateSelection);
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
   const allTaskListColumnsVisible = taskListColumnRows?.length ? visibleTaskListColumnCount === taskListColumnRows.length : true;
@@ -624,6 +631,41 @@ export function Toolbar({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {hasTemplateActions && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant={templateSelectionActive ? 'secondary' : 'ghost'}
+              className={cn(
+                actionButtonClassName,
+                templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
+                'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
+              )}
+              title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
+            >
+              <Layers3 className="h-3.5 w-3.5" />
+              <span className="text-xs">{templateSelectionActive ? 'Выбор шаблона' : 'Шаблон'}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            {onCreateTemplateFromProject && (
+              <DropdownMenuItem onClick={() => void onCreateTemplateFromProject()} className="flex cursor-pointer items-center gap-2">
+                <Layers3 className="h-4 w-4" />
+                <span className="text-sm">Сохранить весь график</span>
+              </DropdownMenuItem>
+            )}
+            {onStartTemplateSelection && (
+              <DropdownMenuItem onClick={() => void onStartTemplateSelection()} className="flex cursor-pointer items-center gap-2">
+                <Check className="h-4 w-4" />
+                <span className="text-sm">Сохранить часть графика</span>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {hasShareMenuActions && (
         <DropdownMenu>

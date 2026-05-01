@@ -74,6 +74,11 @@ interface ProjectWorkspaceProps {
   onSelectedShareTaskIdsChange?: (taskIds: Set<string>) => void;
   onCancelShareSelection?: () => void;
   onConfirmShareSelection?: () => void | Promise<void>;
+  templateSelectionMode?: boolean;
+  selectedTemplateTaskIds?: Set<string>;
+  onSelectedTemplateTaskIdsChange?: (taskIds: Set<string>) => void;
+  onCancelTemplateSelection?: () => void;
+  onConfirmTemplateSelection?: () => void | Promise<void>;
   ganttDayMode: 'business' | 'calendar';
   displayGanttDayMode?: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
@@ -82,8 +87,9 @@ interface ProjectWorkspaceProps {
   previewMessage?: string | null;
   onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   showResourceAssignments?: boolean;
-  onSaveTaskAsTemplate?: (task: Task) => void | Promise<void>;
   onInsertTemplateAtTask?: (task: Task) => void | Promise<void>;
+  onCreateTemplateFromProject?: () => void | Promise<void>;
+  onStartTemplateSelection?: () => void | Promise<void>;
 }
 
 function formatTaskCount(count: number) {
@@ -456,6 +462,11 @@ export function ProjectWorkspace({
   onSelectedShareTaskIdsChange,
   onCancelShareSelection,
   onConfirmShareSelection,
+  templateSelectionMode = false,
+  selectedTemplateTaskIds = new Set(),
+  onSelectedTemplateTaskIdsChange,
+  onCancelTemplateSelection,
+  onConfirmTemplateSelection,
   ganttDayMode,
   displayGanttDayMode,
   calendarDays = [],
@@ -464,8 +475,9 @@ export function ProjectWorkspace({
   previewMessage = null,
   onSplitTask,
   showResourceAssignments = true,
-  onSaveTaskAsTemplate,
   onInsertTemplateAtTask,
+  onCreateTemplateFromProject,
+  onStartTemplateSelection,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -638,6 +650,8 @@ export function ProjectWorkspace({
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const shareSelectionActive = shareSelectionMode && !effectiveReadOnly;
+  const templateSelectionActive = templateSelectionMode && !effectiveReadOnly;
+  const externalSelectionActive = shareSelectionActive || templateSelectionActive;
   const effectiveChatDisabled = chatDisabled || previewModeActive;
   const effectiveChatDisabledReason = previewModeActive
     ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
@@ -1092,7 +1106,7 @@ export function ProjectWorkspace({
   }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, replaceAssignmentsForTask, replaceAssignmentsForTasks, setAssignmentError, tasks, workspace]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
-    if (effectiveReadOnly || shareSelectionActive || chatDisabled || !showChat) {
+    if (effectiveReadOnly || externalSelectionActive || chatDisabled) {
       return [];
     }
 
@@ -1103,13 +1117,16 @@ export function ProjectWorkspace({
         icon: <Users className="h-4 w-4" />,
         onSelect: (row) => openAssignmentSelector(row),
       },
-      {
+    ];
+
+    if (showChat) {
+      commands.push({
         id: 'send-task-to-chat',
         label: 'Выполнить...',
         icon: <WandSparkles className="h-4 w-4" />,
         onSelect: (row) => setTaskChatDraft(row),
-      },
-    ];
+      });
+    }
 
     if (onSplitTask) {
       commands.push({
@@ -1118,16 +1135,6 @@ export function ProjectWorkspace({
         icon: <ListTree className="h-4 w-4" />,
         scope: 'linear',
         onSelect: (row) => setSplitTaskDraft(row),
-      });
-    }
-
-    if (onSaveTaskAsTemplate) {
-      commands.push({
-        id: 'save-task-as-template',
-        label: 'Сохранить как шаблон',
-        icon: <ListTree className="h-4 w-4" />,
-        scope: 'linear',
-        onSelect: (row) => { void onSaveTaskAsTemplate(row); },
       });
     }
 
@@ -1142,7 +1149,7 @@ export function ProjectWorkspace({
     }
 
     return commands;
-  }, [chatDisabled, effectiveReadOnly, onInsertTemplateAtTask, onSaveTaskAsTemplate, onSplitTask, shareSelectionActive, showChat, openAssignmentSelector]);
+  }, [chatDisabled, effectiveReadOnly, externalSelectionActive, onInsertTemplateAtTask, onSplitTask, showChat, openAssignmentSelector]);
 
   const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
     showResourceAssignments
@@ -1588,9 +1595,12 @@ export function ProjectWorkspace({
           onExportExcel={onExportExcel}
           isExportExcelLoading={isExportExcelLoading}
           shareStatus={shareStatus}
-          onCreateShareLink={onCreateShareLink}
-          showShareButton={!hasShareToken && isAuthenticated}
-          viewMode={viewMode}
+            onCreateShareLink={onCreateShareLink}
+            showShareButton={!hasShareToken && isAuthenticated}
+            templateSelectionActive={templateSelectionActive}
+            onCreateTemplateFromProject={effectiveReadOnly || hasShareToken ? null : onCreateTemplateFromProject}
+            onStartTemplateSelection={effectiveReadOnly || hasShareToken ? null : onStartTemplateSelection}
+            viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           disableTaskDrag={effectiveDisableTaskDrag}
           onToggleDisableTaskDrag={handleSetDisableTaskDrag}
@@ -1735,6 +1745,35 @@ export function ProjectWorkspace({
               </div>
             )}
 
+            {templateSelectionActive && (
+              <div className="flex items-center justify-between gap-3 border-b border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                <div className="min-w-0">
+                  <span className="font-semibold">Режим выбора для шаблона.</span>
+                  <span className="ml-2 text-sky-800">Выбрано: {selectedTemplateTaskIds.size}. Отмечайте задачи прямо в текущем графике.</span>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={onCancelTemplateSelection}
+                    className="inline-flex h-8 items-center rounded-md border border-sky-300 bg-white px-3 text-xs font-medium text-sky-900 transition-colors hover:bg-sky-100"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void onConfirmTemplateSelection?.(); }}
+                    disabled={selectedTemplateTaskIds.size === 0}
+                    className={cn(
+                      'inline-flex h-8 items-center rounded-md bg-sky-900 px-3 text-xs font-medium text-white transition-colors hover:bg-sky-950',
+                      selectedTemplateTaskIds.size === 0 && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    Сохранить шаблон
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="min-h-0 flex-1 overflow-hidden bg-white" ref={ganttSectionRef}>
               {loading ? (
                 <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
@@ -1751,7 +1790,7 @@ export function ProjectWorkspace({
                   hiddenTaskListColumns={hiddenTaskListColumns}
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
-                  onTasksChange={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
+                  onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}
                   containerHeight="calc(100dvh - 132px)"
@@ -1760,25 +1799,25 @@ export function ProjectWorkspace({
                   taskListWidth={taskListWidth}
                   onValidateDependencies={onValidation}
                   enableAutoSchedule={autoSchedule}
-                  onCascade={effectiveReadOnly || shareSelectionActive ? undefined : onCascade}
-                  disableTaskNameEditing={effectiveReadOnly || shareSelectionActive}
-                  disableDependencyEditing={effectiveReadOnly || shareSelectionActive}
-                  disableTaskDrag={effectiveDisableTaskDrag || shareSelectionActive}
+                  onCascade={effectiveReadOnly || externalSelectionActive ? undefined : onCascade}
+                  disableTaskNameEditing={effectiveReadOnly || externalSelectionActive}
+                  disableDependencyEditing={effectiveReadOnly || externalSelectionActive}
+                  disableTaskDrag={effectiveDisableTaskDrag || externalSelectionActive}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
                   viewMode={viewMode}
                   collapsedParentIds={collapsedParentIds}
                   onToggleCollapse={handleToggleCollapse}
-                  onAdd={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
-                  onDelete={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
-                  onInsertAfter={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
-                  onReorder={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
-                  onUngroupTask={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
+                  onAdd={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
+                  onDelete={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
+                  onInsertAfter={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                  onReorder={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
+                  onUngroupTask={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
                   customDays={customDays}
                   highlightedTaskIds={highlightedSearchTaskIds}
-                  enableTaskMultiSelect={shareSelectionActive}
-                  selectedTaskIds={selectedShareTaskIds}
-                  onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : undefined}
+                  enableTaskMultiSelect={externalSelectionActive}
+                  selectedTaskIds={shareSelectionActive ? selectedShareTaskIds : selectedTemplateTaskIds}
+                  onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : templateSelectionActive ? onSelectedTemplateTaskIdsChange : undefined}
                   filterMode={filterMode}
                   businessDays={ganttDayMode !== 'calendar'}
                 />

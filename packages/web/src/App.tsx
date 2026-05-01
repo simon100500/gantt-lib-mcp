@@ -9,8 +9,10 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { SaveTemplateModal } from './components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
+import { InsertTemplateModal } from './components/InsertTemplateModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
@@ -498,6 +500,15 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
+  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
+  const [shareSelectionMode, setShareSelectionMode] = useState(false);
+  const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
+  const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
+  const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<Set<string>>(new Set());
+  const [saveTemplateDraft, setSaveTemplateDraft] = useState<{ mode: 'project' | 'selection'; initialName: string; taskCount: number; rootTaskIds: string[] } | null>(null);
+  const [saveTemplatePending, setSaveTemplatePending] = useState(false);
+  const [insertTemplateDraft, setInsertTemplateDraft] = useState<{ anchorTaskId: string; anchorTaskName: string } | null>(null);
+  const [insertTemplatePending, setInsertTemplatePending] = useState(false);
   const refreshProjects = auth.refreshProjects;
   const [limitModal, setLimitModal] = useState<{
     denial: ConstraintDenialPayload;
@@ -600,9 +611,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       : localTasks;
   const templateTasks = activeTemplate?.snapshot.tasks ?? [];
   const setTemplateTasks = useCallback((nextTasks: Task[] | ((prev: Task[]) => Task[])) => {
-    const resolved = typeof nextTasks === 'function' ? nextTasks(activeTemplate?.snapshot.tasks ?? []) : nextTasks;
+    const currentTasks = useTemplateStore.getState().activeTemplate?.snapshot.tasks ?? [];
+    const resolved = typeof nextTasks === 'function' ? nextTasks(currentTasks) : nextTasks;
     updateActiveTemplateTasks(resolved);
-  }, [activeTemplate?.snapshot.tasks, updateActiveTemplateTasks]);
+  }, [updateActiveTemplateTasks]);
   const batchUpdate = useBatchTaskUpdate({
     tasks,
     setTasks,
@@ -630,6 +642,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
   const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
+  const visibleTasks = previewState.active ? previewState.tasks : tasks;
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -1222,25 +1235,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     await auth.deleteProjectGroup(groupId);
   }, [auth]);
 
-  const handleCreateCurrentProjectTemplate = useCallback(async () => {
-    const defaultName = auth.project?.name ? `${auth.project.name} шаблон` : 'Новый шаблон';
-    const name = window.prompt('Название шаблона', defaultName)?.trim();
-    if (!name) {
-      return;
-    }
-    await createTemplateFromProject(name);
-  }, [auth.project?.name, createTemplateFromProject]);
-
-  const handleCreateTaskTemplate = useCallback(async (task: Task) => {
-    const name = window.prompt('Название шаблона', task.name)?.trim();
-    if (!name) {
-      return;
-    }
-    await createTemplateFromSelection({
-      name,
-      rootTaskIds: [task.id],
+  const handleCreateCurrentProjectTemplate = useCallback(() => {
+    setShareSelectionMode(false);
+    setSelectedShareTaskIds(new Set());
+    setTemplateSelectionMode(false);
+    setSaveTemplateDraft({
+      mode: 'project',
+      initialName: auth.project?.name ? `${auth.project.name} шаблон` : 'Новый шаблон',
+      taskCount: visibleTasks.length,
+      rootTaskIds: [],
     });
-  }, [createTemplateFromSelection]);
+  }, [auth.project?.name, visibleTasks.length]);
 
   const handleDeleteTemplate = useCallback(async (templateId: string) => {
     const deletingCurrent = workspace.kind === 'template' && workspace.templateId === templateId;
@@ -1250,35 +1255,60 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
   }, [auth.project?.id, deleteTemplate, setWorkspace, workspace]);
 
+  const handleSaveTemplateFromModal = useCallback(async (name: string) => {
+    if (!saveTemplateDraft) {
+      return;
+    }
+    setSaveTemplatePending(true);
+    try {
+      if (saveTemplateDraft.mode === 'project') {
+        await createTemplateFromProject(name);
+      } else {
+        await createTemplateFromSelection({
+          name,
+          rootTaskIds: saveTemplateDraft.rootTaskIds,
+        });
+        setSelectedTemplateTaskIds(new Set());
+        setTemplateSelectionMode(false);
+      }
+      setSaveTemplateDraft(null);
+    } finally {
+      setSaveTemplatePending(false);
+    }
+  }, [createTemplateFromProject, createTemplateFromSelection, saveTemplateDraft]);
+
+  const handleInsertTemplateFromModal = useCallback(async (input: { templateId: string; placement: 'after' | 'inside' }) => {
+    if (!insertTemplateDraft) {
+      return;
+    }
+    setInsertTemplatePending(true);
+    try {
+      const response = await insertTemplateIntoProject({
+        templateId: input.templateId,
+        anchorTaskId: insertTemplateDraft.anchorTaskId,
+        placement: input.placement,
+      });
+      if (response.accepted && response.snapshot) {
+        useProjectStore.getState().hydrateConfirmed(response.newVersion, {
+          tasks: normalizeTasks(response.snapshot.tasks),
+          dependencies: response.snapshot.dependencies,
+        });
+      }
+      setInsertTemplateDraft(null);
+    } finally {
+      setInsertTemplatePending(false);
+    }
+  }, [insertTemplateDraft, insertTemplateIntoProject]);
+
   const handleInsertTemplateAtTask = useCallback(async (task: Task) => {
     if (!templates.length) {
       return;
     }
-    const promptText = [
-      'Введите ID или точное имя шаблона для вставки после выбранной задачи:',
-      ...templates.map((template) => `${template.id} — ${template.name}`),
-    ].join('\n');
-    const value = window.prompt(promptText, templates[0]?.name ?? '')?.trim();
-    if (!value) {
-      return;
-    }
-    const selectedTemplate = templates.find((template) => template.id === value || template.name === value);
-    if (!selectedTemplate) {
-      window.alert('Шаблон не найден.');
-      return;
-    }
-    const response = await insertTemplateIntoProject({
-      templateId: selectedTemplate.id,
+    setInsertTemplateDraft({
       anchorTaskId: task.id,
-      placement: 'after',
+      anchorTaskName: task.name,
     });
-    if (response.accepted && response.snapshot) {
-      useProjectStore.getState().hydrateConfirmed(response.newVersion, {
-        tasks: normalizeTasks(response.snapshot.tasks),
-        dependencies: response.snapshot.dependencies,
-      });
-    }
-  }, [insertTemplateIntoProject, templates]);
+  }, [templates.length]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
@@ -1390,6 +1420,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   useEffect(() => {
     setSelectedShareTaskIds(new Set());
     setShareSelectionMode(false);
+    setSelectedTemplateTaskIds(new Set());
+    setTemplateSelectionMode(false);
   }, [auth.project?.id, hasShareToken]);
 
   useEffect(() => {
@@ -1548,11 +1580,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const showShareManager = useUIStore((state) => state.showShareManager);
   const { updateAvailable, reloadApp } = useAppUpdateCheck();
-  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
-  const [shareSelectionMode, setShareSelectionMode] = useState(false);
-  const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
-  const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const handleStartPartialShareSelection = useCallback(() => {
+    setTemplateSelectionMode(false);
+    setSelectedTemplateTaskIds(new Set());
     setSelectedShareTaskIds(new Set());
     setShareSelectionMode(true);
     useUIStore.getState().setShowShareManager(false);
@@ -1593,6 +1623,59 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setShareSelectionMode(false);
     setShareStatus('idle');
   }, [setShareStatus]);
+  const handleStartTemplateSelection = useCallback(() => {
+    setShareSelectionMode(false);
+    setSelectedShareTaskIds(new Set());
+    setSelectedTemplateTaskIds(new Set());
+    setTemplateSelectionMode(true);
+  }, []);
+  const handleTemplateSelectionChange = useCallback((nextSelectedTaskIds: Set<string>) => {
+    setSelectedTemplateTaskIds((previousSelectedTaskIds) => {
+      const added = Array.from(nextSelectedTaskIds).filter((id) => !previousSelectedTaskIds.has(id));
+      const removed = Array.from(previousSelectedTaskIds).filter((id) => !nextSelectedTaskIds.has(id));
+      if (added.length + removed.length !== 1) {
+        return nextSelectedTaskIds;
+      }
+
+      const changedTaskId = added[0] ?? removed[0];
+      if (!changedTaskId) {
+        return nextSelectedTaskIds;
+      }
+
+      const subtreeIds = collectTaskSubtreeIds(visibleTasks, changedTaskId);
+      if (subtreeIds.length <= 1) {
+        return nextSelectedTaskIds;
+      }
+
+      const normalized = new Set(nextSelectedTaskIds);
+      const shouldSelect = added.length === 1;
+      for (const taskId of subtreeIds) {
+        if (shouldSelect) {
+          normalized.add(taskId);
+        } else {
+          normalized.delete(taskId);
+        }
+      }
+      return normalized;
+    });
+  }, [visibleTasks]);
+  const handleCancelTemplateSelection = useCallback(() => {
+    setSelectedTemplateTaskIds(new Set());
+    setTemplateSelectionMode(false);
+  }, []);
+  const handleConfirmTemplateSelection = useCallback(() => {
+    if (selectedTemplateTaskIds.size === 0) {
+      return;
+    }
+    const selectedTasks = visibleTasks.filter((task) => selectedTemplateTaskIds.has(task.id));
+    const initialName = selectedTasks.find((task) => !task.parentId || !selectedTemplateTaskIds.has(task.parentId))?.name ?? 'Новый шаблон';
+    setSaveTemplateDraft({
+      mode: 'selection',
+      initialName,
+      taskCount: selectedTasks.length,
+      rootTaskIds: Array.from(selectedTemplateTaskIds),
+    });
+  }, [selectedTemplateTaskIds, visibleTasks]);
   const handleSubmitPartialShareSelection = useCallback(async () => {
     if (!auth.accessToken || !auth.project || selectedShareTaskIds.size === 0) {
       return;
@@ -1861,6 +1944,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onSelectedShareTaskIdsChange={handlePartialShareSelectionChange}
               onCancelShareSelection={handleCancelPartialShareSelection}
               onConfirmShareSelection={handleSubmitPartialShareSelection}
+              templateSelectionMode={templateSelectionMode}
+              selectedTemplateTaskIds={selectedTemplateTaskIds}
+              onSelectedTemplateTaskIdsChange={handleTemplateSelectionChange}
+              onCancelTemplateSelection={handleCancelTemplateSelection}
+              onConfirmTemplateSelection={handleConfirmTemplateSelection}
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
               calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
@@ -1872,8 +1960,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
                   console.error('Failed to update gantt day mode:', error);
                 });
               }}
-              onSaveTaskAsTemplate={handleCreateTaskTemplate}
               onInsertTemplateAtTask={handleInsertTemplateAtTask}
+              onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
+              onStartTemplateSelection={handleStartTemplateSelection}
             />
           )
           : (
@@ -2040,6 +2129,39 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           useUIStore.getState().setShowShareManager(false);
           useUIStore.getState().setShareLinkUrl(null);
           setShareStatus('idle');
+        }}
+      />
+    )}
+
+    {saveTemplateDraft && (
+      <SaveTemplateModal
+        initialName={saveTemplateDraft.initialName}
+        taskCount={saveTemplateDraft.taskCount}
+        mode={saveTemplateDraft.mode}
+        loading={saveTemplatePending}
+        onSave={handleSaveTemplateFromModal}
+        onClose={() => {
+          if (!saveTemplatePending) {
+            if (saveTemplateDraft.mode === 'selection') {
+              setSelectedTemplateTaskIds(new Set());
+              setTemplateSelectionMode(false);
+            }
+            setSaveTemplateDraft(null);
+          }
+        }}
+      />
+    )}
+
+    {insertTemplateDraft && (
+      <InsertTemplateModal
+        templates={templates}
+        anchorTaskName={insertTemplateDraft.anchorTaskName}
+        loading={insertTemplatePending}
+        onInsert={handleInsertTemplateFromModal}
+        onClose={() => {
+          if (!insertTemplatePending) {
+            setInsertTemplateDraft(null);
+          }
         }}
       />
     )}

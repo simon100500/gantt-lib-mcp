@@ -10,9 +10,28 @@ type UseTemplateBatchUpdateOptions = {
 };
 
 function sortTasks(tasks: Task[]): Task[] {
-  return [...tasks].sort((left, right) => (
-    (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.id.localeCompare(right.id)
-  ));
+  return tasks.map((task, index) => ({
+    ...task,
+    sortOrder: index,
+  }));
+}
+
+function mergeTasksById(currentTasks: Task[], nextTasks: Task[]): Task[] {
+  if (nextTasks.length === 0) {
+    return currentTasks;
+  }
+
+  const changedById = new Map(nextTasks.map((task) => [task.id, task]));
+  const merged = currentTasks.map((task) => changedById.get(task.id) ?? task);
+  const mergedIds = new Set(merged.map((task) => task.id));
+
+  for (const task of nextTasks) {
+    if (!mergedIds.has(task.id)) {
+      merged.push(task);
+    }
+  }
+
+  return merged;
 }
 
 function normalizeTaskDates(task: Task): Task {
@@ -34,10 +53,11 @@ export function useTemplateBatchUpdate({
   const setSavingState = useUIStore((state) => state.setSavingState);
 
   const persist = useCallback(async (nextTasks: Task[]) => {
-    setTasks(sortTasks(nextTasks));
+    const normalizedTasks = sortTasks(nextTasks).map(normalizeTaskDates);
+    setTasks(normalizedTasks);
     try {
       setSavingState('saving');
-      await saveTemplateSnapshot(sortTasks(nextTasks).map(normalizeTaskDates));
+      await saveTemplateSnapshot(normalizedTasks);
       setSavingState('saved');
     } catch {
       setSavingState('error');
@@ -46,8 +66,8 @@ export function useTemplateBatchUpdate({
   }, [saveTemplateSnapshot, setSavingState, setTasks]);
 
   const handleTasksChange = useCallback(async (changedTasks: Task[]) => {
-    await persist(changedTasks);
-  }, [persist]);
+    await persist(mergeTasksById(tasks, changedTasks));
+  }, [persist, tasks]);
 
   const handleShiftProject = useCallback(async (deltaDays: number) => {
     const shifted = tasks.map((task) => {

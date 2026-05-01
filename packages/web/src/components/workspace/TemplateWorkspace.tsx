@@ -38,12 +38,12 @@ export function TemplateWorkspace({
       tasks={tasks}
       setTasks={setTasks}
       loading={loading}
-      accessToken={accessToken}
+      accessToken={null}
       sharedProject={null}
       shareToken={null}
       hasShareToken={false}
       displayConnected={true}
-      isAuthenticated
+      isAuthenticated={false}
       batchUpdate={batchUpdate}
       onLoginRequired={() => {}}
       onScrollToToday={onScrollToToday}
