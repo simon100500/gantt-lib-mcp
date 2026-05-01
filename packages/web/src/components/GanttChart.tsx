@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, ValidationResult } from '../types.ts';
-import type { CustomDayConfig, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
+import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -58,6 +58,8 @@ export interface GanttChartProps {
   taskListMenuCommands?: TaskListMenuCommand<Task>[];
   additionalColumns?: TaskListColumn<Task>[];
   hiddenTaskListColumns?: TaskListColumnId[];
+  taskDateChangeMode?: TaskDateChangeMode;
+  onTaskDateChangeModeChange?: (mode: TaskDateChangeMode) => void;
 }
 
 export interface ScrollToRowOptions {
@@ -112,6 +114,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   taskListMenuCommands,
   additionalColumns,
   hiddenTaskListColumns,
+  taskDateChangeMode,
+  onTaskDateChangeModeChange,
 }, ref) => {
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
@@ -156,12 +160,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       collapsedParentIds={collapsedParentIds}
       onToggleCollapse={onToggleCollapse}
       onAdd={onAdd}
-      onDelete={(taskId) => {
-        console.log('%c[GanttChart] onDelete called', 'background: #ff6b6b; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px;', taskId);
-        console.log('[GanttChart] CALLER:', new Error().stack?.split('\n')[2]?.trim());
-        console.log('[GanttChart] FULL STACK:', new Error().stack);
-        onDelete?.(taskId);
-      }}
+      onDelete={onDelete}
       onInsertAfter={onInsertAfter}
       onReorder={onReorder}
       onPromoteTask={onPromoteTask}
@@ -175,6 +174,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       taskListMenuCommands={taskListMenuCommands}
       additionalColumns={additionalColumns}
       hiddenTaskListColumns={hiddenTaskListColumns}
+      taskDateChangeMode={taskDateChangeMode}
+      onTaskDateChangeModeChange={onTaskDateChangeModeChange}
     />
   );
 });

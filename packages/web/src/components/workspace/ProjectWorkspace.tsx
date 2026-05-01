@@ -2,7 +2,7 @@ import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Check, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
-import type { TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
+import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -305,7 +305,7 @@ function ProjectShiftModal({
             <Calendar
               initialDate={range.start}
               isWeekend={isWeekend}
-              onSelect={(date) => {
+              onSelect={(date: Date) => {
                 setShiftDaysInput(String(diffDaysUtc(date, range.start)));
               }}
               selected={nextStart}
@@ -541,6 +541,13 @@ export function ProjectWorkspace({
       0,
     )
   ), [hiddenTaskListColumns]);
+  const taskDateChangeMode = useMemo<TaskDateChangeMode>(() => {
+    if (!projectId) {
+      return 'preserve-duration';
+    }
+
+    return projectStates[projectId]?.taskDateChangeMode ?? 'preserve-duration';
+  }, [projectId, projectStates]);
   const selectedBaselineState = useMemo(() => {
     if (!projectId) {
       return null;
@@ -656,6 +663,16 @@ export function ProjectWorkspace({
 
     setProjectState(projectId, {
       hiddenTaskListColumns: visible ? [] : TASK_LIST_COLUMN_ROWS.map((column) => column.id),
+    });
+  }, [projectId, setProjectState]);
+
+  const handleTaskDateChangeModeChange = useCallback((mode: TaskDateChangeMode) => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      taskDateChangeMode: mode,
     });
   }, [projectId, setProjectState]);
 
@@ -1658,6 +1675,8 @@ export function ProjectWorkspace({
                   taskListMenuCommands={taskListMenuCommands}
                   additionalColumns={additionalColumns}
                   hiddenTaskListColumns={hiddenTaskListColumns}
+                  taskDateChangeMode={taskDateChangeMode}
+                  onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
                   onTasksChange={effectiveReadOnly ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}

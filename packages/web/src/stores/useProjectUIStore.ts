@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { ViewMode } from './useUIStore.ts';
+import type { TaskDateChangeMode } from 'gantt-lib';
 
 interface ProjectBaselineSelectionState {
   id: string;
@@ -19,6 +20,7 @@ interface ProjectUIState {
   activeWorkspace: 'project' | 'planner';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
+  taskDateChangeMode: TaskDateChangeMode;
   hiddenTaskListColumns: string[];
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
@@ -41,6 +43,7 @@ const DEFAULT_STATE: ProjectUIState = {
   activeWorkspace: 'project',
   collapsedParentIds: [],
   disableTaskDrag: false,
+  taskDateChangeMode: 'preserve-duration',
   hiddenTaskListColumns: [],
   selectedBaseline: null,
   selectedBaselineVisible: false,
@@ -62,10 +65,9 @@ export const useProjectUIStore = create<ProjectUIStore>()(
       },
 
       setProjectState: (projectId, partialState) => {
-        console.log('[useProjectUIStore] setProjectState called', { projectId, partialState });
         set((store) => {
           const currentState = store.projectStates[projectId];
-          const newState = {
+          return {
             projectStates: {
               ...store.projectStates,
               [projectId]: {
@@ -75,8 +77,6 @@ export const useProjectUIStore = create<ProjectUIStore>()(
               },
             },
           };
-          console.log('[useProjectUIStore] New state:', newState);
-          return newState;
         });
       },
 
