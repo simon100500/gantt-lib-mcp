@@ -383,6 +383,8 @@ model TaskFinanceSetting {
   taskId      String   @map("task_id")
   plannedCost Decimal  @db.Decimal(18, 2) @map("planned_cost")
   currencyCode String  @default("RUB") @map("currency_code")
+  allocationMode String @default("manual") @map("allocation_mode")
+  allocationParentTaskId String? @map("allocation_parent_task_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -392,6 +394,7 @@ model TaskFinanceSetting {
   @@map("task_finance_settings")
   @@unique([taskId])
   @@index([projectId])
+  @@index([projectId, allocationParentTaskId])
 }
 
 model TaskFundingEvent {

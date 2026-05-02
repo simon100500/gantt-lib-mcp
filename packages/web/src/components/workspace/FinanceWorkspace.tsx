@@ -27,6 +27,8 @@ type FinanceRow =
     depth: number;
     title: string;
     plannedCost: number;
+    allocationMode: 'manual' | 'auto';
+    allocationParentTaskId: string | null;
     plannedToDate: number;
     earnedToDate: number;
     paidToDate: number;
@@ -106,6 +108,8 @@ function buildRows(snapshot: ProjectFinanceSnapshot | null, collapsedTaskIds: Se
       depth: task.depth,
       title: task.title,
       plannedCost: task.plannedCost,
+      allocationMode: task.allocationMode,
+      allocationParentTaskId: task.allocationParentTaskId,
       plannedToDate: task.plannedToDate,
       earnedToDate: task.earnedToDate,
       paidToDate: task.paidToDate,
@@ -230,7 +234,8 @@ export function FinanceWorkspace({
 
   const rows = useMemo(() => buildRows(snapshot, collapsedTaskIds), [collapsedTaskIds, snapshot]);
   const projectTotals = useMemo(() => {
-    return rows.reduce((totals, row) => ({
+    const topLevelRows = rows.filter((row) => row.parentTaskId === null);
+    return topLevelRows.reduce((totals, row) => ({
       plannedCost: totals.plannedCost + row.plannedCost,
       plannedToDate: totals.plannedToDate + row.plannedToDate,
       earnedToDate: totals.earnedToDate + row.earnedToDate,
@@ -530,9 +535,16 @@ export function FinanceWorkspace({
                         ) : (
                           <div className="h-6 w-6 shrink-0" />
                         )}
-                        <span className="min-w-0 break-words whitespace-normal font-medium leading-5 text-slate-900">
-                          {row.title}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="break-words whitespace-normal font-medium leading-5 text-slate-900">
+                            {row.title}
+                          </span>
+                          {row.allocationMode === 'auto' && (
+                            <div className="mt-1 text-[11px] font-medium uppercase tracking-[0.04em] text-amber-600">
+                              Автораспределение
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
@@ -553,6 +565,11 @@ export function FinanceWorkspace({
                           {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                         </button>
                       </div>
+                      {row.allocationMode === 'auto' && (
+                        <div className="mt-1 text-right text-[11px] text-amber-600">
+                          от родителя
+                        </div>
+                      )}
                     </td>
                     <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.plannedToDate)}

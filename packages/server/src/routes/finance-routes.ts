@@ -3,6 +3,7 @@ import { getPrisma } from '@gantt/runtime-core/prisma';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 
 type FinanceGranularity = 'month' | 'week';
+type FinanceAllocationMode = 'manual' | 'auto';
 
 type TaskRecord = {
   id: string;
@@ -24,6 +25,8 @@ type FinanceTaskRow = {
   endDate: string;
   progress: number;
   plannedCost: number;
+  allocationMode: FinanceAllocationMode;
+  allocationParentTaskId: string | null;
   plannedToDate: number;
   earnedToDate: number;
   paidToDate: number;
@@ -38,6 +41,20 @@ type FinancePeriodBucket = {
   label: string;
   startDate: string;
   endDate: string;
+};
+
+type FinanceSettingRecord = {
+  id: string;
+  plannedCost: number;
+  currencyCode: string;
+  allocationMode: FinanceAllocationMode;
+  allocationParentTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type FinanceSettingsStore = {
+  taskFinanceSetting: ReturnType<typeof getPrisma>['taskFinanceSetting'];
 };
 
 function parseIsoDate(value: string): Date | null {
@@ -162,9 +179,222 @@ function allocatePlannedByPeriod(periods: FinancePeriodBucket[], taskStart: Date
   return allocation;
 }
 
+function getTaskDurationDays(task: TaskRecord): number {
+  return Math.max(1, diffDaysInclusive(startOfUtcDay(task.startDate), startOfUtcDay(task.endDate)));
+}
+
+function allocateChildCostsByDuration(
+  children: TaskRecord[],
+  totalPlannedCost: number,
+): Map<string, number> {
+  const allocation = new Map<string, number>();
+  if (children.length === 0) {
+    return allocation;
+  }
+
+  const totalDays = children.reduce((sum, child) => sum + getTaskDurationDays(child), 0);
+  if (totalDays <= 0) {
+    let allocated = 0;
+    children.forEach((child, index) => {
+      const isLast = index === children.length - 1;
+      const value = isLast ? roundMoney(totalPlannedCost - allocated) : 0;
+      allocation.set(child.id, value);
+      allocated = roundMoney(allocated + value);
+    });
+    return allocation;
+  }
+
+  let allocated = 0;
+  children.forEach((child, index) => {
+    const isLast = index === children.length - 1;
+    const raw = totalPlannedCost * (getTaskDurationDays(child) / totalDays);
+    const value = isLast ? roundMoney(totalPlannedCost - allocated) : roundMoney(raw);
+    allocation.set(child.id, value);
+    allocated = roundMoney(allocated + value);
+  });
+
+  return allocation;
+}
+
+function getDirectGroupChildren(tasks: TaskRecord[], parentTaskId: string): TaskRecord[] {
+  return tasks.filter((task) => task.parentId === parentTaskId && task.childCount > 0);
+}
+
+function sumPlannedCosts(taskIds: string[], settingsByTaskId: Map<string, FinanceSettingRecord>): number {
+  return roundMoney(taskIds.reduce((sum, taskId) => sum + (settingsByTaskId.get(taskId)?.plannedCost ?? 0), 0));
+}
+
+async function upsertFinanceSetting(
+  tx: FinanceSettingsStore,
+  input: {
+    projectId: string;
+    taskId: string;
+    plannedCost: number;
+    currencyCode: string;
+    allocationMode: FinanceAllocationMode;
+    allocationParentTaskId: string | null;
+  },
+): Promise<void> {
+  await tx.taskFinanceSetting.upsert({
+    where: { taskId: input.taskId },
+    update: {
+      plannedCost: input.plannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: input.allocationMode,
+      allocationParentTaskId: input.allocationParentTaskId,
+    },
+    create: {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      plannedCost: input.plannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: input.allocationMode,
+      allocationParentTaskId: input.allocationParentTaskId,
+    },
+  });
+}
+
+async function redistributeDirectChildrenFromParent(
+  tx: FinanceSettingsStore,
+  input: {
+    projectId: string;
+    parentTaskId: string;
+    totalPlannedCost: number;
+    currencyCode: string;
+    tasks: TaskRecord[];
+  },
+): Promise<void> {
+  const directChildren = getDirectGroupChildren(input.tasks, input.parentTaskId);
+  if (directChildren.length === 0) {
+    return;
+  }
+
+  const allocation = allocateChildCostsByDuration(directChildren, input.totalPlannedCost);
+  for (const child of directChildren) {
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: child.id,
+      plannedCost: allocation.get(child.id) ?? 0,
+      currencyCode: input.currencyCode,
+      allocationMode: 'auto',
+      allocationParentTaskId: input.parentTaskId,
+    });
+  }
+}
+
+async function rebalanceSiblingsAfterManualChildEdit(
+  tx: FinanceSettingsStore,
+  input: {
+    projectId: string;
+    taskId: string;
+    requestedPlannedCost: number;
+    currencyCode: string;
+    tasks: TaskRecord[];
+    settingsByTaskId: Map<string, FinanceSettingRecord>;
+  },
+): Promise<number> {
+  const task = input.tasks.find((candidate) => candidate.id === input.taskId);
+  if (!task?.parentId) {
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      plannedCost: input.requestedPlannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: 'manual',
+      allocationParentTaskId: null,
+    });
+    return input.requestedPlannedCost;
+  }
+
+  const parentSetting = input.settingsByTaskId.get(task.parentId);
+  if (!parentSetting) {
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      plannedCost: input.requestedPlannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: 'manual',
+      allocationParentTaskId: null,
+    });
+    return input.requestedPlannedCost;
+  }
+
+  const siblings = getDirectGroupChildren(input.tasks, task.parentId);
+  if (siblings.length === 0) {
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      plannedCost: input.requestedPlannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: 'manual',
+      allocationParentTaskId: null,
+    });
+    return input.requestedPlannedCost;
+  }
+
+  const otherManualSiblings = siblings.filter((sibling) => {
+    if (sibling.id === input.taskId) {
+      return false;
+    }
+    return input.settingsByTaskId.get(sibling.id)?.allocationMode === 'manual';
+  });
+  const autoSiblings = siblings.filter((sibling) => {
+    if (sibling.id === input.taskId) {
+      return false;
+    }
+    return input.settingsByTaskId.get(sibling.id)?.allocationMode !== 'manual';
+  });
+  const manualSiblingTotal = sumPlannedCosts(otherManualSiblings.map((sibling) => sibling.id), input.settingsByTaskId);
+
+  if (autoSiblings.length === 0) {
+    const balancedPlannedCost = roundMoney(parentSetting.plannedCost - manualSiblingTotal);
+    if (balancedPlannedCost < 0) {
+      throw new Error('manual_children_exceed_parent');
+    }
+
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      plannedCost: balancedPlannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: 'auto',
+      allocationParentTaskId: task.parentId,
+    });
+    return balancedPlannedCost;
+  }
+
+  const remainder = roundMoney(parentSetting.plannedCost - manualSiblingTotal - input.requestedPlannedCost);
+  if (remainder < 0) {
+    throw new Error('manual_children_exceed_parent');
+  }
+
+  await upsertFinanceSetting(tx, {
+    projectId: input.projectId,
+    taskId: input.taskId,
+    plannedCost: input.requestedPlannedCost,
+    currencyCode: input.currencyCode,
+    allocationMode: 'manual',
+    allocationParentTaskId: null,
+  });
+
+  const allocation = allocateChildCostsByDuration(autoSiblings, remainder);
+  for (const sibling of autoSiblings) {
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: sibling.id,
+      plannedCost: allocation.get(sibling.id) ?? 0,
+      currencyCode: input.currencyCode,
+      allocationMode: 'auto',
+      allocationParentTaskId: task.parentId,
+    });
+  }
+
+  return input.requestedPlannedCost;
+}
+
 function buildFinanceTaskRows(
   tasks: TaskRecord[],
-  settingsByTaskId: Map<string, { id: string; plannedCost: number; currencyCode: string; createdAt: string; updatedAt: string }>,
+  settingsByTaskId: Map<string, FinanceSettingRecord>,
   fundingEvents: Array<{ id: string; taskId: string; eventDate: string; amount: number; comment: string | null; createdAt: string; updatedAt: string }>,
   periods: FinancePeriodBucket[],
   asOfDate: Date,
@@ -183,7 +413,8 @@ function buildFinanceTaskRows(
   return groupTasks.map((task) => {
     const startDate = startOfUtcDay(task.startDate);
     const endDate = startOfUtcDay(task.endDate);
-    const plannedCost = settingsByTaskId.get(task.id)?.plannedCost ?? 0;
+    const setting = settingsByTaskId.get(task.id);
+    const plannedCost = setting?.plannedCost ?? 0;
     const totalDays = Math.max(1, diffDaysInclusive(startDate, endDate));
     const elapsedDays = asOfDate.getTime() < startDate.getTime()
       ? 0
@@ -241,6 +472,8 @@ function buildFinanceTaskRows(
       endDate: toIsoDate(endDate),
       progress: task.progress ?? 0,
       plannedCost,
+      allocationMode: setting?.allocationMode ?? 'manual',
+      allocationParentTaskId: setting?.allocationParentTaskId ?? null,
       plannedToDate,
       earnedToDate,
       paidToDate,
@@ -374,6 +607,8 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
       id: setting.id,
       plannedCost: Number(setting.plannedCost),
       currencyCode: setting.currencyCode,
+      allocationMode: setting.allocationMode as FinanceAllocationMode,
+      allocationParentTaskId: setting.allocationParentTaskId,
       createdAt: setting.createdAt.toISOString(),
       updatedAt: setting.updatedAt.toISOString(),
     }]));
@@ -400,6 +635,8 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
         taskId: setting.taskId,
         plannedCost: Number(setting.plannedCost),
         currencyCode: setting.currencyCode,
+        allocationMode: setting.allocationMode,
+        allocationParentTaskId: setting.allocationParentTaskId,
         createdAt: setting.createdAt.toISOString(),
         updatedAt: setting.updatedAt.toISOString(),
       })),
@@ -417,6 +654,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     if (typeof body.plannedCost !== 'number' || Number.isNaN(body.plannedCost) || body.plannedCost < 0) {
       return reply.status(400).send({ error: 'plannedCost must be a non-negative number' });
     }
+    const requestedPlannedCost = body.plannedCost;
 
     try {
       await ensureFinanceGroupTask(req.user!.projectId, taskId);
@@ -427,29 +665,104 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     }
 
     const prisma = getPrisma();
-    const setting = await prisma.taskFinanceSetting.upsert({
-      where: { taskId },
-      update: {
-        plannedCost: body.plannedCost,
-        currencyCode: typeof body.currencyCode === 'string' && body.currencyCode.trim() ? body.currencyCode.trim().toUpperCase() : 'RUB',
-      },
-      create: {
-        projectId: req.user!.projectId,
-        taskId,
-        plannedCost: body.plannedCost,
-        currencyCode: typeof body.currencyCode === 'string' && body.currencyCode.trim() ? body.currencyCode.trim().toUpperCase() : 'RUB',
-      },
-    });
+    const currencyCode = typeof body.currencyCode === 'string' && body.currencyCode.trim() ? body.currencyCode.trim().toUpperCase() : 'RUB';
 
-    return reply.send({
-      id: setting.id,
-      projectId: setting.projectId,
-      taskId: setting.taskId,
-      plannedCost: Number(setting.plannedCost),
-      currencyCode: setting.currencyCode,
-      createdAt: setting.createdAt.toISOString(),
-      updatedAt: setting.updatedAt.toISOString(),
-    });
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const tasks = await tx.task.findMany({
+          where: { projectId: req.user!.projectId },
+          select: {
+            id: true,
+            name: true,
+            parentId: true,
+            startDate: true,
+            endDate: true,
+            progress: true,
+            sortOrder: true,
+            _count: {
+              select: {
+                children: true,
+              },
+            },
+          },
+        });
+        const normalizedTasks: TaskRecord[] = tasks.map((task) => ({
+          id: task.id,
+          name: task.name,
+          parentId: task.parentId,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          progress: task.progress,
+          sortOrder: task.sortOrder,
+          childCount: task._count.children,
+        }));
+        const targetTask = normalizedTasks.find((task) => task.id === taskId);
+        if (!targetTask) {
+          throw new Error('task_not_found');
+        }
+
+        const settings = await tx.taskFinanceSetting.findMany({
+          where: { projectId: req.user!.projectId },
+          orderBy: { createdAt: 'asc' },
+        });
+        const settingsByTaskId = new Map(settings.map((setting) => [setting.taskId, {
+          id: setting.id,
+          plannedCost: Number(setting.plannedCost),
+          currencyCode: setting.currencyCode,
+          allocationMode: setting.allocationMode as FinanceAllocationMode,
+          allocationParentTaskId: setting.allocationParentTaskId,
+          createdAt: setting.createdAt.toISOString(),
+          updatedAt: setting.updatedAt.toISOString(),
+        } satisfies FinanceSettingRecord]));
+
+        if (targetTask.childCount > 0) {
+          await upsertFinanceSetting(tx, {
+            projectId: req.user!.projectId,
+            taskId,
+            plannedCost: requestedPlannedCost,
+            currencyCode,
+            allocationMode: 'manual',
+            allocationParentTaskId: null,
+          });
+          await redistributeDirectChildrenFromParent(tx, {
+            projectId: req.user!.projectId,
+            parentTaskId: taskId,
+            totalPlannedCost: requestedPlannedCost,
+            currencyCode,
+            tasks: normalizedTasks,
+          });
+        } else {
+          await rebalanceSiblingsAfterManualChildEdit(tx, {
+            projectId: req.user!.projectId,
+            taskId,
+            requestedPlannedCost,
+            currencyCode,
+            tasks: normalizedTasks,
+            settingsByTaskId,
+          });
+        }
+
+        const saved = await tx.taskFinanceSetting.findUniqueOrThrow({ where: { taskId } });
+        return {
+          id: saved.id,
+          projectId: saved.projectId,
+          taskId: saved.taskId,
+          plannedCost: Number(saved.plannedCost),
+          currencyCode: saved.currencyCode,
+          allocationMode: saved.allocationMode,
+          allocationParentTaskId: saved.allocationParentTaskId,
+          createdAt: saved.createdAt.toISOString(),
+          updatedAt: saved.updatedAt.toISOString(),
+        };
+      });
+
+      return reply.send(result);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'manual_children_exceed_parent') {
+        return reply.status(400).send({ error: 'Child manual amounts exceed parent planned cost' });
+      }
+      throw error;
+    }
   });
 
   fastify.post('/api/finance/tasks/:taskId/events', { preHandler: [authMiddleware] }, async (req, reply) => {

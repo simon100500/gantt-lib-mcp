@@ -92,6 +92,7 @@ export interface TaskAssignmentRecord {
 }
 
 export type FinancePeriodGranularity = 'month' | 'week';
+export type TaskFinanceAllocationMode = 'manual' | 'auto';
 
 export interface TaskFinanceSetting {
   id: string;
@@ -99,6 +100,8 @@ export interface TaskFinanceSetting {
   taskId: string;
   plannedCost: number;
   currencyCode: string;
+  allocationMode: TaskFinanceAllocationMode;
+  allocationParentTaskId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -130,6 +133,8 @@ export interface FinanceTaskSnapshot {
   endDate: string;
   progress: number;
   plannedCost: number;
+  allocationMode: TaskFinanceAllocationMode;
+  allocationParentTaskId: string | null;
   plannedToDate: number;
   earnedToDate: number;
   paidToDate: number;
