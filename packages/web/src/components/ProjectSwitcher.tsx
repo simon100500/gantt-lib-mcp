@@ -67,8 +67,8 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
         type="button"
         onClick={() => onSwitch(project.id)}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
-          isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
+          isCurrent ? 'font-medium text-primary' : 'text-slate-700 hover:text-primary',
         )}
       >
         <span className={cn('flex items-center gap-1 truncate text-sm sm:text-xs', isArchived && 'opacity-60')}>
@@ -203,8 +203,8 @@ function TemplateRow({
         type="button"
         onClick={() => onSwitch(template.id)}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
-          isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
+          isCurrent ? 'font-medium text-primary' : 'text-slate-700 hover:text-primary',
         )}
       >
         <span className="truncate text-sm sm:text-xs">{template.name}</span>
@@ -344,7 +344,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
           onClick={onToggle}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
+          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-slate-500">
             <span className="transition-opacity group-hover:opacity-0">{icon}</span>
             <ChevronDown className={cn('absolute inset-0 h-4 w-4 transition-all opacity-0 group-hover:opacity-100', open && 'rotate-180')} />
           </span>
@@ -609,10 +609,10 @@ export function ProjectSwitcher({
               <button
                 type="button"
                 onClick={() => setCreateGroupModalOpen(true)}
-                className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group inline-flex items-center gap-2 text-slate-700 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <Plus className="h-4 w-4" />
-                <span>Группа проектов</span>
+                <Plus className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-primary" />
+                <span className="text-sm font-medium sm:text-xs">Группа проектов</span>
               </button>
             </div>
           ) : null}
