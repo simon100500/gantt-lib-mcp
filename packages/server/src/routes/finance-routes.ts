@@ -216,8 +216,8 @@ function allocateChildCostsByDuration(
   return allocation;
 }
 
-function getDirectGroupChildren(tasks: TaskRecord[], parentTaskId: string): TaskRecord[] {
-  return tasks.filter((task) => task.parentId === parentTaskId && task.childCount > 0);
+function getDirectChildren(tasks: TaskRecord[], parentTaskId: string): TaskRecord[] {
+  return tasks.filter((task) => task.parentId === parentTaskId);
 }
 
 function sumPlannedCosts(taskIds: string[], settingsByTaskId: Map<string, FinanceSettingRecord>): number {
@@ -264,7 +264,7 @@ async function redistributeDirectChildrenFromParent(
     tasks: TaskRecord[];
   },
 ): Promise<void> {
-  const directChildren = getDirectGroupChildren(input.tasks, input.parentTaskId);
+  const directChildren = getDirectChildren(input.tasks, input.parentTaskId);
   if (directChildren.length === 0) {
     return;
   }
@@ -319,7 +319,7 @@ async function rebalanceSiblingsAfterManualChildEdit(
     return input.requestedPlannedCost;
   }
 
-  const siblings = getDirectGroupChildren(input.tasks, task.parentId);
+  const siblings = getDirectChildren(input.tasks, task.parentId);
   if (siblings.length === 0) {
     await upsertFinanceSetting(tx, {
       projectId: input.projectId,
@@ -399,10 +399,19 @@ function buildFinanceTaskRows(
   periods: FinancePeriodBucket[],
   asOfDate: Date,
 ): FinanceTaskRow[] {
-  const groupTasks = tasks.filter((task) => task.childCount > 0);
-  const groupTaskIds = new Set(groupTasks.map((task) => task.id));
   const taskMap = new Map(tasks.map((task) => [task.id, task]));
+  const childrenByParent = new Map<string | null, TaskRecord[]>();
   const eventMap = new Map<string, Array<{ eventDate: string; amount: number }>>();
+
+  for (const task of tasks) {
+    const key = task.parentId ?? null;
+    const bucket = childrenByParent.get(key) ?? [];
+    bucket.push(task);
+    childrenByParent.set(key, bucket);
+  }
+  for (const bucket of childrenByParent.values()) {
+    bucket.sort((left, right) => left.sortOrder - right.sortOrder);
+  }
 
   fundingEvents.forEach((event) => {
     const list = eventMap.get(event.taskId) ?? [];
@@ -410,7 +419,18 @@ function buildFinanceTaskRows(
     eventMap.set(event.taskId, list);
   });
 
-  return groupTasks.map((task) => {
+  const orderedTasks: TaskRecord[] = [];
+  const visit = (task: TaskRecord) => {
+    orderedTasks.push(task);
+    for (const child of childrenByParent.get(task.id) ?? []) {
+      visit(child);
+    }
+  };
+  for (const rootTask of childrenByParent.get(null) ?? []) {
+    visit(rootTask);
+  }
+
+  return orderedTasks.map((task) => {
     const startDate = startOfUtcDay(task.startDate);
     const endDate = startOfUtcDay(task.endDate);
     const setting = settingsByTaskId.get(task.id);
@@ -448,19 +468,12 @@ function buildFinanceTaskRows(
       }
     }
 
-    let parentTaskId: string | null = task.parentId;
-    while (parentTaskId && !groupTaskIds.has(parentTaskId)) {
-      parentTaskId = taskMap.get(parentTaskId)?.parentId ?? null;
-    }
-
+    const parentTaskId = task.parentId;
     let depth = 0;
-    let currentParentId = parentTaskId;
+    let currentParentId = task.parentId;
     while (currentParentId) {
       depth += 1;
       currentParentId = taskMap.get(currentParentId)?.parentId ?? null;
-      while (currentParentId && !groupTaskIds.has(currentParentId)) {
-        currentParentId = taskMap.get(currentParentId)?.parentId ?? null;
-      }
     }
 
     return {
@@ -482,14 +495,10 @@ function buildFinanceTaskRows(
       plannedByPeriod,
       paidByPeriod,
     };
-  }).sort((left, right) => {
-    const leftTask = taskMap.get(left.taskId)!;
-    const rightTask = taskMap.get(right.taskId)!;
-    return leftTask.sortOrder - rightTask.sortOrder || left.title.localeCompare(right.title);
   });
 }
 
-async function ensureFinanceGroupTask(projectId: string, taskId: string): Promise<TaskRecord> {
+async function ensureFinanceTask(projectId: string, taskId: string): Promise<TaskRecord> {
   const prisma = getPrisma();
   const task = await prisma.task.findFirst({
     where: {
@@ -514,10 +523,6 @@ async function ensureFinanceGroupTask(projectId: string, taskId: string): Promis
 
   if (!task) {
     throw new Error('task_not_found');
-  }
-
-  if (task._count.children <= 0) {
-    throw new Error('task_not_group');
   }
 
   return {
@@ -560,7 +565,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
             },
           },
         },
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        orderBy: { sortOrder: 'asc' },
       }),
       prisma.taskFinanceSetting.findMany({
         where: { projectId: req.user!.projectId },
@@ -657,11 +662,9 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     const requestedPlannedCost = body.plannedCost;
 
     try {
-      await ensureFinanceGroupTask(req.user!.projectId, taskId);
+      await ensureFinanceTask(req.user!.projectId, taskId);
     } catch (error) {
-      return reply.status(error instanceof Error && error.message === 'task_not_group' ? 400 : 404).send({
-        error: error instanceof Error && error.message === 'task_not_group' ? 'Only group tasks can store planned cost' : 'Task not found',
-      });
+      return reply.status(404).send({ error: 'Task not found' });
     }
 
     const prisma = getPrisma();
@@ -781,11 +784,9 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     }
 
     try {
-      await ensureFinanceGroupTask(req.user!.projectId, taskId);
+      await ensureFinanceTask(req.user!.projectId, taskId);
     } catch (error) {
-      return reply.status(error instanceof Error && error.message === 'task_not_group' ? 400 : 404).send({
-        error: error instanceof Error && error.message === 'task_not_group' ? 'Only group tasks can store funding events' : 'Task not found',
-      });
+      return reply.status(404).send({ error: 'Task not found' });
     }
 
     const event = await getPrisma().taskFundingEvent.create({

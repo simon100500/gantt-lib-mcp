@@ -46,7 +46,7 @@ type FundingDrawerState = {
   editingEventId: string | null;
 } | null;
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = 28;
 const TASK_COLUMN_WIDTH = 360;
 const COST_COLUMN_WIDTH = 180;
 const METRIC_COLUMN_WIDTH = 110;
@@ -507,7 +507,7 @@ export function FinanceWorkspace({
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {snapshot && snapshot.tasks.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
-            В проекте пока нет групп работ для финансовой таблицы.
+            В проекте пока нет задач для финансовой таблицы.
           </div>
         ) : (
           <div
@@ -515,7 +515,7 @@ export function FinanceWorkspace({
             className="h-full overflow-auto"
             onScroll={handleScroll}
           >
-            <table className="min-w-max border-separate border-spacing-0 text-sm text-slate-700">
+            <table className="min-w-max border-separate border-spacing-0 text-xs text-slate-700">
               <colgroup>
                 <col style={{ width: TASK_COLUMN_WIDTH }} />
                 <col style={{ width: COST_COLUMN_WIDTH }} />
@@ -529,26 +529,26 @@ export function FinanceWorkspace({
               </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[0] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[0] }}>
                     Группа работ
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[1] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[1] }}>
                     Стоимость
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[2] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[2] }}>
                     План
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[3] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[3] }}>
                     Освоено
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[4] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[4] }}>
                     Оплачено
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5] }}>
                     Откл.
                   </th>
                   {snapshot?.periods.map((period) => (
-                    <th key={period.id} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 last:border-r-0">
+                    <th key={period.id} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 last:border-r-0">
                       {period.label}
                     </th>
                   ))}
@@ -557,7 +557,7 @@ export function FinanceWorkspace({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="align-top">
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-3 py-2" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-3 py-1" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
                       <div className="flex items-start gap-2" style={{ paddingLeft: row.depth * 18 }}>
                         {row.hasChildren ? (
                           <button
@@ -571,18 +571,21 @@ export function FinanceWorkspace({
                           <div className="h-6 w-6 shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <span className="break-words whitespace-normal font-medium leading-5 text-slate-900">
+                          <span className={cn(
+                            'break-words whitespace-normal leading-4 text-slate-900',
+                            row.hasChildren ? 'font-medium' : 'font-normal',
+                          )}>
                             {row.title}
                           </span>
                           {row.allocationMode === 'auto' && (
-                            <div className="mt-1 text-[11px] font-medium uppercase tracking-[0.04em] text-amber-600">
+                            <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.04em] text-amber-600">
                               Автораспределение
                             </div>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
                       {editingTaskId === row.taskId ? (
                         <Input
                           ref={costInputRef}
@@ -599,7 +602,7 @@ export function FinanceWorkspace({
                               cancelEditingCost(row.taskId, row.plannedCost);
                             }
                           }}
-                          className="h-10 w-full border-primary/40 bg-white text-right text-sm shadow-[0_0_0_2px_rgba(59,130,246,0.12)]"
+                          className="h-7 w-full border-primary/40 bg-white px-2 text-right text-xs shadow-[0_0_0_2px_rgba(59,130,246,0.12)]"
                           disabled={readOnly || savingTaskId === row.taskId}
                         />
                       ) : (
@@ -608,7 +611,7 @@ export function FinanceWorkspace({
                           onClick={() => startEditingCost(row.taskId, row.plannedCost)}
                           disabled={readOnly}
                           className={cn(
-                            'flex h-10 w-full items-center justify-end rounded-md border border-transparent px-3 text-right text-sm font-medium text-slate-700 transition-colors whitespace-nowrap',
+                            'flex h-7 w-full items-center justify-end rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 transition-colors whitespace-nowrap',
                             !readOnly && 'hover:border-slate-300 hover:bg-slate-50',
                           )}
                         >
@@ -616,21 +619,21 @@ export function FinanceWorkspace({
                         </button>
                       )}
                       {row.allocationMode === 'auto' && (
-                        <div className="mt-1 text-right text-[11px] text-amber-600">
+                        <div className="mt-0.5 text-right text-[10px] text-amber-600">
                           от родителя
                         </div>
                       )}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.plannedToDate)}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[3], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[3], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.earnedToDate)}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[4], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[4], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.paidToDate)}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.varianceEarnedVsPaid)}
                     </td>
                     {snapshot?.periods.map((period) => {
@@ -644,14 +647,14 @@ export function FinanceWorkspace({
                             disabled={readOnly}
                             onClick={() => { openDrawer(row.taskId, period.id, null); }}
                             className={cn(
-                              'flex min-h-[40px] w-full items-center justify-between gap-2 px-3 py-2 text-right',
+                              'flex min-h-[28px] w-full items-center justify-between gap-2 px-3 py-1 text-right leading-4',
                               !readOnly && 'hover:bg-primary/5',
                             )}
                           >
                             <span className={cn('truncate text-xs', paidValue > 0 ? 'text-emerald-600' : 'text-slate-300')}>
                               {paidValue > 0 ? formatMoney(paidValue) : ''}
                             </span>
-                            <span className={cn('text-sm', plannedValue > 0 ? 'font-medium text-slate-700' : 'text-slate-300')}>
+                            <span className={cn('text-xs', plannedValue > 0 ? 'font-medium text-slate-700' : 'text-slate-300')}>
                               {plannedValue > 0 ? formatMoney(plannedValue) : '0'}
                             </span>
                           </button>
