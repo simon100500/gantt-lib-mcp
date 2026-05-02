@@ -91,6 +91,7 @@ interface ProjectWorkspaceProps {
   onInsertTemplateAtTask?: (task: Task) => void | Promise<void>;
   onCreateTemplateFromProject?: () => void | Promise<void>;
   onStartTemplateSelection?: () => void | Promise<void>;
+  templateMode?: boolean;
 }
 
 function formatTaskCount(count: number) {
@@ -480,6 +481,7 @@ export function ProjectWorkspace({
   onInsertTemplateAtTask,
   onCreateTemplateFromProject,
   onStartTemplateSelection,
+  templateMode = false,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -508,6 +510,8 @@ export function ProjectWorkspace({
     ? workspace.projectId
     : workspace.kind === 'shared'
       ? `shared:${shareToken ?? sharedProject?.id ?? 'unknown'}`
+      : workspace.kind === 'template'
+        ? `template:${workspace.templateId}`
       : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
@@ -1340,6 +1344,13 @@ export function ProjectWorkspace({
   }, [batchUpdate, prepareUndoPreviewForEdit]);
 
   const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
+
+  useEffect(() => {
+    if (templateMode && showHistoryPanel) {
+      setShowHistoryPanel(false);
+    }
+  }, [templateMode, showHistoryPanel, setShowHistoryPanel]);
+
   const handleOpenProjectShift = useCallback(() => {
     if (!canShiftProject) {
       return;
@@ -1656,6 +1667,11 @@ export function ProjectWorkspace({
           onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
           onOpenProjectShift={handleOpenProjectShift}
           canShiftProject={canShiftProject}
+          showStructureControls={true}
+          showBaselineControls={!templateMode}
+          showProjectShiftControl={!templateMode}
+          showHistoryControl={!templateMode}
+          showExpiredToggle={!templateMode}
         />
       </div>
 
@@ -1965,7 +1981,7 @@ export function ProjectWorkspace({
           </div>
         </div>
 
-        {showHistoryPanel && (
+        {!templateMode && showHistoryPanel && (
           <HistoryPanel
             items={historyItems}
             loading={historyLoading}

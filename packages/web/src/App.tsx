@@ -1309,6 +1309,29 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       anchorTaskName: task.name,
     });
   }, [templates.length]);
+  const handleInsertTemplateIntoCurrentProject = useCallback(async (templateId: string) => {
+    if (workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0) {
+      return;
+    }
+
+    const anchorTask = [...visibleTasks].reverse().find((task) => !task.parentId) ?? visibleTasks[visibleTasks.length - 1];
+    if (!anchorTask) {
+      return;
+    }
+
+    const response = await insertTemplateIntoProject({
+      templateId,
+      anchorTaskId: anchorTask.id,
+      placement: 'after',
+    });
+
+    if (response.accepted && response.snapshot) {
+      useProjectStore.getState().hydrateConfirmed(response.newVersion, {
+        tasks: normalizeTasks(response.snapshot.tasks),
+        dependencies: response.snapshot.dependencies,
+      });
+    }
+  }, [auth.project?.id, insertTemplateIntoProject, visibleTasks, workspace.kind]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
@@ -1541,14 +1564,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     ? workspace.projectId
     : workspace.kind === 'shared'
       ? `shared:${sharedProject.shareToken ?? sharedProject.project?.id ?? 'unknown'}`
-      : null;
+      : workspace.kind === 'template'
+        ? `template:${workspace.templateId}`
+        : null;
+  const workspaceTasks = workspace.kind === 'template' ? templateTasks : tasks;
 
   const handleCollapseAll = useCallback(() => {
-    console.log('[App] handleCollapseAll called', {
-      workspaceKind: workspace.kind,
-      tasksCount: tasks.length,
-      projectId: workspaceStateId,
-    });
     if (workspaceStateId) {
       const getAllParentIds = (allTasks: Task[]): string[] => {
         const parentIds = new Set<string>();
@@ -1562,20 +1583,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         return Array.from(parentIds).filter((id) => allTasks.some((task) => task.id === id));
       };
 
-      console.log('[App] All tasks sample:', tasks.slice(0, 5).map((task) => ({ id: task.id, name: task.name, parentId: task.parentId })));
-      const allParentIds = getAllParentIds(tasks);
-      console.log('[App] Found all parent IDs (recursive):', allParentIds);
+      const allParentIds = getAllParentIds(workspaceTasks);
       setProjectState(workspaceStateId, { collapsedParentIds: allParentIds });
     }
-  }, [tasks, workspace, workspaceStateId, setProjectState]);
+  }, [workspaceStateId, workspaceTasks, setProjectState]);
 
   const handleExpandAll = useCallback(() => {
-    console.log('[App] handleExpandAll called', { workspaceKind: workspace.kind, projectId: workspaceStateId });
     if (workspaceStateId) {
-      console.log('[App] Expanding all - clearing collapsedParentIds');
       setProjectState(workspaceStateId, { collapsedParentIds: [] });
     }
-  }, [workspace, workspaceStateId, setProjectState]);
+  }, [workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const showShareManager = useUIStore((state) => state.showShareManager);
@@ -2034,6 +2051,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onSwitchTemplate={handleSwitchTemplate}
       onRenameTemplate={renameTemplate}
       onDeleteTemplate={handleDeleteTemplate}
+      onInsertTemplateToProject={handleInsertTemplateIntoCurrentProject}
+      canInsertTemplateToProject={workspace.kind === 'project' && !isArchivedProject && visibleTasks.length > 0}
       onCreateProjectGroup={handleCreateProjectGroup}
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}

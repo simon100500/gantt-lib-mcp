@@ -60,6 +60,7 @@ export function TemplateWorkspace({
       onGanttDayModeChange={undefined}
       previewState="idle"
       previewMessage={template ? null : 'Template not loaded'}
+      templateMode={true}
     />
   );
 }

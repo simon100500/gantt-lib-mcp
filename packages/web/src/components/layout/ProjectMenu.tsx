@@ -43,6 +43,8 @@ interface ProjectMenuProps {
   onSwitchTemplate?: (templateId: string) => void | Promise<void>;
   onRenameTemplate?: (templateId: string, name: string) => void | Promise<void>;
   onDeleteTemplate?: (templateId: string) => void | Promise<void>;
+  onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
+  canInsertTemplateToProject?: boolean;
   onCreateProjectGroup?: (name: string) => void | Promise<void>;
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
@@ -74,6 +76,8 @@ export function ProjectMenu({
   onSwitchTemplate,
   onRenameTemplate,
   onDeleteTemplate,
+  onInsertTemplateToProject,
+  canInsertTemplateToProject = false,
   onCreateProjectGroup,
   onRenameProjectGroup,
   onDeleteProjectGroup,
@@ -411,6 +415,8 @@ export function ProjectMenu({
             onDelete={(projectId) => { void onDeleteProject(projectId); }}
             onRenameTemplate={onRenameTemplate}
             onDeleteTemplate={onDeleteTemplate}
+            onInsertTemplateToProject={onInsertTemplateToProject}
+            canInsertTemplateToProject={canInsertTemplateToProject}
             onOpenResourcePool={onOpenResourcePool}
             onMenuOpenChange={setProjectActionsMenuOpen}
             onClose={() => setSidebarState('closed')}
@@ -732,6 +738,8 @@ export function ProjectMenu({
               onDelete={(projectId) => { void onDeleteProject(projectId); }}
               onRenameTemplate={onRenameTemplate}
               onDeleteTemplate={onDeleteTemplate}
+              onInsertTemplateToProject={onInsertTemplateToProject}
+              canInsertTemplateToProject={canInsertTemplateToProject}
               onOpenResourcePool={onOpenResourcePool}
               onMenuOpenChange={setProjectActionsMenuOpen}
               footer={billingFooter}

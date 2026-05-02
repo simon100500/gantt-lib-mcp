@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2 } from 'lucide-react';
+import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeleteProjectGroupModal } from './DeleteProjectGroupModal.tsx';
 import { EditProjectModal } from './EditProjectModal.tsx';
@@ -32,6 +32,8 @@ interface ProjectSwitcherProps {
   onDelete: (projectId: string) => void | Promise<void>;
   onRenameTemplate?: (templateId: string, name: string) => void | Promise<void>;
   onDeleteTemplate?: (templateId: string) => void | Promise<void>;
+  onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
+  canInsertTemplateToProject?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
   onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
@@ -176,6 +178,8 @@ function TemplateRow({
   onSwitch,
   onRename,
   onDelete,
+  onInsertToProject,
+  canInsertToProject = false,
   onMenuOpenChange,
   setOpenMenuTemplateId,
 }: {
@@ -185,10 +189,13 @@ function TemplateRow({
   onSwitch: (templateId: string) => void | Promise<void>;
   onRename?: (templateId: string, name: string) => void | Promise<void>;
   onDelete?: (templateId: string) => void | Promise<void>;
+  onInsertToProject?: (templateId: string) => void | Promise<void>;
+  canInsertToProject?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
   setOpenMenuTemplateId: (templateId: string | null) => void;
 }) {
   const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   return (
     <div className={cn('group flex items-center rounded-md transition-colors', isCurrent ? 'bg-slate-100' : 'hover:bg-slate-100')}>
@@ -228,6 +235,15 @@ function TemplateRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
+            {onInsertToProject && (
+              <DropdownMenuItem
+                disabled={!canInsertToProject}
+                onClick={() => void onInsertToProject(template.id)}
+              >
+                <ToyBrick className="h-4 w-4" />
+                <span>Вставить в проект</span>
+              </DropdownMenuItem>
+            )}
             {onRename && (
               <DropdownMenuItem onClick={() => setRenameModalOpen(true)}>
                 <Pencil className="h-4 w-4" />
@@ -235,7 +251,7 @@ function TemplateRow({
               </DropdownMenuItem>
             )}
             {onDelete && (
-              <DropdownMenuItem onClick={() => void onDelete(template.id)} className="text-red-600 focus:text-red-700">
+              <DropdownMenuItem onClick={() => setDeleteModalOpen(true)} className="text-red-600 focus:text-red-700">
                 <Trash2 className="h-4 w-4" />
                 <span>Удалить</span>
               </DropdownMenuItem>
@@ -252,6 +268,53 @@ function TemplateRow({
           }}
           onClose={() => setRenameModalOpen(false)}
         />
+      ) : null}
+      {deleteModalOpen && onDelete ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setDeleteModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="w-[440px] max-w-[calc(100vw-2rem)] rounded-xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <TriangleAlert className="h-6 w-6 shrink-0 text-amber-500" />
+              <h2 className="text-lg font-semibold text-slate-800">Удалить шаблон?</h2>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-red-700">
+                <ToyBrick className="h-4 w-4 shrink-0" />
+                <span className="truncate font-semibold">{template.name}</span>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-700">
+              Это действие необратимо.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteModalOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={async () => {
+                  await onDelete(template.id);
+                  setDeleteModalOpen(false);
+                }}
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -374,6 +437,8 @@ export function ProjectSwitcher({
   onDelete,
   onRenameTemplate,
   onDeleteTemplate,
+  onInsertTemplateToProject,
+  canInsertTemplateToProject = false,
   onMenuOpenChange,
   onClose,
   footer,
@@ -558,6 +623,8 @@ export function ProjectSwitcher({
                   onSwitch={handleSwitchTemplate}
                   onRename={onRenameTemplate}
                   onDelete={onDeleteTemplate}
+                  onInsertToProject={onInsertTemplateToProject}
+                  canInsertToProject={canInsertTemplateToProject}
                   onMenuOpenChange={onMenuOpenChange}
                   setOpenMenuTemplateId={setOpenMenuTemplateId}
                 />

@@ -108,6 +108,11 @@ interface ToolbarProps {
   templateSelectionActive?: boolean;
   onCreateTemplateFromProject?: (() => void) | null;
   onStartTemplateSelection?: (() => void) | null;
+  showStructureControls?: boolean;
+  showBaselineControls?: boolean;
+  showProjectShiftControl?: boolean;
+  showHistoryControl?: boolean;
+  showExpiredToggle?: boolean;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -341,6 +346,11 @@ export function Toolbar({
   templateSelectionActive = false,
   onCreateTemplateFromProject = null,
   onStartTemplateSelection = null,
+  showStructureControls = true,
+  showBaselineControls = true,
+  showProjectShiftControl = true,
+  showHistoryControl = true,
+  showExpiredToggle = true,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -494,27 +504,31 @@ export function Toolbar({
         </button>
       </div>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onCollapseAll}
-        aria-label="Свернуть все"
-        title="Свернуть все родительские задачи"
-        className={cn(actionButtonClassName, 'hidden lg:flex')}
-      >
-        <ChevronsDownUp className="h-3.5 w-3.5" />
-      </Button>
+      {showStructureControls && (
+        <>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onCollapseAll}
+            aria-label="Свернуть все"
+            title="Свернуть все родительские задачи"
+            className={cn(actionButtonClassName, 'hidden lg:flex')}
+          >
+            <ChevronsDownUp className="h-3.5 w-3.5" />
+          </Button>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onExpandAll}
-        aria-label="Развернуть все"
-        title="Развернуть все родительские задачи"
-        className={cn(actionButtonClassName, 'hidden lg:flex')}
-      >
-        <ChevronsUpDown className="h-3.5 w-3.5" />
-      </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onExpandAll}
+            aria-label="Развернуть все"
+            title="Развернуть все родительские задачи"
+            className={cn(actionButtonClassName, 'hidden lg:flex')}
+          >
+            <ChevronsUpDown className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      )}
 
       <Button
         size="sm"
@@ -586,52 +600,54 @@ export function Toolbar({
         </DropdownMenu>
       )}
 
-      <DropdownMenu open={baselineMenuOpen} onOpenChange={onBaselineMenuOpenChange} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn(
-              actionButtonClassName,
-              'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:text-slate-600',
-              normalizedBaselineActiveLabel && baselineVisible
-                ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[state=open]:text-primary'
-                : 'data-[state=open]:bg-transparent',
-            )}
-            title={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
-            aria-label={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
-            aria-pressed={Boolean(normalizedBaselineActiveLabel && baselineVisible)}
-          >
-            <Layers3 className="h-3.5 w-3.5" />
-            <span className="hidden md:inline text-xs">Базовый</span>
-            <ChevronDown className="h-3 w-3 text-current/70" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-          {renderBaselineMenuSection({
-            activeLabel: normalizedBaselineActiveLabel,
-            baselineVisible,
-            rows: normalizedBaselineRows,
-            loading: Boolean(baselineLoading),
-            activeRequestId: baselineActiveRequestId,
-            error: normalizedBaselineError,
-            createLabel: normalizedBaselineCreateLabel,
-            creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
-            deletingBaselineId,
-            renamingBaselineId,
-            onCreateBaselineFromCurrent,
-            onSelectBaseline,
-            onToggleBaselineVisibility,
-            onRequestRenameBaseline: (baselineId) => {
-              const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
-              setBaselineRenameCandidateId(baselineId);
-              setBaselineRenameDraft(row?.label ?? '');
-            },
-            onRequestDeleteBaseline: setBaselineDeleteCandidateId,
-            onRefreshBaselines,
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {showBaselineControls && (
+        <DropdownMenu open={baselineMenuOpen} onOpenChange={onBaselineMenuOpenChange} modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                actionButtonClassName,
+                'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:text-slate-600',
+                normalizedBaselineActiveLabel && baselineVisible
+                  ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10 data-[state=open]:bg-primary/10 data-[state=open]:text-primary'
+                  : 'data-[state=open]:bg-transparent',
+              )}
+              title={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
+              aria-label={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
+              aria-pressed={Boolean(normalizedBaselineActiveLabel && baselineVisible)}
+            >
+              <Layers3 className="h-3.5 w-3.5" />
+              <span className="hidden md:inline text-xs">Базовый</span>
+              <ChevronDown className="h-3 w-3 text-current/70" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            {renderBaselineMenuSection({
+              activeLabel: normalizedBaselineActiveLabel,
+              baselineVisible,
+              rows: normalizedBaselineRows,
+              loading: Boolean(baselineLoading),
+              activeRequestId: baselineActiveRequestId,
+              error: normalizedBaselineError,
+              createLabel: normalizedBaselineCreateLabel,
+              creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+              deletingBaselineId,
+              renamingBaselineId,
+              onCreateBaselineFromCurrent,
+              onSelectBaseline,
+              onToggleBaselineVisibility,
+              onRequestRenameBaseline: (baselineId) => {
+                const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
+                setBaselineRenameCandidateId(baselineId);
+                setBaselineRenameDraft(row?.label ?? '');
+              },
+              onRequestDeleteBaseline: setBaselineDeleteCandidateId,
+              onRefreshBaselines,
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {hasTemplateAction && (
         <Button
@@ -743,24 +759,26 @@ export function Toolbar({
         {undoLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
       </Button>
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-        aria-pressed={showHistoryPanel}
-        className={cn(
-          'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
-          showHistoryPanel && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
-        )}
-        title="Показать историю изменений"
-      >
-        <div className="relative">
-          <History className="h-3.5 w-3.5" />
-          {previewMode && (
-            <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+      {showHistoryControl && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+          aria-pressed={showHistoryPanel}
+          className={cn(
+            'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
+            showHistoryPanel && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
           )}
-        </div>
-      </Button>
+          title="Показать историю изменений"
+        >
+          <div className="relative">
+            <History className="h-3.5 w-3.5" />
+            {previewMode && (
+              <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+            )}
+          </div>
+        </Button>
+      )}
 
       <Button
         size="sm"
@@ -883,20 +901,24 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem
-            onClick={onCollapseAll}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <ChevronsDownUp className="h-4 w-4" />
-            <span className="text-sm">Свернуть все</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onExpandAll}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <ChevronsUpDown className="h-4 w-4" />
-            <span className="text-sm">Развернуть все</span>
-          </DropdownMenuItem>
+          {showStructureControls && (
+            <>
+              <DropdownMenuItem
+                onClick={onCollapseAll}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <ChevronsDownUp className="h-4 w-4" />
+                <span className="text-sm">Свернуть все</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onExpandAll}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <ChevronsUpDown className="h-4 w-4" />
+                <span className="text-sm">Развернуть все</span>
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem
             onClick={onScrollToToday}
             className="flex cursor-pointer items-center gap-2"
@@ -904,32 +926,36 @@ export function Toolbar({
             <FlagTriangleRight className="h-4 w-4" />
             <span className="text-sm">Сегодня</span>
           </DropdownMenuItem>
-          <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+          {showBaselineControls && (
+            <>
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
 
-          {renderBaselineMenuSection({
-            activeLabel: normalizedBaselineActiveLabel,
-            baselineVisible,
-            rows: normalizedBaselineRows,
-            loading: Boolean(baselineLoading),
-            activeRequestId: baselineActiveRequestId,
-            error: normalizedBaselineError,
-            createLabel: normalizedBaselineCreateLabel,
-            creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
-            deletingBaselineId,
-            renamingBaselineId,
-            onCreateBaselineFromCurrent,
-            onSelectBaseline,
-            onToggleBaselineVisibility,
-            onRequestRenameBaseline: (baselineId) => {
-              const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
-              setBaselineRenameCandidateId(baselineId);
-              setBaselineRenameDraft(row?.label ?? '');
-            },
-            onRequestDeleteBaseline: setBaselineDeleteCandidateId,
-            onRefreshBaselines,
-          })}
+              {renderBaselineMenuSection({
+                activeLabel: normalizedBaselineActiveLabel,
+                baselineVisible,
+                rows: normalizedBaselineRows,
+                loading: Boolean(baselineLoading),
+                activeRequestId: baselineActiveRequestId,
+                error: normalizedBaselineError,
+                createLabel: normalizedBaselineCreateLabel,
+                creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+                deletingBaselineId,
+                renamingBaselineId,
+                onCreateBaselineFromCurrent,
+                onSelectBaseline,
+                onToggleBaselineVisibility,
+                onRequestRenameBaseline: (baselineId) => {
+                  const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
+                  setBaselineRenameCandidateId(baselineId);
+                  setBaselineRenameDraft(row?.label ?? '');
+                },
+                onRequestDeleteBaseline: setBaselineDeleteCandidateId,
+                onRefreshBaselines,
+              })}
 
-          <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+            </>
+          )}
           {showShareButton && onCreateShareLink && (
             <>
               <DropdownMenuItem
@@ -944,7 +970,7 @@ export function Toolbar({
               </DropdownMenuItem>
             </>
           )}
-          {onOpenProjectShift && (
+          {showProjectShiftControl && onOpenProjectShift && (
             <DropdownMenuItem
               onClick={() => onOpenProjectShift()}
               disabled={!canShiftProject}
@@ -1025,18 +1051,20 @@ export function Toolbar({
             <Undo2 className="h-4 w-4" />
             <span className="text-sm">{undoLoading ? 'Отменяем...' : 'Отменить'}</span>
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <div className="relative">
-              <History className="h-4 w-4" />
-              {previewMode && (
-                <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
-              )}
-            </div>
-            <span className="text-sm">История</span>
-          </DropdownMenuItem>
+          {showHistoryControl && (
+            <DropdownMenuItem
+              onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <div className="relative">
+                <History className="h-4 w-4" />
+                {previewMode && (
+                  <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                )}
+              </div>
+              <span className="text-sm">История</span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={handleToggleDragLock}
             disabled={mutationLocked}
@@ -1047,21 +1075,23 @@ export function Toolbar({
               {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
             </span>
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              setHighlightExpiredTasks(!highlightExpiredTasks);
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={highlightExpiredTasks}
-              readOnly
-              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-            />
-            <span className="text-sm">Просроченные</span>
-          </DropdownMenuItem>
+          {showExpiredToggle && (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                setHighlightExpiredTasks(!highlightExpiredTasks);
+              }}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <input
+                type="checkbox"
+                checked={highlightExpiredTasks}
+                readOnly
+                className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+              />
+              <span className="text-sm">Просроченные</span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             disabled={!canChangeGanttDayMode}
             onSelect={(event) => {
@@ -1092,7 +1122,7 @@ export function Toolbar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          {onOpenProjectShift && (
+          {showProjectShiftControl && onOpenProjectShift && (
             <>
               <DropdownMenuItem
                 onClick={() => onOpenProjectShift()}
@@ -1105,21 +1135,23 @@ export function Toolbar({
               <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
             </>
           )}
-          <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              setHighlightExpiredTasks(!highlightExpiredTasks);
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={highlightExpiredTasks}
-              readOnly
-              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-            />
-            <span className="text-sm">Просроченные</span>
-          </DropdownMenuItem>
+          {showExpiredToggle && (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                setHighlightExpiredTasks(!highlightExpiredTasks);
+              }}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <input
+                type="checkbox"
+                checked={highlightExpiredTasks}
+                readOnly
+                className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+              />
+              <span className="text-sm">Просроченные</span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             disabled={!canChangeGanttDayMode}
             onSelect={(event) => {
