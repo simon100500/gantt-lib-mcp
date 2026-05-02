@@ -74,6 +74,14 @@ function formatInputMoney(value: number): string {
   return String(value);
 }
 
+function parseMoneyInput(value: string): number | null {
+  const parsed = Number(value.replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
 function todayIso(): string {
   return new Date().toISOString().split('T')[0]!;
 }
@@ -298,9 +306,19 @@ export function FinanceWorkspace({
     }
 
     const rawValue = costDrafts[taskId] ?? '0';
-    const plannedCost = Number(rawValue.replace(',', '.'));
-    if (!Number.isFinite(plannedCost) || plannedCost < 0) {
+    const plannedCost = parseMoneyInput(rawValue);
+    if (plannedCost === null) {
       setError('Стоимость должна быть неотрицательным числом.');
+      return;
+    }
+
+    const currentTask = snapshot?.tasks.find((task) => task.taskId === taskId);
+    if (currentTask && Math.abs(currentTask.plannedCost - plannedCost) < 0.0001) {
+      setEditingTaskId(null);
+      setCostDrafts((current) => ({
+        ...current,
+        [taskId]: formatInputMoney(currentTask.plannedCost),
+      }));
       return;
     }
 
@@ -327,10 +345,15 @@ export function FinanceWorkspace({
     } finally {
       setSavingTaskId(null);
     }
-  }, [accessToken, costDrafts, loadSnapshot, readOnly]);
+  }, [accessToken, costDrafts, loadSnapshot, readOnly, snapshot]);
 
   const updateAllocationMode = useCallback(async (taskId: string, allocationMode: 'manual' | 'auto', fallbackPlannedCost: number) => {
     if (!accessToken || readOnly) {
+      return;
+    }
+
+    const currentTask = snapshot?.tasks.find((task) => task.taskId === taskId);
+    if (!currentTask || currentTask.allocationMode === allocationMode) {
       return;
     }
 
@@ -344,7 +367,9 @@ export function FinanceWorkspace({
         },
         body: JSON.stringify({
           allocationMode,
-          plannedCost: allocationMode === 'manual' ? fallbackPlannedCost : undefined,
+          plannedCost: allocationMode === 'manual'
+            ? (parseMoneyInput(costDrafts[taskId] ?? '') ?? fallbackPlannedCost)
+            : undefined,
         }),
       });
 
@@ -360,7 +385,7 @@ export function FinanceWorkspace({
     } finally {
       setSavingTaskId(null);
     }
-  }, [accessToken, loadSnapshot, readOnly]);
+  }, [accessToken, costDrafts, loadSnapshot, readOnly, snapshot]);
 
   const startEditingCost = useCallback((taskId: string, plannedCost: number) => {
     if (readOnly) {

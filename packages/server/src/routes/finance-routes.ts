@@ -408,28 +408,32 @@ async function rebalanceSiblingsAfterManualChildEdit(
   const manualSiblingTotal = sumPlannedCosts(otherManualSiblings.map((sibling) => sibling.id), input.settingsByTaskId);
 
   if (autoSiblings.length === 0) {
-    const balancedPlannedCost = roundMoney(parentSetting.plannedCost - manualSiblingTotal);
-    if (balancedPlannedCost < 0) {
+    const totalManualPlannedCost = roundMoney(manualSiblingTotal + input.requestedPlannedCost);
+    if (totalManualPlannedCost > parentSetting.plannedCost) {
       throw new Error('manual_children_exceed_parent');
+    }
+
+    if (Math.abs(totalManualPlannedCost - parentSetting.plannedCost) >= 0.0001) {
+      throw new Error('manual_children_must_match_parent');
     }
 
     await upsertFinanceSetting(tx, {
       projectId: input.projectId,
       taskId: input.taskId,
-      plannedCost: balancedPlannedCost,
+      plannedCost: input.requestedPlannedCost,
       currencyCode: input.currencyCode,
-      allocationMode: 'auto',
-      allocationParentTaskId: task.parentId,
+      allocationMode: 'manual',
+      allocationParentTaskId: null,
     }, input.settingsByTaskId);
     await redistributeSubtreeFromParent(tx, {
       projectId: input.projectId,
       parentTaskId: input.taskId,
-      totalPlannedCost: balancedPlannedCost,
+      totalPlannedCost: input.requestedPlannedCost,
       currencyCode: input.currencyCode,
       childrenByParent: input.childrenByParent,
       settingsByTaskId: input.settingsByTaskId,
     });
-    return balancedPlannedCost;
+    return input.requestedPlannedCost;
   }
 
   const remainder = roundMoney(parentSetting.plannedCost - manualSiblingTotal - input.requestedPlannedCost);
@@ -535,6 +539,60 @@ async function rebalanceSiblingsForAutoTask(
   }
 
   return allocation.get(input.taskId) ?? 0;
+}
+
+async function lockAncestorsWhenChildrenFullyFixed(
+  tx: FinanceSettingsStore,
+  input: {
+    projectId: string;
+    startTaskId: string;
+    currencyCode: string;
+    taskMap: Map<string, TaskRecord>;
+    childrenByParent: Map<string, TaskRecord[]>;
+    settingsByTaskId: Map<string, FinanceSettingRecord>;
+  },
+): Promise<void> {
+  let currentParentId = input.taskMap.get(input.startTaskId)?.parentId ?? null;
+
+  while (currentParentId) {
+    const parentTask = input.taskMap.get(currentParentId);
+    const parentSetting = input.settingsByTaskId.get(currentParentId);
+    if (!parentTask || !parentSetting) {
+      currentParentId = parentTask?.parentId ?? null;
+      continue;
+    }
+
+    const directChildren = input.childrenByParent.get(currentParentId) ?? [];
+    if (directChildren.length === 0) {
+      currentParentId = parentTask.parentId ?? null;
+      continue;
+    }
+
+    const allChildrenManual = directChildren.every((child) => input.settingsByTaskId.get(child.id)?.allocationMode === 'manual');
+    if (!allChildrenManual) {
+      currentParentId = parentTask.parentId ?? null;
+      continue;
+    }
+
+    const childTotal = roundMoney(
+      directChildren.reduce((sum, child) => sum + (input.settingsByTaskId.get(child.id)?.plannedCost ?? 0), 0),
+    );
+    if (Math.abs(childTotal - parentSetting.plannedCost) >= 0.0001) {
+      currentParentId = parentTask.parentId ?? null;
+      continue;
+    }
+
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: currentParentId,
+      plannedCost: parentSetting.plannedCost,
+      currencyCode: parentSetting.currencyCode || input.currencyCode,
+      allocationMode: 'manual',
+      allocationParentTaskId: null,
+    }, input.settingsByTaskId);
+
+    currentParentId = parentTask.parentId ?? null;
+  }
 }
 
 function buildFinanceTaskRows(
@@ -848,6 +906,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
           childCount: task._count.children,
         }));
         const childrenByParent = buildChildrenByParent(normalizedTasks);
+        const taskMap = new Map(normalizedTasks.map((task) => [task.id, task]));
         const targetTask = normalizedTasks.find((task) => task.id === taskId);
         if (!targetTask) {
           throw new Error('task_not_found');
@@ -910,6 +969,15 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
           });
         }
 
+        await lockAncestorsWhenChildrenFullyFixed(tx, {
+          projectId: req.user!.projectId,
+          startTaskId: taskId,
+          currencyCode,
+          taskMap,
+          childrenByParent,
+          settingsByTaskId,
+        });
+
         const saved = await tx.taskFinanceSetting.findUniqueOrThrow({ where: { taskId } });
         return {
           id: saved.id,
@@ -928,6 +996,9 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     } catch (error) {
       if (error instanceof Error && error.message === 'manual_children_exceed_parent') {
         return reply.status(400).send({ error: 'Child manual amounts exceed parent planned cost' });
+      }
+      if (error instanceof Error && error.message === 'manual_children_must_match_parent') {
+        return reply.status(400).send({ error: 'When all child amounts are fixed, their sum must equal parent planned cost' });
       }
       if (error instanceof Error && error.message === 'auto_requires_parent') {
         return reply.status(400).send({ error: 'Auto allocation requires a parent with planned cost' });
