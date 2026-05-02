@@ -113,6 +113,8 @@ interface ToolbarProps {
   showProjectShiftControl?: boolean;
   showHistoryControl?: boolean;
   showExpiredToggle?: boolean;
+  showUndoControl?: boolean;
+  showOverflowMenuControl?: boolean;
 }
 
 function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
@@ -351,6 +353,8 @@ export function Toolbar({
   showProjectShiftControl = true,
   showHistoryControl = true,
   showExpiredToggle = true,
+  showUndoControl = true,
+  showOverflowMenuControl = true,
 }: ToolbarProps) {
   const [baselineDeleteCandidateId, setBaselineDeleteCandidateId] = useState<string | null>(null);
   const [baselineRenameCandidateId, setBaselineRenameCandidateId] = useState<string | null>(null);
@@ -744,20 +748,22 @@ export function Toolbar({
 
       <div className="flex-1" />
 
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => onUndo?.()}
-        disabled={!canTriggerUndo}
-        className={cn(
-          'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
-          !canTriggerUndo && 'cursor-not-allowed opacity-50',
-        )}
-        title={undoLoading ? 'Отменяем последнее действие...' : 'Отменить последнее действие (Ctrl+Z)'}
-        aria-label={undoLoading ? 'Отменяем последнее действие' : 'Отменить последнее действие'}
-      >
-        {undoLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
-      </Button>
+      {showUndoControl && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onUndo?.()}
+          disabled={!canTriggerUndo}
+          className={cn(
+            'hidden h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-slate-600 hover:border-primary hover:text-primary sm:flex',
+            !canTriggerUndo && 'cursor-not-allowed opacity-50',
+          )}
+          title={undoLoading ? 'Отменяем последнее действие...' : 'Отменить последнее действие (Ctrl+Z)'}
+          aria-label={undoLoading ? 'Отменяем последнее действие' : 'Отменить последнее действие'}
+        >
+          {undoLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
+        </Button>
+      )}
 
       {showHistoryControl && (
         <Button
@@ -889,287 +895,293 @@ export function Toolbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none lg:hidden"
-            title="Ещё"
-            aria-label="Ещё"
-          >
-            <Ellipsis className="h-4 w-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          {showStructureControls && (
-            <>
-              <DropdownMenuItem
-                onClick={onCollapseAll}
-                className="flex cursor-pointer items-center gap-2"
+      {showOverflowMenuControl && (
+        <>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none lg:hidden"
+                title="Ещё"
+                aria-label="Ещё"
               >
-                <ChevronsDownUp className="h-4 w-4" />
-                <span className="text-sm">Свернуть все</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={onExpandAll}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                <ChevronsUpDown className="h-4 w-4" />
-                <span className="text-sm">Развернуть все</span>
-              </DropdownMenuItem>
-            </>
-          )}
-          <DropdownMenuItem
-            onClick={onScrollToToday}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <FlagTriangleRight className="h-4 w-4" />
-            <span className="text-sm">Сегодня</span>
-          </DropdownMenuItem>
-          {showBaselineControls && (
-            <>
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-
-              {renderBaselineMenuSection({
-                activeLabel: normalizedBaselineActiveLabel,
-                baselineVisible,
-                rows: normalizedBaselineRows,
-                loading: Boolean(baselineLoading),
-                activeRequestId: baselineActiveRequestId,
-                error: normalizedBaselineError,
-                createLabel: normalizedBaselineCreateLabel,
-                creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
-                deletingBaselineId,
-                renamingBaselineId,
-                onCreateBaselineFromCurrent,
-                onSelectBaseline,
-                onToggleBaselineVisibility,
-                onRequestRenameBaseline: (baselineId) => {
-                  const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
-                  setBaselineRenameCandidateId(baselineId);
-                  setBaselineRenameDraft(row?.label ?? '');
-                },
-                onRequestDeleteBaseline: setBaselineDeleteCandidateId,
-                onRefreshBaselines,
-              })}
-
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-            </>
-          )}
-          {showShareButton && onCreateShareLink && (
-            <>
-              <DropdownMenuItem
-                onClick={() => void onCreateShareLink()}
-                disabled={shareStatus === 'creating'}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
-                <span className="text-sm">
-                  {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку...'}
-                </span>
-              </DropdownMenuItem>
-            </>
-          )}
-          {showProjectShiftControl && onOpenProjectShift && (
-            <DropdownMenuItem
-              onClick={() => onOpenProjectShift()}
-              disabled={!canShiftProject}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <CalendarClock className="h-4 w-4" />
-              <span className="text-sm">Сдвинуть проект ...</span>
-            </DropdownMenuItem>
-          )}
-          {onExportPdf && (
-            <DropdownMenuItem
-              onClick={onExportPdf}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <FileDown className="h-4 w-4" />
-              <span className="text-sm">PDF / Печать</span>
-            </DropdownMenuItem>
-          )}
-          {onExportExcel && (
-            <DropdownMenuItem
-              onClick={onExportExcel}
-              disabled={isExportExcelLoading}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-          {taskListColumnRows && taskListColumnRows.length > 0 && (
-            <>
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
-                Столбцы задач
-              </DropdownMenuLabel>
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.preventDefault();
-                  onSetAllTaskListColumnsVisible?.(!allTaskListColumnsVisible);
-                }}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                <TriStateCheckbox
-                  checked={allTaskListColumnsVisible}
-                  indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
-                />
-                <span className="text-sm">Выбрать всё</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-              {taskListColumnRows.map((column) => {
-                const checked = !hiddenTaskListColumnSet.has(column.id);
-                return (
+                <Ellipsis className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {showStructureControls && (
+                <>
                   <DropdownMenuItem
-                    key={column.id}
+                    onClick={onCollapseAll}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <ChevronsDownUp className="h-4 w-4" />
+                    <span className="text-sm">Свернуть все</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={onExpandAll}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <ChevronsUpDown className="h-4 w-4" />
+                    <span className="text-sm">Развернуть все</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+              <DropdownMenuItem
+                onClick={onScrollToToday}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <FlagTriangleRight className="h-4 w-4" />
+                <span className="text-sm">Сегодня</span>
+              </DropdownMenuItem>
+              {showBaselineControls && (
+                <>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+
+                  {renderBaselineMenuSection({
+                    activeLabel: normalizedBaselineActiveLabel,
+                    baselineVisible,
+                    rows: normalizedBaselineRows,
+                    loading: Boolean(baselineLoading),
+                    activeRequestId: baselineActiveRequestId,
+                    error: normalizedBaselineError,
+                    createLabel: normalizedBaselineCreateLabel,
+                    creatingBaselineFromCurrent: Boolean(creatingBaselineFromCurrent),
+                    deletingBaselineId,
+                    renamingBaselineId,
+                    onCreateBaselineFromCurrent,
+                    onSelectBaseline,
+                    onToggleBaselineVisibility,
+                    onRequestRenameBaseline: (baselineId) => {
+                      const row = normalizedBaselineRows.find((candidate) => candidate.id === baselineId);
+                      setBaselineRenameCandidateId(baselineId);
+                      setBaselineRenameDraft(row?.label ?? '');
+                    },
+                    onRequestDeleteBaseline: setBaselineDeleteCandidateId,
+                    onRefreshBaselines,
+                  })}
+
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {showShareButton && onCreateShareLink && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => void onCreateShareLink()}
+                    disabled={shareStatus === 'creating'}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    {shareStatus === 'copied' ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                    <span className="text-sm">
+                      {shareStatus === 'copied' ? 'Скопировано' : 'Отправить ссылку...'}
+                    </span>
+                  </DropdownMenuItem>
+                </>
+              )}
+              {showProjectShiftControl && onOpenProjectShift && (
+                <DropdownMenuItem
+                  onClick={() => onOpenProjectShift()}
+                  disabled={!canShiftProject}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  <span className="text-sm">Сдвинуть проект ...</span>
+                </DropdownMenuItem>
+              )}
+              {onExportPdf && (
+                <DropdownMenuItem
+                  onClick={onExportPdf}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <FileDown className="h-4 w-4" />
+                  <span className="text-sm">PDF / Печать</span>
+                </DropdownMenuItem>
+              )}
+              {onExportExcel && (
+                <DropdownMenuItem
+                  onClick={onExportExcel}
+                  disabled={isExportExcelLoading}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+              {taskListColumnRows && taskListColumnRows.length > 0 && (
+                <>
+                  <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                    Столбцы задач
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
                     onSelect={(event) => {
                       event.preventDefault();
-                      onToggleTaskListColumn?.(column.id);
+                      onSetAllTaskListColumnsVisible?.(!allTaskListColumnsVisible);
                     }}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      readOnly
-                      className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                    <TriStateCheckbox
+                      checked={allTaskListColumnsVisible}
+                      indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
                     />
-                    <span className="text-sm">{column.label}</span>
+                    <span className="text-sm">Выбрать всё</span>
                   </DropdownMenuItem>
-                );
-              })}
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-            </>
-          )}
-          <DropdownMenuItem
-            onClick={() => onUndo?.()}
-            disabled={!canTriggerUndo}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <Undo2 className="h-4 w-4" />
-            <span className="text-sm">{undoLoading ? 'Отменяем...' : 'Отменить'}</span>
-          </DropdownMenuItem>
-          {showHistoryControl && (
-            <DropdownMenuItem
-              onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <div className="relative">
-                <History className="h-4 w-4" />
-                {previewMode && (
-                  <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
-                )}
-              </div>
-              <span className="text-sm">История</span>
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onClick={handleToggleDragLock}
-            disabled={mutationLocked}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            {effectiveDisableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
-            <span className="text-sm">
-              {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
-            </span>
-          </DropdownMenuItem>
-          {showExpiredToggle && (
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                setHighlightExpiredTasks(!highlightExpiredTasks);
-              }}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <input
-                type="checkbox"
-                checked={highlightExpiredTasks}
-                readOnly
-                className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-              />
-              <span className="text-sm">Просроченные</span>
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            disabled={!canChangeGanttDayMode}
-            onSelect={(event) => {
-              event.preventDefault();
-              onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={ganttDayMode === 'business'}
-              readOnly
-              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-            />
-            <span className="text-sm">Рабочие дни</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none"
-            title="Дополнительные параметры"
-          >
-            <Ellipsis className="h-4 w-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {showProjectShiftControl && onOpenProjectShift && (
-            <>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  {taskListColumnRows.map((column) => {
+                    const checked = !hiddenTaskListColumnSet.has(column.id);
+                    return (
+                      <DropdownMenuItem
+                        key={column.id}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onToggleTaskListColumn?.(column.id);
+                        }}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          readOnly
+                          className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                        />
+                        <span className="text-sm">{column.label}</span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {showUndoControl && (
+                <DropdownMenuItem
+                  onClick={() => onUndo?.()}
+                  disabled={!canTriggerUndo}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <Undo2 className="h-4 w-4" />
+                  <span className="text-sm">{undoLoading ? 'Отменяем...' : 'Отменить'}</span>
+                </DropdownMenuItem>
+              )}
+              {showHistoryControl && (
+                <DropdownMenuItem
+                  onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <div className="relative">
+                    <History className="h-4 w-4" />
+                    {previewMode && (
+                      <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                    )}
+                  </div>
+                  <span className="text-sm">История</span>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
-                onClick={() => onOpenProjectShift()}
-                disabled={!canShiftProject}
+                onClick={handleToggleDragLock}
+                disabled={mutationLocked}
                 className="flex cursor-pointer items-center gap-2"
               >
-                <CalendarClock className="h-4 w-4" />
-                <span className="text-sm">Сдвинуть проект ...</span>
+                {effectiveDisableTaskDrag ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                <span className="text-sm">
+                  {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
+                </span>
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-            </>
-          )}
-          {showExpiredToggle && (
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                setHighlightExpiredTasks(!highlightExpiredTasks);
-              }}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <input
-                type="checkbox"
-                checked={highlightExpiredTasks}
-                readOnly
-                className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-              />
-              <span className="text-sm">Просроченные</span>
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            disabled={!canChangeGanttDayMode}
-            onSelect={(event) => {
-              event.preventDefault();
-              onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
-            }}
-            className="flex cursor-pointer items-center gap-2"
-          >
-            <input
-              type="checkbox"
-              checked={ganttDayMode === 'business'}
-              readOnly
-              className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-            />
-            <span className="text-sm">Рабочие дни</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+              {showExpiredToggle && (
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setHighlightExpiredTasks(!highlightExpiredTasks);
+                  }}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={highlightExpiredTasks}
+                    readOnly
+                    className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                  />
+                  <span className="text-sm">Просроченные</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                disabled={!canChangeGanttDayMode}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
+                }}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <input
+                  type="checkbox"
+                  checked={ganttDayMode === 'business'}
+                  readOnly
+                  className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                />
+                <span className="text-sm">Рабочие дни</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none"
+                title="Дополнительные параметры"
+              >
+                <Ellipsis className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {showProjectShiftControl && onOpenProjectShift && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onOpenProjectShift()}
+                    disabled={!canShiftProject}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    <span className="text-sm">Сдвинуть проект ...</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {showExpiredToggle && (
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setHighlightExpiredTasks(!highlightExpiredTasks);
+                  }}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={highlightExpiredTasks}
+                    readOnly
+                    className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                  />
+                  <span className="text-sm">Просроченные</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                disabled={!canChangeGanttDayMode}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
+                }}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <input
+                  type="checkbox"
+                  checked={ganttDayMode === 'business'}
+                  readOnly
+                  className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                />
+                <span className="text-sm">Рабочие дни</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
 
       <FilterPopup>
         <Button

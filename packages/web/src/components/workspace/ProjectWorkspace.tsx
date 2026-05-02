@@ -1672,6 +1672,8 @@ export function ProjectWorkspace({
           showProjectShiftControl={!templateMode}
           showHistoryControl={!templateMode}
           showExpiredToggle={!templateMode}
+          showUndoControl={!templateMode}
+          showOverflowMenuControl={!templateMode}
         />
       </div>
 
