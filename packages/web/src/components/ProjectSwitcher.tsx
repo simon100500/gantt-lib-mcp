@@ -207,10 +207,7 @@ function TemplateRow({
           isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
         )}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <ToyBrick className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-          <span className="truncate text-sm sm:text-xs">{template.name}</span>
-        </span>
+        <span className="truncate text-sm sm:text-xs">{template.name}</span>
       </button>
 
       <div className="relative mr-2 flex h-5 w-11 shrink-0 items-center justify-end">
@@ -607,33 +604,6 @@ export function ProjectSwitcher({
             );
           })}
 
-          {onSwitchTemplate ? (
-            <ProjectSection
-              title={`Шаблоны (${templates.length})`}
-              icon={<ToyBrick className="h-4 w-4" />}
-              open={templatesOpen}
-              onToggle={() => setTemplatesOpen((value) => !value)}
-            >
-              {templates.length > 0 ? templates.map((template) => (
-                <TemplateRow
-                  key={template.id}
-                  template={template}
-                  isCurrent={template.id === selectedProjectId}
-                  menuActive={openMenuTemplateId === template.id}
-                  onSwitch={handleSwitchTemplate}
-                  onRename={onRenameTemplate}
-                  onDelete={onDeleteTemplate}
-                  onInsertToProject={onInsertTemplateToProject}
-                  canInsertToProject={canInsertTemplateToProject}
-                  onMenuOpenChange={onMenuOpenChange}
-                  setOpenMenuTemplateId={setOpenMenuTemplateId}
-                />
-              )) : (
-                <div className="px-3 py-2 text-xs text-slate-400">Нет шаблонов</div>
-              )}
-            </ProjectSection>
-          ) : null}
-
           {onCreateGroup ? (
             <div className="px-3 pt-1">
               <button
@@ -647,8 +617,38 @@ export function ProjectSwitcher({
             </div>
           ) : null}
 
+          {onSwitchTemplate ? (
+            <div>
+              <div className="mx-3 mb-2 border-t border-slate-200" />
+              <ProjectSection
+                title={`Шаблоны (${templates.length})`}
+                icon={<ToyBrick className="h-4 w-4" />}
+                open={templatesOpen}
+                onToggle={() => setTemplatesOpen((value) => !value)}
+              >
+                {templates.length > 0 ? templates.map((template) => (
+                  <TemplateRow
+                    key={template.id}
+                    template={template}
+                    isCurrent={template.id === selectedProjectId}
+                    menuActive={openMenuTemplateId === template.id}
+                    onSwitch={handleSwitchTemplate}
+                    onRename={onRenameTemplate}
+                    onDelete={onDeleteTemplate}
+                    onInsertToProject={onInsertTemplateToProject}
+                    canInsertToProject={canInsertTemplateToProject}
+                    onMenuOpenChange={onMenuOpenChange}
+                    setOpenMenuTemplateId={setOpenMenuTemplateId}
+                  />
+                )) : (
+                  <div className="px-3 py-2 text-xs text-slate-400">Нет шаблонов</div>
+                )}
+              </ProjectSection>
+            </div>
+          ) : null}
+
           {archivedProjects.length > 0 ? (
-            <div className="pt-3">
+            <div>
               <div className="mx-3 mb-2 border-t border-slate-200" />
               <ProjectSection title={archiveTitle} icon={<Archive className="h-4 w-4" />} open={archiveOpen} onToggle={() => setArchiveOpen((value) => !value)}>
                 {archivedProjects.map((project) => (
