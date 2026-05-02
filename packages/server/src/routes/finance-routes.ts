@@ -234,6 +234,7 @@ async function upsertFinanceSetting(
     allocationMode: FinanceAllocationMode;
     allocationParentTaskId: string | null;
   },
+  settingsByTaskId?: Map<string, FinanceSettingRecord>,
 ): Promise<void> {
   await tx.taskFinanceSetting.upsert({
     where: { taskId: input.taskId },
@@ -252,19 +253,46 @@ async function upsertFinanceSetting(
       allocationParentTaskId: input.allocationParentTaskId,
     },
   });
+
+  settingsByTaskId?.set(input.taskId, {
+    id: settingsByTaskId.get(input.taskId)?.id ?? `pending:${input.taskId}`,
+    plannedCost: input.plannedCost,
+    currencyCode: input.currencyCode,
+    allocationMode: input.allocationMode,
+    allocationParentTaskId: input.allocationParentTaskId,
+    createdAt: settingsByTaskId.get(input.taskId)?.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
-async function redistributeDirectChildrenFromParent(
+function buildChildrenByParent(tasks: TaskRecord[]): Map<string, TaskRecord[]> {
+  const childrenByParent = new Map<string, TaskRecord[]>();
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+    const bucket = childrenByParent.get(task.parentId) ?? [];
+    bucket.push(task);
+    childrenByParent.set(task.parentId, bucket);
+  }
+  for (const bucket of childrenByParent.values()) {
+    bucket.sort((left, right) => left.sortOrder - right.sortOrder);
+  }
+  return childrenByParent;
+}
+
+async function redistributeSubtreeFromParent(
   tx: FinanceSettingsStore,
   input: {
     projectId: string;
     parentTaskId: string;
     totalPlannedCost: number;
     currencyCode: string;
-    tasks: TaskRecord[];
+    childrenByParent: Map<string, TaskRecord[]>;
+    settingsByTaskId: Map<string, FinanceSettingRecord>;
   },
 ): Promise<void> {
-  const directChildren = getDirectChildren(input.tasks, input.parentTaskId);
+  const directChildren = input.childrenByParent.get(input.parentTaskId) ?? [];
   if (directChildren.length === 0) {
     return;
   }
@@ -278,6 +306,14 @@ async function redistributeDirectChildrenFromParent(
       currencyCode: input.currencyCode,
       allocationMode: 'auto',
       allocationParentTaskId: input.parentTaskId,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: child.id,
+      totalPlannedCost: allocation.get(child.id) ?? 0,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
     });
   }
 }
@@ -290,6 +326,7 @@ async function rebalanceSiblingsAfterManualChildEdit(
     requestedPlannedCost: number;
     currencyCode: string;
     tasks: TaskRecord[];
+    childrenByParent: Map<string, TaskRecord[]>;
     settingsByTaskId: Map<string, FinanceSettingRecord>;
   },
 ): Promise<number> {
@@ -302,6 +339,14 @@ async function rebalanceSiblingsAfterManualChildEdit(
       currencyCode: input.currencyCode,
       allocationMode: 'manual',
       allocationParentTaskId: null,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: input.taskId,
+      totalPlannedCost: input.requestedPlannedCost,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
     });
     return input.requestedPlannedCost;
   }
@@ -315,11 +360,19 @@ async function rebalanceSiblingsAfterManualChildEdit(
       currencyCode: input.currencyCode,
       allocationMode: 'manual',
       allocationParentTaskId: null,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: input.taskId,
+      totalPlannedCost: input.requestedPlannedCost,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
     });
     return input.requestedPlannedCost;
   }
 
-  const siblings = getDirectChildren(input.tasks, task.parentId);
+  const siblings = input.childrenByParent.get(task.parentId) ?? [];
   if (siblings.length === 0) {
     await upsertFinanceSetting(tx, {
       projectId: input.projectId,
@@ -328,6 +381,14 @@ async function rebalanceSiblingsAfterManualChildEdit(
       currencyCode: input.currencyCode,
       allocationMode: 'manual',
       allocationParentTaskId: null,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: input.taskId,
+      totalPlannedCost: input.requestedPlannedCost,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
     });
     return input.requestedPlannedCost;
   }
@@ -359,6 +420,14 @@ async function rebalanceSiblingsAfterManualChildEdit(
       currencyCode: input.currencyCode,
       allocationMode: 'auto',
       allocationParentTaskId: task.parentId,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: input.taskId,
+      totalPlannedCost: balancedPlannedCost,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
     });
     return balancedPlannedCost;
   }
@@ -375,6 +444,14 @@ async function rebalanceSiblingsAfterManualChildEdit(
     currencyCode: input.currencyCode,
     allocationMode: 'manual',
     allocationParentTaskId: null,
+  }, input.settingsByTaskId);
+  await redistributeSubtreeFromParent(tx, {
+    projectId: input.projectId,
+    parentTaskId: input.taskId,
+    totalPlannedCost: input.requestedPlannedCost,
+    currencyCode: input.currencyCode,
+    childrenByParent: input.childrenByParent,
+    settingsByTaskId: input.settingsByTaskId,
   });
 
   const allocation = allocateChildCostsByDuration(autoSiblings, remainder);
@@ -386,6 +463,14 @@ async function rebalanceSiblingsAfterManualChildEdit(
       currencyCode: input.currencyCode,
       allocationMode: 'auto',
       allocationParentTaskId: task.parentId,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: sibling.id,
+      totalPlannedCost: allocation.get(sibling.id) ?? 0,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
     });
   }
 
@@ -699,6 +784,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
           sortOrder: task.sortOrder,
           childCount: task._count.children,
         }));
+        const childrenByParent = buildChildrenByParent(normalizedTasks);
         const targetTask = normalizedTasks.find((task) => task.id === taskId);
         if (!targetTask) {
           throw new Error('task_not_found');
@@ -718,7 +804,9 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
           updatedAt: setting.updatedAt.toISOString(),
         } satisfies FinanceSettingRecord]));
 
-        if (targetTask.childCount > 0) {
+        const parentHasPlannedCost = Boolean(targetTask.parentId && settingsByTaskId.get(targetTask.parentId));
+
+        if (!parentHasPlannedCost) {
           await upsertFinanceSetting(tx, {
             projectId: req.user!.projectId,
             taskId,
@@ -726,13 +814,14 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
             currencyCode,
             allocationMode: 'manual',
             allocationParentTaskId: null,
-          });
-          await redistributeDirectChildrenFromParent(tx, {
+          }, settingsByTaskId);
+          await redistributeSubtreeFromParent(tx, {
             projectId: req.user!.projectId,
             parentTaskId: taskId,
             totalPlannedCost: requestedPlannedCost,
             currencyCode,
-            tasks: normalizedTasks,
+            childrenByParent,
+            settingsByTaskId,
           });
         } else {
           await rebalanceSiblingsAfterManualChildEdit(tx, {
@@ -741,6 +830,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
             requestedPlannedCost,
             currencyCode,
             tasks: normalizedTasks,
+            childrenByParent,
             settingsByTaskId,
           });
         }

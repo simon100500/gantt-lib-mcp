@@ -577,11 +577,6 @@ export function FinanceWorkspace({
                           )}>
                             {row.title}
                           </span>
-                          {row.allocationMode === 'auto' && (
-                            <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.04em] text-amber-600">
-                              Автораспределение
-                            </div>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -611,17 +606,19 @@ export function FinanceWorkspace({
                           onClick={() => startEditingCost(row.taskId, row.plannedCost)}
                           disabled={readOnly}
                           className={cn(
-                            'flex h-7 w-full items-center justify-end rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 transition-colors whitespace-nowrap',
+                            'flex h-7 w-full items-center justify-end gap-2 rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 transition-colors whitespace-nowrap',
                             !readOnly && 'hover:border-slate-300 hover:bg-slate-50',
                           )}
                         >
+                          {row.allocationMode === 'auto' && (
+                            <span
+                              className="inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                              title="Сумма распределена автоматически"
+                              aria-label="Сумма распределена автоматически"
+                            />
+                          )}
                           {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" /> : formatMoney(row.plannedCost)}
                         </button>
-                      )}
-                      {row.allocationMode === 'auto' && (
-                        <div className="mt-0.5 text-right text-[10px] text-amber-600">
-                          от родителя
-                        </div>
                       )}
                     </td>
                     <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
