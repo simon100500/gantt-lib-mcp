@@ -630,6 +630,7 @@ function buildFinanceTaskRows(
       endDate: toIsoDate(endDate),
       progress: task.progress ?? 0,
       plannedCost,
+      hasOwnFinanceSetting: settingsByTaskId.has(task.id),
       allocationMode: setting?.allocationMode ?? 'manual',
       allocationParentTaskId: setting?.allocationParentTaskId ?? null,
       plannedToDate,

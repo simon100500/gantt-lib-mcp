@@ -27,6 +27,7 @@ type FinanceRow =
     depth: number;
     title: string;
     plannedCost: number;
+    hasOwnFinanceSetting: boolean;
     allocationMode: 'manual' | 'auto';
     allocationParentTaskId: string | null;
     plannedToDate: number;
@@ -109,6 +110,7 @@ function buildRows(snapshot: ProjectFinanceSnapshot | null, collapsedTaskIds: Se
       depth: task.depth,
       title: task.title,
       plannedCost: task.plannedCost,
+      hasOwnFinanceSetting: task.hasOwnFinanceSetting,
       allocationMode: task.allocationMode,
       allocationParentTaskId: task.allocationParentTaskId,
       plannedToDate: task.plannedToDate,
@@ -590,13 +592,13 @@ export function FinanceWorkspace({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="align-top">
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-3 py-1" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
-                      <div className="flex items-start gap-2" style={{ paddingLeft: row.depth * 18 }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-3 py-1 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
+                      <div className="flex items-center gap-2" style={{ paddingLeft: row.depth * 18 }}>
                         {row.hasChildren ? (
                           <button
                             type="button"
                             onClick={() => toggleCollapse(row.taskId)}
-                            className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900"
+                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900"
                           >
                             {row.isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </button>
@@ -613,7 +615,7 @@ export function FinanceWorkspace({
                         </div>
                       </div>
                     </td>
-                    <td className="group sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
+                    <td className="group sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 align-middle transition-colors hover:bg-slate-50" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
                       <div className="relative pl-4">
                         <button
                           type="button"
@@ -623,7 +625,7 @@ export function FinanceWorkspace({
                           aria-label={row.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
                           className={cn(
                             'absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-sm p-0.5 text-slate-300 transition-opacity hover:text-slate-500',
-                            row.allocationMode === 'manual'
+                            row.hasOwnFinanceSetting && row.allocationMode === 'manual'
                               ? 'opacity-100'
                               : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
                             (readOnly || savingTaskId === row.taskId || (!row.parentTaskId && row.allocationMode === 'auto')) && 'cursor-default',
@@ -647,19 +649,18 @@ export function FinanceWorkspace({
                                 cancelEditingCost(row.taskId, row.plannedCost);
                               }
                             }}
-                            className="h-7 w-full border-primary/40 bg-white px-2 text-right text-xs shadow-[0_0_0_2px_rgba(59,130,246,0.12)]"
+                            className="h-7 w-full border-transparent bg-transparent px-2 text-right text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                             disabled={readOnly || savingTaskId === row.taskId}
                           />
                         ) : (
                           <button
                             type="button"
                             onClick={() => startEditingCost(row.taskId, row.plannedCost)}
-                            disabled={readOnly}
-                            className={cn(
-                              'flex h-7 w-full items-center justify-end rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 transition-colors whitespace-nowrap',
-                              !readOnly && 'hover:border-slate-300 hover:bg-slate-50',
-                            )}
-                          >
+                          disabled={readOnly}
+                          className={cn(
+                            'flex h-7 w-full items-center justify-end rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 whitespace-nowrap',
+                          )}
+                        >
                             {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" /> : formatMoney(row.plannedCost)}
                           </button>
                         )}

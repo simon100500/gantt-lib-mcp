@@ -114,6 +114,7 @@ export interface FinanceTaskSnapshot {
   endDate: string;
   progress: number;
   plannedCost: number;
+  hasOwnFinanceSetting: boolean;
   allocationMode: TaskFinanceAllocationMode;
   allocationParentTaskId: string | null;
   plannedToDate: number;
