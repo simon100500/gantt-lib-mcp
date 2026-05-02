@@ -44,6 +44,7 @@ interface ProjectMenuProps {
   onRenameTemplate?: (templateId: string, name: string) => void | Promise<void>;
   onDeleteTemplate?: (templateId: string) => void | Promise<void>;
   onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
+  onOpenInsertTemplateToProject?: () => void | Promise<void>;
   canInsertTemplateToProject?: boolean;
   onCreateProjectGroup?: (name: string) => void | Promise<void>;
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
@@ -77,6 +78,7 @@ export function ProjectMenu({
   onRenameTemplate,
   onDeleteTemplate,
   onInsertTemplateToProject,
+  onOpenInsertTemplateToProject,
   canInsertTemplateToProject = false,
   onCreateProjectGroup,
   onRenameProjectGroup,
@@ -567,6 +569,7 @@ export function ProjectMenu({
                   <TaskSearch
                     onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
                     readOnly={isReadOnlyContext}
+                    onInsertTemplateToProject={canInsertTemplateToProject ? onOpenInsertTemplateToProject : undefined}
                   />
                 </div>
                 <div className="justify-self-end">

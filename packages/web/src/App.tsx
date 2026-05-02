@@ -1309,6 +1309,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       anchorTaskName: task.name,
     });
   }, [templates.length]);
+
+  const handleOpenInsertTemplateIntoCurrentProject = useCallback(async () => {
+    if (workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0 || templates.length === 0) {
+      return;
+    }
+
+    const anchorTask = [...visibleTasks].reverse().find((task) => !task.parentId) ?? visibleTasks[visibleTasks.length - 1];
+    if (!anchorTask) {
+      return;
+    }
+
+    setInsertTemplateDraft({
+      anchorTaskId: anchorTask.id,
+      anchorTaskName: anchorTask.name,
+    });
+  }, [auth.project?.id, templates.length, visibleTasks, workspace.kind]);
+
   const handleInsertTemplateIntoCurrentProject = useCallback(async (templateId: string) => {
     if (workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0) {
       return;
@@ -2052,6 +2069,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onRenameTemplate={renameTemplate}
       onDeleteTemplate={handleDeleteTemplate}
       onInsertTemplateToProject={handleInsertTemplateIntoCurrentProject}
+      onOpenInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
       canInsertTemplateToProject={workspace.kind === 'project' && !isArchivedProject && visibleTasks.length > 0}
       onCreateProjectGroup={handleCreateProjectGroup}
       onRenameProjectGroup={handleRenameProjectGroup}

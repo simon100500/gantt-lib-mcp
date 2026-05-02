@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ChevronDown, ChevronUp, X, Search, CornerDownLeft } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -13,9 +13,10 @@ import type { Task } from '../types';
 interface TaskSearchProps {
   onTaskNavigate?: (taskId: string) => void;
   readOnly?: boolean;
+  onInsertTemplateToProject?: () => void | Promise<void>;
 }
 
-export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps) {
+export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateToProject }: TaskSearchProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const searchQuery = useUIStore((state) => state.searchQuery);
@@ -269,15 +270,29 @@ export function TaskSearch({ onTaskNavigate, readOnly = false }: TaskSearchProps
         </div>
       </div>
       {!readOnly && (
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleCreateTask}
-          title="Создать задачу"
-          className="h-8 shrink-0 px-2.5 py-2 text-xs font-medium"
-        >
-          + Задача
-        </Button>
+        <>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleCreateTask}
+            title="Создать задачу"
+            className="h-8 shrink-0 px-2.5 py-2 text-xs font-medium"
+          >
+            + Задача
+          </Button>
+          {onInsertTemplateToProject && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void onInsertTemplateToProject(); }}
+              title="Вставить шаблон"
+              aria-label="Вставить шаблон"
+              className="h-8 w-8 shrink-0 px-0"
+            >
+              <ToyBrick className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </>
       )}
     </div>
   );
