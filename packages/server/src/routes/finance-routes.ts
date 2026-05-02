@@ -477,6 +477,66 @@ async function rebalanceSiblingsAfterManualChildEdit(
   return input.requestedPlannedCost;
 }
 
+async function rebalanceSiblingsForAutoTask(
+  tx: FinanceSettingsStore,
+  input: {
+    projectId: string;
+    taskId: string;
+    currencyCode: string;
+    tasks: TaskRecord[];
+    childrenByParent: Map<string, TaskRecord[]>;
+    settingsByTaskId: Map<string, FinanceSettingRecord>;
+  },
+): Promise<number> {
+  const task = input.tasks.find((candidate) => candidate.id === input.taskId);
+  if (!task?.parentId) {
+    throw new Error('auto_requires_parent');
+  }
+
+  const parentSetting = input.settingsByTaskId.get(task.parentId);
+  if (!parentSetting) {
+    throw new Error('auto_requires_parent');
+  }
+
+  const siblings = input.childrenByParent.get(task.parentId) ?? [];
+  const manualSiblings = siblings.filter((sibling) => input.settingsByTaskId.get(sibling.id)?.allocationMode === 'manual');
+  const autoSiblings = siblings.filter((sibling) => input.settingsByTaskId.get(sibling.id)?.allocationMode !== 'manual' || sibling.id === input.taskId);
+  const manualSiblingTotal = sumPlannedCosts(
+    manualSiblings
+      .filter((sibling) => sibling.id !== input.taskId)
+      .map((sibling) => sibling.id),
+    input.settingsByTaskId,
+  );
+
+  const remainder = roundMoney(parentSetting.plannedCost - manualSiblingTotal);
+  if (remainder < 0) {
+    throw new Error('manual_children_exceed_parent');
+  }
+
+  const allocation = allocateChildCostsByDuration(autoSiblings, remainder);
+  for (const sibling of autoSiblings) {
+    const plannedCost = allocation.get(sibling.id) ?? 0;
+    await upsertFinanceSetting(tx, {
+      projectId: input.projectId,
+      taskId: sibling.id,
+      plannedCost,
+      currencyCode: input.currencyCode,
+      allocationMode: 'auto',
+      allocationParentTaskId: task.parentId,
+    }, input.settingsByTaskId);
+    await redistributeSubtreeFromParent(tx, {
+      projectId: input.projectId,
+      parentTaskId: sibling.id,
+      totalPlannedCost: plannedCost,
+      currencyCode: input.currencyCode,
+      childrenByParent: input.childrenByParent,
+      settingsByTaskId: input.settingsByTaskId,
+    });
+  }
+
+  return allocation.get(input.taskId) ?? 0;
+}
+
 function buildFinanceTaskRows(
   tasks: TaskRecord[],
   settingsByTaskId: Map<string, FinanceSettingRecord>,
@@ -736,15 +796,17 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
 
   fastify.put('/api/finance/tasks/:taskId', { preHandler: [authMiddleware] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
-    const body = (req.body ?? {}) as { plannedCost?: number; currencyCode?: string };
+    const body = (req.body ?? {}) as { plannedCost?: number; currencyCode?: string; allocationMode?: FinanceAllocationMode };
     const taskId = params.taskId?.trim();
     if (!taskId) {
       return reply.status(400).send({ error: 'taskId required' });
     }
-    if (typeof body.plannedCost !== 'number' || Number.isNaN(body.plannedCost) || body.plannedCost < 0) {
+    if (body.plannedCost !== undefined && (typeof body.plannedCost !== 'number' || Number.isNaN(body.plannedCost) || body.plannedCost < 0)) {
       return reply.status(400).send({ error: 'plannedCost must be a non-negative number' });
     }
-    const requestedPlannedCost = body.plannedCost;
+    if (body.plannedCost === undefined && body.allocationMode === undefined) {
+      return reply.status(400).send({ error: 'plannedCost or allocationMode required' });
+    }
 
     try {
       await ensureFinanceTask(req.user!.projectId, taskId);
@@ -803,10 +865,22 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
           createdAt: setting.createdAt.toISOString(),
           updatedAt: setting.updatedAt.toISOString(),
         } satisfies FinanceSettingRecord]));
+        const existingSetting = settingsByTaskId.get(taskId);
+        const requestedPlannedCost = body.plannedCost ?? existingSetting?.plannedCost ?? 0;
+        const requestedAllocationMode = body.allocationMode ?? 'manual';
 
         const parentHasPlannedCost = Boolean(targetTask.parentId && settingsByTaskId.get(targetTask.parentId));
 
-        if (!parentHasPlannedCost) {
+        if (requestedAllocationMode === 'auto') {
+          await rebalanceSiblingsForAutoTask(tx, {
+            projectId: req.user!.projectId,
+            taskId,
+            currencyCode,
+            tasks: normalizedTasks,
+            childrenByParent,
+            settingsByTaskId,
+          });
+        } else if (!parentHasPlannedCost) {
           await upsertFinanceSetting(tx, {
             projectId: req.user!.projectId,
             taskId,
@@ -853,6 +927,9 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     } catch (error) {
       if (error instanceof Error && error.message === 'manual_children_exceed_parent') {
         return reply.status(400).send({ error: 'Child manual amounts exceed parent planned cost' });
+      }
+      if (error instanceof Error && error.message === 'auto_requires_parent') {
+        return reply.status(400).send({ error: 'Auto allocation requires a parent with planned cost' });
       }
       throw error;
     }

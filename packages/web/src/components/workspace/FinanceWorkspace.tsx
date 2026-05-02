@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Landmark, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Landmark, LoaderCircle, Lock, Plus, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -310,7 +310,7 @@ export function FinanceWorkspace({
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ plannedCost }),
+        body: JSON.stringify({ plannedCost, allocationMode: 'manual' }),
       });
 
       if (!response.ok) {
@@ -326,6 +326,39 @@ export function FinanceWorkspace({
       setSavingTaskId(null);
     }
   }, [accessToken, costDrafts, loadSnapshot, readOnly]);
+
+  const updateAllocationMode = useCallback(async (taskId: string, allocationMode: 'manual' | 'auto', fallbackPlannedCost: number) => {
+    if (!accessToken || readOnly) {
+      return;
+    }
+
+    setSavingTaskId(taskId);
+    try {
+      const response = await fetch(`/api/finance/tasks/${encodeURIComponent(taskId)}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          allocationMode,
+          plannedCost: allocationMode === 'manual' ? fallbackPlannedCost : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+
+      setEditingTaskId(null);
+      await loadSnapshot(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось обновить режим суммы');
+    } finally {
+      setSavingTaskId(null);
+    }
+  }, [accessToken, loadSnapshot, readOnly]);
 
   const startEditingCost = useCallback((taskId: string, plannedCost: number) => {
     if (readOnly) {
@@ -580,46 +613,57 @@ export function FinanceWorkspace({
                         </div>
                       </div>
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
-                      {editingTaskId === row.taskId ? (
-                        <Input
-                          ref={costInputRef}
-                          value={costDrafts[row.taskId] ?? formatInputMoney(row.plannedCost)}
-                          onChange={(event) => setCostDrafts((current) => ({ ...current, [row.taskId]: event.target.value }))}
-                          onBlur={() => { void savePlannedCost(row.taskId); }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault();
-                              void savePlannedCost(row.taskId);
-                            }
-                            if (event.key === 'Escape') {
-                              event.preventDefault();
-                              cancelEditingCost(row.taskId, row.plannedCost);
-                            }
-                          }}
-                          className="h-7 w-full border-primary/40 bg-white px-2 text-right text-xs shadow-[0_0_0_2px_rgba(59,130,246,0.12)]"
-                          disabled={readOnly || savingTaskId === row.taskId}
-                        />
-                      ) : (
+                    <td className="group sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
+                      <div className="relative pl-4">
                         <button
                           type="button"
-                          onClick={() => startEditingCost(row.taskId, row.plannedCost)}
-                          disabled={readOnly}
+                          onClick={() => { void updateAllocationMode(row.taskId, row.allocationMode === 'manual' ? 'auto' : 'manual', row.plannedCost); }}
+                          disabled={readOnly || savingTaskId === row.taskId || (!row.parentTaskId && row.allocationMode === 'auto')}
+                          title={row.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
+                          aria-label={row.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
                           className={cn(
-                            'flex h-7 w-full items-center justify-end gap-2 rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 transition-colors whitespace-nowrap',
-                            !readOnly && 'hover:border-slate-300 hover:bg-slate-50',
+                            'absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-sm p-0.5 text-slate-300 transition-opacity hover:text-slate-500',
+                            row.allocationMode === 'manual'
+                              ? 'opacity-100'
+                              : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
+                            (readOnly || savingTaskId === row.taskId || (!row.parentTaskId && row.allocationMode === 'auto')) && 'cursor-default',
                           )}
                         >
-                          {row.allocationMode === 'auto' && (
-                            <span
-                              className="inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                              title="Сумма распределена автоматически"
-                              aria-label="Сумма распределена автоматически"
-                            />
-                          )}
-                          {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" /> : formatMoney(row.plannedCost)}
+                          <Lock className="h-3 w-3" />
                         </button>
-                      )}
+                        {editingTaskId === row.taskId ? (
+                          <Input
+                            ref={costInputRef}
+                            value={costDrafts[row.taskId] ?? formatInputMoney(row.plannedCost)}
+                            onChange={(event) => setCostDrafts((current) => ({ ...current, [row.taskId]: event.target.value }))}
+                            onBlur={() => { void savePlannedCost(row.taskId); }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                void savePlannedCost(row.taskId);
+                              }
+                              if (event.key === 'Escape') {
+                                event.preventDefault();
+                                cancelEditingCost(row.taskId, row.plannedCost);
+                              }
+                            }}
+                            className="h-7 w-full border-primary/40 bg-white px-2 text-right text-xs shadow-[0_0_0_2px_rgba(59,130,246,0.12)]"
+                            disabled={readOnly || savingTaskId === row.taskId}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startEditingCost(row.taskId, row.plannedCost)}
+                            disabled={readOnly}
+                            className={cn(
+                              'flex h-7 w-full items-center justify-end rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 transition-colors whitespace-nowrap',
+                              !readOnly && 'hover:border-slate-300 hover:bg-slate-50',
+                            )}
+                          >
+                            {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" /> : formatMoney(row.plannedCost)}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.plannedToDate)}
