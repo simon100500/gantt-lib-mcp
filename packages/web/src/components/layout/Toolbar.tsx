@@ -653,23 +653,6 @@ export function Toolbar({
         </DropdownMenu>
       )}
 
-      {hasTemplateAction && (
-        <Button
-          size="sm"
-          variant={templateSelectionActive ? 'secondary' : 'ghost'}
-          onClick={() => { void onStartTemplateSelection?.(); }}
-          className={cn(
-            actionButtonClassName,
-            templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-            'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0',
-          )}
-          title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-        >
-          <ToyBrick className="h-3.5 w-3.5" />
-          <span className="text-xs">Сохранить шаблон</span>
-        </Button>
-      )}
-
       {hasShareMenuActions && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -830,6 +813,23 @@ export function Toolbar({
           </div>
         </Button>
       </FilterPopup>
+
+      {hasTemplateAction && (
+        <Button
+          size="sm"
+          variant={templateSelectionActive ? 'secondary' : 'ghost'}
+          onClick={() => { void onStartTemplateSelection?.(); }}
+          className={cn(
+            actionButtonClassName,
+            templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
+            'hidden w-8 px-0 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0',
+          )}
+          aria-label={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
+          title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
+        >
+          <ToyBrick className="h-3.5 w-3.5" />
+        </Button>
+      )}
 
       <div className="inline-flex rounded-md">
         {(['day', 'week', 'month'] as const).map((nextMode, index) => (
