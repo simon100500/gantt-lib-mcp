@@ -132,3 +132,23 @@ export type BaselineUpdateResponse = BaselineSnapshotResponse;
 export interface BaselineDeleteResponse {
   id: string;
 }
+
+export type TemplateSourceKind = 'project' | 'task_selection';
+
+export interface TemplateItem {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  sourceKind: TemplateSourceKind;
+  createdAt: string;
+  updatedAt: string;
+  taskCount: number;
+}
+
+export interface TemplateWorkspaceResponse {
+  metadata: TemplateItem;
+  snapshot: {
+    tasks: Task[];
+    dependencies: ProjectDependency[];
+  };
+}

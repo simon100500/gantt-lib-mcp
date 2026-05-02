@@ -43,6 +43,7 @@ import { registerExcelExportRoutes } from './routes/excel-export-routes.js';
 import { registerFeedbackRoutes } from './routes/feedback-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
 import { registerResourceRoutes } from './routes/resource-routes.js';
+import { registerTemplateRoutes } from './routes/template-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
@@ -63,6 +64,7 @@ await registerExcelExportRoutes(fastify);
 await registerFeedbackRoutes(fastify);
 await registerHistoryRoutes(fastify);
 await registerResourceRoutes(fastify);
+await registerTemplateRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // Helpers

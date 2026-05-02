@@ -9,8 +9,10 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { SaveTemplateModal } from './components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
+import { InsertTemplateModal } from './components/InsertTemplateModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
@@ -20,12 +22,15 @@ import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
 import { ResourcePlannerWorkspace } from './components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
+import { TemplateWorkspace } from './components/workspace/TemplateWorkspace.tsx';
 import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useAppUpdateCheck } from './hooks/useAppUpdateCheck.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
 import { useSharedProject } from './hooks/useSharedProject.ts';
 import { useTasks } from './hooks/useTasks.ts';
+import { useTemplateBatchUpdate } from './hooks/useTemplateBatchUpdate.ts';
+import { useTemplates } from './hooks/useTemplates.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
 import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
@@ -35,6 +40,7 @@ import { useAuthStore } from './stores/useAuthStore.ts';
 import { getExportAccessLevel, useBillingStore, type SubscriptionStatus, type UsageStatus } from './stores/useBillingStore.ts';
 import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
+import { useTemplateStore } from './stores/useTemplateStore.ts';
 import { readProjectChatOpenState, useUIStore } from './stores/useUIStore.ts';
 import { useProjectUIStore } from './stores/useProjectUIStore.ts';
 import { useProjectStore } from './stores/useProjectStore.ts';
@@ -486,11 +492,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
+  const activeTemplate = useTemplateStore((state) => state.activeTemplate);
+  const setActiveTemplate = useTemplateStore((state) => state.setActiveTemplate);
+  const updateActiveTemplateTasks = useTemplateStore((state) => state.updateActiveTemplateTasks);
   const [deleteProjectDraft, setDeleteProjectDraft] = useState<{ id: string; name: string } | null>(null);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
+  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
+  const [shareSelectionMode, setShareSelectionMode] = useState(false);
+  const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
+  const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
+  const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<Set<string>>(new Set());
+  const [saveTemplateDraft, setSaveTemplateDraft] = useState<{ mode: 'project' | 'selection'; initialName: string; taskCount: number; rootTaskIds: string[] } | null>(null);
+  const [saveTemplatePending, setSaveTemplatePending] = useState(false);
+  const [insertTemplateDraft, setInsertTemplateDraft] = useState<{ anchorTaskId: string; anchorTaskName: string } | null>(null);
+  const [insertTemplatePending, setInsertTemplatePending] = useState(false);
   const refreshProjects = auth.refreshProjects;
   const [limitModal, setLimitModal] = useState<{
     denial: ConstraintDenialPayload;
@@ -541,6 +559,19 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
   }, [auth.isAuthenticated, fetchSubscription, fetchUsage, hasShareToken]);
 
+  const {
+    templates,
+    loadingTemplate,
+    saveTemplateSnapshot,
+    loadTemplates,
+    openTemplate,
+    createTemplateFromProject,
+    createTemplateFromSelection,
+    renameTemplate,
+    deleteTemplate,
+    insertTemplateIntoProject,
+  } = useTemplates(hasShareToken ? null : auth.accessToken);
+
   useEffect(() => {
     if (!constraintDenial) {
       return;
@@ -559,6 +590,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     void refreshProjects();
   }, [auth.accessToken, auth.isAuthenticated, hasShareToken, refreshProjects]);
 
+  useEffect(() => {
+    if (!auth.isAuthenticated || hasShareToken) {
+      useTemplateStore.getState().clear();
+      return;
+    }
+    void loadTemplates();
+  }, [auth.isAuthenticated, hasShareToken, loadTemplates]);
+
   const authenticatedTasks = useTasks(
     hasShareToken ? null : auth.accessToken,
     auth.refreshAccessToken,
@@ -570,6 +609,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     : auth.isAuthenticated
       ? authenticatedTasks
       : localTasks;
+  const templateTasks = activeTemplate?.snapshot.tasks ?? [];
+  const setTemplateTasks = useCallback((nextTasks: Task[] | ((prev: Task[]) => Task[])) => {
+    const currentTasks = useTemplateStore.getState().activeTemplate?.snapshot.tasks ?? [];
+    const resolved = typeof nextTasks === 'function' ? nextTasks(currentTasks) : nextTasks;
+    updateActiveTemplateTasks(resolved);
+  }, [updateActiveTemplateTasks]);
   const batchUpdate = useBatchTaskUpdate({
     tasks,
     setTasks,
@@ -578,6 +623,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     calendarDays: hasShareToken
       ? (sharedProject.project?.calendarDays ?? EMPTY_CALENDAR_DAYS)
       : (auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS),
+  });
+  const templateBatchUpdate = useTemplateBatchUpdate({
+    tasks: templateTasks,
+    setTasks: setTemplateTasks,
+    saveTemplateSnapshot,
   });
   const ganttRef = useRef<GanttChartRef>(null);
   const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false, mode: 'rendering', message: null });
@@ -592,6 +642,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
   const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
+  const visibleTasks = previewState.active ? previewState.tasks : tasks;
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -757,6 +808,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
 
     setWorkspace((current) => {
+      if (current.kind === 'template') {
+        return current;
+      }
       if (current.kind === 'project' && current.projectId === projectId) {
         return current;
       }
@@ -1109,6 +1163,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     );
   }, [auth, getProjectState, setWorkspace]);
 
+  const handleSwitchTemplate = useCallback(async (templateId: string) => {
+    createEmptyChartAfterActivationRef.current = false;
+    queuedPromptRef.current = null;
+    await openTemplate(templateId);
+    setWorkspace({ kind: 'template', templateId });
+  }, [openTemplate, setWorkspace]);
+
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
       return;
@@ -1174,6 +1235,104 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     await auth.deleteProjectGroup(groupId);
   }, [auth]);
 
+  const handleCreateCurrentProjectTemplate = useCallback(() => {
+    setShareSelectionMode(false);
+    setSelectedShareTaskIds(new Set());
+    setTemplateSelectionMode(false);
+    setSaveTemplateDraft({
+      mode: 'project',
+      initialName: auth.project?.name ? `${auth.project.name} шаблон` : 'Новый шаблон',
+      taskCount: visibleTasks.length,
+      rootTaskIds: [],
+    });
+  }, [auth.project?.name, visibleTasks.length]);
+
+  const handleDeleteTemplate = useCallback(async (templateId: string) => {
+    const deletingCurrent = workspace.kind === 'template' && workspace.templateId === templateId;
+    await deleteTemplate(templateId);
+    if (deletingCurrent && auth.project?.id) {
+      setWorkspace({ kind: 'project', projectId: auth.project.id, chatOpen: readProjectChatOpenState() });
+    }
+  }, [auth.project?.id, deleteTemplate, setWorkspace, workspace]);
+
+  const handleSaveTemplateFromModal = useCallback(async (name: string) => {
+    if (!saveTemplateDraft) {
+      return;
+    }
+    setSaveTemplatePending(true);
+    try {
+      if (saveTemplateDraft.mode === 'project') {
+        await createTemplateFromProject(name);
+      } else {
+        await createTemplateFromSelection({
+          name,
+          rootTaskIds: saveTemplateDraft.rootTaskIds,
+        });
+        setSelectedTemplateTaskIds(new Set());
+        setTemplateSelectionMode(false);
+      }
+      setSaveTemplateDraft(null);
+    } finally {
+      setSaveTemplatePending(false);
+    }
+  }, [createTemplateFromProject, createTemplateFromSelection, saveTemplateDraft]);
+
+  const handleInsertTemplateFromModal = useCallback(async (input: { templateId: string; placement: 'after' | 'inside' }) => {
+    if (!insertTemplateDraft) {
+      return;
+    }
+    setInsertTemplatePending(true);
+    try {
+      const response = await insertTemplateIntoProject({
+        templateId: input.templateId,
+        anchorTaskId: insertTemplateDraft.anchorTaskId,
+        placement: input.placement,
+      });
+      if (response.accepted && response.snapshot) {
+        useProjectStore.getState().hydrateConfirmed(response.newVersion, {
+          tasks: normalizeTasks(response.snapshot.tasks),
+          dependencies: response.snapshot.dependencies,
+        });
+      }
+      setInsertTemplateDraft(null);
+    } finally {
+      setInsertTemplatePending(false);
+    }
+  }, [insertTemplateDraft, insertTemplateIntoProject]);
+
+  const handleInsertTemplateAtTask = useCallback(async (task: Task) => {
+    if (!templates.length) {
+      return;
+    }
+    setInsertTemplateDraft({
+      anchorTaskId: task.id,
+      anchorTaskName: task.name,
+    });
+  }, [templates.length]);
+  const handleInsertTemplateIntoCurrentProject = useCallback(async (templateId: string) => {
+    if (workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0) {
+      return;
+    }
+
+    const anchorTask = [...visibleTasks].reverse().find((task) => !task.parentId) ?? visibleTasks[visibleTasks.length - 1];
+    if (!anchorTask) {
+      return;
+    }
+
+    const response = await insertTemplateIntoProject({
+      templateId,
+      anchorTaskId: anchorTask.id,
+      placement: 'after',
+    });
+
+    if (response.accepted && response.snapshot) {
+      useProjectStore.getState().hydrateConfirmed(response.newVersion, {
+        tasks: normalizeTasks(response.snapshot.tasks),
+        dependencies: response.snapshot.dependencies,
+      });
+    }
+  }, [auth.project?.id, insertTemplateIntoProject, visibleTasks, workspace.kind]);
+
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
       await openLimitModal(proactiveArchiveDenial);
@@ -1226,6 +1385,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       localTasks.setProjectName(newName);
       return;
     }
+    if (workspace.kind === 'template' && activeTemplate) {
+      await renameTemplate(activeTemplate.metadata.id, newName);
+      return;
+    }
     if (!auth.project) {
       throw new Error('Not authenticated');
     }
@@ -1233,7 +1396,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return;
     }
     await auth.updateProject(auth.project.id, { name: newName });
-  }, [auth, localTasks]);
+  }, [activeTemplate, auth, localTasks, renameTemplate, workspace.kind]);
 
   const handleGanttDayModeChange = useCallback(async (ganttDayMode: 'business' | 'calendar') => {
     if (!auth.project) {
@@ -1280,6 +1443,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   useEffect(() => {
     setSelectedShareTaskIds(new Set());
     setShareSelectionMode(false);
+    setSelectedTemplateTaskIds(new Set());
+    setTemplateSelectionMode(false);
   }, [auth.project?.id, hasShareToken]);
 
   useEffect(() => {
@@ -1399,14 +1564,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     ? workspace.projectId
     : workspace.kind === 'shared'
       ? `shared:${sharedProject.shareToken ?? sharedProject.project?.id ?? 'unknown'}`
-      : null;
+      : workspace.kind === 'template'
+        ? `template:${workspace.templateId}`
+        : null;
+  const workspaceTasks = workspace.kind === 'template' ? templateTasks : tasks;
 
   const handleCollapseAll = useCallback(() => {
-    console.log('[App] handleCollapseAll called', {
-      workspaceKind: workspace.kind,
-      tasksCount: tasks.length,
-      projectId: workspaceStateId,
-    });
     if (workspaceStateId) {
       const getAllParentIds = (allTasks: Task[]): string[] => {
         const parentIds = new Set<string>();
@@ -1420,29 +1583,23 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         return Array.from(parentIds).filter((id) => allTasks.some((task) => task.id === id));
       };
 
-      console.log('[App] All tasks sample:', tasks.slice(0, 5).map((task) => ({ id: task.id, name: task.name, parentId: task.parentId })));
-      const allParentIds = getAllParentIds(tasks);
-      console.log('[App] Found all parent IDs (recursive):', allParentIds);
+      const allParentIds = getAllParentIds(workspaceTasks);
       setProjectState(workspaceStateId, { collapsedParentIds: allParentIds });
     }
-  }, [tasks, workspace, workspaceStateId, setProjectState]);
+  }, [workspaceStateId, workspaceTasks, setProjectState]);
 
   const handleExpandAll = useCallback(() => {
-    console.log('[App] handleExpandAll called', { workspaceKind: workspace.kind, projectId: workspaceStateId });
     if (workspaceStateId) {
-      console.log('[App] Expanding all - clearing collapsedParentIds');
       setProjectState(workspaceStateId, { collapsedParentIds: [] });
     }
-  }, [workspace, workspaceStateId, setProjectState]);
+  }, [workspaceStateId, setProjectState]);
 
   const shareStatus = useUIStore((state) => state.shareStatus);
   const showShareManager = useUIStore((state) => state.showShareManager);
   const { updateAvailable, reloadApp } = useAppUpdateCheck();
-  const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
-  const [shareSelectionMode, setShareSelectionMode] = useState(false);
-  const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
-  const visibleTasks = previewState.active ? previewState.tasks : tasks;
   const handleStartPartialShareSelection = useCallback(() => {
+    setTemplateSelectionMode(false);
+    setSelectedTemplateTaskIds(new Set());
     setSelectedShareTaskIds(new Set());
     setShareSelectionMode(true);
     useUIStore.getState().setShowShareManager(false);
@@ -1483,6 +1640,65 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setShareSelectionMode(false);
     setShareStatus('idle');
   }, [setShareStatus]);
+  const handleStartTemplateSelection = useCallback(() => {
+    setShareSelectionMode(false);
+    setSelectedShareTaskIds(new Set());
+    setSelectedTemplateTaskIds(new Set());
+    setTemplateSelectionMode(true);
+  }, []);
+  const handleTemplateSelectionChange = useCallback((nextSelectedTaskIds: Set<string>) => {
+    setSelectedTemplateTaskIds((previousSelectedTaskIds) => {
+      const added = Array.from(nextSelectedTaskIds).filter((id) => !previousSelectedTaskIds.has(id));
+      const removed = Array.from(previousSelectedTaskIds).filter((id) => !nextSelectedTaskIds.has(id));
+      if (added.length + removed.length !== 1) {
+        return nextSelectedTaskIds;
+      }
+
+      const changedTaskId = added[0] ?? removed[0];
+      if (!changedTaskId) {
+        return nextSelectedTaskIds;
+      }
+
+      const subtreeIds = collectTaskSubtreeIds(visibleTasks, changedTaskId);
+      if (subtreeIds.length <= 1) {
+        return nextSelectedTaskIds;
+      }
+
+      const normalized = new Set(nextSelectedTaskIds);
+      const shouldSelect = added.length === 1;
+      for (const taskId of subtreeIds) {
+        if (shouldSelect) {
+          normalized.add(taskId);
+        } else {
+          normalized.delete(taskId);
+        }
+      }
+      return normalized;
+    });
+  }, [visibleTasks]);
+  const handleCancelTemplateSelection = useCallback(() => {
+    setSelectedTemplateTaskIds(new Set());
+    setTemplateSelectionMode(false);
+  }, []);
+  const handleConfirmTemplateSelection = useCallback(() => {
+    if (selectedTemplateTaskIds.size === 0) {
+      return;
+    }
+    const selectedTasks = visibleTasks.filter((task) => selectedTemplateTaskIds.has(task.id));
+    const initialName = selectedTasks.find((task) => !task.parentId || !selectedTemplateTaskIds.has(task.parentId))?.name ?? 'Новый шаблон';
+    setSaveTemplateDraft({
+      mode: 'selection',
+      initialName,
+      taskCount: selectedTasks.length,
+      rootTaskIds: Array.from(selectedTemplateTaskIds),
+    });
+  }, [selectedTemplateTaskIds, visibleTasks]);
+  const handleCreateTemplateFromTask = useCallback((task: Task) => {
+    setShareSelectionMode(false);
+    setSelectedShareTaskIds(new Set());
+    setSelectedTemplateTaskIds(new Set(collectTaskSubtreeIds(visibleTasks, task.id)));
+    setTemplateSelectionMode(true);
+  }, [visibleTasks]);
   const handleSubmitPartialShareSelection = useCallback(async () => {
     if (!auth.accessToken || !auth.project || selectedShareTaskIds.size === 0) {
       return;
@@ -1535,6 +1751,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     && activeEmptyProjectModeProjectId !== workspace.projectId;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
+    : workspace.kind === 'template'
+      ? (activeTemplate?.metadata.name || 'Шаблон')
     : auth.isAuthenticated
       ? auth.project?.name
       : (localTasks.projectName || 'Мой проект');
@@ -1685,6 +1903,22 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           }}
         />
       )
+      : workspace.kind === 'template'
+        ? (
+          <TemplateWorkspace
+            ganttRef={ganttRef}
+            template={activeTemplate}
+            tasks={templateTasks}
+            setTasks={setTemplateTasks}
+            loading={loadingTemplate}
+            accessToken={auth.accessToken}
+            batchUpdate={templateBatchUpdate}
+            onScrollToToday={handleScrollToToday}
+            onCollapseAll={handleCollapseAll}
+            onExpandAll={handleExpandAll}
+            onValidation={handleValidation}
+          />
+        )
       : workspace.kind === 'draft'
         ? null
         : showProjectStartScreen
@@ -1733,6 +1967,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onSelectedShareTaskIdsChange={handlePartialShareSelectionChange}
               onCancelShareSelection={handleCancelPartialShareSelection}
               onConfirmShareSelection={handleSubmitPartialShareSelection}
+              templateSelectionMode={templateSelectionMode}
+              selectedTemplateTaskIds={selectedTemplateTaskIds}
+              onSelectedTemplateTaskIdsChange={handleTemplateSelectionChange}
+              onCancelTemplateSelection={handleCancelTemplateSelection}
+              onConfirmTemplateSelection={handleConfirmTemplateSelection}
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
               calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
@@ -1744,6 +1983,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
                   console.error('Failed to update gantt day mode:', error);
                 });
               }}
+              onCreateTemplateFromTask={handleCreateTemplateFromTask}
+              onInsertTemplateAtTask={handleInsertTemplateAtTask}
+              onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
+              onStartTemplateSelection={handleStartTemplateSelection}
             />
           )
           : (
@@ -1805,6 +2048,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onArchiveProject={handleArchiveProject}
       onRestoreProject={handleRestoreProject}
       onDeleteProject={handleDeleteProject}
+      onSwitchTemplate={handleSwitchTemplate}
+      onRenameTemplate={renameTemplate}
+      onDeleteTemplate={handleDeleteTemplate}
+      onInsertTemplateToProject={handleInsertTemplateIntoCurrentProject}
+      canInsertTemplateToProject={workspace.kind === 'project' && !isArchivedProject && visibleTasks.length > 0}
       onCreateProjectGroup={handleCreateProjectGroup}
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}
@@ -1819,6 +2067,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         setPlannerCorrectionTarget(null);
         setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
       }}
+      onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
       onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
@@ -1906,6 +2155,39 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           useUIStore.getState().setShowShareManager(false);
           useUIStore.getState().setShareLinkUrl(null);
           setShareStatus('idle');
+        }}
+      />
+    )}
+
+    {saveTemplateDraft && (
+      <SaveTemplateModal
+        initialName={saveTemplateDraft.initialName}
+        taskCount={saveTemplateDraft.taskCount}
+        mode={saveTemplateDraft.mode}
+        loading={saveTemplatePending}
+        onSave={handleSaveTemplateFromModal}
+        onClose={() => {
+          if (!saveTemplatePending) {
+            if (saveTemplateDraft.mode === 'selection') {
+              setSelectedTemplateTaskIds(new Set());
+              setTemplateSelectionMode(false);
+            }
+            setSaveTemplateDraft(null);
+          }
+        }}
+      />
+    )}
+
+    {insertTemplateDraft && (
+      <InsertTemplateModal
+        templates={templates}
+        anchorTaskName={insertTemplateDraft.anchorTaskName}
+        loading={insertTemplatePending}
+        onInsert={handleInsertTemplateFromModal}
+        onClose={() => {
+          if (!insertTemplatePending) {
+            setInsertTemplateDraft(null);
+          }
         }}
       />
     )}

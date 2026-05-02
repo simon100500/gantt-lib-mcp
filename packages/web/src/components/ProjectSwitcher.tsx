@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeleteProjectGroupModal } from './DeleteProjectGroupModal.tsx';
 import { EditProjectModal } from './EditProjectModal.tsx';
@@ -9,12 +9,15 @@ import { Button } from './ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
 import type { AuthProject } from '../stores/useAuthStore.ts';
 import type { ProjectGroup } from '../types.ts';
+import type { TemplateItem } from '../lib/apiTypes.ts';
 
 interface ProjectSwitcherProps {
-  currentProject: Pick<AuthProject, 'id' | 'name' | 'status' | 'taskCount' | 'groupId'> & { kind?: 'project' | 'draft' };
+  currentProject: Pick<AuthProject, 'id' | 'name' | 'status' | 'taskCount' | 'groupId'> & { kind?: 'project' | 'draft' | 'template' };
   projects: AuthProject[];
+  templates?: TemplateItem[];
   projectGroups?: ProjectGroup[];
   onSwitch: (projectId: string) => void | Promise<void>;
+  onSwitchTemplate?: (templateId: string) => void | Promise<void>;
   onCreateNew: (groupId?: string) => void;
   onCreateGroup?: (name: string) => void | Promise<void>;
   onRenameGroup?: (groupId: string, name: string) => void | Promise<void>;
@@ -27,6 +30,10 @@ interface ProjectSwitcherProps {
   onArchive: (projectId: string) => void | Promise<void>;
   onRestore: (projectId: string) => void | Promise<void>;
   onDelete: (projectId: string) => void | Promise<void>;
+  onRenameTemplate?: (templateId: string, name: string) => void | Promise<void>;
+  onDeleteTemplate?: (templateId: string) => void | Promise<void>;
+  onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
+  canInsertTemplateToProject?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
   onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
@@ -60,8 +67,8 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
         type="button"
         onClick={() => onSwitch(project.id)}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
-          isCurrent ? 'font-medium text-slate-900' : 'text-slate-700',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
+          isCurrent ? 'font-medium text-primary' : 'text-slate-700 hover:text-primary',
         )}
       >
         <span className={cn('flex items-center gap-1 truncate text-sm sm:text-xs', isArchived && 'opacity-60')}>
@@ -164,6 +171,152 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
   );
 }
 
+function TemplateRow({
+  template,
+  isCurrent,
+  menuActive,
+  onSwitch,
+  onRename,
+  onDelete,
+  onInsertToProject,
+  canInsertToProject = false,
+  onMenuOpenChange,
+  setOpenMenuTemplateId,
+}: {
+  template: TemplateItem;
+  isCurrent: boolean;
+  menuActive: boolean;
+  onSwitch: (templateId: string) => void | Promise<void>;
+  onRename?: (templateId: string, name: string) => void | Promise<void>;
+  onDelete?: (templateId: string) => void | Promise<void>;
+  onInsertToProject?: (templateId: string) => void | Promise<void>;
+  canInsertToProject?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
+  setOpenMenuTemplateId: (templateId: string | null) => void;
+}) {
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  return (
+    <div className={cn('group flex items-center rounded-md transition-colors', isCurrent ? 'bg-slate-100' : 'hover:bg-slate-100')}>
+      <button
+        type="button"
+        onClick={() => onSwitch(template.id)}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-2',
+          isCurrent ? 'font-medium text-primary' : 'text-slate-700 hover:text-primary',
+        )}
+      >
+        <span className="truncate text-sm sm:text-xs">{template.name}</span>
+      </button>
+
+      <div className="relative mr-2 flex h-5 w-11 shrink-0 items-center justify-end">
+        {template.taskCount > 0 ? <span className="pr-1 text-xs text-slate-400 transition-opacity group-hover:opacity-0">{template.taskCount}</span> : null}
+        <DropdownMenu
+          onOpenChange={(open) => {
+            setOpenMenuTemplateId(open ? template.id : null);
+            onMenuOpenChange?.(open);
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                menuActive ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700',
+                'opacity-0 group-hover:opacity-100',
+              )}
+              aria-label="Действия шаблона"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-44">
+            {onInsertToProject && (
+              <DropdownMenuItem
+                disabled={!canInsertToProject}
+                onClick={() => void onInsertToProject(template.id)}
+              >
+                <ToyBrick className="h-4 w-4" />
+                <span>Вставить в проект</span>
+              </DropdownMenuItem>
+            )}
+            {onRename && (
+              <DropdownMenuItem onClick={() => setRenameModalOpen(true)}>
+                <Pencil className="h-4 w-4" />
+                <span>Переименовать</span>
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem onClick={() => setDeleteModalOpen(true)} className="text-red-600 focus:text-red-700">
+                <Trash2 className="h-4 w-4" />
+                <span>Удалить</span>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {renameModalOpen && onRename ? (
+        <EditProjectModal
+          projectName={template.name}
+          onSave={async (newName) => {
+            await onRename(template.id, newName);
+          }}
+          onClose={() => setRenameModalOpen(false)}
+        />
+      ) : null}
+      {deleteModalOpen && onDelete ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setDeleteModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="w-[440px] max-w-[calc(100vw-2rem)] rounded-xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <TriangleAlert className="h-6 w-6 shrink-0 text-amber-500" />
+              <h2 className="text-lg font-semibold text-slate-800">Удалить шаблон?</h2>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-red-700">
+                <ToyBrick className="h-4 w-4 shrink-0" />
+                <span className="truncate font-semibold">{template.name}</span>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-700">
+              Это действие необратимо.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteModalOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={async () => {
+                  await onDelete(template.id);
+                  setDeleteModalOpen(false);
+                }}
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 interface ProjectSectionProps {
   title: string;
   icon: ReactNode;
@@ -191,7 +344,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
           onClick={onToggle}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
+          <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-slate-500">
             <span className="transition-opacity group-hover:opacity-0">{icon}</span>
             <ChevronDown className={cn('absolute inset-0 h-4 w-4 transition-all opacity-0 group-hover:opacity-100', open && 'rotate-180')} />
           </span>
@@ -263,8 +416,10 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
 export function ProjectSwitcher({
   currentProject,
   projects,
+  templates = [],
   projectGroups = [],
   onSwitch,
+  onSwitchTemplate,
   onCreateNew,
   onCreateGroup,
   onRenameGroup,
@@ -277,6 +432,10 @@ export function ProjectSwitcher({
   onArchive,
   onRestore,
   onDelete,
+  onRenameTemplate,
+  onDeleteTemplate,
+  onInsertTemplateToProject,
+  canInsertTemplateToProject = false,
   onMenuOpenChange,
   onClose,
   footer,
@@ -290,7 +449,9 @@ export function ProjectSwitcher({
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const selectedProjectId = pendingProjectId ?? currentProject.id;
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
+  const [openMenuTemplateId, setOpenMenuTemplateId] = useState<string | null>(null);
   const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(true);
 
   const effectiveGroups = useMemo<ProjectGroup[]>(() => {
     if (projectGroups.length > 0) return projectGroups;
@@ -353,6 +514,19 @@ export function ProjectSwitcher({
     setPendingProjectId(projectId);
     try {
       await onSwitch(projectId);
+    } catch (error) {
+      setPendingProjectId(null);
+      throw error;
+    }
+  };
+
+  const handleSwitchTemplate = async (templateId: string) => {
+    if (!onSwitchTemplate || templateId === selectedProjectId) return;
+    setOpenMenuTemplateId(null);
+    onMenuOpenChange?.(false);
+    setPendingProjectId(templateId);
+    try {
+      await onSwitchTemplate(templateId);
     } catch (error) {
       setPendingProjectId(null);
       throw error;
@@ -435,16 +609,46 @@ export function ProjectSwitcher({
               <button
                 type="button"
                 onClick={() => setCreateGroupModalOpen(true)}
-                className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group inline-flex items-center gap-2 text-slate-700 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <Plus className="h-4 w-4" />
-                <span>Группа проектов</span>
+                <Plus className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-primary" />
+                <span className="text-sm font-medium sm:text-xs">Группа проектов</span>
               </button>
             </div>
           ) : null}
 
+          {onSwitchTemplate ? (
+            <div>
+              <div className="mx-3 mb-2 border-t border-slate-200" />
+              <ProjectSection
+                title={`Шаблоны (${templates.length})`}
+                icon={<ToyBrick className="h-4 w-4" />}
+                open={templatesOpen}
+                onToggle={() => setTemplatesOpen((value) => !value)}
+              >
+                {templates.length > 0 ? templates.map((template) => (
+                  <TemplateRow
+                    key={template.id}
+                    template={template}
+                    isCurrent={template.id === selectedProjectId}
+                    menuActive={openMenuTemplateId === template.id}
+                    onSwitch={handleSwitchTemplate}
+                    onRename={onRenameTemplate}
+                    onDelete={onDeleteTemplate}
+                    onInsertToProject={onInsertTemplateToProject}
+                    canInsertToProject={canInsertTemplateToProject}
+                    onMenuOpenChange={onMenuOpenChange}
+                    setOpenMenuTemplateId={setOpenMenuTemplateId}
+                  />
+                )) : (
+                  <div className="px-3 py-2 text-xs text-slate-400">Нет шаблонов</div>
+                )}
+              </ProjectSection>
+            </div>
+          ) : null}
+
           {archivedProjects.length > 0 ? (
-            <div className="pt-3">
+            <div>
               <div className="mx-3 mb-2 border-t border-slate-200" />
               <ProjectSection title={archiveTitle} icon={<Archive className="h-4 w-4" />} open={archiveOpen} onToggle={() => setArchiveOpen((value) => !value)}>
                 {archivedProjects.map((project) => (

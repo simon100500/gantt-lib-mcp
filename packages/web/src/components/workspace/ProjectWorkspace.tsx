@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
-import { Users, ListTree, LoaderCircle, MessageSquare, TriangleAlert, WandSparkles, X } from 'lucide-react';
+import { Users, ListTree, LoaderCircle, MessageSquare, ToyBrick, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
 import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
 
@@ -74,6 +74,11 @@ interface ProjectWorkspaceProps {
   onSelectedShareTaskIdsChange?: (taskIds: Set<string>) => void;
   onCancelShareSelection?: () => void;
   onConfirmShareSelection?: () => void | Promise<void>;
+  templateSelectionMode?: boolean;
+  selectedTemplateTaskIds?: Set<string>;
+  onSelectedTemplateTaskIdsChange?: (taskIds: Set<string>) => void;
+  onCancelTemplateSelection?: () => void;
+  onConfirmTemplateSelection?: () => void | Promise<void>;
   ganttDayMode: 'business' | 'calendar';
   displayGanttDayMode?: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
@@ -81,6 +86,12 @@ interface ProjectWorkspaceProps {
   previewState?: 'idle' | 'rendering' | 'failed';
   previewMessage?: string | null;
   onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
+  showResourceAssignments?: boolean;
+  onCreateTemplateFromTask?: (task: Task) => void | Promise<void>;
+  onInsertTemplateAtTask?: (task: Task) => void | Promise<void>;
+  onCreateTemplateFromProject?: () => void | Promise<void>;
+  onStartTemplateSelection?: () => void | Promise<void>;
+  templateMode?: boolean;
 }
 
 function formatTaskCount(count: number) {
@@ -453,6 +464,11 @@ export function ProjectWorkspace({
   onSelectedShareTaskIdsChange,
   onCancelShareSelection,
   onConfirmShareSelection,
+  templateSelectionMode = false,
+  selectedTemplateTaskIds = new Set(),
+  onSelectedTemplateTaskIdsChange,
+  onCancelTemplateSelection,
+  onConfirmTemplateSelection,
   ganttDayMode,
   displayGanttDayMode,
   calendarDays = [],
@@ -460,6 +476,12 @@ export function ProjectWorkspace({
   previewState = 'idle',
   previewMessage = null,
   onSplitTask,
+  showResourceAssignments = true,
+  onCreateTemplateFromTask,
+  onInsertTemplateAtTask,
+  onCreateTemplateFromProject,
+  onStartTemplateSelection,
+  templateMode = false,
 }: ProjectWorkspaceProps) {
   const messages = useChatStore((state) => state.messages);
   const streaming = useChatStore((state) => state.streamingText);
@@ -488,7 +510,9 @@ export function ProjectWorkspace({
     ? workspace.projectId
     : workspace.kind === 'shared'
       ? `shared:${shareToken ?? sharedProject?.id ?? 'unknown'}`
-      : null;
+      : workspace.kind === 'template'
+        ? `template:${workspace.templateId}`
+        : null;
   const chatSidebarVisible = showChat && workspace.kind === 'project' && workspace.chatOpen;
 
   useFilterPersistence();
@@ -632,6 +656,8 @@ export function ProjectWorkspace({
   const hasRenderableChart = effectiveTasks.length > 0 || effectiveReadOnly;
   const effectiveDisableTaskDrag = effectiveReadOnly || disableTaskDrag;
   const shareSelectionActive = shareSelectionMode && !effectiveReadOnly;
+  const templateSelectionActive = templateSelectionMode && !effectiveReadOnly;
+  const externalSelectionActive = shareSelectionActive || templateSelectionActive;
   const effectiveChatDisabled = chatDisabled || previewModeActive;
   const effectiveChatDisabledReason = previewModeActive
     ? 'Только чтение. Вернитесь к текущей версии, чтобы продолжить.'
@@ -1086,7 +1112,7 @@ export function ProjectWorkspace({
   }, [accessToken, clearResourcePlannerCache, effectiveReadOnly, replaceAssignmentsForTask, replaceAssignmentsForTasks, setAssignmentError, tasks, workspace]);
 
   const taskListMenuCommands = useMemo<TaskListMenuCommand<Task>[]>(() => {
-    if (effectiveReadOnly || shareSelectionActive || chatDisabled || !showChat) {
+    if (effectiveReadOnly || externalSelectionActive || chatDisabled) {
       return [];
     }
 
@@ -1097,13 +1123,16 @@ export function ProjectWorkspace({
         icon: <Users className="h-4 w-4" />,
         onSelect: (row) => openAssignmentSelector(row),
       },
-      {
+    ];
+
+    if (showChat) {
+      commands.push({
         id: 'send-task-to-chat',
         label: 'Выполнить...',
         icon: <WandSparkles className="h-4 w-4" />,
         onSelect: (row) => setTaskChatDraft(row),
-      },
-    ];
+      });
+    }
 
     if (onSplitTask) {
       commands.push({
@@ -1115,18 +1144,41 @@ export function ProjectWorkspace({
       });
     }
 
-    return commands;
-  }, [chatDisabled, effectiveReadOnly, onSplitTask, shareSelectionActive, showChat, openAssignmentSelector]);
+    if (onInsertTemplateAtTask) {
+      commands.push({
+        id: 'insert-template-at-task',
+        label: 'Вставить шаблон...',
+        icon: <ToyBrick className="h-4 w-4" />,
+        scope: 'linear',
+        onSelect: (row) => { void onInsertTemplateAtTask(row); },
+      });
+    }
 
-  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => [
-    createAssignedResourcesColumn({
-      resources,
-      assignments,
-      editable: !effectiveReadOnly && !shareSelectionActive,
-      readOnly: effectiveReadOnly || shareSelectionActive,
-      onEdit: openAssignmentSelector,
-    }),
-  ], [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive]);
+    if (onCreateTemplateFromTask) {
+      commands.push({
+        id: 'create-template-from-task',
+        label: 'В шаблон...',
+        icon: <ToyBrick className="h-4 w-4" />,
+        onSelect: (row) => { void onCreateTemplateFromTask(row); },
+      });
+    }
+
+    return commands;
+  }, [chatDisabled, effectiveReadOnly, externalSelectionActive, onCreateTemplateFromTask, onInsertTemplateAtTask, onSplitTask, showChat, openAssignmentSelector]);
+
+  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
+    showResourceAssignments
+      ? [
+        createAssignedResourcesColumn({
+          resources,
+          assignments,
+          editable: !effectiveReadOnly && !shareSelectionActive,
+          readOnly: effectiveReadOnly || shareSelectionActive,
+          onEdit: openAssignmentSelector,
+        }),
+      ]
+      : []
+  ), [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive, showResourceAssignments]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,
@@ -1292,6 +1344,13 @@ export function ProjectWorkspace({
   }, [batchUpdate, prepareUndoPreviewForEdit]);
 
   const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
+
+  useEffect(() => {
+    if (templateMode && showHistoryPanel) {
+      setShowHistoryPanel(false);
+    }
+  }, [templateMode, showHistoryPanel, setShowHistoryPanel]);
+
   const handleOpenProjectShift = useCallback(() => {
     if (!canShiftProject) {
       return;
@@ -1560,6 +1619,9 @@ export function ProjectWorkspace({
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}
           showShareButton={!hasShareToken && isAuthenticated}
+          templateSelectionActive={templateSelectionActive}
+          onCreateTemplateFromProject={effectiveReadOnly || hasShareToken ? null : onCreateTemplateFromProject}
+          onStartTemplateSelection={effectiveReadOnly || hasShareToken ? null : onStartTemplateSelection}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           disableTaskDrag={effectiveDisableTaskDrag}
@@ -1605,6 +1667,13 @@ export function ProjectWorkspace({
           onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
           onOpenProjectShift={handleOpenProjectShift}
           canShiftProject={canShiftProject}
+          showStructureControls={true}
+          showBaselineControls={!templateMode}
+          showProjectShiftControl={!templateMode}
+          showHistoryControl={!templateMode}
+          showExpiredToggle={!templateMode}
+          showUndoControl={!templateMode}
+          showOverflowMenuControl={!templateMode}
         />
       </div>
 
@@ -1705,6 +1774,43 @@ export function ProjectWorkspace({
               </div>
             )}
 
+            {templateSelectionActive && (
+              <div className="flex items-center justify-between gap-3 border-b border-primary/30 bg-primary/20 px-3 py-2.5 text-sm text-slate-900">
+                <div className="min-w-0">
+                  <span className="text-[13px] font-bold uppercase tracking-[0.04em] text-primary">Режим создания шаблона</span>
+                  <span className="ml-2 font-medium text-slate-700">Выбрано: {selectedTemplateTaskIds.size}.</span>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={onCancelTemplateSelection}
+                    className="inline-flex h-8 items-center rounded-md border border-primary/20 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void onCreateTemplateFromProject?.(); }}
+                    className="inline-flex h-8 items-center rounded-md border border-primary/20 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Весь график
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void onConfirmTemplateSelection?.(); }}
+                    disabled={selectedTemplateTaskIds.size === 0}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+                      selectedTemplateTaskIds.size === 0 && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    <ToyBrick className="h-3.5 w-3.5" />
+                    Сохранить шаблон
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="min-h-0 flex-1 overflow-hidden bg-white" ref={ganttSectionRef}>
               {loading ? (
                 <div className="flex flex-1 items-center justify-center bg-white text-sm text-slate-400">
@@ -1721,7 +1827,7 @@ export function ProjectWorkspace({
                   hiddenTaskListColumns={hiddenTaskListColumns}
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
-                  onTasksChange={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
+                  onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}
                   containerHeight="calc(100dvh - 132px)"
@@ -1730,25 +1836,25 @@ export function ProjectWorkspace({
                   taskListWidth={taskListWidth}
                   onValidateDependencies={onValidation}
                   enableAutoSchedule={autoSchedule}
-                  onCascade={effectiveReadOnly || shareSelectionActive ? undefined : onCascade}
-                  disableTaskNameEditing={effectiveReadOnly || shareSelectionActive}
-                  disableDependencyEditing={effectiveReadOnly || shareSelectionActive}
-                  disableTaskDrag={effectiveDisableTaskDrag || shareSelectionActive}
+                  onCascade={effectiveReadOnly || externalSelectionActive ? undefined : onCascade}
+                  disableTaskNameEditing={effectiveReadOnly || externalSelectionActive}
+                  disableDependencyEditing={effectiveReadOnly || externalSelectionActive}
+                  disableTaskDrag={effectiveDisableTaskDrag || externalSelectionActive}
                   highlightExpiredTasks={highlightExpiredTasks}
                   headerHeight={40}
                   viewMode={viewMode}
                   collapsedParentIds={collapsedParentIds}
                   onToggleCollapse={handleToggleCollapse}
-                  onAdd={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
-                  onDelete={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
-                  onInsertAfter={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
-                  onReorder={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
-                  onUngroupTask={effectiveReadOnly || shareSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
+                  onAdd={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleAdd}
+                  onDelete={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleDelete}
+                  onInsertAfter={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleInsertAfter}
+                  onReorder={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleReorder}
+                  onUngroupTask={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleUngroupTask}
                   customDays={customDays}
                   highlightedTaskIds={highlightedSearchTaskIds}
-                  enableTaskMultiSelect={shareSelectionActive}
-                  selectedTaskIds={selectedShareTaskIds}
-                  onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : undefined}
+                  enableTaskMultiSelect={externalSelectionActive}
+                  selectedTaskIds={shareSelectionActive ? selectedShareTaskIds : selectedTemplateTaskIds}
+                  onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : templateSelectionActive ? onSelectedTemplateTaskIdsChange : undefined}
                   filterMode={filterMode}
                   businessDays={ganttDayMode !== 'calendar'}
                 />
@@ -1877,7 +1983,7 @@ export function ProjectWorkspace({
           </div>
         </div>
 
-        {showHistoryPanel && (
+        {!templateMode && showHistoryPanel && (
           <HistoryPanel
             items={historyItems}
             loading={historyLoading}
