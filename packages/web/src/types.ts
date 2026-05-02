@@ -72,6 +72,64 @@ export interface ProjectGroup {
   projectCount?: number;
 }
 
+export type FinancePeriodGranularity = 'month' | 'week';
+
+export interface TaskFinanceSetting {
+  id: string;
+  projectId: string;
+  taskId: string;
+  plannedCost: number;
+  currencyCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskFundingEvent {
+  id: string;
+  projectId: string;
+  taskId: string;
+  eventDate: string;
+  amount: number;
+  comment: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinancePeriodBucket {
+  id: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface FinanceTaskSnapshot {
+  taskId: string;
+  parentTaskId: string | null;
+  title: string;
+  depth: number;
+  startDate: string;
+  endDate: string;
+  progress: number;
+  plannedCost: number;
+  plannedToDate: number;
+  earnedToDate: number;
+  paidToDate: number;
+  variancePlannedVsEarned: number;
+  varianceEarnedVsPaid: number;
+  plannedByPeriod: Record<string, number>;
+  paidByPeriod: Record<string, number>;
+}
+
+export interface ProjectFinanceSnapshot {
+  projectId: string;
+  asOfDate: string;
+  granularity: FinancePeriodGranularity;
+  periods: FinancePeriodBucket[];
+  tasks: FinanceTaskSnapshot[];
+  settings: TaskFinanceSetting[];
+  events: TaskFundingEvent[];
+}
+
 export interface CalendarDay {
   date: string;
   kind: 'working' | 'non_working' | 'shortened';

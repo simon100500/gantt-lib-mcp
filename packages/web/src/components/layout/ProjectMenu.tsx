@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -50,6 +50,7 @@ interface ProjectMenuProps {
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
   onOpenResourcePool?: () => void | Promise<void>;
+  onOpenFinance?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
   onCreateProjectTemplate?: () => void | Promise<void>;
   onSaveProjectName: (name: string) => Promise<void>;
@@ -84,6 +85,7 @@ export function ProjectMenu({
   onRenameProjectGroup,
   onDeleteProjectGroup,
   onOpenResourcePool,
+  onOpenFinance,
   onOpenChartMode,
   onCreateProjectTemplate,
   onSaveProjectName,
@@ -537,15 +539,30 @@ export function ProjectMenu({
                         onClick={() => { void onOpenChartMode?.(); }}
                         className={cn(
                           'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          workspace.kind === 'planner'
+                          workspace.kind === 'planner' || workspace.kind === 'finance'
                             ? 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'
                             : 'border-primary text-primary',
                         )}
                         data-testid="topbar-mode-chart"
                         role="tab"
-                        aria-selected={workspace.kind !== 'planner'}
+                        aria-selected={workspace.kind !== 'planner' && workspace.kind !== 'finance'}
                       >
                         <span>График</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenFinance?.(); }}
+                        className={cn(
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind === 'finance'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                        )}
+                        data-testid="topbar-mode-finance"
+                        role="tab"
+                        aria-selected={workspace.kind === 'finance'}
+                      >
+                        <span>Финансы</span>
                       </button>
                       <button
                         type="button"
@@ -601,10 +618,12 @@ export function ProjectMenu({
                   >
                     {workspace.kind === 'planner' ? (
                       <Package className="h-3.5 w-3.5 text-primary" />
+                    ) : workspace.kind === 'finance' ? (
+                      <Landmark className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
-                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : 'График'}</span>
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : 'График'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -613,12 +632,23 @@ export function ProjectMenu({
                     onClick={() => { void onOpenChartMode?.(); }}
                     className={cn(
                       'gap-2 text-slate-700 focus:text-slate-900',
-                      workspace.kind !== 'planner' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                      workspace.kind !== 'planner' && workspace.kind !== 'finance' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
                     )}
                     data-testid="topbar-mode-chart-mobile"
                   >
                     <ChartNoAxesGantt className="h-4 w-4" />
                     <span>График</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenFinance?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind === 'finance' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-finance-mobile"
+                  >
+                    <Landmark className="h-4 w-4" />
+                    <span>Финансы</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => { void onOpenResourcePool?.(); }}
