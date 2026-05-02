@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Landmark, LoaderCircle, Plus, RefreshCw, Save, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Landmark, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -48,14 +48,15 @@ type FundingDrawerState = {
 
 const ROW_HEIGHT = 40;
 const TASK_COLUMN_WIDTH = 360;
+const COST_COLUMN_WIDTH = 180;
 const METRIC_COLUMN_WIDTH = 110;
 const LEFT_COLUMN_OFFSETS = [
   0,
   TASK_COLUMN_WIDTH,
-  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH,
-  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 2,
-  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 3,
-  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 4,
+  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH,
+  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH + METRIC_COLUMN_WIDTH,
+  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 2,
+  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 3,
 ] as const;
 
 function formatMoney(value: number): string {
@@ -157,6 +158,7 @@ export function FinanceWorkspace({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [drawerState, setDrawerState] = useState<FundingDrawerState>(null);
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
@@ -168,6 +170,7 @@ export function FinanceWorkspace({
     comment: '',
   });
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const costInputRef = useRef<HTMLInputElement | null>(null);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
 
@@ -220,6 +223,17 @@ export function FinanceWorkspace({
   useEffect(() => {
     void loadSnapshot(true);
   }, [loadSnapshot]);
+
+  useEffect(() => {
+    if (!editingTaskId) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      costInputRef.current?.focus();
+      costInputRef.current?.select();
+    });
+  }, [editingTaskId]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -304,6 +318,7 @@ export function FinanceWorkspace({
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
 
+      setEditingTaskId(null);
       await loadSnapshot(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить стоимость');
@@ -311,6 +326,26 @@ export function FinanceWorkspace({
       setSavingTaskId(null);
     }
   }, [accessToken, costDrafts, loadSnapshot, readOnly]);
+
+  const startEditingCost = useCallback((taskId: string, plannedCost: number) => {
+    if (readOnly) {
+      return;
+    }
+
+    setCostDrafts((current) => ({
+      ...current,
+      [taskId]: current[taskId] ?? formatInputMoney(plannedCost),
+    }));
+    setEditingTaskId(taskId);
+  }, [readOnly]);
+
+  const cancelEditingCost = useCallback((taskId: string, plannedCost: number) => {
+    setCostDrafts((current) => ({
+      ...current,
+      [taskId]: formatInputMoney(plannedCost),
+    }));
+    setEditingTaskId((current) => (current === taskId ? null : current));
+  }, []);
 
   const openDrawer = useCallback((taskId: string, periodId: string | null, event?: TaskFundingEvent | null) => {
     setDrawerState({
@@ -480,10 +515,10 @@ export function FinanceWorkspace({
             className="h-full overflow-auto"
             onScroll={handleScroll}
           >
-            <table className="min-w-max border-collapse text-sm text-slate-700">
+            <table className="min-w-max border-separate border-spacing-0 text-sm text-slate-700">
               <colgroup>
                 <col style={{ width: TASK_COLUMN_WIDTH }} />
-                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                <col style={{ width: COST_COLUMN_WIDTH }} />
                 <col style={{ width: METRIC_COLUMN_WIDTH }} />
                 <col style={{ width: METRIC_COLUMN_WIDTH }} />
                 <col style={{ width: METRIC_COLUMN_WIDTH }} />
@@ -494,22 +529,22 @@ export function FinanceWorkspace({
               </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[0] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[0] }}>
                     Группа работ
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[1] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[1] }}>
                     Стоимость
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[2] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[2] }}>
                     План
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[3] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[3] }}>
                     Освоено
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[4] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[4] }}>
                     Оплачено
                   </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5] }}>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5] }}>
                     Откл.
                   </th>
                   {snapshot?.periods.map((period) => (
@@ -522,7 +557,7 @@ export function FinanceWorkspace({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="align-top">
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-3 py-2" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-3 py-2" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
                       <div className="flex items-start gap-2" style={{ paddingLeft: row.depth * 18 }}>
                         {row.hasChildren ? (
                           <button
@@ -547,40 +582,55 @@ export function FinanceWorkspace({
                         </div>
                       </div>
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
+                      {editingTaskId === row.taskId ? (
                         <Input
+                          ref={costInputRef}
                           value={costDrafts[row.taskId] ?? formatInputMoney(row.plannedCost)}
                           onChange={(event) => setCostDrafts((current) => ({ ...current, [row.taskId]: event.target.value }))}
                           onBlur={() => { void savePlannedCost(row.taskId); }}
-                          className="h-8 text-right"
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void savePlannedCost(row.taskId);
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              cancelEditingCost(row.taskId, row.plannedCost);
+                            }
+                          }}
+                          className="h-10 w-full border-primary/40 bg-white text-right text-sm shadow-[0_0_0_2px_rgba(59,130,246,0.12)]"
                           disabled={readOnly || savingTaskId === row.taskId}
                         />
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => { void savePlannedCost(row.taskId); }}
-                          disabled={readOnly || savingTaskId === row.taskId}
-                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900 disabled:opacity-50"
+                          onClick={() => startEditingCost(row.taskId, row.plannedCost)}
+                          disabled={readOnly}
+                          className={cn(
+                            'flex h-10 w-full items-center justify-end rounded-md border border-transparent px-3 text-right text-sm font-medium text-slate-700 transition-colors whitespace-nowrap',
+                            !readOnly && 'hover:border-slate-300 hover:bg-slate-50',
+                          )}
                         >
-                          {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" /> : formatMoney(row.plannedCost)}
                         </button>
-                      </div>
+                      )}
                       {row.allocationMode === 'auto' && (
                         <div className="mt-1 text-right text-[11px] text-amber-600">
                           от родителя
                         </div>
                       )}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.plannedToDate)}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[3], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[3], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.earnedToDate)}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[4], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[4], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.paidToDate)}
                     </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5], minHeight: ROW_HEIGHT }}>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-2 text-right align-middle font-medium shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5], minHeight: ROW_HEIGHT }}>
                       {formatMoney(row.varianceEarnedVsPaid)}
                     </td>
                     {snapshot?.periods.map((period) => {
