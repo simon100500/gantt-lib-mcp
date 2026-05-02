@@ -20,10 +20,10 @@ type FinanceWorkspaceProps = {
 };
 
 type FinanceRow =
-  | {
+  {
     id: string;
-    kind: 'group';
     taskId: string;
+    parentTaskId: string | null;
     depth: number;
     title: string;
     plannedCost: number;
@@ -35,14 +35,7 @@ type FinanceRow =
     plannedByPeriod: Record<string, number>;
     paidByPeriod: Record<string, number>;
     isCollapsed: boolean;
-  }
-  | {
-    id: string;
-    kind: 'plan' | 'paid';
-    taskId: string;
-    depth: number;
-    title: string;
-    valuesByPeriod: Record<string, number>;
+    hasChildren: boolean;
   };
 
 type FundingDrawerState = {
@@ -52,7 +45,16 @@ type FundingDrawerState = {
 } | null;
 
 const ROW_HEIGHT = 40;
-const LEFT_PANE_WIDTH = 720;
+const TASK_COLUMN_WIDTH = 360;
+const METRIC_COLUMN_WIDTH = 110;
+const LEFT_COLUMN_OFFSETS = [
+  0,
+  TASK_COLUMN_WIDTH,
+  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH,
+  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 2,
+  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 3,
+  TASK_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 4,
+] as const;
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat('ru-RU', {
@@ -77,13 +79,30 @@ function buildRows(snapshot: ProjectFinanceSnapshot | null, collapsedTaskIds: Se
     return [];
   }
 
-  const rows: FinanceRow[] = [];
-  for (const task of snapshot.tasks) {
-    const isCollapsed = collapsedTaskIds.has(task.taskId);
-    rows.push({
+  const childCountByParentId = new Map<string, number>();
+  snapshot.tasks.forEach((task) => {
+    if (task.parentTaskId) {
+      childCountByParentId.set(task.parentTaskId, (childCountByParentId.get(task.parentTaskId) ?? 0) + 1);
+    }
+  });
+
+  const taskMap = new Map(snapshot.tasks.map((task) => [task.taskId, task]));
+
+  return snapshot.tasks
+    .filter((task) => {
+      let currentParentId = task.parentTaskId;
+      while (currentParentId) {
+        if (collapsedTaskIds.has(currentParentId)) {
+          return false;
+        }
+        currentParentId = taskMap.get(currentParentId)?.parentTaskId ?? null;
+      }
+      return true;
+    })
+    .map((task) => ({
       id: `group:${task.taskId}`,
-      kind: 'group',
       taskId: task.taskId,
+      parentTaskId: task.parentTaskId,
       depth: task.depth,
       title: task.title,
       plannedCost: task.plannedCost,
@@ -94,30 +113,9 @@ function buildRows(snapshot: ProjectFinanceSnapshot | null, collapsedTaskIds: Se
       varianceEarnedVsPaid: task.varianceEarnedVsPaid,
       plannedByPeriod: task.plannedByPeriod,
       paidByPeriod: task.paidByPeriod,
-      isCollapsed,
-    });
-
-    if (!isCollapsed) {
-      rows.push({
-        id: `plan:${task.taskId}`,
-        kind: 'plan',
-        taskId: task.taskId,
-        depth: task.depth + 1,
-        title: 'План',
-        valuesByPeriod: task.plannedByPeriod,
-      });
-      rows.push({
-        id: `paid:${task.taskId}`,
-        kind: 'paid',
-        taskId: task.taskId,
-        depth: task.depth + 1,
-        title: 'Оплачено',
-        valuesByPeriod: task.paidByPeriod,
-      });
-    }
-  }
-
-  return rows;
+      isCollapsed: collapsedTaskIds.has(task.taskId),
+      hasChildren: (childCountByParentId.get(task.taskId) ?? 0) > 0,
+    }));
 }
 
 function filterEventsForDrawer(
@@ -157,6 +155,7 @@ export function FinanceWorkspace({
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [drawerState, setDrawerState] = useState<FundingDrawerState>(null);
+  const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
   const [drawerPending, setDrawerPending] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [eventForm, setEventForm] = useState<{ eventDate: string; amount: string; comment: string }>({
@@ -164,14 +163,9 @@ export function FinanceWorkspace({
     amount: '',
     comment: '',
   });
-  const leftBodyRef = useRef<HTMLDivElement | null>(null);
-  const rightBodyRef = useRef<HTMLDivElement | null>(null);
-  const scrollSyncLockRef = useRef<'left' | 'right' | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
-  const collapsedTaskIds = useMemo(() => (
-    new Set(getProjectState(projectId)?.collapsedParentIds ?? [])
-  ), [getProjectState, projectId]);
 
   const loadSnapshot = useCallback(async (showSpinner: boolean) => {
     if (!accessToken) {
@@ -224,22 +218,19 @@ export function FinanceWorkspace({
   }, [loadSnapshot]);
 
   useEffect(() => {
-    const left = leftBodyRef.current;
-    const right = rightBodyRef.current;
-    if (!left || !right) {
+    const container = scrollContainerRef.current;
+    if (!container) {
       return;
     }
 
     const state = getProjectState(projectId);
-    left.scrollTop = state?.financeScrollTop ?? 0;
-    right.scrollTop = state?.financeScrollTop ?? 0;
-    right.scrollLeft = state?.financeScrollLeft ?? 0;
+    container.scrollTop = state?.financeScrollTop ?? 0;
+    container.scrollLeft = state?.financeScrollLeft ?? 0;
   }, [getProjectState, projectId, snapshot]);
 
   const rows = useMemo(() => buildRows(snapshot, collapsedTaskIds), [collapsedTaskIds, snapshot]);
   const projectTotals = useMemo(() => {
-    const groupRows = rows.filter((row): row is Extract<FinanceRow, { kind: 'group' }> => row.kind === 'group');
-    return groupRows.reduce((totals, row) => ({
+    return rows.reduce((totals, row) => ({
       plannedCost: totals.plannedCost + row.plannedCost,
       plannedToDate: totals.plannedToDate + row.plannedToDate,
       earnedToDate: totals.earnedToDate + row.earnedToDate,
@@ -256,45 +247,29 @@ export function FinanceWorkspace({
     [drawerState, snapshot],
   );
 
-  const syncScroll = useCallback((source: 'left' | 'right') => {
-    const left = leftBodyRef.current;
-    const right = rightBodyRef.current;
-    if (!left || !right) {
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
       return;
     }
 
-    if (scrollSyncLockRef.current && scrollSyncLockRef.current !== source) {
-      return;
-    }
-
-    scrollSyncLockRef.current = source;
-    if (source === 'left') {
-      right.scrollTop = left.scrollTop;
-      setProjectState(projectId, {
-        financeScrollTop: left.scrollTop,
-        financeScrollLeft: right.scrollLeft,
-      });
-    } else {
-      left.scrollTop = right.scrollTop;
-      setProjectState(projectId, {
-        financeScrollTop: right.scrollTop,
-        financeScrollLeft: right.scrollLeft,
-      });
-    }
-    window.requestAnimationFrame(() => {
-      scrollSyncLockRef.current = null;
+    setProjectState(projectId, {
+      financeScrollTop: container.scrollTop,
+      financeScrollLeft: container.scrollLeft,
     });
   }, [projectId, setProjectState]);
 
   const toggleCollapse = useCallback((taskId: string) => {
-    const current = new Set(getProjectState(projectId)?.collapsedParentIds ?? []);
-    if (current.has(taskId)) {
-      current.delete(taskId);
-    } else {
-      current.add(taskId);
-    }
-    setProjectState(projectId, { collapsedParentIds: Array.from(current) });
-  }, [getProjectState, projectId, setProjectState]);
+    setCollapsedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  }, []);
 
   const savePlannedCost = useCallback(async (taskId: string) => {
     if (!accessToken || readOnly) {
@@ -495,47 +470,73 @@ export function FinanceWorkspace({
             В проекте пока нет групп работ для финансовой таблицы.
           </div>
         ) : (
-        <div className="flex h-full min-h-0">
-          <div className="flex shrink-0 flex-col border-r border-slate-200" style={{ width: LEFT_PANE_WIDTH }}>
-            <div className="grid shrink-0 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ gridTemplateColumns: '300px 110px 110px 110px 110px 110px' }}>
-              <div className="px-3 py-3">Группа работ</div>
-              <div className="px-2 py-3 text-right">Стоимость</div>
-              <div className="px-2 py-3 text-right">План</div>
-              <div className="px-2 py-3 text-right">Освоено</div>
-              <div className="px-2 py-3 text-right">Оплачено</div>
-              <div className="px-2 py-3 text-right">Откл.</div>
-            </div>
-            <div
-              ref={leftBodyRef}
-              className="min-h-0 flex-1 overflow-y-auto"
-              onScroll={() => syncScroll('left')}
-            >
-              {rows.map((row) => (
-                <div
-                  key={row.id}
-                  className={cn(
-                    'grid items-center border-b border-slate-100 text-sm text-slate-700',
-                    row.kind === 'group' ? 'bg-white' : 'bg-slate-50/50 text-slate-600',
-                  )}
-                  style={{ gridTemplateColumns: '300px 110px 110px 110px 110px 110px', minHeight: ROW_HEIGHT }}
-                >
-                  <div className="flex min-w-0 items-center gap-2 px-3" style={{ paddingLeft: 12 + row.depth * 18 }}>
-                    {row.kind === 'group' ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleCollapse(row.taskId)}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900"
-                      >
-                        {row.isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </button>
-                    ) : (
-                      <div className="h-6 w-6" />
-                    )}
-                    <span className={cn('truncate', row.kind === 'group' ? 'font-medium text-slate-900' : 'font-medium')}>{row.title}</span>
-                  </div>
-                  {row.kind === 'group' ? (
-                    <>
-                      <div className="flex items-center justify-end gap-1 px-2">
+          <div
+            ref={scrollContainerRef}
+            className="h-full overflow-auto"
+            onScroll={handleScroll}
+          >
+            <table className="min-w-max border-collapse text-sm text-slate-700">
+              <colgroup>
+                <col style={{ width: TASK_COLUMN_WIDTH }} />
+                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                {snapshot?.periods.map((period) => (
+                  <col key={period.id} style={{ width: 120 }} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[0] }}>
+                    Группа работ
+                  </th>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[1] }}>
+                    Стоимость
+                  </th>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[2] }}>
+                    План
+                  </th>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[3] }}>
+                    Освоено
+                  </th>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[4] }}>
+                    Оплачено
+                  </th>
+                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5] }}>
+                    Откл.
+                  </th>
+                  {snapshot?.periods.map((period) => (
+                    <th key={period.id} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 last:border-r-0">
+                      {period.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="align-top">
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-3 py-2" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
+                      <div className="flex items-start gap-2" style={{ paddingLeft: row.depth * 18 }}>
+                        {row.hasChildren ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleCollapse(row.taskId)}
+                            className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900"
+                          >
+                            {row.isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </button>
+                        ) : (
+                          <div className="h-6 w-6 shrink-0" />
+                        )}
+                        <span className="min-w-0 break-words whitespace-normal font-medium leading-5 text-slate-900">
+                          {row.title}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
+                      <div className="flex items-center justify-end gap-1">
                         <Input
                           value={costDrafts[row.taskId] ?? formatInputMoney(row.plannedCost)}
                           onChange={(event) => setCostDrafts((current) => ({ ...current, [row.taskId]: event.target.value }))}
@@ -547,101 +548,54 @@ export function FinanceWorkspace({
                           type="button"
                           onClick={() => { void savePlannedCost(row.taskId); }}
                           disabled={readOnly || savingTaskId === row.taskId}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900 disabled:opacity-50"
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900 disabled:opacity-50"
                         >
                           {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                         </button>
                       </div>
-                      <div className="px-2 text-right font-medium">{formatMoney(row.plannedToDate)}</div>
-                      <div className="px-2 text-right font-medium">{formatMoney(row.earnedToDate)}</div>
-                      <div className="px-2 text-right font-medium">{formatMoney(row.paidToDate)}</div>
-                      <div className="px-2 text-right font-medium">{formatMoney(row.varianceEarnedVsPaid)}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="px-2 text-right text-slate-400">-</div>
-                      <div className="px-2 text-right text-slate-400">-</div>
-                      <div className="px-2 text-right text-slate-400">-</div>
-                      <div className="px-2 text-right text-slate-400">-</div>
-                      <div className="px-2 text-right text-slate-400">-</div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div
-              ref={rightBodyRef}
-              className="h-full overflow-auto"
-              onScroll={() => syncScroll('right')}
-            >
-              <div className="min-w-max">
-                <div
-                  className="sticky top-0 z-10 grid border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500"
-                  style={{ gridTemplateColumns: `repeat(${snapshot?.periods.length ?? 0}, minmax(120px, 1fr))` }}
-                >
-                  {snapshot?.periods.map((period) => (
-                    <div key={period.id} className="border-r border-slate-200 px-3 py-3 text-center last:border-r-0">
-                      {period.label}
-                    </div>
-                  ))}
-                </div>
-                {rows.map((row) => (
-                  <div
-                    key={row.id}
-                    className={cn(
-                      'grid border-b border-slate-100 text-sm',
-                      row.kind === 'group' ? 'bg-white' : 'bg-slate-50/50',
-                    )}
-                    style={{ gridTemplateColumns: `repeat(${snapshot?.periods.length ?? 0}, minmax(120px, 1fr))`, minHeight: ROW_HEIGHT }}
-                  >
+                    </td>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
+                      {formatMoney(row.plannedToDate)}
+                    </td>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[3], minHeight: ROW_HEIGHT }}>
+                      {formatMoney(row.earnedToDate)}
+                    </td>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[4], minHeight: ROW_HEIGHT }}>
+                      {formatMoney(row.paidToDate)}
+                    </td>
+                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white px-2 py-2 text-right align-middle font-medium shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5], minHeight: ROW_HEIGHT }}>
+                      {formatMoney(row.varianceEarnedVsPaid)}
+                    </td>
                     {snapshot?.periods.map((period) => {
-                      const value = row.kind === 'group'
-                        ? 0
-                        : row.valuesByPeriod[period.id] ?? 0;
-                      const isPaidRow = row.kind === 'paid';
+                      const plannedValue = row.plannedByPeriod[period.id] ?? 0;
+                      const paidValue = row.paidByPeriod[period.id] ?? 0;
 
                       return (
-                        <button
-                          key={`${row.id}:${period.id}`}
-                          type="button"
-                          disabled={row.kind === 'plan' || readOnly}
-                          onClick={() => {
-                            if (isPaidRow) {
-                              openDrawer(row.taskId, period.id, null);
-                            } else if (row.kind === 'group') {
-                              openDrawer(row.taskId, period.id, null);
-                            }
-                          }}
-                          className={cn(
-                            'border-r border-slate-100 px-3 text-right last:border-r-0',
-                            !isPaidRow && row.kind !== 'group' && 'cursor-default',
-                            (isPaidRow || row.kind === 'group') && !readOnly && 'hover:bg-primary/5',
-                          )}
-                        >
-                          {row.kind === 'group' ? (
-                            <div className="flex h-full items-center justify-end">
-                              <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-                                <Plus className="h-3.5 w-3.5" />
-                                Поступление
-                              </span>
-                            </div>
-                          ) : (
-                            <div className={cn('flex h-full items-center justify-end', value > 0 ? 'font-medium text-slate-700' : 'text-slate-300')}>
-                              {value > 0 ? formatMoney(value) : '0'}
-                            </div>
-                          )}
-                        </button>
+                        <td key={`${row.id}:${period.id}`} className="border-b border-r border-slate-100 p-0 last:border-r-0">
+                          <button
+                            type="button"
+                            disabled={readOnly}
+                            onClick={() => { openDrawer(row.taskId, period.id, null); }}
+                            className={cn(
+                              'flex min-h-[40px] w-full items-center justify-between gap-2 px-3 py-2 text-right',
+                              !readOnly && 'hover:bg-primary/5',
+                            )}
+                          >
+                            <span className={cn('truncate text-xs', paidValue > 0 ? 'text-emerald-600' : 'text-slate-300')}>
+                              {paidValue > 0 ? formatMoney(paidValue) : ''}
+                            </span>
+                            <span className={cn('text-sm', plannedValue > 0 ? 'font-medium text-slate-700' : 'text-slate-300')}>
+                              {plannedValue > 0 ? formatMoney(plannedValue) : '0'}
+                            </span>
+                          </button>
+                        </td>
                       );
                     })}
-                  </div>
+                  </tr>
                 ))}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
-        </div>
         )}
 
         {drawerState && snapshot && (
