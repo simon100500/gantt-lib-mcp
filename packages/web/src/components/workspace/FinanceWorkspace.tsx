@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Landmark, LoaderCircle, Lock, Plus, RefreshCw, X } from 'lucide-react';
+import { GanttChart } from 'gantt-lib';
+import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
+import { Landmark, LoaderCircle, Lock, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -10,7 +12,6 @@ import type {
 import { Button } from '../ui/button.tsx';
 import { Input } from '../ui/input.tsx';
 import { cn } from '../../lib/utils.ts';
-import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 
 type FinanceWorkspaceProps = {
   accessToken?: string | null;
@@ -19,27 +20,19 @@ type FinanceWorkspaceProps = {
   onBackToProject?: () => void;
 };
 
-type FinanceRow =
-  {
-    id: string;
-    taskId: string;
-    parentTaskId: string | null;
-    depth: number;
-    title: string;
-    plannedCost: number;
-    hasOwnFinanceSetting: boolean;
-    allocationMode: 'manual' | 'auto';
-    allocationParentTaskId: string | null;
-    plannedToDate: number;
-    earnedToDate: number;
-    paidToDate: number;
-    variancePlannedVsEarned: number;
-    varianceEarnedVsPaid: number;
-    plannedByPeriod: Record<string, number>;
-    paidByPeriod: Record<string, number>;
-    isCollapsed: boolean;
-    hasChildren: boolean;
-  };
+type FinanceMatrixTask = Task & {
+  plannedCost: number;
+  hasOwnFinanceSetting: boolean;
+  allocationMode: 'manual' | 'auto';
+  allocationParentTaskId: string | null;
+  plannedToDate: number;
+  earnedToDate: number;
+  paidToDate: number;
+  variancePlannedVsEarned: number;
+  varianceEarnedVsPaid: number;
+  plannedByPeriod: Record<string, number>;
+  paidByPeriod: Record<string, number>;
+};
 
 type FundingDrawerState = {
   taskId: string;
@@ -47,24 +40,22 @@ type FundingDrawerState = {
   editingEventId: string | null;
 } | null;
 
-const ROW_HEIGHT = 28;
-const TASK_COLUMN_WIDTH = 360;
-const COST_COLUMN_WIDTH = 180;
-const METRIC_COLUMN_WIDTH = 110;
-const LEFT_COLUMN_OFFSETS = [
-  0,
-  TASK_COLUMN_WIDTH,
-  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH,
-  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH + METRIC_COLUMN_WIDTH,
-  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 2,
-  TASK_COLUMN_WIDTH + COST_COLUMN_WIDTH + METRIC_COLUMN_WIDTH * 3,
-] as const;
+const ROW_HEIGHT = 46;
+const DEFAULT_CHART_HEIGHT = 640;
+const OWNER_COLUMN_WIDTH = 120;
+const COST_COLUMN_WIDTH = 120;
+const PAID_COLUMN_WIDTH = 120;
+const MATRIX_COLUMN_WIDTH_WEEK = 98;
+const MATRIX_COLUMN_WIDTH_MONTH = 108;
+
+const moneyFormatter = new Intl.NumberFormat('ru-RU', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 function formatMoney(value: number): string {
-  return new Intl.NumberFormat('ru-RU', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value);
+  const formatted = moneyFormatter.format(value);
+  return formatted.endsWith(',00') ? formatted.slice(0, -3) : formatted;
 }
 
 function formatInputMoney(value: number): string {
@@ -75,7 +66,8 @@ function formatInputMoney(value: number): string {
 }
 
 function parseMoneyInput(value: string): number | null {
-  const parsed = Number(value.replace(',', '.'));
+  const normalized = value.replace(/\s+/g, '').replace(',', '.');
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) {
     return null;
   }
@@ -86,37 +78,18 @@ function todayIso(): string {
   return new Date().toISOString().split('T')[0]!;
 }
 
-function buildRows(snapshot: ProjectFinanceSnapshot | null, collapsedTaskIds: Set<string>): FinanceRow[] {
+function buildFinanceTasks(snapshot: ProjectFinanceSnapshot | null): FinanceMatrixTask[] {
   if (!snapshot) {
     return [];
   }
-
-  const childCountByParentId = new Map<string, number>();
-  snapshot.tasks.forEach((task) => {
-    if (task.parentTaskId) {
-      childCountByParentId.set(task.parentTaskId, (childCountByParentId.get(task.parentTaskId) ?? 0) + 1);
-    }
-  });
-
-  const taskMap = new Map(snapshot.tasks.map((task) => [task.taskId, task]));
-
   return snapshot.tasks
-    .filter((task) => {
-      let currentParentId = task.parentTaskId;
-      while (currentParentId) {
-        if (collapsedTaskIds.has(currentParentId)) {
-          return false;
-        }
-        currentParentId = taskMap.get(currentParentId)?.parentTaskId ?? null;
-      }
-      return true;
-    })
     .map((task) => ({
-      id: `group:${task.taskId}`,
-      taskId: task.taskId,
-      parentTaskId: task.parentTaskId,
-      depth: task.depth,
-      title: task.title,
+      id: task.taskId,
+      name: task.title,
+      startDate: task.startDate,
+      endDate: task.endDate,
+      parentId: task.parentTaskId ?? undefined,
+      progress: task.progress,
       plannedCost: task.plannedCost,
       hasOwnFinanceSetting: task.hasOwnFinanceSetting,
       allocationMode: task.allocationMode,
@@ -128,8 +101,6 @@ function buildRows(snapshot: ProjectFinanceSnapshot | null, collapsedTaskIds: Se
       varianceEarnedVsPaid: task.varianceEarnedVsPaid,
       plannedByPeriod: task.plannedByPeriod,
       paidByPeriod: task.paidByPeriod,
-      isCollapsed: collapsedTaskIds.has(task.taskId),
-      hasChildren: (childCountByParentId.get(task.taskId) ?? 0) > 0,
     }));
 }
 
@@ -155,6 +126,104 @@ function filterEventsForDrawer(
   return taskEvents.filter((event) => event.eventDate >= period.startDate && event.eventDate <= period.endDate);
 }
 
+function buildPeriodGroup(period: FinancePeriodBucket, granularity: FinancePeriodGranularity): { id: string; label: string } {
+  const date = new Date(`${period.startDate}T00:00:00Z`);
+  if (granularity === 'month') {
+    const year = date.getUTCFullYear();
+    return { id: `year:${year}`, label: String(year) };
+  }
+
+  const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  const monthLabel = new Intl.DateTimeFormat('ru-RU', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+
+  return {
+    id: `month:${monthKey}`,
+    label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1),
+  };
+}
+
+function getMatrixColumnWidth(granularity: FinancePeriodGranularity): number {
+  return granularity === 'week' ? MATRIX_COLUMN_WIDTH_WEEK : MATRIX_COLUMN_WIDTH_MONTH;
+}
+
+function MoneyValue({
+  value,
+  color,
+  fontWeight,
+}: {
+  value: number;
+  color?: string;
+  fontWeight?: number;
+}) {
+  return (
+    <span style={{ color, fontWeight, fontVariantNumeric: 'tabular-nums' }}>
+      {formatMoney(value)}
+    </span>
+  );
+}
+
+function BudgetCellEditor({
+  value,
+  editStartValue,
+  onCommit,
+  onCancel,
+}: {
+  value: number;
+  editStartValue?: string;
+  onCommit: (value: number) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(editStartValue ?? String(value));
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    if (editStartValue === undefined) {
+      inputRef.current?.select();
+      return;
+    }
+
+    const cursorPosition = editStartValue.length;
+    inputRef.current?.setSelectionRange(cursorPosition, cursorPosition);
+  }, [editStartValue]);
+
+  const commit = useCallback(() => {
+    const nextValue = parseMoneyInput(draft);
+    if (nextValue !== null) {
+      onCommit(nextValue);
+      return;
+    }
+    onCancel();
+  }, [draft, onCancel, onCommit]);
+
+  return (
+    <input
+      ref={inputRef}
+      value={draft}
+      className="gantt-tl-inline-editor-input"
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onCancel();
+          return;
+        }
+
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commit();
+        }
+      }}
+      style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+    />
+  );
+}
+
 export function FinanceWorkspace({
   accessToken = null,
   projectId,
@@ -168,21 +237,17 @@ export function FinanceWorkspace({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [drawerState, setDrawerState] = useState<FundingDrawerState>(null);
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
   const [drawerPending, setDrawerPending] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [chartHeight, setChartHeight] = useState<number>(DEFAULT_CHART_HEIGHT);
   const [eventForm, setEventForm] = useState<{ eventDate: string; amount: string; comment: string }>({
     eventDate: todayIso(),
     amount: '',
     comment: '',
   });
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const costInputRef = useRef<HTMLInputElement | null>(null);
-  const getProjectState = useProjectUIStore((state) => state.getProjectState);
-  const setProjectState = useProjectUIStore((state) => state.setProjectState);
+  const chartHostRef = useRef<HTMLDivElement | null>(null);
 
   const loadSnapshot = useCallback(async (showSpinner: boolean) => {
     if (!accessToken) {
@@ -215,12 +280,6 @@ export function FinanceWorkspace({
 
       const data = await response.json() as ProjectFinanceSnapshot;
       setSnapshot(data);
-      setCostDrafts(
-        data.tasks.reduce<Record<string, string>>((accumulator, task) => {
-          accumulator[task.taskId] = formatInputMoney(task.plannedCost);
-          return accumulator;
-        }, {}),
-      );
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить финансы');
@@ -235,58 +294,41 @@ export function FinanceWorkspace({
   }, [loadSnapshot]);
 
   useEffect(() => {
-    if (!editingTaskId) {
+    const element = chartHostRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') {
       return;
     }
 
-    window.requestAnimationFrame(() => {
-      costInputRef.current?.focus();
-      costInputRef.current?.select();
-    });
-  }, [editingTaskId]);
+    const updateHeight = () => {
+      const nextHeight = Math.max(320, Math.floor(element.getBoundingClientRect().height));
+      setChartHeight(nextHeight);
+    };
 
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
-    const state = getProjectState(projectId);
-    container.scrollTop = state?.financeScrollTop ?? 0;
-    container.scrollLeft = state?.financeScrollLeft ?? 0;
-  }, [getProjectState, projectId, snapshot]);
-
-  const rows = useMemo(() => buildRows(snapshot, collapsedTaskIds), [collapsedTaskIds, snapshot]);
+  const tasks = useMemo(() => buildFinanceTasks(snapshot), [snapshot]);
   const projectTotals = useMemo(() => {
-    const topLevelRows = rows.filter((row) => row.parentTaskId === null);
-    return topLevelRows.reduce((totals, row) => ({
-      plannedCost: totals.plannedCost + row.plannedCost,
-      plannedToDate: totals.plannedToDate + row.plannedToDate,
-      earnedToDate: totals.earnedToDate + row.earnedToDate,
-      paidToDate: totals.paidToDate + row.paidToDate,
+    const topLevelTasks = tasks.filter((task) => !task.parentId);
+    return topLevelTasks.reduce((totals, task) => ({
+      plannedCost: totals.plannedCost + task.plannedCost,
+      plannedToDate: totals.plannedToDate + task.plannedToDate,
+      earnedToDate: totals.earnedToDate + task.earnedToDate,
+      paidToDate: totals.paidToDate + task.paidToDate,
     }), {
       plannedCost: 0,
       plannedToDate: 0,
       earnedToDate: 0,
       paidToDate: 0,
     });
-  }, [rows]);
+  }, [tasks]);
   const drawerEvents = useMemo(
     () => drawerState && snapshot ? filterEventsForDrawer(snapshot.events, drawerState, snapshot.periods) : [],
     [drawerState, snapshot],
   );
-
-  const handleScroll = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    setProjectState(projectId, {
-      financeScrollTop: container.scrollTop,
-      financeScrollLeft: container.scrollLeft,
-    });
-  }, [projectId, setProjectState]);
 
   const toggleCollapse = useCallback((taskId: string) => {
     setCollapsedTaskIds((current) => {
@@ -300,27 +342,24 @@ export function FinanceWorkspace({
     });
   }, []);
 
-  const savePlannedCost = useCallback(async (taskId: string) => {
+  const savePlannedCost = useCallback(async (taskId: string, plannedCost: number) => {
     if (!accessToken || readOnly) {
-      return;
-    }
-
-    const rawValue = costDrafts[taskId] ?? '0';
-    const plannedCost = parseMoneyInput(rawValue);
-    if (plannedCost === null) {
-      setError('Стоимость должна быть неотрицательным числом.');
       return;
     }
 
     const currentTask = snapshot?.tasks.find((task) => task.taskId === taskId);
     if (currentTask && Math.abs(currentTask.plannedCost - plannedCost) < 0.0001) {
-      setEditingTaskId(null);
-      setCostDrafts((current) => ({
-        ...current,
-        [taskId]: formatInputMoney(currentTask.plannedCost),
-      }));
       return;
     }
+
+    setSnapshot((current) => current ? ({
+      ...current,
+      tasks: current.tasks.map((task) => (
+        task.taskId === taskId
+          ? { ...task, plannedCost, allocationMode: 'manual' }
+          : task
+      )),
+    }) : current);
 
     setSavingTaskId(taskId);
     try {
@@ -337,15 +376,13 @@ export function FinanceWorkspace({
         const body = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
-
-      setEditingTaskId(null);
-      await loadSnapshot(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить стоимость');
+      await loadSnapshot(false);
     } finally {
       setSavingTaskId(null);
     }
-  }, [accessToken, costDrafts, loadSnapshot, readOnly, snapshot]);
+  }, [accessToken, loadSnapshot, readOnly, snapshot]);
 
   const updateAllocationMode = useCallback(async (taskId: string, allocationMode: 'manual' | 'auto', fallbackPlannedCost: number) => {
     if (!accessToken || readOnly) {
@@ -368,7 +405,7 @@ export function FinanceWorkspace({
         body: JSON.stringify({
           allocationMode,
           plannedCost: allocationMode === 'manual'
-            ? (parseMoneyInput(costDrafts[taskId] ?? '') ?? fallbackPlannedCost)
+            ? fallbackPlannedCost
             : undefined,
         }),
       });
@@ -378,34 +415,27 @@ export function FinanceWorkspace({
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
 
-      setEditingTaskId(null);
+      setSnapshot((current) => current ? ({
+        ...current,
+        tasks: current.tasks.map((task) => (
+          task.taskId === taskId
+            ? {
+              ...task,
+              allocationMode,
+              plannedCost: allocationMode === 'manual'
+                ? (parseMoneyInput(String(currentTask.plannedCost)) ?? currentTask.plannedCost)
+                : task.plannedCost,
+            }
+            : task
+        )),
+      }) : current);
       await loadSnapshot(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось обновить режим суммы');
     } finally {
       setSavingTaskId(null);
     }
-  }, [accessToken, costDrafts, loadSnapshot, readOnly, snapshot]);
-
-  const startEditingCost = useCallback((taskId: string, plannedCost: number) => {
-    if (readOnly) {
-      return;
-    }
-
-    setCostDrafts((current) => ({
-      ...current,
-      [taskId]: current[taskId] ?? formatInputMoney(plannedCost),
-    }));
-    setEditingTaskId(taskId);
-  }, [readOnly]);
-
-  const cancelEditingCost = useCallback((taskId: string, plannedCost: number) => {
-    setCostDrafts((current) => ({
-      ...current,
-      [taskId]: formatInputMoney(plannedCost),
-    }));
-    setEditingTaskId((current) => (current === taskId ? null : current));
-  }, []);
+  }, [accessToken, loadSnapshot, readOnly, snapshot]);
 
   const openDrawer = useCallback((taskId: string, periodId: string | null, event?: TaskFundingEvent | null) => {
     setDrawerState({
@@ -498,6 +528,158 @@ export function FinanceWorkspace({
     }
   }, [accessToken, drawerState, loadSnapshot, openDrawer, readOnly]);
 
+  const handleFinanceTasksChange = useCallback((changedTasks: FinanceMatrixTask[]) => {
+    for (const changedTask of changedTasks) {
+      const currentTask = snapshot?.tasks.find((task) => task.taskId === changedTask.id);
+      if (!currentTask) {
+        continue;
+      }
+
+      if (typeof changedTask.plannedCost === 'number' && Math.abs(changedTask.plannedCost - currentTask.plannedCost) > 0.0001) {
+        void savePlannedCost(changedTask.id, changedTask.plannedCost);
+      }
+    }
+  }, [savePlannedCost, snapshot]);
+
+  const additionalColumns = useMemo<TaskListColumn<FinanceMatrixTask>[]>(() => [
+    {
+      id: 'allocationMode',
+      header: 'Тип',
+      width: OWNER_COLUMN_WIDTH,
+      after: 'name',
+      align: 'left',
+      renderCell: ({ task }) => (
+        <div className="group flex min-h-[28px] items-center gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void updateAllocationMode(task.id, task.allocationMode === 'manual' ? 'auto' : 'manual', task.plannedCost);
+            }}
+            disabled={readOnly || savingTaskId === task.id || (!task.parentId && task.allocationMode === 'auto')}
+            title={task.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
+            aria-label={task.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
+            className={cn(
+              'rounded-sm p-0.5 text-slate-300 transition-opacity hover:text-slate-500',
+              task.hasOwnFinanceSetting && task.allocationMode === 'manual'
+                ? 'opacity-100'
+                : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
+              (readOnly || savingTaskId === task.id || (!task.parentId && task.allocationMode === 'auto')) && 'cursor-default',
+            )}
+          >
+            <Lock className="h-3 w-3" />
+          </button>
+          <span style={{ fontWeight: task.parentId ? 500 : 700 }}>
+            {task.allocationMode === 'manual' ? 'Ручной' : 'Авто'}
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: 'plannedCost',
+      header: 'Бюджет',
+      width: COST_COLUMN_WIDTH,
+      after: 'allocationMode',
+      align: 'right',
+      editable: !readOnly,
+      renderCell: ({ task }) => (
+        savingTaskId === task.id
+          ? <LoaderCircle className="ml-auto h-4 w-4 animate-spin text-slate-500" />
+          : <MoneyValue value={task.plannedCost} fontWeight={task.parentId ? 500 : 700} />
+      ),
+      renderEditor: ({ task, editStartValue, updateTask, closeEditor }) => (
+        <BudgetCellEditor
+          value={task.plannedCost}
+          editStartValue={editStartValue}
+          onCommit={(nextValue) => {
+            updateTask({ plannedCost: nextValue, allocationMode: 'manual' });
+            closeEditor();
+          }}
+          onCancel={closeEditor}
+        />
+      ),
+    },
+    {
+      id: 'paidToDate',
+      header: 'Оплачено',
+      width: PAID_COLUMN_WIDTH,
+      after: 'plannedCost',
+      align: 'right',
+      renderCell: ({ task }) => (
+        <MoneyValue
+          value={task.paidToDate}
+          color={task.paidToDate > 0 ? '#0f766e' : '#94a3b8'}
+          fontWeight={task.parentId ? 500 : 700}
+        />
+      ),
+    },
+  ], [
+    readOnly,
+    savingTaskId,
+    updateAllocationMode,
+  ]);
+
+  const matrixColumnGroups = useMemo<TableMatrixColumnGroup[]>(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    const groups: TableMatrixColumnGroup[] = [];
+    const seen = new Set<string>();
+
+    for (const period of snapshot.periods) {
+      const group = buildPeriodGroup(period, snapshot.granularity);
+      if (seen.has(group.id)) {
+        continue;
+      }
+      seen.add(group.id);
+      groups.push({
+        id: group.id,
+        header: group.label,
+      });
+    }
+
+    return groups;
+  }, [snapshot]);
+
+  const matrixColumns = useMemo<TableMatrixColumn<FinanceMatrixTask>[]>(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    return snapshot.periods.map((period) => {
+      const group = buildPeriodGroup(period, snapshot.granularity);
+      return {
+        id: period.id,
+        header: period.label,
+        groupId: group.id,
+        width: getMatrixColumnWidth(snapshot.granularity),
+        align: 'right',
+        cellClassName: (task) => [
+          task.plannedByPeriod[period.id] ? 'finance-matrix-cell-active' : 'finance-matrix-cell-empty',
+        ].join(' '),
+        renderCell: (task) => {
+          const plannedValue = task.plannedByPeriod[period.id] ?? 0;
+          const share = plannedValue > 0 ? Math.round((plannedValue / Math.max(task.plannedCost, 1)) * 100) : 0;
+          const showSecondaryLine = plannedValue > 0 && share >= 18;
+
+          return (
+            <div style={{ display: 'grid', gap: 2, justifyItems: 'end', width: '100%', padding: '2px 0' }}>
+              {plannedValue > 0 && (
+                <MoneyValue value={plannedValue} color="#0f172a" />
+              )}
+              {showSecondaryLine && (
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  {share}% бюджета
+                </span>
+              )}
+            </div>
+          );
+        },
+      };
+    });
+  }, [snapshot]);
+
   if (loading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white">
@@ -564,175 +746,40 @@ export function FinanceWorkspace({
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div ref={chartHostRef} className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {snapshot && snapshot.tasks.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
             В проекте пока нет задач для финансовой таблицы.
           </div>
         ) : (
-          <div
-            ref={scrollContainerRef}
-            className="h-full overflow-auto"
-            onScroll={handleScroll}
-          >
-            <table className="min-w-max border-separate border-spacing-0 text-xs text-slate-700">
-              <colgroup>
-                <col style={{ width: TASK_COLUMN_WIDTH }} />
-                <col style={{ width: COST_COLUMN_WIDTH }} />
-                <col style={{ width: METRIC_COLUMN_WIDTH }} />
-                <col style={{ width: METRIC_COLUMN_WIDTH }} />
-                <col style={{ width: METRIC_COLUMN_WIDTH }} />
-                <col style={{ width: METRIC_COLUMN_WIDTH }} />
-                {snapshot?.periods.map((period) => (
-                  <col key={period.id} style={{ width: 120 }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[0] }}>
-                    Группа работ
-                  </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[1] }}>
-                    Стоимость
-                  </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[2] }}>
-                    План
-                  </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[3] }}>
-                    Освоено
-                  </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500" style={{ left: LEFT_COLUMN_OFFSETS[4] }}>
-                    Оплачено
-                  </th>
-                  <th className="sticky top-0 z-30 border-b border-r border-slate-200 bg-slate-50 bg-clip-padding px-2 py-2 text-right text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5] }}>
-                    Откл.
-                  </th>
-                  {snapshot?.periods.map((period) => (
-                    <th key={period.id} className="sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.04em] text-slate-500 last:border-r-0">
-                      {period.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="align-top">
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-3 py-1 align-middle" style={{ left: LEFT_COLUMN_OFFSETS[0], minHeight: ROW_HEIGHT }}>
-                      <div className="flex items-center gap-2" style={{ paddingLeft: row.depth * 18 }}>
-                        {row.hasChildren ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleCollapse(row.taskId)}
-                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900"
-                          >
-                            {row.isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </button>
-                        ) : (
-                          <div className="h-6 w-6 shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <span className={cn(
-                            'break-words whitespace-normal leading-4 text-slate-900',
-                            row.hasChildren ? 'font-medium' : 'font-normal',
-                          )}>
-                            {row.title}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="group sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 align-middle transition-colors hover:bg-slate-50" style={{ left: LEFT_COLUMN_OFFSETS[1], minHeight: ROW_HEIGHT }}>
-                      <div className="relative pl-4">
-                        <button
-                          type="button"
-                          onClick={() => { void updateAllocationMode(row.taskId, row.allocationMode === 'manual' ? 'auto' : 'manual', row.plannedCost); }}
-                          disabled={readOnly || savingTaskId === row.taskId || (!row.parentTaskId && row.allocationMode === 'auto')}
-                          title={row.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
-                          aria-label={row.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
-                          className={cn(
-                            'absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-sm p-0.5 text-slate-300 transition-opacity hover:text-slate-500',
-                            row.hasOwnFinanceSetting && row.allocationMode === 'manual'
-                              ? 'opacity-100'
-                              : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
-                            (readOnly || savingTaskId === row.taskId || (!row.parentTaskId && row.allocationMode === 'auto')) && 'cursor-default',
-                          )}
-                        >
-                          <Lock className="h-3 w-3" />
-                        </button>
-                        {editingTaskId === row.taskId ? (
-                          <Input
-                            ref={costInputRef}
-                            value={costDrafts[row.taskId] ?? formatInputMoney(row.plannedCost)}
-                            onChange={(event) => setCostDrafts((current) => ({ ...current, [row.taskId]: event.target.value }))}
-                            onBlur={() => { void savePlannedCost(row.taskId); }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                void savePlannedCost(row.taskId);
-                              }
-                              if (event.key === 'Escape') {
-                                event.preventDefault();
-                                cancelEditingCost(row.taskId, row.plannedCost);
-                              }
-                            }}
-                            className="h-7 w-full border-transparent bg-transparent px-2 text-right text-xs shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                            disabled={readOnly || savingTaskId === row.taskId}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => startEditingCost(row.taskId, row.plannedCost)}
-                          disabled={readOnly}
-                          className={cn(
-                            'flex h-7 w-full items-center justify-end rounded-md border border-transparent px-2 text-right text-xs font-medium text-slate-700 whitespace-nowrap',
-                          )}
-                        >
-                            {savingTaskId === row.taskId ? <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" /> : formatMoney(row.plannedCost)}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[2], minHeight: ROW_HEIGHT }}>
-                      {formatMoney(row.plannedToDate)}
-                    </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[3], minHeight: ROW_HEIGHT }}>
-                      {formatMoney(row.earnedToDate)}
-                    </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium" style={{ left: LEFT_COLUMN_OFFSETS[4], minHeight: ROW_HEIGHT }}>
-                      {formatMoney(row.paidToDate)}
-                    </td>
-                    <td className="sticky z-20 border-b border-r border-slate-200 bg-white bg-clip-padding px-2 py-1 text-right align-middle font-medium shadow-[8px_0_14px_rgba(15,23,42,0.04)]" style={{ left: LEFT_COLUMN_OFFSETS[5], minHeight: ROW_HEIGHT }}>
-                      {formatMoney(row.varianceEarnedVsPaid)}
-                    </td>
-                    {snapshot?.periods.map((period) => {
-                      const plannedValue = row.plannedByPeriod[period.id] ?? 0;
-                      const paidValue = row.paidByPeriod[period.id] ?? 0;
-
-                      return (
-                        <td key={`${row.id}:${period.id}`} className="border-b border-r border-slate-100 p-0 last:border-r-0">
-                          <button
-                            type="button"
-                            disabled={readOnly}
-                            onClick={() => { openDrawer(row.taskId, period.id, null); }}
-                            className={cn(
-                              'flex min-h-[28px] w-full items-center justify-between gap-2 px-3 py-1 text-right leading-4',
-                              !readOnly && 'hover:bg-primary/5',
-                            )}
-                          >
-                            <span className={cn('truncate text-xs', paidValue > 0 ? 'text-emerald-600' : 'text-slate-300')}>
-                              {paidValue > 0 ? formatMoney(paidValue) : ''}
-                            </span>
-                            <span className={cn('text-xs', plannedValue > 0 ? 'font-medium text-slate-700' : 'text-slate-300')}>
-                              {plannedValue > 0 ? formatMoney(plannedValue) : '0'}
-                            </span>
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <GanttChart<FinanceMatrixTask>
+            mode="table-matrix"
+            tasks={tasks}
+            showTaskList={true}
+            taskListWidth={620}
+            rowHeight={36}
+            rowContentLines={2}
+            headerHeight={52}
+            containerHeight={chartHeight}
+            matrixColumns={matrixColumns}
+            matrixColumnGroups={snapshot?.granularity === 'week' ? matrixColumnGroups : undefined}
+            additionalColumns={additionalColumns}
+            hiddenTaskListColumns={['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions']}
+            disableTaskDrag={true}
+            disableTaskNameEditing={true}
+            disableDependencyEditing={true}
+            enableAddTask={false}
+            hideTaskListRowActions={true}
+            collapsedParentIds={collapsedTaskIds}
+            onToggleCollapse={toggleCollapse}
+            onTasksChange={handleFinanceTasksChange}
+            onMatrixCellClick={({ task, column }) => {
+              if (readOnly) {
+                return;
+              }
+              openDrawer(task.id, column.id, null);
+            }}
+          />
         )}
 
         {drawerState && snapshot && (

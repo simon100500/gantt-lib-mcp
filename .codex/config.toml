@@ -1,0 +1,6 @@
+[mcp_servers.astro-docs]
+url = "https://mcp.docs.astro.build/mcp"
+
+[mcp_servers.gantt-lib]
+args = ["D:/Projects/gantt-lib-mcp/packages/mcp/dist/index.js"]
+command = "node"
