@@ -58,3 +58,32 @@
 .finance-workspace .gantt-tl-name-trigger {
   line-height: 1.05;
 }
+
+.finance-drawer-backdrop {
+  animation: finance-drawer-backdrop-in 80ms linear;
+  contain: layout paint;
+}
+
+.finance-drawer-panel {
+  animation: finance-drawer-panel-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+@keyframes finance-drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes finance-drawer-panel-in {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}

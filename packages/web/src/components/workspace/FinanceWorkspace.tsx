@@ -279,6 +279,7 @@ export function FinanceWorkspace({
   const [showFundingLine, setShowFundingLine] = useState(true);
   const snapshotCacheRef = useRef<Map<string, ProjectFinanceSnapshot>>(new Map());
   const activeSnapshotKeyRef = useRef(getSnapshotCacheKey(asOfDate, granularity));
+  const eventAmountInputRef = useRef<HTMLInputElement | null>(null);
   const [eventForm, setEventForm] = useState<{ eventDate: string; amount: string; comment: string }>({
     eventDate: todayIso(),
     amount: '',
@@ -520,6 +521,19 @@ export function FinanceWorkspace({
       comment: event?.comment ?? '',
     });
   }, [snapshot]);
+
+  useEffect(() => {
+    if (!drawerState) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      eventAmountInputRef.current?.focus();
+      eventAmountInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [drawerState]);
 
   const closeDrawer = useCallback(() => {
     if (drawerPending) {
@@ -876,102 +890,115 @@ export function FinanceWorkspace({
             )}
 
             {drawerState && snapshot && (
-              <div className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-[-16px_0_32px_rgba(15,23,42,0.08)]">
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">Поступления</h3>
-                    <p className="text-xs text-slate-500">
-                      {snapshot.tasks.find((task) => task.taskId === drawerState.taskId)?.title ?? 'Группа'}
-                    </p>
-                  </div>
-                  <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-900">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="space-y-3 border-b border-slate-200 px-4 py-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="space-y-1 text-xs font-medium text-slate-600">
-                      <span>Дата</span>
-                      <Input
-                        type="date"
-                        value={eventForm.eventDate}
-                        onChange={(event) => setEventForm((current) => ({ ...current, eventDate: event.target.value }))}
-                      />
-                    </label>
-                    <label className="space-y-1 text-xs font-medium text-slate-600">
-                      <span>Сумма</span>
-                      <Input
-                        value={eventForm.amount}
-                        onChange={(event) => setEventForm((current) => ({ ...current, amount: event.target.value }))}
-                        placeholder="0"
-                      />
-                    </label>
-                  </div>
-                  <label className="space-y-1 text-xs font-medium text-slate-600">
-                    <span>Комментарий</span>
-                    <Input
-                      value={eventForm.comment}
-                      onChange={(event) => setEventForm((current) => ({ ...current, comment: event.target.value }))}
-                      placeholder="Аванс, КС, этап..."
-                    />
-                  </label>
-                  {drawerError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                      {drawerError}
+              <div className="finance-drawer-backdrop fixed inset-0 z-50 bg-slate-900/20" onMouseDown={closeDrawer}>
+                <div
+                  className="finance-drawer-panel absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-[-16px_0_32px_rgba(15,23,42,0.12)]"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Поступления"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Поступления</h3>
+                      <p className="text-xs text-slate-500">
+                        {snapshot.tasks.find((task) => task.taskId === drawerState.taskId)?.title ?? 'Группа'}
+                      </p>
                     </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Button onClick={() => { void submitEvent(); }} disabled={drawerPending || readOnly}>
-                      {drawerPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : drawerState.editingEventId ? 'Сохранить' : 'Добавить'}
-                    </Button>
-                    {drawerState.editingEventId && (
-                      <Button variant="outline" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
-                        Новый ввод
-                      </Button>
+                    <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-900">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 border-b border-slate-200 px-4 py-4">
+                    <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-3">
+                      <label className="space-y-1 text-xs font-medium text-slate-600">
+                        <span>Сумма</span>
+                        <div className="relative">
+                          <Input
+                            ref={eventAmountInputRef}
+                            value={eventForm.amount}
+                            onChange={(event) => setEventForm((current) => ({ ...current, amount: event.target.value }))}
+                            placeholder="0"
+                            className="pr-8 text-base font-semibold tabular-nums"
+                          />
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-slate-400">₽</span>
+                        </div>
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-slate-600">
+                        <span>Дата</span>
+                        <Input
+                          type="date"
+                          value={eventForm.eventDate}
+                          onChange={(event) => setEventForm((current) => ({ ...current, eventDate: event.target.value }))}
+                        />
+                      </label>
+                    </div>
+                    <label className="space-y-1 text-xs font-medium text-slate-600">
+                      <span>Комментарий</span>
+                      <Input
+                        value={eventForm.comment}
+                        onChange={(event) => setEventForm((current) => ({ ...current, comment: event.target.value }))}
+                        placeholder="Аванс, КС, этап..."
+                      />
+                    </label>
+                    {drawerError && (
+                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                        {drawerError}
+                      </div>
                     )}
-                  </div>
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-                  {drawerEvents.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                      Для выбранной группы пока нет поступлений.
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => { void submitEvent(); }} disabled={drawerPending || readOnly}>
+                        {drawerPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : drawerState.editingEventId ? 'Сохранить' : 'Добавить'}
+                      </Button>
+                      {drawerState.editingEventId && (
+                        <Button variant="outline" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
+                          Новый ввод
+                        </Button>
+                      )}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {drawerEvents.map((event) => (
-                        <div key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-900">{formatMoney(event.amount)}</div>
-                              <div className="text-xs text-slate-500">{event.eventDate}</div>
-                              {event.comment && <div className="mt-1 text-sm text-slate-600">{event.comment}</div>}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
-                                disabled={drawerPending || readOnly}
-                              >
-                                Изм.
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => { void deleteEvent(event.id); }}
-                                disabled={drawerPending || readOnly}
-                                className="text-rose-600 hover:text-rose-700"
-                              >
-                                Удалить
-                              </Button>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                    {drawerEvents.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                        Для выбранной группы пока нет поступлений.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {drawerEvents.map((event) => (
+                          <div key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-900">{formatMoney(event.amount)}</div>
+                                <div className="text-xs text-slate-500">{event.eventDate}</div>
+                                {event.comment && <div className="mt-1 text-sm text-slate-600">{event.comment}</div>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
+                                  disabled={drawerPending || readOnly}
+                                >
+                                  Изм.
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => { void deleteEvent(event.id); }}
+                                  disabled={drawerPending || readOnly}
+                                  className="text-rose-600 hover:text-rose-700"
+                                >
+                                  Удалить
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
