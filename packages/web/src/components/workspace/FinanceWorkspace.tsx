@@ -41,7 +41,7 @@ type FundingDrawerState = {
 } | null;
 
 const FINANCE_CHART_HEIGHT = 'calc(100dvh - 132px)';
-const FINANCE_ROW_HEIGHT_WITH_FUNDING = 30;
+const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 36;
 const MIN_COST_COLUMN_WIDTH = 120;
@@ -749,7 +749,7 @@ export function FinanceWorkspace({
         ].join(' '),
         renderCell: (task) => {
           const plannedValue = task.plannedByPeriod[period.id] ?? 0;
-        const paidValue = showFundingLine ? (task.paidByPeriod[period.id] ?? 0) : 0;
+          const paidValue = showFundingLine ? (task.paidByPeriod[period.id] ?? 0) : 0;
 
           return (
             <div className="finance-period-cell">
@@ -851,7 +851,7 @@ export function FinanceWorkspace({
                 showTaskList={true}
                 taskListWidth={financeTaskListWidth}
                 rowHeight={showFundingLine ? FINANCE_ROW_HEIGHT_WITH_FUNDING : FINANCE_ROW_HEIGHT_COMPACT}
-                rowContentLines={showFundingLine ? 2 : 1}
+                rowContentLines={1}
                 headerHeight={52}
                 containerHeight={FINANCE_CHART_HEIGHT}
                 matrixColumns={matrixColumns}

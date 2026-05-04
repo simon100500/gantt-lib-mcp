@@ -35,11 +35,16 @@
 
 .finance-period-cell {
   display: grid;
-  gap: 1px;
+  gap: 0;
   justify-items: end;
   width: 100%;
-  padding: 1px 0;
-  line-height: 1.15;
+  padding: 0;
+  line-height: 1.08;
+}
+
+.finance-period-cell .finance-money-value {
+  font-size: 12px;
+  line-height: 1.05;
 }
 
 .finance-workspace .gantt-container {
