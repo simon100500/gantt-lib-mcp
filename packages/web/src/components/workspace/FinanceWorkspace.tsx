@@ -42,7 +42,7 @@ type FundingDrawerState = {
 
 const ROW_HEIGHT = 46;
 const DEFAULT_CHART_HEIGHT = 640;
-const OWNER_COLUMN_WIDTH = 120;
+const LOCK_COLUMN_WIDTH = 36;
 const COST_COLUMN_WIDTH = 120;
 const PAID_COLUMN_WIDTH = 120;
 const MATRIX_COLUMN_WIDTH_WEEK = 98;
@@ -136,14 +136,30 @@ function buildPeriodGroup(period: FinancePeriodBucket, granularity: FinancePerio
   const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
   const monthLabel = new Intl.DateTimeFormat('ru-RU', {
     month: 'long',
-    year: 'numeric',
     timeZone: 'UTC',
   }).format(date);
+  const shortYear = String(date.getUTCFullYear()).slice(-2);
 
   return {
     id: `month:${monthKey}`,
-    label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1),
+    label: `${monthLabel} '${shortYear}`,
   };
+}
+
+function formatPeriodColumnHeader(period: FinancePeriodBucket, granularity: FinancePeriodGranularity): string {
+  const startDate = new Date(`${period.startDate}T00:00:00Z`);
+  const endDate = new Date(`${period.endDate}T00:00:00Z`);
+
+  if (granularity === 'month') {
+    return new Intl.DateTimeFormat('ru-RU', {
+      month: 'long',
+      timeZone: 'UTC',
+    }).format(startDate);
+  }
+
+  const startDay = String(startDate.getUTCDate()).padStart(2, '0');
+  const endDay = String(endDate.getUTCDate()).padStart(2, '0');
+  return `${startDay}-${endDay}`;
 }
 
 function getMatrixColumnWidth(granularity: FinancePeriodGranularity): number {
@@ -544,12 +560,12 @@ export function FinanceWorkspace({
   const additionalColumns = useMemo<TaskListColumn<FinanceMatrixTask>[]>(() => [
     {
       id: 'allocationMode',
-      header: 'Тип',
-      width: OWNER_COLUMN_WIDTH,
+      header: '',
+      width: LOCK_COLUMN_WIDTH,
       after: 'name',
-      align: 'left',
+      align: 'center',
       renderCell: ({ task }) => (
-        <div className="group flex min-h-[28px] items-center gap-2">
+        <div className="group flex min-h-[28px] items-center justify-center">
           <button
             type="button"
             onClick={(event) => {
@@ -569,9 +585,6 @@ export function FinanceWorkspace({
           >
             <Lock className="h-3 w-3" />
           </button>
-          <span style={{ fontWeight: task.parentId ? 500 : 700 }}>
-            {task.allocationMode === 'manual' ? 'Ручной' : 'Авто'}
-          </span>
         </div>
       ),
     },
@@ -651,7 +664,7 @@ export function FinanceWorkspace({
       const group = buildPeriodGroup(period, snapshot.granularity);
       return {
         id: period.id,
-        header: period.label,
+        header: formatPeriodColumnHeader(period, snapshot.granularity),
         groupId: group.id,
         width: getMatrixColumnWidth(snapshot.granularity),
         align: 'right',
@@ -762,7 +775,7 @@ export function FinanceWorkspace({
             headerHeight={52}
             containerHeight={chartHeight}
             matrixColumns={matrixColumns}
-            matrixColumnGroups={snapshot?.granularity === 'week' ? matrixColumnGroups : undefined}
+            matrixColumnGroups={matrixColumnGroups}
             additionalColumns={additionalColumns}
             hiddenTaskListColumns={['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions']}
             disableTaskDrag={true}
