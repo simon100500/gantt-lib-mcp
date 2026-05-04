@@ -441,6 +441,8 @@ export function FinanceWorkspace({
         const body = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
+
+      await loadSnapshot(granularity, asOfDate, false, true);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить стоимость');
       await loadSnapshot(granularity, asOfDate, false, true);
