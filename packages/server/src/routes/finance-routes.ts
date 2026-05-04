@@ -622,6 +622,25 @@ function buildFinanceTaskRows(
     eventMap.set(event.taskId, list);
   });
 
+  const descendantTaskIdsByTaskId = new Map<string, string[]>();
+  const collectDescendantTaskIds = (taskId: string): string[] => {
+    const cached = descendantTaskIdsByTaskId.get(taskId);
+    if (cached) {
+      return cached;
+    }
+
+    const descendants: string[] = [];
+    for (const child of childrenByParent.get(taskId) ?? []) {
+      descendants.push(child.id, ...collectDescendantTaskIds(child.id));
+    }
+    descendantTaskIdsByTaskId.set(taskId, descendants);
+    return descendants;
+  };
+
+  for (const task of tasks) {
+    collectDescendantTaskIds(task.id);
+  }
+
   const orderedTasks: TaskRecord[] = [];
   const visit = (task: TaskRecord) => {
     orderedTasks.push(task);
@@ -650,7 +669,10 @@ function buildFinanceTaskRows(
     const paidByPeriod: Record<string, number> = {};
     let paidToDate = 0;
 
-    for (const event of eventMap.get(task.id) ?? []) {
+    const taskAndDescendantIds = [task.id, ...(descendantTaskIdsByTaskId.get(task.id) ?? [])];
+    const taskAndDescendantEvents = taskAndDescendantIds.flatMap((taskId) => eventMap.get(taskId) ?? []);
+
+    for (const event of taskAndDescendantEvents) {
       const eventDate = parseIsoDate(event.eventDate);
       if (!eventDate) {
         continue;

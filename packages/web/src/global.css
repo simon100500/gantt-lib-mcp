@@ -79,12 +79,12 @@
 }
 
 .finance-drawer-body::-webkit-scrollbar-thumb {
-  background: #dfe1e6;
+  background: #cbd5e1;
   border-radius: 999px;
 }
 
 .finance-drawer-body::-webkit-scrollbar-thumb:hover {
-  background: #6b778c;
+  background: #94a3b8;
 }
 
 .finance-drawer-form-group {
@@ -94,7 +94,7 @@
 .finance-drawer-label {
   display: block;
   margin-bottom: 6px;
-  color: #6b778c;
+  color: #64748b;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -104,15 +104,15 @@
 
 .finance-drawer-input {
   height: 36px;
-  border: 2px solid #dfe1e6;
-  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   box-shadow: none;
-  color: #172b4d;
+  color: #0f172a;
 }
 
 .finance-drawer-input:focus-visible {
-  border-color: #4c9aff;
-  box-shadow: 0 0 0 1px #4c9aff;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15);
 }
 
 .finance-history-list {
@@ -126,54 +126,45 @@
   gap: 12px;
   min-height: 40px;
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: 8px;
   transition: background-color 120ms ease;
 }
 
 .finance-history-item:not(:last-child) {
-  border-bottom: 1px solid #dfe1e6;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .finance-history-item:hover {
-  background: #f4f5f7;
+  background: #f8fafc;
 }
 
 .finance-history-date {
   width: 88px;
   flex: 0 0 88px;
-  color: #6b778c;
+  color: #64748b;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
 .finance-history-amount {
   flex: 0 0 auto;
-  border: 0;
-  background: transparent;
-  color: #006644;
-  cursor: pointer;
+  color: #16a34a;
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  padding: 0;
-}
-
-.finance-history-amount:hover {
-  color: #00875a;
-  text-decoration: underline;
 }
 
 .finance-history-comment {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  color: #6b778c;
+  color: #64748b;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.finance-history-delete {
+.finance-history-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -181,22 +172,27 @@
   height: 24px;
   flex: 0 0 24px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
-  color: #97a0af;
+  color: #94a3b8;
   cursor: pointer;
   opacity: 0;
   transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 
-.finance-history-item:hover .finance-history-delete,
-.finance-history-delete:focus-visible {
+.finance-history-item:hover .finance-history-action,
+.finance-history-action:focus-visible {
   opacity: 1;
 }
 
+.finance-history-action:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
 .finance-history-delete:hover {
-  background: rgba(222, 53, 11, 0.08);
-  color: #de350b;
+  background: #fff1f2;
+  color: #e11d48;
 }
 
 @keyframes finance-drawer-backdrop-in {

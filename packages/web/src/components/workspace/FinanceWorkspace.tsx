@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
-import { LoaderCircle, Lock, RefreshCw, X } from 'lucide-react';
+import { LoaderCircle, Lock, Pencil, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -59,8 +59,10 @@ const moneyFormatter = new Intl.NumberFormat('ru-RU', {
 });
 
 function formatMoney(value: number): string {
-  const formatted = moneyFormatter.format(value);
-  return formatted.endsWith(',00') ? formatted.slice(0, -3) : formatted;
+  if (Math.abs(value) < 0.0001) {
+    return '0';
+  }
+  return moneyFormatter.format(value);
 }
 
 function formatInputMoney(value: number): string {
@@ -95,6 +97,50 @@ function todayIso(): string {
 function formatDisplayDate(value: string): string {
   const [year, month, day] = value.split('-');
   return year && month && day ? `${day}.${month}.${year}` : value;
+}
+
+const RUSSIAN_MONTHS_GENITIVE = [
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+] as const;
+
+function formatPeriodDetails(period: FinancePeriodBucket | null, granularity: FinancePeriodGranularity): string {
+  if (!period) {
+    return 'Весь период';
+  }
+
+  const startDate = new Date(`${period.startDate}T00:00:00Z`);
+  const endDate = new Date(`${period.endDate}T00:00:00Z`);
+
+  if (granularity === 'month') {
+    return new Intl.DateTimeFormat('ru-RU', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(startDate);
+  }
+
+  const startDay = startDate.getUTCDate();
+  const endDay = endDate.getUTCDate();
+  const startMonth = RUSSIAN_MONTHS_GENITIVE[startDate.getUTCMonth()];
+  const endMonth = RUSSIAN_MONTHS_GENITIVE[endDate.getUTCMonth()];
+  const endYear = endDate.getUTCFullYear();
+
+  if (startDate.getUTCMonth() === endDate.getUTCMonth() && startDate.getUTCFullYear() === endDate.getUTCFullYear()) {
+    return `${startDay}–${endDay} ${endMonth} ${endYear}`;
+  }
+
+  return `${startDay} ${startMonth} – ${endDay} ${endMonth} ${endYear}`;
 }
 
 function buildFinanceTasks(snapshot: ProjectFinanceSnapshot | null): FinanceMatrixTask[] {
@@ -414,10 +460,11 @@ export function FinanceWorkspace({
     [drawerState, snapshot],
   );
   const drawerContractAmount = drawerTask
-    ? drawerState?.periodId
-      ? drawerTask.plannedByPeriod[drawerState.periodId] ?? 0
-      : drawerTask.plannedCost
+    ? drawerTask.plannedCost
     : 0;
+  const drawerPeriodAmount = drawerTask && drawerState?.periodId
+    ? drawerTask.plannedByPeriod[drawerState.periodId] ?? 0
+    : drawerContractAmount;
   const financeColumnWidths = useMemo(() => {
     const plannedValues = tasks.map((task) => formatMoney(task.plannedCost));
     const paidValues = tasks.map((task) => formatMoney(task.paidToDate));
@@ -639,6 +686,10 @@ export function FinanceWorkspace({
 
   const deleteEvent = useCallback(async (eventId: string) => {
     if (!accessToken || !drawerState || readOnly) {
+      return;
+    }
+
+    if (!window.confirm('Удалить поступление?')) {
       return;
     }
 
@@ -942,30 +993,43 @@ export function FinanceWorkspace({
             {drawerState && snapshot && (
               <div className="finance-drawer-backdrop fixed inset-0 z-50 bg-slate-900/20" onMouseDown={closeDrawer}>
                 <div
-                  className="finance-drawer-panel absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col border-l border-[#dfe1e6] bg-white text-[#172b4d] shadow-[-4px_0_24px_rgba(9,30,66,0.12),0_0_1px_rgba(9,30,66,0.08)]"
+                  className="finance-drawer-panel absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col border-l border-slate-200 bg-white text-slate-900 shadow-[-8px_0_28px_rgba(15,23,42,0.12)]"
                   onMouseDown={(event) => event.stopPropagation()}
                   role="dialog"
                   aria-modal="true"
                   aria-label="Поступления"
                 >
-                  <div className="flex items-start justify-between gap-4 border-b border-[#dfe1e6] px-6 py-5">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-xl font-semibold leading-tight text-[#172b4d]">
-                        {drawerTask?.title ?? 'Поступления'}
-                      </h3>
-                      <p className="mt-1 text-[13px] text-[#6b778c]">
-                        {drawerPeriod ? `${formatDisplayDate(drawerPeriod.startDate)} - ${formatDisplayDate(drawerPeriod.endDate)}` : 'Все поступления по работе'}
-                      </p>
-                      <p className="mt-2 text-[13px] font-medium text-[#44546f]">
-                        Сумма по договору: <span className="font-semibold text-[#172b4d]">{formatMoney(drawerContractAmount)} ₽</span>
-                      </p>
+                  <div className="border-b border-slate-200 px-5 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <h3 className="text-lg font-semibold leading-tight text-slate-900">Детали</h3>
+                      <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900">
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                    <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-transparent text-[#6b778c] transition-colors hover:bg-[#f4f5f7] hover:text-[#172b4d]">
-                      <X className="h-4 w-4" />
-                    </button>
+                    <div className="mt-5 min-w-0">
+                      <dl className="grid w-full gap-1.5 text-sm">
+                        <div className="grid w-full grid-cols-[200px_minmax(0,1fr)] gap-3">
+                          <dt className="text-slate-500">Работа</dt>
+                          <dd className="min-w-0 whitespace-normal break-words font-medium leading-snug text-slate-900">{drawerTask?.title ?? 'Группа'}</dd>
+                        </div>
+                        <div className="grid w-full grid-cols-[200px_minmax(0,1fr)] gap-3">
+                          <dt className="text-slate-500">Сумма по договору</dt>
+                          <dd className="font-medium tabular-nums text-slate-900">{formatMoney(drawerContractAmount)} ₽</dd>
+                        </div>
+                        <div className="my-1 border-t border-slate-200 [grid-column:1/-1]" />
+                        <div className="grid w-full grid-cols-[200px_minmax(0,1fr)] gap-3">
+                          <dt className="text-slate-500">Период</dt>
+                          <dd className="font-medium text-slate-900">{formatPeriodDetails(drawerPeriod, snapshot.granularity)}</dd>
+                        </div>
+                        <div className="grid w-full grid-cols-[200px_minmax(0,1fr)] gap-3">
+                          <dt className="text-slate-500">Сумма за период</dt>
+                          <dd className="font-medium tabular-nums text-slate-900">{formatMoney(drawerPeriodAmount)} ₽</dd>
+                        </div>
+                      </dl>
+                    </div>
                   </div>
 
-                  <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 finance-drawer-body">
+                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 finance-drawer-body">
                     <div className="grid grid-cols-[minmax(0,1fr)_130px] gap-3">
                       <label className="finance-drawer-form-group">
                         <span className="finance-drawer-label">Сумма</span>
@@ -980,7 +1044,7 @@ export function FinanceWorkspace({
                             autoComplete="off"
                             className="finance-drawer-input pr-8 text-base font-semibold tabular-nums"
                           />
-                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#6b778c]">₽</span>
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-slate-400">₽</span>
                         </div>
                       </label>
                       <label className="finance-drawer-form-group">
@@ -1011,25 +1075,21 @@ export function FinanceWorkspace({
                       </div>
                     )}
                     <div className="mt-4 flex items-center gap-2">
-                      <Button
-                        onClick={() => { void submitEvent(); }}
-                        disabled={drawerPending || readOnly}
-                        className="h-8 rounded bg-[#0052cc] px-5 text-sm font-medium text-white hover:bg-[#0065ff]"
-                      >
+                      <Button onClick={() => { void submitEvent(); }} disabled={drawerPending || readOnly} className="h-8 px-4">
                         {drawerPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : drawerState.editingEventId ? 'Сохранить' : 'Добавить'}
                       </Button>
                       {drawerState.editingEventId && (
-                        <Button variant="outline" className="h-8 rounded border-[#dfe1e6]" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
-                          Новый ввод
+                        <Button variant="outline" className="h-8" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
+                          Отмена
                         </Button>
                       )}
                     </div>
 
-                    <div className="my-6 h-px bg-[#dfe1e6]" />
+                    <div className="my-5 h-px bg-slate-200" />
 
-                    <div className="mb-3 text-xs font-semibold uppercase tracking-[0.03em] text-[#6b778c]">История поступлений</div>
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-[0.03em] text-slate-500">История поступлений</div>
                     {sortedDrawerEvents.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-[#dfe1e6] bg-[#f4f5f7] px-5 py-8 text-center text-sm text-[#6b778c]">
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
                         Для выбранной группы пока нет поступлений.
                       </div>
                     ) : (
@@ -1038,19 +1098,22 @@ export function FinanceWorkspace({
                           {sortedDrawerEvents.map((event) => (
                             <div key={event.id} className="finance-history-item">
                               <span className="finance-history-date">{formatDisplayDate(event.eventDate)}</span>
-                              <button
-                                type="button"
-                                className="finance-history-amount"
-                                onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
-                                disabled={drawerPending || readOnly}
-                                title="Редактировать поступление"
-                              >
+                              <span className="finance-history-amount">
                                 +{formatMoney(event.amount)} ₽
-                              </button>
+                              </span>
                               <span className="finance-history-comment">{event.comment || '—'}</span>
                               <button
                                 type="button"
-                                className="finance-history-delete"
+                                className="finance-history-action"
+                                onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
+                                disabled={drawerPending || readOnly}
+                                aria-label="Редактировать"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                className="finance-history-action finance-history-delete"
                                 onClick={() => { void deleteEvent(event.id); }}
                                 disabled={drawerPending || readOnly}
                                 aria-label="Удалить"
@@ -1060,9 +1123,9 @@ export function FinanceWorkspace({
                             </div>
                           ))}
                         </div>
-                        <div className="mt-4 flex items-center justify-between rounded-md bg-[#f4f5f7] px-4 py-3">
-                          <span className="text-xs font-semibold uppercase tracking-[0.03em] text-[#6b778c]">Итого</span>
-                          <span className="text-lg font-semibold tabular-nums text-[#172b4d]">{formatMoney(drawerEventsTotal)} ₽</span>
+                        <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
+                          <span className="text-xs font-semibold uppercase tracking-[0.03em] text-slate-500">Итого</span>
+                          <span className="text-lg font-semibold tabular-nums text-green-600">+{formatMoney(drawerEventsTotal)} ₽</span>
                         </div>
                       </>
                     )}
