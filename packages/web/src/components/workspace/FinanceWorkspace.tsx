@@ -58,7 +58,9 @@ const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
 const MIN_PAID_COLUMN_WIDTH = 120;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MATRIX_COLUMN_WIDTH_WEEK = 98;
+const DAY_COLUMN_WIDTH = MATRIX_COLUMN_WIDTH_WEEK / 7;
 const MIN_MATRIX_COLUMN_WIDTH_WEEK = 96;
 const MIN_MATRIX_COLUMN_WIDTH_MONTH = 108;
 const MAX_MATRIX_COLUMN_WIDTH = 340;
@@ -250,6 +252,32 @@ function parseUtcDate(value: string): Date {
   return new Date(`${value}T00:00:00Z`);
 }
 
+function addUtcDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * DAY_MS);
+}
+
+function startOfUtcMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function getUtcMonthKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthGroupLabel(date: Date): string {
+  const monthLabel = new Intl.DateTimeFormat('ru-RU', {
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(date);
+  const shortYear = String(date.getUTCFullYear()).slice(-2);
+
+  return `${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}'${shortYear}`;
+}
+
+function daysBetween(start: Date, end: Date): number {
+  return Math.round((end.getTime() - start.getTime()) / DAY_MS);
+}
+
 function getMonthGroupDateForWeek(period: FinancePeriodBucket): Date {
   const startDate = parseUtcDate(period.startDate);
   const endDate = parseUtcDate(period.endDate);
@@ -279,6 +307,33 @@ function buildPeriodGroup(period: FinancePeriodBucket, granularity: FinancePerio
     id: `month:${monthKey}`,
     label: `${monthLabel} '${shortYear}`,
   };
+}
+
+function buildVisibleMonthGroups(periods: FinancePeriodBucket[]): TableMatrixColumnGroup[] {
+  if (periods.length === 0) {
+    return [];
+  }
+
+  const visibleStart = parseUtcDate(periods[0]!.startDate);
+  const visibleEndExclusive = addUtcDays(parseUtcDate(periods[periods.length - 1]!.endDate), 1);
+  const groups: TableMatrixColumnGroup[] = [];
+  let cursor = startOfUtcMonth(visibleStart);
+
+  while (cursor < visibleEndExclusive) {
+    const nextMonth = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    const groupStart = visibleStart > cursor ? visibleStart : cursor;
+    const groupEnd = nextMonth < visibleEndExclusive ? nextMonth : visibleEndExclusive;
+
+    groups.push({
+      id: `month:${getUtcMonthKey(cursor)}`,
+      header: formatMonthGroupLabel(cursor),
+      width: daysBetween(groupStart, groupEnd) * DAY_COLUMN_WIDTH,
+    });
+
+    cursor = nextMonth;
+  }
+
+  return groups;
 }
 
 function formatPeriodColumnHeader(period: FinancePeriodBucket, granularity: FinancePeriodGranularity): string {
@@ -997,27 +1052,30 @@ export function FinanceWorkspace({
   ]);
 
   const matrixColumnGroups = useMemo<TableMatrixColumnGroup[]>(() => {
-    if (!snapshot || snapshot.granularity !== 'week') {
+    if (!snapshot) {
       return [];
     }
 
-    const groups = new Map<string, TableMatrixColumnGroup>();
+    if (snapshot.granularity === 'week') {
+      return buildVisibleMonthGroups(snapshot.periods);
+    }
+
+    const groups: TableMatrixColumnGroup[] = [];
+    const seen = new Set<string>();
 
     for (const period of snapshot.periods) {
       const group = buildPeriodGroup(period, snapshot.granularity);
-      const current = groups.get(group.id);
-      if (current) {
-        current.width = (current.width as number) + MATRIX_COLUMN_WIDTH_WEEK;
+      if (seen.has(group.id)) {
         continue;
       }
-      groups.set(group.id, {
+      seen.add(group.id);
+      groups.push({
         id: group.id,
         header: group.label,
-        width: MATRIX_COLUMN_WIDTH_WEEK,
       });
     }
 
-    return [...groups.values()];
+    return groups;
   }, [snapshot]);
 
   const matrixColumns = useMemo<TableMatrixColumn<FinanceMatrixTask>[]>(() => {
@@ -1067,9 +1125,7 @@ export function FinanceWorkspace({
 
     return {
       date: todayIso(),
-      shouldRender: ({ task, column }: { task: FinanceMatrixTask; column: TableMatrixColumn<FinanceMatrixTask> }) => (
-        ((task.plannedByPeriod[column.id] ?? 0) > 0) || ((task.paidByPeriod[column.id] ?? 0) > 0)
-      ),
+      shouldRender: () => false,
     };
   }, [snapshot]);
 
