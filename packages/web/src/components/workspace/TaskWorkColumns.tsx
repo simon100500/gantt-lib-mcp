@@ -78,7 +78,7 @@ function TaskWorkMetadataCell({
     }} open={open}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
+          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           type="button"
@@ -119,7 +119,7 @@ function TaskWorkMetadataCell({
         >
           <div className="space-y-1">
             <h4 className="text-sm font-semibold text-slate-900">Исходный объём</h4>
-            <p className="text-xs text-slate-500">{task.name}</p>
+            <p className="text-sm text-slate-500">{task.name}</p>
           </div>
           <div className="grid grid-cols-[1.3fr_1fr] gap-2">
             <Input
@@ -165,7 +165,7 @@ function TaskWorkMetadataCell({
           <p className="text-[11px] text-slate-500">
             Можно выбрать из списка или ввести свою единицу вручную.
           </p>
-          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
+          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <div className="flex items-center justify-end gap-2">
             <Button disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
@@ -219,7 +219,7 @@ function TaskCompletedVolumeCell({
     }} open={open}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
+          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           type="button"
@@ -252,24 +252,24 @@ function TaskCompletedVolumeCell({
         >
           <div className="space-y-1">
             <h4 className="text-sm font-semibold text-slate-900">Выполненный объём</h4>
-            <p className="text-xs text-slate-500">{task.name}</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm text-slate-500">{task.name}</p>
+            <p className="text-sm text-slate-500">
               Всего: {formatMetricValue(task.workVolume)} {task.workUnit?.trim() || ''}
             </p>
           </div>
 
           {!task.workVolume || task.workVolume <= 0 ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Сначала задайте общий объём работы, после этого можно вносить факт по датам.
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <label className="space-y-1 text-xs text-slate-600">
+                <label className="space-y-1 text-sm text-slate-600">
                   <span>Дата</span>
                   <Input disabled={pending} onChange={(event) => setEntryDate(event.target.value)} type="date" value={entryDate} />
                 </label>
-                <label className="space-y-1 text-xs text-slate-600">
+                <label className="space-y-1 text-sm text-slate-600">
                   <span>Значение</span>
                   <Input
                     disabled={pending}
@@ -315,7 +315,7 @@ function TaskCompletedVolumeCell({
               <p className="text-[11px] font-medium uppercase tracking-[0.03em] text-slate-500">Последние записи</p>
               <div className="space-y-1">
                 {sortedEntries.slice(0, 5).map((entry) => (
-                  <div className="flex items-center justify-between gap-3 text-xs text-slate-700" key={entry.id}>
+                  <div className="flex items-center justify-between gap-3 text-sm text-slate-700" key={entry.id}>
                     <span>{entry.entryDate}</span>
                     <span>{formatMetricValue(entry.amount)} {task.workUnit?.trim() || ''}</span>
                   </div>
@@ -324,7 +324,7 @@ function TaskCompletedVolumeCell({
             </div>
           ) : null}
 
-          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
+          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
           <div className="flex items-center justify-end gap-2">
             <Button disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
@@ -362,10 +362,10 @@ export function createTaskWorkColumns({
     },
     {
       id: 'completed-volume',
-      header: 'Выполнено',
+      header: 'Вып.',
       width: 110,
       minWidth: 100,
-      after: 'progress',
+      after: 'work-volume',
       renderCell: ({ task }) => (
         <TaskCompletedVolumeCell
           entries={progressEntries.filter((entry) => entry.taskId === task.id)}

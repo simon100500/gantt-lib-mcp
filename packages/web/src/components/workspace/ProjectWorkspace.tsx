@@ -413,8 +413,8 @@ const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
   { id: 'endDate', label: 'Окончание' },
   { id: 'duration', label: 'Длительность' },
   { id: 'work-volume', label: 'Объём' },
-  { id: 'progress', label: '% выполнения' },
   { id: 'completed-volume', label: 'Выполнено' },
+  { id: 'progress', label: '% выполнения' },
   { id: 'assigned-resources', label: 'Ресурсы' },
   { id: 'dependencies', label: 'Связи' },
 ];
