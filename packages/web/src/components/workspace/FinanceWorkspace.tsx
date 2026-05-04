@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn, TaskListColumnWidthMap } from 'gantt-lib';
-import { ChevronsDownUp, ChevronsUpDown, GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, TriangleAlert, X } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, Columns3Cog, GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -12,6 +12,14 @@ import type {
 } from '../../lib/apiTypes.ts';
 import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { Button } from '../ui/button.tsx';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu.tsx';
 import { Input } from '../ui/input.tsx';
 import { cn } from '../../lib/utils.ts';
 
@@ -53,6 +61,11 @@ type AllocationConfirmState = {
   fallbackPlannedCost: number;
 } | null;
 
+type FinanceTaskListColumnRow = {
+  id: string;
+  label: string;
+};
+
 const FINANCE_CHART_HEIGHT = 'calc(100dvh - 132px)';
 const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
@@ -74,6 +87,16 @@ const MATRIX_RECEIVED_COLOR = '#34c15c';
 const FINANCE_HIDDEN_TASK_LIST_COLUMNS = ['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions'] as const;
 const FINANCE_DEFAULT_NUMBER_COLUMN_WIDTH = 40;
 const FINANCE_DEFAULT_NAME_COLUMN_WIDTH = 200;
+const FINANCE_TASK_LIST_COLUMN_ROWS: FinanceTaskListColumnRow[] = [
+  { id: 'number', label: 'Номер' },
+  { id: 'name', label: 'Имя' },
+  { id: 'plannedCost', label: 'Бюджет' },
+  { id: 'plannedToDate', label: 'План' },
+  { id: 'earnedToDate', label: 'Освоено' },
+  { id: 'paidToDate', label: 'Оплачено' },
+  { id: 'varianceEarnedVsPaid', label: 'Разница' },
+];
+const KNOWN_FINANCE_TASK_LIST_COLUMN_IDS = new Set(FINANCE_TASK_LIST_COLUMN_ROWS.map((column) => column.id));
 
 const moneyFormatter = new Intl.NumberFormat('ru-RU', {
   minimumFractionDigits: 2,
@@ -438,6 +461,22 @@ function MoneyValue({
   );
 }
 
+function TriStateCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate: boolean }) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      ref={(element) => {
+        if (element) {
+          element.indeterminate = indeterminate;
+        }
+      }}
+      readOnly
+      className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+    />
+  );
+}
+
 function formatShare(value: number, total: number): string | null {
   if (total <= 0 || value <= 0) {
     return null;
@@ -712,24 +751,57 @@ export function FinanceWorkspace({
     projectId,
     projectStates,
   ]);
+  const hiddenFinanceTaskListColumns = useMemo<string[]>(() => {
+    const storedColumns = projectStates[projectId]?.hiddenFinanceTaskListColumns;
+    if (!Array.isArray(storedColumns)) {
+      return [];
+    }
+
+    return storedColumns.filter((columnId): columnId is string => KNOWN_FINANCE_TASK_LIST_COLUMN_IDS.has(columnId));
+  }, [projectId, projectStates]);
+  const hiddenFinanceTaskListColumnSet = useMemo(
+    () => new Set(hiddenFinanceTaskListColumns),
+    [hiddenFinanceTaskListColumns],
+  );
+  const visibleFinanceTaskListColumnCount = FINANCE_TASK_LIST_COLUMN_ROWS.filter((column) => !hiddenFinanceTaskListColumnSet.has(column.id)).length;
+  const allFinanceTaskListColumnsVisible = visibleFinanceTaskListColumnCount === FINANCE_TASK_LIST_COLUMN_ROWS.length;
+  const someFinanceTaskListColumnsVisible = visibleFinanceTaskListColumnCount > 0;
   const financeTaskListWidth = useMemo(() => (
     Math.max(
       250,
-      (financeTaskListColumnWidths.number ?? 0)
-      + (financeTaskListColumnWidths.name ?? 0)
-      + (financeTaskListColumnWidths.plannedCost ?? 0)
-      + (financeTaskListColumnWidths.plannedToDate ?? 0)
-      + (financeTaskListColumnWidths.allocationMode ?? 0)
-      + (financeTaskListColumnWidths.earnedToDate ?? 0)
-      + (financeTaskListColumnWidths.paidToDate ?? 0)
-      + (financeTaskListColumnWidths.varianceEarnedVsPaid ?? 0),
+      Object.entries(financeTaskListColumnWidths).reduce((width, [columnId, columnWidth]) => (
+        hiddenFinanceTaskListColumns.includes(columnId) ? width : width + (columnWidth ?? 0)
+      ), 0),
     )
   ), [
     financeTaskListColumnWidths,
+    hiddenFinanceTaskListColumns,
   ]);
   const handleTaskListColumnWidthsChange = useCallback((widths: TaskListColumnWidthMap) => {
     setProjectState(projectId, {
       financeTaskListColumnWidths: normalizeTaskListColumnWidthMap(widths),
+    });
+  }, [projectId, setProjectState]);
+  const handleToggleFinanceTaskListColumn = useCallback((columnId: string) => {
+    if (!KNOWN_FINANCE_TASK_LIST_COLUMN_IDS.has(columnId)) {
+      return;
+    }
+
+    const currentColumns = projectStates[projectId]?.hiddenFinanceTaskListColumns ?? [];
+    const currentSet = new Set(currentColumns.filter((id) => KNOWN_FINANCE_TASK_LIST_COLUMN_IDS.has(id)));
+    if (currentSet.has(columnId)) {
+      currentSet.delete(columnId);
+    } else {
+      currentSet.add(columnId);
+    }
+
+    setProjectState(projectId, {
+      hiddenFinanceTaskListColumns: Array.from(currentSet),
+    });
+  }, [projectId, projectStates, setProjectState]);
+  const handleSetAllFinanceTaskListColumnsVisible = useCallback((visible: boolean) => {
+    setProjectState(projectId, {
+      hiddenFinanceTaskListColumns: visible ? [] : FINANCE_TASK_LIST_COLUMN_ROWS.map((column) => column.id),
     });
   }, [projectId, setProjectState]);
   const parentTaskIds = useMemo(() => {
@@ -1307,6 +1379,10 @@ export function FinanceWorkspace({
       shouldRender: () => false,
     };
   }, [snapshot]);
+  const hiddenTaskListColumns = useMemo(
+    () => [...FINANCE_HIDDEN_TASK_LIST_COLUMNS, ...hiddenFinanceTaskListColumns],
+    [hiddenFinanceTaskListColumns],
+  );
 
   if (loading) {
     return (
@@ -1398,6 +1474,62 @@ export function FinanceWorkspace({
             >
               <ChevronsUpDown className="h-3.5 w-3.5" />
             </Button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant={hiddenFinanceTaskListColumns.length > 0 ? 'secondary' : 'ghost'}
+                  title="Настроить столбцы финансовой таблицы"
+                  className={cn(
+                    'hidden h-8 gap-1.5 px-2.5 text-slate-600 hover:text-primary lg:flex',
+                    hiddenFinanceTaskListColumns.length > 0 && 'border-primary bg-primary/5 text-primary hover:bg-primary/10',
+                  )}
+                >
+                  <Columns3Cog className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline text-xs">Столбцы</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                  Столбцы финансов
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    handleSetAllFinanceTaskListColumnsVisible(!allFinanceTaskListColumnsVisible);
+                  }}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <TriStateCheckbox
+                    checked={allFinanceTaskListColumnsVisible}
+                    indeterminate={someFinanceTaskListColumnsVisible && !allFinanceTaskListColumnsVisible}
+                  />
+                  <span className="text-sm">Выбрать всё</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                {FINANCE_TASK_LIST_COLUMN_ROWS.map((column) => {
+                  const checked = !hiddenFinanceTaskListColumnSet.has(column.id);
+                  return (
+                    <DropdownMenuItem
+                      key={column.id}
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        handleToggleFinanceTaskListColumn(column.id);
+                      }}
+                      className="flex cursor-pointer items-center gap-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        readOnly
+                        className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                      />
+                      <span className="text-sm">{column.label}</span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <label className="flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600">
               <input
                 type="checkbox"
@@ -1469,7 +1601,7 @@ export function FinanceWorkspace({
                 matrixColumnGroups={matrixColumnGroups.length > 0 ? matrixColumnGroups : undefined}
                 matrixDateOverlay={matrixDateOverlay}
                 additionalColumns={additionalColumns}
-                hiddenTaskListColumns={FINANCE_HIDDEN_TASK_LIST_COLUMNS as unknown as string[]}
+                hiddenTaskListColumns={hiddenTaskListColumns}
                 taskListColumnWidths={financeTaskListColumnWidths}
                 onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                 disableTaskDrag={true}

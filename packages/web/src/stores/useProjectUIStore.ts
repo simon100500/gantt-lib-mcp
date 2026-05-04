@@ -22,6 +22,7 @@ interface ProjectUIState {
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;
   hiddenTaskListColumns: string[];
+  hiddenFinanceTaskListColumns: string[];
   taskListColumnWidths: TaskListColumnWidthMap;
   financeTaskListColumnWidths: TaskListColumnWidthMap;
   selectedBaseline: ProjectBaselineSelectionState | null;
@@ -49,6 +50,7 @@ const DEFAULT_STATE: ProjectUIState = {
   disableTaskDrag: false,
   taskDateChangeMode: 'preserve-duration',
   hiddenTaskListColumns: [],
+  hiddenFinanceTaskListColumns: [],
   taskListColumnWidths: {},
   financeTaskListColumnWidths: {},
   selectedBaseline: null,
