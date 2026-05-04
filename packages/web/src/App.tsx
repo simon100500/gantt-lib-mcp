@@ -20,6 +20,7 @@ import { DraftWorkspace } from './components/workspace/DraftWorkspace.tsx';
 import type { StartScreenSendResult } from './components/StartScreen.tsx';
 import { GuestWorkspace } from './components/workspace/GuestWorkspace.tsx';
 import { ProjectWorkspace } from './components/workspace/ProjectWorkspace.tsx';
+import { FinanceWorkspace } from './components/workspace/FinanceWorkspace.tsx';
 import { ResourcePlannerWorkspace } from './components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { TemplateWorkspace } from './components/workspace/TemplateWorkspace.tsx';
@@ -814,12 +815,18 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       if (current.kind === 'project' && current.projectId === projectId) {
         return current;
       }
+      if (current.kind === 'finance' && current.projectId === projectId) {
+        return current;
+      }
       if (current.kind === 'planner' && current.projectId === projectId) {
         return current;
       }
-      return (getProjectState(projectId)?.activeWorkspace ?? 'project') === 'planner'
+      const activeWorkspace = getProjectState(projectId)?.activeWorkspace ?? 'project';
+      return activeWorkspace === 'planner'
         ? { kind: 'planner', projectId }
-        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
+        : activeWorkspace === 'finance'
+          ? { kind: 'finance', projectId }
+          : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() };
     });
   }, [auth.isAuthenticated, auth.project?.id, getProjectState, hasShareToken, setWorkspace]);
 
@@ -1156,10 +1163,13 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     useTaskStore.setState({ loading: true, error: null });
     useProjectStore.getState().clearTransientState();
     await auth.switchProject(projectId);
+    const activeWorkspace = getProjectState(projectId)?.activeWorkspace ?? 'project';
     setWorkspace(
-      (getProjectState(projectId)?.activeWorkspace ?? 'project') === 'planner'
+      activeWorkspace === 'planner'
         ? { kind: 'planner', projectId }
-        : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() }
+        : activeWorkspace === 'finance'
+          ? { kind: 'finance', projectId }
+          : { kind: 'project', projectId, chatOpen: readProjectChatOpenState() }
     );
   }, [auth, getProjectState, setWorkspace]);
 
@@ -1378,11 +1388,21 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     setWorkspace({ kind: 'planner', projectId: auth.project.id });
   }, [auth.project, billingStatus, openLimitModal, setWorkspace]);
 
+  const handleOpenFinance = useCallback(async () => {
+    if (!auth.project) {
+      return;
+    }
+
+    setWorkspace({ kind: 'finance', projectId: auth.project.id });
+  }, [auth.project, setWorkspace]);
+
   useEffect(() => {
     if (workspace.kind === 'project') {
       setProjectState(workspace.projectId, { activeWorkspace: 'project' });
     } else if (workspace.kind === 'planner') {
       setProjectState(workspace.projectId, { activeWorkspace: 'planner' });
+    } else if (workspace.kind === 'finance') {
+      setProjectState(workspace.projectId, { activeWorkspace: 'finance' });
     }
   }, [setProjectState, workspace]);
 
@@ -1898,6 +1918,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         ganttDayMode={sharedProject.project?.ganttDayMode ?? 'calendar'}
       />
     )
+    : workspace.kind === 'finance'
+      ? (
+        <FinanceWorkspace
+          accessToken={auth.accessToken}
+          projectId={workspace.projectId}
+          readOnly={isArchivedProject}
+          onBackToProject={() => {
+            setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
+          }}
+        />
+      )
     : workspace.kind === 'planner'
       ? (
         <ResourcePlannerWorkspace
@@ -2075,8 +2106,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}
       onOpenResourcePool={handleOpenResourcePool}
+      onOpenFinance={handleOpenFinance}
       onOpenChartMode={async () => {
-        const targetProjectId = workspace.kind === 'planner'
+        const targetProjectId = workspace.kind === 'planner' || workspace.kind === 'finance'
           ? workspace.projectId
           : auth.project?.id;
         if (!targetProjectId) {

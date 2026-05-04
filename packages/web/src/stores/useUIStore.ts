@@ -54,6 +54,7 @@ export type WorkspaceMode =
   | { kind: 'shared' }
   | { kind: 'project'; projectId: string; chatOpen: boolean }
   | { kind: 'planner'; projectId: string }
+  | { kind: 'finance'; projectId: string }
   | { kind: 'template'; templateId: string }
   | {
     kind: 'draft';

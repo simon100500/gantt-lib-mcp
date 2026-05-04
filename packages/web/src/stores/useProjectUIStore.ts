@@ -17,7 +17,7 @@ interface ProjectBaselineSelectionState {
 
 interface ProjectUIState {
   viewMode: ViewMode;
-  activeWorkspace: 'project' | 'planner';
+  activeWorkspace: 'project' | 'planner' | 'finance';
   collapsedParentIds: string[];
   disableTaskDrag: boolean;
   taskDateChangeMode: TaskDateChangeMode;
@@ -29,6 +29,8 @@ interface ProjectUIState {
   ganttScrollTop: number;
   plannerScrollLeft: number;
   plannerScrollTop: number;
+  financeScrollLeft: number;
+  financeScrollTop: number;
 }
 
 interface ProjectUIStore {
@@ -52,6 +54,8 @@ const DEFAULT_STATE: ProjectUIState = {
   ganttScrollTop: 0,
   plannerScrollLeft: 0,
   plannerScrollTop: 0,
+  financeScrollLeft: 0,
+  financeScrollTop: 0,
 };
 
 export const useProjectUIStore = create<ProjectUIStore>()(

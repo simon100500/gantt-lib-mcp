@@ -191,6 +191,8 @@ model Project {
   mutationGroups MutationGroup[]
   baselines      Baseline[]
   agentDebugLogs AgentDebugLog[]
+  financeSettings TaskFinanceSetting[]
+  fundingEvents   TaskFundingEvent[]
 
   @@map("projects")
   @@index([userId])
@@ -367,10 +369,50 @@ model Task {
   dependencies Dependency[] @relation("TaskDependencies")
   dependsOn   Dependency[] @relation("DependsOnTasks")
   assignments TaskAssignment[]
+  financeSetting TaskFinanceSetting?
+  fundingEvents  TaskFundingEvent[]
 
   @@map("tasks")
   @@index([projectId])
   @@index([parentId])
+}
+
+model TaskFinanceSetting {
+  id          String   @id @default(uuid())
+  projectId   String   @map("project_id")
+  taskId      String   @map("task_id")
+  plannedCost Decimal  @db.Decimal(18, 2) @map("planned_cost")
+  currencyCode String  @default("RUB") @map("currency_code")
+  allocationMode String @default("manual") @map("allocation_mode")
+  allocationParentTaskId String? @map("allocation_parent_task_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_finance_settings")
+  @@unique([taskId])
+  @@index([projectId])
+  @@index([projectId, allocationParentTaskId])
+}
+
+model TaskFundingEvent {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  taskId     String   @map("task_id")
+  eventDate DateTime @map("event_date")
+  amount    Decimal  @db.Decimal(18, 2)
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_funding_events")
+  @@index([projectId, taskId])
+  @@index([projectId, eventDate])
 }
 
 // Dependencies table

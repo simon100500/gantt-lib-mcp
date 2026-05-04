@@ -6,6 +6,11 @@ import type {
   ResourceType,
   Task,
   ProjectGroup,
+  FinancePeriodGranularity,
+  FinancePeriodBucket,
+  ProjectFinanceSnapshot,
+  TaskFinanceSetting,
+  TaskFundingEvent,
 } from '../types.ts';
 
 export type {
@@ -16,6 +21,11 @@ export type {
   ResourceScope,
   ResourceType,
   ProjectGroup,
+  FinancePeriodGranularity,
+  FinancePeriodBucket,
+  ProjectFinanceSnapshot,
+  TaskFinanceSetting,
+  TaskFundingEvent,
 } from '../types.ts';
 
 export interface ProjectResource {
