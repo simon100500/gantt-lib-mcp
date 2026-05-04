@@ -1160,7 +1160,7 @@ export function FinanceWorkspace({
     },
     {
       id: 'varianceEarnedVsPaid',
-      header: <span title="Разница между освоено и оплачено. Плюс — должны мы, минус — должны нам.">Разница</span>,
+      header: <span title="Разница между освоено и оплачено. Плюс — должны нам, минус — должны мы.">Разница</span>,
       width: financeColumnWidths.varianceEarnedVsPaid,
       after: 'paidToDate',
       align: 'right',
@@ -1169,9 +1169,9 @@ export function FinanceWorkspace({
           value={task.varianceEarnedVsPaid}
           color={
             task.varianceEarnedVsPaid > 0
-              ? '#be123c'
+              ? '#047857'
               : task.varianceEarnedVsPaid < 0
-                ? '#047857'
+                ? '#be123c'
                 : '#94a3b8'
           }
           fontWeight={task.parentId ? 500 : 700}
@@ -1391,14 +1391,14 @@ export function FinanceWorkspace({
               className={cn(
                 'grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2 rounded-md border px-2.5 py-1.5 text-xs leading-tight',
                 outstandingReceivable > 0
-                  ? 'border-rose-200 bg-rose-50 text-rose-900'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                   : outstandingReceivable < 0
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    ? 'border-rose-200 bg-rose-50 text-rose-900'
                     : 'border-slate-200 bg-slate-100 text-slate-700',
               )}
-              title="Разница между освоено и оплачено. Плюс — должны мы, минус — должны нам."
+              title="Разница между освоено и оплачено. Плюс — должны нам, минус — должны мы."
             >
-              <div className="whitespace-nowrap">Должны нам</div>
+              <div className="whitespace-nowrap">{outstandingReceivable < 0 ? 'Должны мы' : 'Должны нам'}</div>
               <div className="text-right font-semibold tabular-nums">{formatMoney(outstandingReceivable)}</div>
             </div>
             <Button variant="ghost" size="sm" className="h-8" onClick={() => { void loadSnapshot(granularity, asOfDate, false, true); }} disabled={refreshing}>
