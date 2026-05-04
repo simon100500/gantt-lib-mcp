@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
 import type { TaskListColumn } from 'gantt-lib';
-import { AlertCircle, Calendar, Check, History, LoaderCircle, Pencil, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, Calendar, Check, History, Pencil, Save, Trash2, X } from 'lucide-react';
 
 import type { TaskProgressEntry } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -19,6 +19,7 @@ const SUGGESTED_WORK_UNITS = ['м', 'м2', 'м3', 'шт', 'кг', 'т', 'ком�
 export interface CreateTaskWorkColumnsOptions {
   progressEntries: TaskProgressEntry[];
   loadingTaskIds?: Set<string>;
+  parentTaskIds?: Set<string>;
   readOnly?: boolean;
   onUpdateWorkMetadata: (
     task: Task,
@@ -75,11 +76,13 @@ function TaskWorkMetadataCell({
   task,
   readOnly = false,
   compact = false,
+  disabled = false,
   onSubmit,
 }: {
   task: Task;
   readOnly?: boolean;
   compact?: boolean;
+  disabled?: boolean;
   onSubmit: (task: Task, patch: { workVolume?: number | null; workUnit?: string | null }) => Promise<TaskWorkMutationResult>;
 }) {
   const [open, setOpen] = useState(false);
@@ -90,6 +93,10 @@ function TaskWorkMetadataCell({
   const unitInputRef = useRef<HTMLInputElement | null>(null);
   const volumeLabel = formatVolumeWithUnit(task);
   const hasVolume = volumeLabel !== '-';
+
+  if (disabled) {
+    return <span aria-hidden="true" />;
+  }
 
   return (
     <Popover onOpenChange={(nextOpen) => {
@@ -103,7 +110,7 @@ function TaskWorkMetadataCell({
       <PopoverTrigger asChild>
         <button
           className={`inline-flex w-full items-center justify-start py-1 text-sm transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${hasVolume ? 'text-slate-700' : 'text-slate-400'} ${compact ? 'rounded-none px-0' : 'rounded-md px-2'}`}
-          disabled={readOnly}
+          disabled={readOnly || disabled}
           onClick={(event) => event.stopPropagation()}
           type="button"
         >
@@ -204,6 +211,7 @@ function TaskCompletedVolumeCell({
   entries,
   loading = false,
   readOnly = false,
+  disabled = false,
   onUpdateMetadata,
   onSubmit,
   onUpdateEntry,
@@ -213,6 +221,7 @@ function TaskCompletedVolumeCell({
   entries: TaskProgressEntry[];
   loading?: boolean;
   readOnly?: boolean;
+  disabled?: boolean;
   onUpdateMetadata: (task: Task, patch: { workVolume?: number | null; workUnit?: string | null }) => Promise<TaskWorkMutationResult>;
   onSubmit: (
     task: Task,
@@ -332,9 +341,10 @@ function TaskCompletedVolumeCell({
 
   return (
     <>
+      {disabled ? <span aria-hidden="true" /> : (
       <button
         className={`inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${hasCompletedVolume ? 'text-slate-700' : 'text-slate-400'}`}
-        disabled={readOnly}
+        disabled={readOnly || disabled}
         onClick={(event) => {
           event.stopPropagation();
           setOpen(true);
@@ -354,11 +364,12 @@ function TaskCompletedVolumeCell({
       >
         <span className="relative inline-flex min-w-6 items-center">
           <span className={loading ? 'opacity-0' : undefined}>{completedVolumeLabel}</span>
-          {loading ? <LoaderCircle className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin" /> : null}
+          {loading ? <span className="absolute left-0 top-1/2 h-3 w-full -translate-y-1/2 animate-pulse rounded bg-slate-300" /> : null}
         </span>
       </button>
+      )}
 
-      {open ? (
+      {open && !disabled ? (
         <div
           aria-labelledby={`task-progress-modal-title-${task.id}`}
           aria-modal="true"
@@ -779,6 +790,7 @@ function TaskCompletedVolumeCell({
 export function createTaskWorkColumns({
   progressEntries,
   loadingTaskIds,
+  parentTaskIds,
   readOnly = false,
   onUpdateWorkMetadata,
   onAddProgressEntry,
@@ -795,6 +807,7 @@ export function createTaskWorkColumns({
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
           compact={true}
+          disabled={parentTaskIds?.has(task.id) ?? false}
           onSubmit={onUpdateWorkMetadata}
           readOnly={readOnly}
           task={task}
@@ -810,6 +823,7 @@ export function createTaskWorkColumns({
       renderCell: ({ task }) => (
         <TaskCompletedVolumeCell
           entries={progressEntries.filter((entry) => entry.taskId === task.id)}
+          disabled={parentTaskIds?.has(task.id) ?? false}
           loading={loadingTaskIds?.has(task.id) ?? false}
           onUpdateMetadata={onUpdateWorkMetadata}
           onSubmit={onAddProgressEntry}

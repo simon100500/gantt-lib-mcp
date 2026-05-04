@@ -549,6 +549,15 @@ export function ProjectWorkspace({
   const resources = useProjectStore((state) => state.resources);
   const assignments = useProjectStore((state) => state.assignments);
   const progressEntries = useProjectStore((state) => state.progressEntries);
+  const parentTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const task of tasks) {
+      if (task.parentId) {
+        ids.add(task.parentId);
+      }
+    }
+    return ids;
+  }, [tasks]);
   const pendingCommands = useProjectStore((state) => state.pending);
   const assignmentError = useProjectStore((state) => state.assignmentError);
   const replaceAssignmentsForTask = useProjectStore((state) => state.replaceAssignmentsForTask);
@@ -1248,7 +1257,20 @@ export function ProjectWorkspace({
       const nextProgress = changedTask.progress ?? 0;
       const progressChanged = Math.abs(nextProgress - originalProgress) > 0.0001;
 
-      if (!originalTask || !progressChanged || !originalTask.workVolume || originalTask.workVolume <= 0) {
+      if (!originalTask || !progressChanged) {
+        passthroughTasks.push(changedTask);
+        continue;
+      }
+
+      if (parentTaskIds.has(originalTask.id)) {
+        passthroughTasks.push({
+          ...changedTask,
+          progress: nextProgress >= 100 ? 100 : 0,
+        });
+        continue;
+      }
+
+      if (!originalTask.workVolume || originalTask.workVolume <= 0) {
         passthroughTasks.push(changedTask);
         continue;
       }
@@ -1281,7 +1303,7 @@ export function ProjectWorkspace({
     }
 
     return passthroughTasks;
-  }, [handleAddTaskProgressEntry, runWithWorkProgressLoader, tasks]);
+  }, [handleAddTaskProgressEntry, parentTaskIds, runWithWorkProgressLoader, tasks]);
 
   const activeResources = useMemo(
     () => getAssignableResources(resources, workspace.kind === 'project' ? workspace.projectId : null),
@@ -1528,6 +1550,7 @@ export function ProjectWorkspace({
       ...createTaskWorkColumns({
         progressEntries,
         loadingTaskIds: workProgressLoadingTaskIds,
+        parentTaskIds,
         readOnly: effectiveReadOnly || shareSelectionActive,
         onUpdateWorkMetadata: handleUpdateTaskWorkMetadata,
         onAddProgressEntry: handleAddTaskProgressEntry,
@@ -1557,6 +1580,7 @@ export function ProjectWorkspace({
     handleUpdateTaskProgressEntry,
     handleUpdateTaskWorkMetadata,
     openAssignmentSelector,
+    parentTaskIds,
     progressEntries,
     resources,
     shareSelectionActive,

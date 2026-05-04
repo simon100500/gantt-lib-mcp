@@ -134,11 +134,14 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
 
       const existingTask = await prisma.task.findFirst({
         where: { id: taskId, projectId: req.user!.projectId },
-        select: { id: true, completedVolume: true, workVolume: true },
+        select: { id: true, completedVolume: true, workVolume: true, _count: { select: { children: true } } },
       });
 
       if (!existingTask) {
         return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (existingTask._count.children > 0) {
+        return reply.status(400).send({ error: 'Work volume can only be entered for leaf tasks' });
       }
 
       const normalizedWorkVolume = workVolume === undefined
@@ -195,11 +198,15 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
           id: true,
           workVolume: true,
           completedVolume: true,
+          _count: { select: { children: true } },
         },
       });
 
       if (!task) {
         return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (task._count.children > 0) {
+        return reply.status(400).send({ error: 'Completed work can only be entered for leaf tasks' });
       }
 
       if (!task.workVolume || task.workVolume <= 0) {
@@ -270,11 +277,14 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
 
       const task = await prisma.task.findFirst({
         where: { id: taskId, projectId: req.user!.projectId },
-        select: { id: true, workVolume: true },
+        select: { id: true, workVolume: true, _count: { select: { children: true } } },
       });
 
       if (!task) {
         return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (task._count.children > 0) {
+        return reply.status(400).send({ error: 'Completed work can only be edited for leaf tasks' });
       }
       if (!task.workVolume || task.workVolume <= 0) {
         return reply.status(400).send({ error: 'Set total volume before editing completed work' });
@@ -327,11 +337,14 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
 
       const task = await prisma.task.findFirst({
         where: { id: taskId, projectId: req.user!.projectId },
-        select: { id: true, workVolume: true },
+        select: { id: true, workVolume: true, _count: { select: { children: true } } },
       });
 
       if (!task) {
         return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (task._count.children > 0) {
+        return reply.status(400).send({ error: 'Completed work can only be deleted for leaf tasks' });
       }
 
       const existingEntry = await prisma.taskProgressEntry.findFirst({
