@@ -26,7 +26,8 @@ function clampProgress(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
   }
-  return Math.max(0, Math.min(100, value));
+  const clamped = Math.max(0, Math.min(100, value));
+  return Math.round((clamped + Number.EPSILON) * 100) / 100;
 }
 
 function toEntryResponse(entry: {
@@ -90,6 +91,28 @@ async function buildTaskProgressResponse(projectId: string, taskId: string): Pro
     },
     progressEntries: progressEntries.map(toEntryResponse),
   };
+}
+
+async function recomputeTaskProgress(
+  tx: Parameters<Parameters<ReturnType<typeof getPrisma>['$transaction']>[0]>[0],
+  projectId: string,
+  taskId: string,
+  taskWorkVolume: number,
+): Promise<void> {
+  const aggregate = await tx.taskProgressEntry.aggregate({
+    where: { projectId, taskId },
+    _sum: { amount: true },
+  });
+  const completedVolume = aggregate._sum.amount ?? 0;
+  const nextProgress = taskWorkVolume > 0 ? clampProgress((completedVolume / taskWorkVolume) * 100) : 0;
+
+  await tx.task.update({
+    where: { id: taskId },
+    data: {
+      completedVolume,
+      progress: nextProgress,
+    },
+  });
 }
 
 export async function registerWorkProgressRoutes(fastify: FastifyInstance): Promise<void> {
@@ -159,8 +182,8 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
       if (!normalizedDate) {
         return reply.status(400).send({ error: 'entryDate must be YYYY-MM-DD' });
       }
-      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-        return reply.status(400).send({ error: 'value must be a finite number > 0' });
+      if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) {
+        return reply.status(400).send({ error: 'value must be a finite non-zero number' });
       }
       if (inputMode !== 'volume' && inputMode !== 'percent') {
         return reply.status(400).send({ error: 'inputMode must be volume or percent' });
@@ -216,20 +239,113 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
           });
         }
 
-        const aggregate = await tx.taskProgressEntry.aggregate({
-          where: { projectId: req.user!.projectId, taskId },
-          _sum: { amount: true },
-        });
-        const completedVolume = aggregate._sum.amount ?? 0;
-        const nextProgress = clampProgress((completedVolume / taskWorkVolume) * 100);
+        await recomputeTaskProgress(tx, req.user!.projectId, taskId, taskWorkVolume);
+      });
 
-        await tx.task.update({
-          where: { id: taskId },
+      return reply.send(await buildTaskProgressResponse(req.user!.projectId, taskId));
+    },
+  );
+
+  fastify.patch<{
+    Params: { taskId: string; entryId: string };
+    Body: { entryDate?: string; amount?: number };
+  }>(
+    '/api/tasks/:taskId/progress-entries/:entryId',
+    { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] },
+    async (req, reply) => {
+      const prisma = getPrisma();
+      const { taskId, entryId } = req.params;
+      const { entryDate, amount } = req.body ?? {};
+
+      if (!entryDate || typeof entryDate !== 'string') {
+        return reply.status(400).send({ error: 'entryDate is required' });
+      }
+      const normalizedDate = parseIsoDateOnly(entryDate);
+      if (!normalizedDate) {
+        return reply.status(400).send({ error: 'entryDate must be YYYY-MM-DD' });
+      }
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+        return reply.status(400).send({ error: 'amount must be a finite number > 0' });
+      }
+
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, projectId: req.user!.projectId },
+        select: { id: true, workVolume: true },
+      });
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+      if (!task.workVolume || task.workVolume <= 0) {
+        return reply.status(400).send({ error: 'Set total volume before editing completed work' });
+      }
+
+      const existingEntry = await prisma.taskProgressEntry.findFirst({
+        where: { id: entryId, taskId, projectId: req.user!.projectId },
+        select: { id: true },
+      });
+
+      if (!existingEntry) {
+        return reply.status(404).send({ error: 'Progress entry not found' });
+      }
+
+      const conflictingEntry = await prisma.taskProgressEntry.findFirst({
+        where: {
+          id: { not: entryId },
+          taskId,
+          projectId: req.user!.projectId,
+          entryDate: normalizedDate,
+        },
+        select: { id: true },
+      });
+
+      if (conflictingEntry) {
+        return reply.status(409).send({ error: 'Progress entry for this date already exists' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.taskProgressEntry.update({
+          where: { id: entryId },
           data: {
-            completedVolume,
-            progress: nextProgress,
+            entryDate: normalizedDate,
+            amount,
           },
         });
+        await recomputeTaskProgress(tx, req.user!.projectId, taskId, task.workVolume!);
+      });
+
+      return reply.send(await buildTaskProgressResponse(req.user!.projectId, taskId));
+    },
+  );
+
+  fastify.delete<{ Params: { taskId: string; entryId: string } }>(
+    '/api/tasks/:taskId/progress-entries/:entryId',
+    { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] },
+    async (req, reply) => {
+      const prisma = getPrisma();
+      const { taskId, entryId } = req.params;
+
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, projectId: req.user!.projectId },
+        select: { id: true, workVolume: true },
+      });
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      const existingEntry = await prisma.taskProgressEntry.findFirst({
+        where: { id: entryId, taskId, projectId: req.user!.projectId },
+        select: { id: true },
+      });
+
+      if (!existingEntry) {
+        return reply.status(404).send({ error: 'Progress entry not found' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.taskProgressEntry.delete({ where: { id: entryId } });
+        await recomputeTaskProgress(tx, req.user!.projectId, taskId, task.workVolume ?? 0);
       });
 
       return reply.send(await buildTaskProgressResponse(req.user!.projectId, taskId));

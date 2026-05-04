@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
 import type { TaskListColumn } from 'gantt-lib';
-import { AlertCircle, Calendar, Check, History, X } from 'lucide-react';
+import { AlertCircle, Calendar, Check, History, LoaderCircle, Pencil, Save, Trash2, X } from 'lucide-react';
 
 import type { TaskProgressEntry } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
@@ -18,6 +18,7 @@ const SUGGESTED_WORK_UNITS = ['м', 'м2', 'м3', 'шт', 'кг', 'т', 'ком�
 
 export interface CreateTaskWorkColumnsOptions {
   progressEntries: TaskProgressEntry[];
+  loadingTaskIds?: Set<string>;
   readOnly?: boolean;
   onUpdateWorkMetadata: (
     task: Task,
@@ -26,6 +27,15 @@ export interface CreateTaskWorkColumnsOptions {
   onAddProgressEntry: (
     task: Task,
     input: { entryDate: string; value: number; inputMode: 'volume' | 'percent' },
+  ) => Promise<TaskWorkMutationResult>;
+  onUpdateProgressEntry: (
+    task: Task,
+    entry: TaskProgressEntry,
+    input: { entryDate: string; amount: number },
+  ) => Promise<TaskWorkMutationResult>;
+  onDeleteProgressEntry: (
+    task: Task,
+    entry: TaskProgressEntry,
   ) => Promise<TaskWorkMutationResult>;
 }
 
@@ -42,6 +52,14 @@ function formatMetricValue(value: number | null | undefined, maximumFractionDigi
 
 function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0] ?? '';
+}
+
+function formatIsoDateRu(value: string): string {
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) {
+    return value;
+  }
+  return `${day}.${month}.${year}`;
 }
 
 function formatVolumeWithUnit(task: Task): string {
@@ -94,7 +112,7 @@ function TaskWorkMetadataCell({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>
         <form
-          className="space-y-3"
+          className="flex flex-col gap-3"
           onSubmit={async (event) => {
             event.preventDefault();
             setPending(true);
@@ -123,9 +141,10 @@ function TaskWorkMetadataCell({
             }
           }}
         >
-          <div className="grid grid-cols-[1.3fr_1fr] gap-2">
+          <div className="flex min-w-0 gap-2">
             <Input
               autoFocus
+              className="min-w-0 flex-[1_1_0]"
               disabled={pending}
               inputMode="decimal"
               onKeyDown={(event) => {
@@ -150,6 +169,7 @@ function TaskWorkMetadataCell({
               value={volumeValue}
             />
             <Input
+              className="min-w-0 flex-[0_1_6rem]"
               disabled={pending}
               list="work-unit-suggestions"
               ref={unitInputRef}
@@ -182,18 +202,28 @@ function TaskWorkMetadataCell({
 function TaskCompletedVolumeCell({
   task,
   entries,
+  loading = false,
   readOnly = false,
   onUpdateMetadata,
   onSubmit,
+  onUpdateEntry,
+  onDeleteEntry,
 }: {
   task: Task;
   entries: TaskProgressEntry[];
+  loading?: boolean;
   readOnly?: boolean;
   onUpdateMetadata: (task: Task, patch: { workVolume?: number | null; workUnit?: string | null }) => Promise<TaskWorkMutationResult>;
   onSubmit: (
     task: Task,
     input: { entryDate: string; value: number; inputMode: 'volume' | 'percent' },
   ) => Promise<TaskWorkMutationResult>;
+  onUpdateEntry: (
+    task: Task,
+    entry: TaskProgressEntry,
+    input: { entryDate: string; amount: number },
+  ) => Promise<TaskWorkMutationResult>;
+  onDeleteEntry: (task: Task, entry: TaskProgressEntry) => Promise<TaskWorkMutationResult>;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -204,6 +234,9 @@ function TaskCompletedVolumeCell({
   const [totalVolumeValue, setTotalVolumeValue] = useState(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
   const [unitValue, setUnitValue] = useState(task.workUnit ?? '');
   const [activeField, setActiveField] = useState<'volume' | 'percent'>('volume');
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingEntryDate, setEditingEntryDate] = useState('');
+  const [editingEntryAmount, setEditingEntryAmount] = useState('');
   const totalVolumeInputRef = useRef<HTMLInputElement | null>(null);
   const volumeInputRef = useRef<HTMLInputElement | null>(null);
   const unitInputRef = useRef<HTMLInputElement | null>(null);
@@ -313,10 +346,16 @@ function TaskCompletedVolumeCell({
           setValueInUnits('');
           setValueInPercent(formatMetricValue(currentPercent, 1));
           setActiveField('volume');
+          setEditingEntryId(null);
+          setEditingEntryDate('');
+          setEditingEntryAmount('');
         }}
         type="button"
       >
-        <span>{completedVolumeLabel}</span>
+        <span className="relative inline-flex min-w-6 items-center">
+          <span className={loading ? 'opacity-0' : undefined}>{completedVolumeLabel}</span>
+          {loading ? <LoaderCircle className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 animate-spin" /> : null}
+        </span>
       </button>
 
       {open ? (
@@ -389,21 +428,15 @@ function TaskCompletedVolumeCell({
               </button>
             </div>
 
-            <div className="min-w-0 space-y-5 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-5">
+            <div className="flex min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-5">
               {primarySetupMode ? (
-                <div className="space-y-4 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4">
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Первичный ввод данных</p>
-                    <p className="text-[12px] leading-5 text-[#6b778c]">
-                      Укажите общий объём и единицу измерения. После сохранения здесь появится форма добавления факта.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-[minmax(0,1fr)_8rem]">
-                    <label className="min-w-0 space-y-1.5">
+                <>
+                  <div className="flex min-w-0 flex-wrap gap-3">
+                    <label className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Общий объём</span>
                       <Input
                         ref={totalVolumeInputRef}
-                        className="h-10 border-[#dfe1e6] bg-white text-sm font-semibold text-[#172b4d] shadow-none"
+                        className="h-10 min-w-0 border-[#dfe1e6] bg-white text-sm font-semibold text-[#172b4d] shadow-none"
                         disabled={pending}
                         inputMode="decimal"
                         onKeyDown={(event) => {
@@ -429,11 +462,11 @@ function TaskCompletedVolumeCell({
                         value={totalVolumeValue}
                       />
                     </label>
-                    <label className="min-w-0 space-y-1.5">
+                    <label className="flex min-w-0 flex-[0_1_8rem] flex-col gap-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Ед. изм.</span>
                       <Input
                         ref={unitInputRef}
-                        className="h-10 border-[#dfe1e6] bg-white text-sm font-semibold text-[#172b4d] shadow-none"
+                        className="h-10 min-w-0 border-[#dfe1e6] bg-white text-sm font-semibold text-[#172b4d] shadow-none"
                         disabled={pending}
                         list="task-progress-unit-suggestions"
                         onChange={(event) => setUnitValue(event.target.value)}
@@ -443,13 +476,13 @@ function TaskCompletedVolumeCell({
                       />
                     </label>
                   </div>
-                </div>
+                </>
               ) : null}
 
               {!primarySetupMode ? (
                 <>
-                  <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-2">
-                    <label className="min-w-0 space-y-1.5">
+                  <div className="flex min-w-0 flex-wrap gap-3">
+                    <label className="flex min-w-0 flex-[1_1_10rem] flex-col gap-1.5">
                       <span className="block truncate text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
                         Добавить ({normalizedUnitValue || task.workUnit?.trim() || 'ед.'})
                       </span>
@@ -475,7 +508,7 @@ function TaskCompletedVolumeCell({
                         value={valueInUnits}
                       />
                     </label>
-                    <label className="min-w-0 space-y-1.5">
+                    <label className="flex min-w-0 flex-[1_1_10rem] flex-col gap-1.5">
                       <span className="block truncate text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
                         Итоговый %
                       </span>
@@ -502,9 +535,9 @@ function TaskCompletedVolumeCell({
                     </label>
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 space-y-0.5">
+                  <div className="flex flex-col gap-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-3">
+                    <div className="flex min-w-0 items-start justify-between gap-4">
+                      <div className="flex min-w-0 flex-col gap-0.5">
                         <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">
                           {isInputEmpty ? 'Всего' : 'Станет всего'}
                         </div>
@@ -512,7 +545,7 @@ function TaskCompletedVolumeCell({
                           {formatMetricValue(totalAfterAdd, 2)} <span className="font-normal text-[#6b778c]">/</span> {formatMetricValue(totalVolume, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
                         </div>
                       </div>
-                      <div className="shrink-0 space-y-0.5 text-right">
+                      <div className="flex shrink-0 flex-col gap-0.5 text-right">
                         <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">Итог</div>
                         <div className={`text-sm font-bold ${isInputEmpty ? 'text-[#172b4d]' : 'text-primary'}`}>
                           {formatMetricValue(finalPercent, 1)}%
@@ -548,8 +581,8 @@ function TaskCompletedVolumeCell({
                     </div>
                   )}
 
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,12rem)] items-end gap-3">
-                    <label className="min-w-0 space-y-1.5">
+                  <div className="flex min-w-0 items-end gap-3">
+                    <label className="flex min-w-0 flex-[1_1_10rem] flex-col gap-1.5">
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
                         <Calendar className="h-3.5 w-3.5" />
                         Дата работ
@@ -562,7 +595,7 @@ function TaskCompletedVolumeCell({
                         value={entryDate}
                       />
                     </label>
-                    <div className="min-w-0 space-y-1.5">
+                    <div className="flex min-w-0 flex-[0_1_10.5rem] flex-col gap-1.5">
                       <span className="block text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Быстро</span>
                       <Button
                         className="h-9 w-full min-w-0 border-[#dfe1e6] bg-white px-3 text-xs font-bold text-[#44546f] shadow-none hover:bg-[#f4f5f7] hover:text-primary"
@@ -577,25 +610,139 @@ function TaskCompletedVolumeCell({
                     </div>
                   </div>
 
-                  <p className="min-w-0 max-w-full whitespace-normal text-[11px] leading-5 text-[#6b778c] [overflow-wrap:anywhere]">
+                  <p className="block min-w-0 max-w-full flex-none whitespace-normal break-words text-[11px] leading-5 text-[#6b778c]">
                     Новое значение добавится к уже внесённому факту за выбранную дату.
                   </p>
 
                   {sortedEntries.length > 0 ? (
-                    <div className="space-y-3 border-t border-[#dfe1e6] pt-4">
+                    <div className="flex flex-col gap-3 border-t border-[#dfe1e6] pt-4">
                       <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">
                         <History className="h-3.5 w-3.5" />
                         История
                       </div>
-                      <div className="max-h-36 space-y-2 overflow-y-auto pr-1">
+                      <div className="flex max-h-36 flex-col gap-2 overflow-y-auto pr-1">
                         {sortedEntries.slice(0, 5).map((entry) => (
-                          <div className="flex items-center justify-between rounded-md border border-[#dfe1e6] bg-white px-3 py-2" key={entry.id}>
-                            <div>
-                              <div className="text-sm font-semibold text-[#172b4d]">
-                                {formatMetricValue(entry.amount, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
+                          <div className="rounded-md border border-[#dfe1e6] bg-white px-3 py-2" key={entry.id}>
+                            {editingEntryId === entry.id ? (
+                              <div className="flex min-w-0 flex-col gap-2">
+                                <div className="flex min-w-0 gap-2">
+                                  <Input
+                                    className="h-8 min-w-0 flex-[1_1_0] border-[#dfe1e6] bg-white text-xs text-[#172b4d] shadow-none"
+                                    disabled={pending}
+                                    onChange={(event) => setEditingEntryDate(event.target.value)}
+                                    type="date"
+                                    value={editingEntryDate}
+                                  />
+                                  <Input
+                                    className="h-8 min-w-0 flex-[1_1_0] border-[#dfe1e6] bg-white text-xs font-semibold text-[#172b4d] shadow-none"
+                                    disabled={pending}
+                                    inputMode="decimal"
+                                    onChange={(event) => setEditingEntryAmount(event.target.value)}
+                                    step="0.01"
+                                    type="number"
+                                    value={editingEntryAmount}
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    className="h-8 px-2 text-xs text-[#44546f]"
+                                    disabled={pending}
+                                    size="sm"
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => setEditingEntryId(null)}
+                                  >
+                                    Отмена
+                                  </Button>
+                                  <Button
+                                    className="h-8 gap-1 px-2 text-xs"
+                                    disabled={pending}
+                                    size="sm"
+                                    type="button"
+                                    onClick={async () => {
+                                      const parsedAmount = Number.parseFloat(editingEntryAmount.replace(',', '.'));
+                                      if (!editingEntryDate || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+                                        setError('Введите дату и корректный объём записи.');
+                                        return;
+                                      }
+
+                                      setPending(true);
+                                      setError(null);
+                                      try {
+                                        await onUpdateEntry(task, entry, { entryDate: editingEntryDate, amount: parsedAmount });
+                                        setEditingEntryId(null);
+                                      } catch (updateError) {
+                                        setError(updateError instanceof Error ? updateError.message : 'Не удалось обновить запись.');
+                                      } finally {
+                                        setPending(false);
+                                      }
+                                    }}
+                                  >
+                                    <Save className="h-3.5 w-3.5" />
+                                    Сохранить
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="mt-0.5 text-[11px] text-[#6b778c]">{entry.entryDate}</div>
-                            </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-3">
+                                <button
+                                  className="min-w-0 flex-1 text-left"
+                                  disabled={pending}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingEntryId(entry.id);
+                                    setEditingEntryDate(entry.entryDate);
+                                    setEditingEntryAmount(String(entry.amount));
+                                    setError(null);
+                                  }}
+                                >
+                                  <div className="truncate text-sm font-semibold text-[#172b4d]">
+                                    {formatMetricValue(entry.amount, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
+                                  </div>
+                                  <div className="mt-0.5 text-[11px] text-[#6b778c]">{formatIsoDateRu(entry.entryDate)}</div>
+                                </button>
+                                <Button
+                                  aria-label="Редактировать запись истории"
+                                  className="h-8 w-8 shrink-0 px-0 text-[#44546f] hover:bg-[#f4f5f7] hover:text-primary"
+                                  disabled={pending}
+                                  size="sm"
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingEntryId(entry.id);
+                                    setEditingEntryDate(entry.entryDate);
+                                    setEditingEntryAmount(String(entry.amount));
+                                    setError(null);
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  aria-label="Удалить запись истории"
+                                  className="h-8 w-8 shrink-0 px-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  disabled={pending}
+                                  size="sm"
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={async () => {
+                                    setPending(true);
+                                    setError(null);
+                                    try {
+                                      await onDeleteEntry(task, entry);
+                                      if (editingEntryId === entry.id) {
+                                        setEditingEntryId(null);
+                                      }
+                                    } catch (deleteError) {
+                                      setError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить запись.');
+                                    } finally {
+                                      setPending(false);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -631,9 +778,12 @@ function TaskCompletedVolumeCell({
 
 export function createTaskWorkColumns({
   progressEntries,
+  loadingTaskIds,
   readOnly = false,
   onUpdateWorkMetadata,
   onAddProgressEntry,
+  onUpdateProgressEntry,
+  onDeleteProgressEntry,
 }: CreateTaskWorkColumnsOptions): TaskListColumn<Task>[] {
   return [
     {
@@ -660,8 +810,11 @@ export function createTaskWorkColumns({
       renderCell: ({ task }) => (
         <TaskCompletedVolumeCell
           entries={progressEntries.filter((entry) => entry.taskId === task.id)}
+          loading={loadingTaskIds?.has(task.id) ?? false}
           onUpdateMetadata={onUpdateWorkMetadata}
           onSubmit={onAddProgressEntry}
+          onUpdateEntry={onUpdateProgressEntry}
+          onDeleteEntry={onDeleteProgressEntry}
           readOnly={readOnly}
           task={task}
         />

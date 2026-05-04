@@ -437,7 +437,8 @@ function clampPercent(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
   }
-  return Math.max(0, Math.min(100, value));
+  const clamped = Math.max(0, Math.min(100, value));
+  return Math.round((clamped + Number.EPSILON) * 100) / 100;
 }
 
 function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap {
@@ -670,6 +671,7 @@ export function ProjectWorkspace({
   const [assignmentSelectionTaskId, setAssignmentSelectionTaskId] = useState<string | null>(null);
   const [selectedAssignmentResourceIds, setSelectedAssignmentResourceIds] = useState<string[]>([]);
   const [assignmentSubmitting, setAssignmentSubmitting] = useState(false);
+  const [workProgressLoadingTaskIds, setWorkProgressLoadingTaskIds] = useState<Set<string>>(() => new Set());
   const [createAssignmentResourceOpen, setCreateAssignmentResourceOpen] = useState(false);
   const [createAssignmentResourcePending, setCreateAssignmentResourcePending] = useState(false);
   const [createAssignmentResourceError, setCreateAssignmentResourceError] = useState<string | null>(null);
@@ -1112,6 +1114,175 @@ export function ProjectWorkspace({
     return { task: resolvedTask, progressEntries: body.progressEntries };
   }, [accessToken, applyTaskWorkMutation, progressEntries, projectId, workspace.kind]);
 
+  const handleUpdateTaskProgressEntry = useCallback(async (
+    task: Task,
+    entry: TaskProgressEntry,
+    input: { entryDate: string; amount: number },
+  ) => {
+    if (!task.workVolume || task.workVolume <= 0) {
+      throw new Error('Сначала задайте общий объём работы.');
+    }
+
+    if (!accessToken || workspace.kind !== 'project') {
+      const existingEntries = progressEntries.filter((progressEntry) => progressEntry.taskId === task.id);
+      const duplicateEntry = existingEntries.find((progressEntry) => (
+        progressEntry.id !== entry.id && progressEntry.entryDate === input.entryDate
+      ));
+      if (duplicateEntry) {
+        throw new Error('На эту дату уже есть запись.');
+      }
+
+      const now = new Date().toISOString();
+      const nextEntries = existingEntries.map((progressEntry) => (
+        progressEntry.id === entry.id
+          ? { ...progressEntry, entryDate: input.entryDate, amount: input.amount, updatedAt: now }
+          : progressEntry
+      ));
+      const completedVolume = nextEntries.reduce((sum, progressEntry) => sum + progressEntry.amount, 0);
+      const resolvedTask: Task = {
+        ...task,
+        completedVolume,
+        progress: clampPercent((completedVolume / task.workVolume) * 100),
+      };
+      applyTaskWorkMutation(resolvedTask, nextEntries);
+      return { task: resolvedTask, progressEntries: nextEntries };
+    }
+
+    const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/progress-entries/${encodeURIComponent(entry.id)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(input),
+    });
+    const body = await response.json().catch(() => null) as {
+      error?: string;
+      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null };
+      progressEntries?: TaskProgressEntry[];
+    } | null;
+
+    if (!response.ok || !body?.task) {
+      throw new Error(body?.error || `HTTP ${response.status}`);
+    }
+
+    const resolvedTask: Task = {
+      ...task,
+      workVolume: body.task.workVolume,
+      workUnit: body.task.workUnit,
+      completedVolume: body.task.completedVolume,
+      progress: body.task.progress,
+    };
+    applyTaskWorkMutation(resolvedTask, body.progressEntries);
+    return { task: resolvedTask, progressEntries: body.progressEntries };
+  }, [accessToken, applyTaskWorkMutation, progressEntries, workspace.kind]);
+
+  const handleDeleteTaskProgressEntry = useCallback(async (
+    task: Task,
+    entry: TaskProgressEntry,
+  ) => {
+    if (!task.workVolume || task.workVolume <= 0) {
+      throw new Error('Сначала задайте общий объём работы.');
+    }
+
+    if (!accessToken || workspace.kind !== 'project') {
+      const nextEntries = progressEntries.filter((progressEntry) => (
+        progressEntry.taskId === task.id && progressEntry.id !== entry.id
+      ));
+      const completedVolume = nextEntries.reduce((sum, progressEntry) => sum + progressEntry.amount, 0);
+      const resolvedTask: Task = {
+        ...task,
+        completedVolume,
+        progress: clampPercent((completedVolume / task.workVolume) * 100),
+      };
+      applyTaskWorkMutation(resolvedTask, nextEntries);
+      return { task: resolvedTask, progressEntries: nextEntries };
+    }
+
+    const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/progress-entries/${encodeURIComponent(entry.id)}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const body = await response.json().catch(() => null) as {
+      error?: string;
+      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null };
+      progressEntries?: TaskProgressEntry[];
+    } | null;
+
+    if (!response.ok || !body?.task) {
+      throw new Error(body?.error || `HTTP ${response.status}`);
+    }
+
+    const resolvedTask: Task = {
+      ...task,
+      workVolume: body.task.workVolume,
+      workUnit: body.task.workUnit,
+      completedVolume: body.task.completedVolume,
+      progress: body.task.progress,
+    };
+    applyTaskWorkMutation(resolvedTask, body.progressEntries);
+    return { task: resolvedTask, progressEntries: body.progressEntries };
+  }, [accessToken, applyTaskWorkMutation, progressEntries, workspace.kind]);
+
+  const runWithWorkProgressLoader = useCallback(async <T,>(taskId: string, action: () => Promise<T>): Promise<T> => {
+    setWorkProgressLoadingTaskIds((current) => new Set(current).add(taskId));
+    try {
+      return await action();
+    } finally {
+      setWorkProgressLoadingTaskIds((current) => {
+        const next = new Set(current);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  }, []);
+
+  const applyProgressColumnVolumeDeltas = useCallback(async (changedTasks: Task[]): Promise<Task[]> => {
+    const passthroughTasks: Task[] = [];
+
+    for (const changedTask of changedTasks) {
+      const originalTask = tasks.find((task) => task.id === changedTask.id);
+      const originalProgress = originalTask?.progress ?? 0;
+      const nextProgress = changedTask.progress ?? 0;
+      const progressChanged = Math.abs(nextProgress - originalProgress) > 0.0001;
+
+      if (!originalTask || !progressChanged || !originalTask.workVolume || originalTask.workVolume <= 0) {
+        passthroughTasks.push(changedTask);
+        continue;
+      }
+
+      const currentPercent = ((originalTask.completedVolume ?? 0) / originalTask.workVolume) * 100;
+      const targetPercent = clampPercent(nextProgress);
+      const deltaAmount = ((targetPercent - currentPercent) / 100) * originalTask.workVolume;
+
+      if (Math.abs(deltaAmount) < 0.000001) {
+        continue;
+      }
+
+      const sanitizedTask = { ...changedTask, progress: originalProgress };
+      const hasOnlyProgressChange = Object.keys(changedTask).every((key) => {
+        const taskKey = key as keyof Task;
+        return taskKey === 'progress' || changedTask[taskKey] === originalTask[taskKey];
+      });
+
+      if (!hasOnlyProgressChange) {
+        passthroughTasks.push(sanitizedTask);
+      }
+
+      await runWithWorkProgressLoader(originalTask.id, async () => {
+        await handleAddTaskProgressEntry(originalTask, {
+          entryDate: new Date().toISOString().split('T')[0] ?? '',
+          value: Number(deltaAmount.toFixed(6)),
+          inputMode: 'volume',
+        });
+      });
+    }
+
+    return passthroughTasks;
+  }, [handleAddTaskProgressEntry, runWithWorkProgressLoader, tasks]);
+
   const activeResources = useMemo(
     () => getAssignableResources(resources, workspace.kind === 'project' ? workspace.projectId : null),
     [resources, workspace],
@@ -1356,9 +1527,12 @@ export function ProjectWorkspace({
     const columns: TaskListColumn<Task>[] = [
       ...createTaskWorkColumns({
         progressEntries,
+        loadingTaskIds: workProgressLoadingTaskIds,
         readOnly: effectiveReadOnly || shareSelectionActive,
         onUpdateWorkMetadata: handleUpdateTaskWorkMetadata,
         onAddProgressEntry: handleAddTaskProgressEntry,
+        onUpdateProgressEntry: handleUpdateTaskProgressEntry,
+        onDeleteProgressEntry: handleDeleteTaskProgressEntry,
       }),
     ];
 
@@ -1379,12 +1553,15 @@ export function ProjectWorkspace({
     assignments,
     effectiveReadOnly,
     handleAddTaskProgressEntry,
+    handleDeleteTaskProgressEntry,
+    handleUpdateTaskProgressEntry,
     handleUpdateTaskWorkMetadata,
     openAssignmentSelector,
     progressEntries,
     resources,
     shareSelectionActive,
     showResourceAssignments,
+    workProgressLoadingTaskIds,
   ]);
 
   const latestRestorableItem = useMemo(
@@ -1509,7 +1686,10 @@ export function ProjectWorkspace({
         if (!(await prepareUndoPreviewForEdit())) {
           return;
         }
-        await batchUpdate.handleTasksChange(changedTasks);
+        const passthroughTasks = await applyProgressColumnVolumeDeltas(changedTasks);
+        if (passthroughTasks.length > 0) {
+          await batchUpdate.handleTasksChange(passthroughTasks);
+        }
       },
       handleShiftProject: async (deltaDays: number) => {
         if (!(await prepareUndoPreviewForEdit())) {
@@ -1548,7 +1728,7 @@ export function ProjectWorkspace({
         await batchUpdate.handleUngroupTask(taskId);
       },
     };
-  }, [batchUpdate, prepareUndoPreviewForEdit]);
+  }, [applyProgressColumnVolumeDeltas, batchUpdate, prepareUndoPreviewForEdit]);
 
   const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
 
