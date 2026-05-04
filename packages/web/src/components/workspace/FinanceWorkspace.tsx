@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
-import { Landmark, LoaderCircle, Lock, RefreshCw, X } from 'lucide-react';
+import { LoaderCircle, Lock, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -41,7 +41,7 @@ type FundingDrawerState = {
 } | null;
 
 const ROW_HEIGHT = 46;
-const DEFAULT_CHART_HEIGHT = 640;
+const FINANCE_CHART_HEIGHT = 'calc(100dvh - 132px)';
 const LOCK_COLUMN_WIDTH = 36;
 const COST_COLUMN_WIDTH = 120;
 const PAID_COLUMN_WIDTH = 120;
@@ -244,7 +244,7 @@ export function FinanceWorkspace({
   accessToken = null,
   projectId,
   readOnly = false,
-  onBackToProject,
+  onBackToProject: _onBackToProject,
 }: FinanceWorkspaceProps) {
   const [granularity, setGranularity] = useState<FinancePeriodGranularity>('month');
   const [asOfDate, setAsOfDate] = useState(todayIso);
@@ -257,13 +257,11 @@ export function FinanceWorkspace({
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
   const [drawerPending, setDrawerPending] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
-  const [chartHeight, setChartHeight] = useState<number>(DEFAULT_CHART_HEIGHT);
   const [eventForm, setEventForm] = useState<{ eventDate: string; amount: string; comment: string }>({
     eventDate: todayIso(),
     amount: '',
     comment: '',
   });
-  const chartHostRef = useRef<HTMLDivElement | null>(null);
 
   const loadSnapshot = useCallback(async (showSpinner: boolean) => {
     if (!accessToken) {
@@ -308,23 +306,6 @@ export function FinanceWorkspace({
   useEffect(() => {
     void loadSnapshot(true);
   }, [loadSnapshot]);
-
-  useEffect(() => {
-    const element = chartHostRef.current;
-    if (!element || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const updateHeight = () => {
-      const nextHeight = Math.max(320, Math.floor(element.getBoundingClientRect().height));
-      setChartHeight(nextHeight);
-    };
-
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   const tasks = useMemo(() => buildFinanceTasks(snapshot), [snapshot]);
   const projectTotals = useMemo(() => {
@@ -705,196 +686,196 @@ export function FinanceWorkspace({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {onBackToProject && (
-            <Button variant="outline" size="sm" onClick={onBackToProject}>
-              Назад к графику
+    <div className="finance-workspace flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
+      <div className="px-3 md:px-4">
+        <div className="flex min-h-[46px] flex-wrap items-center justify-between gap-2 bg-[#f4f5f7] py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <span>На дату</span>
+              <Input
+                className="h-9 w-[150px] bg-white"
+                type="date"
+                value={asOfDate}
+                onChange={(event) => setAsOfDate(event.target.value)}
+              />
+            </label>
+            <div className="inline-flex rounded-md">
+              {(['month', 'week'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setGranularity(mode)}
+                  className={cn(
+                    'relative flex h-8 items-center px-2.5 text-xs font-medium transition-colors focus-visible:outline-none',
+                    mode === 'month' ? 'rounded-l-md border' : 'ml-[-1px] rounded-r-md border',
+                    granularity === mode
+                      ? 'z-10 border-primary bg-primary/5 text-primary [@media(any-hover:hover)]:hover:bg-primary/10'
+                      : 'border-slate-300 text-slate-600 [@media(any-hover:hover)]:hover:border-primary [@media(any-hover:hover)]:hover:text-primary',
+                  )}
+                >
+                  {mode === 'month' ? 'Месяцы' : 'Недели'}
+                </button>
+              ))}
+            </div>
+            <Button variant="ghost" size="sm" className="h-8" onClick={() => { void loadSnapshot(false); }} disabled={refreshing}>
+              {refreshing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
-          )}
-          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
-            <Landmark className="h-4 w-4 text-primary" />
-            Финансы
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <span>На дату</span>
-            <Input
-              className="h-9 w-[150px]"
-              type="date"
-              value={asOfDate}
-              onChange={(event) => setAsOfDate(event.target.value)}
-            />
-          </label>
-          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-            {(['month', 'week'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setGranularity(mode)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm transition-colors',
-                  granularity === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900',
-                )}
-              >
-                {mode === 'month' ? 'Месяцы' : 'Недели'}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+            <span>Стоимость: {formatMoney(projectTotals.plannedCost)}</span>
+            <span>План: {formatMoney(projectTotals.plannedToDate)}</span>
+            <span>Освоено: {formatMoney(projectTotals.earnedToDate)}</span>
+            <span>Оплачено: {formatMoney(projectTotals.paidToDate)}</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => { void loadSnapshot(false); }} disabled={refreshing}>
-            {refreshing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-          <span>Стоимость: {formatMoney(projectTotals.plannedCost)}</span>
-          <span>План: {formatMoney(projectTotals.plannedToDate)}</span>
-          <span>Освоено: {formatMoney(projectTotals.earnedToDate)}</span>
-          <span>Оплачено: {formatMoney(projectTotals.paidToDate)}</span>
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
-        </div>
-      )}
-
-      <div ref={chartHostRef} className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {snapshot && snapshot.tasks.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
-            В проекте пока нет задач для финансовой таблицы.
+      <div className="mt-0.5 flex min-w-0 flex-1 flex-col overflow-auto px-3 md:px-4">
+        {error && (
+          <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
           </div>
-        ) : (
-          <GanttChart<FinanceMatrixTask>
-            mode="table-matrix"
-            tasks={tasks}
-            showTaskList={true}
-            taskListWidth={620}
-            rowHeight={36}
-            rowContentLines={2}
-            headerHeight={52}
-            containerHeight={chartHeight}
-            matrixColumns={matrixColumns}
-            matrixColumnGroups={matrixColumnGroups}
-            additionalColumns={additionalColumns}
-            hiddenTaskListColumns={['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions']}
-            disableTaskDrag={true}
-            disableTaskNameEditing={true}
-            disableDependencyEditing={true}
-            enableAddTask={false}
-            hideTaskListRowActions={true}
-            collapsedParentIds={collapsedTaskIds}
-            onToggleCollapse={toggleCollapse}
-            onTasksChange={handleFinanceTasksChange}
-            onMatrixCellClick={({ task, column }) => {
-              if (readOnly) {
-                return;
-              }
-              openDrawer(task.id, column.id, null);
-            }}
-          />
         )}
 
-        {drawerState && snapshot && (
-          <div className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-[-16px_0_32px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900">Поступления</h3>
-                <p className="text-xs text-slate-500">
-                  {snapshot.tasks.find((task) => task.taskId === drawerState.taskId)?.title ?? 'Группа'}
-                </p>
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {snapshot && snapshot.tasks.length === 0 ? (
+              <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
+                В проекте пока нет задач для финансовой таблицы.
               </div>
-              <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-900">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            ) : (
+              <GanttChart<FinanceMatrixTask>
+                mode="table-matrix"
+                tasks={tasks}
+                showTaskList={true}
+                taskListWidth={620}
+                rowHeight={36}
+                rowContentLines={2}
+                headerHeight={52}
+                containerHeight={FINANCE_CHART_HEIGHT}
+                matrixColumns={matrixColumns}
+                matrixColumnGroups={matrixColumnGroups}
+                additionalColumns={additionalColumns}
+                hiddenTaskListColumns={['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions']}
+                disableTaskDrag={true}
+                disableTaskNameEditing={true}
+                disableDependencyEditing={true}
+                enableAddTask={false}
+                hideTaskListRowActions={true}
+                collapsedParentIds={collapsedTaskIds}
+                onToggleCollapse={toggleCollapse}
+                onTasksChange={handleFinanceTasksChange}
+                onMatrixCellClick={({ task, column }) => {
+                  if (readOnly) {
+                    return;
+                  }
+                  openDrawer(task.id, column.id, null);
+                }}
+              />
+            )}
 
-            <div className="space-y-3 border-b border-slate-200 px-4 py-4">
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Дата</span>
-                  <Input
-                    type="date"
-                    value={eventForm.eventDate}
-                    onChange={(event) => setEventForm((current) => ({ ...current, eventDate: event.target.value }))}
-                  />
-                </label>
-                <label className="space-y-1 text-xs font-medium text-slate-600">
-                  <span>Сумма</span>
-                  <Input
-                    value={eventForm.amount}
-                    onChange={(event) => setEventForm((current) => ({ ...current, amount: event.target.value }))}
-                    placeholder="0"
-                  />
-                </label>
-              </div>
-              <label className="space-y-1 text-xs font-medium text-slate-600">
-                <span>Комментарий</span>
-                <Input
-                  value={eventForm.comment}
-                  onChange={(event) => setEventForm((current) => ({ ...current, comment: event.target.value }))}
-                  placeholder="Аванс, КС, этап..."
-                />
-              </label>
-              {drawerError && (
-                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                  {drawerError}
+            {drawerState && snapshot && (
+              <div className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-[-16px_0_32px_rgba(15,23,42,0.08)]">
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Поступления</h3>
+                    <p className="text-xs text-slate-500">
+                      {snapshot.tasks.find((task) => task.taskId === drawerState.taskId)?.title ?? 'Группа'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-900">
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button onClick={() => { void submitEvent(); }} disabled={drawerPending || readOnly}>
-                  {drawerPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : drawerState.editingEventId ? 'Сохранить' : 'Добавить'}
-                </Button>
-                {drawerState.editingEventId && (
-                  <Button variant="outline" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
-                    Новый ввод
-                  </Button>
-                )}
-              </div>
-            </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {drawerEvents.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  Для выбранной группы пока нет поступлений.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {drawerEvents.map((event) => (
-                    <div key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-slate-900">{formatMoney(event.amount)}</div>
-                          <div className="text-xs text-slate-500">{event.eventDate}</div>
-                          {event.comment && <div className="mt-1 text-sm text-slate-600">{event.comment}</div>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
-                            disabled={drawerPending || readOnly}
-                          >
-                            Изм.
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => { void deleteEvent(event.id); }}
-                            disabled={drawerPending || readOnly}
-                            className="text-rose-600 hover:text-rose-700"
-                          >
-                            Удалить
-                          </Button>
-                        </div>
-                      </div>
+                <div className="space-y-3 border-b border-slate-200 px-4 py-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1 text-xs font-medium text-slate-600">
+                      <span>Дата</span>
+                      <Input
+                        type="date"
+                        value={eventForm.eventDate}
+                        onChange={(event) => setEventForm((current) => ({ ...current, eventDate: event.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-slate-600">
+                      <span>Сумма</span>
+                      <Input
+                        value={eventForm.amount}
+                        onChange={(event) => setEventForm((current) => ({ ...current, amount: event.target.value }))}
+                        placeholder="0"
+                      />
+                    </label>
+                  </div>
+                  <label className="space-y-1 text-xs font-medium text-slate-600">
+                    <span>Комментарий</span>
+                    <Input
+                      value={eventForm.comment}
+                      onChange={(event) => setEventForm((current) => ({ ...current, comment: event.target.value }))}
+                      placeholder="Аванс, КС, этап..."
+                    />
+                  </label>
+                  {drawerError && (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      {drawerError}
                     </div>
-                  ))}
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button onClick={() => { void submitEvent(); }} disabled={drawerPending || readOnly}>
+                      {drawerPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : drawerState.editingEventId ? 'Сохранить' : 'Добавить'}
+                    </Button>
+                    {drawerState.editingEventId && (
+                      <Button variant="outline" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
+                        Новый ввод
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                  {drawerEvents.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                      Для выбранной группы пока нет поступлений.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {drawerEvents.map((event) => (
+                        <div key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900">{formatMoney(event.amount)}</div>
+                              <div className="text-xs text-slate-500">{event.eventDate}</div>
+                              {event.comment && <div className="mt-1 text-sm text-slate-600">{event.comment}</div>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
+                                disabled={drawerPending || readOnly}
+                              >
+                                Изм.
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => { void deleteEvent(event.id); }}
+                                disabled={drawerPending || readOnly}
+                                className="text-rose-600 hover:text-rose-700"
+                              >
+                                Удалить
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
