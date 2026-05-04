@@ -59,6 +59,7 @@ const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
 const MIN_EARNED_COLUMN_WIDTH = 104;
 const MIN_PAID_COLUMN_WIDTH = 104;
+const MIN_VARIANCE_COLUMN_WIDTH = 104;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MATRIX_COLUMN_WIDTH_WEEK = 98;
 const DAY_COLUMN_WIDTH = MATRIX_COLUMN_WIDTH_WEEK / 7;
@@ -634,19 +635,31 @@ export function FinanceWorkspace({
     const plannedValues = tasks.map((task) => formatMoney(task.plannedCost));
     const earnedValues = tasks.map((task) => formatMoney(task.earnedToDate));
     const paidValues = tasks.map((task) => formatMoney(task.paidToDate));
+    const varianceValues = tasks.map((task) => formatMoney(task.varianceEarnedVsPaid));
 
     return {
       plannedCost: estimateMoneyColumnWidth(['Бюджет', ...plannedValues], MIN_COST_COLUMN_WIDTH),
       earnedToDate: estimateMoneyColumnWidth(['Освоено', ...earnedValues], MIN_EARNED_COLUMN_WIDTH),
       paidToDate: estimateMoneyColumnWidth(['Оплачено', ...paidValues], MIN_PAID_COLUMN_WIDTH),
+      varianceEarnedVsPaid: estimateMoneyColumnWidth(['Разница', ...varianceValues], MIN_VARIANCE_COLUMN_WIDTH),
     };
   }, [tasks]);
   const financeTaskListWidth = useMemo(() => (
     Math.max(
       620,
-      356 + LOCK_COLUMN_WIDTH + financeColumnWidths.plannedCost + financeColumnWidths.earnedToDate + financeColumnWidths.paidToDate,
+      356
+      + LOCK_COLUMN_WIDTH
+      + financeColumnWidths.plannedCost
+      + financeColumnWidths.earnedToDate
+      + financeColumnWidths.paidToDate
+      + financeColumnWidths.varianceEarnedVsPaid,
     )
-  ), [financeColumnWidths.earnedToDate, financeColumnWidths.paidToDate, financeColumnWidths.plannedCost]);
+  ), [
+    financeColumnWidths.earnedToDate,
+    financeColumnWidths.paidToDate,
+    financeColumnWidths.plannedCost,
+    financeColumnWidths.varianceEarnedVsPaid,
+  ]);
   const parentTaskIds = useMemo(() => {
     const ids = new Set<string>();
     for (const task of tasks) {
@@ -1101,11 +1114,34 @@ export function FinanceWorkspace({
         );
       },
     },
+    {
+      id: 'varianceEarnedVsPaid',
+      header: <span title="Разница между освоено и оплачено. Плюс — должны мы, минус — должны нам.">Разница</span>,
+      width: financeColumnWidths.varianceEarnedVsPaid,
+      after: 'paidToDate',
+      align: 'right',
+      renderCell: ({ task }) => (
+        <MoneyValue
+          value={task.varianceEarnedVsPaid}
+          color={
+            task.varianceEarnedVsPaid > 0
+              ? '#be123c'
+              : task.varianceEarnedVsPaid < 0
+                ? '#047857'
+                : '#94a3b8'
+          }
+          fontWeight={task.parentId ? 500 : 700}
+          className="text-[12px]"
+          prefix={task.varianceEarnedVsPaid > 0 ? '+' : ''}
+        />
+      ),
+    },
   ], [
     readOnly,
     financeColumnWidths.earnedToDate,
     financeColumnWidths.paidToDate,
     financeColumnWidths.plannedCost,
+    financeColumnWidths.varianceEarnedVsPaid,
     requestAllocationModeChange,
     savingTaskId,
   ]);
@@ -1311,12 +1347,12 @@ export function FinanceWorkspace({
               className={cn(
                 'grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2 rounded-md border px-2.5 py-1.5 text-xs leading-tight',
                 outstandingReceivable > 0
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                  ? 'border-rose-200 bg-rose-50 text-rose-900'
                   : outstandingReceivable < 0
-                    ? 'border-rose-200 bg-rose-50 text-rose-900'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                     : 'border-slate-200 bg-slate-100 text-slate-700',
               )}
-              title="Разница между освоено и оплачено. Показывает, сколько заказчик ещё должен оплатить."
+              title="Разница между освоено и оплачено. Плюс — должны мы, минус — должны нам."
             >
               <div className="whitespace-nowrap">Должны нам</div>
               <div className="text-right font-semibold tabular-nums">{formatMoney(outstandingReceivable)}</div>
