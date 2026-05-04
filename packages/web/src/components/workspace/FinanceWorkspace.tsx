@@ -315,6 +315,28 @@ function buildPeriodGroup(period: FinancePeriodBucket, granularity: FinancePerio
   };
 }
 
+function buildYearGroups(periods: FinancePeriodBucket[]): TableMatrixColumnGroup[] {
+  const groups: TableMatrixColumnGroup[] = [];
+  const monthWidth = getMatrixColumnMinWidth('month');
+
+  for (const period of periods) {
+    const group = buildPeriodGroup(period, 'month');
+    const previousGroup = groups[groups.length - 1];
+    if (previousGroup?.id === group.id) {
+      previousGroup.width = (previousGroup.width ?? 0) + monthWidth;
+      continue;
+    }
+
+    groups.push({
+      id: group.id,
+      header: group.label,
+      width: monthWidth,
+    });
+  }
+
+  return groups;
+}
+
 function buildVisibleMonthGroups(periods: FinancePeriodBucket[]): TableMatrixColumnGroup[] {
   if (periods.length === 0) {
     return [];
@@ -1199,22 +1221,7 @@ export function FinanceWorkspace({
       return buildVisibleMonthGroups(snapshot.periods);
     }
 
-    const groups: TableMatrixColumnGroup[] = [];
-    const seen = new Set<string>();
-
-    for (const period of snapshot.periods) {
-      const group = buildPeriodGroup(period, snapshot.granularity);
-      if (seen.has(group.id)) {
-        continue;
-      }
-      seen.add(group.id);
-      groups.push({
-        id: group.id,
-        header: group.label,
-      });
-    }
-
-    return groups;
+    return buildYearGroups(snapshot.periods);
   }, [snapshot]);
 
   const matrixColumns = useMemo<TableMatrixColumn<FinanceMatrixTask>[]>(() => {

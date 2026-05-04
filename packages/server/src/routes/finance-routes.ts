@@ -596,7 +596,7 @@ async function lockAncestorsWhenChildrenFullyFixed(
   }
 }
 
-function buildFinanceTaskRows(
+export function buildFinanceTaskRows(
   tasks: TaskRecord[],
   settingsByTaskId: Map<string, FinanceSettingRecord>,
   fundingEvents: Array<{ id: string; taskId: string; eventDate: string; amount: number; comment: string | null; createdAt: string; updatedAt: string }>,
@@ -740,6 +740,8 @@ function buildFinanceTaskRows(
     if (!hasChildPlannedCost) {
       continue;
     }
+
+    row.plannedCost = roundMoney(childRows.reduce((sum, childRow) => sum + childRow.plannedCost, 0));
 
     const plannedByPeriod: Record<string, number> = {};
     for (const period of periods) {
