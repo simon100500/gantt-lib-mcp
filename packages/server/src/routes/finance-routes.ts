@@ -752,8 +752,20 @@ function buildFinanceTaskRows(
     }
 
     row.plannedByPeriod = plannedByPeriod;
+    const paidByPeriod: Record<string, number> = {};
+    for (const period of periods) {
+      const periodTotal = roundMoney(
+        childRows.reduce((sum, childRow) => sum + (childRow.paidByPeriod[period.id] ?? 0), 0),
+      );
+      if (periodTotal > 0) {
+        paidByPeriod[period.id] = periodTotal;
+      }
+    }
+
+    row.paidByPeriod = paidByPeriod;
     row.plannedToDate = roundMoney(childRows.reduce((sum, childRow) => sum + childRow.plannedToDate, 0));
     row.earnedToDate = roundMoney(childRows.reduce((sum, childRow) => sum + childRow.earnedToDate, 0));
+    row.paidToDate = roundMoney(childRows.reduce((sum, childRow) => sum + childRow.paidToDate, 0));
     row.variancePlannedVsEarned = roundMoney(row.earnedToDate - row.plannedToDate);
     row.varianceEarnedVsPaid = roundMoney(row.paidToDate - row.earnedToDate);
   }
