@@ -173,9 +173,6 @@ function TaskCompletedVolumeCell({
     () => [...entries].sort((left, right) => right.entryDate.localeCompare(left.entryDate)),
     [entries],
   );
-  const progressLabel = typeof task.progress === 'number'
-    ? `${formatMetricValue(task.progress, 1)}%`
-    : null;
 
   return (
     <Popover onOpenChange={(nextOpen) => {
@@ -190,13 +187,12 @@ function TaskCompletedVolumeCell({
     }} open={open}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex w-full items-center justify-between rounded-md px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
+          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           type="button"
         >
           <span>{formatMetricValue(task.completedVolume ?? 0)}</span>
-          {progressLabel ? <span className="ml-2 text-[10px] text-slate-400">{progressLabel}</span> : null}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80" onClick={(event) => event.stopPropagation()}>
@@ -323,7 +319,7 @@ export function createTaskWorkColumns({
       header: 'Объём',
       width: 92,
       minWidth: 84,
-      after: 'progress',
+      after: 'duration',
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
           mode="volume"
