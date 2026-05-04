@@ -12,6 +12,8 @@ type TaskWorkMutationResult = {
   progressEntries?: TaskProgressEntry[];
 };
 
+const SUGGESTED_WORK_UNITS = ['м', 'м2', 'м3', 'шт', 'кг', 'т', 'компл', 'пог.м', 'л', 'смена', 'ч'];
+
 export interface CreateTaskWorkColumnsOptions {
   progressEntries: TaskProgressEntry[];
   readOnly?: boolean;
@@ -40,40 +42,37 @@ function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0] ?? '';
 }
 
+function formatVolumeWithUnit(task: Task): string {
+  const volumeLabel = formatMetricValue(task.workVolume);
+  const unitLabel = task.workUnit?.trim();
+  if (volumeLabel === '—') {
+    return '—';
+  }
+  return unitLabel ? `${volumeLabel} ${unitLabel}` : volumeLabel;
+}
+
 function TaskWorkMetadataCell({
   task,
   readOnly = false,
-  mode,
   onSubmit,
 }: {
   task: Task;
   readOnly?: boolean;
-  mode: 'volume' | 'unit';
   onSubmit: (task: Task, patch: { workVolume?: number | null; workUnit?: string | null }) => Promise<TaskWorkMutationResult>;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [value, setValue] = useState(
-    mode === 'volume'
-      ? task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume)
-      : task.workUnit ?? '',
-  );
-
-  const displayValue = mode === 'volume'
-    ? formatMetricValue(task.workVolume)
-    : task.workUnit?.trim() || '—';
+  const [volumeValue, setVolumeValue] = useState(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
+  const [unitValue, setUnitValue] = useState(task.workUnit ?? '');
 
   return (
     <Popover onOpenChange={(nextOpen) => {
       setOpen(nextOpen);
       if (nextOpen) {
         setError(null);
-        setValue(
-          mode === 'volume'
-            ? task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume)
-            : task.workUnit ?? '',
-        );
+        setVolumeValue(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
+        setUnitValue(task.workUnit ?? '');
       }
     }} open={open}>
       <PopoverTrigger asChild>
@@ -83,10 +82,10 @@ function TaskWorkMetadataCell({
           onClick={(event) => event.stopPropagation()}
           type="button"
         >
-          {displayValue}
+          {formatVolumeWithUnit(task)}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64" onClick={(event) => event.stopPropagation()}>
+      <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>
         <form
           className="space-y-3"
           onSubmit={async (event) => {
@@ -95,20 +94,20 @@ function TaskWorkMetadataCell({
             setError(null);
 
             try {
-              if (mode === 'volume') {
-                const trimmed = value.trim();
-                if (trimmed.length === 0) {
-                  await onSubmit(task, { workVolume: null });
-                } else {
-                  const parsed = Number.parseFloat(trimmed.replace(',', '.'));
-                  if (!Number.isFinite(parsed) || parsed < 0) {
-                    throw new Error('Введите корректный объём.');
-                  }
-                  await onSubmit(task, { workVolume: parsed });
+              const trimmedVolume = volumeValue.trim();
+              let parsedVolume: number | null = null;
+              if (trimmedVolume.length > 0) {
+                parsedVolume = Number.parseFloat(trimmedVolume.replace(',', '.'));
+                if (!Number.isFinite(parsedVolume) || parsedVolume < 0) {
+                  throw new Error('Введите корректный объём.');
                 }
               } else {
-                await onSubmit(task, { workUnit: value.trim() || null });
+                parsedVolume = null;
               }
+              await onSubmit(task, {
+                workVolume: parsedVolume,
+                workUnit: unitValue.trim() || null,
+              });
               setOpen(false);
             } catch (submissionError) {
               setError(submissionError instanceof Error ? submissionError.message : 'Не удалось сохранить значение.');
@@ -118,21 +117,37 @@ function TaskWorkMetadataCell({
           }}
         >
           <div className="space-y-1">
-            <h4 className="text-sm font-semibold text-slate-900">
-              {mode === 'volume' ? 'Объём работы' : 'Единица измерения'}
-            </h4>
+            <h4 className="text-sm font-semibold text-slate-900">Исходный объём</h4>
             <p className="text-xs text-slate-500">{task.name}</p>
           </div>
-          <Input
-            autoFocus
-            disabled={pending}
-            inputMode={mode === 'volume' ? 'decimal' : 'text'}
-            onChange={(event) => setValue(event.target.value)}
-            placeholder={mode === 'volume' ? 'Например, 1200' : 'Например, м2'}
-            step={mode === 'volume' ? '0.01' : undefined}
-            type={mode === 'volume' ? 'number' : 'text'}
-            value={value}
-          />
+          <div className="grid grid-cols-[1.3fr_1fr] gap-2">
+            <Input
+              autoFocus
+              disabled={pending}
+              inputMode="decimal"
+              onChange={(event) => setVolumeValue(event.target.value)}
+              placeholder="Например, 1200"
+              step="0.01"
+              type="number"
+              value={volumeValue}
+            />
+            <Input
+              disabled={pending}
+              list="work-unit-suggestions"
+              onChange={(event) => setUnitValue(event.target.value)}
+              placeholder="Ед. изм."
+              type="text"
+              value={unitValue}
+            />
+            <datalist id="work-unit-suggestions">
+              {SUGGESTED_WORK_UNITS.map((unit) => (
+                <option key={unit} value={unit} />
+              ))}
+            </datalist>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Можно выбрать из списка или ввести свою единицу вручную.
+          </p>
           {error ? <p className="text-xs text-rose-600">{error}</p> : null}
           <div className="flex items-center justify-end gap-2">
             <Button disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
@@ -317,27 +332,11 @@ export function createTaskWorkColumns({
     {
       id: 'work-volume',
       header: 'Объём',
-      width: 92,
-      minWidth: 84,
+      width: 124,
+      minWidth: 110,
       after: 'duration',
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
-          mode="volume"
-          onSubmit={onUpdateWorkMetadata}
-          readOnly={readOnly}
-          task={task}
-        />
-      ),
-    },
-    {
-      id: 'work-unit',
-      header: 'Ед. изм.',
-      width: 88,
-      minWidth: 80,
-      after: 'work-volume',
-      renderCell: ({ task }) => (
-        <TaskWorkMetadataCell
-          mode="unit"
           onSubmit={onUpdateWorkMetadata}
           readOnly={readOnly}
           task={task}
@@ -349,7 +348,7 @@ export function createTaskWorkColumns({
       header: 'Выполнено',
       width: 110,
       minWidth: 100,
-      after: 'work-unit',
+      after: 'progress',
       renderCell: ({ task }) => (
         <TaskCompletedVolumeCell
           entries={progressEntries.filter((entry) => entry.taskId === task.id)}
