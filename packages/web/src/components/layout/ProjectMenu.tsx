@@ -514,8 +514,8 @@ export function ProjectMenu({
                     >
                       {currentProjectLabel}
                     </span>
-                    </>
-                  )}
+                  </>
+                )}
                 {!hasShareToken && auth.isAuthenticated && projectUsageLabel && (
                   <div className="hidden items-center gap-2 sm:flex">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
@@ -551,21 +551,6 @@ export function ProjectMenu({
                       </button>
                       <button
                         type="button"
-                        onClick={() => { void onOpenFinance?.(); }}
-                        className={cn(
-                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          workspace.kind === 'finance'
-                            ? 'border-primary text-primary'
-                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
-                        )}
-                        data-testid="topbar-mode-finance"
-                        role="tab"
-                        aria-selected={workspace.kind === 'finance'}
-                      >
-                        <span>Финансы</span>
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => { void onOpenResourcePool?.(); }}
                         className={cn(
                           'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -578,6 +563,21 @@ export function ProjectMenu({
                         aria-selected={workspace.kind === 'planner'}
                       >
                         <span>Ресурсы</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void onOpenFinance?.(); }}
+                        className={cn(
+                          'relative -mb-px inline-flex h-full items-center gap-1.5 border-b-2 bg-transparent px-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                          workspace.kind === 'finance'
+                            ? 'border-primary text-primary'
+                            : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                        )}
+                        data-testid="topbar-mode-finance"
+                        role="tab"
+                        aria-selected={workspace.kind === 'finance'}
+                      >
+                        <span>Финансы</span>
                       </button>
                     </div>
                   )}
@@ -623,7 +623,7 @@ export function ProjectMenu({
                     ) : (
                       <ChartNoAxesGantt className="h-3.5 w-3.5 text-primary" />
                     )}
-                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : 'График'}</span>
+                    <span>{workspace.kind === 'planner' ? 'Ресурсы' : workspace.kind === 'finance' ? 'Финансы' : 'Гант'}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -637,18 +637,7 @@ export function ProjectMenu({
                     data-testid="topbar-mode-chart-mobile"
                   >
                     <ChartNoAxesGantt className="h-4 w-4" />
-                    <span>График</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => { void onOpenFinance?.(); }}
-                    className={cn(
-                      'gap-2 text-slate-700 focus:text-slate-900',
-                      workspace.kind === 'finance' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
-                    )}
-                    data-testid="topbar-mode-finance-mobile"
-                  >
-                    <Landmark className="h-4 w-4" />
-                    <span>Финансы</span>
+                    <span>Гант</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => { void onOpenResourcePool?.(); }}
@@ -660,6 +649,17 @@ export function ProjectMenu({
                   >
                     <Package className="h-4 w-4" />
                     <span>Ресурсы</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => { void onOpenFinance?.(); }}
+                    className={cn(
+                      'gap-2 text-slate-700 focus:text-slate-900',
+                      workspace.kind === 'finance' && 'bg-primary/10 text-primary focus:bg-primary/10 focus:text-primary',
+                    )}
+                    data-testid="topbar-mode-finance-mobile"
+                  >
+                    <Landmark className="h-4 w-4" />
+                    <span>Финансы</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
-import { LoaderCircle, Lock, Pencil, RefreshCw, X } from 'lucide-react';
+import { GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -173,12 +173,25 @@ function filterEventsForDrawer(
   events: TaskFundingEvent[],
   drawer: FundingDrawerState,
   periods: FinancePeriodBucket[],
+  tasks: ProjectFinanceSnapshot['tasks'],
 ): TaskFundingEvent[] {
   if (!drawer) {
     return [];
   }
 
-  const taskEvents = events.filter((event) => event.taskId === drawer.taskId);
+  const taskIds = new Set<string>([drawer.taskId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const task of tasks) {
+      if (task.parentTaskId && taskIds.has(task.parentTaskId) && !taskIds.has(task.taskId)) {
+        taskIds.add(task.taskId);
+        changed = true;
+      }
+    }
+  }
+
+  const taskEvents = events.filter((event) => taskIds.has(event.taskId));
   if (!drawer.periodId) {
     return taskEvents;
   }
@@ -438,7 +451,7 @@ export function FinanceWorkspace({
     });
   }, [tasks]);
   const drawerEvents = useMemo(
-    () => drawerState && snapshot ? filterEventsForDrawer(snapshot.events, drawerState, snapshot.periods) : [],
+    () => drawerState && snapshot ? filterEventsForDrawer(snapshot.events, drawerState, snapshot.periods, snapshot.tasks) : [],
     [drawerState, snapshot],
   );
   const sortedDrawerEvents = useMemo(
@@ -454,6 +467,10 @@ export function FinanceWorkspace({
   const drawerTask = useMemo(
     () => drawerState && snapshot ? snapshot.tasks.find((task) => task.taskId === drawerState.taskId) ?? null : null,
     [drawerState, snapshot],
+  );
+  const drawerTaskTitleById = useMemo(
+    () => new Map(snapshot?.tasks.map((task) => [task.taskId, task.title]) ?? []),
+    [snapshot],
   );
   const drawerPeriod = useMemo(
     () => drawerState?.periodId && snapshot ? snapshot.periods.find((period) => period.id === drawerState.periodId) ?? null : null,
@@ -747,7 +764,7 @@ export function FinanceWorkspace({
             title={task.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
             aria-label={task.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
             className={cn(
-              'rounded-sm p-0.5 text-slate-300 transition-opacity hover:text-slate-500',
+              'rounded-sm p-0.5 text-slate-400 transition-colors transition-opacity hover:text-primary focus-visible:text-primary',
               task.hasOwnFinanceSetting && task.allocationMode === 'manual'
                 ? 'opacity-100'
                 : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
@@ -1095,33 +1112,47 @@ export function FinanceWorkspace({
                     ) : (
                       <>
                         <div className="finance-history-list">
-                          {sortedDrawerEvents.map((event) => (
-                            <div key={event.id} className="finance-history-item">
-                              <span className="finance-history-date">{formatDisplayDate(event.eventDate)}</span>
-                              <span className="finance-history-amount">
-                                +{formatMoney(event.amount)} ₽
-                              </span>
-                              <span className="finance-history-comment">{event.comment || '—'}</span>
-                              <button
-                                type="button"
-                                className="finance-history-action"
-                                onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
-                                disabled={drawerPending || readOnly}
-                                aria-label="Редактировать"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                className="finance-history-action finance-history-delete"
-                                onClick={() => { void deleteEvent(event.id); }}
-                                disabled={drawerPending || readOnly}
-                                aria-label="Удалить"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ))}
+                          {sortedDrawerEvents.map((event) => {
+                            const sourceTaskTitle = event.taskId !== drawerState.taskId
+                              ? drawerTaskTitleById.get(event.taskId)
+                              : null;
+
+                            return (
+                              <div key={event.id} className="finance-history-item">
+                                {sourceTaskTitle && (
+                                  <div className="finance-history-source-row">
+                                    <GitMerge className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    <span>{sourceTaskTitle}</span>
+                                  </div>
+                                )}
+                                <div className="finance-history-detail-row">
+                                  <span className="finance-history-date">{formatDisplayDate(event.eventDate)}</span>
+                                  <span className="finance-history-amount">
+                                    +{formatMoney(event.amount)} ₽
+                                  </span>
+                                  <span className="finance-history-comment">{event.comment || '—'}</span>
+                                  <button
+                                    type="button"
+                                    className="finance-history-action"
+                                    onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
+                                    disabled={drawerPending || readOnly}
+                                    aria-label="Редактировать"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="finance-history-action finance-history-delete"
+                                    onClick={() => { void deleteEvent(event.id); }}
+                                    disabled={drawerPending || readOnly}
+                                    aria-label="Удалить"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                         <div className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
                           <span className="text-xs font-semibold uppercase tracking-[0.03em] text-slate-500">Итого</span>

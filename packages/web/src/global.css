@@ -121,10 +121,7 @@
 }
 
 .finance-history-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 40px;
+  display: block;
   padding: 10px 12px;
   border-radius: 8px;
   transition: background-color 120ms ease;
@@ -146,6 +143,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.finance-history-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .finance-history-amount {
   flex: 0 0 auto;
   color: #16a34a;
@@ -157,11 +160,27 @@
 .finance-history-comment {
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   overflow: hidden;
   color: #64748b;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.finance-history-source-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .finance-history-action {
