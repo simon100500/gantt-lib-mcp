@@ -23,6 +23,9 @@ export interface Task {
   color?: string;
   parentId?: string;
   progress?: number;
+  workVolume?: number | null;
+  workUnit?: string | null;
+  completedVolume?: number;
   dependencies?: TaskDependency[];
   sortOrder?: number;
   children?: Task[];
@@ -40,6 +43,9 @@ export interface CreateTaskInput {
   color?: string;
   parentId?: string;
   progress?: number;
+  workVolume?: number | null;
+  workUnit?: string | null;
+  completedVolume?: number;
   dependencies?: TaskDependency[];
   sortOrder?: number;
   projectId?: string;
@@ -54,8 +60,21 @@ export interface UpdateTaskInput {
   color?: string | null;
   parentId?: string;
   progress?: number;
+  workVolume?: number | null;
+  workUnit?: string | null;
+  completedVolume?: number;
   dependencies?: TaskDependency[];
   sortOrder?: number;
+}
+
+export interface TaskProgressEntry {
+  id: string;
+  projectId: string;
+  taskId: string;
+  entryDate: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkType {
@@ -793,6 +812,9 @@ export type ProjectCommand =
         color?: string | null;
         parentId?: string | null;
         progress?: number;
+        workVolume?: number | null;
+        workUnit?: string | null;
+        completedVolume?: number;
         dependencies?: TaskDependency[];
       };
     }
@@ -806,6 +828,9 @@ export type ProjectCommand =
           color?: string | null;
           parentId?: string | null;
           progress?: number;
+          workVolume?: number | null;
+          workUnit?: string | null;
+          completedVolume?: number;
           dependencies?: TaskDependency[];
         };
       }>;

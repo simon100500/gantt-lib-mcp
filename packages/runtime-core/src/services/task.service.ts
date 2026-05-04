@@ -62,6 +62,9 @@ export class TaskService {
       color: task.color || undefined,
       parentId: task.parentId || undefined,
       progress: task.progress,
+      workVolume: task.workVolume ?? null,
+      workUnit: task.workUnit ?? null,
+      completedVolume: task.completedVolume ?? 0,
       dependencies,
       sortOrder: task.sortOrder,
     };

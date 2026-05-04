@@ -126,6 +126,34 @@ function normalizeTaskAssignments(
   });
 }
 
+function normalizeTaskProgressEntries(
+  progressEntries: ProjectLoadResponse['snapshot']['progressEntries'] | undefined,
+): ProjectLoadResponse['snapshot']['progressEntries'] {
+  if (!Array.isArray(progressEntries)) {
+    return [];
+  }
+
+  return progressEntries.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+
+    const id = typeof entry.id === 'string' ? entry.id : '';
+    const projectId = typeof entry.projectId === 'string' ? entry.projectId : '';
+    const taskId = typeof entry.taskId === 'string' ? entry.taskId : '';
+    const entryDate = typeof entry.entryDate === 'string' ? entry.entryDate : '';
+    const amount = typeof entry.amount === 'number' && Number.isFinite(entry.amount) ? entry.amount : null;
+    const createdAt = typeof entry.createdAt === 'string' ? entry.createdAt : '';
+    const updatedAt = typeof entry.updatedAt === 'string' ? entry.updatedAt : '';
+
+    if (!id || !projectId || !taskId || !entryDate || amount === null || !createdAt || !updatedAt) {
+      return [];
+    }
+
+    return [{ id, projectId, taskId, entryDate, amount, createdAt, updatedAt }];
+  });
+}
+
 interface LocalSnapshot {
   tasks: Task[];
   isDemoMode: boolean;
@@ -285,12 +313,14 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       const normalizedTasks = normalizeTasks(project.snapshot.tasks);
       const normalizedResources = normalizeProjectResources(project.snapshot.resources);
       const normalizedAssignments = normalizeTaskAssignments(project.snapshot.assignments, normalizedResources, project.project.id);
+      const normalizedProgressEntries = normalizeTaskProgressEntries(project.snapshot.progressEntries);
       useProjectStore.getState().hydrateConfirmed(project.version, {
         tasks: normalizedTasks,
         dependencies: project.snapshot.dependencies,
       }, {
         resources: normalizedResources,
         assignments: normalizedAssignments,
+        progressEntries: normalizedProgressEntries,
       });
       const authState = useAuthStore.getState();
       if (authState.project) {
@@ -331,6 +361,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     }, {
       resources: [],
       assignments: [],
+      progressEntries: [],
     });
 
     set({
@@ -355,6 +386,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     }, {
       resources: [],
       assignments: [],
+      progressEntries: [],
     });
     set({
       activeSource: 'shared',

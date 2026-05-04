@@ -281,6 +281,42 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
     await unmountWorkspace(root);
   });
 
+  it('hydrates persisted task list widths and stores resized widths back into project UI state', async () => {
+    useProjectUIStore.getState().setProjectState('project-1', {
+      taskListColumnWidths: {
+        name: 280,
+        'assigned-resources': 160,
+      },
+    });
+
+    const { root } = await renderWorkspace();
+
+    expect(ganttPropsSpy?.taskListColumnWidths).toMatchObject({
+      name: 280,
+      'assigned-resources': 160,
+    });
+    expect(ganttPropsSpy?.taskListWidth).toBe(1076);
+
+    await act(async () => {
+      const onTaskListColumnWidthsChange = ganttPropsSpy?.onTaskListColumnWidthsChange as ((widths: Record<string, number>) => void) | undefined;
+      onTaskListColumnWidthsChange?.({
+        name: 320,
+        'assigned-resources': 170,
+        duration: 72,
+      });
+      await Promise.resolve();
+    });
+
+    expect(useProjectUIStore.getState().projectStates['project-1']?.taskListColumnWidths).toEqual({
+      name: 320,
+      'assigned-resources': 170,
+      duration: 72,
+    });
+    expect(ganttPropsSpy?.taskListWidth).toBe(1138);
+
+    await unmountWorkspace(root);
+  });
+
   it('renders assigned, inactive, stale, and empty task states from ProjectWorkspace store inputs', async () => {
     const { root } = await renderWorkspace();
     const column = getAssignedResourcesColumn();

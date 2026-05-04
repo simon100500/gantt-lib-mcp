@@ -136,6 +136,9 @@ function applyTaskFieldUpdateToSnapshot(
     ...(update.fields.color !== undefined ? { color: update.fields.color ?? undefined } : {}),
     ...(update.fields.parentId !== undefined ? { parentId: update.fields.parentId ?? undefined } : {}),
     ...(update.fields.progress !== undefined ? { progress: update.fields.progress } : {}),
+    ...(update.fields.workVolume !== undefined ? { workVolume: update.fields.workVolume } : {}),
+    ...(update.fields.workUnit !== undefined ? { workUnit: update.fields.workUnit } : {}),
+    ...(update.fields.completedVolume !== undefined ? { completedVolume: update.fields.completedVolume } : {}),
     ...(update.fields.dependencies !== undefined
       ? {
           dependencies: update.fields.dependencies.map((dependency) => ({
@@ -176,6 +179,9 @@ function applyTaskFieldUpdateToSnapshot(
             color: updatedTask.color,
             parentId: updatedTask.parentId,
             progress: updatedTask.progress,
+            workVolume: (updatedTask as Task).workVolume,
+            workUnit: (updatedTask as Task).workUnit,
+            completedVolume: (updatedTask as Task).completedVolume,
             dependencies: updatedTask.dependencies,
           }
         : candidate,
@@ -247,6 +253,9 @@ function buildTaskSnapshot(tasks: CoreTask[]): Task[] {
     color: task.color,
     parentId: task.parentId,
     progress: task.progress,
+    workVolume: (task as Task).workVolume ?? null,
+    workUnit: (task as Task).workUnit ?? null,
+    completedVolume: (task as Task).completedVolume ?? 0,
     dependencies: task.dependencies?.map((dependency) => ({
       taskId: dependency.taskId,
       type: dependency.type as DependencyType,
@@ -532,6 +541,9 @@ export function applyProjectCommandToSnapshot(
         color: command.task.color,
         parentId: command.task.parentId,
         progress: command.task.progress,
+        workVolume: command.task.workVolume ?? null,
+        workUnit: command.task.workUnit ?? null,
+        completedVolume: command.task.completedVolume ?? 0,
         dependencies: command.task.dependencies,
         sortOrder: command.task.sortOrder,
       };
@@ -548,6 +560,9 @@ export function applyProjectCommandToSnapshot(
         color: task.color,
         parentId: task.parentId,
         progress: task.progress,
+        workVolume: task.workVolume ?? null,
+        workUnit: task.workUnit ?? null,
+        completedVolume: task.completedVolume ?? 0,
         dependencies: task.dependencies,
         sortOrder: task.sortOrder,
       }));

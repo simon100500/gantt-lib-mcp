@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Task, ProjectState, ProjectSnapshot, FrontendProjectCommand, PendingCommand } from '../types';
-import type { PlannerScope, ProjectResource, ResourcePlannerResult, TaskAssignmentRecord } from '../lib/apiTypes';
+import type { PlannerScope, ProjectResource, ResourcePlannerResult, TaskAssignmentRecord, TaskProgressEntry } from '../lib/apiTypes';
 import { replayProjectCommand } from '../lib/projectCommandReplay';
 import { getDefaultProjectScheduleOptions } from '../lib/projectScheduleOptions';
 import type { ScheduleCommandOptions } from 'gantt-lib/core/scheduling';
@@ -34,11 +34,16 @@ export function deriveVisibleSnapshot(
 interface ProjectStoreState extends ProjectState {
   resources: ProjectResource[];
   assignments: TaskAssignmentRecord[];
+  progressEntries: TaskProgressEntry[];
   assignmentError: string | null;
   resourcePlannerCache: Record<string, ResourcePlannerResult>;
   setConfirmed: (version: number, snapshot: ProjectSnapshot) => void;
   mergeConfirmedSnapshot: (snapshot: ProjectSnapshot, version?: number) => void;
-  hydrateConfirmed: (version: number, snapshot: ProjectSnapshot, extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[] }) => void;
+  hydrateConfirmed: (
+    version: number,
+    snapshot: ProjectSnapshot,
+    extras?: { resources?: ProjectResource[]; assignments?: TaskAssignmentRecord[]; progressEntries?: TaskProgressEntry[] }
+  ) => void;
   addPending: (pending: PendingCommand) => void;
   hydratePending: (pending: PendingCommand[]) => void;
   updatePendingStatus: (requestId: string, status: NonNullable<PendingCommand['status']>) => void;
@@ -55,6 +60,8 @@ interface ProjectStoreState extends ProjectState {
   upsertResource: (resource: ProjectResource) => void;
   removeResource: (resourceId: string) => void;
   setAssignments: (assignments: TaskAssignmentRecord[]) => void;
+  setProgressEntries: (progressEntries: TaskProgressEntry[]) => void;
+  replaceProgressEntriesForTask: (taskId: string, progressEntries: TaskProgressEntry[]) => void;
   replaceAssignmentsForTask: (taskId: string, assignments: TaskAssignmentRecord[]) => void;
   replaceAssignmentsForTasks: (taskIds: string[], assignments: TaskAssignmentRecord[]) => void;
   removeAssignmentsByResource: (resourceId: string) => void;
@@ -80,6 +87,7 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
   confirmed: { version: 0, snapshot: { tasks: [], dependencies: [] } },
   resources: [],
   assignments: [],
+  progressEntries: [],
   assignmentError: null,
   resourcePlannerCache: {},
   pending: [],
@@ -105,6 +113,7 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
     confirmed: { version, snapshot },
     resources: extras?.resources ? sortResources(extras.resources) : [],
     assignments: extras?.assignments ?? [],
+    progressEntries: extras?.progressEntries ?? [],
     assignmentError: null,
     resourcePlannerCache: {},
     pending: [],
@@ -213,6 +222,16 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
     resources: state.resources.filter((resource) => resource.id !== resourceId),
   })),
   setAssignments: (assignments) => set({ assignments }),
+  setProgressEntries: (progressEntries) => set({ progressEntries }),
+  replaceProgressEntriesForTask: (taskId, progressEntries) => set((state) => ({
+    progressEntries: [
+      ...state.progressEntries.filter((entry) => entry.taskId !== taskId),
+      ...progressEntries,
+    ].sort((left, right) => (
+      left.entryDate.localeCompare(right.entryDate)
+      || left.createdAt.localeCompare(right.createdAt)
+    )),
+  })),
   replaceAssignmentsForTask: (taskId, assignments) => set((state) => ({
     assignments: [
       ...state.assignments.filter((assignment) => assignment.taskId !== taskId),

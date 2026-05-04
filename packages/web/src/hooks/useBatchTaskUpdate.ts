@@ -20,6 +20,9 @@ function summarizeTasks(tasks: Task[]) {
     type: task.type ?? 'task',
     parentId: task.parentId ?? null,
     progress: task.progress ?? 0,
+    workVolume: task.workVolume ?? null,
+    workUnit: task.workUnit ?? null,
+    completedVolume: task.completedVolume ?? 0,
     dependencies: (task.dependencies ?? []).map((dependency) => ({
       taskId: dependency.taskId,
       type: dependency.type,
@@ -134,6 +137,9 @@ export function useBatchTaskUpdate({
     && (left.parentId ?? null) === (right.parentId ?? null)
     && (left.color ?? null) === (right.color ?? null)
     && (left.progress ?? 0) === (right.progress ?? 0)
+    && (left.workVolume ?? null) === (right.workVolume ?? null)
+    && (left.workUnit ?? null) === (right.workUnit ?? null)
+    && (left.completedVolume ?? 0) === (right.completedVolume ?? 0)
     && JSON.stringify(left.dependencies ?? []) === JSON.stringify(right.dependencies ?? [])
   ), [toDateString]);
 
@@ -305,6 +311,9 @@ export function useBatchTaskUpdate({
     color: task.color,
     parentId: task.parentId,
     progress: task.progress,
+    workVolume: task.workVolume ?? null,
+    workUnit: task.workUnit ?? null,
+    completedVolume: task.completedVolume ?? 0,
     dependencies: task.dependencies,
     sortOrder: task.sortOrder,
   }), []);
@@ -439,7 +448,10 @@ export function useBatchTaskUpdate({
         toDateString(original.endDate) === toDateString(t.endDate) &&
         (original.parentId ?? null) === (t.parentId ?? null) &&
         (original.color ?? null) === (t.color ?? null) &&
-        (original.progress ?? 0) === (t.progress ?? 0);
+        (original.progress ?? 0) === (t.progress ?? 0) &&
+        (original.workVolume ?? null) === (t.workVolume ?? null) &&
+        (original.workUnit ?? null) === (t.workUnit ?? null) &&
+        (original.completedVolume ?? 0) === (t.completedVolume ?? 0);
       return depsChanged && nothingElseChanged;
     });
 
@@ -668,6 +680,9 @@ export function useBatchTaskUpdate({
         color: task.color,
         parentId: task.parentId,
         progress: task.progress,
+        workVolume: task.workVolume ?? null,
+        workUnit: task.workUnit ?? null,
+        completedVolume: task.completedVolume ?? 0,
         dependencies: task.dependencies,
       });
 
@@ -810,6 +825,9 @@ export function useBatchTaskUpdate({
         color: newTask.color,
         parentId: newTask.parentId,
         progress: newTask.progress,
+        workVolume: newTask.workVolume ?? null,
+        workUnit: newTask.workUnit ?? null,
+        completedVolume: newTask.completedVolume ?? 0,
         dependencies: newTask.dependencies,
       });
 

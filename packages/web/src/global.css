@@ -25,6 +25,26 @@
   pointer-events: auto;
 }
 
+.gantt-tl-headerCell[data-custom-column-id="work-volume"],
+.gantt-tl-cell-custom[data-custom-column-id="work-volume"] {
+  border-left: 1px solid #dfe1e6 !important;
+}
+
+.gantt-tl-headerCell[data-custom-column-id="work-volume"] {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.gantt-tl-cell-custom[data-custom-column-id="work-volume"] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.gantt-tl-headerCell[data-column-id="progress"],
+.gantt-tl-cell-progress {
+  border-right: 1px solid #dfe1e6 !important;
+}
+
 .finance-money-value {
   display: inline-block;
   max-width: 100%;

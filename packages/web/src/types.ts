@@ -136,6 +136,16 @@ export interface ProjectFinanceSnapshot {
   events: TaskFundingEvent[];
 }
 
+export interface TaskProgressEntry {
+  id: string;
+  projectId: string;
+  taskId: string;
+  entryDate: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CalendarDay {
   date: string;
   kind: 'working' | 'non_working' | 'shortened';
@@ -152,6 +162,9 @@ export interface Task {
   color?: string;
   parentId?: string;          // Optional parent task ID for hierarchy
   progress?: number;
+  workVolume?: number | null;
+  workUnit?: string | null;
+  completedVolume?: number;
   accepted?: boolean;        // Controls progress bar color at 100% (green vs yellow)
   locked?: boolean;          // Prevents drag/resize/edit
   divider?: 'top' | 'bottom'; // Visual grouping lines
@@ -202,6 +215,9 @@ export type FrontendProjectCommand =
         color?: string | null;
         parentId?: string | null;
         progress?: number;
+        workVolume?: number | null;
+        workUnit?: string | null;
+        completedVolume?: number;
         dependencies?: TaskDependency[];
       };
     }
@@ -215,6 +231,9 @@ export type FrontendProjectCommand =
           color?: string | null;
           parentId?: string | null;
           progress?: number;
+          workVolume?: number | null;
+          workUnit?: string | null;
+          completedVolume?: number;
           dependencies?: TaskDependency[];
         };
       }>;
