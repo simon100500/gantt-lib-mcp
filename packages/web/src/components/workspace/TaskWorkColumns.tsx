@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { TaskListColumn } from 'gantt-lib';
 
 import type { TaskProgressEntry } from '../../lib/apiTypes.ts';
@@ -65,6 +65,7 @@ function TaskWorkMetadataCell({
   const [error, setError] = useState<string | null>(null);
   const [volumeValue, setVolumeValue] = useState(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
   const [unitValue, setUnitValue] = useState(task.workUnit ?? '');
+  const unitInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <Popover onOpenChange={(nextOpen) => {
@@ -125,8 +126,23 @@ function TaskWorkMetadataCell({
               autoFocus
               disabled={pending}
               inputMode="decimal"
+              onKeyDown={(event) => {
+                if (event.ctrlKey || event.altKey || event.metaKey || event.key.length !== 1) {
+                  return;
+                }
+
+                if (/[\p{L}]/u.test(event.key)) {
+                  event.preventDefault();
+                  const nextUnitValue = `${unitValue}${event.key}`;
+                  setUnitValue(nextUnitValue);
+                  window.requestAnimationFrame(() => {
+                    unitInputRef.current?.focus();
+                    unitInputRef.current?.setSelectionRange(nextUnitValue.length, nextUnitValue.length);
+                  });
+                }
+              }}
               onChange={(event) => setVolumeValue(event.target.value)}
-              placeholder="Например, 1200"
+              placeholder="Объём"
               step="0.01"
               type="number"
               value={volumeValue}
@@ -134,6 +150,7 @@ function TaskWorkMetadataCell({
             <Input
               disabled={pending}
               list="work-unit-suggestions"
+              ref={unitInputRef}
               onChange={(event) => setUnitValue(event.target.value)}
               placeholder="Ед. изм."
               type="text"
