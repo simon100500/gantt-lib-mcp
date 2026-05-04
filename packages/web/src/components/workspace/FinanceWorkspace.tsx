@@ -594,6 +594,10 @@ export function FinanceWorkspace({
       paidToDate: 0,
     });
   }, [tasks]);
+  const outstandingReceivable = useMemo(
+    () => Math.max(0, projectTotals.earnedToDate - projectTotals.paidToDate),
+    [projectTotals.earnedToDate, projectTotals.paidToDate],
+  );
   const drawerEvents = useMemo(
     () => drawerState && snapshot ? filterEventsForDrawer(snapshot.events, drawerState, snapshot.periods, snapshot.tasks) : [],
     [drawerState, snapshot],
@@ -1285,10 +1289,28 @@ export function FinanceWorkspace({
             </label>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3 text-sm text-slate-600">
-            <span>Стоимость: {formatMoney(projectTotals.plannedCost)}</span>
-            <span>План: {formatMoney(projectTotals.plannedToDate)}</span>
-            <span>Освоено: {formatMoney(projectTotals.earnedToDate)}</span>
-            <span>Оплачено: {formatMoney(projectTotals.paidToDate)}</span>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-1 rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-xs leading-tight text-slate-600">
+              <div className="grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2">
+                <span className="whitespace-nowrap">Бюджет</span>
+                <span className="text-right font-medium tabular-nums text-slate-900">{formatMoney(projectTotals.plannedCost)}</span>
+              </div>
+              <div className="grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2">
+                <span className="whitespace-nowrap">Освоено</span>
+                <span className="text-right font-medium tabular-nums text-slate-900">{formatMoney(projectTotals.earnedToDate)}</span>
+              </div>
+              <div className="grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2">
+                <span className="whitespace-nowrap">План</span>
+                <span className="text-right font-medium tabular-nums text-slate-900">{formatMoney(projectTotals.plannedToDate)}</span>
+              </div>
+              <div className="grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2">
+                <span className="whitespace-nowrap">Оплачено</span>
+                <span className="text-right font-medium tabular-nums text-slate-900">{formatMoney(projectTotals.paidToDate)}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-[auto_minmax(88px,1fr)] items-baseline gap-x-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-tight text-amber-900">
+              <div className="whitespace-nowrap">Должны нам</div>
+              <div className="text-right font-semibold tabular-nums">{formatMoney(outstandingReceivable)}</div>
+            </div>
             <Button variant="ghost" size="sm" className="h-8" onClick={() => { void loadSnapshot(granularity, asOfDate, false, true); }} disabled={refreshing}>
               {refreshing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
