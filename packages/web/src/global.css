@@ -86,6 +86,11 @@
   --gantt-grid-line-color: #dfe1e6;
 }
 
+.finance-workspace .gantt-tl-headerCell[data-custom-column-id="plannedToDate"],
+.finance-workspace .gantt-tl-cell-custom[data-custom-column-id="plannedToDate"] {
+  border-left: 1px solid #dfe1e6 !important;
+}
+
 .finance-workspace .gantt-mx-dateOverlayEdge {
   display: block;
 }
