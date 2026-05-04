@@ -54,10 +54,12 @@ function formatVolumeWithUnit(task: Task): string {
 function TaskWorkMetadataCell({
   task,
   readOnly = false,
+  compact = false,
   onSubmit,
 }: {
   task: Task;
   readOnly?: boolean;
+  compact?: boolean;
   onSubmit: (task: Task, patch: { workVolume?: number | null; workUnit?: string | null }) => Promise<TaskWorkMutationResult>;
 }) {
   const [open, setOpen] = useState(false);
@@ -78,7 +80,7 @@ function TaskWorkMetadataCell({
     }} open={open}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
+          className={`inline-flex w-full items-center justify-start rounded-md py-1 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${compact ? 'px-0' : 'px-2'}`}
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           type="button"
@@ -354,6 +356,7 @@ export function createTaskWorkColumns({
       after: 'duration',
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
+          compact={true}
           onSubmit={onUpdateWorkMetadata}
           readOnly={readOnly}
           task={task}
