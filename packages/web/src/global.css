@@ -42,6 +42,10 @@
   line-height: 1.08;
 }
 
+.finance-period-cell-with-gap {
+  gap: 2px;
+}
+
 .finance-period-cell .finance-money-value {
   font-size: 12px;
   line-height: 1.05;

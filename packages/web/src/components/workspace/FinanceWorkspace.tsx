@@ -989,7 +989,7 @@ export function FinanceWorkspace({
   const additionalColumns = useMemo<TaskListColumn<FinanceMatrixTask>[]>(() => [
     {
       id: 'plannedCost',
-      header: 'Бюджет',
+      header: <span title="Плановая стоимость задачи.">Бюджет</span>,
       width: financeColumnWidths.plannedCost,
       after: 'name',
       align: 'right',
@@ -1047,7 +1047,7 @@ export function FinanceWorkspace({
     },
     {
       id: 'earnedToDate',
-      header: 'Освоено',
+      header: <span title="Освоенная стоимость: бюджет, умноженный на процент выполнения.">Освоено</span>,
       width: financeColumnWidths.earnedToDate,
       after: 'allocationMode',
       align: 'right',
@@ -1055,7 +1055,7 @@ export function FinanceWorkspace({
         const share = formatShare(task.earnedToDate, task.plannedCost);
 
         return (
-          <div className="grid justify-items-end gap-0 leading-none">
+          <div className="grid justify-items-end gap-[3px] leading-none">
             <MoneyValue
               value={task.earnedToDate}
               color={task.earnedToDate > 0 ? '#0f172a' : '#94a3b8'}
@@ -1073,7 +1073,7 @@ export function FinanceWorkspace({
     },
     {
       id: 'paidToDate',
-      header: 'Оплачено',
+      header: <span title="Фактически оплаченная сумма по задаче.">Оплачено</span>,
       width: financeColumnWidths.paidToDate,
       after: 'earnedToDate',
       align: 'right',
@@ -1081,7 +1081,7 @@ export function FinanceWorkspace({
         const share = formatShare(task.paidToDate, task.plannedCost);
 
         return (
-          <div className="grid justify-items-end gap-0 leading-none">
+          <div className="grid justify-items-end gap-[3px] leading-none">
             <MoneyValue
               value={task.paidToDate}
               color={task.paidToDate > 0 ? MATRIX_RECEIVED_COLOR : '#94a3b8'}
@@ -1159,7 +1159,7 @@ export function FinanceWorkspace({
           const paidValue = showFundingLine ? (task.paidByPeriod[period.id] ?? 0) : 0;
 
           return (
-            <div className="finance-period-cell">
+            <div className="finance-period-cell finance-period-cell-with-gap">
               {plannedValue > 0 && (
                 <MoneyValue value={plannedValue} color="#0f172a" />
               )}
