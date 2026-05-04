@@ -12,6 +12,7 @@ import { TaskChatModal } from '../TaskChatModal.tsx';
 import { CreateResourceModal } from './CreateResourceModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
 import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
+import { createTaskWorkColumns } from './TaskWorkColumns.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
 import { buildCustomDays, getProjectWeekendPredicate } from '../../lib/projectScheduleOptions.ts';
@@ -29,7 +30,7 @@ import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
-import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
+import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord, TaskProgressEntry } from '../../lib/apiTypes.ts';
 import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
 import {
   collectDescendantLeafIds,
@@ -412,6 +413,9 @@ const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
   { id: 'endDate', label: 'Окончание' },
   { id: 'duration', label: 'Длительность' },
   { id: 'progress', label: 'Прогресс' },
+  { id: 'work-volume', label: 'Объём' },
+  { id: 'work-unit', label: 'Ед. изм.' },
+  { id: 'completed-volume', label: 'Выполнено' },
   { id: 'assigned-resources', label: 'Ресурсы' },
   { id: 'dependencies', label: 'Связи' },
 ];
@@ -424,9 +428,19 @@ const TASK_LIST_COLUMN_WIDTHS: Record<string, number> = {
   endDate: 90,
   duration: 60,
   progress: 50,
+  'work-volume': 92,
+  'work-unit': 88,
+  'completed-volume': 110,
   dependencies: 128,
   'assigned-resources': 132,
 };
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, value));
+}
 
 export function ProjectWorkspace({
   ganttRef,
@@ -521,10 +535,12 @@ export function ProjectWorkspace({
   const projectStates = useProjectUIStore((state) => state.projectStates);
   const resources = useProjectStore((state) => state.resources);
   const assignments = useProjectStore((state) => state.assignments);
+  const progressEntries = useProjectStore((state) => state.progressEntries);
   const pendingCommands = useProjectStore((state) => state.pending);
   const assignmentError = useProjectStore((state) => state.assignmentError);
   const replaceAssignmentsForTask = useProjectStore((state) => state.replaceAssignmentsForTask);
   const replaceAssignmentsForTasks = useProjectStore((state) => state.replaceAssignmentsForTasks);
+  const replaceProgressEntriesForTask = useProjectStore((state) => state.replaceProgressEntriesForTask);
   const setAssignmentError = useProjectStore((state) => state.setAssignmentError);
   const clearResourcePlannerCache = useProjectStore((state) => state.clearResourcePlannerCache);
   const upsertResource = useProjectStore((state) => state.upsertResource);
@@ -926,6 +942,144 @@ export function ProjectWorkspace({
     return await Promise.resolve(onSplitTask(splitTaskDraft, details));
   }, [onSplitTask, splitTaskDraft]);
 
+  const applyTaskWorkMutation = useCallback((updatedTask: Task, nextEntries?: TaskProgressEntry[]) => {
+    setTasks((prev) => prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
+
+    const projectStoreState = useProjectStore.getState();
+    projectStoreState.mergeConfirmedSnapshot({
+      ...projectStoreState.confirmed.snapshot,
+      tasks: projectStoreState.confirmed.snapshot.tasks.map((task) => (
+        task.id === updatedTask.id ? { ...task, ...updatedTask } : task
+      )),
+    });
+
+    if (nextEntries) {
+      replaceProgressEntriesForTask(updatedTask.id, nextEntries);
+    }
+  }, [replaceProgressEntriesForTask, setTasks]);
+
+  const handleUpdateTaskWorkMetadata = useCallback(async (
+    task: Task,
+    patch: { workVolume?: number | null; workUnit?: string | null },
+  ) => {
+    if (!accessToken || workspace.kind !== 'project') {
+      const nextTask = {
+        ...task,
+        ...(patch.workVolume !== undefined ? { workVolume: patch.workVolume } : {}),
+        ...(patch.workUnit !== undefined ? { workUnit: patch.workUnit } : {}),
+      };
+      const nextProgress = nextTask.workVolume && nextTask.workVolume > 0
+        ? clampPercent(((nextTask.completedVolume ?? 0) / nextTask.workVolume) * 100)
+        : 0;
+      const resolvedTask = {
+        ...nextTask,
+        progress: nextProgress,
+      };
+      applyTaskWorkMutation(resolvedTask);
+      return { task: resolvedTask };
+    }
+
+    const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/work-metadata`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(patch),
+    });
+    const body = await response.json().catch(() => null) as {
+      error?: string;
+      task?: { workVolume: number | null; workUnit: string | null; completedVolume: number; progress: number };
+      progressEntries?: TaskProgressEntry[];
+    } | null;
+
+    if (!response.ok || !body?.task) {
+      throw new Error(body?.error || `HTTP ${response.status}`);
+    }
+
+    const resolvedTask: Task = {
+      ...task,
+      workVolume: body.task.workVolume,
+      workUnit: body.task.workUnit,
+      completedVolume: body.task.completedVolume,
+      progress: body.task.progress,
+    };
+    applyTaskWorkMutation(resolvedTask, body.progressEntries);
+    return { task: resolvedTask, progressEntries: body.progressEntries };
+  }, [accessToken, applyTaskWorkMutation, workspace.kind]);
+
+  const handleAddTaskProgressEntry = useCallback(async (
+    task: Task,
+    input: { entryDate: string; value: number; inputMode: 'volume' | 'percent' },
+  ) => {
+    if (!task.workVolume || task.workVolume <= 0) {
+      throw new Error('Сначала задайте общий объём работы.');
+    }
+
+    if (!accessToken || workspace.kind !== 'project') {
+      const nextAmount = input.inputMode === 'percent'
+        ? task.workVolume * (input.value / 100)
+        : input.value;
+      const existingEntries = progressEntries.filter((entry) => entry.taskId === task.id);
+      const currentEntry = existingEntries.find((entry) => entry.entryDate === input.entryDate);
+      const now = new Date().toISOString();
+      const nextEntries = currentEntry
+        ? existingEntries.map((entry) => (
+            entry.id === currentEntry.id
+              ? { ...entry, amount: entry.amount + nextAmount, updatedAt: now }
+              : entry
+          ))
+        : [
+            ...existingEntries,
+            {
+              id: `local:${task.id}:${input.entryDate}`,
+              projectId: projectId ?? 'local',
+              taskId: task.id,
+              entryDate: input.entryDate,
+              amount: nextAmount,
+              createdAt: now,
+              updatedAt: now,
+            },
+          ];
+      const completedVolume = nextEntries.reduce((sum, entry) => sum + entry.amount, 0);
+      const resolvedTask: Task = {
+        ...task,
+        completedVolume,
+        progress: clampPercent((completedVolume / task.workVolume) * 100),
+      };
+      applyTaskWorkMutation(resolvedTask, nextEntries);
+      return { task: resolvedTask, progressEntries: nextEntries };
+    }
+
+    const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/progress-entries`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(input),
+    });
+    const body = await response.json().catch(() => null) as {
+      error?: string;
+      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null };
+      progressEntries?: TaskProgressEntry[];
+    } | null;
+
+    if (!response.ok || !body?.task) {
+      throw new Error(body?.error || `HTTP ${response.status}`);
+    }
+
+    const resolvedTask: Task = {
+      ...task,
+      workVolume: body.task.workVolume,
+      workUnit: body.task.workUnit,
+      completedVolume: body.task.completedVolume,
+      progress: body.task.progress,
+    };
+    applyTaskWorkMutation(resolvedTask, body.progressEntries);
+    return { task: resolvedTask, progressEntries: body.progressEntries };
+  }, [accessToken, applyTaskWorkMutation, progressEntries, projectId, workspace.kind]);
+
   const activeResources = useMemo(
     () => getAssignableResources(resources, workspace.kind === 'project' ? workspace.projectId : null),
     [resources, workspace],
@@ -1166,9 +1320,18 @@ export function ProjectWorkspace({
     return commands;
   }, [chatDisabled, effectiveReadOnly, externalSelectionActive, onCreateTemplateFromTask, onInsertTemplateAtTask, onSplitTask, showChat, openAssignmentSelector]);
 
-  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => (
-    showResourceAssignments
-      ? [
+  const additionalColumns = useMemo<TaskListColumn<Task>[]>(() => {
+    const columns: TaskListColumn<Task>[] = [
+      ...createTaskWorkColumns({
+        progressEntries,
+        readOnly: effectiveReadOnly || shareSelectionActive,
+        onUpdateWorkMetadata: handleUpdateTaskWorkMetadata,
+        onAddProgressEntry: handleAddTaskProgressEntry,
+      }),
+    ];
+
+    if (showResourceAssignments) {
+      columns.push(
         createAssignedResourcesColumn({
           resources,
           assignments,
@@ -1176,9 +1339,21 @@ export function ProjectWorkspace({
           readOnly: effectiveReadOnly || shareSelectionActive,
           onEdit: openAssignmentSelector,
         }),
-      ]
-      : []
-  ), [assignments, effectiveReadOnly, openAssignmentSelector, resources, shareSelectionActive, showResourceAssignments]);
+      );
+    }
+
+    return columns;
+  }, [
+    assignments,
+    effectiveReadOnly,
+    handleAddTaskProgressEntry,
+    handleUpdateTaskWorkMetadata,
+    openAssignmentSelector,
+    progressEntries,
+    resources,
+    shareSelectionActive,
+    showResourceAssignments,
+  ]);
 
   const latestRestorableItem = useMemo(
     () => historyItems.find((item) => item.canRestore) ?? null,

@@ -236,6 +236,9 @@ export function replayProjectCommand(
         color: command.task.color,
         parentId: command.task.parentId,
         progress: command.task.progress,
+        workVolume: command.task.workVolume ?? null,
+        workUnit: command.task.workUnit ?? null,
+        completedVolume: command.task.completedVolume ?? 0,
         dependencies: normalizeTaskDependencies(command.task.dependencies),
         sortOrder: createdSortOrder,
       };
@@ -263,6 +266,9 @@ export function replayProjectCommand(
           color: taskDef.color,
           parentId: taskDef.parentId,
           progress: taskDef.progress,
+          workVolume: taskDef.workVolume ?? null,
+          workUnit: taskDef.workUnit ?? null,
+          completedVolume: taskDef.completedVolume ?? 0,
           dependencies: normalizeTaskDependencies(taskDef.dependencies),
           sortOrder: taskDef.sortOrder,
         });
@@ -355,6 +361,9 @@ export function replayProjectCommand(
               ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
               ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
               ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+              ...(command.fields.workVolume !== undefined ? { workVolume: command.fields.workVolume } : {}),
+              ...(command.fields.workUnit !== undefined ? { workUnit: command.fields.workUnit } : {}),
+              ...(command.fields.completedVolume !== undefined ? { completedVolume: command.fields.completedVolume } : {}),
               ...(command.fields.dependencies !== undefined ? { dependencies: normalizeTaskDependencies(command.fields.dependencies) } : {}),
             }
           : task

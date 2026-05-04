@@ -45,6 +45,7 @@ import { registerFinanceRoutes } from './routes/finance-routes.js';
 import { registerHistoryRoutes } from './routes/history-routes.js';
 import { registerResourceRoutes } from './routes/resource-routes.js';
 import { registerTemplateRoutes } from './routes/template-routes.js';
+import { registerWorkProgressRoutes } from './routes/work-progress-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
@@ -67,6 +68,7 @@ await registerFinanceRoutes(fastify);
 await registerHistoryRoutes(fastify);
 await registerResourceRoutes(fastify);
 await registerTemplateRoutes(fastify);
+await registerWorkProgressRoutes(fastify);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,6 +95,15 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       taskId: string;
       resourceId: string;
       createdAt: string;
+    }>;
+    progressEntries: Array<{
+      id: string;
+      projectId: string;
+      taskId: string;
+      entryDate: string;
+      amount: number;
+      createdAt: string;
+      updatedAt: string;
     }>;
   };
   project: {
@@ -121,7 +132,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     throw new Error('Project unavailable');
   }
 
-  const [projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar] = await Promise.all([
+  const [projectVersion, tasks, dependencies, resourceCatalog, assignments, progressEntries, projectCalendar] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: projectId,
@@ -145,6 +156,10 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       where: { projectId },
       select: { id: true, projectId: true, taskId: true, resourceId: true, createdAt: true },
       orderBy: [{ taskId: 'asc' }, { resourceId: 'asc' }],
+    }),
+    prisma.taskProgressEntry.findMany({
+      where: { projectId },
+      orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
     }),
     getProjectCalendarSettings(prisma, projectId),
   ]);
@@ -172,6 +187,9 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         color: task.color ?? undefined,
         parentId: task.parentId ?? undefined,
         progress: task.progress,
+        workVolume: task.workVolume ?? null,
+        workUnit: task.workUnit ?? null,
+        completedVolume: task.completedVolume ?? 0,
         sortOrder: task.sortOrder,
         dependencies: task.dependencies.map((dependency: any): TaskDependency => ({
           taskId: dependency.depTaskId,
@@ -204,6 +222,15 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         taskId: assignment.taskId,
         resourceId: assignment.resourceId,
         createdAt: assignment.createdAt.toISOString(),
+      })),
+      progressEntries: progressEntries.map((entry: any) => ({
+        id: entry.id,
+        projectId: entry.projectId,
+        taskId: entry.taskId,
+        entryDate: entry.entryDate.toISOString().split('T')[0],
+        amount: entry.amount,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
       })),
     },
   };

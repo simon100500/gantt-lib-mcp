@@ -11,6 +11,7 @@ import type {
   ProjectFinanceSnapshot,
   TaskFinanceSetting,
   TaskFundingEvent,
+  TaskProgressEntry,
 } from '../types.ts';
 
 export type {
@@ -26,6 +27,7 @@ export type {
   ProjectFinanceSnapshot,
   TaskFinanceSetting,
   TaskFundingEvent,
+  TaskProgressEntry,
 } from '../types.ts';
 
 export interface ProjectResource {
@@ -77,6 +79,7 @@ export interface ProjectLoadResponse {
     dependencies: ProjectDependency[];
     resources: ProjectResource[];
     assignments: TaskAssignmentRecord[];
+    progressEntries?: TaskProgressEntry[];
   };
 }
 

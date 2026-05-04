@@ -18,6 +18,9 @@ export interface CreateTaskInput {
   color?: string;
   parentId?: string;
   progress?: number;
+  workVolume?: number | null;
+  workUnit?: string | null;
+  completedVolume?: number;
   dependencies?: TaskDependency[];
   sortOrder?: number;
 }
@@ -131,6 +134,15 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   }
   if ((nextTask.progress ?? 0) !== (originalTask.progress ?? 0)) {
     fieldUpdates.progress = nextTask.progress;
+  }
+  if ((nextTask.workVolume ?? null) !== (originalTask.workVolume ?? null)) {
+    fieldUpdates.workVolume = nextTask.workVolume ?? null;
+  }
+  if ((nextTask.workUnit ?? null) !== (originalTask.workUnit ?? null)) {
+    fieldUpdates.workUnit = nextTask.workUnit ?? null;
+  }
+  if ((nextTask.completedVolume ?? 0) !== (originalTask.completedVolume ?? 0)) {
+    fieldUpdates.completedVolume = nextTask.completedVolume ?? 0;
   }
   if (dependenciesChanged) {
     fieldUpdates.dependencies = nextDependencies;

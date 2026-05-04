@@ -147,6 +147,9 @@ function taskRowToSnapshotTask(task: any): Task {
     color: task.color || undefined,
     parentId: task.parentId || undefined,
     progress: task.progress,
+    workVolume: task.workVolume ?? null,
+    workUnit: task.workUnit ?? null,
+    completedVolume: task.completedVolume ?? 0,
     dependencies: deps,
     sortOrder: task.sortOrder,
   };
@@ -397,6 +400,9 @@ function applyTaskFieldUpdateToSnapshot(
     ...(update.fields.color !== undefined ? { color: update.fields.color ?? undefined } : {}),
     ...(update.fields.parentId !== undefined ? { parentId: update.fields.parentId ?? undefined } : {}),
     ...(update.fields.progress !== undefined ? { progress: update.fields.progress } : {}),
+    ...(update.fields.workVolume !== undefined ? { workVolume: update.fields.workVolume } : {}),
+    ...(update.fields.workUnit !== undefined ? { workUnit: update.fields.workUnit } : {}),
+    ...(update.fields.completedVolume !== undefined ? { completedVolume: update.fields.completedVolume } : {}),
     ...(update.fields.dependencies !== undefined
       ? {
           dependencies: update.fields.dependencies.map((dependency) => ({
@@ -437,6 +443,9 @@ function applyTaskFieldUpdateToSnapshot(
             color: updatedTask.color,
             parentId: updatedTask.parentId,
             progress: updatedTask.progress,
+            workVolume: (updatedTask as Task).workVolume,
+            workUnit: (updatedTask as Task).workUnit,
+            completedVolume: (updatedTask as Task).completedVolume,
             dependencies: updatedTask.dependencies,
           }
         : candidate,
@@ -611,6 +620,9 @@ function buildDeleteInverseCommand(
       color: task.color,
       parentId: task.parentId,
       progress: task.progress,
+      workVolume: task.workVolume ?? null,
+      workUnit: task.workUnit ?? null,
+      completedVolume: task.completedVolume ?? 0,
       dependencies: cloneDependencies(task.dependencies),
       sortOrder: task.sortOrder,
     }));
@@ -802,6 +814,9 @@ export class CommandService {
             ...('color' in command.fields ? { color: task.color ?? null } : {}),
             ...('parentId' in command.fields ? { parentId: task.parentId ?? null } : {}),
             ...('progress' in command.fields ? { progress: task.progress ?? 0 } : {}),
+            ...('workVolume' in command.fields ? { workVolume: task.workVolume ?? null } : {}),
+            ...('workUnit' in command.fields ? { workUnit: task.workUnit ?? null } : {}),
+            ...('completedVolume' in command.fields ? { completedVolume: task.completedVolume ?? 0 } : {}),
             ...('dependencies' in command.fields ? { dependencies: cloneDependencies(task.dependencies) ?? [] } : {}),
           },
         };
@@ -822,6 +837,9 @@ export class CommandService {
               ...('color' in update.fields ? { color: task.color ?? null } : {}),
               ...('parentId' in update.fields ? { parentId: task.parentId ?? null } : {}),
               ...('progress' in update.fields ? { progress: task.progress ?? 0 } : {}),
+              ...('workVolume' in update.fields ? { workVolume: task.workVolume ?? null } : {}),
+              ...('workUnit' in update.fields ? { workUnit: task.workUnit ?? null } : {}),
+              ...('completedVolume' in update.fields ? { completedVolume: task.completedVolume ?? 0 } : {}),
               ...('dependencies' in update.fields ? { dependencies: cloneDependencies(task.dependencies) ?? [] } : {}),
             },
           };
@@ -841,6 +859,9 @@ export class CommandService {
               color?: string | null;
               parentId?: string | null;
               progress?: number;
+              workVolume?: number | null;
+              workUnit?: string | null;
+              completedVolume?: number;
               dependencies?: TaskDependency[];
             };
           }>,
@@ -1065,6 +1086,9 @@ export class CommandService {
             ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
             ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
             ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+            ...(command.fields.workVolume !== undefined ? { workVolume: command.fields.workVolume } : {}),
+            ...(command.fields.workUnit !== undefined ? { workUnit: command.fields.workUnit } : {}),
+            ...(command.fields.completedVolume !== undefined ? { completedVolume: command.fields.completedVolume } : {}),
           };
           const changedTaskIds = [nextTask.id];
           const changedTasks = [nextTask];
@@ -1080,6 +1104,9 @@ export class CommandService {
             ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
             ...(command.fields.color !== undefined ? { color: command.fields.color ?? null } : {}),
             ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+            ...(command.fields.workVolume !== undefined ? { workVolume: command.fields.workVolume } : {}),
+            ...(command.fields.workUnit !== undefined ? { workUnit: command.fields.workUnit ?? null } : {}),
+            ...(command.fields.completedVolume !== undefined ? { completedVolume: command.fields.completedVolume } : {}),
           };
           await time('persistTasksMs', async () => {
             if (Object.keys(updateData).length > 0) {
@@ -1117,6 +1144,9 @@ export class CommandService {
                   ...('name' in command.fields ? { name: beforeTask.name } : {}),
                   ...('color' in command.fields ? { color: beforeTask.color ?? null } : {}),
                   ...('progress' in command.fields ? { progress: beforeTask.progress ?? 0 } : {}),
+                  ...('workVolume' in command.fields ? { workVolume: beforeTask.workVolume ?? null } : {}),
+                  ...('workUnit' in command.fields ? { workUnit: beforeTask.workUnit ?? null } : {}),
+                  ...('completedVolume' in command.fields ? { completedVolume: beforeTask.completedVolume ?? 0 } : {}),
                 },
               } as any,
               result: {
@@ -1253,6 +1283,9 @@ export class CommandService {
                 ? taskChange.task!.parentId
                 : null,
               progress: taskChange.task!.progress ?? 0,
+              workVolume: taskChange.task!.workVolume ?? null,
+              workUnit: taskChange.task!.workUnit ?? null,
+              completedVolume: taskChange.task!.completedVolume ?? 0,
               sortOrder: appendBaseSort + index,
             })),
           });
@@ -1319,6 +1352,9 @@ export class CommandService {
                     ? taskChange.task.parentId
                     : null,
                   progress: taskChange.task.progress ?? 0,
+                  workVolume: taskChange.task.workVolume ?? null,
+                  workUnit: taskChange.task.workUnit ?? null,
+                  completedVolume: taskChange.task.completedVolume ?? 0,
                   sortOrder,
                 },
               });
@@ -1422,6 +1458,9 @@ export class CommandService {
               color: task.color ?? null,
               parentId: task.parentId ?? null,
               progress: task.progress ?? 0,
+              workVolume: (task as Task).workVolume ?? null,
+              workUnit: (task as Task).workUnit ?? null,
+              completedVolume: (task as Task).completedVolume ?? 0,
               sortOrder: 'sortOrder' in task ? (task as Task & { sortOrder?: number }).sortOrder : undefined,
             },
           });
@@ -1825,6 +1864,9 @@ export class CommandService {
           color: command.task.color,
           parentId: command.task.parentId,
           progress: command.task.progress,
+          workVolume: command.task.workVolume ?? null,
+          workUnit: command.task.workUnit ?? null,
+          completedVolume: command.task.completedVolume ?? 0,
           dependencies: command.task.dependencies,
           sortOrder: command.task.sortOrder,
         };
@@ -1843,6 +1885,9 @@ export class CommandService {
           color: task.color,
           parentId: task.parentId,
           progress: task.progress,
+          workVolume: task.workVolume ?? null,
+          workUnit: task.workUnit ?? null,
+          completedVolume: task.completedVolume ?? 0,
           dependencies: task.dependencies,
           sortOrder: task.sortOrder,
         }));
