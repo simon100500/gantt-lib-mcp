@@ -230,9 +230,10 @@ function TaskCompletedVolumeCell({
   const isOverflow = totalVolume > 0 && totalAfterAdd > totalVolume;
   const isNegativeResult = currentAdded < 0;
   const normalizedUnitValue = unitValue.trim();
+  const primarySetupMode = !hasPersistedTotalVolume;
   const canSaveTotalVolume = !hasPersistedTotalVolume && Number.isFinite(parsedDraftTotalVolume) && parsedDraftTotalVolume > 0;
   const canAddProgress = totalVolume > 0 && Number.isFinite(parsedAddedVolume) && parsedAddedVolume > 0;
-  const canSubmit = !pending && (canSaveTotalVolume || canAddProgress);
+  const canSubmit = !pending && (primarySetupMode ? canSaveTotalVolume : canAddProgress);
 
   useEffect(() => {
     if (!open) {
@@ -337,7 +338,7 @@ function TaskCompletedVolumeCell({
               event.preventDefault();
 
               if (!canSubmit) {
-                setError('Заполните общий объём или добавьте выполненный факт.');
+                setError(primarySetupMode ? 'Введите общий объём работы.' : 'Добавьте выполненный факт.');
                 return;
               }
 
@@ -345,22 +346,17 @@ function TaskCompletedVolumeCell({
               setError(null);
 
               try {
-                let resolvedTask = task;
-
-                if (!hasPersistedTotalVolume) {
+                if (primarySetupMode) {
                   if (!Number.isFinite(parsedDraftTotalVolume) || parsedDraftTotalVolume <= 0) {
                     throw new Error('Введите общий объём работы.');
                   }
 
-                  const metadataResult = await onUpdateMetadata(task, {
+                  await onUpdateMetadata(task, {
                     workVolume: parsedDraftTotalVolume,
                     workUnit: normalizedUnitValue || null,
                   });
-                  resolvedTask = metadataResult.task;
-                }
-
-                if (canAddProgress) {
-                  await onSubmit(resolvedTask, { entryDate, value: parsedAddedVolume, inputMode: 'volume' });
+                } else {
+                  await onSubmit(task, { entryDate, value: parsedAddedVolume, inputMode: 'volume' });
                 }
 
                 setOpen(false);
@@ -371,13 +367,15 @@ function TaskCompletedVolumeCell({
               }
             }}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-5 py-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#dfe1e6] px-4 py-4 sm:px-5">
               <div className="min-w-0 flex-1">
                 <h4 className="break-words text-[15px] font-bold leading-6 text-[#172b4d]" id={`task-progress-modal-title-${task.id}`}>
                   {task.name}
                 </h4>
                 <p className="mt-1 text-[12px] text-[#6b778c]">
-                  Факт: {formatMetricValue(completedVolume, 2)} из {formatMetricValue(totalVolume, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
+                  {primarySetupMode
+                    ? 'Сначала задайте общий объём работы'
+                    : `Факт: ${formatMetricValue(completedVolume, 2)} из ${formatMetricValue(totalVolume, 2)} ${normalizedUnitValue || task.workUnit?.trim() || ''}`}
                 </p>
               </div>
               <button
@@ -391,15 +389,17 @@ function TaskCompletedVolumeCell({
               </button>
             </div>
 
-            <div className="space-y-5 overflow-y-auto px-5 py-5">
-              {!hasPersistedTotalVolume ? (
-                <div className="space-y-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4">
+            <div className="min-w-0 space-y-5 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-5">
+              {primarySetupMode ? (
+                <div className="space-y-4 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4">
                   <div className="space-y-1">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Сначала задайте общий объём</p>
-                    <p className="text-[12px] leading-5 text-[#6b778c]">Можно сделать это прямо здесь, без перехода в соседнюю колонку.</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Первичный ввод данных</p>
+                    <p className="text-[12px] leading-5 text-[#6b778c]">
+                      Укажите общий объём и единицу измерения. После сохранения здесь появится форма добавления факта.
+                    </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_7rem]">
-                    <label className="space-y-1.5">
+                  <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-[minmax(0,1fr)_8rem]">
+                    <label className="min-w-0 space-y-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Общий объём</span>
                       <Input
                         ref={totalVolumeInputRef}
@@ -429,7 +429,7 @@ function TaskCompletedVolumeCell({
                         value={totalVolumeValue}
                       />
                     </label>
-                    <label className="space-y-1.5">
+                    <label className="min-w-0 space-y-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Ед. изм.</span>
                       <Input
                         ref={unitInputRef}
@@ -446,158 +446,162 @@ function TaskCompletedVolumeCell({
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
-                    Добавить ({normalizedUnitValue || task.workUnit?.trim() || 'ед.'})
-                  </span>
-                  <Input
-                    ref={volumeInputRef}
-                    className={`h-12 border px-4 text-xl font-bold shadow-none ${activeField === 'volume' ? 'border-primary bg-white text-[#172b4d]' : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#44546f]'}`}
-                    disabled={pending}
-                    inputMode="decimal"
-                    onChange={(event) => handleUnitsChange(event.target.value)}
-                    onFocus={(event) => {
-                      setActiveField('volume');
-                      handleFocusSelect(event);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && canSubmit) {
-                        event.preventDefault();
-                        void event.currentTarget.form?.requestSubmit();
-                      }
-                    }}
-                    placeholder="0.00"
-                    step="0.01"
-                    type="number"
-                    value={valueInUnits}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
-                    Итоговый %
-                  </span>
-                  <Input
-                    className={`h-12 border px-4 text-xl font-bold shadow-none ${activeField === 'percent' ? 'border-primary bg-white text-[#172b4d]' : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#44546f]'}`}
-                    disabled={pending || totalVolume <= 0}
-                    inputMode="decimal"
-                    onChange={(event) => handlePercentChange(event.target.value)}
-                    onFocus={(event) => {
-                      setActiveField('percent');
-                      handleFocusSelect(event);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && canSubmit) {
-                        event.preventDefault();
-                        void event.currentTarget.form?.requestSubmit();
-                      }
-                    }}
-                    placeholder="0"
-                    step="0.1"
-                    type="number"
-                    value={valueInPercent}
-                  />
-                </label>
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">
-                      {isInputEmpty ? 'Всего' : 'Станет всего'}
-                    </div>
-                    <div className={`break-words text-sm font-bold ${isOverflow || isNegativeResult ? 'text-red-700' : 'text-[#172b4d]'}`}>
-                      {formatMetricValue(totalAfterAdd, 2)} <span className="font-normal text-[#6b778c]">/</span> {formatMetricValue(totalVolume, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
-                    </div>
+              {!primarySetupMode ? (
+                <>
+                  <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-2">
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="block truncate text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
+                        Добавить ({normalizedUnitValue || task.workUnit?.trim() || 'ед.'})
+                      </span>
+                      <Input
+                        ref={volumeInputRef}
+                        className={`h-12 min-w-0 border px-4 text-xl font-bold shadow-none ${activeField === 'volume' ? 'border-primary bg-white text-[#172b4d]' : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#44546f]'}`}
+                        disabled={pending}
+                        inputMode="decimal"
+                        onChange={(event) => handleUnitsChange(event.target.value)}
+                        onFocus={(event) => {
+                          setActiveField('volume');
+                          handleFocusSelect(event);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' && canSubmit) {
+                            event.preventDefault();
+                            void event.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                        placeholder="0.00"
+                        step="0.01"
+                        type="number"
+                        value={valueInUnits}
+                      />
+                    </label>
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="block truncate text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
+                        Итоговый %
+                      </span>
+                      <Input
+                        className={`h-12 min-w-0 border px-4 text-xl font-bold shadow-none ${activeField === 'percent' ? 'border-primary bg-white text-[#172b4d]' : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#44546f]'}`}
+                        disabled={pending || totalVolume <= 0}
+                        inputMode="decimal"
+                        onChange={(event) => handlePercentChange(event.target.value)}
+                        onFocus={(event) => {
+                          setActiveField('percent');
+                          handleFocusSelect(event);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' && canSubmit) {
+                            event.preventDefault();
+                            void event.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                        placeholder="0"
+                        step="0.1"
+                        type="number"
+                        value={valueInPercent}
+                      />
+                    </label>
                   </div>
-                  <div className="shrink-0 space-y-0.5 text-right">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">Итог</div>
-                    <div className={`text-sm font-bold ${isInputEmpty ? 'text-[#172b4d]' : 'text-primary'}`}>
-                      {formatMetricValue(finalPercent, 1)}%
-                    </div>
-                  </div>
-                </div>
 
-                <div className="h-2 overflow-hidden rounded-full bg-[#dfe1e6]">
-                  <div
-                    className="flex h-full overflow-hidden rounded-full"
-                    style={{ width: `${Math.min(100, Math.max(finalPercent, currentPercent)).toFixed(2)}%` }}
-                  >
-                    <div
-                      className="h-full bg-slate-400"
-                      style={{ width: `${totalVolume > 0 ? Math.min(100, (completedVolume / totalVolume) * 100) : 0}%` }}
-                    />
-                    <div
-                      className={isOverflow ? 'h-full bg-red-500' : 'h-full bg-primary'}
-                      style={{ width: `${totalVolume > 0 ? Math.max(0, Math.min(100, (currentAdded / totalVolume) * 100)) : 0}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {(isOverflow || isNegativeResult) && (
-                <div className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium ${isNegativeResult ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>
-                    {isNegativeResult
-                      ? 'Итоговый объём не может быть меньше текущего факта.'
-                      : `Перебор на ${formatMetricValue(totalAfterAdd - totalVolume, 2)} ${normalizedUnitValue || task.workUnit?.trim() || ''}`}
-                  </span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_12rem] md:items-end">
-                <label className="space-y-1.5">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
-                    <Calendar className="h-3.5 w-3.5" />
-                    Дата работ
-                  </span>
-                  <Input
-                    className="h-9 border-[#dfe1e6] bg-white text-sm text-[#172b4d] shadow-none"
-                    disabled={pending}
-                    onChange={(event) => setEntryDate(event.target.value)}
-                    type="date"
-                    value={entryDate}
-                  />
-                </label>
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Быстро</span>
-                  <Button
-                    className="h-9 w-full border-[#dfe1e6] bg-white px-3 text-xs font-bold text-[#44546f] shadow-none hover:bg-[#f4f5f7] hover:text-primary"
-                    disabled={pending || totalVolume <= 0}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={() => handlePercentChange('100')}
-                  >
-                    Закрыть в 100%
-                  </Button>
-                </div>
-              </div>
-
-              <p className="break-words text-[11px] leading-5 text-[#6b778c]">
-                Новое значение добавится к уже внесённому факту за выбранную дату.
-              </p>
-
-              {sortedEntries.length > 0 ? (
-                <div className="space-y-3 border-t border-[#dfe1e6] pt-4">
-                  <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">
-                    <History className="h-3.5 w-3.5" />
-                    История
-                  </div>
-                  <div className="max-h-36 space-y-2 overflow-y-auto pr-1">
-                    {sortedEntries.slice(0, 5).map((entry) => (
-                      <div className="flex items-center justify-between rounded-md border border-[#dfe1e6] bg-white px-3 py-2" key={entry.id}>
-                        <div>
-                          <div className="text-sm font-semibold text-[#172b4d]">
-                            {formatMetricValue(entry.amount, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-[#6b778c]">{entry.entryDate}</div>
+                  <div className="space-y-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-4 py-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">
+                          {isInputEmpty ? 'Всего' : 'Станет всего'}
+                        </div>
+                        <div className={`break-words text-sm font-bold ${isOverflow || isNegativeResult ? 'text-red-700' : 'text-[#172b4d]'}`}>
+                          {formatMetricValue(totalAfterAdd, 2)} <span className="font-normal text-[#6b778c]">/</span> {formatMetricValue(totalVolume, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
                         </div>
                       </div>
-                    ))}
+                      <div className="shrink-0 space-y-0.5 text-right">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">Итог</div>
+                        <div className={`text-sm font-bold ${isInputEmpty ? 'text-[#172b4d]' : 'text-primary'}`}>
+                          {formatMetricValue(finalPercent, 1)}%
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-[#dfe1e6]">
+                      <div
+                        className="flex h-full overflow-hidden rounded-full"
+                        style={{ width: `${Math.min(100, Math.max(finalPercent, currentPercent)).toFixed(2)}%` }}
+                      >
+                        <div
+                          className="h-full bg-slate-400"
+                          style={{ width: `${totalVolume > 0 ? Math.min(100, (completedVolume / totalVolume) * 100) : 0}%` }}
+                        />
+                        <div
+                          className={isOverflow ? 'h-full bg-red-500' : 'h-full bg-primary'}
+                          style={{ width: `${totalVolume > 0 ? Math.max(0, Math.min(100, (currentAdded / totalVolume) * 100)) : 0}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+
+                  {(isOverflow || isNegativeResult) && (
+                    <div className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] font-medium ${isNegativeResult ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>
+                        {isNegativeResult
+                          ? 'Итоговый объём не может быть меньше текущего факта.'
+                          : `Перебор на ${formatMetricValue(totalAfterAdd - totalVolume, 2)} ${normalizedUnitValue || task.workUnit?.trim() || ''}`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,12rem)] items-end gap-3">
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Дата работ
+                      </span>
+                      <Input
+                        className="h-9 min-w-0 border-[#dfe1e6] bg-white text-sm text-[#172b4d] shadow-none"
+                        disabled={pending}
+                        onChange={(event) => setEntryDate(event.target.value)}
+                        type="date"
+                        value={entryDate}
+                      />
+                    </label>
+                    <div className="min-w-0 space-y-1.5">
+                      <span className="block text-[11px] font-bold uppercase tracking-[0.03em] text-[#44546f]">Быстро</span>
+                      <Button
+                        className="h-9 w-full min-w-0 border-[#dfe1e6] bg-white px-3 text-xs font-bold text-[#44546f] shadow-none hover:bg-[#f4f5f7] hover:text-primary"
+                        disabled={pending || totalVolume <= 0}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        onClick={() => handlePercentChange('100')}
+                      >
+                        Закрыть в 100%
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="min-w-0 max-w-full whitespace-normal text-[11px] leading-5 text-[#6b778c] [overflow-wrap:anywhere]">
+                    Новое значение добавится к уже внесённому факту за выбранную дату.
+                  </p>
+
+                  {sortedEntries.length > 0 ? (
+                    <div className="space-y-3 border-t border-[#dfe1e6] pt-4">
+                      <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b778c]">
+                        <History className="h-3.5 w-3.5" />
+                        История
+                      </div>
+                      <div className="max-h-36 space-y-2 overflow-y-auto pr-1">
+                        {sortedEntries.slice(0, 5).map((entry) => (
+                          <div className="flex items-center justify-between rounded-md border border-[#dfe1e6] bg-white px-3 py-2" key={entry.id}>
+                            <div>
+                              <div className="text-sm font-semibold text-[#172b4d]">
+                                {formatMetricValue(entry.amount, 2)} {normalizedUnitValue || task.workUnit?.trim() || ''}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-[#6b778c]">{entry.entryDate}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
               <datalist id="task-progress-unit-suggestions">
@@ -609,13 +613,13 @@ function TaskCompletedVolumeCell({
               {error ? <p className="text-sm text-rose-600">{error}</p> : null}
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-[#dfe1e6] bg-[#f7f8fa] px-5 py-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col-reverse gap-3 border-t border-[#dfe1e6] bg-[#f7f8fa] px-4 py-4 sm:flex-row sm:items-center sm:px-5">
               <Button className="w-full px-3 text-[#44546f] sm:w-auto" disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Отмена
               </Button>
               <Button className="h-10 w-full gap-2 px-4 sm:ml-auto sm:w-auto sm:min-w-36" disabled={!canSubmit} type="submit">
                 <Check className="h-4 w-4" />
-                Подтвердить
+                {primarySetupMode ? 'Сохранить объём' : 'Подтвердить'}
               </Button>
             </div>
           </form>
