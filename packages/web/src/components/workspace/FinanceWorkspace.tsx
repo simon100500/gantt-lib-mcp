@@ -58,6 +58,7 @@ const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
+const MIN_PLANNED_COLUMN_WIDTH = 104;
 const MIN_EARNED_COLUMN_WIDTH = 104;
 const MIN_PAID_COLUMN_WIDTH = 104;
 const MIN_VARIANCE_COLUMN_WIDTH = 104;
@@ -675,12 +676,14 @@ export function FinanceWorkspace({
     : drawerContractAmount;
   const financeColumnWidths = useMemo(() => {
     const plannedValues = tasks.map((task) => formatMoney(task.plannedCost));
+    const plannedToDateValues = tasks.map((task) => formatMoney(task.plannedToDate));
     const earnedValues = tasks.map((task) => formatMoney(task.earnedToDate));
     const paidValues = tasks.map((task) => formatMoney(task.paidToDate));
     const varianceValues = tasks.map((task) => formatMoney(task.varianceEarnedVsPaid));
 
     return {
       plannedCost: estimateMoneyColumnWidth(['Бюджет', ...plannedValues], MIN_COST_COLUMN_WIDTH),
+      plannedToDate: estimateMoneyColumnWidth(['План', ...plannedToDateValues], MIN_PLANNED_COLUMN_WIDTH),
       earnedToDate: estimateMoneyColumnWidth(['Освоено', ...earnedValues], MIN_EARNED_COLUMN_WIDTH),
       paidToDate: estimateMoneyColumnWidth(['Оплачено', ...paidValues], MIN_PAID_COLUMN_WIDTH),
       varianceEarnedVsPaid: estimateMoneyColumnWidth(['Разница', ...varianceValues], MIN_VARIANCE_COLUMN_WIDTH),
@@ -693,6 +696,7 @@ export function FinanceWorkspace({
       number: FINANCE_DEFAULT_NUMBER_COLUMN_WIDTH,
       name: FINANCE_DEFAULT_NAME_COLUMN_WIDTH,
       plannedCost: financeColumnWidths.plannedCost,
+      plannedToDate: financeColumnWidths.plannedToDate,
       allocationMode: LOCK_COLUMN_WIDTH,
       earnedToDate: financeColumnWidths.earnedToDate,
       paidToDate: financeColumnWidths.paidToDate,
@@ -703,6 +707,7 @@ export function FinanceWorkspace({
     financeColumnWidths.earnedToDate,
     financeColumnWidths.paidToDate,
     financeColumnWidths.plannedCost,
+    financeColumnWidths.plannedToDate,
     financeColumnWidths.varianceEarnedVsPaid,
     projectId,
     projectStates,
@@ -713,6 +718,7 @@ export function FinanceWorkspace({
       (financeTaskListColumnWidths.number ?? 0)
       + (financeTaskListColumnWidths.name ?? 0)
       + (financeTaskListColumnWidths.plannedCost ?? 0)
+      + (financeTaskListColumnWidths.plannedToDate ?? 0)
       + (financeTaskListColumnWidths.allocationMode ?? 0)
       + (financeTaskListColumnWidths.earnedToDate ?? 0)
       + (financeTaskListColumnWidths.paidToDate ?? 0)
@@ -1129,10 +1135,36 @@ export function FinanceWorkspace({
       },
     },
     {
+      id: 'plannedToDate',
+      header: <span title="Плановая сумма к выбранной дате по календарному графику.">План</span>,
+      width: financeColumnWidths.plannedToDate,
+      after: 'allocationMode',
+      align: 'right',
+      renderCell: ({ task }) => {
+        const share = formatShare(task.plannedToDate, task.plannedCost);
+
+        return (
+          <div className="grid justify-items-end gap-[3px] leading-none">
+            <MoneyValue
+              value={task.plannedToDate}
+              color={task.plannedToDate > 0 ? '#0f172a' : '#94a3b8'}
+              fontWeight={task.parentId ? 500 : 700}
+              className="text-[12px]"
+            />
+            {share && (
+              <span className="text-[10px] text-slate-400">
+                {share}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       id: 'earnedToDate',
       header: <span title="Освоенная стоимость: бюджет, умноженный на процент выполнения.">Освоено</span>,
       width: financeColumnWidths.earnedToDate,
-      after: 'allocationMode',
+      after: 'plannedToDate',
       align: 'right',
       renderCell: ({ task }) => {
         const share = formatShare(task.earnedToDate, task.plannedCost);
@@ -1207,6 +1239,7 @@ export function FinanceWorkspace({
     financeColumnWidths.earnedToDate,
     financeColumnWidths.paidToDate,
     financeColumnWidths.plannedCost,
+    financeColumnWidths.plannedToDate,
     financeColumnWidths.varianceEarnedVsPaid,
     requestAllocationModeChange,
     savingTaskId,
