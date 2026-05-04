@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
-import { GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, X } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -44,11 +44,12 @@ type FundingDrawerState = {
 const FINANCE_CHART_HEIGHT = 'calc(100dvh - 132px)';
 const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
-const LOCK_COLUMN_WIDTH = 36;
+const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
 const MIN_PAID_COLUMN_WIDTH = 120;
-const MIN_MATRIX_COLUMN_WIDTH_WEEK = 82;
-const MIN_MATRIX_COLUMN_WIDTH_MONTH = 92;
+const MIN_MATRIX_COLUMN_WIDTH_WEEK = 96;
+const MIN_MATRIX_COLUMN_WIDTH_MONTH = 108;
+const MAX_MATRIX_COLUMN_WIDTH = 340;
 const MONEY_COLUMN_HORIZONTAL_PADDING = 26;
 const MONEY_CHARACTER_WIDTH = 7.4;
 const MATRIX_RECEIVED_COLOR = '#34c15c';
@@ -204,19 +205,34 @@ function filterEventsForDrawer(
   return taskEvents.filter((event) => event.eventDate >= period.startDate && event.eventDate <= period.endDate);
 }
 
+function parseUtcDate(value: string): Date {
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function getMonthGroupDateForWeek(period: FinancePeriodBucket): Date {
+  const startDate = parseUtcDate(period.startDate);
+  const endDate = parseUtcDate(period.endDate);
+  if (startDate.getUTCMonth() === endDate.getUTCMonth() && startDate.getUTCFullYear() === endDate.getUTCFullYear()) {
+    return startDate;
+  }
+
+  return endDate.getUTCDate() > 3 ? endDate : startDate;
+}
+
 function buildPeriodGroup(period: FinancePeriodBucket, granularity: FinancePeriodGranularity): { id: string; label: string } {
-  const date = new Date(`${period.startDate}T00:00:00Z`);
   if (granularity === 'month') {
+    const date = parseUtcDate(period.startDate);
     const year = date.getUTCFullYear();
     return { id: `year:${year}`, label: String(year) };
   }
 
-  const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  const monthDate = getMonthGroupDateForWeek(period);
+  const monthKey = `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, '0')}`;
   const monthLabel = new Intl.DateTimeFormat('ru-RU', {
     month: 'long',
     timeZone: 'UTC',
-  }).format(date);
-  const shortYear = String(date.getUTCFullYear()).slice(-2);
+  }).format(monthDate);
+  const shortYear = String(monthDate.getUTCFullYear()).slice(-2);
 
   return {
     id: `month:${monthKey}`,
@@ -240,7 +256,7 @@ function formatPeriodColumnHeader(period: FinancePeriodBucket, granularity: Fina
   return `${startDay}-${endDay}`;
 }
 
-function getMatrixColumnWidth(granularity: FinancePeriodGranularity): number {
+function getMatrixColumnMinWidth(granularity: FinancePeriodGranularity): number {
   return granularity === 'week' ? MIN_MATRIX_COLUMN_WIDTH_WEEK : MIN_MATRIX_COLUMN_WIDTH_MONTH;
 }
 
@@ -494,6 +510,15 @@ export function FinanceWorkspace({
   const financeTaskListWidth = useMemo(() => (
     Math.max(620, 356 + LOCK_COLUMN_WIDTH + financeColumnWidths.plannedCost + financeColumnWidths.paidToDate)
   ), [financeColumnWidths.paidToDate, financeColumnWidths.plannedCost]);
+  const parentTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const task of tasks) {
+      if (task.parentId) {
+        ids.add(task.parentId);
+      }
+    }
+    return ids;
+  }, [tasks]);
 
   const toggleCollapse = useCallback((taskId: string) => {
     setCollapsedTaskIds((current) => {
@@ -505,6 +530,12 @@ export function FinanceWorkspace({
       }
       return next;
     });
+  }, []);
+  const collapseAll = useCallback(() => {
+    setCollapsedTaskIds(new Set(parentTaskIds));
+  }, [parentTaskIds]);
+  const expandAll = useCallback(() => {
+    setCollapsedTaskIds(new Set());
   }, []);
 
   const savePlannedCost = useCallback(async (taskId: string, plannedCost: number) => {
@@ -747,10 +778,34 @@ export function FinanceWorkspace({
 
   const additionalColumns = useMemo<TaskListColumn<FinanceMatrixTask>[]>(() => [
     {
+      id: 'plannedCost',
+      header: 'Бюджет',
+      width: financeColumnWidths.plannedCost,
+      after: 'name',
+      align: 'right',
+      editable: !readOnly,
+      renderCell: ({ task }) => (
+        savingTaskId === task.id
+          ? <LoaderCircle className="ml-auto h-4 w-4 animate-spin text-slate-500" />
+          : <MoneyValue value={task.plannedCost} fontWeight={task.parentId ? 500 : 700} />
+      ),
+      renderEditor: ({ task, editStartValue, updateTask, closeEditor }) => (
+        <BudgetCellEditor
+          value={task.plannedCost}
+          editStartValue={editStartValue}
+          onCommit={(nextValue) => {
+            updateTask({ plannedCost: nextValue, allocationMode: 'manual' });
+            closeEditor();
+          }}
+          onCancel={closeEditor}
+        />
+      ),
+    },
+    {
       id: 'allocationMode',
       header: '',
       width: LOCK_COLUMN_WIDTH,
-      after: 'name',
+      after: 'plannedCost',
       align: 'center',
       renderCell: ({ task }) => (
         <div className="group flex min-h-[28px] items-center justify-center">
@@ -777,34 +832,10 @@ export function FinanceWorkspace({
       ),
     },
     {
-      id: 'plannedCost',
-      header: 'Бюджет',
-      width: financeColumnWidths.plannedCost,
-      after: 'allocationMode',
-      align: 'right',
-      editable: !readOnly,
-      renderCell: ({ task }) => (
-        savingTaskId === task.id
-          ? <LoaderCircle className="ml-auto h-4 w-4 animate-spin text-slate-500" />
-          : <MoneyValue value={task.plannedCost} fontWeight={task.parentId ? 500 : 700} />
-      ),
-      renderEditor: ({ task, editStartValue, updateTask, closeEditor }) => (
-        <BudgetCellEditor
-          value={task.plannedCost}
-          editStartValue={editStartValue}
-          onCommit={(nextValue) => {
-            updateTask({ plannedCost: nextValue, allocationMode: 'manual' });
-            closeEditor();
-          }}
-          onCancel={closeEditor}
-        />
-      ),
-    },
-    {
       id: 'paidToDate',
       header: 'Оплачено',
       width: financeColumnWidths.paidToDate,
-      after: 'plannedCost',
+      after: 'allocationMode',
       align: 'right',
       renderCell: ({ task }) => (
         <MoneyValue
@@ -852,27 +883,14 @@ export function FinanceWorkspace({
 
     return snapshot.periods.map((period) => {
       const group = buildPeriodGroup(period, snapshot.granularity);
-      const periodValues = snapshot.tasks.flatMap((task) => {
-        const values: string[] = [];
-        const plannedValue = task.plannedByPeriod[period.id] ?? 0;
-        const paidValue = showFundingLine ? (task.paidByPeriod[period.id] ?? 0) : 0;
-        if (plannedValue > 0) {
-          values.push(formatMoney(plannedValue));
-        }
-        if (paidValue > 0) {
-          values.push(formatReceivedMoney(paidValue));
-        }
-        return values;
-      });
 
       return {
         id: period.id,
         header: formatPeriodColumnHeader(period, snapshot.granularity),
         groupId: group.id,
-        width: estimateMoneyColumnWidth(
-          [formatPeriodColumnHeader(period, snapshot.granularity), ...periodValues],
-          getMatrixColumnWidth(snapshot.granularity),
-        ),
+        width: 'auto',
+        minWidth: getMatrixColumnMinWidth(snapshot.granularity),
+        maxWidth: MAX_MATRIX_COLUMN_WIDTH,
         align: 'right',
         cellClassName: (task) => [
           task.plannedByPeriod[period.id] || task.paidByPeriod[period.id]
@@ -913,31 +931,7 @@ export function FinanceWorkspace({
     <div className="finance-workspace flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center justify-between gap-2 bg-[#f4f5f7] py-2">
-          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-            <span>Стоимость: {formatMoney(projectTotals.plannedCost)}</span>
-            <span>План: {formatMoney(projectTotals.plannedToDate)}</span>
-            <span>Освоено: {formatMoney(projectTotals.earnedToDate)}</span>
-            <span>Оплачено: {formatMoney(projectTotals.paidToDate)}</span>
-          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600">
-              <input
-                type="checkbox"
-                checked={showFundingLine}
-                onChange={(event) => setShowFundingLine(event.target.checked)}
-                className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-              />
-              <span>Поступления</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <span>На дату</span>
-              <Input
-                className="h-9 w-[150px] bg-white"
-                type="date"
-                value={asOfDate}
-                onChange={(event) => setAsOfDate(event.target.value)}
-              />
-            </label>
             <div className="inline-flex rounded-md">
               {(['week', 'month'] as const).map((mode) => (
                 <button
@@ -956,6 +950,52 @@ export function FinanceWorkspace({
                 </button>
               ))}
             </div>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <span>На дату</span>
+              <Input
+                className="h-9 w-[150px] bg-white"
+                type="date"
+                value={asOfDate}
+                onChange={(event) => setAsOfDate(event.target.value)}
+              />
+            </label>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={collapseAll}
+              disabled={parentTaskIds.size === 0}
+              aria-label="Свернуть все"
+              title="Свернуть все родительские задачи"
+              className="hidden h-8 px-2 text-slate-600 hover:text-primary lg:flex"
+            >
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={expandAll}
+              disabled={collapsedTaskIds.size === 0}
+              aria-label="Развернуть все"
+              title="Развернуть все родительские задачи"
+              className="hidden h-8 px-2 text-slate-600 hover:text-primary lg:flex"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+            </Button>
+            <label className="flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={showFundingLine}
+                onChange={(event) => setShowFundingLine(event.target.checked)}
+                className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+              />
+              <span>Поступления</span>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3 text-sm text-slate-600">
+            <span>Стоимость: {formatMoney(projectTotals.plannedCost)}</span>
+            <span>План: {formatMoney(projectTotals.plannedToDate)}</span>
+            <span>Освоено: {formatMoney(projectTotals.earnedToDate)}</span>
+            <span>Оплачено: {formatMoney(projectTotals.paidToDate)}</span>
             <Button variant="ghost" size="sm" className="h-8" onClick={() => { void loadSnapshot(granularity, asOfDate, false, true); }} disabled={refreshing}>
               {refreshing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>

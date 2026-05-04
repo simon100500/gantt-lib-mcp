@@ -25,6 +25,7 @@ type FinanceTaskRow = {
   endDate: string;
   progress: number;
   plannedCost: number;
+  hasOwnFinanceSetting: boolean;
   allocationMode: FinanceAllocationMode;
   allocationParentTaskId: string | null;
   plannedToDate: number;
@@ -652,7 +653,7 @@ function buildFinanceTaskRows(
     visit(rootTask);
   }
 
-  return orderedTasks.map((task) => {
+  const rows = orderedTasks.map((task) => {
     const startDate = startOfUtcDay(task.startDate);
     const endDate = startOfUtcDay(task.endDate);
     const setting = settingsByTaskId.get(task.id);
@@ -678,9 +679,7 @@ function buildFinanceTaskRows(
         continue;
       }
 
-      if (eventDate.getTime() <= asOfDate.getTime()) {
-        paidToDate = roundMoney(paidToDate + event.amount);
-      }
+      paidToDate = roundMoney(paidToDate + event.amount);
 
       const period = periods.find((candidate) => {
         const periodStart = parseIsoDate(candidate.startDate)!;
@@ -722,6 +721,44 @@ function buildFinanceTaskRows(
       paidByPeriod,
     };
   });
+
+  const rowsByTaskId = new Map(rows.map((row) => [row.taskId, row]));
+  for (const task of orderedTasks.slice().reverse()) {
+    const row = rowsByTaskId.get(task.id);
+    if (!row) {
+      continue;
+    }
+
+    const childRows = (childrenByParent.get(task.id) ?? [])
+      .map((child) => rowsByTaskId.get(child.id))
+      .filter((childRow): childRow is FinanceTaskRow => Boolean(childRow));
+    if (childRows.length === 0) {
+      continue;
+    }
+
+    const hasChildPlannedCost = childRows.some((childRow) => childRow.plannedCost > 0);
+    if (!hasChildPlannedCost) {
+      continue;
+    }
+
+    const plannedByPeriod: Record<string, number> = {};
+    for (const period of periods) {
+      const periodTotal = roundMoney(
+        childRows.reduce((sum, childRow) => sum + (childRow.plannedByPeriod[period.id] ?? 0), 0),
+      );
+      if (periodTotal > 0) {
+        plannedByPeriod[period.id] = periodTotal;
+      }
+    }
+
+    row.plannedByPeriod = plannedByPeriod;
+    row.plannedToDate = roundMoney(childRows.reduce((sum, childRow) => sum + childRow.plannedToDate, 0));
+    row.earnedToDate = roundMoney(childRows.reduce((sum, childRow) => sum + childRow.earnedToDate, 0));
+    row.variancePlannedVsEarned = roundMoney(row.earnedToDate - row.plannedToDate);
+    row.varianceEarnedVsPaid = roundMoney(row.paidToDate - row.earnedToDate);
+  }
+
+  return rows;
 }
 
 async function ensureFinanceTask(projectId: string, taskId: string): Promise<TaskRecord> {

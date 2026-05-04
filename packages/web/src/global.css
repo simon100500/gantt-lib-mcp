@@ -45,6 +45,9 @@
 .finance-period-cell .finance-money-value {
   font-size: 12px;
   line-height: 1.05;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .finance-workspace .gantt-container {
