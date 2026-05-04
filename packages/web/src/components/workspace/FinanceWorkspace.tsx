@@ -57,6 +57,7 @@ const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
+const MIN_EARNED_COLUMN_WIDTH = 120;
 const MIN_PAID_COLUMN_WIDTH = 120;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MATRIX_COLUMN_WIDTH_WEEK = 98;
@@ -380,14 +381,16 @@ function MoneyValue({
   color,
   fontWeight,
   prefix = '',
+  className,
 }: {
   value: number;
   color?: string;
   fontWeight?: number;
   prefix?: string;
+  className?: string;
 }) {
   return (
-    <span className="finance-money-value" style={{ color, fontWeight, fontVariantNumeric: 'tabular-nums' }}>
+    <span className={cn('finance-money-value', className)} style={{ color, fontWeight, fontVariantNumeric: 'tabular-nums' }}>
       {prefix}{formatMoney(value)}
     </span>
   );
@@ -617,16 +620,21 @@ export function FinanceWorkspace({
     : drawerContractAmount;
   const financeColumnWidths = useMemo(() => {
     const plannedValues = tasks.map((task) => formatMoney(task.plannedCost));
+    const earnedValues = tasks.map((task) => formatMoney(task.earnedToDate));
     const paidValues = tasks.map((task) => formatMoney(task.paidToDate));
 
     return {
       plannedCost: estimateMoneyColumnWidth(['Бюджет', ...plannedValues], MIN_COST_COLUMN_WIDTH),
+      earnedToDate: estimateMoneyColumnWidth(['Освоено', ...earnedValues], MIN_EARNED_COLUMN_WIDTH),
       paidToDate: estimateMoneyColumnWidth(['Оплачено', ...paidValues], MIN_PAID_COLUMN_WIDTH),
     };
   }, [tasks]);
   const financeTaskListWidth = useMemo(() => (
-    Math.max(620, 356 + LOCK_COLUMN_WIDTH + financeColumnWidths.plannedCost + financeColumnWidths.paidToDate)
-  ), [financeColumnWidths.paidToDate, financeColumnWidths.plannedCost]);
+    Math.max(
+      620,
+      356 + LOCK_COLUMN_WIDTH + financeColumnWidths.plannedCost + financeColumnWidths.earnedToDate + financeColumnWidths.paidToDate,
+    )
+  ), [financeColumnWidths.earnedToDate, financeColumnWidths.paidToDate, financeColumnWidths.plannedCost]);
   const parentTaskIds = useMemo(() => {
     const ids = new Set<string>();
     for (const task of tasks) {
@@ -981,7 +989,7 @@ export function FinanceWorkspace({
       renderCell: ({ task }) => (
         savingTaskId === task.id
           ? <LoaderCircle className="ml-auto h-4 w-4 animate-spin text-slate-500" />
-          : <MoneyValue value={task.plannedCost} fontWeight={task.parentId ? 500 : 700} />
+          : <MoneyValue value={task.plannedCost} fontWeight={task.parentId ? 500 : 700} className="text-[12px]" />
       ),
       renderEditor: ({ task, editStartValue, updateTask, closeEditor }) => (
         <BudgetCellEditor
@@ -1030,21 +1038,38 @@ export function FinanceWorkspace({
       },
     },
     {
+      id: 'earnedToDate',
+      header: 'Освоено',
+      width: financeColumnWidths.earnedToDate,
+      after: 'allocationMode',
+      align: 'right',
+      renderCell: ({ task }) => (
+        <MoneyValue
+          value={task.earnedToDate}
+          color={task.earnedToDate > 0 ? '#0f172a' : '#94a3b8'}
+          fontWeight={task.parentId ? 500 : 700}
+          className="text-[12px]"
+        />
+      ),
+    },
+    {
       id: 'paidToDate',
       header: 'Оплачено',
       width: financeColumnWidths.paidToDate,
-      after: 'allocationMode',
+      after: 'earnedToDate',
       align: 'right',
       renderCell: ({ task }) => (
         <MoneyValue
           value={task.paidToDate}
           color={task.paidToDate > 0 ? MATRIX_RECEIVED_COLOR : '#94a3b8'}
           fontWeight={task.parentId ? 500 : 700}
+          className="text-[12px]"
         />
       ),
     },
   ], [
     readOnly,
+    financeColumnWidths.earnedToDate,
     financeColumnWidths.paidToDate,
     financeColumnWidths.plannedCost,
     requestAllocationModeChange,
@@ -1095,7 +1120,7 @@ export function FinanceWorkspace({
         ...getMatrixColumnSizing(snapshot.granularity),
         align: 'right',
         cellClassName: (task) => [
-          task.plannedByPeriod[period.id] || task.paidByPeriod[period.id]
+          task.plannedByPeriod[period.id]
             ? 'finance-matrix-cell-active'
             : 'finance-matrix-cell-empty',
         ].join(' '),
