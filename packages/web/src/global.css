@@ -84,6 +84,14 @@
 
 .finance-workspace .gantt-container {
   --gantt-grid-line-color: #dfe1e6;
+  --gantt-finance-tasklist-divider-color: #a7b1c2;
+}
+
+.finance-workspace .gantt-tl-overlay::after {
+  width: 1px;
+  background: var(--gantt-finance-tasklist-divider-color);
+  transform: scaleX(0.5);
+  transform-origin: right center;
 }
 
 .finance-workspace .gantt-tl-headerCell[data-custom-column-id="plannedToDate"],
