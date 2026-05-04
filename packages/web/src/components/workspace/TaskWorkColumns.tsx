@@ -29,7 +29,7 @@ export interface CreateTaskWorkColumnsOptions {
 
 function formatMetricValue(value: number | null | undefined, maximumFractionDigits: number = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
-    return '—';
+    return '-';
   }
 
   return new Intl.NumberFormat('ru-RU', {
@@ -45,8 +45,8 @@ function todayIsoDate(): string {
 function formatVolumeWithUnit(task: Task): string {
   const volumeLabel = formatMetricValue(task.workVolume);
   const unitLabel = task.workUnit?.trim();
-  if (volumeLabel === '—') {
-    return '—';
+  if (volumeLabel === '-') {
+    return '-';
   }
   return unitLabel ? `${volumeLabel} ${unitLabel}` : volumeLabel;
 }
@@ -68,6 +68,8 @@ function TaskWorkMetadataCell({
   const [volumeValue, setVolumeValue] = useState(task.workVolume === null || task.workVolume === undefined ? '' : String(task.workVolume));
   const [unitValue, setUnitValue] = useState(task.workUnit ?? '');
   const unitInputRef = useRef<HTMLInputElement | null>(null);
+  const volumeLabel = formatVolumeWithUnit(task);
+  const hasVolume = volumeLabel !== '-';
 
   return (
     <Popover onOpenChange={(nextOpen) => {
@@ -80,12 +82,12 @@ function TaskWorkMetadataCell({
     }} open={open}>
       <PopoverTrigger asChild>
         <button
-          className={`inline-flex w-full items-center justify-start rounded-md py-1 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${compact ? 'px-0' : 'px-2'}`}
+          className={`inline-flex w-full items-center justify-start py-1 text-sm transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${hasVolume ? 'text-slate-700' : 'text-slate-400'} ${compact ? 'rounded-none px-0' : 'rounded-md px-2'}`}
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           type="button"
         >
-          {formatVolumeWithUnit(task)}
+          <span className={compact ? 'px-1.5' : undefined}>{volumeLabel}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>
@@ -119,10 +121,6 @@ function TaskWorkMetadataCell({
             }
           }}
         >
-          <div className="space-y-1">
-            <h4 className="text-sm font-semibold text-slate-900">Исходный объём</h4>
-            <p className="text-sm text-slate-500">{task.name}</p>
-          </div>
           <div className="grid grid-cols-[1.3fr_1fr] gap-2">
             <Input
               autoFocus
@@ -164,15 +162,12 @@ function TaskWorkMetadataCell({
               ))}
             </datalist>
           </div>
-          <p className="text-[11px] text-slate-500">
-            Можно выбрать из списка или ввести свою единицу вручную.
-          </p>
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-          <div className="flex items-center justify-end gap-2">
-            <Button disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
+          <div className="flex items-center gap-2">
+            <Button className="shrink-0 px-3" disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
               Отмена
             </Button>
-            <Button disabled={pending} size="sm" type="submit">
+            <Button className="flex-1" disabled={pending} size="sm" type="submit">
               Сохранить
             </Button>
           </div>
@@ -207,6 +202,8 @@ function TaskCompletedVolumeCell({
     () => [...entries].sort((left, right) => right.entryDate.localeCompare(left.entryDate)),
     [entries],
   );
+  const hasCompletedVolume = entries.length > 0;
+  const completedVolumeLabel = hasCompletedVolume ? formatMetricValue(task.completedVolume) : '-';
 
   return (
     <Popover onOpenChange={(nextOpen) => {
@@ -221,12 +218,12 @@ function TaskCompletedVolumeCell({
     }} open={open}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent"
+          className={`inline-flex w-full items-center justify-start rounded-md px-2 py-1 text-sm transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent ${hasCompletedVolume ? 'text-slate-700' : 'text-slate-400'}`}
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           type="button"
         >
-          <span>{formatMetricValue(task.completedVolume ?? 0)}</span>
+          <span>{completedVolumeLabel}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80" onClick={(event) => event.stopPropagation()}>
@@ -351,7 +348,7 @@ export function createTaskWorkColumns({
     {
       id: 'work-volume',
       header: 'Объём',
-      width: 124,
+      width: 96,
       minWidth: 110,
       after: 'duration',
       renderCell: ({ task }) => (
@@ -366,7 +363,7 @@ export function createTaskWorkColumns({
     {
       id: 'completed-volume',
       header: 'Вып.',
-      width: 110,
+      width: 82,
       minWidth: 100,
       after: 'work-volume',
       renderCell: ({ task }) => (

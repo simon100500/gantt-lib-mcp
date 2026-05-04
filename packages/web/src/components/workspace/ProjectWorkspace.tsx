@@ -427,8 +427,8 @@ const TASK_LIST_COLUMN_WIDTHS: Record<string, number> = {
   endDate: 90,
   duration: 60,
   progress: 50,
-  'work-volume': 124,
-  'completed-volume': 110,
+  'work-volume': 96,
+  'completed-volume': 82,
   dependencies: 128,
   'assigned-resources': 132,
 };
