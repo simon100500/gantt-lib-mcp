@@ -40,15 +40,16 @@ type FundingDrawerState = {
   editingEventId: string | null;
 } | null;
 
-const ROW_HEIGHT = 46;
 const FINANCE_CHART_HEIGHT = 'calc(100dvh - 132px)';
+const FINANCE_ROW_HEIGHT_WITH_FUNDING = 30;
+const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 36;
 const MIN_COST_COLUMN_WIDTH = 120;
 const MIN_PAID_COLUMN_WIDTH = 120;
-const MIN_MATRIX_COLUMN_WIDTH_WEEK = 98;
-const MIN_MATRIX_COLUMN_WIDTH_MONTH = 108;
-const MONEY_COLUMN_HORIZONTAL_PADDING = 32;
-const MONEY_CHARACTER_WIDTH = 8;
+const MIN_MATRIX_COLUMN_WIDTH_WEEK = 82;
+const MIN_MATRIX_COLUMN_WIDTH_MONTH = 92;
+const MONEY_COLUMN_HORIZONTAL_PADDING = 26;
+const MONEY_CHARACTER_WIDTH = 7.4;
 const MATRIX_RECEIVED_COLOR = '#34c15c';
 
 const moneyFormatter = new Intl.NumberFormat('ru-RU', {
@@ -275,6 +276,7 @@ export function FinanceWorkspace({
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
   const [drawerPending, setDrawerPending] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [showFundingLine, setShowFundingLine] = useState(true);
   const snapshotCacheRef = useRef<Map<string, ProjectFinanceSnapshot>>(new Map());
   const activeSnapshotKeyRef = useRef(getSnapshotCacheKey(asOfDate, granularity));
   const [eventForm, setEventForm] = useState<{ eventDate: string; amount: string; comment: string }>({
@@ -721,7 +723,7 @@ export function FinanceWorkspace({
       const periodValues = snapshot.tasks.flatMap((task) => {
         const values: string[] = [];
         const plannedValue = task.plannedByPeriod[period.id] ?? 0;
-        const paidValue = task.paidByPeriod[period.id] ?? 0;
+        const paidValue = showFundingLine ? (task.paidByPeriod[period.id] ?? 0) : 0;
         if (plannedValue > 0) {
           values.push(formatMoney(plannedValue));
         }
@@ -747,10 +749,10 @@ export function FinanceWorkspace({
         ].join(' '),
         renderCell: (task) => {
           const plannedValue = task.plannedByPeriod[period.id] ?? 0;
-          const paidValue = task.paidByPeriod[period.id] ?? 0;
+        const paidValue = showFundingLine ? (task.paidByPeriod[period.id] ?? 0) : 0;
 
           return (
-            <div style={{ display: 'grid', gap: 2, justifyItems: 'end', width: '100%', padding: '2px 0' }}>
+            <div className="finance-period-cell">
               {plannedValue > 0 && (
                 <MoneyValue value={plannedValue} color="#0f172a" />
               )}
@@ -762,7 +764,7 @@ export function FinanceWorkspace({
         },
       };
     });
-  }, [snapshot]);
+  }, [showFundingLine, snapshot]);
 
   if (loading) {
     return (
@@ -786,6 +788,15 @@ export function FinanceWorkspace({
             <span>Оплачено: {formatMoney(projectTotals.paidToDate)}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-transparent px-2.5 text-xs font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={showFundingLine}
+                onChange={(event) => setShowFundingLine(event.target.checked)}
+                className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+              />
+              <span>Поступления</span>
+            </label>
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <span>На дату</span>
               <Input
@@ -839,8 +850,8 @@ export function FinanceWorkspace({
                 tasks={tasks}
                 showTaskList={true}
                 taskListWidth={financeTaskListWidth}
-                rowHeight={36}
-                rowContentLines={2}
+                rowHeight={showFundingLine ? FINANCE_ROW_HEIGHT_WITH_FUNDING : FINANCE_ROW_HEIGHT_COMPACT}
+                rowContentLines={showFundingLine ? 2 : 1}
                 headerHeight={52}
                 containerHeight={FINANCE_CHART_HEIGHT}
                 matrixColumns={matrixColumns}

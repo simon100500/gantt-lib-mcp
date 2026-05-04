@@ -33,10 +33,23 @@
   white-space: nowrap;
 }
 
+.finance-period-cell {
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+  width: 100%;
+  padding: 1px 0;
+  line-height: 1.15;
+}
+
 .finance-workspace .gantt-container {
   --gantt-grid-line-color: #dfe1e6;
 }
 
 .finance-workspace .gantt-tl-row {
   border-bottom: 1px solid #dfe1e6 !important;
+}
+
+.finance-workspace .gantt-tl-name-trigger {
+  line-height: 1.05;
 }
