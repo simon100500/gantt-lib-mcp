@@ -646,8 +646,7 @@ export function FinanceWorkspace({
   }, [tasks]);
   const financeTaskListWidth = useMemo(() => (
     Math.max(
-      620,
-      356
+      250,
       + LOCK_COLUMN_WIDTH
       + financeColumnWidths.plannedCost
       + financeColumnWidths.earnedToDate

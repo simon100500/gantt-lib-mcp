@@ -349,7 +349,7 @@ export function createTaskWorkColumns({
       id: 'work-volume',
       header: 'Объём',
       width: 96,
-      minWidth: 110,
+      minWidth: 55,
       after: 'duration',
       renderCell: ({ task }) => (
         <TaskWorkMetadataCell
@@ -364,7 +364,7 @@ export function createTaskWorkColumns({
       id: 'completed-volume',
       header: 'Вып.',
       width: 82,
-      minWidth: 100,
+      minWidth: 50,
       after: 'work-volume',
       renderCell: ({ task }) => (
         <TaskCompletedVolumeCell

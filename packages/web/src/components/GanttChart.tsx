@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
 import type { Task, ValidationResult } from '../types.ts';
-import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
+import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -61,6 +61,8 @@ export interface GanttChartProps {
   taskListMenuCommands?: TaskListMenuCommand<Task>[];
   additionalColumns?: TaskListColumn<Task>[];
   hiddenTaskListColumns?: TaskListColumnId[];
+  taskListColumnWidths?: TaskListColumnWidthMap;
+  onTaskListColumnWidthsChange?: (widths: TaskListColumnWidthMap) => void;
   taskDateChangeMode?: TaskDateChangeMode;
   onTaskDateChangeModeChange?: (mode: TaskDateChangeMode) => void;
 }
@@ -120,6 +122,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   taskListMenuCommands,
   additionalColumns,
   hiddenTaskListColumns,
+  taskListColumnWidths,
+  onTaskListColumnWidthsChange,
   taskDateChangeMode,
   onTaskDateChangeModeChange,
 }, ref) => {
@@ -183,6 +187,8 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       taskListMenuCommands={taskListMenuCommands}
       additionalColumns={additionalColumns}
       hiddenTaskListColumns={hiddenTaskListColumns}
+      taskListColumnWidths={taskListColumnWidths}
+      onTaskListColumnWidthsChange={onTaskListColumnWidthsChange}
       taskDateChangeMode={taskDateChangeMode}
       onTaskDateChangeModeChange={onTaskDateChangeModeChange}
     />

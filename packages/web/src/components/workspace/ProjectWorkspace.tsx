@@ -2,7 +2,7 @@ import type { Ref, RefObject } from 'react';
 import { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { Users, ListTree, LoaderCircle, MessageSquare, ToyBrick, TriangleAlert, WandSparkles, X } from 'lucide-react';
 import { Calendar, reflowTasksOnModeSwitch } from 'gantt-lib';
-import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListMenuCommand } from 'gantt-lib';
+import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
 
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
@@ -420,7 +420,7 @@ const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
 ];
 
 const KNOWN_TASK_LIST_COLUMN_IDS = new Set(TASK_LIST_COLUMN_ROWS.map((column) => column.id));
-const TASK_LIST_COLUMN_WIDTHS: Record<string, number> = {
+const TASK_LIST_COLUMN_WIDTHS: TaskListColumnWidthMap = {
   number: 40,
   name: 200,
   startDate: 90,
@@ -438,6 +438,20 @@ function clampPercent(value: number): number {
     return 0;
   }
   return Math.max(0, Math.min(100, value));
+}
+
+function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, number] => (
+      typeof entry[1] === 'number'
+      && Number.isFinite(entry[1])
+      && entry[1] > 0
+    )),
+  );
 }
 
 export function ProjectWorkspace({
@@ -583,12 +597,23 @@ export function ProjectWorkspace({
 
     return storedColumns.filter((columnId): columnId is TaskListColumnId => KNOWN_TASK_LIST_COLUMN_IDS.has(columnId));
   }, [projectId, projectStates]);
+  const taskListColumnWidths = useMemo<TaskListColumnWidthMap>(() => {
+    if (!projectId) {
+      return TASK_LIST_COLUMN_WIDTHS;
+    }
+
+    const storedWidths = normalizeTaskListColumnWidthMap(projectStates[projectId]?.taskListColumnWidths);
+    return {
+      ...TASK_LIST_COLUMN_WIDTHS,
+      ...storedWidths,
+    };
+  }, [projectId, projectStates]);
   const taskListWidth = useMemo(() => (
     Object.entries(TASK_LIST_COLUMN_WIDTHS).reduce(
-      (width, [columnId, columnWidth]) => hiddenTaskListColumns.includes(columnId) ? width : width + columnWidth,
+      (width, [columnId]) => hiddenTaskListColumns.includes(columnId) ? width : width + (taskListColumnWidths[columnId] ?? 0),
       0,
     )
-  ), [hiddenTaskListColumns]);
+  ), [hiddenTaskListColumns, taskListColumnWidths]);
   const taskDateChangeMode = useMemo<TaskDateChangeMode>(() => {
     if (!projectId) {
       return 'preserve-duration';
@@ -724,6 +749,15 @@ export function ProjectWorkspace({
 
     setProjectState(projectId, {
       taskDateChangeMode: mode,
+    });
+  }, [projectId, setProjectState]);
+  const handleTaskListColumnWidthsChange = useCallback((widths: TaskListColumnWidthMap) => {
+    if (!projectId) {
+      return;
+    }
+
+    setProjectState(projectId, {
+      taskListColumnWidths: normalizeTaskListColumnWidthMap(widths),
     });
   }, [projectId, setProjectState]);
 
@@ -1998,6 +2032,8 @@ export function ProjectWorkspace({
                   taskListMenuCommands={taskListMenuCommands}
                   additionalColumns={additionalColumns}
                   hiddenTaskListColumns={hiddenTaskListColumns}
+                  taskListColumnWidths={taskListColumnWidths}
+                  onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
                   onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
