@@ -57,8 +57,8 @@ const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
-const MIN_EARNED_COLUMN_WIDTH = 120;
-const MIN_PAID_COLUMN_WIDTH = 120;
+const MIN_EARNED_COLUMN_WIDTH = 104;
+const MIN_PAID_COLUMN_WIDTH = 104;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MATRIX_COLUMN_WIDTH_WEEK = 98;
 const DAY_COLUMN_WIDTH = MATRIX_COLUMN_WIDTH_WEEK / 7;
@@ -394,6 +394,14 @@ function MoneyValue({
       {prefix}{formatMoney(value)}
     </span>
   );
+}
+
+function formatShare(value: number, total: number): string | null {
+  if (total <= 0 || value <= 0) {
+    return null;
+  }
+
+  return `${Math.round((value / total) * 100)}%`;
 }
 
 function BudgetCellEditor({
@@ -1043,14 +1051,25 @@ export function FinanceWorkspace({
       width: financeColumnWidths.earnedToDate,
       after: 'allocationMode',
       align: 'right',
-      renderCell: ({ task }) => (
-        <MoneyValue
-          value={task.earnedToDate}
-          color={task.earnedToDate > 0 ? '#0f172a' : '#94a3b8'}
-          fontWeight={task.parentId ? 500 : 700}
-          className="text-[12px]"
-        />
-      ),
+      renderCell: ({ task }) => {
+        const share = formatShare(task.earnedToDate, task.plannedCost);
+
+        return (
+          <div className="grid justify-items-end gap-0 leading-none">
+            <MoneyValue
+              value={task.earnedToDate}
+              color={task.earnedToDate > 0 ? '#0f172a' : '#94a3b8'}
+              fontWeight={task.parentId ? 500 : 700}
+              className="text-[12px]"
+            />
+            {share && (
+              <span className="text-[10px] text-slate-400">
+                {share}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: 'paidToDate',
@@ -1058,14 +1077,25 @@ export function FinanceWorkspace({
       width: financeColumnWidths.paidToDate,
       after: 'earnedToDate',
       align: 'right',
-      renderCell: ({ task }) => (
-        <MoneyValue
-          value={task.paidToDate}
-          color={task.paidToDate > 0 ? MATRIX_RECEIVED_COLOR : '#94a3b8'}
-          fontWeight={task.parentId ? 500 : 700}
-          className="text-[12px]"
-        />
-      ),
+      renderCell: ({ task }) => {
+        const share = formatShare(task.paidToDate, task.plannedCost);
+
+        return (
+          <div className="grid justify-items-end gap-0 leading-none">
+            <MoneyValue
+              value={task.paidToDate}
+              color={task.paidToDate > 0 ? MATRIX_RECEIVED_COLOR : '#94a3b8'}
+              fontWeight={task.parentId ? 500 : 700}
+              className="text-[12px]"
+            />
+            {share && (
+              <span className="text-[10px] text-slate-400">
+                {share}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
   ], [
     readOnly,
