@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
-import { ChevronsDownUp, ChevronsUpDown, GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, X } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 import type {
   FinancePeriodBucket,
@@ -41,12 +41,24 @@ type FundingDrawerState = {
   editingEventId: string | null;
 } | null;
 
+type FinanceToast = {
+  id: number;
+  message: string;
+};
+
+type AllocationConfirmState = {
+  taskId: string;
+  taskName: string;
+  fallbackPlannedCost: number;
+} | null;
+
 const FINANCE_CHART_HEIGHT = 'calc(100dvh - 132px)';
 const FINANCE_ROW_HEIGHT_WITH_FUNDING = 36;
 const FINANCE_ROW_HEIGHT_COMPACT = 24;
 const LOCK_COLUMN_WIDTH = 26;
 const MIN_COST_COLUMN_WIDTH = 120;
 const MIN_PAID_COLUMN_WIDTH = 120;
+const MATRIX_COLUMN_WIDTH_WEEK = 98;
 const MIN_MATRIX_COLUMN_WIDTH_WEEK = 96;
 const MIN_MATRIX_COLUMN_WIDTH_MONTH = 108;
 const MAX_MATRIX_COLUMN_WIDTH = 340;
@@ -75,6 +87,35 @@ function formatInputMoney(value: number): string {
 
 function formatReceivedMoney(value: number): string {
   return `+${formatMoney(value)}`;
+}
+
+function normalizeFinanceErrorMessage(message: string): string {
+  const normalized = message.trim();
+
+  switch (normalized) {
+    case 'Auto allocation requires a parent with planned cost':
+      return 'Автораспределение доступно только если у родительской задачи задан бюджет.';
+    case 'Child manual amounts exceed parent planned cost':
+      return 'Сумма зафиксированных дочерних значений превышает бюджет родительской задачи.';
+    case 'When all child amounts are fixed, their sum must equal parent planned cost':
+      return 'Если у всех дочерних задач сумма зафиксирована, их общая сумма должна совпадать с бюджетом родительской задачи.';
+    case 'Invalid asOf date':
+      return 'Некорректная дата в параметре asOf.';
+    case 'taskId required':
+      return 'Не указан taskId.';
+    case 'plannedCost must be a non-negative number':
+      return 'Плановая стоимость должна быть неотрицательным числом.';
+    case 'plannedCost or allocationMode required':
+      return 'Нужно передать plannedCost или allocationMode.';
+    case 'eventDate must be YYYY-MM-DD':
+      return 'Дата события должна быть в формате YYYY-MM-DD.';
+    case 'amount must be a number':
+      return 'Сумма должна быть числом.';
+    case 'eventId required':
+      return 'Не указан eventId.';
+    default:
+      return normalized.startsWith('HTTP ') ? 'Не удалось выполнить запрос. Попробуйте ещё раз.' : normalized;
+  }
 }
 
 function parseMoneyInput(value: string): number | null {
@@ -260,6 +301,16 @@ function getMatrixColumnMinWidth(granularity: FinancePeriodGranularity): number 
   return granularity === 'week' ? MIN_MATRIX_COLUMN_WIDTH_WEEK : MIN_MATRIX_COLUMN_WIDTH_MONTH;
 }
 
+function getMatrixColumnSizing(granularity: FinancePeriodGranularity) {
+  return granularity === 'week'
+    ? { width: MATRIX_COLUMN_WIDTH_WEEK }
+    : {
+      width: 'auto' as const,
+      minWidth: getMatrixColumnMinWidth(granularity),
+      maxWidth: MAX_MATRIX_COLUMN_WIDTH,
+    };
+}
+
 function estimateMoneyColumnWidth(values: string[], minWidth: number): number {
   const maxLength = values.reduce((max, value) => Math.max(max, value.length), 0);
   return Math.max(minWidth, Math.ceil(maxLength * MONEY_CHARACTER_WIDTH + MONEY_COLUMN_HORIZONTAL_PADDING));
@@ -356,8 +407,9 @@ export function FinanceWorkspace({
   const [snapshot, setSnapshot] = useState<ProjectFinanceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<FinanceToast[]>([]);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
+  const [allocationConfirmState, setAllocationConfirmState] = useState<AllocationConfirmState>(null);
   const [drawerState, setDrawerState] = useState<FundingDrawerState>(null);
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
   const [drawerPending, setDrawerPending] = useState(false);
@@ -371,6 +423,18 @@ export function FinanceWorkspace({
     amount: '',
     comment: '',
   });
+  const toastIdRef = useRef(0);
+
+  const dismissToast = useCallback((toastId: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== toastId));
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    const normalized = normalizeFinanceErrorMessage(message);
+    const id = toastIdRef.current + 1;
+    toastIdRef.current = id;
+    setToasts((current) => [...current, { id, message: normalized }]);
+  }, []);
 
   const loadSnapshot = useCallback(async (
     targetGranularity: FinancePeriodGranularity,
@@ -381,7 +445,7 @@ export function FinanceWorkspace({
     if (!accessToken) {
       setSnapshot(null);
       setLoading(false);
-      setError('Нет доступа к финансовым данным.');
+      showToast('Нет доступа к финансовым данным.');
       return;
     }
 
@@ -393,7 +457,6 @@ export function FinanceWorkspace({
       }
       setLoading(false);
       setRefreshing(false);
-      setError(null);
       return;
     }
 
@@ -423,14 +486,13 @@ export function FinanceWorkspace({
       if (activeSnapshotKeyRef.current === cacheKey) {
         setSnapshot(data);
       }
-      setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить финансы');
+      showToast(loadError instanceof Error ? loadError.message : 'Не удалось загрузить финансы.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [accessToken]);
+  }, [accessToken, showToast]);
 
   useEffect(() => {
     activeSnapshotKeyRef.current = getSnapshotCacheKey(asOfDate, granularity);
@@ -576,21 +638,56 @@ export function FinanceWorkspace({
 
       await loadSnapshot(granularity, asOfDate, false, true);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить стоимость');
+      showToast(saveError instanceof Error ? saveError.message : 'Не удалось сохранить стоимость.');
       await loadSnapshot(granularity, asOfDate, false, true);
     } finally {
       setSavingTaskId(null);
     }
-  }, [accessToken, asOfDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly, snapshot]);
+  }, [accessToken, asOfDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly, showToast, snapshot]);
+
+  const redistributeChildrenFromParent = useCallback(async (taskId: string, plannedCost: number) => {
+    if (!accessToken || readOnly) {
+      return false;
+    }
+
+    setSavingTaskId(taskId);
+    try {
+      invalidateSnapshotCache();
+      const response = await fetch(`/api/finance/tasks/${encodeURIComponent(taskId)}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plannedCost,
+          allocationMode: 'manual',
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${response.status}`);
+      }
+
+      await loadSnapshot(granularity, asOfDate, false, true);
+      return true;
+    } catch (saveError) {
+      showToast(saveError instanceof Error ? saveError.message : 'Не удалось пересчитать дочерние задачи.');
+      return false;
+    } finally {
+      setSavingTaskId(null);
+    }
+  }, [accessToken, asOfDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly, showToast]);
 
   const updateAllocationMode = useCallback(async (taskId: string, allocationMode: 'manual' | 'auto', fallbackPlannedCost: number) => {
     if (!accessToken || readOnly) {
-      return;
+      return false;
     }
 
     const currentTask = snapshot?.tasks.find((task) => task.taskId === taskId);
     if (!currentTask || currentTask.allocationMode === allocationMode) {
-      return;
+      return false;
     }
 
     setSavingTaskId(taskId);
@@ -630,12 +727,49 @@ export function FinanceWorkspace({
         )),
       }) : current);
       await loadSnapshot(granularity, asOfDate, false, true);
+      return true;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Не удалось обновить режим суммы');
+      showToast(saveError instanceof Error ? saveError.message : 'Не удалось обновить режим суммы.');
+      return false;
     } finally {
       setSavingTaskId(null);
     }
-  }, [accessToken, asOfDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly, snapshot]);
+  }, [accessToken, asOfDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly, showToast, snapshot]);
+
+  const requestAllocationModeChange = useCallback((task: FinanceMatrixTask) => {
+    const nextAllocationMode = task.allocationMode === 'manual' ? 'auto' : 'manual';
+    if (nextAllocationMode === 'auto' && parentTaskIds.has(task.id)) {
+      setAllocationConfirmState({
+        taskId: task.id,
+        taskName: task.name,
+        fallbackPlannedCost: task.plannedCost,
+      });
+      return;
+    }
+
+    void updateAllocationMode(task.id, nextAllocationMode, task.plannedCost);
+  }, [parentTaskIds, updateAllocationMode]);
+
+  const closeAllocationConfirmation = useCallback(() => {
+    if (allocationConfirmState && savingTaskId === allocationConfirmState.taskId) {
+      return;
+    }
+    setAllocationConfirmState(null);
+  }, [allocationConfirmState, savingTaskId]);
+
+  const confirmAllocationModeChange = useCallback(async () => {
+    if (!allocationConfirmState) {
+      return;
+    }
+
+    const changed = await redistributeChildrenFromParent(
+      allocationConfirmState.taskId,
+      allocationConfirmState.fallbackPlannedCost,
+    );
+    if (changed) {
+      setAllocationConfirmState(null);
+    }
+  }, [allocationConfirmState, redistributeChildrenFromParent]);
 
   const openDrawer = useCallback((taskId: string, periodId: string | null, event?: TaskFundingEvent | null) => {
     setDrawerState({
@@ -680,6 +814,7 @@ export function FinanceWorkspace({
     const amount = parseFundingAmount(eventForm.amount);
     if (amount === null) {
       setDrawerError('Введите положительную сумму.');
+      showToast('Введите положительную сумму.');
       eventAmountInputRef.current?.focus();
       return;
     }
@@ -717,11 +852,13 @@ export function FinanceWorkspace({
       }));
       eventAmountInputRef.current?.focus();
     } catch (submitError) {
-      setDrawerError(submitError instanceof Error ? submitError.message : 'Не удалось сохранить поступление');
+      const message = submitError instanceof Error ? submitError.message : 'Не удалось сохранить поступление.';
+      setDrawerError(normalizeFinanceErrorMessage(message));
+      showToast(message);
     } finally {
       setDrawerPending(false);
     }
-  }, [accessToken, asOfDate, drawerState, eventForm.amount, eventForm.comment, eventForm.eventDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly]);
+  }, [accessToken, asOfDate, drawerState, eventForm.amount, eventForm.comment, eventForm.eventDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly, showToast]);
 
   const handleEventFormKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
@@ -757,11 +894,13 @@ export function FinanceWorkspace({
       await loadSnapshot(granularity, asOfDate, false, true);
       openDrawer(drawerState.taskId, drawerState.periodId, null);
     } catch (deleteError) {
-      setDrawerError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить поступление');
+      const message = deleteError instanceof Error ? deleteError.message : 'Не удалось удалить поступление.';
+      setDrawerError(normalizeFinanceErrorMessage(message));
+      showToast(message);
     } finally {
       setDrawerPending(false);
     }
-  }, [accessToken, asOfDate, drawerState, granularity, invalidateSnapshotCache, loadSnapshot, openDrawer, readOnly]);
+  }, [accessToken, asOfDate, drawerState, granularity, invalidateSnapshotCache, loadSnapshot, openDrawer, readOnly, showToast]);
 
   const handleFinanceTasksChange = useCallback((changedTasks: FinanceMatrixTask[]) => {
     for (const changedTask of changedTasks) {
@@ -807,29 +946,33 @@ export function FinanceWorkspace({
       width: LOCK_COLUMN_WIDTH,
       after: 'plannedCost',
       align: 'center',
-      renderCell: ({ task }) => (
-        <div className="group flex min-h-[28px] items-center justify-center">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              void updateAllocationMode(task.id, task.allocationMode === 'manual' ? 'auto' : 'manual', task.plannedCost);
-            }}
-            disabled={readOnly || savingTaskId === task.id || (!task.parentId && task.allocationMode === 'auto')}
-            title={task.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
-            aria-label={task.allocationMode === 'manual' ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
-            className={cn(
-              'rounded-sm p-0.5 text-slate-400 transition-colors transition-opacity hover:text-primary focus-visible:text-primary',
-              task.hasOwnFinanceSetting && task.allocationMode === 'manual'
-                ? 'opacity-100'
-                : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
-              (readOnly || savingTaskId === task.id || (!task.parentId && task.allocationMode === 'auto')) && 'cursor-default',
-            )}
-          >
-            <Lock className="h-3 w-3" />
-          </button>
-        </div>
-      ),
+      renderCell: ({ task }) => {
+        const hasVisibleManualLock = task.hasOwnFinanceSetting && task.allocationMode === 'manual' && task.plannedCost > 0;
+
+        return (
+          <div className="group flex min-h-[28px] items-center justify-center">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                requestAllocationModeChange(task);
+              }}
+              disabled={readOnly || savingTaskId === task.id || (!task.parentId && task.allocationMode === 'auto')}
+              title={hasVisibleManualLock ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
+              aria-label={hasVisibleManualLock ? 'Снять фиксацию суммы' : 'Зафиксировать сумму'}
+              className={cn(
+                'rounded-sm p-0.5 text-slate-400 transition-colors transition-opacity hover:text-primary focus-visible:text-primary',
+                hasVisibleManualLock
+                  ? 'opacity-100'
+                  : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
+                (readOnly || savingTaskId === task.id || (!task.parentId && task.allocationMode === 'auto')) && 'cursor-default',
+              )}
+            >
+              <Lock className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      },
     },
     {
       id: 'paidToDate',
@@ -849,31 +992,32 @@ export function FinanceWorkspace({
     readOnly,
     financeColumnWidths.paidToDate,
     financeColumnWidths.plannedCost,
+    requestAllocationModeChange,
     savingTaskId,
-    updateAllocationMode,
   ]);
 
   const matrixColumnGroups = useMemo<TableMatrixColumnGroup[]>(() => {
-    if (!snapshot) {
+    if (!snapshot || snapshot.granularity !== 'week') {
       return [];
     }
 
-    const groups: TableMatrixColumnGroup[] = [];
-    const seen = new Set<string>();
+    const groups = new Map<string, TableMatrixColumnGroup>();
 
     for (const period of snapshot.periods) {
       const group = buildPeriodGroup(period, snapshot.granularity);
-      if (seen.has(group.id)) {
+      const current = groups.get(group.id);
+      if (current) {
+        current.width = (current.width as number) + MATRIX_COLUMN_WIDTH_WEEK;
         continue;
       }
-      seen.add(group.id);
-      groups.push({
+      groups.set(group.id, {
         id: group.id,
         header: group.label,
+        width: MATRIX_COLUMN_WIDTH_WEEK,
       });
     }
 
-    return groups;
+    return [...groups.values()];
   }, [snapshot]);
 
   const matrixColumns = useMemo<TableMatrixColumn<FinanceMatrixTask>[]>(() => {
@@ -888,9 +1032,9 @@ export function FinanceWorkspace({
         id: period.id,
         header: formatPeriodColumnHeader(period, snapshot.granularity),
         groupId: group.id,
-        width: 'auto',
-        minWidth: getMatrixColumnMinWidth(snapshot.granularity),
-        maxWidth: MAX_MATRIX_COLUMN_WIDTH,
+        periodStartDate: period.startDate,
+        periodEndDate: period.endDate,
+        ...getMatrixColumnSizing(snapshot.granularity),
         align: 'right',
         cellClassName: (task) => [
           task.plannedByPeriod[period.id] || task.paidByPeriod[period.id]
@@ -916,6 +1060,19 @@ export function FinanceWorkspace({
     });
   }, [showFundingLine, snapshot]);
 
+  const matrixDateOverlay = useMemo(() => {
+    if (!snapshot) {
+      return false;
+    }
+
+    return {
+      date: todayIso(),
+      shouldRender: ({ task, column }: { task: FinanceMatrixTask; column: TableMatrixColumn<FinanceMatrixTask> }) => (
+        ((task.plannedByPeriod[column.id] ?? 0) > 0) || ((task.paidByPeriod[column.id] ?? 0) > 0)
+      ),
+    };
+  }, [snapshot]);
+
   if (loading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white">
@@ -929,6 +1086,31 @@ export function FinanceWorkspace({
 
   return (
     <div className="finance-workspace flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
+      {toasts.length > 0 && (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-[70] flex w-full max-w-[420px] flex-col gap-2">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className="pointer-events-auto flex items-start gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 text-sm text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur"
+              role="alert"
+              aria-atomic="true"
+            >
+              <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+              <div className="min-w-0 flex-1">{toast.message}</div>
+              <button
+                type="button"
+                onClick={() => dismissToast(toast.id)}
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Скрыть уведомление"
+                title="Скрыть уведомление"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center justify-between gap-2 bg-[#f4f5f7] py-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -1004,12 +1186,6 @@ export function FinanceWorkspace({
       </div>
 
       <div className="mt-0.5 flex min-w-0 flex-1 flex-col overflow-auto px-3 md:px-4">
-        {error && (
-          <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
-          </div>
-        )}
-
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-t-xl border-x border-t border-slate-300 bg-white shadow-[0_1px_2px_rgba(9,30,66,0.08)]">
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
             {snapshot && snapshot.tasks.length === 0 ? (
@@ -1027,7 +1203,8 @@ export function FinanceWorkspace({
                 headerHeight={52}
                 containerHeight={FINANCE_CHART_HEIGHT}
                 matrixColumns={matrixColumns}
-                matrixColumnGroups={matrixColumnGroups}
+                matrixColumnGroups={matrixColumnGroups.length > 0 ? matrixColumnGroups : undefined}
+                matrixDateOverlay={matrixDateOverlay}
                 additionalColumns={additionalColumns}
                 hiddenTaskListColumns={['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions']}
                 disableTaskDrag={true}
@@ -1045,6 +1222,60 @@ export function FinanceWorkspace({
                   openDrawer(task.id, column.id, null);
                 }}
               />
+            )}
+
+            {allocationConfirmState && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) {
+                    closeAllocationConfirmation();
+                  }
+                }}
+              >
+                <section
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="finance-allocation-confirm-title"
+                  className="w-[460px] max-w-full rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                      <TriangleAlert className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <h2 id="finance-allocation-confirm-title" className="text-lg font-semibold text-slate-900">
+                        Снять фиксацию у родителя?
+                      </h2>
+                      <div className="mt-2 space-y-2 text-sm leading-5 text-slate-600">
+                        <p>Для задачи «{allocationConfirmState.taskName}» стоимость будет пересчитана по длительности.</p>
+                        <p>Фиксация суммы у всех дочерних задач тоже будет снята, и они перейдут в автораспределение.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={closeAllocationConfirmation}
+                      disabled={savingTaskId === allocationConfirmState.taskId}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void confirmAllocationModeChange(); }}
+                      disabled={savingTaskId === allocationConfirmState.taskId}
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {savingTaskId === allocationConfirmState.taskId && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                      Продолжить
+                    </button>
+                  </div>
+                </section>
+              </div>
             )}
 
             {drawerState && snapshot && (
@@ -1127,7 +1358,7 @@ export function FinanceWorkspace({
                       />
                     </label>
                     {drawerError && (
-                      <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                         {drawerError}
                       </div>
                     )}

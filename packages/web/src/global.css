@@ -50,8 +50,20 @@
   text-overflow: clip;
 }
 
+.finance-matrix-cell-active {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.finance-matrix-cell-empty {
+  background: transparent;
+}
+
 .finance-workspace .gantt-container {
   --gantt-grid-line-color: #dfe1e6;
+}
+
+.finance-workspace .gantt-mx-dateOverlayEdge {
+  display: block;
 }
 
 .finance-workspace .gantt-tl-row {

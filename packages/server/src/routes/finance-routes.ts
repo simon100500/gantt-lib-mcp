@@ -807,7 +807,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     const asOfDate = query.asOf ? parseIsoDate(query.asOf) : startOfUtcDay(new Date());
 
     if (!asOfDate) {
-      return reply.status(400).send({ error: 'Invalid asOf date' });
+      return reply.status(400).send({ error: 'Некорректная дата в параметре asOf.' });
     }
 
     const prisma = getPrisma();
@@ -917,13 +917,13 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     const body = (req.body ?? {}) as { plannedCost?: number; currencyCode?: string; allocationMode?: FinanceAllocationMode };
     const taskId = params.taskId?.trim();
     if (!taskId) {
-      return reply.status(400).send({ error: 'taskId required' });
+      return reply.status(400).send({ error: 'Не указан taskId.' });
     }
     if (body.plannedCost !== undefined && (typeof body.plannedCost !== 'number' || Number.isNaN(body.plannedCost) || body.plannedCost < 0)) {
-      return reply.status(400).send({ error: 'plannedCost must be a non-negative number' });
+      return reply.status(400).send({ error: 'Плановая стоимость должна быть неотрицательным числом.' });
     }
     if (body.plannedCost === undefined && body.allocationMode === undefined) {
-      return reply.status(400).send({ error: 'plannedCost or allocationMode required' });
+      return reply.status(400).send({ error: 'Нужно передать plannedCost или allocationMode.' });
     }
 
     try {
@@ -1054,13 +1054,13 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
       return reply.send(result);
     } catch (error) {
       if (error instanceof Error && error.message === 'manual_children_exceed_parent') {
-        return reply.status(400).send({ error: 'Child manual amounts exceed parent planned cost' });
+        return reply.status(400).send({ error: 'Сумма зафиксированных дочерних значений превышает бюджет родительской задачи.' });
       }
       if (error instanceof Error && error.message === 'manual_children_must_match_parent') {
-        return reply.status(400).send({ error: 'When all child amounts are fixed, their sum must equal parent planned cost' });
+        return reply.status(400).send({ error: 'Если у всех дочерних задач сумма зафиксирована, их общая сумма должна совпадать с бюджетом родительской задачи.' });
       }
       if (error instanceof Error && error.message === 'auto_requires_parent') {
-        return reply.status(400).send({ error: 'Auto allocation requires a parent with planned cost' });
+        return reply.status(400).send({ error: 'Автораспределение доступно только если у родительской задачи задан бюджет.' });
       }
       throw error;
     }
@@ -1071,14 +1071,14 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     const body = (req.body ?? {}) as { eventDate?: string; amount?: number; comment?: string | null };
     const taskId = params.taskId?.trim();
     if (!taskId) {
-      return reply.status(400).send({ error: 'taskId required' });
+      return reply.status(400).send({ error: 'Не указан taskId.' });
     }
     const eventDate = typeof body.eventDate === 'string' ? parseIsoDate(body.eventDate) : null;
     if (!eventDate) {
-      return reply.status(400).send({ error: 'eventDate must be YYYY-MM-DD' });
+      return reply.status(400).send({ error: 'Дата события должна быть в формате YYYY-MM-DD.' });
     }
     if (typeof body.amount !== 'number' || Number.isNaN(body.amount)) {
-      return reply.status(400).send({ error: 'amount must be a number' });
+      return reply.status(400).send({ error: 'Сумма должна быть числом.' });
     }
 
     try {
@@ -1114,7 +1114,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     const body = (req.body ?? {}) as { eventDate?: string; amount?: number; comment?: string | null };
     const eventId = params.eventId?.trim();
     if (!eventId) {
-      return reply.status(400).send({ error: 'eventId required' });
+      return reply.status(400).send({ error: 'Не указан eventId.' });
     }
 
     const existing = await getPrisma().taskFundingEvent.findFirst({
@@ -1129,10 +1129,10 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
 
     const eventDate = typeof body.eventDate === 'string' ? parseIsoDate(body.eventDate) : undefined;
     if (typeof body.eventDate === 'string' && !eventDate) {
-      return reply.status(400).send({ error: 'eventDate must be YYYY-MM-DD' });
+      return reply.status(400).send({ error: 'Дата события должна быть в формате YYYY-MM-DD.' });
     }
     if (body.amount !== undefined && (typeof body.amount !== 'number' || Number.isNaN(body.amount))) {
-      return reply.status(400).send({ error: 'amount must be a number' });
+      return reply.status(400).send({ error: 'Сумма должна быть числом.' });
     }
 
     const updated = await getPrisma().taskFundingEvent.update({
@@ -1164,7 +1164,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     const params = req.params as { eventId?: string };
     const eventId = params.eventId?.trim();
     if (!eventId) {
-      return reply.status(400).send({ error: 'eventId required' });
+      return reply.status(400).send({ error: 'Не указан eventId.' });
     }
 
     const existing = await getPrisma().taskFundingEvent.findFirst({
