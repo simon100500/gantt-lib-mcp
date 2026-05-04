@@ -23,6 +23,7 @@ interface ProjectUIState {
   taskDateChangeMode: TaskDateChangeMode;
   hiddenTaskListColumns: string[];
   taskListColumnWidths: TaskListColumnWidthMap;
+  financeTaskListColumnWidths: TaskListColumnWidthMap;
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
   plannerSelectedAssignmentId: string | null;
@@ -49,6 +50,7 @@ const DEFAULT_STATE: ProjectUIState = {
   taskDateChangeMode: 'preserve-duration',
   hiddenTaskListColumns: [],
   taskListColumnWidths: {},
+  financeTaskListColumnWidths: {},
   selectedBaseline: null,
   selectedBaselineVisible: false,
   plannerSelectedAssignmentId: null,

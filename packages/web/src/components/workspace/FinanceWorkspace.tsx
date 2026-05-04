@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
-import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
+import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn, TaskListColumnWidthMap } from 'gantt-lib';
 import { ChevronsDownUp, ChevronsUpDown, GitMerge, LoaderCircle, Lock, Pencil, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 import type {
@@ -10,6 +10,7 @@ import type {
   ProjectFinanceSnapshot,
   TaskFundingEvent,
 } from '../../lib/apiTypes.ts';
+import { useProjectUIStore } from '../../stores/useProjectUIStore.ts';
 import { Button } from '../ui/button.tsx';
 import { Input } from '../ui/input.tsx';
 import { cn } from '../../lib/utils.ts';
@@ -69,6 +70,9 @@ const MAX_MATRIX_COLUMN_WIDTH = 340;
 const MONEY_COLUMN_HORIZONTAL_PADDING = 26;
 const MONEY_CHARACTER_WIDTH = 7.4;
 const MATRIX_RECEIVED_COLOR = '#34c15c';
+const FINANCE_HIDDEN_TASK_LIST_COLUMNS = ['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions'] as const;
+const FINANCE_DEFAULT_NUMBER_COLUMN_WIDTH = 40;
+const FINANCE_DEFAULT_NAME_COLUMN_WIDTH = 200;
 
 const moneyFormatter = new Intl.NumberFormat('ru-RU', {
   minimumFractionDigits: 2,
@@ -377,6 +381,20 @@ function getSnapshotCacheKey(asOfDate: string, granularity: FinancePeriodGranula
   return `${asOfDate}:${granularity}`;
 }
 
+function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, number] => (
+      typeof entry[1] === 'number'
+      && Number.isFinite(entry[1])
+      && entry[1] > 0
+    )),
+  );
+}
+
 function MoneyValue({
   value,
   color,
@@ -469,6 +487,8 @@ export function FinanceWorkspace({
   readOnly = false,
   onBackToProject: _onBackToProject,
 }: FinanceWorkspaceProps) {
+  const projectStates = useProjectUIStore((state) => state.projectStates);
+  const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const [granularity, setGranularity] = useState<FinancePeriodGranularity>('month');
   const [asOfDate, setAsOfDate] = useState(todayIso);
   const [snapshot, setSnapshot] = useState<ProjectFinanceSnapshot | null>(null);
@@ -644,21 +664,46 @@ export function FinanceWorkspace({
       varianceEarnedVsPaid: estimateMoneyColumnWidth(['Разница', ...varianceValues], MIN_VARIANCE_COLUMN_WIDTH),
     };
   }, [tasks]);
-  const financeTaskListWidth = useMemo(() => (
-    Math.max(
-      250,
-      + LOCK_COLUMN_WIDTH
-      + financeColumnWidths.plannedCost
-      + financeColumnWidths.earnedToDate
-      + financeColumnWidths.paidToDate
-      + financeColumnWidths.varianceEarnedVsPaid,
-    )
-  ), [
+  const financeTaskListColumnWidths = useMemo<TaskListColumnWidthMap>(() => {
+    const storedWidths = normalizeTaskListColumnWidthMap(projectStates[projectId]?.financeTaskListColumnWidths);
+
+    return {
+      number: FINANCE_DEFAULT_NUMBER_COLUMN_WIDTH,
+      name: FINANCE_DEFAULT_NAME_COLUMN_WIDTH,
+      plannedCost: financeColumnWidths.plannedCost,
+      allocationMode: LOCK_COLUMN_WIDTH,
+      earnedToDate: financeColumnWidths.earnedToDate,
+      paidToDate: financeColumnWidths.paidToDate,
+      varianceEarnedVsPaid: financeColumnWidths.varianceEarnedVsPaid,
+      ...storedWidths,
+    };
+  }, [
     financeColumnWidths.earnedToDate,
     financeColumnWidths.paidToDate,
     financeColumnWidths.plannedCost,
     financeColumnWidths.varianceEarnedVsPaid,
+    projectId,
+    projectStates,
   ]);
+  const financeTaskListWidth = useMemo(() => (
+    Math.max(
+      250,
+      (financeTaskListColumnWidths.number ?? 0)
+      + (financeTaskListColumnWidths.name ?? 0)
+      + (financeTaskListColumnWidths.plannedCost ?? 0)
+      + (financeTaskListColumnWidths.allocationMode ?? 0)
+      + (financeTaskListColumnWidths.earnedToDate ?? 0)
+      + (financeTaskListColumnWidths.paidToDate ?? 0)
+      + (financeTaskListColumnWidths.varianceEarnedVsPaid ?? 0),
+    )
+  ), [
+    financeTaskListColumnWidths,
+  ]);
+  const handleTaskListColumnWidthsChange = useCallback((widths: TaskListColumnWidthMap) => {
+    setProjectState(projectId, {
+      financeTaskListColumnWidths: normalizeTaskListColumnWidthMap(widths),
+    });
+  }, [projectId, setProjectState]);
   const parentTaskIds = useMemo(() => {
     const ids = new Set<string>();
     for (const task of tasks) {
@@ -1384,7 +1429,9 @@ export function FinanceWorkspace({
                 matrixColumnGroups={matrixColumnGroups.length > 0 ? matrixColumnGroups : undefined}
                 matrixDateOverlay={matrixDateOverlay}
                 additionalColumns={additionalColumns}
-                hiddenTaskListColumns={['dependencies', 'progress', 'duration', 'startDate', 'endDate', 'actions']}
+                hiddenTaskListColumns={FINANCE_HIDDEN_TASK_LIST_COLUMNS as unknown as string[]}
+                taskListColumnWidths={financeTaskListColumnWidths}
+                onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                 disableTaskDrag={true}
                 disableTaskNameEditing={true}
                 disableDependencyEditing={true}
