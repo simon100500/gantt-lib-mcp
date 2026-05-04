@@ -70,6 +70,135 @@
   will-change: transform;
 }
 
+.finance-drawer-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.finance-drawer-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.finance-drawer-body::-webkit-scrollbar-thumb {
+  background: #dfe1e6;
+  border-radius: 999px;
+}
+
+.finance-drawer-body::-webkit-scrollbar-thumb:hover {
+  background: #6b778c;
+}
+
+.finance-drawer-form-group {
+  display: block;
+}
+
+.finance-drawer-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #6b778c;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.finance-drawer-input {
+  height: 36px;
+  border: 2px solid #dfe1e6;
+  border-radius: 4px;
+  box-shadow: none;
+  color: #172b4d;
+}
+
+.finance-drawer-input:focus-visible {
+  border-color: #4c9aff;
+  box-shadow: 0 0 0 1px #4c9aff;
+}
+
+.finance-history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.finance-history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  transition: background-color 120ms ease;
+}
+
+.finance-history-item:not(:last-child) {
+  border-bottom: 1px solid #dfe1e6;
+}
+
+.finance-history-item:hover {
+  background: #f4f5f7;
+}
+
+.finance-history-date {
+  width: 88px;
+  flex: 0 0 88px;
+  color: #6b778c;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-history-amount {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #006644;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 0;
+}
+
+.finance-history-amount:hover {
+  color: #00875a;
+  text-decoration: underline;
+}
+
+.finance-history-comment {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #6b778c;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finance-history-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #97a0af;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.finance-history-item:hover .finance-history-delete,
+.finance-history-delete:focus-visible {
+  opacity: 1;
+}
+
+.finance-history-delete:hover {
+  background: rgba(222, 53, 11, 0.08);
+  color: #de350b;
+}
+
 @keyframes finance-drawer-backdrop-in {
   from {
     opacity: 0;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { GanttChart } from 'gantt-lib';
 import type { TableMatrixColumn, TableMatrixColumnGroup, Task, TaskListColumn } from 'gantt-lib';
 import { LoaderCircle, Lock, RefreshCw, X } from 'lucide-react';
@@ -82,8 +83,18 @@ function parseMoneyInput(value: string): number | null {
   return parsed;
 }
 
+function parseFundingAmount(value: string): number | null {
+  const parsed = parseMoneyInput(value);
+  return parsed !== null && parsed > 0 ? parsed : null;
+}
+
 function todayIso(): string {
   return new Date().toISOString().split('T')[0]!;
+}
+
+function formatDisplayDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}.${month}.${year}` : value;
 }
 
 function buildFinanceTasks(snapshot: ProjectFinanceSnapshot | null): FinanceMatrixTask[] {
@@ -384,6 +395,29 @@ export function FinanceWorkspace({
     () => drawerState && snapshot ? filterEventsForDrawer(snapshot.events, drawerState, snapshot.periods) : [],
     [drawerState, snapshot],
   );
+  const sortedDrawerEvents = useMemo(
+    () => drawerEvents.slice().sort((left, right) => (
+      right.eventDate.localeCompare(left.eventDate) || right.createdAt.localeCompare(left.createdAt)
+    )),
+    [drawerEvents],
+  );
+  const drawerEventsTotal = useMemo(
+    () => drawerEvents.reduce((total, event) => total + event.amount, 0),
+    [drawerEvents],
+  );
+  const drawerTask = useMemo(
+    () => drawerState && snapshot ? snapshot.tasks.find((task) => task.taskId === drawerState.taskId) ?? null : null,
+    [drawerState, snapshot],
+  );
+  const drawerPeriod = useMemo(
+    () => drawerState?.periodId && snapshot ? snapshot.periods.find((period) => period.id === drawerState.periodId) ?? null : null,
+    [drawerState, snapshot],
+  );
+  const drawerContractAmount = drawerTask
+    ? drawerState?.periodId
+      ? drawerTask.plannedByPeriod[drawerState.periodId] ?? 0
+      : drawerTask.plannedCost
+    : 0;
   const financeColumnWidths = useMemo(() => {
     const plannedValues = tasks.map((task) => formatMoney(task.plannedCost));
     const paidValues = tasks.map((task) => formatMoney(task.paidToDate));
@@ -548,9 +582,10 @@ export function FinanceWorkspace({
       return;
     }
 
-    const amount = Number(eventForm.amount.replace(',', '.'));
-    if (!Number.isFinite(amount)) {
-      setDrawerError('Сумма должна быть числом.');
+    const amount = parseFundingAmount(eventForm.amount);
+    if (amount === null) {
+      setDrawerError('Введите положительную сумму.');
+      eventAmountInputRef.current?.focus();
       return;
     }
 
@@ -579,13 +614,28 @@ export function FinanceWorkspace({
       }
 
       await loadSnapshot(granularity, asOfDate, false, true);
-      openDrawer(drawerState.taskId, drawerState.periodId, null);
+      setDrawerState((current) => current ? { ...current, editingEventId: null } : current);
+      setEventForm((current) => ({
+        ...current,
+        amount: '',
+        comment: '',
+      }));
+      eventAmountInputRef.current?.focus();
     } catch (submitError) {
       setDrawerError(submitError instanceof Error ? submitError.message : 'Не удалось сохранить поступление');
     } finally {
       setDrawerPending(false);
     }
-  }, [accessToken, asOfDate, drawerState, eventForm.amount, eventForm.comment, eventForm.eventDate, granularity, invalidateSnapshotCache, loadSnapshot, openDrawer, readOnly]);
+  }, [accessToken, asOfDate, drawerState, eventForm.amount, eventForm.comment, eventForm.eventDate, granularity, invalidateSnapshotCache, loadSnapshot, readOnly]);
+
+  const handleEventFormKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    void submitEvent();
+  }, [submitEvent]);
 
   const deleteEvent = useCallback(async (eventId: string) => {
     if (!accessToken || !drawerState || readOnly) {
@@ -892,111 +942,129 @@ export function FinanceWorkspace({
             {drawerState && snapshot && (
               <div className="finance-drawer-backdrop fixed inset-0 z-50 bg-slate-900/20" onMouseDown={closeDrawer}>
                 <div
-                  className="finance-drawer-panel absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-[-16px_0_32px_rgba(15,23,42,0.12)]"
+                  className="finance-drawer-panel absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col border-l border-[#dfe1e6] bg-white text-[#172b4d] shadow-[-4px_0_24px_rgba(9,30,66,0.12),0_0_1px_rgba(9,30,66,0.08)]"
                   onMouseDown={(event) => event.stopPropagation()}
                   role="dialog"
                   aria-modal="true"
                   aria-label="Поступления"
                 >
-                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">Поступления</h3>
-                      <p className="text-xs text-slate-500">
-                        {snapshot.tasks.find((task) => task.taskId === drawerState.taskId)?.title ?? 'Группа'}
+                  <div className="flex items-start justify-between gap-4 border-b border-[#dfe1e6] px-6 py-5">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-xl font-semibold leading-tight text-[#172b4d]">
+                        {drawerTask?.title ?? 'Поступления'}
+                      </h3>
+                      <p className="mt-1 text-[13px] text-[#6b778c]">
+                        {drawerPeriod ? `${formatDisplayDate(drawerPeriod.startDate)} - ${formatDisplayDate(drawerPeriod.endDate)}` : 'Все поступления по работе'}
+                      </p>
+                      <p className="mt-2 text-[13px] font-medium text-[#44546f]">
+                        Сумма по договору: <span className="font-semibold text-[#172b4d]">{formatMoney(drawerContractAmount)} ₽</span>
                       </p>
                     </div>
-                    <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-900">
+                    <button type="button" onClick={closeDrawer} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-transparent text-[#6b778c] transition-colors hover:bg-[#f4f5f7] hover:text-[#172b4d]">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
 
-                  <div className="space-y-3 border-b border-slate-200 px-4 py-4">
-                    <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-3">
-                      <label className="space-y-1 text-xs font-medium text-slate-600">
-                        <span>Сумма</span>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 finance-drawer-body">
+                    <div className="grid grid-cols-[minmax(0,1fr)_130px] gap-3">
+                      <label className="finance-drawer-form-group">
+                        <span className="finance-drawer-label">Сумма</span>
                         <div className="relative">
                           <Input
                             ref={eventAmountInputRef}
                             value={eventForm.amount}
                             onChange={(event) => setEventForm((current) => ({ ...current, amount: event.target.value }))}
+                            onKeyDown={handleEventFormKeyDown}
                             placeholder="0"
-                            className="pr-8 text-base font-semibold tabular-nums"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            className="finance-drawer-input pr-8 text-base font-semibold tabular-nums"
                           />
-                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-slate-400">₽</span>
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#6b778c]">₽</span>
                         </div>
                       </label>
-                      <label className="space-y-1 text-xs font-medium text-slate-600">
-                        <span>Дата</span>
+                      <label className="finance-drawer-form-group">
+                        <span className="finance-drawer-label">Дата</span>
                         <Input
                           type="date"
                           value={eventForm.eventDate}
                           onChange={(event) => setEventForm((current) => ({ ...current, eventDate: event.target.value }))}
+                          onKeyDown={handleEventFormKeyDown}
+                          className="finance-drawer-input"
                         />
                       </label>
                     </div>
-                    <label className="space-y-1 text-xs font-medium text-slate-600">
-                      <span>Комментарий</span>
+                    <label className="finance-drawer-form-group mt-4">
+                      <span className="finance-drawer-label">Комментарий</span>
                       <Input
                         value={eventForm.comment}
                         onChange={(event) => setEventForm((current) => ({ ...current, comment: event.target.value }))}
+                        onKeyDown={handleEventFormKeyDown}
                         placeholder="Аванс, КС, этап..."
+                        autoComplete="off"
+                        className="finance-drawer-input"
                       />
                     </label>
                     {drawerError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
                         {drawerError}
                       </div>
                     )}
-                    <div className="flex items-center gap-2">
-                      <Button onClick={() => { void submitEvent(); }} disabled={drawerPending || readOnly}>
+                    <div className="mt-4 flex items-center gap-2">
+                      <Button
+                        onClick={() => { void submitEvent(); }}
+                        disabled={drawerPending || readOnly}
+                        className="h-8 rounded bg-[#0052cc] px-5 text-sm font-medium text-white hover:bg-[#0065ff]"
+                      >
                         {drawerPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : drawerState.editingEventId ? 'Сохранить' : 'Добавить'}
                       </Button>
                       {drawerState.editingEventId && (
-                        <Button variant="outline" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
+                        <Button variant="outline" className="h-8 rounded border-[#dfe1e6]" onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, null)} disabled={drawerPending}>
                           Новый ввод
                         </Button>
                       )}
                     </div>
-                  </div>
 
-                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-                    {drawerEvents.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                    <div className="my-6 h-px bg-[#dfe1e6]" />
+
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-[0.03em] text-[#6b778c]">История поступлений</div>
+                    {sortedDrawerEvents.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-[#dfe1e6] bg-[#f4f5f7] px-5 py-8 text-center text-sm text-[#6b778c]">
                         Для выбранной группы пока нет поступлений.
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        {drawerEvents.map((event) => (
-                          <div key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-slate-900">{formatMoney(event.amount)}</div>
-                                <div className="text-xs text-slate-500">{event.eventDate}</div>
-                                {event.comment && <div className="mt-1 text-sm text-slate-600">{event.comment}</div>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
-                                  disabled={drawerPending || readOnly}
-                                >
-                                  Изм.
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => { void deleteEvent(event.id); }}
-                                  disabled={drawerPending || readOnly}
-                                  className="text-rose-600 hover:text-rose-700"
-                                >
-                                  Удалить
-                                </Button>
-                              </div>
+                      <>
+                        <div className="finance-history-list">
+                          {sortedDrawerEvents.map((event) => (
+                            <div key={event.id} className="finance-history-item">
+                              <span className="finance-history-date">{formatDisplayDate(event.eventDate)}</span>
+                              <button
+                                type="button"
+                                className="finance-history-amount"
+                                onClick={() => openDrawer(drawerState.taskId, drawerState.periodId, event)}
+                                disabled={drawerPending || readOnly}
+                                title="Редактировать поступление"
+                              >
+                                +{formatMoney(event.amount)} ₽
+                              </button>
+                              <span className="finance-history-comment">{event.comment || '—'}</span>
+                              <button
+                                type="button"
+                                className="finance-history-delete"
+                                onClick={() => { void deleteEvent(event.id); }}
+                                disabled={drawerPending || readOnly}
+                                aria-label="Удалить"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                        <div className="mt-4 flex items-center justify-between rounded-md bg-[#f4f5f7] px-4 py-3">
+                          <span className="text-xs font-semibold uppercase tracking-[0.03em] text-[#6b778c]">Итого</span>
+                          <span className="text-lg font-semibold tabular-nums text-[#172b4d]">{formatMoney(drawerEventsTotal)} ₽</span>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
