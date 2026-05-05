@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConstraintDenialPayload } from '../lib/constraintUi';
-import type { CalendarDay, ProjectGroup } from '../types';
+import type { CalendarDay, ProjectGroup, ProjectGroupMembersPayload } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -72,6 +72,10 @@ export interface UseAuthResult extends AuthState {
   createProjectGroup(name: string): Promise<ProjectGroup | null>;
   updateProjectGroup(groupId: string, updates: { name: string }): Promise<ProjectGroup>;
   deleteProjectGroup(groupId: string): Promise<void>;
+  fetchProjectGroupMembers(groupId: string): Promise<ProjectGroupMembersPayload>;
+  inviteProjectGroupMember(groupId: string, payload: { email: string; role: 'editor' | 'viewer' }): Promise<void>;
+  updateProjectGroupMember(groupId: string, userId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
+  removeProjectGroupMember(groupId: string, userId: string): Promise<void>;
   updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
   restoreProject(projectId: string): Promise<AuthProject>;
@@ -754,6 +758,73 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     });
 
     set({ accessToken, projectGroups });
+  },
+
+  async fetchProjectGroupMembers(groupId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/members`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to load project group members');
+    }
+
+    return response.json() as Promise<ProjectGroupMembersPayload>;
+  },
+
+  async inviteProjectGroupMember(groupId, payload) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to invite member');
+    }
+  },
+
+  async updateProjectGroupMember(groupId, userId, payload) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/members/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to update project group member');
+    }
+  },
+
+  async removeProjectGroupMember(groupId, userId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to remove project group member');
+    }
   },
 
   async updateProject(projectId, updates) {

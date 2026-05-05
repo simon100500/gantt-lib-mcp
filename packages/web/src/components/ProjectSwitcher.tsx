@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2, TriangleAlert } from 'lucide-react';
+import { Archive, ArrowRightLeft, ChevronDown, Folder, Lock, MoreHorizontal, PanelRightOpen, Pencil, Plus, RotateCcw, ToyBrick, Trash2, TriangleAlert, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeleteProjectGroupModal } from './DeleteProjectGroupModal.tsx';
 import { EditProjectModal } from './EditProjectModal.tsx';
 import { MoveProjectModal } from './MoveProjectModal.tsx';
 import { ProjectGroupModal } from './ProjectGroupModal.tsx';
+import { ProjectGroupMembersModal } from './ProjectGroupMembersModal.tsx';
 import { Button } from './ui/button.tsx';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu.tsx';
 import type { AuthProject } from '../stores/useAuthStore.ts';
@@ -331,12 +332,14 @@ interface ProjectSectionProps {
   onCreateProject?: (groupId?: string) => void;
   onRenameGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteGroup?: (groupId: string) => void | Promise<void>;
+  onManageMembers?: (groupId: string) => void;
   children: ReactNode;
 }
 
-function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projectCount = 0, onCreateProject, onRenameGroup, onDeleteGroup, children }: ProjectSectionProps) {
+function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projectCount = 0, onCreateProject, onRenameGroup, onDeleteGroup, onManageMembers, children }: ProjectSectionProps) {
   const canEditGroup = group?.accessRole !== 'viewer';
   const canManageGroup = group?.accessRole === undefined || group.accessRole === 'owner';
+  const canOpenMembers = Boolean(group && onManageMembers);
   const canDeleteGroup = Boolean(group && canManageGroup && !group.isDefault && onDeleteGroup);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -359,7 +362,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
           </span>
         </button>
 
-        {group && ((canEditGroup && onCreateProject) || (canManageGroup && onRenameGroup) || canDeleteGroup) ? (
+        {group && ((canEditGroup && onCreateProject) || canOpenMembers || (canManageGroup && onRenameGroup) || canDeleteGroup) ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -375,6 +378,12 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
                 <DropdownMenuItem onClick={() => onCreateProject(group.id)}>
                   <Plus className="h-4 w-4" />
                   <span>Новый проект</span>
+                </DropdownMenuItem>
+              )}
+              {canOpenMembers && (
+                <DropdownMenuItem onClick={() => onManageMembers?.(group.id)}>
+                  <Users className="h-4 w-4" />
+                  <span>Команда</span>
                 </DropdownMenuItem>
               )}
               {canManageGroup && onRenameGroup && (
@@ -456,6 +465,7 @@ export function ProjectSwitcher({
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
   const [openMenuTemplateId, setOpenMenuTemplateId] = useState<string | null>(null);
   const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
+  const [membersGroupId, setMembersGroupId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(true);
 
   const effectiveGroups = useMemo<ProjectGroup[]>(() => {
@@ -472,6 +482,7 @@ export function ProjectSwitcher({
       accessRole: 'owner',
     }];
   }, [activeProjects, currentProject.groupId, projectGroups]);
+  const membersGroup = membersGroupId ? effectiveGroups.find((group) => group.id === membersGroupId) ?? null : null;
 
   const activeProjectsByGroup = useMemo(() => {
     const map = new Map<string, AuthProject[]>();
@@ -585,7 +596,7 @@ export function ProjectSwitcher({
             const open = openGroupIds.has(group.id);
             if (groupProjects.length === 0 && !group.isDefault) {
               return (
-                <ProjectSection key={group.id} title={group.name} icon={<Folder className="h-4 w-4" />} open={open} onToggle={() => toggleGroup(group.id)} group={group} projectCount={0} onCreateProject={onCreateNew} onRenameGroup={onRenameGroup} onDeleteGroup={onDeleteGroup}>
+                <ProjectSection key={group.id} title={group.name} icon={<Folder className="h-4 w-4" />} open={open} onToggle={() => toggleGroup(group.id)} group={group} projectCount={0} onCreateProject={onCreateNew} onRenameGroup={onRenameGroup} onDeleteGroup={onDeleteGroup} onManageMembers={setMembersGroupId}>
                   <div className="px-3 py-2 text-xs text-slate-400">Нет проектов</div>
                 </ProjectSection>
               );
@@ -604,6 +615,7 @@ export function ProjectSwitcher({
                 onCreateProject={onCreateNew}
                 onRenameGroup={onRenameGroup}
                 onDeleteGroup={onDeleteGroup}
+                onManageMembers={setMembersGroupId}
               >
                 {groupProjects.map((project) => (
                   <ProjectRow key={project.id} project={project} isCurrent={project.id === selectedProjectId} menuActive={openMenuProjectId === project.id} onSwitch={handleSwitch} onRename={onRenameProject} onMove={onMoveProject} projectGroups={effectiveGroups} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} onMenuOpenChange={onMenuOpenChange} setOpenMenuProjectId={setOpenMenuProjectId} />
@@ -679,6 +691,12 @@ export function ProjectSwitcher({
             await onCreateGroup(name);
           }}
           onClose={() => setCreateGroupModalOpen(false)}
+        />
+      ) : null}
+      {membersGroup ? (
+        <ProjectGroupMembersModal
+          group={membersGroup}
+          onClose={() => setMembersGroupId(null)}
         />
       ) : null}
     </div>

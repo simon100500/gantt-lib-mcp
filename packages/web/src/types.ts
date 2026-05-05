@@ -73,6 +73,30 @@ export interface ProjectGroup {
   projectCount?: number;
 }
 
+export type ProjectGroupMemberRole = 'owner' | 'editor' | 'viewer';
+
+export interface ProjectGroupMember {
+  userId: string;
+  email: string;
+  role: Exclude<ProjectGroupMemberRole, 'owner'>;
+  createdAt: string;
+}
+
+export interface ProjectGroupInvite {
+  id: string;
+  email: string;
+  role: Exclude<ProjectGroupMemberRole, 'owner'>;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ProjectGroupMembersPayload {
+  owner: { id: string; email: string; role: 'owner' } | null;
+  members: ProjectGroupMember[];
+  invites: ProjectGroupInvite[];
+}
+
 export type FinancePeriodGranularity = 'month' | 'week';
 export type TaskFinanceAllocationMode = 'manual' | 'auto';
 
