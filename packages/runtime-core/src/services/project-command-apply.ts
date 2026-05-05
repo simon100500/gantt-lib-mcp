@@ -644,9 +644,14 @@ export function applyProjectCommandToSnapshot(
       coreResult = recalculateProjectSchedule(updatedSnapshot, options);
       break;
     }
-    case 'reorder_tasks':
+    case 'reorder_tasks': {
+      const sortById = new Map(command.updates.map((update) => [update.taskId, update.sortOrder]));
+      workingSnapshot = workingSnapshot.map((task) => (
+        sortById.has(task.id) ? { ...task, sortOrder: sortById.get(task.id)! } : task
+      ));
       coreResult = { changedTasks: [], changedIds: [] };
       break;
+    }
     default: {
       const _never: never = command;
       coreResult = { changedTasks: [], changedIds: [] };
