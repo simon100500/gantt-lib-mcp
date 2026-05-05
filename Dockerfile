@@ -49,7 +49,10 @@ RUN npx prisma generate --schema=packages/runtime-core/prisma/schema.prisma
 # Build shared runtime package first, then MCP, then server
 RUN npm run build -w packages/runtime-core
 RUN npm run build:mcp
-RUN npm run build:server
+# Server package has a prebuild that rebuilds runtime-core and MCP. They are
+# already built in this Docker stage, so skip lifecycle scripts here to avoid
+# duplicate TypeScript compiler passes on small build machines.
+RUN npm run build -w packages/server --ignore-scripts
 
 
 # ── Stage 3: Runtime (Nginx + Node) ────────────────────────────────────────
