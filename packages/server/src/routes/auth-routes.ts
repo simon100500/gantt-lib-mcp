@@ -12,7 +12,7 @@ import type { FastifyInstance } from 'fastify';
 import { authService, projectService, taskService } from '@gantt/mcp/services';
 import type { Task } from '@gantt/mcp/types';
 import { getPrisma } from '@gantt/runtime-core/prisma';
-import { sendOtpEmail } from '../email.js';
+import { sendOtpEmail, sendProjectGroupInviteEmail } from '../email.js';
 import {
   generateOtp,
   signAccessToken,
@@ -854,6 +854,20 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       },
     });
 
+    const origin = buildShareOrigin(req);
+    const inviteUrl = `${origin}/?invite=${encodeURIComponent(invite.token)}&auth=otp`;
+    await sendProjectGroupInviteEmail({
+      to: invite.email,
+      inviterEmail: req.user!.email,
+      groupName: req.params.id === access.groupId ? (await prisma.projectGroup.findUnique({
+        where: { id: req.params.id },
+        select: { name: true },
+      }))?.name ?? 'Команда' : 'Команда',
+      role: invite.role,
+      inviteUrl,
+      expiresAt: invite.expiresAt,
+    });
+
     return reply.status(201).send({
       invite: {
         id: invite.id,
@@ -865,6 +879,47 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         createdAt: invite.createdAt.toISOString(),
       },
     });
+  });
+
+  fastify.patch<{ Params: { id: string; inviteId: string } }>('/api/project-groups/:id/invites/:inviteId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
+    const role = normalizeInviteRole((req.body as { role?: unknown } | undefined)?.role);
+    const invite = await getPrisma().projectGroupInvite.updateMany({
+      where: { id: req.params.inviteId, groupId: req.params.id, status: 'pending' },
+      data: { role },
+    });
+    if (invite.count === 0) {
+      return reply.status(404).send({ error: 'Project group invite not found' });
+    }
+
+    return reply.send({ invite: { id: req.params.inviteId, role } });
+  });
+
+  fastify.delete<{ Params: { id: string; inviteId: string } }>('/api/project-groups/:id/invites/:inviteId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
+    const result = await getPrisma().projectGroupInvite.updateMany({
+      where: { id: req.params.inviteId, groupId: req.params.id, status: 'pending' },
+      data: { status: 'revoked', revokedAt: new Date() },
+    });
+    if (result.count === 0) {
+      return reply.status(404).send({ error: 'Project group invite not found' });
+    }
+
+    return reply.send({ ok: true });
   });
 
   fastify.patch<{ Params: { id: string; userId: string } }>('/api/project-groups/:id/members/:userId', { preHandler: [authMiddleware] }, async (req, reply) => {

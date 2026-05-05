@@ -101,16 +101,61 @@ function MemberRow({
   );
 }
 
-function InviteRow({ invite }: { invite: ProjectGroupInvite }) {
+function InviteRow({
+  invite,
+  canManage,
+  pending,
+  onRoleChange,
+  onRemove,
+}: {
+  invite: ProjectGroupInvite;
+  canManage: boolean;
+  pending: boolean;
+  onRoleChange: (role: EditableRole) => Promise<void>;
+  onRemove: () => Promise<void>;
+}) {
+  const [role, setRole] = useState<EditableRole>(invite.role);
+
+  useEffect(() => {
+    setRole(invite.role);
+  }, [invite.role]);
+
   return (
-    <div className="grid grid-cols-[minmax(0,1fr),128px] items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="grid grid-cols-[minmax(0,1fr),128px,40px] items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-slate-900">{invite.email}</div>
         <div className="text-xs text-slate-500">
           Приглашение активно до {new Date(invite.expiresAt).toLocaleDateString('ru-RU')}
         </div>
       </div>
-      <div className="text-sm text-slate-600">{roleLabel(invite.role)}</div>
+      {canManage ? (
+        <InviteRoleSelect
+          value={role}
+          disabled={pending}
+          onChange={(nextRole) => {
+            setRole(nextRole);
+            void onRoleChange(nextRole).catch(() => {
+              setRole(invite.role);
+            });
+          }}
+        />
+      ) : (
+        <div className="text-sm text-slate-600">{roleLabel(invite.role)}</div>
+      )}
+      {canManage ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => { void onRemove(); }}
+          className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={`Удалить приглашение ${invite.email}`}
+          title="Удалить приглашение"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      ) : (
+        <span className="h-9 w-9" />
+      )}
     </div>
   );
 }
@@ -311,7 +356,37 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                   </div>
                   <div className="space-y-2">
                     {data?.invites.length ? data.invites.map((invite) => (
-                      <InviteRow key={invite.id} invite={invite} />
+                      <InviteRow
+                        key={invite.id}
+                        invite={invite}
+                        canManage={canManage}
+                        pending={saving}
+                        onRoleChange={async (role) => {
+                          setSaving(true);
+                          setError(null);
+                          try {
+                            await auth.updateProjectGroupInvite(group.id, invite.id, { role });
+                            await load();
+                          } catch (updateError) {
+                            setError(updateError instanceof Error ? updateError.message : 'Не удалось обновить приглашение');
+                            throw updateError;
+                          } finally {
+                            setSaving(false);
+                          }
+                        }}
+                        onRemove={async () => {
+                          setSaving(true);
+                          setError(null);
+                          try {
+                            await auth.removeProjectGroupInvite(group.id, invite.id);
+                            await load();
+                          } catch (removeError) {
+                            setError(removeError instanceof Error ? removeError.message : 'Не удалось удалить приглашение');
+                          } finally {
+                            setSaving(false);
+                          }
+                        }}
+                      />
                     )) : (
                       <div className="rounded-xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-500">
                         Активных приглашений нет.

@@ -76,6 +76,8 @@ export interface UseAuthResult extends AuthState {
   inviteProjectGroupMember(groupId: string, payload: { email: string; role: 'editor' | 'viewer' }): Promise<void>;
   updateProjectGroupMember(groupId: string, userId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
   removeProjectGroupMember(groupId: string, userId: string): Promise<void>;
+  updateProjectGroupInvite(groupId: string, inviteId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
+  removeProjectGroupInvite(groupId: string, inviteId: string): Promise<void>;
   updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
   restoreProject(projectId: string): Promise<AuthProject>;
@@ -824,6 +826,40 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
       throw new Error(data.error || 'Failed to remove project group member');
+    }
+  },
+
+  async updateProjectGroupInvite(groupId, inviteId, payload) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/invites/${inviteId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to update project group invite');
+    }
+  },
+
+  async removeProjectGroupInvite(groupId, inviteId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/invites/${inviteId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to remove project group invite');
     }
   },
 
