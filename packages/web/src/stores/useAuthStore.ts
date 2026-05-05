@@ -75,6 +75,7 @@ export interface UseAuthResult extends AuthState {
   fetchProjectGroupMembers(groupId: string): Promise<ProjectGroupMembersPayload>;
   inviteProjectGroupMember(groupId: string, payload: { email: string; role: 'editor' | 'viewer' }): Promise<void>;
   updateProjectGroupMember(groupId: string, userId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
+  transferProjectGroupOwner(groupId: string, userId: string): Promise<ProjectGroup | null>;
   removeProjectGroupMember(groupId: string, userId: string): Promise<void>;
   updateProjectGroupInvite(groupId: string, inviteId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
   removeProjectGroupInvite(groupId: string, inviteId: string): Promise<void>;
@@ -811,6 +812,28 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
       throw new Error(data.error || 'Failed to update project group member');
     }
+  },
+
+  async transferProjectGroupOwner(groupId, userId) {
+    const state = get();
+    if (!state.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const { response } = await fetchWithAuthRetry(`/api/project-groups/${groupId}/transfer-owner`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+      throw new Error(data.error || 'Failed to transfer project group owner');
+    }
+
+    const data = await response.json() as { group: ProjectGroup | null };
+    await get().refreshProjects();
+    return data.group;
   },
 
   async removeProjectGroupMember(groupId, userId) {
