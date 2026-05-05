@@ -17,6 +17,14 @@ export interface SendFeedbackEmailInput {
   attachments?: FeedbackEmailAttachment[];
 }
 
+export interface SendProjectGroupInviteEmailInput {
+  to: string;
+  inviterEmail: string;
+  groupName: string;
+  role: 'editor' | 'viewer';
+  expiresAt: Date;
+}
+
 function getEmailConfig() {
   const emailHost = process.env.EMAIL_HOST;
   const emailUser = process.env.EMAIL_USER;
@@ -163,5 +171,55 @@ export async function sendFeedbackEmail(input: SendFeedbackEmailInput): Promise<
       content: Buffer.from(attachment.contentBase64, 'base64'),
       contentType: attachment.mimeType,
     })),
+  });
+}
+
+export async function sendProjectGroupInviteEmail(input: SendProjectGroupInviteEmailInput): Promise<void> {
+  const transport = await createTransport();
+  const roleLabel = input.role === 'viewer' ? 'наблюдатель' : 'редактор';
+  const expiresAtLabel = input.expiresAt.toLocaleDateString('ru-RU');
+
+  if (!transport) {
+    console.log('[DEV] Project group invite email', {
+      to: input.to,
+      inviterEmail: input.inviterEmail,
+      groupName: input.groupName,
+      role: input.role,
+      expiresAt: input.expiresAt.toISOString(),
+    });
+    return;
+  }
+
+  const textBody = [
+    `Вас пригласили в команду группы проектов "${input.groupName}" в GetGantt.`,
+    '',
+    `Пригласил: ${input.inviterEmail}`,
+    `Роль: ${roleLabel}`,
+    `Приглашение действует до ${expiresAtLabel}.`,
+    '',
+    'Просто войдите в GetGantt под этим email, и пространство появится автоматически.',
+  ].join('\n');
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; color: #0f172a;">
+      <h2 style="margin: 0 0 16px;">Приглашение в команду группы проектов</h2>
+      <p style="margin: 0 0 8px;">Вас пригласили в <strong>${escapeHtml(input.groupName)}</strong> в GetGantt.</p>
+      <p style="margin: 0 0 8px;"><strong>Пригласил:</strong> ${escapeHtml(input.inviterEmail)}</p>
+      <p style="margin: 0 0 16px;"><strong>Роль:</strong> ${escapeHtml(roleLabel)}</p>
+      <div style="margin: 0 0 16px; border: 1px solid #dbeafe; background: #eff6ff; border-radius: 12px; padding: 16px;">
+        <p style="margin: 0; line-height: 1.5; color: #1e3a8a;">
+          Просто войдите в GetGantt под этим email, и пространство появится автоматически.
+        </p>
+      </div>
+      <p style="margin: 0; color: #64748b; font-size: 14px;">Приглашение действует до ${escapeHtml(expiresAtLabel)}.</p>
+    </div>
+  `;
+
+  await transport.transporter.sendMail({
+    from: transport.fromAddress,
+    to: input.to,
+    subject: `[GetGantt] Приглашение в "${input.groupName}"`,
+    text: textBody,
+    html: htmlBody,
   });
 }

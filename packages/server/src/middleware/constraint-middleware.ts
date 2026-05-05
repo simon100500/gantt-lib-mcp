@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { LimitKey, PlanId } from '@gantt/mcp/constraints';
 import { BillingService, type BillingSubscriptionStatus } from '../services/billing-service.js';
 import { ConstraintService, type ConstraintCheckResult } from '../services/constraint-service.js';
+import { resolveGroupAccess, resolveProjectAccess } from '../access-control.js';
 
 type ConstraintMiddlewareDeps = {
   billingService?: Pick<BillingService, 'getSubscriptionStatus'>;
@@ -32,6 +33,33 @@ type DenialPayload = {
 
 const defaultBillingService = new BillingService();
 const defaultConstraintService = new ConstraintService();
+
+async function resolveConstraintUserId(request: FastifyRequest): Promise<string | null> {
+  const userId = request.user?.userId;
+  if (!userId) {
+    return null;
+  }
+
+  const body = request.body as { groupId?: unknown } | undefined;
+  if (typeof body?.groupId === 'string' && body.groupId.trim()) {
+    const groupAccess = await resolveGroupAccess(userId, body.groupId.trim());
+    return groupAccess?.billingUserId ?? userId;
+  }
+
+  const params = request.params as { id?: unknown } | undefined;
+  if (request.url?.includes('/api/project-groups/') && typeof params?.id === 'string' && params.id.trim()) {
+    const groupAccess = await resolveGroupAccess(userId, params.id.trim());
+    return groupAccess?.billingUserId ?? userId;
+  }
+
+  const projectId = request.user?.projectId;
+  if (projectId) {
+    const projectAccess = request.projectAccess ?? await resolveProjectAccess(userId, projectId);
+    return projectAccess?.billingUserId ?? userId;
+  }
+
+  return userId;
+}
 
 function sendDenial(reply: FastifyReply, payload: DenialPayload): void {
   reply.status(403).send(payload);
@@ -86,7 +114,7 @@ export function createConstraintMiddleware(deps: ConstraintMiddlewareDeps = {}) 
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> {
-    const userId = request.user?.userId;
+    const userId = await resolveConstraintUserId(request);
     if (!userId) {
       reply.status(401).send({ error: 'Unauthorized' });
       return;
@@ -108,7 +136,7 @@ export function createConstraintMiddleware(deps: ConstraintMiddlewareDeps = {}) 
       request: FastifyRequest,
       reply: FastifyReply,
     ): Promise<void> {
-      const userId = request.user?.userId;
+      const userId = await resolveConstraintUserId(request);
       if (!userId) {
         reply.status(401).send({ error: 'Unauthorized' });
         return;
@@ -132,7 +160,7 @@ export function createConstraintMiddleware(deps: ConstraintMiddlewareDeps = {}) 
       request: FastifyRequest,
       reply: FastifyReply,
     ): Promise<void> {
-      const userId = request.user?.userId;
+      const userId = await resolveConstraintUserId(request);
       if (!userId) {
         reply.status(401).send({ error: 'Unauthorized' });
         return;

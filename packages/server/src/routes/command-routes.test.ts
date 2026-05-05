@@ -16,21 +16,21 @@ describe('chat and command enforcement routes', () => {
     );
     assert.match(
       indexSource,
-      /fastify\.post\('\/api\/chat', \{ preHandler: \[authMiddleware, requireActiveSubscriptionForMutation, requireAiQueryLimit\] \}, async \(req, reply\) => \{[\s\S]*await incrementAiUsage\(req\.user!\.userId\);/,
+      /fastify\.post\('\/api\/chat', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation, requireAiQueryLimit\] \}, async \(req, reply\) => \{[\s\S]*await incrementAiUsage\(req\.projectAccess\?\.billingUserId \?\? req\.user!\.userId\);/,
     );
   });
 
   it('guards command commits with the active subscription check before commitCommand runs', () => {
     assert.match(
       commandRoutesSource,
-      /fastify\.post\('\/api\/commands\/commit', \{ preHandler: \[authMiddleware, requireActiveSubscriptionForMutation\] \}, async \(req, reply\) => \{[\s\S]*commandService\.commitCommand\(request, actorType, actorId\)/,
+      /fastify\.post\('\/api\/commands\/commit', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation\] \}, async \(req, reply\) => \{[\s\S]*commandService\.commitCommand\(request, actorType, actorId\)/,
     );
   });
 
   it('exposes project shift as a dedicated batch command endpoint', () => {
     assert.match(
       commandRoutesSource,
-      /fastify\.post\('\/api\/commands\/shift-project', \{ preHandler: \[authMiddleware, requireActiveSubscriptionForMutation\] \}, async \(req, reply\) => \{[\s\S]*type: 'shift_project'[\s\S]*commandService\.commitCommand\(request, actorType, actorId\)/,
+      /fastify\.post\('\/api\/commands\/shift-project', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation\] \}, async \(req, reply\) => \{[\s\S]*type: 'shift_project'[\s\S]*commandService\.commitCommand\(request, actorType, actorId\)/,
     );
   });
 

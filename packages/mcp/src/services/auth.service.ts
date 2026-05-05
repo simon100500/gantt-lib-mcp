@@ -161,6 +161,71 @@ export class AuthService {
     return this.userToDomain(user);
   }
 
+  async syncPendingGroupInvitesForUser(userId: string, email: string): Promise<number> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      return 0;
+    }
+
+    const now = new Date();
+    const pendingInvites = await this.prisma.projectGroupInvite.findMany({
+      where: {
+        email: normalizedEmail,
+        status: 'pending',
+      },
+      select: {
+        id: true,
+        groupId: true,
+        role: true,
+        invitedByUserId: true,
+        expiresAt: true,
+      },
+    });
+
+    if (pendingInvites.length === 0) {
+      return 0;
+    }
+
+    const expiredInviteIds = pendingInvites
+      .filter((invite) => invite.expiresAt.getTime() <= now.getTime())
+      .map((invite) => invite.id);
+
+    if (expiredInviteIds.length > 0) {
+      await this.prisma.projectGroupInvite.updateMany({
+        where: { id: { in: expiredInviteIds } },
+        data: { status: 'expired' },
+      });
+    }
+
+    const activeInvites = pendingInvites.filter((invite) => invite.expiresAt.getTime() > now.getTime());
+    if (activeInvites.length === 0) {
+      return 0;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const invite of activeInvites) {
+        await tx.projectGroupMember.upsert({
+          where: { groupId_userId: { groupId: invite.groupId, userId } },
+          create: {
+            id: randomUUID(),
+            groupId: invite.groupId,
+            userId,
+            role: invite.role,
+            invitedByUserId: invite.invitedByUserId,
+          },
+          update: { role: invite.role },
+        });
+
+        await tx.projectGroupInvite.update({
+          where: { id: invite.id },
+          data: { status: 'accepted', acceptedAt: now },
+        });
+      }
+    });
+
+    return activeInvites.length;
+  }
+
   async findUserById(userId: string): Promise<User | undefined> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) return undefined;

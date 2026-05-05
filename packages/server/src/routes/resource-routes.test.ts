@@ -17,10 +17,10 @@ describe('resource routes', () => {
     assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources\/planner', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.get\('\/api\/resources', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
     assert.match(resourceRoutesSource, /fastify\.post\('\/api\/resources', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(resourceRoutesSource, /fastify\.patch\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(resourceRoutesSource, /fastify\.delete\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments\/materialize', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
+    assert.match(resourceRoutesSource, /fastify\.patch\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/);
+    assert.match(resourceRoutesSource, /fastify\.delete\('\/api\/resources\/:resourceId', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/);
+    assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/);
+    assert.match(resourceRoutesSource, /fastify\.post\('\/api\/tasks\/:taskId\/assignments\/materialize', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/);
   });
 
   it('registers a dedicated planner route that delegates to plannerService with stable validation_error mapping', () => {
@@ -43,15 +43,15 @@ describe('resource routes', () => {
 
   it('passes ownership scope through resource create and update routes', () => {
     assert.match(resourceRoutesSource, /type ResourceBody = \{[\s\S]*projectId\?: string;[\s\S]*scope\?: 'shared' \| 'project';[\s\S]*\};/);
-    assert.match(resourceRoutesSource, /function resolveOwnedProjectId\(requestedProjectId: unknown, userId: string, fallbackProjectId: string\)/);
-    assert.match(resourceRoutesSource, /status: \{ not: 'deleted' \}/);
+    assert.match(resourceRoutesSource, /function resolveAccessibleProjectId\(requestedProjectId: unknown, userId: string, fallbackProjectId: string, requireEdit = false\)/);
+    assert.match(resourceRoutesSource, /const access = await resolveProjectAccess\(userId, targetProjectId\);/);
     assert.match(resourceRoutesSource, /resourceService\.create\(\{[\s\S]*projectId: targetProjectId,[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
     assert.match(resourceRoutesSource, /resourceService\.update\(\{[\s\S]*scope: body\.scope,[\s\S]*\}\)/);
   });
 
   it('keeps /api/project as the current-project hydration seam instead of embedding planner data', () => {
     assert.match(indexSource, /fastify\.get\('\/api\/project', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/);
-    assert.match(indexSource, /const \[projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
+    assert.match(indexSource, /const \[projectVersion, tasks, dependencies, resourceCatalog, assignments, progressEntries, projectCalendar\] = await Promise\.all\(/);
     assert.doesNotMatch(indexSource, /plannerService/);
     assert.doesNotMatch(indexSource, /workspaceUserId/);
   });
@@ -100,7 +100,7 @@ describe('resource routes', () => {
   });
 
   it('keeps /api/project resource hydration authoritative to the current project boundary and excludes foreign local resources from direct prisma filtering', () => {
-    assert.match(indexSource, /const \[projectVersion, tasks, dependencies, resourceCatalog, assignments, projectCalendar\] = await Promise\.all\(/);
+    assert.match(indexSource, /const \[projectVersion, tasks, dependencies, resourceCatalog, assignments, progressEntries, projectCalendar\] = await Promise\.all\(/);
     assert.match(indexSource, /resourceService\.list\(/);
     assert.doesNotMatch(indexSource, /prisma\.resource\.findMany\(\{[\s\S]*where: \{ projectId \}[\s\S]*\}\)/);
   });

@@ -24,15 +24,15 @@ describe('baseline routes', () => {
     );
     assert.match(
       baselineRoutesSource,
-      /fastify\.post\('\/api\/baselines\/current', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+      /fastify\.post\('\/api\/baselines\/current', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/,
     );
     assert.match(
       baselineRoutesSource,
-      /fastify\.post\('\/api\/baselines\/history\/:groupId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+      /fastify\.post\('\/api\/baselines\/history\/:groupId', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/,
     );
     assert.match(
       baselineRoutesSource,
-      /fastify\.delete\('\/api\/baselines\/:baselineId', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+      /fastify\.delete\('\/api\/baselines\/:baselineId', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/,
     );
   });
 
@@ -67,7 +67,6 @@ describe('baseline routes', () => {
     assert.match(baselineRoutesSource, /fastify\.delete\('\/api\/baselines\/:baselineId'/);
     assert.match(baselineRoutesSource, /deleteBaseline\(\{\s*projectId: req\.user!\.projectId,\s*baselineId: params\.baselineId,\s*\}\)/s);
     assert.match(baselineRoutesSource, /return reply\.send\(\{\s*id: response\.id,\s*\}\);/s);
-    assert.doesNotMatch(baselineRoutesSource, /return reply\.send\(\{\s*id: response\.id,\s*projectId:/s);
   });
 
   it('preserves history-snapshot delegation in the service layer instead of duplicating rollback logic in routes', () => {

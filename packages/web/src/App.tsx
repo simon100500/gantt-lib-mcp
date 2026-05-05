@@ -525,8 +525,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
   const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
   const isArchivedProject = !hasShareToken && workspace.kind === 'project' && auth.project?.status === 'archived';
-  const chatDisabledReason = isArchivedProject
-    ? 'Проект в архиве. AI-изменения недоступны в режиме только чтения.'
+  const isReadOnlyProject = isArchivedProject || (!hasShareToken && workspace.kind === 'project' && auth.project?.accessRole === 'viewer');
+  const chatDisabledReason = isReadOnlyProject
+    ? 'Проект доступен только для чтения. AI-изменения недоступны.'
     : proactiveChatDenial
       ? proactiveChatDenial.code === 'SUBSCRIPTION_EXPIRED'
         ? 'Подписка истекла. Продлите тариф, чтобы снова отправлять запросы.'
@@ -906,7 +907,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [auth, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setSidebarState, setWorkspace]);
 
   const submitChatMessage = useCallback(async (message: string) => {
-    if (isArchivedProject) {
+    if (isReadOnlyProject) {
       return false;
     }
 
@@ -975,16 +976,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       throw new Error(`HTTP ${response.status}`);
     }
     return true;
-  }, [armAiMutationWatchdog, auth, isArchivedProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, isReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
   const submitSplitTask = useCallback(async (task: Task, details: string): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
       return { accepted: false };
     }
-    if (isArchivedProject) {
+    if (isReadOnlyProject) {
       return {
         accepted: false,
-        message: 'Проект в архиве. Восстановите его, чтобы разбить задачу.',
+        message: 'Проект доступен только для чтения.',
       };
     }
     if (!auth.isAuthenticated) {
@@ -1058,16 +1059,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
 
     return { accepted: true };
-  }, [armAiMutationWatchdog, auth, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, hasShareToken, isReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
       return { accepted: false };
     }
-    if (isArchivedProject) {
+    if (isReadOnlyProject) {
       return {
         accepted: false,
-        message: 'Проект в архиве. Восстановите его, чтобы отправить запрос.',
+        message: 'Проект доступен только для чтения.',
       };
     }
     if (!auth.isAuthenticated) {
@@ -1090,7 +1091,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       useChatStore.getState().setError(String(submitError));
     });
     return { accepted: true };
-  }, [auth.isAuthenticated, auth.project, hasShareToken, isArchivedProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
+  }, [auth.isAuthenticated, auth.project, hasShareToken, isReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, submitChatMessage]);
 
   const handleStartScreenSend = useCallback(async (text: string): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
@@ -1105,10 +1106,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onLoginRequired();
       return { accepted: true };
     }
-    if (isArchivedProject) {
+    if (isReadOnlyProject) {
       return {
         accepted: false,
-        message: 'Проект в архиве. Восстановите его, чтобы отправить запрос.',
+        message: 'Проект доступен только для чтения.',
       };
     }
     if (!auth.project) {
@@ -1120,7 +1121,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return { accepted: true };
     }
     return handleSend(text);
-  }, [auth.isAuthenticated, auth.project, handleSend, hasShareToken, isArchivedProject, localTasks.tasks.length, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
+  }, [auth.isAuthenticated, auth.project, handleSend, hasShareToken, isReadOnlyProject, localTasks.tasks.length, onLoginRequired, openCreateProjectModal, openLimitModal, proactiveProjectDenial, setPendingPostAuthAction]);
 
   const handleValidation = useCallback((result: ValidationResult) => {
     setValidationErrors(result.isValid ? [] : result.errors);
@@ -1130,11 +1131,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [setValidationErrors]);
 
   const handleCascade = useCallback((shiftedTasks: Task[]) => {
-    if (isArchivedProject) {
+    if (isReadOnlyProject) {
       return;
     }
     void batchUpdate.handleTasksChange(shiftedTasks);
-  }, [batchUpdate, isArchivedProject]);
+  }, [batchUpdate, isReadOnlyProject]);
 
   const handleEmptyChart = useCallback(async () => {
     if (hasShareToken) {
@@ -1246,6 +1247,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [auth]);
 
   const handleCreateCurrentProjectTemplate = useCallback(() => {
+    if (isReadOnlyProject) {
+      return;
+    }
     setShareSelectionMode(false);
     setSelectedShareTaskIds(new Set());
     setTemplateSelectionMode(false);
@@ -1255,7 +1259,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       taskCount: visibleTasks.length,
       rootTaskIds: [],
     });
-  }, [auth.project?.name, visibleTasks.length]);
+  }, [auth.project?.name, isReadOnlyProject, visibleTasks.length]);
 
   const handleDeleteTemplate = useCallback(async (templateId: string) => {
     const deletingCurrent = workspace.kind === 'template' && workspace.templateId === templateId;
@@ -1321,7 +1325,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   }, [templates.length]);
 
   const handleOpenInsertTemplateIntoCurrentProject = useCallback(async () => {
-    if (workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0 || templates.length === 0) {
+    if (isReadOnlyProject || workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0 || templates.length === 0) {
       return;
     }
 
@@ -1334,10 +1338,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       anchorTaskId: anchorTask.id,
       anchorTaskName: anchorTask.name,
     });
-  }, [auth.project?.id, templates.length, visibleTasks, workspace.kind]);
+  }, [auth.project?.id, isReadOnlyProject, templates.length, visibleTasks, workspace.kind]);
 
   const handleInsertTemplateIntoCurrentProject = useCallback(async (templateId: string) => {
-    if (workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0) {
+    if (isReadOnlyProject || workspace.kind !== 'project' || !auth.project?.id || visibleTasks.length === 0) {
       return;
     }
 
@@ -1358,7 +1362,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         dependencies: response.snapshot.dependencies,
       });
     }
-  }, [auth.project?.id, insertTemplateIntoProject, visibleTasks, workspace.kind]);
+  }, [auth.project?.id, insertTemplateIntoProject, isReadOnlyProject, visibleTasks, workspace.kind]);
 
   const handleArchiveProject = useCallback(async (projectId: string) => {
     if (proactiveArchiveDenial) {
@@ -1429,17 +1433,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (!auth.project) {
       throw new Error('Not authenticated');
     }
-    if (auth.project.status === 'archived') {
+    if (isReadOnlyProject) {
       return;
     }
     await auth.updateProject(auth.project.id, { name: newName });
-  }, [activeTemplate, auth, localTasks, renameTemplate, workspace.kind]);
+  }, [activeTemplate, auth, isReadOnlyProject, localTasks, renameTemplate, workspace.kind]);
 
   const handleGanttDayModeChange = useCallback(async (ganttDayMode: 'business' | 'calendar') => {
     if (!auth.project) {
       throw new Error('Not authenticated');
     }
-    if (auth.project.status === 'archived') {
+    if (isReadOnlyProject) {
       return;
     }
 
@@ -1454,14 +1458,14 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       setPendingGanttDayMode(null);
       throw error;
     }
-  }, [auth.project, batchUpdate, effectiveAuthGanttDayMode]);
+  }, [auth.project, batchUpdate, effectiveAuthGanttDayMode, isReadOnlyProject]);
 
   const handleCreateShareLink = useCallback(async () => {
-    if (!auth.accessToken || !auth.project) {
+    if (!auth.accessToken || !auth.project || isReadOnlyProject) {
       return;
     }
     useUIStore.getState().setShowShareManager(true);
-  }, [auth.accessToken, auth.project]);
+  }, [auth.accessToken, auth.project, isReadOnlyProject]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken) {
@@ -1923,7 +1927,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         <FinanceWorkspace
           accessToken={auth.accessToken}
           projectId={workspace.projectId}
-          readOnly={isArchivedProject}
+          readOnly={isReadOnlyProject}
           onBackToProject={() => {
             setWorkspace({ kind: 'project', projectId: workspace.projectId, chatOpen: readProjectChatOpenState() });
           }}
@@ -1992,7 +1996,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               displayConnected={displayConnected}
               isAuthenticated={auth.isAuthenticated}
               chatUsage={billingStatus}
-              chatDisabled={isArchivedProject || Boolean(proactiveChatDenial)}
+              chatDisabled={isReadOnlyProject || Boolean(proactiveChatDenial)}
               chatDisabledReason={chatDisabledReason}
               batchUpdate={batchUpdate}
               onSend={handleSend}
@@ -2023,7 +2027,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
               calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
-              readOnly={isArchivedProject}
+              readOnly={isReadOnlyProject}
               previewState={previewState.active ? previewState.mode : 'idle'}
               previewMessage={previewState.active ? previewState.message : null}
               onGanttDayModeChange={(ganttDayMode) => {
@@ -2101,7 +2105,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onDeleteTemplate={handleDeleteTemplate}
       onInsertTemplateToProject={handleInsertTemplateIntoCurrentProject}
       onOpenInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
-      canInsertTemplateToProject={workspace.kind === 'project' && !isArchivedProject && visibleTasks.length > 0}
+      canInsertTemplateToProject={workspace.kind === 'project' && !isReadOnlyProject && visibleTasks.length > 0}
       onCreateProjectGroup={handleCreateProjectGroup}
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}

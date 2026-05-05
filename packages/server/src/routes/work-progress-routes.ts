@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
+import { requireCurrentProjectEditor } from '../access-control.js';
 
 type WorkProgressResponse = {
   task: {
@@ -118,7 +119,7 @@ async function recomputeTaskProgress(
 export async function registerWorkProgressRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.patch<{ Params: { taskId: string }; Body: { workVolume?: number | null; workUnit?: string | null } }>(
     '/api/tasks/:taskId/work-metadata',
-    { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] },
+    { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
     async (req, reply) => {
       const prisma = getPrisma();
       const { taskId } = req.params;
@@ -172,7 +173,7 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
     Body: { entryDate?: string; value?: number; inputMode?: 'volume' | 'percent' };
   }>(
     '/api/tasks/:taskId/progress-entries',
-    { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] },
+    { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
     async (req, reply) => {
       const prisma = getPrisma();
       const { taskId } = req.params;
@@ -258,7 +259,7 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
     Body: { entryDate?: string; amount?: number };
   }>(
     '/api/tasks/:taskId/progress-entries/:entryId',
-    { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] },
+    { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
     async (req, reply) => {
       const prisma = getPrisma();
       const { taskId, entryId } = req.params;
@@ -330,7 +331,7 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
 
   fastify.delete<{ Params: { taskId: string; entryId: string } }>(
     '/api/tasks/:taskId/progress-entries/:entryId',
-    { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] },
+    { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
     async (req, reply) => {
       const prisma = getPrisma();
       const { taskId, entryId } = req.params;
