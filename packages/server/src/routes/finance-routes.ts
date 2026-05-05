@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { requireCurrentProjectEditor } from '../access-control.js';
 
 type FinanceGranularity = 'month' | 'week';
 type FinanceAllocationMode = 'manual' | 'auto';
@@ -926,7 +927,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     });
   });
 
-  fastify.put('/api/finance/tasks/:taskId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.put('/api/finance/tasks/:taskId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     const body = (req.body ?? {}) as { plannedCost?: number; currencyCode?: string; allocationMode?: FinanceAllocationMode };
     const taskId = params.taskId?.trim();
@@ -1080,7 +1081,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     }
   });
 
-  fastify.post('/api/finance/tasks/:taskId/events', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/finance/tasks/:taskId/events', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     const body = (req.body ?? {}) as { eventDate?: string; amount?: number; comment?: string | null };
     const taskId = params.taskId?.trim();
@@ -1123,7 +1124,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     });
   });
 
-  fastify.patch('/api/finance/events/:eventId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.patch('/api/finance/events/:eventId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { eventId?: string };
     const body = (req.body ?? {}) as { eventDate?: string; amount?: number; comment?: string | null };
     const eventId = params.eventId?.trim();
@@ -1174,7 +1175,7 @@ export async function registerFinanceRoutes(fastify: FastifyInstance): Promise<v
     });
   });
 
-  fastify.delete('/api/finance/events/:eventId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.delete('/api/finance/events/:eventId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { eventId?: string };
     const eventId = params.eventId?.trim();
     if (!eventId) {

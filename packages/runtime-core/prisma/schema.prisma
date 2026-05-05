@@ -125,6 +125,18 @@ enum TemplateSourceKind {
   task_selection
 }
 
+enum ProjectGroupMemberRole {
+  editor
+  viewer
+}
+
+enum ProjectGroupInviteStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
 // Users table
 model User {
   id        String   @id @default(uuid())
@@ -142,6 +154,9 @@ model User {
   usageCounters   UsageCounter[]
   billingEvents   BillingEvent[]
   agentDebugLogs  AgentDebugLog[]
+  groupMemberships ProjectGroupMember[] @relation("ProjectGroupMemberUser")
+  invitedGroupMembers ProjectGroupMember[] @relation("ProjectGroupMemberInviter")
+  sentGroupInvites ProjectGroupInvite[] @relation("ProjectGroupInviteInviter")
 
   @@map("users")
 }
@@ -157,9 +172,52 @@ model ProjectGroup {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   projects  Project[]
   resources Resource[]
+  members   ProjectGroupMember[]
+  invites   ProjectGroupInvite[]
 
   @@map("project_groups")
   @@index([userId])
+}
+
+model ProjectGroupMember {
+  id              String                 @id @default(uuid())
+  groupId         String                 @map("group_id")
+  userId          String                 @map("user_id")
+  role            ProjectGroupMemberRole
+  invitedByUserId String?                @map("invited_by_user_id")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  group     ProjectGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User         @relation("ProjectGroupMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy User?        @relation("ProjectGroupMemberInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("project_group_members")
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId, role])
+}
+
+model ProjectGroupInvite {
+  id              String                   @id @default(uuid())
+  groupId         String                   @map("group_id")
+  email           String
+  role            ProjectGroupMemberRole
+  token           String                   @unique
+  status          ProjectGroupInviteStatus @default(pending)
+  invitedByUserId String?                  @map("invited_by_user_id")
+  expiresAt       DateTime                 @map("expires_at")
+  acceptedAt      DateTime?                @map("accepted_at")
+  revokedAt       DateTime?                @map("revoked_at")
+  createdAt       DateTime                 @default(now()) @map("created_at")
+
+  group     ProjectGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  invitedBy User?        @relation("ProjectGroupInviteInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("project_group_invites")
+  @@index([email])
+  @@index([groupId, status])
+  @@index([expiresAt])
 }
 
 // Projects table

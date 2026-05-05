@@ -3,6 +3,7 @@ import { historyService } from '@gantt/mcp/services';
 import { messageService } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { broadcastToSession } from '../ws.js';
+import { requireCurrentProjectEditor } from '../access-control.js';
 
 type HistoryFailureCode = 'version_conflict' | 'validation_error';
 
@@ -119,7 +120,7 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
     }
   });
 
-  fastify.post('/api/history/:groupId/restore', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/history/:groupId/restore', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { groupId?: string };
     if (!params.groupId) {
       return reply.status(400).send({
@@ -162,7 +163,7 @@ export async function registerHistoryRoutes(fastify: FastifyInstance): Promise<v
     }
   });
 
-  fastify.post('/api/history/redo', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/history/redo', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     try {
       const response = await historyService.redoLatest(getActorContext(req));
       broadcastToSession(req.user!.sessionId, { type: 'history_changed' });

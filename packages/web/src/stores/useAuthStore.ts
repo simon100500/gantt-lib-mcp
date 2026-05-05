@@ -34,6 +34,7 @@ export interface AuthProject {
   groupId?: string;
   name: string;
   status: ProjectStatus;
+  accessRole?: 'owner' | 'editor' | 'viewer';
   ganttDayMode: GanttDayMode;
   calendarId?: string | null;
   calendarDays?: CalendarDay[];
@@ -183,6 +184,7 @@ function readStoredAuth(): StoredAuthState | null {
       ...value,
       groupId: value.groupId ?? '',
       status: value.status ?? 'active',
+      accessRole: value.accessRole ?? 'owner',
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
     });
@@ -405,6 +407,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       projectCount: fallbackProjects.length,
+      accessRole: 'owner',
     }] : [];
 
     persistStoredAuth({
@@ -472,6 +475,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       projectCount: projects.length,
+      accessRole: 'owner',
     }] : [];
 
     persistStoredAuth({

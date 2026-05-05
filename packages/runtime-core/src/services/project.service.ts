@@ -26,6 +26,7 @@ export class ProjectService {
   private prisma = getPrisma();
 
   private groupToDomain(group: any): ProjectGroup {
+    const membershipRole = group.members?.[0]?.role;
     return {
       id: group.id,
       userId: group.userId,
@@ -34,6 +35,7 @@ export class ProjectService {
       createdAt: group.createdAt.toISOString(),
       updatedAt: group.updatedAt.toISOString(),
       projectCount: group._count?.projects,
+      accessRole: group.accessRole ?? (membershipRole === 'editor' || membershipRole === 'viewer' ? membershipRole : 'owner'),
     };
   }
 
@@ -59,9 +61,18 @@ export class ProjectService {
   }
 
   async listGroupsByUser(userId: string): Promise<ProjectGroup[]> {
-    const groups = await this.prisma.projectGroup.findMany({
-      where: { userId },
+    const groups = await (this.prisma.projectGroup as any).findMany({
+      where: {
+        OR: [
+          { userId },
+          { members: { some: { userId } } },
+        ],
+      },
       include: {
+        members: {
+          where: { userId },
+          select: { role: true },
+        },
         _count: {
           select: { projects: true },
         },
@@ -244,12 +255,23 @@ export class ProjectService {
    * @returns Array of projects with task counts, ordered by creation date
    */
   async listByUser(userId: string): Promise<Array<Project & { taskCount: number }>> {
-    const projects = await this.prisma.project.findMany({
+    const projects = await (this.prisma.project as any).findMany({
       where: {
-        userId,
+        OR: [
+          { userId },
+          { group: { members: { some: { userId } } } },
+        ],
         status: { not: 'deleted' },
       },
       include: {
+        group: {
+          include: {
+            members: {
+              where: { userId },
+              select: { role: true },
+            },
+          },
+        },
         _count: {
           select: { tasks: true },
         },
@@ -263,6 +285,11 @@ export class ProjectService {
     return Promise.all(projects.map(async (project) => ({
       ...(await this.projectToDomain(project)),
       taskCount: project._count.tasks,
+      accessRole: project.userId === userId
+        ? 'owner'
+        : project.group?.members?.[0]?.role === 'editor'
+          ? 'editor'
+          : 'viewer',
     })));
   }
 

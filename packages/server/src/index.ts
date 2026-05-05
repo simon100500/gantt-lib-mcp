@@ -31,6 +31,7 @@ import type {
 import { registerWsRoutes, broadcast, broadcastToSession, onChatMessage } from './ws.js';
 import { runAgentWithHistory } from './agent.js';
 import { authMiddleware } from './middleware/auth-middleware.js';
+import { requireCurrentProjectEditor } from './access-control.js';
 import { requireActiveSubscriptionForMutation, requireTrackedLimit } from './middleware/constraint-middleware.js';
 import { incrementAiUsage } from './middleware/subscription-middleware.js';
 import { registerAdminRoutes } from './admin.js';
@@ -247,14 +248,14 @@ fastify.get('/api/project', { preHandler: [authMiddleware] }, async (req, reply)
   return reply.send(project);
 });
 
-fastify.post('/api/chat', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
+fastify.post('/api/chat', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
   const body = req.body as { message?: string };
   const message = body?.message;
   if (!message) {
     return reply.status(400).send({ error: 'message required' });
   }
   // Increment AI counter (D-07: 1 message = 1 generation)
-  await incrementAiUsage(req.user!.userId);
+  await incrementAiUsage(req.projectAccess?.billingUserId ?? req.user!.userId);
   await writeServerDebugLog('rest_chat_received', {
     userId: req.user!.userId,
     projectId: req.user!.projectId,
@@ -269,7 +270,7 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireActiveSubscripti
   return reply.send({ status: 'processing' });
 });
 
-fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
+fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
   const params = req.params as { taskId?: string };
   const body = (req.body ?? {}) as { details?: string };
   const taskId = params.taskId?.trim();
@@ -278,7 +279,7 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireA
     return reply.status(400).send({ error: 'taskId required' });
   }
 
-  await incrementAiUsage(req.user!.userId);
+  await incrementAiUsage(req.projectAccess?.billingUserId ?? req.user!.userId);
   const runId = randomUUID();
 
   void runDirectSplitTask({

@@ -13,6 +13,7 @@ import { getPrisma } from '@gantt/runtime-core/prisma';
 import { verifyToken, type JwtPayload } from '../auth.js';
 import { authService } from '@gantt/mcp/services';
 import { isAdminEmail } from './admin-middleware.js';
+import { resolveProjectAccess } from '../access-control.js';
 
 // ---------------------------------------------------------------------------
 // Module augmentation
@@ -82,8 +83,8 @@ export async function authMiddleware(
   }
 
   let resolvedProjectId = session.projectId;
-  const project = await authService.findProjectById(session.projectId);
-  if (!project) {
+  const projectAccess = await resolveProjectAccess(session.userId, session.projectId);
+  if (!projectAccess) {
     const prisma = getPrisma();
     const deletedProject = isAdminEmail(payload.email)
       ? await prisma.project.findUnique({

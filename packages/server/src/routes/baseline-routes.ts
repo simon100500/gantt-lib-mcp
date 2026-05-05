@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { baselineService, BaselineValidationError } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { requireCurrentProjectEditor } from '../access-control.js';
 
 type CreateBaselineBody = {
   name?: string;
@@ -91,7 +92,7 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/baselines/current', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/baselines/current', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const name = parseBaselineName(req.body);
     if (!name) {
       return reply.status(400).send({
@@ -127,7 +128,7 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/baselines/history/:groupId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/baselines/history/:groupId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { groupId?: string };
     if (!params.groupId?.trim()) {
       return reply.status(400).send({
@@ -172,7 +173,7 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.delete('/api/baselines/:baselineId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.delete('/api/baselines/:baselineId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { baselineId?: string };
     if (!params.baselineId?.trim()) {
       return reply.status(400).send({
@@ -202,7 +203,7 @@ export async function registerBaselineRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.patch('/api/baselines/:baselineId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.patch('/api/baselines/:baselineId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { baselineId?: string };
     if (!params.baselineId?.trim()) {
       return reply.status(400).send({

@@ -565,6 +565,7 @@ export interface Project {
   groupId?: string;
   name: string;
   status: ProjectStatus;
+  accessRole?: 'owner' | 'editor' | 'viewer';
   ganttDayMode: GanttDayMode;
   calendarId: string | null;
   calendarDays: EffectiveCalendarDay[];
@@ -578,6 +579,7 @@ export interface ProjectGroup {
   userId: string;
   name: string;
   isDefault: boolean;
+  accessRole?: 'owner' | 'editor' | 'viewer';
   createdAt: string;
   updatedAt: string;
   projectCount?: number;

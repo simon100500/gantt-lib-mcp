@@ -22,9 +22,10 @@ import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
 import { writeServerDebugLog } from '../debug-log.js';
 import { broadcastToSession } from '../ws.js';
+import { requireCurrentProjectEditor } from '../access-control.js';
 
 export async function registerCommandRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.post('/api/commands/shift-project', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+  fastify.post('/api/commands/shift-project', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const body = req.body as Partial<Omit<CommitProjectCommandRequest, 'command' | 'projectId'> & { deltaDays: number }>;
 
     const deltaDays = body.deltaDays;
@@ -126,7 +127,7 @@ export async function registerCommandRoutes(fastify: FastifyInstance): Promise<v
     }
   });
 
-  fastify.post('/api/commands/commit', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+  fastify.post('/api/commands/commit', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const body = req.body as Partial<CommitProjectCommandRequest>;
 
     // Validate required fields

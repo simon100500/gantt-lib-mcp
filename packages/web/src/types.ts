@@ -67,6 +67,7 @@ export interface ProjectGroup {
   userId: string;
   name: string;
   isDefault: boolean;
+  accessRole?: 'owner' | 'editor' | 'viewer';
   createdAt: string;
   updatedAt: string;
   projectCount?: number;

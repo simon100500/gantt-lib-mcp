@@ -3,6 +3,7 @@ import { templateService, TemplateValidationError } from '@gantt/mcp/services';
 import type { TemplateWorkspaceSnapshot } from '@gantt/mcp/types';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
+import { requireCurrentProjectEditor } from '../access-control.js';
 
 function parseName(body: unknown): string | undefined {
   if (!body || typeof body !== 'object' || !('name' in body)) {
@@ -57,7 +58,7 @@ export async function registerTemplateRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/templates/project', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+  fastify.post('/api/templates/project', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const name = parseName(req.body);
     if (!name) {
       return reply.status(400).send({ reason: 'validation_error', error: 'name required' });
@@ -78,7 +79,7 @@ export async function registerTemplateRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/templates/selection', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+  fastify.post('/api/templates/selection', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const body = (req.body ?? {}) as { name?: string; rootTaskIds?: unknown };
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const rootTaskIds = Array.isArray(body.rootTaskIds) ? body.rootTaskIds.filter((id): id is string => typeof id === 'string') : [];
@@ -167,7 +168,7 @@ export async function registerTemplateRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/templates/:templateId/insert', { preHandler: [authMiddleware, requireActiveSubscriptionForMutation] }, async (req, reply) => {
+  fastify.post('/api/templates/:templateId/insert', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const templateId = (req.params as { templateId?: string }).templateId?.trim();
     const body = (req.body ?? {}) as { anchorTaskId?: string; placement?: 'after' | 'inside' };
     if (!templateId || !body.anchorTaskId?.trim()) {

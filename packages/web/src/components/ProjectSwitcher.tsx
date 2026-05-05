@@ -57,6 +57,7 @@ interface ProjectRowProps {
 
 function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove, projectGroups, onArchive, onRestore, onDelete, onMenuOpenChange, setOpenMenuProjectId }: ProjectRowProps) {
   const isArchived = project.status === 'archived';
+  const canEditProject = project.accessRole !== 'viewer';
   const taskCountLabel = project.taskCount === undefined ? '—' : project.taskCount > 0 ? String(project.taskCount) : '';
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
@@ -83,6 +84,7 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
 
       <div className="relative mr-2 flex h-5 w-11 shrink-0 items-center justify-end">
         {taskCountLabel ? <span className="pr-1 text-xs text-slate-400 transition-opacity group-hover:opacity-0">{taskCountLabel}</span> : null}
+        {canEditProject ? (
         <DropdownMenu
           onOpenChange={(open) => {
             setOpenMenuProjectId(open ? project.id : null);
@@ -146,6 +148,7 @@ function ProjectRow({ project, isCurrent, menuActive, onSwitch, onRename, onMove
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        ) : null}
       </div>
       {renameModalOpen && onRename ? (
         <EditProjectModal
@@ -332,7 +335,9 @@ interface ProjectSectionProps {
 }
 
 function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projectCount = 0, onCreateProject, onRenameGroup, onDeleteGroup, children }: ProjectSectionProps) {
-  const canDeleteGroup = Boolean(group && !group.isDefault && onDeleteGroup);
+  const canEditGroup = group?.accessRole !== 'viewer';
+  const canManageGroup = group?.accessRole === undefined || group.accessRole === 'owner';
+  const canDeleteGroup = Boolean(group && canManageGroup && !group.isDefault && onDeleteGroup);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -354,7 +359,7 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
           </span>
         </button>
 
-        {group && (onCreateProject || onRenameGroup || canDeleteGroup) ? (
+        {group && ((canEditGroup && onCreateProject) || (canManageGroup && onRenameGroup) || canDeleteGroup) ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -366,13 +371,13 @@ function ProjectSection({ title, icon, open, onToggle, usageLabel, group, projec
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="right" sideOffset={6} className="w-48">
-              {onCreateProject && (
+              {canEditGroup && onCreateProject && (
                 <DropdownMenuItem onClick={() => onCreateProject(group.id)}>
                   <Plus className="h-4 w-4" />
                   <span>Новый проект</span>
                 </DropdownMenuItem>
               )}
-              {onRenameGroup && (
+              {canManageGroup && onRenameGroup && (
                 <DropdownMenuItem onClick={() => setRenameModalOpen(true)}>
                   <Pencil className="h-4 w-4" />
                   <span>Переименовать</span>
@@ -464,6 +469,7 @@ export function ProjectSwitcher({
       createdAt: '',
       updatedAt: '',
       projectCount: activeProjects.length,
+      accessRole: 'owner',
     }];
   }, [activeProjects, currentProject.groupId, projectGroups]);
 
@@ -483,6 +489,8 @@ export function ProjectSwitcher({
   const defaultCreateGroupId = currentProject.kind === 'project'
     ? projects.find((project) => project.id === currentProject.id)?.groupId ?? currentProject.groupId
     : effectiveGroups.find((group) => group.isDefault)?.id ?? effectiveGroups[0]?.id;
+  const defaultCreateGroup = effectiveGroups.find((group) => group.id === defaultCreateGroupId);
+  const defaultCreateDisabled = createDisabled || defaultCreateGroup?.accessRole === 'viewer';
 
   useEffect(() => {
     setOpenGroupIds((current) => {
@@ -560,8 +568,8 @@ export function ProjectSwitcher({
         <Button
           variant="default"
           size="sm"
-          disabled={createDisabled}
-          onClick={() => { if (!createDisabled) onCreateNew(defaultCreateGroupId); }}
+          disabled={defaultCreateDisabled}
+          onClick={() => { if (!defaultCreateDisabled) onCreateNew(defaultCreateGroupId); }}
           className="h-8 w-full rounded-md px-3 text-sm font-medium sm:h-8"
           title={createTitle ?? 'Новый проект'}
         >

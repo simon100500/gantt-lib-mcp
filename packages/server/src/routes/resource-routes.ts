@@ -7,8 +7,8 @@ import {
   resourceService,
   ResourceValidationError,
 } from '@gantt/mcp/services';
-import { getPrisma } from '@gantt/runtime-core/prisma';
 import { authMiddleware } from '../middleware/auth-middleware.js';
+import { requireCurrentProjectEditor, resolveProjectAccess } from '../access-control.js';
 
 type ResourceBody = {
   name?: string;
@@ -45,20 +45,17 @@ function parseAssignmentResourceIds(body: unknown): string[] | undefined {
   return Array.isArray(resourceIds) ? resourceIds : undefined;
 }
 
-async function resolveOwnedProjectId(requestedProjectId: unknown, userId: string, fallbackProjectId: string): Promise<string | null> {
+async function resolveAccessibleProjectId(requestedProjectId: unknown, userId: string, fallbackProjectId: string, requireEdit = false): Promise<string | null> {
   const targetProjectId = typeof requestedProjectId === 'string' && requestedProjectId.trim().length > 0
     ? requestedProjectId.trim()
     : fallbackProjectId;
-  const project = await getPrisma().project.findFirst({
-    where: {
-      id: targetProjectId,
-      userId,
-      status: { not: 'deleted' },
-    },
-    select: { id: true },
-  });
+  const access = await resolveProjectAccess(userId, targetProjectId);
 
-  return project?.id ?? null;
+  if (!access || (requireEdit && !access.canEdit)) {
+    return null;
+  }
+
+  return targetProjectId;
 }
 
 function isResourceValidationError(error: unknown): error is ResourceValidationError {
@@ -122,7 +119,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
   fastify.get('/api/resources', { preHandler: [authMiddleware] }, async (req, reply) => {
     try {
       const query = req.query as { projectId?: string };
-      const targetProjectId = await resolveOwnedProjectId(query.projectId, req.user!.userId, req.user!.projectId);
+      const targetProjectId = await resolveAccessibleProjectId(query.projectId, req.user!.userId, req.user!.projectId);
       if (!targetProjectId) {
         return reply.status(400).send({
           reason: 'validation_error',
@@ -160,7 +157,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
 
     try {
       const body = (req.body ?? {}) as ResourceBody;
-      const targetProjectId = await resolveOwnedProjectId(body.projectId, req.user!.userId, req.user!.projectId);
+      const targetProjectId = await resolveAccessibleProjectId(body.projectId, req.user!.userId, req.user!.projectId, true);
       if (!targetProjectId) {
         return reply.status(400).send({
           reason: 'validation_error',
@@ -189,7 +186,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.patch('/api/resources/:resourceId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.patch('/api/resources/:resourceId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { resourceId?: string };
     if (!params.resourceId?.trim()) {
       return reply.status(400).send({
@@ -223,7 +220,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.delete('/api/resources/:resourceId', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.delete('/api/resources/:resourceId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { resourceId?: string };
     if (!params.resourceId?.trim()) {
       return reply.status(400).send({
@@ -252,7 +249,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/tasks/:taskId/assignments', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/tasks/:taskId/assignments', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     if (!params.taskId?.trim()) {
       return reply.status(400).send({
@@ -290,7 +287,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/tasks/:taskId/assignments/materialize', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/tasks/:taskId/assignments/materialize', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     if (!params.taskId?.trim()) {
       return reply.status(400).send({

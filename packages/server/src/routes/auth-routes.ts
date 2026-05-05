@@ -11,6 +11,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authService, projectService, taskService } from '@gantt/mcp/services';
 import type { Task } from '@gantt/mcp/types';
+import { getPrisma } from '@gantt/runtime-core/prisma';
 import { sendOtpEmail } from '../email.js';
 import {
   generateOtp,
@@ -22,6 +23,8 @@ import { authMiddleware } from '../middleware/auth-middleware.js';
 import { isAdminEmail } from '../middleware/admin-middleware.js';
 import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
 import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
+import { resolveGroupAccess, resolveProjectAccess } from '../access-control.js';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
@@ -108,6 +111,24 @@ type CreateShareLinkBody = {
 type UpdateShareLinkBody = {
   label?: string;
 };
+
+type InviteRole = 'editor' | 'viewer';
+
+function normalizeInviteRole(role: unknown): InviteRole {
+  return role === 'viewer' ? 'viewer' : 'editor';
+}
+
+function normalizeInviteEmail(email: unknown): string | null {
+  if (typeof email !== 'string') {
+    return null;
+  }
+  const trimmed = email.trim().toLowerCase();
+  return trimmed.includes('@') ? trimmed : null;
+}
+
+function generateInviteToken(): string {
+  return randomBytes(24).toString('base64url');
+}
 
 function buildShareOrigin(req: {
   headers: Record<string, unknown>;
@@ -467,8 +488,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
   fastify.get<{ Params: { id: string } }>('/api/projects/:id/share-links', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const projects = await authService.listProjects(req.user!.userId);
-    const project = projects.find((item) => item.id === projectId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    const project = access ? await authService.findProjectById(projectId) : null;
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
@@ -490,11 +511,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/share-links', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
     const body = (req.body ?? {}) as CreateShareLinkBody;
-    const projects = await authService.listProjects(req.user!.userId);
-    const project = projects.find((item) => item.id === projectId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    const project = access ? await authService.findProjectById(projectId) : null;
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access?.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
     }
 
     const scope = body.scope === 'task_selection' ? 'task_selection' : 'project';
@@ -538,11 +562,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
   fastify.post<{ Params: { id: string; shareLinkId: string } }>('/api/projects/:id/share-links/:shareLinkId/revoke', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId, shareLinkId } = req.params;
-    const projects = await authService.listProjects(req.user!.userId);
-    const project = projects.find((item) => item.id === projectId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    const project = access ? await authService.findProjectById(projectId) : null;
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access?.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
     }
 
     const link = await authService.revokeShareLink(shareLinkId, projectId);
@@ -556,11 +583,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   fastify.patch<{ Params: { id: string; shareLinkId: string } }>('/api/projects/:id/share-links/:shareLinkId', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId, shareLinkId } = req.params;
     const body = (req.body ?? {}) as UpdateShareLinkBody;
-    const projects = await authService.listProjects(req.user!.userId);
-    const project = projects.find((item) => item.id === projectId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    const project = access ? await authService.findProjectById(projectId) : null;
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access?.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
     }
 
     const updated = await authService.updateShareLink(shareLinkId, projectId, {
@@ -585,11 +615,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/share', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const projects = await authService.listProjects(req.user!.userId);
-    const project = projects.find((item) => item.id === projectId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    const project = access ? await authService.findProjectById(projectId) : null;
 
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access?.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
     }
 
     const shareLink = await authService.createShareLink({
@@ -684,6 +717,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   });
 
   fastify.patch<{ Params: { id: string } }>('/api/project-groups/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
     const body = req.body as { name?: string };
     const name = body.name?.trim();
     if (!name) {
@@ -699,6 +740,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   });
 
   fastify.delete<{ Params: { id: string } }>('/api/project-groups/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
     const result = await projectService.deleteGroup(req.params.id, req.user!.userId);
     if (result.ok) {
       return reply.send({ ok: true });
@@ -710,6 +759,193 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(409).send({ error: 'Project group is not empty' });
     }
     return reply.status(404).send({ error: 'Project group not found' });
+  });
+
+  fastify.get<{ Params: { id: string } }>('/api/project-groups/:id/members', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+
+    const prisma = getPrisma();
+    const [owner, members, invites] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: access.ownerUserId },
+        select: { id: true, email: true },
+      }),
+      prisma.projectGroupMember.findMany({
+        where: { groupId: req.params.id },
+        include: { user: { select: { id: true, email: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      access.role === 'owner'
+        ? prisma.projectGroupInvite.findMany({
+          where: { groupId: req.params.id, status: 'pending' },
+          orderBy: { createdAt: 'desc' },
+        })
+        : Promise.resolve([]),
+    ]);
+
+    return reply.send({
+      owner: owner ? { id: owner.id, email: owner.email, role: 'owner' } : null,
+      members: members.map((member) => ({
+        userId: member.userId,
+        email: member.user.email,
+        role: member.role,
+        createdAt: member.createdAt.toISOString(),
+      })),
+      invites: invites.map((invite) => ({
+        id: invite.id,
+        email: invite.email,
+        role: invite.role,
+        status: invite.status,
+        expiresAt: invite.expiresAt.toISOString(),
+        createdAt: invite.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/project-groups/:id/invites', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
+    const body = (req.body ?? {}) as { email?: unknown; role?: unknown };
+    const email = normalizeInviteEmail(body.email);
+    if (!email) {
+      return reply.status(400).send({ error: 'valid email required' });
+    }
+
+    const role = normalizeInviteRole(body.role);
+    const prisma = getPrisma();
+    const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (existingUser?.id === access.ownerUserId) {
+      return reply.status(409).send({ error: 'User is already the group owner' });
+    }
+
+    if (existingUser) {
+      const existingMember = await prisma.projectGroupMember.findUnique({
+        where: { groupId_userId: { groupId: req.params.id, userId: existingUser.id } },
+        select: { id: true },
+      });
+      if (existingMember) {
+        return reply.status(409).send({ error: 'User is already a group member' });
+      }
+    }
+
+    await prisma.projectGroupInvite.updateMany({
+      where: { groupId: req.params.id, email, status: 'pending' },
+      data: { status: 'revoked', revokedAt: new Date() },
+    });
+
+    const invite = await prisma.projectGroupInvite.create({
+      data: {
+        id: randomUUID(),
+        groupId: req.params.id,
+        email,
+        role,
+        token: generateInviteToken(),
+        invitedByUserId: req.user!.userId,
+        expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return reply.status(201).send({
+      invite: {
+        id: invite.id,
+        email: invite.email,
+        role: invite.role,
+        token: invite.token,
+        status: invite.status,
+        expiresAt: invite.expiresAt.toISOString(),
+        createdAt: invite.createdAt.toISOString(),
+      },
+    });
+  });
+
+  fastify.patch<{ Params: { id: string; userId: string } }>('/api/project-groups/:id/members/:userId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
+    const role = normalizeInviteRole((req.body as { role?: unknown } | undefined)?.role);
+    const member = await getPrisma().projectGroupMember.update({
+      where: { groupId_userId: { groupId: req.params.id, userId: req.params.userId } },
+      data: { role },
+    }).catch(() => null);
+    if (!member) {
+      return reply.status(404).send({ error: 'Project group member not found' });
+    }
+
+    return reply.send({ member: { userId: member.userId, role: member.role } });
+  });
+
+  fastify.delete<{ Params: { id: string; userId: string } }>('/api/project-groups/:id/members/:userId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
+    await getPrisma().projectGroupMember.delete({
+      where: { groupId_userId: { groupId: req.params.id, userId: req.params.userId } },
+    }).catch(() => null);
+
+    return reply.send({ ok: true });
+  });
+
+  fastify.post<{ Params: { token: string } }>('/api/invites/:token/accept', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const token = req.params.token.trim();
+    if (!token) {
+      return reply.status(400).send({ error: 'token required' });
+    }
+
+    const prisma = getPrisma();
+    const invite = await prisma.projectGroupInvite.findUnique({ where: { token } });
+    if (!invite || invite.status !== 'pending') {
+      return reply.status(404).send({ error: 'Invite not found' });
+    }
+    if (invite.expiresAt.getTime() < Date.now()) {
+      await prisma.projectGroupInvite.update({
+        where: { id: invite.id },
+        data: { status: 'expired' },
+      });
+      return reply.status(410).send({ error: 'Invite expired' });
+    }
+    if (invite.email !== req.user!.email.trim().toLowerCase()) {
+      return reply.status(403).send({ error: 'Invite email does not match current user' });
+    }
+
+    const member = await prisma.$transaction(async (tx) => {
+      const nextMember = await tx.projectGroupMember.upsert({
+        where: { groupId_userId: { groupId: invite.groupId, userId: req.user!.userId } },
+        create: {
+          id: randomUUID(),
+          groupId: invite.groupId,
+          userId: req.user!.userId,
+          role: invite.role,
+          invitedByUserId: invite.invitedByUserId,
+        },
+        update: { role: invite.role },
+      });
+      await tx.projectGroupInvite.update({
+        where: { id: invite.id },
+        data: { status: 'accepted', acceptedAt: new Date() },
+      });
+      return nextMember;
+    });
+
+    return reply.send({ member: { groupId: member.groupId, userId: member.userId, role: member.role } });
   });
 
   // ---------------------------------------------------------------------------
@@ -725,7 +961,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     const currentProject = await authService.findProjectById(req.user!.projectId);
     const groupId = body.groupId?.trim() || currentProject?.groupId;
-    const project = await authService.createProject(req.user!.userId, name.trim(), groupId);
+    const groupAccess = groupId ? await resolveGroupAccess(req.user!.userId, groupId) : null;
+    if (!groupAccess) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (!groupAccess.canEdit) {
+      return reply.status(403).send({ error: 'Project group is read-only for this user' });
+    }
+
+    const project = await authService.createProject(groupAccess.ownerUserId, name.trim(), groupId);
     return reply.send({ project });
   });
 
@@ -757,7 +1001,21 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(400).send({ error: 'groupId required' });
     }
 
-    const project = await authService.updateProject(projectId, req.user!.userId, {
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
+    }
+    if (hasGroupId) {
+      const targetGroupAccess = await resolveGroupAccess(req.user!.userId, groupId!);
+      if (!targetGroupAccess || !targetGroupAccess.canEdit || targetGroupAccess.ownerUserId !== access.ownerUserId) {
+        return reply.status(404).send({ error: 'Project group not found' });
+      }
+    }
+
+    const project = await authService.updateProject(projectId, access.ownerUserId, {
       ...(hasName ? { name } : {}),
       ...(hasGanttDayMode ? { ganttDayMode: body.ganttDayMode } : {}),
       ...(body.calendarId !== undefined ? { calendarId: body.calendarId } : {}),
@@ -773,7 +1031,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/archive', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const result = await authService.archiveProject(projectId, req.user!.userId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
+    }
+
+    const result = await authService.archiveProject(projectId, access.ownerUserId);
 
     if (!result.ok) {
       if (result.reason === 'already_archived') {
@@ -787,7 +1053,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
   fastify.post<{ Params: { id: string } }>('/api/projects/:id/restore', { preHandler: [authMiddleware, requireProjectLimit] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const result = await authService.restoreProject(projectId, req.user!.userId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
+    }
+
+    const result = await authService.restoreProject(projectId, access.ownerUserId);
 
     if (!result.ok) {
       if (result.reason === 'not_archived') {
@@ -802,11 +1076,84 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   fastify.delete<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
 
-    const result = await authService.softDeleteProject(projectId, req.user!.userId);
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+    if (!access.canEdit) {
+      return reply.status(403).send({ error: 'Project is read-only for this user' });
+    }
+
+    const result = await authService.softDeleteProject(projectId, access.ownerUserId);
     if (!result.ok) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
     return reply.send({ ok: true });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/api/project-groups/:id/import-project', { preHandler: [authMiddleware, requireProjectLimit] }, async (req, reply) => {
+    const targetGroupId = req.params.id;
+    const body = (req.body ?? {}) as { projectId?: string };
+    const projectId = body.projectId?.trim();
+    if (!projectId) {
+      return reply.status(400).send({ error: 'projectId required' });
+    }
+
+    const groupAccess = await resolveGroupAccess(req.user!.userId, targetGroupId);
+    if (!groupAccess) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (!groupAccess.canEdit) {
+      return reply.status(403).send({ error: 'Project group is read-only for this user' });
+    }
+
+    const prisma = getPrisma();
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        userId: req.user!.userId,
+        status: { not: 'deleted' },
+      },
+      select: { id: true, groupId: true, userId: true },
+    });
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Personal project not found' });
+    }
+
+    if (project.userId === groupAccess.ownerUserId && project.groupId === targetGroupId) {
+      const existing = await authService.findProjectById(project.id);
+      return reply.send({ project: existing });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.resource.updateMany({
+        where: {
+          userId: req.user!.userId,
+          projectId,
+        },
+        data: {
+          userId: groupAccess.ownerUserId,
+        },
+      });
+
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          userId: groupAccess.ownerUserId,
+          groupId: targetGroupId,
+        },
+      });
+
+      return tx.project.findUniqueOrThrow({ where: { id: projectId } });
+    });
+
+    return reply.send({
+      project: {
+        ...(await authService.findProjectById(updated.id)),
+        accessRole: groupAccess.role,
+      },
+    });
   });
 }

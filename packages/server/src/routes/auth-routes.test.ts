@@ -9,14 +9,14 @@ describe('auth project route enforcement', () => {
   it('guards project creation with the projects limit before createProject runs', () => {
     assert.match(
       authRoutesSource,
-      /fastify\.post\('\/api\/projects',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireProjectLimit\]\s*\},\s*async \(req, reply\) => \{[\s\S]*authService\.createProject\(req\.user!\.userId, name\.trim\(\)\)/,
+      /fastify\.post\('\/api\/projects',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireProjectLimit\]\s*\},\s*async \(req, reply\) => \{[\s\S]*resolveGroupAccess\(req\.user!\.userId, groupId\)[\s\S]*authService\.createProject\(groupAccess\.ownerUserId, name\.trim\(\), groupId\)/,
     );
   });
 
   it('guards project restore with the projects limit before restoreProject runs', () => {
     assert.match(
       authRoutesSource,
-      /fastify\.post<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id\/restore',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireProjectLimit\]\s*\},\s*async \(req, reply\) => \{[\s\S]*authService\.restoreProject\(projectId, req\.user!\.userId\)/,
+      /fastify\.post<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id\/restore',\s*\{\s*preHandler:\s*\[authMiddleware,\s*requireProjectLimit\]\s*\},\s*async \(req, reply\) => \{[\s\S]*resolveProjectAccess\(req\.user!\.userId, projectId\)[\s\S]*authService\.restoreProject\(projectId, access\.ownerUserId\)/,
     );
   });
 
@@ -36,7 +36,7 @@ describe('archive and delete route enforcement', () => {
   it('guards archive only with authMiddleware before archiveProject', () => {
     assert.match(
       authRoutesSource,
-      /fastify\.post<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id\/archive',\s*\{\s*preHandler:\s*\[authMiddleware\]\s*\},\s*async \(req, reply\) => \{[\s\S]*authService\.archiveProject\(projectId, req\.user!\.userId\)/,
+      /fastify\.post<\{ Params: \{ id: string \} \}>\('\/api\/projects\/:id\/archive',\s*\{\s*preHandler:\s*\[authMiddleware\]\s*\},\s*async \(req, reply\) => \{[\s\S]*resolveProjectAccess\(req\.user!\.userId, projectId\)[\s\S]*authService\.archiveProject\(projectId, access\.ownerUserId\)/,
     );
   });
 

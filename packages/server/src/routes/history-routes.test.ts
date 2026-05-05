@@ -23,7 +23,7 @@ describe('history routes', () => {
     );
     assert.match(
       historyRoutesSource,
-      /fastify\.post\('\/api\/history\/:groupId\/restore', \{ preHandler: \[authMiddleware\] \}, async \(req, reply\) => \{/,
+      /fastify\.post\('\/api\/history\/:groupId\/restore', \{ preHandler: \[authMiddleware, requireCurrentProjectEditor\] \}, async \(req, reply\) => \{/,
     );
   });
 
