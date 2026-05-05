@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Mail, Shield, Trash2, UserPlus, Users } from 'lucide-react';
+import { Crown, Loader2, Mail, Shield, Trash2, UserPlus, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,12 +49,14 @@ function MemberRow({
   canManage,
   pending,
   onRoleChange,
+  onTransfer,
   onRemove,
 }: {
   member: ProjectGroupMember;
   canManage: boolean;
   pending: boolean;
   onRoleChange: (role: EditableRole) => Promise<void>;
+  onTransfer: () => Promise<void>;
   onRemove: () => Promise<void>;
 }) {
   const [role, setRole] = useState<EditableRole>(member.role);
@@ -64,7 +66,7 @@ function MemberRow({
   }, [member.role]);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr),128px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <div className="grid grid-cols-[minmax(0,1fr),128px,40px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-slate-900">{member.email}</div>
         <div className="text-xs text-slate-500">Доступ с {new Date(member.createdAt).toLocaleDateString('ru-RU')}</div>
@@ -82,6 +84,20 @@ function MemberRow({
         />
       ) : (
         <div className="text-sm text-slate-600">{roleLabel(member.role)}</div>
+      )}
+      {canManage ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => { void onTransfer(); }}
+          className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={`Передать владение ${member.email}`}
+          title="Передать владение пространством"
+        >
+          <Crown className="h-4 w-4" />
+        </button>
+      ) : (
+        <span className="h-9 w-9" />
       )}
       {canManage ? (
         <button
@@ -321,6 +337,23 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                           } catch (updateError) {
                             setError(updateError instanceof Error ? updateError.message : 'Не удалось обновить роль');
                             throw updateError;
+                          } finally {
+                            setSaving(false);
+                          }
+                        }}
+                        onTransfer={async () => {
+                          const confirmed = window.confirm(`Передать владение пространством пользователю ${row.member!.email}? Вы останетесь редактором.`);
+                          if (!confirmed) {
+                            return;
+                          }
+
+                          setSaving(true);
+                          setError(null);
+                          try {
+                            await auth.transferProjectGroupOwner(group.id, row.member!.userId);
+                            await load();
+                          } catch (transferError) {
+                            setError(transferError instanceof Error ? transferError.message : 'Не удалось передать владение');
                           } finally {
                             setSaving(false);
                           }

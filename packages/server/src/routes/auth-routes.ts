@@ -959,6 +959,111 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     return reply.send({ ok: true });
   });
 
+  fastify.post<{ Params: { id: string }; Body: { userId?: unknown } }>('/api/project-groups/:id/transfer-owner', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const access = await resolveGroupAccess(req.user!.userId, req.params.id);
+    if (!access) {
+      return reply.status(404).send({ error: 'Project group not found' });
+    }
+    if (access.role !== 'owner') {
+      return reply.status(403).send({ error: 'Project group owner access required' });
+    }
+
+    const targetUserId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+    if (!targetUserId) {
+      return reply.status(400).send({ error: 'userId required' });
+    }
+    if (targetUserId === access.ownerUserId) {
+      return reply.status(409).send({ error: 'User is already the group owner' });
+    }
+
+    const prisma = getPrisma();
+    const targetMember = await prisma.projectGroupMember.findUnique({
+      where: { groupId_userId: { groupId: req.params.id, userId: targetUserId } },
+      include: { user: { select: { email: true } } },
+    });
+    if (!targetMember) {
+      return reply.status(404).send({ error: 'Target user must be an accepted group member' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const groupProjects = await tx.project.findMany({
+        where: { groupId: req.params.id },
+        select: { id: true },
+      });
+      const projectIds = groupProjects.map((project) => project.id);
+
+      await tx.projectGroup.update({
+        where: { id: req.params.id },
+        data: { userId: targetUserId },
+      });
+
+      await tx.project.updateMany({
+        where: { groupId: req.params.id },
+        data: { userId: targetUserId },
+      });
+
+      await tx.resource.updateMany({
+        where: {
+          OR: [
+            { projectGroupId: req.params.id },
+            ...(projectIds.length > 0 ? [{ projectId: { in: projectIds } }] : []),
+          ],
+        },
+        data: { userId: targetUserId },
+      });
+
+      await tx.projectGroupMember.delete({
+        where: { groupId_userId: { groupId: req.params.id, userId: targetUserId } },
+      });
+
+      await tx.projectGroupMember.upsert({
+        where: { groupId_userId: { groupId: req.params.id, userId: access.ownerUserId } },
+        create: {
+          id: randomUUID(),
+          groupId: req.params.id,
+          userId: access.ownerUserId,
+          role: 'editor',
+        },
+        update: { role: 'editor' },
+      });
+
+      await tx.projectGroupInvite.updateMany({
+        where: { groupId: req.params.id, email: targetMember.user.email, status: 'pending' },
+        data: { status: 'revoked', revokedAt: new Date() },
+      });
+    });
+
+    const group = await prisma.projectGroup.findUnique({
+      where: { id: req.params.id },
+      include: {
+        members: {
+          where: { userId: req.user!.userId },
+          select: { role: true },
+        },
+        _count: {
+          select: { projects: true },
+        },
+      },
+    });
+
+    return reply.send({
+      group: group ? {
+        id: group.id,
+        userId: group.userId,
+        name: group.name,
+        isDefault: group.isDefault,
+        createdAt: group.createdAt.toISOString(),
+        updatedAt: group.updatedAt.toISOString(),
+        projectCount: group._count.projects,
+        accessRole: group.userId === req.user!.userId
+          ? 'owner'
+          : group.members[0]?.role === 'viewer'
+            ? 'viewer'
+            : 'editor',
+      } : null,
+    });
+  });
+
   fastify.post<{ Params: { token: string } }>('/api/invites/:token/accept', { preHandler: [authMiddleware] }, async (req, reply) => {
     const token = req.params.token.trim();
     if (!token) {
