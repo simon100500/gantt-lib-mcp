@@ -147,6 +147,33 @@ export const useProjectStore = create<ProjectStoreState>((set) => ({
       };
     }
 
+    if (pendingCommand?.type === 'reorder_tasks') {
+      const sortOrderById = new Map(pendingCommand.updates.map((update) => [update.taskId, update.sortOrder]));
+      const reorderedTasks = state.confirmed.snapshot.tasks
+        .map((task) => (
+          sortOrderById.has(task.id)
+            ? { ...task, sortOrder: sortOrderById.get(task.id)! }
+            : task
+        ))
+        .sort((left, right) => {
+          const leftSort = left.sortOrder ?? Number.MAX_SAFE_INTEGER;
+          const rightSort = right.sortOrder ?? Number.MAX_SAFE_INTEGER;
+          return leftSort - rightSort || left.id.localeCompare(right.id);
+        });
+
+      return {
+        confirmed: {
+          version: newVersion,
+          snapshot: {
+            tasks: reorderedTasks,
+            dependencies: state.confirmed.snapshot.dependencies,
+          },
+        },
+        pending: nextPending,
+        dragPreview: undefined,
+      };
+    }
+
     const changedTasks = (result as { changedTasks?: Task[] }).changedTasks ?? [];
     const changedTaskById = new Map(changedTasks.map((task) => [task.id, task]));
     const deleteIds = new Set<string>();

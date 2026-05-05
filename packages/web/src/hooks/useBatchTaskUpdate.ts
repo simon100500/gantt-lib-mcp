@@ -39,6 +39,36 @@ function dedupeTasksById(tasks: Task[]): Task[] {
   return Array.from(byId.values());
 }
 
+function mergeReorderedTasksWithReference(
+  reorderedTasks: Task[],
+  referenceTasks: Task[],
+  movedTaskId?: string,
+  inferredParentId?: string,
+): Task[] {
+  const referenceById = new Map(referenceTasks.map((task) => [task.id, task]));
+
+  return reorderedTasks.map((task, index) => {
+    const referenceTask = referenceById.get(task.id);
+    const definedTaskFields = Object.fromEntries(
+      Object.entries(task).filter(([, value]) => value !== undefined),
+    ) as Partial<Task>;
+    const nextParentId = task.id === movedTaskId
+      ? (inferredParentId ?? task.parentId ?? referenceTask?.parentId)
+      : (task.parentId ?? referenceTask?.parentId);
+
+    return {
+      id: task.id,
+      name: referenceTask?.name ?? task.name,
+      startDate: referenceTask?.startDate ?? task.startDate,
+      endDate: referenceTask?.endDate ?? task.endDate,
+      ...(referenceTask ?? {}),
+      ...definedTaskFields,
+      parentId: nextParentId,
+      sortOrder: index,
+    };
+  });
+}
+
 function resolveBatchHistoryTitle(commands: FrontendProjectCommand[]): string {
   if (
     commands.length === 2
@@ -94,6 +124,10 @@ export interface UseBatchTaskUpdateResult {
   handleUngroupTask: (taskId: string) => Promise<void>;
   savingState: SavingState;
 }
+
+export const __batchTaskUpdateInternals = {
+  mergeReorderedTasksWithReference,
+};
 
 export function useBatchTaskUpdate({
   tasks,
@@ -846,11 +880,12 @@ export function useBatchTaskUpdate({
     const referenceTasks = isAuthenticatedMode ? getCurrentAuthTasks() : tasks;
     const referenceTaskIds = new Set(referenceTasks.map((task) => task.id));
 
-    // Add sortOrder to all tasks based on their position in the array
-    const tasksWithOrder = reorderedTasks.map((task, index) => ({
-      ...task,
-      sortOrder: index,
-    }));
+    const tasksWithOrder = mergeReorderedTasksWithReference(
+      reorderedTasks,
+      referenceTasks,
+      movedTaskId,
+      inferredParentId,
+    );
     const createdTasks = tasksWithOrder.filter((task) => !referenceTaskIds.has(task.id));
 
     if (isAuthenticatedMode && createdTasks.length > 0) {
@@ -926,11 +961,11 @@ export function useBatchTaskUpdate({
 
     // Update parentId if provided
     if (movedTaskId && inferredParentId !== undefined) {
-      const updated = tasksWithOrder.map(t =>
-        t.id === movedTaskId
-          ? { ...t, parentId: inferredParentId || undefined }
-          : t
-      );
+      const updated = tasksWithOrder.map((task) => (
+        task.id === movedTaskId
+          ? { ...task, parentId: inferredParentId || undefined }
+          : task
+      ));
       const movedTask = referenceTasks.find(t => t.id === movedTaskId);
       const optimisticTasks = inferredParentId && movedTask
         ? removeDependenciesBetweenTasks(movedTaskId, inferredParentId, updated)
