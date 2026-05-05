@@ -50,6 +50,7 @@ type AuthSuccessResponse = {
 
 async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse> {
   const user = await authService.findOrCreateUser(email);
+  await authService.syncPendingGroupInvitesForUser(user.id, user.email);
   const project = await authService.ensurePrimaryProject(user.id);
   const session = await authService.createSession(user.id, project.id, '', '');
 
@@ -696,11 +697,13 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // GET /api/projects
   // ---------------------------------------------------------------------------
   fastify.get('/api/projects', { preHandler: [authMiddleware] }, async (req, reply) => {
+    await authService.syncPendingGroupInvitesForUser(req.user!.userId, req.user!.email);
     const projects = await authService.listProjects(req.user!.userId);
     return reply.send({ projects });
   });
 
   fastify.get('/api/project-groups', { preHandler: [authMiddleware] }, async (req, reply) => {
+    await authService.syncPendingGroupInvitesForUser(req.user!.userId, req.user!.email);
     const groups = await projectService.listGroupsByUser(req.user!.userId);
     return reply.send({ groups });
   });
@@ -854,8 +857,6 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       },
     });
 
-    const origin = buildShareOrigin(req);
-    const inviteUrl = `${origin}/?invite=${encodeURIComponent(invite.token)}&auth=otp`;
     await sendProjectGroupInviteEmail({
       to: invite.email,
       inviterEmail: req.user!.email,
@@ -864,7 +865,6 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         select: { name: true },
       }))?.name ?? 'Команда' : 'Команда',
       role: invite.role,
-      inviteUrl,
       expiresAt: invite.expiresAt,
     });
 

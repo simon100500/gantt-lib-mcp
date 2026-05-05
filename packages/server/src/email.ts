@@ -22,7 +22,6 @@ export interface SendProjectGroupInviteEmailInput {
   inviterEmail: string;
   groupName: string;
   role: 'editor' | 'viewer';
-  inviteUrl: string;
   expiresAt: Date;
 }
 
@@ -186,7 +185,6 @@ export async function sendProjectGroupInviteEmail(input: SendProjectGroupInviteE
       inviterEmail: input.inviterEmail,
       groupName: input.groupName,
       role: input.role,
-      inviteUrl: input.inviteUrl,
       expiresAt: input.expiresAt.toISOString(),
     });
     return;
@@ -197,10 +195,9 @@ export async function sendProjectGroupInviteEmail(input: SendProjectGroupInviteE
     '',
     `Пригласил: ${input.inviterEmail}`,
     `Роль: ${roleLabel}`,
-    `Ссылка: ${input.inviteUrl}`,
     `Приглашение действует до ${expiresAtLabel}.`,
     '',
-    'Откройте ссылку, войдите под этим email и примите приглашение.',
+    'Просто войдите в GetGantt под этим email, и пространство появится автоматически.',
   ].join('\n');
 
   const htmlBody = `
@@ -209,19 +206,12 @@ export async function sendProjectGroupInviteEmail(input: SendProjectGroupInviteE
       <p style="margin: 0 0 8px;">Вас пригласили в <strong>${escapeHtml(input.groupName)}</strong> в GetGantt.</p>
       <p style="margin: 0 0 8px;"><strong>Пригласил:</strong> ${escapeHtml(input.inviterEmail)}</p>
       <p style="margin: 0 0 16px;"><strong>Роль:</strong> ${escapeHtml(roleLabel)}</p>
-      <p style="margin: 0 0 20px;">
-        <a
-          href="${escapeHtml(input.inviteUrl)}"
-          style="display: inline-block; border-radius: 10px; background: #2563eb; color: #ffffff; padding: 12px 18px; text-decoration: none; font-weight: 600;"
-        >
-          Открыть приглашение
-        </a>
-      </p>
-      <p style="margin: 0 0 8px; color: #475569;">Если кнопка не сработала, откройте ссылку вручную:</p>
-      <p style="margin: 0 0 16px; word-break: break-all;">
-        <a href="${escapeHtml(input.inviteUrl)}" style="color: #2563eb;">${escapeHtml(input.inviteUrl)}</a>
-      </p>
-      <p style="margin: 0; color: #64748b; font-size: 14px;">Приглашение действует до ${escapeHtml(expiresAtLabel)}. Войдите под этим email, чтобы принять его.</p>
+      <div style="margin: 0 0 16px; border: 1px solid #dbeafe; background: #eff6ff; border-radius: 12px; padding: 16px;">
+        <p style="margin: 0; line-height: 1.5; color: #1e3a8a;">
+          Просто войдите в GetGantt под этим email, и пространство появится автоматически.
+        </p>
+      </div>
+      <p style="margin: 0; color: #64748b; font-size: 14px;">Приглашение действует до ${escapeHtml(expiresAtLabel)}.</p>
     </div>
   `;
 
