@@ -132,4 +132,49 @@ describe('useBatchTaskUpdate reorder normalization', () => {
       sortOrder: 1,
     });
   });
+
+  it('detaches the moved last child when inferredParentId is undefined', () => {
+    const referenceTasks: Task[] = [
+      {
+        id: 'parent-1',
+        name: 'Parent',
+        startDate: '2026-05-01',
+        endDate: '2026-05-04',
+        sortOrder: 0,
+      },
+      {
+        id: 'task-a',
+        name: 'Task A',
+        startDate: '2026-05-02',
+        endDate: '2026-05-03',
+        parentId: 'parent-1',
+        color: '#123456',
+        sortOrder: 1,
+      },
+    ];
+
+    const reorderedTasks: Task[] = [
+      {
+        id: 'parent-1',
+        name: 'Parent',
+        startDate: '2026-05-01',
+        endDate: '2026-05-04',
+      },
+      {
+        id: 'task-a',
+        name: 'Task A',
+        startDate: '2026-05-02',
+        endDate: '2026-05-03',
+      },
+    ];
+
+    const merged = mergeReorderedTasksWithReference(reorderedTasks, referenceTasks, 'task-a', undefined);
+
+    expect(merged[1]).toMatchObject({
+      id: 'task-a',
+      parentId: undefined,
+      color: '#123456',
+      sortOrder: 1,
+    });
+  });
 });

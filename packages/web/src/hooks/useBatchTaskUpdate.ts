@@ -53,7 +53,7 @@ function mergeReorderedTasksWithReference(
       Object.entries(task).filter(([, value]) => value !== undefined),
     ) as Partial<Task>;
     const nextParentId = task.id === movedTaskId
-      ? (inferredParentId ?? task.parentId ?? referenceTask?.parentId)
+      ? inferredParentId
       : (task.parentId ?? referenceTask?.parentId);
 
     return {
@@ -926,7 +926,7 @@ export function useBatchTaskUpdate({
     if (isAuthenticatedMode) {
       const commands: FrontendProjectCommand[] = [];
 
-      if (movedTaskId && inferredParentId !== undefined) {
+      if (movedTaskId) {
         const movedTask = referenceTasks.find((task) => task.id === movedTaskId);
         if (movedTask && (movedTask.parentId ?? null) !== (inferredParentId || null)) {
           commands.push({
@@ -960,7 +960,7 @@ export function useBatchTaskUpdate({
     }
 
     // Update parentId if provided
-    if (movedTaskId && inferredParentId !== undefined) {
+    if (movedTaskId) {
       const updated = tasksWithOrder.map((task) => (
         task.id === movedTaskId
           ? { ...task, parentId: inferredParentId || undefined }

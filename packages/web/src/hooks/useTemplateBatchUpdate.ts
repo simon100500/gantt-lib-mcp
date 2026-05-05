@@ -130,7 +130,7 @@ export function useTemplateBatchUpdate({
   const handleReorder = useCallback(async (reorderedTasks: Task[], _movedTaskId?: string, inferredParentId?: string) => {
     const normalized = reorderedTasks.map((task, index) => ({
       ...task,
-      parentId: task.id === _movedTaskId ? (inferredParentId ?? task.parentId) : task.parentId,
+      parentId: task.id === _movedTaskId ? (inferredParentId ?? undefined) : task.parentId,
       sortOrder: index,
     }));
     await persist(normalized);
