@@ -34,6 +34,27 @@ function mergeTasksById(currentTasks: Task[], nextTasks: Task[]): Task[] {
   return merged;
 }
 
+function removeDependenciesBetweenTasks(taskId1: string, taskId2: string, nextTasks: Task[]): Task[] {
+  return nextTasks.map((task) => {
+    if (task.id !== taskId1 && task.id !== taskId2) {
+      return task;
+    }
+
+    const dependencies = task.dependencies ?? [];
+    const otherTaskId = task.id === taskId1 ? taskId2 : taskId1;
+    const filteredDependencies = dependencies.filter((dependency) => dependency.taskId !== otherTaskId);
+
+    if (filteredDependencies.length === dependencies.length) {
+      return task;
+    }
+
+    return {
+      ...task,
+      dependencies: filteredDependencies,
+    };
+  });
+}
+
 function normalizeTaskDates(task: Task): Task {
   if ((task.type ?? 'task') !== 'milestone') {
     return task;
@@ -133,7 +154,9 @@ export function useTemplateBatchUpdate({
       parentId: task.id === _movedTaskId ? (inferredParentId ?? undefined) : task.parentId,
       sortOrder: index,
     }));
-    await persist(normalized);
+    await persist(_movedTaskId && inferredParentId
+      ? removeDependenciesBetweenTasks(_movedTaskId, inferredParentId, normalized)
+      : normalized);
   }, [persist]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
@@ -146,7 +169,11 @@ export function useTemplateBatchUpdate({
   }, [persist, tasks]);
 
   const handleDemoteTask = useCallback(async (taskId: string, newParentId: string) => {
-    await persist(tasks.map((task) => task.id === taskId ? { ...task, parentId: newParentId } : task));
+    await persist(removeDependenciesBetweenTasks(
+      taskId,
+      newParentId,
+      tasks.map((task) => task.id === taskId ? { ...task, parentId: newParentId } : task),
+    ));
   }, [persist, tasks]);
 
   const handleUngroupTask = useCallback(async (taskId: string) => {

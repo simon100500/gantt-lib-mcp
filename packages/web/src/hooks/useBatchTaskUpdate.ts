@@ -216,6 +216,29 @@ export function useBatchTaskUpdate({
     })
   ), []);
 
+  const buildFieldUpdateCommandsForTasks = useCallback((originalTasks: Task[], nextTasks: Task[]): FrontendProjectCommand[] => {
+    const updateCommands = nextTasks.flatMap((task) => {
+      const originalTask = originalTasks.find((candidate) => candidate.id === task.id);
+      if (!originalTask) {
+        return [];
+      }
+      return buildCommandsFromDiff(originalTask, task)
+        .filter((command): command is Extract<FrontendProjectCommand, { type: 'update_task_fields' }> => command.type === 'update_task_fields');
+    });
+
+    if (updateCommands.length > 1) {
+      return [{
+        type: 'update_tasks_fields_batch',
+        updates: updateCommands.map((command) => ({
+          taskId: command.taskId,
+          fields: command.fields,
+        })),
+      }];
+    }
+
+    return updateCommands;
+  }, []);
+
   // Helper to update saving state and reset after delay
   const setSavingStateWithReset = useCallback((state: SavingState) => {
     useUIStore.getState().setSavingState(state);
@@ -880,12 +903,15 @@ export function useBatchTaskUpdate({
     const referenceTasks = isAuthenticatedMode ? getCurrentAuthTasks() : tasks;
     const referenceTaskIds = new Set(referenceTasks.map((task) => task.id));
 
-    const tasksWithOrder = mergeReorderedTasksWithReference(
+    const reorderedWithParents = mergeReorderedTasksWithReference(
       reorderedTasks,
       referenceTasks,
       movedTaskId,
       inferredParentId,
     );
+    const tasksWithOrder = movedTaskId && inferredParentId
+      ? removeDependenciesBetweenTasks(movedTaskId, inferredParentId, reorderedWithParents)
+      : reorderedWithParents;
     const createdTasks = tasksWithOrder.filter((task) => !referenceTaskIds.has(task.id));
 
     if (isAuthenticatedMode && createdTasks.length > 0) {
@@ -925,16 +951,15 @@ export function useBatchTaskUpdate({
 
     if (isAuthenticatedMode) {
       const commands: FrontendProjectCommand[] = [];
-
       if (movedTaskId) {
-        const movedTask = referenceTasks.find((task) => task.id === movedTaskId);
-        if (movedTask && (movedTask.parentId ?? null) !== (inferredParentId || null)) {
-          commands.push({
-            type: 'update_task_fields',
-            taskId: movedTaskId,
-            fields: { parentId: inferredParentId || null },
-          });
+        const affectedIds = new Set<string>([movedTaskId]);
+        if (inferredParentId) {
+          affectedIds.add(inferredParentId);
         }
+        commands.push(...buildFieldUpdateCommandsForTasks(
+          referenceTasks,
+          tasksWithOrder.filter((task) => affectedIds.has(task.id)),
+        ));
       }
 
       if (reorderUpdates.length > 0) {
@@ -974,12 +999,16 @@ export function useBatchTaskUpdate({
 
       try {
         setSavingStateWithReset('saving');
-        if (movedTask && (movedTask.parentId ?? null) !== (inferredParentId || null)) {
-          await commitOrThrow({
-            type: 'update_task_fields',
-            taskId: movedTaskId,
-            fields: { parentId: inferredParentId || null },
-          });
+        const affectedIds = new Set<string>([movedTaskId]);
+        if (inferredParentId) {
+          affectedIds.add(inferredParentId);
+        }
+        const fieldCommands = buildFieldUpdateCommandsForTasks(
+          referenceTasks,
+          optimisticTasks.filter((task) => affectedIds.has(task.id)),
+        );
+        for (const command of fieldCommands) {
+          await commitOrThrow(command);
         }
 
         if (reorderUpdates.length > 0) {
@@ -1012,7 +1041,7 @@ export function useBatchTaskUpdate({
         setSavingStateWithReset('error');
       }
     }
-  }, [commitAuthCommands, commitOrThrow, fetchProjectSnapshot, getCurrentAuthTasks, isAuthenticatedMode, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
+  }, [buildFieldUpdateCommandsForTasks, commitAuthCommands, commitOrThrow, fetchProjectSnapshot, getCurrentAuthTasks, isAuthenticatedMode, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
 
   const handlePromoteTask = useCallback(async (taskId: string) => {
     console.log('[useBatchTaskUpdate] handlePromoteTask called for taskId:', taskId);
@@ -1089,21 +1118,20 @@ export function useBatchTaskUpdate({
     console.log('[useBatchTaskUpdate] Demoting task:', task.name, 'to parentId:', newParentId);
 
     if (isAuthenticatedMode) {
-      const nextTask = removeDependenciesBetweenTasks(
+      const nextTasks = removeDependenciesBetweenTasks(
         taskId,
         newParentId,
         tasks.map((currentTask) => (
           currentTask.id === taskId ? { ...currentTask, parentId: newParentId } : currentTask
         )),
-      ).find((currentTask) => currentTask.id === taskId);
-
-      if (!nextTask) {
-        return;
-      }
+      );
 
       try {
         setSavingStateWithReset('saving');
-        await commitAuthCommands(buildCommandsFromDiff(task, nextTask));
+        await commitAuthCommands(buildFieldUpdateCommandsForTasks(
+          tasks,
+          nextTasks.filter((currentTask) => currentTask.id === taskId || currentTask.id === newParentId),
+        ));
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to demote task:', error);
@@ -1134,7 +1162,7 @@ export function useBatchTaskUpdate({
       // Revert on error
       setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? task : t));
     }
-  }, [applyAuthoritativeTaskResult, applyTaskChanges, commitAuthCommands, isAuthenticatedMode, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
+  }, [applyAuthoritativeTaskResult, applyTaskChanges, buildFieldUpdateCommandsForTasks, commitAuthCommands, isAuthenticatedMode, removeDependenciesBetweenTasks, setSavingStateWithReset, setTasks, tasks]);
 
   const handleUngroupTask = useCallback(async (taskId: string) => {
     const parentTask = tasks.find((task) => task.id === taskId);
