@@ -69,6 +69,51 @@ function mergeReorderedTasksWithReference(
   });
 }
 
+function isAncestorTask(ancestorId: string, taskId: string, tasks: Task[]): boolean {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const visited = new Set<string>();
+  let current = taskById.get(taskId);
+
+  while (current?.parentId) {
+    if (current.parentId === ancestorId) {
+      return true;
+    }
+    if (visited.has(current.parentId)) {
+      return false;
+    }
+    visited.add(current.parentId);
+    current = taskById.get(current.parentId);
+  }
+
+  return false;
+}
+
+function areTasksHierarchicallyRelated(taskId1: string, taskId2: string, tasks: Task[]): boolean {
+  if (taskId1 === taskId2) {
+    return true;
+  }
+
+  return isAncestorTask(taskId1, taskId2, tasks) || isAncestorTask(taskId2, taskId1, tasks);
+}
+
+function sanitizeHierarchyDependencies(tasks: Task[]): Task[] {
+  return tasks.map((task) => {
+    const dependencies = task.dependencies ?? [];
+    const filteredDependencies = dependencies.filter((dependency) => (
+      !areTasksHierarchicallyRelated(task.id, dependency.taskId, tasks)
+    ));
+
+    if (filteredDependencies.length === dependencies.length) {
+      return task;
+    }
+
+    return {
+      ...task,
+      dependencies: filteredDependencies.length > 0 ? filteredDependencies : undefined,
+    };
+  });
+}
+
 function resolveBatchHistoryTitle(commands: FrontendProjectCommand[]): string {
   if (
     commands.length === 2
@@ -127,6 +172,7 @@ export interface UseBatchTaskUpdateResult {
 
 export const __batchTaskUpdateInternals = {
   mergeReorderedTasksWithReference,
+  sanitizeHierarchyDependencies,
 };
 
 export function useBatchTaskUpdate({
@@ -282,7 +328,10 @@ export function useBatchTaskUpdate({
     return result;
   }, [commitCommand]);
 
-  const commitCommandsOrThrow = useCallback(async (commands: FrontendProjectCommand[]) => {
+  const commitCommandsOrThrow = useCallback(async (
+    commands: FrontendProjectCommand[],
+    options?: { includeSnapshot?: boolean },
+  ) => {
     const historySeed = {
       groupId: crypto.randomUUID(),
       requestContextId: crypto.randomUUID(),
@@ -294,6 +343,7 @@ export function useBatchTaskUpdate({
       const result = await commitCommand(
         command,
         createHistoryGroup(historyTitle, index === commands.length - 1, historySeed),
+        { includeSnapshot: options?.includeSnapshot },
       );
       if (!result.accepted) {
         throw new Error(`Command rejected: ${result.reason}`);
@@ -327,14 +377,17 @@ export function useBatchTaskUpdate({
     };
   }, [isAuthenticatedMode, scheduleOptions]);
 
-  const commitAuthCommands = useCallback(async (commands: FrontendProjectCommand[]) => {
+  const commitAuthCommands = useCallback(async (
+    commands: FrontendProjectCommand[],
+    options?: { includeSnapshot?: boolean },
+  ) => {
     if (commands.length === 0) {
       return;
     }
 
     const clearPreview = setProtocolPreview(commands);
     try {
-      await commitCommandsOrThrow(commands);
+      await commitCommandsOrThrow(commands, options);
     } finally {
       clearPreview();
     }
@@ -529,7 +582,23 @@ export function useBatchTaskUpdate({
       try {
         setSavingStateWithReset('saving');
 
-        const primaryTask = uniqueChangedTasks[0];
+        const changedTaskIds = new Set(uniqueChangedTasks.map((task) => task.id));
+        const mergedTasks = referenceTasks.map((task) => changedTaskIds.has(task.id)
+          ? (uniqueChangedTasks.find((candidate) => candidate.id === task.id) ?? task)
+          : task);
+        const hasHierarchyEdit = uniqueChangedTasks.some((task) => {
+          const originalTask = referenceTasks.find((candidate) => candidate.id === task.id);
+          return (originalTask?.parentId ?? null) !== (task.parentId ?? null);
+        });
+        const effectiveChangedTasks = hasHierarchyEdit
+          ? sanitizeHierarchyDependencies(mergedTasks).filter((task) => {
+              const originalTask = referenceTasks.find((candidate) => candidate.id === task.id);
+              const dependenciesChanged = JSON.stringify(originalTask?.dependencies ?? []) !== JSON.stringify(task.dependencies ?? []);
+              return changedTaskIds.has(task.id) || dependenciesChanged;
+            })
+          : uniqueChangedTasks;
+
+        const primaryTask = effectiveChangedTasks[0];
         if (!primaryTask) {
           setSavingStateWithReset('saved');
           return;
@@ -544,7 +613,7 @@ export function useBatchTaskUpdate({
         const primaryIsScheduleEdit = primaryOriginal ? hasScheduleDiff(primaryOriginal, primaryTask) : false;
         const commands = primaryIsScheduleEdit
           ? (primaryOriginal ? buildCommandsFromDiff(primaryOriginal, primaryTask) : [])
-          : uniqueChangedTasks.flatMap((task) => {
+          : effectiveChangedTasks.flatMap((task) => {
               const originalTask = referenceTasks.find((candidate) => candidate.id === task.id);
               if (!originalTask) {
                 return [];
@@ -555,7 +624,7 @@ export function useBatchTaskUpdate({
         if (primaryIsScheduleEdit) {
           console.log('[UI SHIFT] primary schedule edit: secondary cascades will be handled by server, skipping direct commits for secondary tasks', {
             primaryTask: summarizeTasks([primaryTask])[0],
-            skippedSecondaryTasks: summarizeTasks(uniqueChangedTasks.slice(1)),
+            skippedSecondaryTasks: summarizeTasks(effectiveChangedTasks.slice(1)),
           });
         }
 
@@ -580,7 +649,10 @@ export function useBatchTaskUpdate({
         }
 
         console.log('[UI SHIFT] built-commands', batchedCommands);
-        await commitAuthCommands(batchedCommands);
+        await commitAuthCommands(
+          batchedCommands,
+          { includeSnapshot: primaryIsScheduleEdit || hasHierarchyEdit || batchedCommands.length > 1 },
+        );
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Command save failed:', error);
@@ -648,7 +720,7 @@ export function useBatchTaskUpdate({
 
       try {
         setSavingStateWithReset('saving');
-        await commitAuthCommands([{ type: 'shift_project', deltaDays }]);
+        await commitAuthCommands([{ type: 'shift_project', deltaDays }], { includeSnapshot: true });
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to shift project:', error);
@@ -912,7 +984,8 @@ export function useBatchTaskUpdate({
     const tasksWithOrder = movedTaskId && inferredParentId
       ? removeDependenciesBetweenTasks(movedTaskId, inferredParentId, reorderedWithParents)
       : reorderedWithParents;
-    const createdTasks = tasksWithOrder.filter((task) => !referenceTaskIds.has(task.id));
+    const sanitizedTasksWithOrder = sanitizeHierarchyDependencies(tasksWithOrder);
+    const createdTasks = sanitizedTasksWithOrder.filter((task) => !referenceTaskIds.has(task.id));
 
     if (isAuthenticatedMode && createdTasks.length > 0) {
       try {
@@ -923,13 +996,13 @@ export function useBatchTaskUpdate({
         }];
         duplicateCommands.push({
           type: 'reorder_tasks',
-          updates: tasksWithOrder.map((task) => ({
+          updates: sanitizedTasksWithOrder.map((task) => ({
             taskId: task.id,
             sortOrder: task.sortOrder ?? 0,
           })),
         });
 
-        await commitAuthCommands(duplicateCommands);
+        await commitAuthCommands(duplicateCommands, { includeSnapshot: true });
 
         setSavingStateWithReset('saved');
       } catch (error) {
@@ -939,7 +1012,7 @@ export function useBatchTaskUpdate({
       return;
     }
 
-    const reorderUpdates = tasksWithOrder
+    const reorderUpdates = sanitizedTasksWithOrder
       .filter((task) => {
         const originalTask = referenceTasks.find((candidate) => candidate.id === task.id);
         return (originalTask?.sortOrder ?? null) !== (task.sortOrder ?? null);
@@ -951,16 +1024,7 @@ export function useBatchTaskUpdate({
 
     if (isAuthenticatedMode) {
       const commands: FrontendProjectCommand[] = [];
-      if (movedTaskId) {
-        const affectedIds = new Set<string>([movedTaskId]);
-        if (inferredParentId) {
-          affectedIds.add(inferredParentId);
-        }
-        commands.push(...buildFieldUpdateCommandsForTasks(
-          referenceTasks,
-          tasksWithOrder.filter((task) => affectedIds.has(task.id)),
-        ));
-      }
+      commands.push(...buildFieldUpdateCommandsForTasks(referenceTasks, sanitizedTasksWithOrder));
 
       if (reorderUpdates.length > 0) {
         commands.push({
@@ -975,7 +1039,7 @@ export function useBatchTaskUpdate({
 
       try {
         setSavingStateWithReset('saving');
-        await commitAuthCommands(commands);
+        await commitAuthCommands(commands, { includeSnapshot: true });
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to persist reordered task list:', error);
@@ -986,7 +1050,7 @@ export function useBatchTaskUpdate({
 
     // Update parentId if provided
     if (movedTaskId) {
-      const updated = tasksWithOrder.map((task) => (
+      const updated = sanitizedTasksWithOrder.map((task) => (
         task.id === movedTaskId
           ? { ...task, parentId: inferredParentId || undefined }
           : task
@@ -999,14 +1063,7 @@ export function useBatchTaskUpdate({
 
       try {
         setSavingStateWithReset('saving');
-        const affectedIds = new Set<string>([movedTaskId]);
-        if (inferredParentId) {
-          affectedIds.add(inferredParentId);
-        }
-        const fieldCommands = buildFieldUpdateCommandsForTasks(
-          referenceTasks,
-          optimisticTasks.filter((task) => affectedIds.has(task.id)),
-        );
+        const fieldCommands = buildFieldUpdateCommandsForTasks(referenceTasks, optimisticTasks);
         for (const command of fieldCommands) {
           await commitOrThrow(command);
         }
@@ -1024,7 +1081,7 @@ export function useBatchTaskUpdate({
         setSavingStateWithReset('error');
       }
     } else {
-      setTasks(tasksWithOrder);
+      setTasks(sanitizedTasksWithOrder);
       try {
         setSavingStateWithReset('saving');
         if (reorderUpdates.length > 0) {
@@ -1035,7 +1092,7 @@ export function useBatchTaskUpdate({
         }
         setTasks(await fetchProjectSnapshot());
         setSavingStateWithReset('saved');
-        console.log('[useBatchTaskUpdate] Persisted full reordered task list:', tasksWithOrder.length);
+        console.log('[useBatchTaskUpdate] Persisted full reordered task list:', sanitizedTasksWithOrder.length);
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to persist reordered task list:', error);
         setSavingStateWithReset('error');
@@ -1055,7 +1112,7 @@ export function useBatchTaskUpdate({
     if (isAuthenticatedMode) {
       try {
         setSavingStateWithReset('saving');
-        await commitAuthCommands(buildCommandsFromDiff(task, { ...task, parentId: undefined }));
+        await commitAuthCommands(buildCommandsFromDiff(task, { ...task, parentId: undefined }), { includeSnapshot: true });
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to promote task:', error);
@@ -1131,7 +1188,7 @@ export function useBatchTaskUpdate({
         await commitAuthCommands(buildFieldUpdateCommandsForTasks(
           tasks,
           nextTasks.filter((currentTask) => currentTask.id === taskId || currentTask.id === newParentId),
-        ));
+        ), { includeSnapshot: true });
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to demote task:', error);
@@ -1201,7 +1258,7 @@ export function useBatchTaskUpdate({
 
       try {
         setSavingStateWithReset('saving');
-        await commitAuthCommands(commands);
+        await commitAuthCommands(commands, { includeSnapshot: true });
         setSavingStateWithReset('saved');
       } catch (error) {
         console.error('[useBatchTaskUpdate] Failed to ungroup task:', error);

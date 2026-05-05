@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { __batchTaskUpdateInternals } from '../useBatchTaskUpdate.ts';
 import type { Task } from '../../types.ts';
 
-const { mergeReorderedTasksWithReference } = __batchTaskUpdateInternals;
+const { mergeReorderedTasksWithReference, sanitizeHierarchyDependencies } = __batchTaskUpdateInternals;
 
 describe('useBatchTaskUpdate reorder normalization', () => {
   it('preserves authoritative task fields when gantt reorder payload is partial', () => {
@@ -175,6 +175,35 @@ describe('useBatchTaskUpdate reorder normalization', () => {
       parentId: undefined,
       color: '#123456',
       sortOrder: 1,
+    });
+  });
+
+  it('removes dependencies between ancestor and descendant tasks after hierarchy edits', () => {
+    const sanitized = sanitizeHierarchyDependencies([
+      {
+        id: 'parent-1',
+        name: 'Parent',
+        startDate: '2026-05-01',
+        endDate: '2026-05-04',
+        dependencies: [{ taskId: 'child-1', type: 'FS', lag: 0 }],
+      },
+      {
+        id: 'child-1',
+        name: 'Child',
+        startDate: '2026-05-02',
+        endDate: '2026-05-03',
+        parentId: 'parent-1',
+        dependencies: [{ taskId: 'parent-1', type: 'FS', lag: 0 }],
+      },
+    ]);
+
+    expect(sanitized[0]).toMatchObject({
+      id: 'parent-1',
+      dependencies: undefined,
+    });
+    expect(sanitized[1]).toMatchObject({
+      id: 'child-1',
+      dependencies: undefined,
     });
   });
 });

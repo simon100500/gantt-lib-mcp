@@ -146,6 +146,10 @@ function coalesceCommands(
   return null;
 }
 
+export const __commandCommitInternals = {
+  coalesceCommands,
+};
+
 function resolveCallbacks(requestId: string, data: CommitResponse): void {
   for (const callback of callbacks.get(requestId) ?? []) {
     callback.resolve(data);
@@ -405,7 +409,7 @@ export function useCommandCommit(accessToken: string | null) {
 
     const currentEntries = readOutbox(projectId);
     const lastEntry = currentEntries[currentEntries.length - 1];
-    const coalescedCommand = !flushPromise && lastEntry && lastEntry.attempts === 0 && lastEntry.status === 'pending'
+    const coalescedCommand = lastEntry && lastEntry.attempts === 0 && lastEntry.status === 'pending'
       ? coalesceCommands(lastEntry.command, command)
       : null;
     const requestId = coalescedCommand ? lastEntry!.requestId : generateRequestId();
@@ -419,7 +423,9 @@ export function useCommandCommit(accessToken: string | null) {
       baseSnapshot: useProjectStore.getState().confirmed.snapshot,
       command: coalescedCommand ?? command,
       history: coalescedCommand ? lastEntry!.history : history,
-      includeSnapshot: options?.includeSnapshot,
+      includeSnapshot: coalescedCommand
+        ? Boolean(lastEntry?.includeSnapshot || options?.includeSnapshot)
+        : options?.includeSnapshot,
       createdAt: Date.now(),
       attempts: 0,
       status: 'pending',
