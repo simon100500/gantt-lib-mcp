@@ -828,25 +828,6 @@ export function Toolbar({
         </Button>
       </FilterPopup>
 
-      {hasTemplateAction && (
-        <div className="hidden items-center gap-1 sm:flex">
-          <Button
-            size="sm"
-            variant={templateSelectionActive ? 'secondary' : 'ghost'}
-            onClick={() => { void onStartTemplateSelection?.(); }}
-            className={cn(
-              actionButtonClassName,
-              templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-              'w-8 px-0 focus-visible:ring-0 focus-visible:ring-offset-0',
-            )}
-            aria-label={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-            title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-          >
-            <ToyBrick className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-
       <div className="inline-flex rounded-md">
         {(['day', 'week', 'month'] as const).map((nextMode, index) => (
           <button
@@ -1023,6 +1004,18 @@ export function Toolbar({
                   <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
                 </DropdownMenuItem>
               )}
+              {hasTemplateAction && (
+                <DropdownMenuItem
+                  onClick={() => { void onStartTemplateSelection?.(); }}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2',
+                    templateSelectionActive && 'bg-primary/5 text-primary',
+                  )}
+                >
+                  <ToyBrick className="h-4 w-4" />
+                  <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
+                </DropdownMenuItem>
+              )}
               {onImportExcel && (
                 <DropdownMenuItem
                   onClick={onImportExcel}
@@ -1166,6 +1159,21 @@ export function Toolbar({
                   >
                     <CalendarClock className="h-4 w-4" />
                     <span className="text-sm">Сдвинуть проект ...</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {hasTemplateAction && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => { void onStartTemplateSelection?.(); }}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2',
+                      templateSelectionActive && 'bg-primary/5 text-primary',
+                    )}
+                  >
+                    <ToyBrick className="h-4 w-4" />
+                    <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>

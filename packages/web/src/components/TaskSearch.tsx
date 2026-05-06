@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick, Download } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick, Upload } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -231,24 +231,24 @@ export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateT
           )}
           {hasResults && (
             <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavPrev}
-                  className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
-                  title="Предыдущий результат"
-                >
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavNext}
-                  className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
-                  title="Следующий результат"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNavPrev}
+                className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                title="Предыдущий результат"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNavNext}
+                className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                title="Следующий результат"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
             </>
           )}
           {searchQuery && (
@@ -302,7 +302,7 @@ export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateT
               aria-label="Импорт Excel"
               className="h-8 w-8 shrink-0 px-0"
             >
-              <Download className="h-3.5 w-3.5" />
+              <Upload className="h-3.5 w-3.5" />
             </Button>
           )}
         </>
