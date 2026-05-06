@@ -78,6 +78,8 @@ interface ImportExcelModalProps {
   onLoginRequired: () => void;
   onClose: () => void;
   onImported: (result: ImportCommitResponse) => void | Promise<void>;
+  onDownloadTemplate: () => void | Promise<void>;
+  isDownloadTemplateLoading?: boolean;
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -102,12 +104,18 @@ function formatIssuePrefix(issue: ImportIssue): string {
   return '';
 }
 
+function getFieldLabel(preview: ImportPreviewResponse, field: ImportField): string {
+  return preview.supportedFields.find((entry) => entry.field === field)?.label ?? field;
+}
+
 export function ImportExcelModal({
   accessToken,
   refreshAccessToken,
   onLoginRequired,
   onClose,
   onImported,
+  onDownloadTemplate,
+  isDownloadTemplateLoading = false,
 }: ImportExcelModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -121,6 +129,21 @@ export function ImportExcelModal({
   const [issues, setIssues] = useState<ImportIssue[]>([]);
 
   const blockingIssues = useMemo(() => issues.filter((issue) => issue.severity === 'error'), [issues]);
+  const visibleIssues = issues.length > 0;
+
+  const mappedFieldByColumnIndex = useMemo(() => {
+    if (!mapping) {
+      return new Map<number, ImportField>();
+    }
+    const next = new Map<number, ImportField>();
+    (Object.keys(mapping) as ImportField[]).forEach((field) => {
+      const config = mapping[field];
+      if (config.enabled && config.columnIndex !== null) {
+        next.set(config.columnIndex, field);
+      }
+    });
+    return next;
+  }, [mapping]);
 
   const invokeAuthorized = async <T,>(path: string, body: unknown): Promise<T> => {
     const headers = { 'Content-Type': 'application/json' };
@@ -247,6 +270,8 @@ export function ImportExcelModal({
     return () => window.removeEventListener('keydown', onEscape);
   }, [commitLoading, onClose, previewLoading]);
 
+  const emptyState = !selectedFile && !previewLoading && !preview;
+
   return (
     <div
       aria-modal="true"
@@ -258,11 +283,13 @@ export function ImportExcelModal({
       }}
       role="dialog"
     >
-      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+      <div className={`flex w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] ${emptyState ? 'max-w-xl' : 'max-w-6xl'}`}>
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div>
             <div className="text-lg font-semibold text-slate-900">Импорт из Excel</div>
-            <div className="text-sm text-slate-500">Линейная структура по столбцу “Уровень WBS”, связи в формате “1ОН”, “2НН+12”.</div>
+            {!emptyState ? (
+              <div className="text-sm text-slate-500">Структура читается только из столбца “Уровень WBS”, связи только в формате “1ОН”, “2НН+12”.</div>
+            ) : null}
           </div>
           <button
             aria-label="Закрыть импорт"
@@ -275,12 +302,11 @@ export function ImportExcelModal({
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden px-5 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="flex min-h-0 flex-col gap-4">
+        {emptyState ? (
+          <div className="p-5">
             <div
-              className={`rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
-                dragActive ? 'border-primary bg-primary/5' : 'border-slate-300 bg-slate-50'
-              }`}
+              className={`rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${dragActive ? 'border-primary bg-primary/5' : 'border-slate-300 bg-slate-50'
+                }`}
               onDragEnter={(event) => {
                 event.preventDefault();
                 setDragActive(true);
@@ -304,17 +330,12 @@ export function ImportExcelModal({
                 }
               }}
             >
-              <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm">
-                <Upload className="h-5 w-5" />
+              <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm">
+                <Upload className="h-6 w-6" />
               </div>
-              <div className="text-sm font-medium text-slate-800">Перетащите `.xlsx` файл сюда</div>
-              <div className="mt-1 text-xs text-slate-500">или выберите файл вручную</div>
-              <Button
-                className="mt-4"
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-                variant="outline"
-              >
+              <div className="text-base font-medium text-slate-800">Перетащите `.xlsx` файл сюда</div>
+              <div className="mt-1 text-sm text-slate-500">или выберите его вручную</div>
+              <Button className="mt-5" onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
                 <FileSpreadsheet className="h-4 w-4" />
                 Выбрать файл
               </Button>
@@ -331,96 +352,63 @@ export function ImportExcelModal({
                 type="file"
               />
             </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Файл</div>
-              <div className="mt-1 truncate text-sm font-medium text-slate-800">{selectedFile?.name ?? 'Файл не выбран'}</div>
-              {preview?.sheetName ? (
-                <div className="mt-1 text-xs text-slate-500">Лист: {preview.sheetName}</div>
-              ) : null}
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Шаблон</div>
+              <div className="mt-1 text-sm text-slate-600">Можно скачать пример файла с готовой таблицей Excel.</div>
+              <Button
+                className="mt-3"
+                disabled={isDownloadTemplateLoading}
+                onClick={() => void onDownloadTemplate()}
+                type="button"
+                variant="outline"
+              >
+                {isDownloadTemplateLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                {isDownloadTemplateLoading ? 'Готовим шаблон...' : 'Скачать шаблон'}
+              </Button>
             </div>
-
-            {mapping && preview ? (
-              <div className="min-h-0 overflow-auto rounded-xl border border-slate-200">
-                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-900">Сопоставление столбцов</div>
-                </div>
-                <div className="space-y-3 p-4">
-                  {preview.supportedFields.map((fieldConfig) => (
-                    <div key={fieldConfig.field} className="rounded-lg border border-slate-200 p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <label className="text-sm font-medium text-slate-800">{fieldConfig.label}</label>
-                        <label className="flex items-center gap-2 text-xs text-slate-600">
-                          <input
-                            checked={mapping[fieldConfig.field].enabled}
-                            disabled={fieldConfig.required}
-                            onChange={(event) => {
-                              setMapping((prev) => (
-                                prev
-                                  ? {
-                                      ...prev,
-                                      [fieldConfig.field]: {
-                                        ...prev[fieldConfig.field],
-                                        enabled: event.target.checked,
-                                      },
-                                    }
-                                  : prev
-                              ));
-                            }}
-                            type="checkbox"
-                          />
-                          Импортировать
-                        </label>
-                      </div>
-                      <select
-                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                        onChange={(event) => {
-                          const nextValue = event.target.value === '' ? null : Number(event.target.value);
-                          setMapping((prev) => (
-                            prev
-                              ? {
-                                  ...prev,
-                                  [fieldConfig.field]: {
-                                    ...prev[fieldConfig.field],
-                                    columnIndex: nextValue,
-                                  },
-                                }
-                              : prev
-                          ));
-                        }}
-                        value={mapping[fieldConfig.field].columnIndex ?? ''}
-                      >
-                        <option value="">Не сопоставлено</option>
-                        {preview.columns.map((column) => (
-                          <option key={column.index} value={column.index}>
-                            {column.header}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </div>
+            {errorMessage ? (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {errorMessage}
               </div>
             ) : null}
           </div>
-
-          <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
+        ) : (
+          <div className="flex min-h-0 max-h-[92vh] flex-col gap-4 overflow-hidden px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-sm text-slate-700">
-                {preview
-                  ? `Строк в файле: ${preview.summary.parsedRowCount} · К импорту: ${preview.summary.taskCount} · Связей: ${preview.summary.dependencyCount} · Ресурсов: ${preview.summary.resourceNameCount}`
-                  : 'Загрузите файл, чтобы увидеть превью и ошибки.'}
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-slate-900">{selectedFile?.name ?? preview?.fileName ?? 'Файл'}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {preview
+                    ? `Лист: ${preview.sheetName} · Строк: ${preview.summary.parsedRowCount} · К импорту: ${preview.summary.taskCount} · Связей: ${preview.summary.dependencyCount} · Ресурсов: ${preview.summary.resourceNameCount}`
+                    : 'Разбираем файл...'}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Другой файл
+                </Button>
                 <Button disabled={!selectedFile || !fileBase64 || previewLoading} onClick={() => void handleRefreshPreview()} type="button" variant="outline">
                   {previewLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Обновить превью
+                  Обновить
                 </Button>
                 <Button disabled={!preview || blockingIssues.length > 0 || commitLoading || previewLoading} onClick={() => void handleCommit()} type="button">
                   {commitLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                   Импортировать
                 </Button>
               </div>
+              <input
+                accept=".xlsx"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleFile(file);
+                  }
+                }}
+                ref={fileInputRef}
+                type="file"
+              />
             </div>
 
             {errorMessage ? (
@@ -429,21 +417,18 @@ export function ImportExcelModal({
               </div>
             ) : null}
 
-            <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-              <div className="min-h-0 overflow-auto rounded-xl border border-slate-200">
+            {visibleIssues ? (
+              <div className="max-h-52 overflow-auto rounded-xl border border-slate-200 bg-white">
                 <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
                   Ошибки и предупреждения
                 </div>
                 <div className="space-y-2 p-4">
-                  {issues.length === 0 ? (
-                    <div className="text-sm text-slate-500">Ошибок нет. Можно импортировать после проверки превью.</div>
-                  ) : issues.map((issue, index) => (
+                  {issues.map((issue, index) => (
                     <div
-                      className={`rounded-lg border px-3 py-2 text-sm ${
-                        issue.severity === 'error'
+                      className={`rounded-lg border px-3 py-2 text-sm ${issue.severity === 'error'
                           ? 'border-rose-200 bg-rose-50 text-rose-700'
                           : 'border-amber-200 bg-amber-50 text-amber-800'
-                      }`}
+                        }`}
                       key={`${issue.severity}-${issue.rowNumber ?? 'global'}-${index}`}
                     >
                       <span className="font-medium">{formatIssuePrefix(issue)}</span>
@@ -452,43 +437,132 @@ export function ImportExcelModal({
                   ))}
                 </div>
               </div>
+            ) : null}
 
-              <div className="min-h-0 overflow-auto rounded-xl border border-slate-200">
-                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-                  Превью импорта
-                </div>
-                {preview ? (
-                  <table className="min-w-full text-sm">
-                    <thead className="sticky top-0 bg-white shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-                      <tr className="text-left text-slate-500">
-                        <th className="px-4 py-3 font-medium">№</th>
-                        <th className="px-4 py-3 font-medium">Уровень</th>
-                        <th className="px-4 py-3 font-medium">Задача</th>
-                        <th className="px-4 py-3 font-medium">Родитель</th>
-                        <th className="px-4 py-3 font-medium">Связи</th>
-                        <th className="px-4 py-3 font-medium">Ресурсы</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.rows.slice(0, 30).map((row) => (
-                        <tr className="border-t border-slate-100 align-top" key={`${row.rowNumber}-${row.importIndex}`}>
-                          <td className="px-4 py-3 text-slate-500">{row.importIndex}</td>
-                          <td className="px-4 py-3 text-slate-700">{row.normalized.wbsLevel}</td>
-                          <td className="px-4 py-3 text-slate-900">{row.normalized.name}</td>
-                          <td className="px-4 py-3 text-slate-600">{row.normalized.parentImportIndex ?? '—'}</td>
-                          <td className="px-4 py-3 text-slate-600">{row.normalized.dependencyLabels.join(', ') || '—'}</td>
-                          <td className="px-4 py-3 text-slate-600">{row.normalized.resourceNames.join(', ') || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="p-6 text-sm text-slate-500">Превью появится после загрузки файла.</div>
-                )}
+            <div className="min-h-0 overflow-auto rounded-xl border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                Превью и сопоставление столбцов
               </div>
+              {preview && mapping ? (
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(226,232,240,1)]">
+                    <tr className="align-top">
+                      {preview.columns.map((column) => {
+                        const mappedField = mappedFieldByColumnIndex.get(column.index) ?? null;
+                        return (
+                          <th className="min-w-[180px] border-r border-slate-100 px-3 py-3 text-left last:border-r-0" key={column.index}>
+                            <div className="space-y-2">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500">{column.header}</div>
+                              <select
+                                className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                onChange={(event) => {
+                                  const nextField = event.target.value as ImportField | '';
+                                  setMapping((prev) => {
+                                    if (!prev) {
+                                      return prev;
+                                    }
+
+                                    const next = { ...prev };
+                                    (Object.keys(next) as ImportField[]).forEach((field) => {
+                                      if (next[field].columnIndex === column.index) {
+                                        next[field] = {
+                                          ...next[field],
+                                          columnIndex: null,
+                                          enabled: false,
+                                        };
+                                      }
+                                      if (nextField && field === nextField && next[field].columnIndex !== column.index) {
+                                        next[field] = {
+                                          ...next[field],
+                                          columnIndex: null,
+                                          enabled: false,
+                                        };
+                                      }
+                                    });
+
+                                    if (nextField) {
+                                      const current = next[nextField];
+                                      next[nextField] = {
+                                        ...current,
+                                        columnIndex: column.index,
+                                        enabled: true,
+                                      };
+                                    }
+
+                                    return next;
+                                  });
+                                }}
+                                value={mappedField ?? ''}
+                              >
+                                <option value="">Не импортировать</option>
+                                {preview.supportedFields.map((fieldConfig) => (
+                                  <option key={fieldConfig.field} value={fieldConfig.field}>
+                                    {fieldConfig.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {mappedField ? (
+                                <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                  <input
+                                    checked={mapping[mappedField].enabled}
+                                    disabled={preview.supportedFields.find((entry) => entry.field === mappedField)?.required}
+                                    onChange={(event) => {
+                                      setMapping((prev) => (
+                                        prev
+                                          ? {
+                                            ...prev,
+                                            [mappedField]: {
+                                              ...prev[mappedField],
+                                              enabled: event.target.checked,
+                                            },
+                                          }
+                                          : prev
+                                      ));
+                                    }}
+                                    type="checkbox"
+                                  />
+                                  Импортировать
+                                </label>
+                              ) : (
+                                <div className="text-xs text-slate-400">Столбец будет пропущен</div>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.slice(0, 30).map((row) => (
+                      <tr className="border-t border-slate-100 align-top" key={`${row.rowNumber}-${row.importIndex}`}>
+                        {preview.columns.map((column) => {
+                          const mappedField = mappedFieldByColumnIndex.get(column.index) ?? null;
+                          const value = mappedField ? row.values[mappedField] ?? '' : '';
+                          return (
+                            <td className="border-r border-slate-100 px-3 py-2.5 text-slate-700 last:border-r-0" key={`${row.rowNumber}-${column.index}`}>
+                              {value || <span className="text-slate-300">—</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-6 text-sm text-slate-500">Превью появится после разбора файла.</div>
+              )}
             </div>
+
+            {preview && mapping ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                {(Object.keys(mapping) as ImportField[])
+                  .filter((field) => mapping[field].enabled && mapping[field].columnIndex !== null)
+                  .map((field) => getFieldLabel(preview, field))
+                  .join(' · ')}
+              </div>
+            ) : null}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

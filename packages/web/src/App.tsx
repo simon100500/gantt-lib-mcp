@@ -2152,9 +2152,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onExportPdf={handleExportPdf}
               onExportExcel={handleExportExcel}
               onImportExcel={() => setShowImportExcelModal(true)}
-              onDownloadImportTemplate={handleDownloadImportTemplate}
               isExportExcelLoading={isExportExcelLoading}
-              isImportTemplateLoading={isImportTemplateLoading}
               onValidation={handleValidation}
               onCascade={handleCascade}
               shareStatus={shareStatus}
@@ -2217,8 +2215,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         accessToken={auth.accessToken}
         refreshAccessToken={auth.refreshAccessToken}
         onClose={() => setShowImportExcelModal(false)}
+        onDownloadTemplate={handleDownloadImportTemplate}
         onImported={handleImportExcelCompleted}
         onLoginRequired={onLoginRequired}
+        isDownloadTemplateLoading={isImportTemplateLoading}
       />
     )}
     {updateAvailable && (

@@ -952,31 +952,56 @@ export async function buildExcelImportTemplateBuffer(): Promise<Buffer> {
 
   const sheet = workbook.addWorksheet('Импорт задач');
   sheet.columns = [
-    { header: 'Уровень WBS', key: 'wbs', width: 14 },
-    { header: 'Название задачи', key: 'name', width: 34 },
-    { header: 'Дата начала', key: 'start', width: 14 },
-    { header: 'Дата окончания', key: 'end', width: 16 },
-    { header: 'Тип', key: 'type', width: 12 },
-    { header: '% выполнения', key: 'progress', width: 14 },
-    { header: 'Объём', key: 'volume', width: 12 },
-    { header: 'Единица', key: 'unit', width: 12 },
-    { header: 'Выполнено', key: 'completed', width: 12 },
-    { header: 'Связи', key: 'dependencies', width: 18 },
-    { header: 'Ресурсы', key: 'resources', width: 24 },
+    { width: 14 },
+    { width: 34 },
+    { width: 14 },
+    { width: 16 },
+    { width: 12 },
+    { width: 14 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 18 },
+    { width: 24 },
+  ];
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const rows = [
+    [1, 'Подготовительный этап', new Date(Date.UTC(2026, 4, 12)), new Date(Date.UTC(2026, 4, 16)), 'задача', 15, null, null, null, null, null],
+    [2, 'Разбивка осей', new Date(Date.UTC(2026, 4, 12)), new Date(Date.UTC(2026, 4, 13)), 'задача', 100, 120, 'м2', 120, null, 'Бригада 1'],
+    [2, 'Подготовка площадки', new Date(Date.UTC(2026, 4, 14)), new Date(Date.UTC(2026, 4, 16)), 'задача', 0, 3, 'дн', 0, '2ОН', 'Экскаватор; Бригада 2'],
+    [1, 'Монолит', new Date(Date.UTC(2026, 4, 19)), new Date(Date.UTC(2026, 4, 30)), 'задача', 0, null, null, null, '3ОН+2', null],
+    [2, 'Фундамент', new Date(Date.UTC(2026, 4, 19)), new Date(Date.UTC(2026, 4, 23)), 'задача', 0, 40, 'м3', 0, null, 'Бригада 1'],
   ];
 
-  const headerRow = sheet.getRow(1);
-  headerRow.font = { bold: true };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+  sheet.addTable({
+    name: 'ImportTasksTemplate',
+    displayName: 'ImportTasksTemplate',
+    ref: 'A1',
+    headerRow: true,
+    totalsRow: false,
+    style: {
+      theme: 'TableStyleMedium2',
+      showRowStripes: true,
+    },
+    columns: [
+      { name: 'Уровень WBS', filterButton: true },
+      { name: 'Название задачи', filterButton: true },
+      { name: 'Дата начала', filterButton: true },
+      { name: 'Дата окончания', filterButton: true },
+      { name: 'Тип', filterButton: true },
+      { name: '% выполнения', filterButton: true },
+      { name: 'Объём', filterButton: true },
+      { name: 'Единица', filterButton: true },
+      { name: 'Выполнено', filterButton: true },
+      { name: 'Связи', filterButton: true },
+      { name: 'Ресурсы', filterButton: true },
+    ],
+    rows,
+  });
 
-  sheet.addRows([
-    [1, 'Подготовительный этап', '2026-05-12', '2026-05-16', 'задача', 15, '', '', '', '', ''],
-    [2, 'Разбивка осей', '2026-05-12', '2026-05-13', 'задача', 100, 120, 'м2', 120, '', 'Бригада 1'],
-    [2, 'Подготовка площадки', '2026-05-14', '2026-05-16', 'задача', 0, 3, 'дн', 0, '2ОН', 'Экскаватор; Бригада 2'],
-    [1, 'Монолит', '2026-05-19', '2026-05-30', 'задача', 0, '', '', '', '3ОН+2', ''],
-    [2, 'Фундамент', '2026-05-19', '2026-05-23', 'задача', 0, 40, 'м3', 0, '', 'Бригада 1'],
-  ]);
+  sheet.getColumn(3).numFmt = 'dd.mm.yyyy';
+  sheet.getColumn(4).numFmt = 'dd.mm.yyyy';
 
   const hintSheet = workbook.addWorksheet('Подсказки');
   hintSheet.columns = [{ width: 110 }];
