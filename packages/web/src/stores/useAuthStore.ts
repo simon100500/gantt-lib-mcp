@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConstraintDenialPayload } from '../lib/constraintUi';
-import type { CalendarDay, ProjectGroup, ProjectGroupMembersPayload } from '../types';
+import type { CalendarDay, ProjectGroup, ProjectGroupMembersPayload, ProjectSectionPermissions } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -35,6 +35,7 @@ export interface AuthProject {
   name: string;
   status: ProjectStatus;
   accessRole?: 'owner' | 'editor' | 'viewer';
+  permissions?: ProjectSectionPermissions;
   ganttDayMode: GanttDayMode;
   calendarId?: string | null;
   calendarDays?: CalendarDay[];
@@ -73,11 +74,11 @@ export interface UseAuthResult extends AuthState {
   updateProjectGroup(groupId: string, updates: { name: string }): Promise<ProjectGroup>;
   deleteProjectGroup(groupId: string): Promise<void>;
   fetchProjectGroupMembers(groupId: string): Promise<ProjectGroupMembersPayload>;
-  inviteProjectGroupMember(groupId: string, payload: { email: string; role: 'editor' | 'viewer' }): Promise<void>;
-  updateProjectGroupMember(groupId: string, userId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
+  inviteProjectGroupMember(groupId: string, payload: { email: string; role?: 'editor' | 'viewer'; permissions: ProjectSectionPermissions }): Promise<void>;
+  updateProjectGroupMember(groupId: string, userId: string, payload: { role?: 'editor' | 'viewer'; permissions: ProjectSectionPermissions }): Promise<void>;
   transferProjectGroupOwner(groupId: string, userId: string): Promise<ProjectGroup | null>;
   removeProjectGroupMember(groupId: string, userId: string): Promise<void>;
-  updateProjectGroupInvite(groupId: string, inviteId: string, payload: { role: 'editor' | 'viewer' }): Promise<void>;
+  updateProjectGroupInvite(groupId: string, inviteId: string, payload: { role?: 'editor' | 'viewer'; permissions: ProjectSectionPermissions }): Promise<void>;
   removeProjectGroupInvite(groupId: string, inviteId: string): Promise<void>;
   updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
@@ -192,6 +193,7 @@ function readStoredAuth(): StoredAuthState | null {
       groupId: value.groupId ?? '',
       status: value.status ?? 'active',
       accessRole: value.accessRole ?? 'owner',
+      permissions: value.permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' },
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
     });

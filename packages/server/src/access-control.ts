@@ -1,11 +1,16 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { getPrisma } from '@gantt/runtime-core/prisma';
-
-export type ProjectAccessRole = 'owner' | 'editor' | 'viewer';
+import type {
+  ProjectAccessRole,
+  ProjectSectionAccessLevel,
+  ProjectSectionKey,
+  ProjectSectionPermissions,
+} from '@gantt/runtime-core/types';
 
 export type AccessContext = {
   role: ProjectAccessRole;
   canEdit: boolean;
+  permissions: ProjectSectionPermissions;
   ownerUserId: string;
   billingUserId: string;
   groupId: string;
@@ -20,13 +25,57 @@ declare module 'fastify' {
 }
 
 function toAccessContext(role: ProjectAccessRole, ownerUserId: string, groupId: string): AccessContext {
+  const permissions = role === 'viewer'
+    ? { schedule: 'view', resources: 'view', finance: 'view' } satisfies ProjectSectionPermissions
+    : { schedule: 'edit', resources: 'edit', finance: 'edit' } satisfies ProjectSectionPermissions;
   return {
     role,
-    canEdit: role !== 'viewer',
+    canEdit: permissions.schedule === 'edit',
+    permissions,
     ownerUserId,
     billingUserId: ownerUserId,
     groupId,
   };
+}
+
+function buildAccessContext(
+  role: ProjectAccessRole,
+  permissions: ProjectSectionPermissions,
+  ownerUserId: string,
+  groupId: string,
+): AccessContext {
+  return {
+    role,
+    canEdit: permissions.schedule === 'edit',
+    permissions,
+    ownerUserId,
+    billingUserId: ownerUserId,
+    groupId,
+  };
+}
+
+function normalizeRoleFromPermissions(permissions: ProjectSectionPermissions): ProjectAccessRole {
+  if (permissions.schedule === 'edit' && permissions.resources === 'edit' && permissions.finance === 'edit') {
+    return 'editor';
+  }
+
+  if (permissions.schedule !== 'edit' && permissions.resources !== 'edit' && permissions.finance !== 'edit') {
+    return 'viewer';
+  }
+
+  return 'editor';
+}
+
+function canAccessSection(
+  permissions: ProjectSectionPermissions,
+  section: ProjectSectionKey,
+  level: ProjectSectionAccessLevel,
+): boolean {
+  if (permissions[section] === 'none') {
+    return false;
+  }
+
+  return level === 'view' || permissions[section] === 'edit';
 }
 
 export function setAccessControlPrismaGetterForTests(getter: typeof getPrisma): void {
@@ -59,14 +108,25 @@ export async function resolveGroupAccess(userId: string, groupId: string): Promi
         userId,
       },
     },
-    select: { role: true },
+    select: {
+      role: true,
+      scheduleAccess: true,
+      resourcesAccess: true,
+      financeAccess: true,
+    },
   });
 
   if (!member) {
     return null;
   }
 
-  return toAccessContext(member.role === 'editor' ? 'editor' : 'viewer', group.userId, group.id);
+  const permissions: ProjectSectionPermissions = {
+    schedule: member.scheduleAccess,
+    resources: member.resourcesAccess,
+    finance: member.financeAccess,
+  };
+
+  return buildAccessContext(normalizeRoleFromPermissions(permissions), permissions, group.userId, group.id);
 }
 
 export async function resolveProjectAccess(userId: string, projectId: string): Promise<AccessContext | null> {
@@ -109,13 +169,50 @@ export async function requireCurrentProjectAccess(request: FastifyRequest, reply
 }
 
 export async function requireCurrentProjectEditor(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'schedule', 'edit');
+}
+
+export async function requireCurrentProjectScheduleViewer(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'schedule', 'view');
+}
+
+export async function requireCurrentProjectScheduleEditor(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'schedule', 'edit');
+}
+
+export async function requireCurrentProjectResourcesViewer(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'resources', 'view');
+}
+
+export async function requireCurrentProjectResourcesEditor(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'resources', 'edit');
+}
+
+export async function requireCurrentProjectFinanceViewer(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'finance', 'view');
+}
+
+export async function requireCurrentProjectFinanceEditor(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireCurrentProjectSection(request, reply, 'finance', 'edit');
+}
+
+export async function requireCurrentProjectSection(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  section: ProjectSectionKey,
+  level: ProjectSectionAccessLevel,
+): Promise<void> {
   await requireCurrentProjectAccess(request, reply);
   if (reply.sent) {
     return;
   }
 
-  if (!request.projectAccess?.canEdit) {
-    reply.status(403).send({ error: 'Project is read-only for this user' });
+  if (!request.projectAccess || !canAccessSection(request.projectAccess.permissions, section, level)) {
+    reply.status(403).send({
+      error: level === 'edit'
+        ? `Project ${section} is read-only for this user`
+        : `Project ${section} is hidden for this user`,
+    });
   }
 }
 

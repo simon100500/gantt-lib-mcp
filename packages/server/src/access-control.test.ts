@@ -40,6 +40,7 @@ describe('access-control', () => {
     assert.deepEqual(access, {
       role: 'owner',
       canEdit: true,
+      permissions: { schedule: 'edit', resources: 'edit', finance: 'edit' },
       ownerUserId: 'owner-1',
       billingUserId: 'owner-1',
       groupId: 'group-1',
@@ -53,12 +54,16 @@ describe('access-control', () => {
     });
     prismaState.projectGroupMember.findUnique = async () => ({
       role: 'viewer',
+      scheduleAccess: 'view',
+      resourcesAccess: 'view',
+      financeAccess: 'view',
     });
 
     const access = await resolveGroupAccess('viewer-1', 'group-1');
     assert.deepEqual(access, {
       role: 'viewer',
       canEdit: false,
+      permissions: { schedule: 'view', resources: 'view', finance: 'view' },
       ownerUserId: 'owner-1',
       billingUserId: 'owner-1',
       groupId: 'group-1',
@@ -76,12 +81,16 @@ describe('access-control', () => {
     });
     prismaState.projectGroupMember.findUnique = async () => ({
       role: 'editor',
+      scheduleAccess: 'edit',
+      resourcesAccess: 'edit',
+      financeAccess: 'edit',
     });
 
     const access = await resolveProjectAccess('editor-1', 'project-1');
     assert.deepEqual(access, {
       role: 'editor',
       canEdit: true,
+      permissions: { schedule: 'edit', resources: 'edit', finance: 'edit' },
       ownerUserId: 'owner-1',
       billingUserId: 'owner-1',
       groupId: 'group-1',

@@ -6,7 +6,7 @@
  */
 
 import { getPrisma } from '../prisma.js';
-import type { Project, ProjectGroup } from '../types.js';
+import type { Project, ProjectGroup, ProjectSectionPermissions } from '../types.js';
 import { randomUUID } from 'node:crypto';
 import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
 
@@ -25,8 +25,34 @@ export type SoftDeleteProjectResult =
 export class ProjectService {
   private prisma = getPrisma();
 
+  private permissionsFromMembership(membership: {
+    scheduleAccess?: 'none' | 'view' | 'edit';
+    resourcesAccess?: 'none' | 'view' | 'edit';
+    financeAccess?: 'none' | 'view' | 'edit';
+    role?: 'editor' | 'viewer';
+  } | null | undefined): ProjectSectionPermissions {
+    if (!membership) {
+      return { schedule: 'edit', resources: 'edit', finance: 'edit' };
+    }
+
+    return {
+      schedule: membership.scheduleAccess ?? (membership.role === 'viewer' ? 'view' : 'edit'),
+      resources: membership.resourcesAccess ?? (membership.role === 'viewer' ? 'view' : 'edit'),
+      finance: membership.financeAccess ?? (membership.role === 'viewer' ? 'view' : 'edit'),
+    };
+  }
+
+  private roleFromPermissions(permissions: ProjectSectionPermissions): 'editor' | 'viewer' {
+    return permissions.schedule !== 'edit' && permissions.resources !== 'edit' && permissions.finance !== 'edit'
+      ? 'viewer'
+      : 'editor';
+  }
+
   private groupToDomain(group: any): ProjectGroup {
-    const membershipRole = group.members?.[0]?.role;
+    const permissions: ProjectSectionPermissions = group.accessRole === 'owner'
+      ? { schedule: 'edit', resources: 'edit', finance: 'edit' }
+      : this.permissionsFromMembership(group.members?.[0]);
+    const membershipRole = this.roleFromPermissions(permissions);
     return {
       id: group.id,
       userId: group.userId,
@@ -35,7 +61,8 @@ export class ProjectService {
       createdAt: group.createdAt.toISOString(),
       updatedAt: group.updatedAt.toISOString(),
       projectCount: group._count?.projects,
-      accessRole: group.accessRole ?? (membershipRole === 'editor' || membershipRole === 'viewer' ? membershipRole : 'owner'),
+      accessRole: group.accessRole ?? membershipRole,
+      permissions,
     };
   }
 
@@ -71,7 +98,7 @@ export class ProjectService {
       include: {
         members: {
           where: { userId },
-          select: { role: true },
+          select: { role: true, scheduleAccess: true, resourcesAccess: true, financeAccess: true },
         },
         _count: {
           select: { projects: true },
@@ -266,10 +293,10 @@ export class ProjectService {
       include: {
         group: {
           include: {
-            members: {
-              where: { userId },
-              select: { role: true },
-            },
+        members: {
+          where: { userId },
+          select: { role: true, scheduleAccess: true, resourcesAccess: true, financeAccess: true },
+        },
           },
         },
         _count: {
@@ -287,9 +314,10 @@ export class ProjectService {
       taskCount: project._count.tasks,
       accessRole: project.userId === userId
         ? 'owner'
-        : project.group?.members?.[0]?.role === 'editor'
-          ? 'editor'
-          : 'viewer',
+        : this.roleFromPermissions(this.permissionsFromMembership(project.group?.members?.[0])),
+      permissions: project.userId === userId
+        ? { schedule: 'edit', resources: 'edit', finance: 'edit' }
+        : this.permissionsFromMembership(project.group?.members?.[0]),
     })));
   }
 

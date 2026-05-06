@@ -510,6 +510,15 @@ export interface ValidateScheduleResult {
 export type TaskMutationSource = 'agent' | 'manual-save' | 'api' | 'system';
 export type GanttDayMode = 'business' | 'calendar';
 export type ProjectStatus = 'active' | 'archived' | 'deleted';
+export type ProjectAccessRole = 'owner' | 'editor' | 'viewer';
+export type ProjectSectionKey = 'schedule' | 'resources' | 'finance';
+export type ProjectSectionAccessLevel = 'none' | 'view' | 'edit';
+
+export interface ProjectSectionPermissions {
+  schedule: ProjectSectionAccessLevel;
+  resources: ProjectSectionAccessLevel;
+  finance: ProjectSectionAccessLevel;
+}
 
 export type CalendarScope = 'system' | 'project';
 export type CalendarDayKind = 'working' | 'non_working' | 'shortened';
@@ -565,7 +574,8 @@ export interface Project {
   groupId?: string;
   name: string;
   status: ProjectStatus;
-  accessRole?: 'owner' | 'editor' | 'viewer';
+  accessRole?: ProjectAccessRole;
+  permissions?: ProjectSectionPermissions;
   ganttDayMode: GanttDayMode;
   calendarId: string | null;
   calendarDays: EffectiveCalendarDay[];
@@ -579,7 +589,8 @@ export interface ProjectGroup {
   userId: string;
   name: string;
   isDefault: boolean;
-  accessRole?: 'owner' | 'editor' | 'viewer';
+  accessRole?: ProjectAccessRole;
+  permissions?: ProjectSectionPermissions;
   createdAt: string;
   updatedAt: string;
   projectCount?: number;

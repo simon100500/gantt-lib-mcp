@@ -68,17 +68,26 @@ export interface ProjectGroup {
   name: string;
   isDefault: boolean;
   accessRole?: 'owner' | 'editor' | 'viewer';
+  permissions?: ProjectSectionPermissions;
   createdAt: string;
   updatedAt: string;
   projectCount?: number;
 }
 
 export type ProjectGroupMemberRole = 'owner' | 'editor' | 'viewer';
+export type ProjectSectionAccessLevel = 'none' | 'view' | 'edit';
+
+export interface ProjectSectionPermissions {
+  schedule: ProjectSectionAccessLevel;
+  resources: ProjectSectionAccessLevel;
+  finance: ProjectSectionAccessLevel;
+}
 
 export interface ProjectGroupMember {
   userId: string;
   email: string;
   role: Exclude<ProjectGroupMemberRole, 'owner'>;
+  permissions: ProjectSectionPermissions;
   createdAt: string;
 }
 
@@ -86,6 +95,7 @@ export interface ProjectGroupInvite {
   id: string;
   email: string;
   role: Exclude<ProjectGroupMemberRole, 'owner'>;
+  permissions: ProjectSectionPermissions;
   status: 'pending' | 'accepted' | 'revoked' | 'expired';
   expiresAt: string;
   createdAt: string;

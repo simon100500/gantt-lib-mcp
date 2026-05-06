@@ -25,6 +25,7 @@ import { requireTrackedLimit } from '../middleware/constraint-middleware.js';
 import { YandexAuthError, YandexAuthService } from '../services/yandex-auth-service.js';
 import { resolveGroupAccess, resolveProjectAccess } from '../access-control.js';
 import { randomBytes, randomUUID } from 'node:crypto';
+import type { ProjectSectionAccessLevel, ProjectSectionPermissions } from '@gantt/runtime-core/types';
 
 const requireProjectLimit = requireTrackedLimit('projects', {
   code: 'PROJECT_LIMIT_REACHED',
@@ -114,9 +115,41 @@ type UpdateShareLinkBody = {
 };
 
 type InviteRole = 'editor' | 'viewer';
+type SectionPermissionsBody = Partial<Record<'schedule' | 'resources' | 'finance', unknown>>;
+type NormalizedSectionPermissions = ProjectSectionPermissions;
 
 function normalizeInviteRole(role: unknown): InviteRole {
   return role === 'viewer' ? 'viewer' : 'editor';
+}
+
+function normalizeSectionAccessLevel(value: unknown, fallback: ProjectSectionAccessLevel): ProjectSectionAccessLevel {
+  return value === 'none' || value === 'view' || value === 'edit' ? value : fallback;
+}
+
+function normalizeSectionPermissions(
+  permissions: unknown,
+  fallbackRole: InviteRole = 'editor',
+): NormalizedSectionPermissions {
+  const fallback: NormalizedSectionPermissions = fallbackRole === 'viewer'
+    ? { schedule: 'view', resources: 'view', finance: 'view' }
+    : { schedule: 'edit', resources: 'edit', finance: 'edit' };
+
+  if (!permissions || typeof permissions !== 'object') {
+    return fallback;
+  }
+
+  const candidate = permissions as SectionPermissionsBody;
+  return {
+    schedule: normalizeSectionAccessLevel(candidate.schedule, fallback.schedule),
+    resources: normalizeSectionAccessLevel(candidate.resources, fallback.resources),
+    finance: normalizeSectionAccessLevel(candidate.finance, fallback.finance),
+  };
+}
+
+function roleFromPermissions(permissions: NormalizedSectionPermissions): InviteRole {
+  return permissions.schedule !== 'edit' && permissions.resources !== 'edit' && permissions.finance !== 'edit'
+    ? 'viewer'
+    : 'editor';
 }
 
 function normalizeInviteEmail(email: unknown): string | null {
@@ -795,12 +828,22 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         userId: member.userId,
         email: member.user.email,
         role: member.role,
+        permissions: {
+          schedule: member.scheduleAccess,
+          resources: member.resourcesAccess,
+          finance: member.financeAccess,
+        },
         createdAt: member.createdAt.toISOString(),
       })),
       invites: invites.map((invite) => ({
         id: invite.id,
         email: invite.email,
         role: invite.role,
+        permissions: {
+          schedule: invite.scheduleAccess,
+          resources: invite.resourcesAccess,
+          finance: invite.financeAccess,
+        },
         status: invite.status,
         expiresAt: invite.expiresAt.toISOString(),
         createdAt: invite.createdAt.toISOString(),
@@ -817,13 +860,15 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(403).send({ error: 'Project group owner access required' });
     }
 
-    const body = (req.body ?? {}) as { email?: unknown; role?: unknown };
+    const body = (req.body ?? {}) as { email?: unknown; role?: unknown; permissions?: unknown };
     const email = normalizeInviteEmail(body.email);
     if (!email) {
       return reply.status(400).send({ error: 'valid email required' });
     }
 
-    const role = normalizeInviteRole(body.role);
+    const initialRole = normalizeInviteRole(body.role);
+    const permissions = normalizeSectionPermissions(body.permissions, initialRole);
+    const role = roleFromPermissions(permissions);
     const prisma = getPrisma();
     const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existingUser?.id === access.ownerUserId) {
@@ -851,6 +896,9 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         groupId: req.params.id,
         email,
         role,
+        scheduleAccess: permissions.schedule,
+        resourcesAccess: permissions.resources,
+        financeAccess: permissions.finance,
         token: generateInviteToken(),
         invitedByUserId: req.user!.userId,
         expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
@@ -873,6 +921,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         id: invite.id,
         email: invite.email,
         role: invite.role,
+        permissions,
         token: invite.token,
         status: invite.status,
         expiresAt: invite.expiresAt.toISOString(),
@@ -890,16 +939,23 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(403).send({ error: 'Project group owner access required' });
     }
 
-    const role = normalizeInviteRole((req.body as { role?: unknown } | undefined)?.role);
+    const body = (req.body ?? {}) as { role?: unknown; permissions?: unknown };
+    const permissions = normalizeSectionPermissions(body.permissions, normalizeInviteRole(body.role));
+    const role = roleFromPermissions(permissions);
     const invite = await getPrisma().projectGroupInvite.updateMany({
       where: { id: req.params.inviteId, groupId: req.params.id, status: 'pending' },
-      data: { role },
+      data: {
+        role,
+        scheduleAccess: permissions.schedule,
+        resourcesAccess: permissions.resources,
+        financeAccess: permissions.finance,
+      },
     });
     if (invite.count === 0) {
       return reply.status(404).send({ error: 'Project group invite not found' });
     }
 
-    return reply.send({ invite: { id: req.params.inviteId, role } });
+    return reply.send({ invite: { id: req.params.inviteId, role, permissions } });
   });
 
   fastify.delete<{ Params: { id: string; inviteId: string } }>('/api/project-groups/:id/invites/:inviteId', { preHandler: [authMiddleware] }, async (req, reply) => {
@@ -931,16 +987,23 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return reply.status(403).send({ error: 'Project group owner access required' });
     }
 
-    const role = normalizeInviteRole((req.body as { role?: unknown } | undefined)?.role);
+    const body = (req.body ?? {}) as { role?: unknown; permissions?: unknown };
+    const permissions = normalizeSectionPermissions(body.permissions, normalizeInviteRole(body.role));
+    const role = roleFromPermissions(permissions);
     const member = await getPrisma().projectGroupMember.update({
       where: { groupId_userId: { groupId: req.params.id, userId: req.params.userId } },
-      data: { role },
+      data: {
+        role,
+        scheduleAccess: permissions.schedule,
+        resourcesAccess: permissions.resources,
+        financeAccess: permissions.finance,
+      },
     }).catch(() => null);
     if (!member) {
       return reply.status(404).send({ error: 'Project group member not found' });
     }
 
-    return reply.send({ member: { userId: member.userId, role: member.role } });
+    return reply.send({ member: { userId: member.userId, role: member.role, permissions } });
   });
 
   fastify.delete<{ Params: { id: string; userId: string } }>('/api/project-groups/:id/members/:userId', { preHandler: [authMiddleware] }, async (req, reply) => {
@@ -1023,8 +1086,16 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           groupId: req.params.id,
           userId: access.ownerUserId,
           role: 'editor',
+          scheduleAccess: 'edit',
+          resourcesAccess: 'edit',
+          financeAccess: 'edit',
         },
-        update: { role: 'editor' },
+        update: {
+          role: 'editor',
+          scheduleAccess: 'edit',
+          resourcesAccess: 'edit',
+          financeAccess: 'edit',
+        },
       });
 
       await tx.projectGroupInvite.updateMany({
@@ -1038,7 +1109,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       include: {
         members: {
           where: { userId: req.user!.userId },
-          select: { role: true },
+          select: { role: true, scheduleAccess: true, resourcesAccess: true, financeAccess: true },
         },
         _count: {
           select: { projects: true },
@@ -1057,9 +1128,18 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         projectCount: group._count.projects,
         accessRole: group.userId === req.user!.userId
           ? 'owner'
-          : group.members[0]?.role === 'viewer'
-            ? 'viewer'
-            : 'editor',
+          : roleFromPermissions({
+            schedule: group.members[0]?.scheduleAccess ?? 'view',
+            resources: group.members[0]?.resourcesAccess ?? 'view',
+            finance: group.members[0]?.financeAccess ?? 'view',
+          }),
+        permissions: group.userId === req.user!.userId
+          ? { schedule: 'edit', resources: 'edit', finance: 'edit' }
+          : {
+            schedule: group.members[0]?.scheduleAccess ?? 'view',
+            resources: group.members[0]?.resourcesAccess ?? 'view',
+            finance: group.members[0]?.financeAccess ?? 'view',
+          },
       } : null,
     });
   });
@@ -1094,9 +1174,17 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
           groupId: invite.groupId,
           userId: req.user!.userId,
           role: invite.role,
+          scheduleAccess: invite.scheduleAccess,
+          resourcesAccess: invite.resourcesAccess,
+          financeAccess: invite.financeAccess,
           invitedByUserId: invite.invitedByUserId,
         },
-        update: { role: invite.role },
+        update: {
+          role: invite.role,
+          scheduleAccess: invite.scheduleAccess,
+          resourcesAccess: invite.resourcesAccess,
+          financeAccess: invite.financeAccess,
+        },
       });
       await tx.projectGroupInvite.update({
         where: { id: invite.id },
@@ -1313,6 +1401,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       project: {
         ...(await authService.findProjectById(updated.id)),
         accessRole: groupAccess.role,
+        permissions: groupAccess.permissions,
       },
     });
   });
