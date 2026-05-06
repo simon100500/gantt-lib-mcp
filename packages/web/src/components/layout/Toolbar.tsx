@@ -174,6 +174,7 @@ function renderBaselineMenuSection({
 }: BaselineMenuSectionProps) {
   const createActionDisabled = !onCreateBaselineFromCurrent || creatingBaselineFromCurrent;
   const hasSelectedBaseline = Boolean(activeLabel?.trim());
+  const hasBaselineContent = (loading && !activeRequestId) || Boolean(error) || rows.length > 0;
 
   return (
     <>
@@ -217,7 +218,9 @@ function renderBaselineMenuSection({
         <span className="text-sm">{creatingBaselineFromCurrent ? `${createLabel}…` : createLabel}</span>
       </DropdownMenuItem>
 
-      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+      {hasBaselineContent ? (
+        <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+      ) : null}
 
       {loading && !activeRequestId ? (
         <div className="px-2 pb-1">
@@ -287,10 +290,18 @@ function renderBaselineMenuSection({
         </>
       ) : null}
 
-      {onRefreshBaselines && <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />}
+      {onRefreshBaselines && hasBaselineContent ? (
+        <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+      ) : null}
 
       {onRefreshBaselines ? (
-        <DropdownMenuItem onClick={() => void onRefreshBaselines()} className="flex cursor-pointer items-center gap-2 text-slate-700">
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            void onRefreshBaselines();
+          }}
+          className="flex cursor-pointer items-center gap-2 text-slate-700"
+        >
           <RefreshCw className="h-4 w-4" />
           <span className="text-sm">Обновить базовые планы</span>
         </DropdownMenuItem>
@@ -728,15 +739,6 @@ export function Toolbar({
                 <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
               </DropdownMenuItem>
             )}
-            {onImportExcel && (
-              <DropdownMenuItem
-                onClick={onImportExcel}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                <span className="text-sm">Импорт Excel</span>
-              </DropdownMenuItem>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -827,20 +829,22 @@ export function Toolbar({
       </FilterPopup>
 
       {hasTemplateAction && (
-        <Button
-          size="sm"
-          variant={templateSelectionActive ? 'secondary' : 'ghost'}
-          onClick={() => { void onStartTemplateSelection?.(); }}
-          className={cn(
-            actionButtonClassName,
-            templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-            'hidden w-8 px-0 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0',
-          )}
-          aria-label={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-          title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-        >
-          <ToyBrick className="h-3.5 w-3.5" />
-        </Button>
+        <div className="hidden items-center gap-1 sm:flex">
+          <Button
+            size="sm"
+            variant={templateSelectionActive ? 'secondary' : 'ghost'}
+            onClick={() => { void onStartTemplateSelection?.(); }}
+            className={cn(
+              actionButtonClassName,
+              templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
+              'w-8 px-0 focus-visible:ring-0 focus-visible:ring-offset-0',
+            )}
+            aria-label={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
+            title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
+          >
+            <ToyBrick className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       )}
 
       <div className="inline-flex rounded-md">
@@ -1162,6 +1166,18 @@ export function Toolbar({
                   >
                     <CalendarClock className="h-4 w-4" />
                     <span className="text-sm">Сдвинуть проект ...</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {onImportExcel && (
+                <>
+                  <DropdownMenuItem
+                    onClick={onImportExcel}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span className="text-sm">Импорт Excel</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>

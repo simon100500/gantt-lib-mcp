@@ -47,6 +47,7 @@ interface ProjectMenuProps {
   onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
   onOpenInsertTemplateToProject?: () => void | Promise<void>;
   canInsertTemplateToProject?: boolean;
+  onOpenImportExcel?: () => void | Promise<void>;
   onCreateProjectGroup?: (name: string) => void | Promise<void>;
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
@@ -86,6 +87,7 @@ export function ProjectMenu({
   onInsertTemplateToProject,
   onOpenInsertTemplateToProject,
   canInsertTemplateToProject = false,
+  onOpenImportExcel,
   onCreateProjectGroup,
   onRenameProjectGroup,
   onDeleteProjectGroup,
@@ -601,6 +603,7 @@ export function ProjectMenu({
                     onTaskNavigate={(taskId) => ganttRef.current?.scrollToRow(taskId)}
                     readOnly={isReadOnlyContext}
                     onInsertTemplateToProject={canInsertTemplateToProject ? onOpenInsertTemplateToProject : undefined}
+                    onImportExcel={!isReadOnlyContext ? onOpenImportExcel : undefined}
                   />
                 </div>
                 <div className="justify-self-end">

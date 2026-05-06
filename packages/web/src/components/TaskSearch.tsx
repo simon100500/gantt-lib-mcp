@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick, Download } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -14,9 +14,10 @@ interface TaskSearchProps {
   onTaskNavigate?: (taskId: string) => void;
   readOnly?: boolean;
   onInsertTemplateToProject?: () => void | Promise<void>;
+  onImportExcel?: () => void | Promise<void>;
 }
 
-export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateToProject }: TaskSearchProps) {
+export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateToProject, onImportExcel }: TaskSearchProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const searchQuery = useUIStore((state) => state.searchQuery);
@@ -290,6 +291,18 @@ export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateT
               className="h-8 w-8 shrink-0 px-0"
             >
               <ToyBrick className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {onImportExcel && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void onImportExcel(); }}
+              title="Импорт Excel"
+              aria-label="Импорт Excel"
+              className="h-8 w-8 shrink-0 px-0"
+            >
+              <Download className="h-3.5 w-3.5" />
             </Button>
           )}
         </>
