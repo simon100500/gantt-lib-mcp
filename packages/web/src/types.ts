@@ -75,7 +75,7 @@ export interface ProjectGroup {
 }
 
 export type ProjectGroupMemberRole = 'owner' | 'editor' | 'viewer';
-export type ProjectSectionAccessLevel = 'view' | 'edit';
+export type ProjectSectionAccessLevel = 'none' | 'view' | 'edit';
 
 export interface ProjectSectionPermissions {
   schedule: ProjectSectionAccessLevel;

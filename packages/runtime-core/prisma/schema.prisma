@@ -131,6 +131,7 @@ enum ProjectGroupMemberRole {
 }
 
 enum ProjectSectionAccess {
+  none
   view
   edit
 }

@@ -26,9 +26,9 @@ export class ProjectService {
   private prisma = getPrisma();
 
   private permissionsFromMembership(membership: {
-    scheduleAccess?: 'view' | 'edit';
-    resourcesAccess?: 'view' | 'edit';
-    financeAccess?: 'view' | 'edit';
+    scheduleAccess?: 'none' | 'view' | 'edit';
+    resourcesAccess?: 'none' | 'view' | 'edit';
+    financeAccess?: 'none' | 'view' | 'edit';
     role?: 'editor' | 'viewer';
   } | null | undefined): ProjectSectionPermissions {
     if (!membership) {
@@ -43,7 +43,7 @@ export class ProjectService {
   }
 
   private roleFromPermissions(permissions: ProjectSectionPermissions): 'editor' | 'viewer' {
-    return permissions.schedule === 'view' && permissions.resources === 'view' && permissions.finance === 'view'
+    return permissions.schedule !== 'edit' && permissions.resources !== 'edit' && permissions.finance !== 'edit'
       ? 'viewer'
       : 'editor';
   }

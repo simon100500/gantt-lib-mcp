@@ -59,7 +59,7 @@ function normalizeRoleFromPermissions(permissions: ProjectSectionPermissions): P
     return 'editor';
   }
 
-  if (permissions.schedule === 'view' && permissions.resources === 'view' && permissions.finance === 'view') {
+  if (permissions.schedule !== 'edit' && permissions.resources !== 'edit' && permissions.finance !== 'edit') {
     return 'viewer';
   }
 
@@ -71,6 +71,10 @@ function canAccessSection(
   section: ProjectSectionKey,
   level: ProjectSectionAccessLevel,
 ): boolean {
+  if (permissions[section] === 'none') {
+    return false;
+  }
+
   return level === 'view' || permissions[section] === 'edit';
 }
 

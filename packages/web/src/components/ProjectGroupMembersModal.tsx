@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Crown, Loader2, Mail, Shield, Trash2, UserPlus, Users } from 'lucide-react';
+import { Crown, Eye, EyeOff, Loader2, Mail, Pencil, Shield, Trash2, UserPlus, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +42,9 @@ function roleFromPermissions(permissions: ProjectSectionPermissions): EditableRo
 }
 
 function permissionSummary(permissions: ProjectSectionPermissions): string {
+  if (SECTION_LABELS.every(({ key }) => permissions[key] === 'none')) {
+    return 'Скрыто';
+  }
   const role = roleFromPermissions(permissions);
   const isUniform = SECTION_LABELS.every(({ key }) => permissions[key] === permissions.schedule);
   if (isUniform) {
@@ -50,25 +53,23 @@ function permissionSummary(permissions: ProjectSectionPermissions): string {
   return 'Гибкий доступ';
 }
 
-function PermissionSelect({
-  value,
-  disabled = false,
-  onChange,
-}: {
-  value: ProjectSectionAccessLevel;
-  disabled?: boolean;
-  onChange: (value: ProjectSectionAccessLevel) => void;
-}) {
+function PermissionsLegend() {
   return (
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value === 'view' ? 'view' : 'edit')}
-      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-    >
-      <option value="view">Просмотр</option>
-      <option value="edit">Редактирование</option>
-    </select>
+    <div className="grid grid-cols-[72px,96px,96px,96px] items-center gap-2 text-[11px] font-medium uppercase tracking-[0.03em] text-slate-500">
+      <div />
+      <div className="flex items-center justify-center gap-1">
+        <EyeOff className="h-3.5 w-3.5" />
+        <span>Скрыть</span>
+      </div>
+      <div className="flex items-center justify-center gap-1">
+        <Eye className="h-3.5 w-3.5" />
+        <span>Просмотр</span>
+      </div>
+      <div className="flex items-center justify-center gap-1">
+        <Pencil className="h-3.5 w-3.5" />
+        <span>Ред.</span>
+      </div>
+    </div>
   );
 }
 
@@ -86,11 +87,56 @@ function PermissionsMatrix({
       {SECTION_LABELS.map((section) => (
         <div key={section.key} className="grid grid-cols-[72px,1fr] items-center gap-2">
           <div className="text-xs font-medium text-slate-500">{section.label}</div>
-          <PermissionSelect
-            value={value[section.key]}
-            disabled={disabled}
-            onChange={(nextValue) => onChange({ ...value, [section.key]: nextValue })}
-          />
+          <div className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ ...value, [section.key]: 'none' })}
+              className={cn(
+                'inline-flex h-8 w-24 items-center justify-center rounded-md border transition',
+                value[section.key] === 'none'
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                disabled && 'cursor-not-allowed opacity-50',
+              )}
+              aria-pressed={value[section.key] === 'none'}
+              title={`${section.label}: скрыть`}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ ...value, [section.key]: 'view' })}
+              className={cn(
+                'inline-flex h-8 w-24 items-center justify-center rounded-md border transition',
+                value[section.key] === 'view'
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                disabled && 'cursor-not-allowed opacity-50',
+              )}
+              aria-pressed={value[section.key] === 'view'}
+              title={`${section.label}: просмотр`}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ ...value, [section.key]: 'edit' })}
+              className={cn(
+                'inline-flex h-8 w-24 items-center justify-center rounded-md border transition',
+                value[section.key] === 'edit'
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                disabled && 'cursor-not-allowed opacity-50',
+              )}
+              aria-pressed={value[section.key] === 'edit'}
+              title={`${section.label}: редактирование`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       ))}
     </div>
@@ -119,7 +165,7 @@ function MemberRow({
   }, [member.permissions]);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr),264px,88px,40px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <div className="grid grid-cols-[minmax(0,1fr),392px,88px,40px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-slate-900">{member.email}</div>
         <div className="text-xs text-slate-500">Доступ с {new Date(member.createdAt).toLocaleDateString('ru-RU')}</div>
@@ -191,7 +237,7 @@ function InviteRow({
   }, [invite.permissions]);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr),264px,88px,40px] items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="grid grid-cols-[minmax(0,1fr),392px,88px,40px] items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-slate-900">{invite.email}</div>
         <div className="text-xs text-slate-500">
@@ -324,13 +370,14 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {canManage ? <PermissionsLegend /> : null}
           {canManage ? (
             <form onSubmit={handleInvite} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
                 <UserPlus className="h-4 w-4" />
                 Пригласить коллегу
               </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),264px,auto]">
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),392px,auto]">
                 <div className="space-y-2">
                   <Label htmlFor="group-invite-email">Email</Label>
                   <Input
@@ -379,7 +426,7 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                 <div className="space-y-2">
                   {ownerAndMembers.map((row) => (
                     row.role === 'owner' ? (
-                      <div key={row.key} className="grid grid-cols-[minmax(0,1fr),264px,88px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div key={row.key} className="grid grid-cols-[minmax(0,1fr),392px,88px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-slate-900">{row.email}</div>
                           <div className="text-xs text-slate-500">Основной владелец пространства</div>

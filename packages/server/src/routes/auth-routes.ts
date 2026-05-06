@@ -123,7 +123,7 @@ function normalizeInviteRole(role: unknown): InviteRole {
 }
 
 function normalizeSectionAccessLevel(value: unknown, fallback: ProjectSectionAccessLevel): ProjectSectionAccessLevel {
-  return value === 'view' || value === 'edit' ? value : fallback;
+  return value === 'none' || value === 'view' || value === 'edit' ? value : fallback;
 }
 
 function normalizeSectionPermissions(
@@ -147,7 +147,7 @@ function normalizeSectionPermissions(
 }
 
 function roleFromPermissions(permissions: NormalizedSectionPermissions): InviteRole {
-  return permissions.schedule === 'view' && permissions.resources === 'view' && permissions.finance === 'view'
+  return permissions.schedule !== 'edit' && permissions.resources !== 'edit' && permissions.finance !== 'edit'
     ? 'viewer'
     : 'editor';
 }

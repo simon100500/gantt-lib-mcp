@@ -529,11 +529,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const proactiveChatDenial = buildProactiveConstraintDenial('ai_queries', billingStatus);
   const proactiveArchiveDenial = buildProactiveConstraintDenial('archive', billingStatus);
   const projectPermissions = getProjectPermissions(auth.project?.permissions);
-  const canViewSchedule = hasShareToken || projectPermissions.schedule === 'view' || projectPermissions.schedule === 'edit';
+  const canViewSchedule = hasShareToken || projectPermissions.schedule !== 'none';
   const canEditSchedule = hasShareToken ? false : projectPermissions.schedule === 'edit';
-  const canViewResources = hasShareToken || projectPermissions.resources === 'view' || projectPermissions.resources === 'edit';
+  const canViewResources = hasShareToken || projectPermissions.resources !== 'none';
   const canEditResources = hasShareToken ? false : projectPermissions.resources === 'edit';
-  const canViewFinance = hasShareToken || projectPermissions.finance === 'view' || projectPermissions.finance === 'edit';
+  const canViewFinance = hasShareToken || projectPermissions.finance !== 'none';
   const canEditFinance = hasShareToken ? false : projectPermissions.finance === 'edit';
   const isArchivedProject = !hasShareToken && workspace.kind === 'project' && auth.project?.status === 'archived';
   const isScheduleReadOnlyProject = isArchivedProject || !canEditSchedule;

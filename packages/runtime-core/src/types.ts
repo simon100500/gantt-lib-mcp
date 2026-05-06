@@ -512,7 +512,7 @@ export type GanttDayMode = 'business' | 'calendar';
 export type ProjectStatus = 'active' | 'archived' | 'deleted';
 export type ProjectAccessRole = 'owner' | 'editor' | 'viewer';
 export type ProjectSectionKey = 'schedule' | 'resources' | 'finance';
-export type ProjectSectionAccessLevel = 'view' | 'edit';
+export type ProjectSectionAccessLevel = 'none' | 'view' | 'edit';
 
 export interface ProjectSectionPermissions {
   schedule: ProjectSectionAccessLevel;
