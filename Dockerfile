@@ -8,13 +8,9 @@ ENV VITE_YANDEX_CLIENT_ID=${VITE_YANDEX_CLIENT_ID}
 # Copy all workspace package manifests for npm ci (workspaces require all package.json files)
 COPY package.json package-lock.json ./
 COPY packages/web/package.json ./packages/web/
-COPY packages/mcp/package.json ./packages/mcp/
-COPY packages/runtime-core/package.json ./packages/runtime-core/
-COPY packages/server/package.json ./packages/server/
-COPY packages/site/package.json ./packages/site/
 
-# Install all workspace deps (needed for dhtmlx-gantt, vite, etc.)
-RUN npm ci --ignore-scripts
+# Install only the web workspace to keep memory and disk use down during build
+RUN npm ci -w packages/web --include-workspace-root=false --ignore-scripts
 
 # Copy web source (only what we need for the web build)
 COPY packages/web ./packages/web
@@ -34,10 +30,9 @@ COPY package.json package-lock.json ./
 COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/runtime-core/package.json ./packages/runtime-core/
 COPY packages/server/package.json ./packages/server/
-COPY packages/web/package.json ./packages/web/
-COPY packages/site/package.json ./packages/site/
 
-RUN npm ci --ignore-scripts
+# Install only the server-side workspaces required for this image
+RUN npm ci -w packages/runtime-core -w packages/mcp -w packages/server --include-workspace-root=false --ignore-scripts
 
 COPY packages/mcp ./packages/mcp
 COPY packages/runtime-core ./packages/runtime-core
