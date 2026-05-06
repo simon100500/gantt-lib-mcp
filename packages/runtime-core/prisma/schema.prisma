@@ -130,6 +130,11 @@ enum ProjectGroupMemberRole {
   viewer
 }
 
+enum ProjectSectionAccess {
+  view
+  edit
+}
+
 enum ProjectGroupInviteStatus {
   pending
   accepted
@@ -184,6 +189,9 @@ model ProjectGroupMember {
   groupId         String                 @map("group_id")
   userId          String                 @map("user_id")
   role            ProjectGroupMemberRole
+  scheduleAccess  ProjectSectionAccess   @default(edit) @map("schedule_access")
+  resourcesAccess ProjectSectionAccess   @default(edit) @map("resources_access")
+  financeAccess   ProjectSectionAccess   @default(edit) @map("finance_access")
   invitedByUserId String?                @map("invited_by_user_id")
   createdAt       DateTime               @default(now()) @map("created_at")
   updatedAt       DateTime               @updatedAt @map("updated_at")
@@ -203,6 +211,9 @@ model ProjectGroupInvite {
   groupId         String                   @map("group_id")
   email           String
   role            ProjectGroupMemberRole
+  scheduleAccess  ProjectSectionAccess     @default(edit) @map("schedule_access")
+  resourcesAccess ProjectSectionAccess     @default(edit) @map("resources_access")
+  financeAccess   ProjectSectionAccess     @default(edit) @map("finance_access")
   token           String                   @unique
   status          ProjectGroupInviteStatus @default(pending)
   invitedByUserId String?                  @map("invited_by_user_id")

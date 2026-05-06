@@ -29,6 +29,7 @@ interface ProjectMenuProps {
   error: string | null;
   hasShareToken: boolean;
   isArchivedProject?: boolean;
+  isReadOnlyProject?: boolean;
   currentProjectLabel: string | undefined;
   onCreateProject: (groupId?: string) => void | Promise<void>;
   createProjectDisabled?: boolean;
@@ -49,6 +50,9 @@ interface ProjectMenuProps {
   onCreateProjectGroup?: (name: string) => void | Promise<void>;
   onRenameProjectGroup?: (groupId: string, name: string) => void | Promise<void>;
   onDeleteProjectGroup?: (groupId: string) => void | Promise<void>;
+  canViewChartMode?: boolean;
+  canViewResourcePool?: boolean;
+  canViewFinance?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
   onOpenFinance?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
@@ -64,6 +68,7 @@ export function ProjectMenu({
   error,
   hasShareToken,
   isArchivedProject = false,
+  isReadOnlyProject = false,
   currentProjectLabel,
   onCreateProject,
   createProjectDisabled = false,
@@ -84,6 +89,9 @@ export function ProjectMenu({
   onCreateProjectGroup,
   onRenameProjectGroup,
   onDeleteProjectGroup,
+  canViewChartMode = true,
+  canViewResourcePool = true,
+  canViewFinance = true,
   onOpenResourcePool,
   onOpenFinance,
   onOpenChartMode,
@@ -112,7 +120,7 @@ export function ProjectMenu({
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const showProjectContext = hasShareToken || (auth.isAuthenticated && workspace.kind !== 'draft');
-  const isReadOnlyContext = hasShareToken || isArchivedProject;
+  const isReadOnlyContext = hasShareToken || isReadOnlyProject;
   const shouldShowUpgradeButton = subscription?.plan === 'free';
   const canUseSidebar = auth.isAuthenticated && !hasShareToken;
 
@@ -527,13 +535,14 @@ export function ProjectMenu({
 
               <div className="hidden min-w-0 flex-1 self-stretch grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 px-4 lg:grid lg:px-6">
                 <div className="flex self-stretch justify-self-start">
-                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (
+                  {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewResourcePool || canViewFinance) && (
                     <div
                       className="inline-flex h-full shrink-0 items-stretch gap-4"
                       data-testid="topbar-workspace-mode-switch"
                       role="tablist"
                       aria-label="Режим проекта"
                     >
+                      {canViewChartMode && (
                       <button
                         type="button"
                         onClick={() => { void onOpenChartMode?.(); }}
@@ -549,6 +558,8 @@ export function ProjectMenu({
                       >
                         <span>График</span>
                       </button>
+                      )}
+                      {canViewResourcePool && (
                       <button
                         type="button"
                         onClick={() => { void onOpenResourcePool?.(); }}
@@ -564,6 +575,8 @@ export function ProjectMenu({
                       >
                         <span>Ресурсы</span>
                       </button>
+                      )}
+                      {canViewFinance && (
                       <button
                         type="button"
                         onClick={() => { void onOpenFinance?.(); }}
@@ -579,6 +592,7 @@ export function ProjectMenu({
                       >
                         <span>Финансы</span>
                       </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -607,7 +621,7 @@ export function ProjectMenu({
 
           {/* User menu */}
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (
+            {!hasShareToken && auth.isAuthenticated && workspace.kind !== 'template' && (canViewChartMode || canViewResourcePool || canViewFinance) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -628,6 +642,7 @@ export function ProjectMenu({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-40 lg:hidden">
+                  {canViewChartMode && (
                   <DropdownMenuItem
                     onClick={() => { void onOpenChartMode?.(); }}
                     className={cn(
@@ -639,6 +654,8 @@ export function ProjectMenu({
                     <ChartNoAxesGantt className="h-4 w-4" />
                     <span>Гант</span>
                   </DropdownMenuItem>
+                  )}
+                  {canViewResourcePool && (
                   <DropdownMenuItem
                     onClick={() => { void onOpenResourcePool?.(); }}
                     className={cn(
@@ -650,6 +667,8 @@ export function ProjectMenu({
                     <Package className="h-4 w-4" />
                     <span>Ресурсы</span>
                   </DropdownMenuItem>
+                  )}
+                  {canViewFinance && (
                   <DropdownMenuItem
                     onClick={() => { void onOpenFinance?.(); }}
                     className={cn(
@@ -661,6 +680,7 @@ export function ProjectMenu({
                     <Landmark className="h-4 w-4" />
                     <span>Финансы</span>
                   </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

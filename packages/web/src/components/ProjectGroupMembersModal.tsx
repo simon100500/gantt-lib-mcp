@@ -7,7 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '../stores/useAuthStore.ts';
-import type { ProjectGroup, ProjectGroupInvite, ProjectGroupMember, ProjectGroupMembersPayload, ProjectGroupMemberRole } from '../types.ts';
+import type {
+  ProjectGroup,
+  ProjectGroupInvite,
+  ProjectGroupMember,
+  ProjectGroupMembersPayload,
+  ProjectGroupMemberRole,
+  ProjectSectionAccessLevel,
+  ProjectSectionPermissions,
+} from '../types.ts';
 
 interface ProjectGroupMembersModalProps {
   group: ProjectGroup;
@@ -15,6 +23,13 @@ interface ProjectGroupMembersModalProps {
 }
 
 type EditableRole = Exclude<ProjectGroupMemberRole, 'owner'>;
+type PermissionSection = keyof ProjectSectionPermissions;
+
+const SECTION_LABELS: Array<{ key: PermissionSection; label: string }> = [
+  { key: 'schedule', label: 'График' },
+  { key: 'resources', label: 'Ресурсы' },
+  { key: 'finance', label: 'Финансы' },
+];
 
 function roleLabel(role: ProjectGroupMemberRole): string {
   if (role === 'owner') return 'Владелец';
@@ -22,25 +37,63 @@ function roleLabel(role: ProjectGroupMemberRole): string {
   return 'Редактор';
 }
 
-function InviteRoleSelect({
+function roleFromPermissions(permissions: ProjectSectionPermissions): EditableRole {
+  return SECTION_LABELS.every(({ key }) => permissions[key] === 'view') ? 'viewer' : 'editor';
+}
+
+function permissionSummary(permissions: ProjectSectionPermissions): string {
+  const role = roleFromPermissions(permissions);
+  const isUniform = SECTION_LABELS.every(({ key }) => permissions[key] === permissions.schedule);
+  if (isUniform) {
+    return roleLabel(role);
+  }
+  return 'Гибкий доступ';
+}
+
+function PermissionSelect({
   value,
   disabled = false,
   onChange,
 }: {
-  value: EditableRole;
+  value: ProjectSectionAccessLevel;
   disabled?: boolean;
-  onChange: (role: EditableRole) => void;
+  onChange: (value: ProjectSectionAccessLevel) => void;
 }) {
   return (
     <select
       value={value}
       disabled={disabled}
-      onChange={(event) => onChange(event.target.value === 'viewer' ? 'viewer' : 'editor')}
-      className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+      onChange={(event) => onChange(event.target.value === 'view' ? 'view' : 'edit')}
+      className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
     >
-      <option value="editor">Редактор</option>
-      <option value="viewer">Наблюдатель</option>
+      <option value="view">Просмотр</option>
+      <option value="edit">Редактирование</option>
     </select>
+  );
+}
+
+function PermissionsMatrix({
+  value,
+  disabled = false,
+  onChange,
+}: {
+  value: ProjectSectionPermissions;
+  disabled?: boolean;
+  onChange: (value: ProjectSectionPermissions) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      {SECTION_LABELS.map((section) => (
+        <div key={section.key} className="grid grid-cols-[72px,1fr] items-center gap-2">
+          <div className="text-xs font-medium text-slate-500">{section.label}</div>
+          <PermissionSelect
+            value={value[section.key]}
+            disabled={disabled}
+            onChange={(nextValue) => onChange({ ...value, [section.key]: nextValue })}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -48,43 +101,44 @@ function MemberRow({
   member,
   canManage,
   pending,
-  onRoleChange,
+  onPermissionsChange,
   onTransfer,
   onRemove,
 }: {
   member: ProjectGroupMember;
   canManage: boolean;
   pending: boolean;
-  onRoleChange: (role: EditableRole) => Promise<void>;
+  onPermissionsChange: (permissions: ProjectSectionPermissions) => Promise<void>;
   onTransfer: () => Promise<void>;
   onRemove: () => Promise<void>;
 }) {
-  const [role, setRole] = useState<EditableRole>(member.role);
+  const [permissions, setPermissions] = useState<ProjectSectionPermissions>(member.permissions);
 
   useEffect(() => {
-    setRole(member.role);
-  }, [member.role]);
+    setPermissions(member.permissions);
+  }, [member.permissions]);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr),128px,40px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <div className="grid grid-cols-[minmax(0,1fr),264px,88px,40px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-slate-900">{member.email}</div>
         <div className="text-xs text-slate-500">Доступ с {new Date(member.createdAt).toLocaleDateString('ru-RU')}</div>
       </div>
       {canManage ? (
-        <InviteRoleSelect
-          value={role}
+        <PermissionsMatrix
+          value={permissions}
           disabled={pending}
-          onChange={(nextRole) => {
-            setRole(nextRole);
-            void onRoleChange(nextRole).catch(() => {
-              setRole(member.role);
+          onChange={(nextPermissions) => {
+            setPermissions(nextPermissions);
+            void onPermissionsChange(nextPermissions).catch(() => {
+              setPermissions(member.permissions);
             });
           }}
         />
       ) : (
-        <div className="text-sm text-slate-600">{roleLabel(member.role)}</div>
+        <div className="text-sm text-slate-600">{permissionSummary(member.permissions)}</div>
       )}
+      <div className="text-xs text-slate-500">{permissionSummary(permissions)}</div>
       {canManage ? (
         <button
           type="button"
@@ -121,23 +175,23 @@ function InviteRow({
   invite,
   canManage,
   pending,
-  onRoleChange,
+  onPermissionsChange,
   onRemove,
 }: {
   invite: ProjectGroupInvite;
   canManage: boolean;
   pending: boolean;
-  onRoleChange: (role: EditableRole) => Promise<void>;
+  onPermissionsChange: (permissions: ProjectSectionPermissions) => Promise<void>;
   onRemove: () => Promise<void>;
 }) {
-  const [role, setRole] = useState<EditableRole>(invite.role);
+  const [permissions, setPermissions] = useState<ProjectSectionPermissions>(invite.permissions);
 
   useEffect(() => {
-    setRole(invite.role);
-  }, [invite.role]);
+    setPermissions(invite.permissions);
+  }, [invite.permissions]);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr),128px,40px] items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="grid grid-cols-[minmax(0,1fr),264px,88px,40px] items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-slate-900">{invite.email}</div>
         <div className="text-xs text-slate-500">
@@ -145,19 +199,20 @@ function InviteRow({
         </div>
       </div>
       {canManage ? (
-        <InviteRoleSelect
-          value={role}
+        <PermissionsMatrix
+          value={permissions}
           disabled={pending}
-          onChange={(nextRole) => {
-            setRole(nextRole);
-            void onRoleChange(nextRole).catch(() => {
-              setRole(invite.role);
+          onChange={(nextPermissions) => {
+            setPermissions(nextPermissions);
+            void onPermissionsChange(nextPermissions).catch(() => {
+              setPermissions(invite.permissions);
             });
           }}
         />
       ) : (
-        <div className="text-sm text-slate-600">{roleLabel(invite.role)}</div>
+        <div className="text-sm text-slate-600">{permissionSummary(invite.permissions)}</div>
       )}
+      <div className="text-xs text-slate-500">{permissionSummary(permissions)}</div>
       {canManage ? (
         <button
           type="button"
@@ -182,10 +237,16 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<EditableRole>('editor');
+  const [invitePermissions, setInvitePermissions] = useState<ProjectSectionPermissions>({
+    schedule: 'edit',
+    resources: 'edit',
+    finance: 'edit',
+  });
   const [error, setError] = useState<string | null>(null);
 
-  const canManage = group.accessRole === 'owner';
+  const canManage = group.accessRole === 'owner'
+    || group.userId === auth.user?.id
+    || data?.owner?.id === auth.user?.id;
   const ownerAndMembers = useMemo(() => {
     const rows: Array<{ key: string; email: string; role: ProjectGroupMemberRole; member?: ProjectGroupMember }> = [];
     if (data?.owner) {
@@ -225,7 +286,11 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
     setSaving(true);
     setError(null);
     try {
-      await auth.inviteProjectGroupMember(group.id, { email: normalizedEmail, role: inviteRole });
+      await auth.inviteProjectGroupMember(group.id, {
+        email: normalizedEmail,
+        role: roleFromPermissions(invitePermissions),
+        permissions: invitePermissions,
+      });
       setEmail('');
       await load();
     } catch (inviteError) {
@@ -255,7 +320,7 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
             Команда группы проектов
           </CardTitle>
           <CardDescription className="pr-10">
-            {group.name}. Владельцы управляют доступом, редакторы могут менять проекты, наблюдатели работают только на просмотр.
+            {group.name}. Для каждой вкладки можно отдельно задать просмотр или редактирование.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -265,7 +330,7 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                 <UserPlus className="h-4 w-4" />
                 Пригласить коллегу
               </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),140px,auto]">
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),264px,auto]">
                 <div className="space-y-2">
                   <Label htmlFor="group-invite-email">Email</Label>
                   <Input
@@ -279,9 +344,9 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="group-invite-role">Роль</Label>
+                  <Label htmlFor="group-invite-role">Права</Label>
                   <div id="group-invite-role">
-                    <InviteRoleSelect value={inviteRole} disabled={saving} onChange={setInviteRole} />
+                    <PermissionsMatrix value={invitePermissions} disabled={saving} onChange={setInvitePermissions} />
                   </div>
                 </div>
                 <div className="flex items-end">
@@ -314,12 +379,13 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                 <div className="space-y-2">
                   {ownerAndMembers.map((row) => (
                     row.role === 'owner' ? (
-                      <div key={row.key} className="grid grid-cols-[minmax(0,1fr),128px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div key={row.key} className="grid grid-cols-[minmax(0,1fr),264px,88px,40px] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-slate-900">{row.email}</div>
                           <div className="text-xs text-slate-500">Основной владелец пространства</div>
                         </div>
                         <div className="text-sm text-slate-600">{roleLabel(row.role)}</div>
+                        <div className="text-xs text-slate-500">Полный доступ</div>
                         <span className="h-9 w-9" />
                       </div>
                     ) : row.member ? (
@@ -328,11 +394,14 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                         member={row.member}
                         canManage={canManage}
                         pending={saving}
-                        onRoleChange={async (role) => {
+                        onPermissionsChange={async (permissions) => {
                           setSaving(true);
                           setError(null);
                           try {
-                            await auth.updateProjectGroupMember(group.id, row.member!.userId, { role });
+                            await auth.updateProjectGroupMember(group.id, row.member!.userId, {
+                              role: roleFromPermissions(permissions),
+                              permissions,
+                            });
                             await load();
                           } catch (updateError) {
                             setError(updateError instanceof Error ? updateError.message : 'Не удалось обновить роль');
@@ -394,11 +463,14 @@ export function ProjectGroupMembersModal({ group, onClose }: ProjectGroupMembers
                         invite={invite}
                         canManage={canManage}
                         pending={saving}
-                        onRoleChange={async (role) => {
+                        onPermissionsChange={async (permissions) => {
                           setSaving(true);
                           setError(null);
                           try {
-                            await auth.updateProjectGroupInvite(group.id, invite.id, { role });
+                            await auth.updateProjectGroupInvite(group.id, invite.id, {
+                              role: roleFromPermissions(permissions),
+                              permissions,
+                            });
                             await load();
                           } catch (updateError) {
                             setError(updateError instanceof Error ? updateError.message : 'Не удалось обновить приглашение');

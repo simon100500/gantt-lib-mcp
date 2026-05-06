@@ -8,7 +8,11 @@ import {
   ResourceValidationError,
 } from '@gantt/mcp/services';
 import { authMiddleware } from '../middleware/auth-middleware.js';
-import { requireCurrentProjectEditor, resolveProjectAccess } from '../access-control.js';
+import {
+  requireCurrentProjectResourcesEditor,
+  requireCurrentProjectResourcesViewer,
+  resolveProjectAccess,
+} from '../access-control.js';
 
 type ResourceBody = {
   name?: string;
@@ -94,7 +98,7 @@ function isPlannerValidationError(error: unknown): error is PlannerValidationErr
 }
 
 export async function registerResourceRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.get('/api/resources/planner', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.get('/api/resources/planner', { preHandler: [authMiddleware, requireCurrentProjectResourcesViewer] }, async (req, reply) => {
     try {
       const query = req.query as { scope?: string };
       const response = await plannerService.getResourcePlanner({
@@ -116,7 +120,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.get('/api/resources', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.get('/api/resources', { preHandler: [authMiddleware, requireCurrentProjectResourcesViewer] }, async (req, reply) => {
     try {
       const query = req.query as { projectId?: string };
       const targetProjectId = await resolveAccessibleProjectId(query.projectId, req.user!.userId, req.user!.projectId);
@@ -146,7 +150,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/resources', { preHandler: [authMiddleware] }, async (req, reply) => {
+  fastify.post('/api/resources', { preHandler: [authMiddleware, requireCurrentProjectResourcesEditor] }, async (req, reply) => {
     const name = parseResourceName(req.body);
     if (!name) {
       return reply.status(400).send({
@@ -186,7 +190,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.patch('/api/resources/:resourceId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
+  fastify.patch('/api/resources/:resourceId', { preHandler: [authMiddleware, requireCurrentProjectResourcesEditor] }, async (req, reply) => {
     const params = req.params as { resourceId?: string };
     if (!params.resourceId?.trim()) {
       return reply.status(400).send({
@@ -220,7 +224,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.delete('/api/resources/:resourceId', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
+  fastify.delete('/api/resources/:resourceId', { preHandler: [authMiddleware, requireCurrentProjectResourcesEditor] }, async (req, reply) => {
     const params = req.params as { resourceId?: string };
     if (!params.resourceId?.trim()) {
       return reply.status(400).send({
@@ -249,7 +253,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/tasks/:taskId/assignments', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
+  fastify.post('/api/tasks/:taskId/assignments', { preHandler: [authMiddleware, requireCurrentProjectResourcesEditor] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     if (!params.taskId?.trim()) {
       return reply.status(400).send({
@@ -287,7 +291,7 @@ export async function registerResourceRoutes(fastify: FastifyInstance): Promise<
     }
   });
 
-  fastify.post('/api/tasks/:taskId/assignments/materialize', { preHandler: [authMiddleware, requireCurrentProjectEditor] }, async (req, reply) => {
+  fastify.post('/api/tasks/:taskId/assignments/materialize', { preHandler: [authMiddleware, requireCurrentProjectResourcesEditor] }, async (req, reply) => {
     const params = req.params as { taskId?: string };
     if (!params.taskId?.trim()) {
       return reply.status(400).send({

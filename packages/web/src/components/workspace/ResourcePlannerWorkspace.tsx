@@ -41,6 +41,7 @@ interface ResourcePlannerWorkspaceProps {
   projectId: string;
   ganttDayMode?: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
+  readonly?: boolean;
   onBackToProject: () => void;
   onCorrectConflict: (target: PlannerCorrectionTarget) => void;
   onOpenTask?: (target: PlannerCorrectionTarget) => void;
@@ -299,6 +300,7 @@ export function ResourcePlannerWorkspace({
   projectId,
   ganttDayMode = 'calendar',
   calendarDays = [],
+  readonly = false,
   onOpenTask,
 }: ResourcePlannerWorkspaceProps) {
   const plannerScope: PlannerScope = 'current-project';
@@ -1309,7 +1311,7 @@ export function ResourcePlannerWorkspace({
         : current
     ));
   }, [selectedItem, visibleProjectSnapshot.tasks]);
-  const readonly = !accessToken;
+  const effectiveReadonly = !accessToken || readonly;
   const plannerResourceCount = timelineResources.length;
   const plannerAssignmentCount = timelineResources.reduce((total, resource) => total + resource.items.length, 0);
   const pendingMoveCount = Object.keys(pendingMoveCounts).length;
@@ -1317,12 +1319,12 @@ export function ResourcePlannerWorkspace({
   const hasBlockedPendingCommand = pendingCommands.some((command) => command.status === 'conflict' || command.status === 'failed');
   const hasRetryingPendingCommand = pendingCommands.some((command) => command.status === 'retrying');
   const isBackgroundRefreshing = state.status === 'loading' && Boolean(displayedPlannerData);
-  const showSyncStatus = !readonly && (
+  const showSyncStatus = !effectiveReadonly && (
     hasBlockedPendingCommand
     || hasRetryingPendingCommand
     || (pendingCommandCount > 0 && showDelayedSyncStatus)
   );
-  const showSavingStatus = !readonly
+  const showSavingStatus = !effectiveReadonly
     && pendingCommandCount === 0
     && savingState === 'saving'
     && showDelayedSavingStatus;
@@ -1357,7 +1359,7 @@ export function ResourcePlannerWorkspace({
       id: 'deactivate',
       label: 'Деактивировать',
       isVisible: (resource) => mapTimelineResourceStatusToActive(resource.status),
-      isDisabled: (resource) => readonly || pendingCatalogResourceId === resource.id,
+      isDisabled: (resource) => effectiveReadonly || pendingCatalogResourceId === resource.id,
       danger: true,
       onSelect: (resource) => {
         const catalogResource = resources.find((candidate) => candidate.id === resource.id);
@@ -1370,7 +1372,7 @@ export function ResourcePlannerWorkspace({
       id: 'activate',
       label: 'Вернуть в пул',
       isVisible: (resource) => !mapTimelineResourceStatusToActive(resource.status),
-      isDisabled: (resource) => readonly || pendingCatalogResourceId === resource.id,
+      isDisabled: (resource) => effectiveReadonly || pendingCatalogResourceId === resource.id,
       onSelect: (resource) => {
         const catalogResource = resources.find((candidate) => candidate.id === resource.id);
         if (catalogResource) {
@@ -1382,7 +1384,7 @@ export function ResourcePlannerWorkspace({
       id: 'delete',
       label: 'Удалить',
       danger: true,
-      isDisabled: (resource) => readonly || pendingCatalogResourceId === resource.id,
+      isDisabled: (resource) => effectiveReadonly || pendingCatalogResourceId === resource.id,
       onSelect: (resource) => {
         const catalogResource = resources.find((candidate) => candidate.id === resource.id);
         if (!catalogResource) {
@@ -1393,7 +1395,7 @@ export function ResourcePlannerWorkspace({
         }
       },
     },
-  ], [handleDeleteResource, handleSetResourceActive, pendingCatalogResourceId, readonly, resources]);
+  ], [effectiveReadonly, handleDeleteResource, handleSetResourceActive, pendingCatalogResourceId, resources]);
   const showSidePanel = Boolean(selectedItem);
 
   useEffect(() => {
@@ -1451,7 +1453,7 @@ export function ResourcePlannerWorkspace({
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#f4f5f7]">
       <div className="px-3 md:px-4">
         <div className="flex min-h-[46px] flex-wrap items-center gap-2 bg-[#f4f5f7] py-2">
-          {!readonly && (
+          {!effectiveReadonly && (
             <Button
               type="button"
               size="sm"
@@ -1660,7 +1662,7 @@ export function ResourcePlannerWorkspace({
                       ? 'По текущим фильтрам ничего не найдено. Добавьте новый ресурс и он сразу появится в календаре.'
                       : 'Добавьте первый ресурс в проект, чтобы начать планирование загрузки и назначений.'}
                   </div>
-                  {!readonly && (
+                  {!effectiveReadonly && (
                     <Button
                       type="button"
                       size="sm"
@@ -1717,17 +1719,17 @@ export function ResourcePlannerWorkspace({
                     allowVerticalPan
                     businessDays={ganttDayMode !== 'calendar'}
                     customDays={customDays}
-                    readonly={readonly}
+                    readonly={effectiveReadonly}
                     disableResourceReassignment={false}
                     resourceGrouping="type"
-                    onResourceChange={readonly ? undefined : handleResourceChange}
-                    onAddResource={readonly ? undefined : handleAddResource}
-                    enableAddResource={!readonly}
+                    onResourceChange={effectiveReadonly ? undefined : handleResourceChange}
+                    onAddResource={effectiveReadonly ? undefined : handleAddResource}
+                    enableAddResource={!effectiveReadonly}
                     resourceMenuCommands={resourceMenuCommands}
                     getItemClassName={getTimelineItemClassName}
                     activeResourceItemId={selectedItem?.id ?? null}
                     onResourceItemMenuClick={handleOpenTimelineItemDetails}
-                    onResourceItemMove={readonly ? undefined : persistPlannerMove}
+                    onResourceItemMove={effectiveReadonly ? undefined : persistPlannerMove}
                   />
                 </section>
               </div>
@@ -1761,21 +1763,21 @@ export function ResourcePlannerWorkspace({
                   </span>
                 )}
 
-                {readonly && (
+                {effectiveReadonly && (
                   <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
                     Только для чтения
                   </span>
                 )}
 
-                {!readonly && (resourceListLoading || pendingCatalogResourceId) && (
+                {!effectiveReadonly && (resourceListLoading || pendingCatalogResourceId) && (
                   <span className="flex items-center gap-1.5 font-mono text-[11px] text-amber-600">
                     <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" />
                     Ресурсы...
                   </span>
                 )}
 
-                {!readonly && plannerSaveError && (
+                {!effectiveReadonly && plannerSaveError && (
                   <span className="flex items-center gap-1.5 font-mono text-[11px] text-red-600">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
                     Ошибка сохранения
@@ -1826,7 +1828,7 @@ export function ResourcePlannerWorkspace({
               resource={selectedResource}
               resources={resources}
               assignedResources={selectedAssignedResources}
-              readonly={readonly}
+              readonly={effectiveReadonly}
               onClose={() => setSelectedItem(null)}
               onOpenTask={onOpenTask}
               onAddResource={handleAddAssignment}

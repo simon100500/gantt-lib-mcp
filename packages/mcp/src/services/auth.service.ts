@@ -177,6 +177,9 @@ export class AuthService {
         id: true,
         groupId: true,
         role: true,
+        scheduleAccess: true,
+        resourcesAccess: true,
+        financeAccess: true,
         invitedByUserId: true,
         expiresAt: true,
       },
@@ -211,9 +214,17 @@ export class AuthService {
             groupId: invite.groupId,
             userId,
             role: invite.role,
+            scheduleAccess: invite.scheduleAccess,
+            resourcesAccess: invite.resourcesAccess,
+            financeAccess: invite.financeAccess,
             invitedByUserId: invite.invitedByUserId,
           },
-          update: { role: invite.role },
+          update: {
+            role: invite.role,
+            scheduleAccess: invite.scheduleAccess,
+            resourcesAccess: invite.resourcesAccess,
+            financeAccess: invite.financeAccess,
+          },
         });
 
         await tx.projectGroupInvite.update({
