@@ -26,6 +26,7 @@ import {
   ToyBrick,
   TriangleAlert,
   Undo2,
+  Upload,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -64,7 +65,10 @@ interface ToolbarProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  onImportExcel?: () => void;
+  onDownloadImportTemplate?: () => void;
   isExportExcelLoading?: boolean;
+  isImportTemplateLoading?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
   showShareButton?: boolean;
@@ -306,7 +310,10 @@ export function Toolbar({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  onImportExcel,
+  onDownloadImportTemplate,
   isExportExcelLoading = false,
+  isImportTemplateLoading = false,
   shareStatus = 'idle',
   onCreateShareLink,
   showShareButton = false,
@@ -417,7 +424,7 @@ export function Toolbar({
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
-  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
+  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onImportExcel || onDownloadImportTemplate || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
@@ -725,6 +732,25 @@ export function Toolbar({
                 <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
               </DropdownMenuItem>
             )}
+            {onImportExcel && (
+              <DropdownMenuItem
+                onClick={onImportExcel}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="text-sm">Импорт Excel</span>
+              </DropdownMenuItem>
+            )}
+            {onDownloadImportTemplate && (
+              <DropdownMenuItem
+                onClick={onDownloadImportTemplate}
+                disabled={isImportTemplateLoading}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span className="text-sm">{isImportTemplateLoading ? 'Готовим шаблон...' : 'Скачать шаблон'}</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -1005,6 +1031,25 @@ export function Toolbar({
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
+                </DropdownMenuItem>
+              )}
+              {onImportExcel && (
+                <DropdownMenuItem
+                  onClick={onImportExcel}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span className="text-sm">Импорт Excel</span>
+                </DropdownMenuItem>
+              )}
+              {onDownloadImportTemplate && (
+                <DropdownMenuItem
+                  onClick={onDownloadImportTemplate}
+                  disabled={isImportTemplateLoading}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span className="text-sm">{isImportTemplateLoading ? 'Готовим шаблон...' : 'Скачать шаблон'}</span>
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
