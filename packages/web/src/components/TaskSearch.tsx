@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Search, CornerDownLeft, ToyBrick, Upload } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -14,9 +14,10 @@ interface TaskSearchProps {
   onTaskNavigate?: (taskId: string) => void;
   readOnly?: boolean;
   onInsertTemplateToProject?: () => void | Promise<void>;
+  onImportExcel?: () => void | Promise<void>;
 }
 
-export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateToProject }: TaskSearchProps) {
+export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateToProject, onImportExcel }: TaskSearchProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const searchQuery = useUIStore((state) => state.searchQuery);
@@ -230,24 +231,24 @@ export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateT
           )}
           {hasResults && (
             <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavPrev}
-                  className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
-                  title="Предыдущий результат"
-                >
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavNext}
-                  className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
-                  title="Следующий результат"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNavPrev}
+                className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                title="Предыдущий результат"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNavNext}
+                className="h-5 w-5 p-0 text-slate-500 hover:text-slate-700"
+                title="Следующий результат"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
             </>
           )}
           {searchQuery && (
@@ -290,6 +291,18 @@ export function TaskSearch({ onTaskNavigate, readOnly = false, onInsertTemplateT
               className="h-8 w-8 shrink-0 px-0"
             >
               <ToyBrick className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {onImportExcel && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { void onImportExcel(); }}
+              title="Импорт Excel"
+              aria-label="Импорт Excel"
+              className="h-8 w-8 shrink-0 px-0"
+            >
+              <Upload className="h-3.5 w-3.5" />
             </Button>
           )}
         </>

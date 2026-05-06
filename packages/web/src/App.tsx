@@ -13,6 +13,7 @@ import { SaveTemplateModal } from './components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { InsertTemplateModal } from './components/InsertTemplateModal.tsx';
+import { ImportExcelModal } from './components/ImportExcelModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
@@ -506,6 +507,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
+  const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false);
   const [shareSelectionMode, setShareSelectionMode] = useState(false);
   const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
   const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
@@ -1951,6 +1954,98 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
   }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
 
+  const reloadAuthenticatedProjectSnapshot = useCallback(async () => {
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      onLoginRequired();
+      return;
+    }
+
+    let response = await fetch('/api/project', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        onLoginRequired();
+        return;
+      }
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch('/api/project', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = await response.json() as ProjectLoadResponse;
+    useProjectStore.getState().hydrateConfirmed(payload.version, {
+      tasks: normalizeTasks(payload.snapshot.tasks),
+      dependencies: payload.snapshot.dependencies,
+    }, {
+      resources: payload.snapshot.resources,
+      assignments: payload.snapshot.assignments,
+      progressEntries: payload.snapshot.progressEntries ?? [],
+    });
+  }, [auth, onLoginRequired]);
+
+  const handleDownloadImportTemplate = useCallback(async () => {
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      onLoginRequired();
+      return;
+    }
+
+    setIsImportTemplateLoading(true);
+    try {
+      let response = await fetch('/api/import/excel/template', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          onLoginRequired();
+          return;
+        }
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch('/api/import/excel/template', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const fileName = getAttachmentFileName(
+        response.headers.get('Content-Disposition'),
+        'Шаблон импорта задач - GetGantt.xlsx',
+      );
+      await triggerBlobDownload(blob, fileName);
+    } finally {
+      setIsImportTemplateLoading(false);
+    }
+  }, [auth, onLoginRequired]);
+
+  const handleImportExcelCompleted = useCallback(async () => {
+    await reloadAuthenticatedProjectSnapshot();
+  }, [reloadAuthenticatedProjectSnapshot]);
+
   const workspaceShell = workspace.kind === 'shared'
     ? (
       <SharedWorkspace
@@ -2056,6 +2151,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onExpandAll={handleExpandAll}
               onExportPdf={handleExportPdf}
               onExportExcel={handleExportExcel}
+              onImportExcel={() => setShowImportExcelModal(true)}
               isExportExcelLoading={isExportExcelLoading}
               onValidation={handleValidation}
               onCascade={handleCascade}
@@ -2114,6 +2210,17 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   return (
     <>
+    {showImportExcelModal && workspace.kind === 'project' && auth.isAuthenticated && !hasShareToken && (
+      <ImportExcelModal
+        accessToken={auth.accessToken}
+        refreshAccessToken={auth.refreshAccessToken}
+        onClose={() => setShowImportExcelModal(false)}
+        onDownloadTemplate={handleDownloadImportTemplate}
+        onImported={handleImportExcelCompleted}
+        onLoginRequired={onLoginRequired}
+        isDownloadTemplateLoading={isImportTemplateLoading}
+      />
+    )}
     {updateAvailable && (
       <div className="fixed inset-x-0 top-0 z-[90] flex justify-center px-3 pt-3">
         <div className="flex w-full max-w-xl items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-[0_12px_32px_rgba(15,23,42,0.14)]">
@@ -2154,6 +2261,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onInsertTemplateToProject={handleInsertTemplateIntoCurrentProject}
       onOpenInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
       canInsertTemplateToProject={workspace.kind === 'project' && !isScheduleReadOnlyProject && visibleTasks.length > 0}
+      onOpenImportExcel={workspace.kind === 'project' && !isScheduleReadOnlyProject ? () => setShowImportExcelModal(true) : undefined}
       onCreateProjectGroup={handleCreateProjectGroup}
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}

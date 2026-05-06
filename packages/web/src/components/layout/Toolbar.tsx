@@ -26,6 +26,7 @@ import {
   ToyBrick,
   TriangleAlert,
   Undo2,
+  Upload,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -64,6 +65,7 @@ interface ToolbarProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  onImportExcel?: () => void;
   isExportExcelLoading?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
@@ -172,6 +174,7 @@ function renderBaselineMenuSection({
 }: BaselineMenuSectionProps) {
   const createActionDisabled = !onCreateBaselineFromCurrent || creatingBaselineFromCurrent;
   const hasSelectedBaseline = Boolean(activeLabel?.trim());
+  const hasBaselineContent = (loading && !activeRequestId) || Boolean(error) || rows.length > 0;
 
   return (
     <>
@@ -215,7 +218,9 @@ function renderBaselineMenuSection({
         <span className="text-sm">{creatingBaselineFromCurrent ? `${createLabel}…` : createLabel}</span>
       </DropdownMenuItem>
 
-      <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+      {hasBaselineContent ? (
+        <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+      ) : null}
 
       {loading && !activeRequestId ? (
         <div className="px-2 pb-1">
@@ -285,10 +290,18 @@ function renderBaselineMenuSection({
         </>
       ) : null}
 
-      {onRefreshBaselines && <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />}
+      {onRefreshBaselines && hasBaselineContent ? (
+        <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+      ) : null}
 
       {onRefreshBaselines ? (
-        <DropdownMenuItem onClick={() => void onRefreshBaselines()} className="flex cursor-pointer items-center gap-2 text-slate-700">
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            void onRefreshBaselines();
+          }}
+          className="flex cursor-pointer items-center gap-2 text-slate-700"
+        >
           <RefreshCw className="h-4 w-4" />
           <span className="text-sm">Обновить базовые планы</span>
         </DropdownMenuItem>
@@ -306,6 +319,7 @@ export function Toolbar({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  onImportExcel,
   isExportExcelLoading = false,
   shareStatus = 'idle',
   onCreateShareLink,
@@ -417,7 +431,7 @@ export function Toolbar({
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
-  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
+  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onImportExcel || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
@@ -814,23 +828,6 @@ export function Toolbar({
         </Button>
       </FilterPopup>
 
-      {hasTemplateAction && (
-        <Button
-          size="sm"
-          variant={templateSelectionActive ? 'secondary' : 'ghost'}
-          onClick={() => { void onStartTemplateSelection?.(); }}
-          className={cn(
-            actionButtonClassName,
-            templateSelectionActive && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-            'hidden w-8 px-0 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0',
-          )}
-          aria-label={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-          title={templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}
-        >
-          <ToyBrick className="h-3.5 w-3.5" />
-        </Button>
-      )}
-
       <div className="inline-flex rounded-md">
         {(['day', 'week', 'month'] as const).map((nextMode, index) => (
           <button
@@ -1007,6 +1004,27 @@ export function Toolbar({
                   <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
                 </DropdownMenuItem>
               )}
+              {hasTemplateAction && (
+                <DropdownMenuItem
+                  onClick={() => { void onStartTemplateSelection?.(); }}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2',
+                    templateSelectionActive && 'bg-primary/5 text-primary',
+                  )}
+                >
+                  <ToyBrick className="h-4 w-4" />
+                  <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
+                </DropdownMenuItem>
+              )}
+              {onImportExcel && (
+                <DropdownMenuItem
+                  onClick={onImportExcel}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span className="text-sm">Импорт Excel</span>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
               {taskListColumnRows && taskListColumnRows.length > 0 && (
                 <>
@@ -1141,6 +1159,33 @@ export function Toolbar({
                   >
                     <CalendarClock className="h-4 w-4" />
                     <span className="text-sm">Сдвинуть проект ...</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {hasTemplateAction && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => { void onStartTemplateSelection?.(); }}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2',
+                      templateSelectionActive && 'bg-primary/5 text-primary',
+                    )}
+                  >
+                    <ToyBrick className="h-4 w-4" />
+                    <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                </>
+              )}
+              {onImportExcel && (
+                <>
+                  <DropdownMenuItem
+                    onClick={onImportExcel}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span className="text-sm">Импорт Excel</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>
