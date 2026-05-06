@@ -108,6 +108,15 @@ function getFieldLabel(preview: ImportPreviewResponse, field: ImportField): stri
   return preview.supportedFields.find((entry) => entry.field === field)?.label ?? field;
 }
 
+function formatPreviewDate(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
+  if (!match) {
+    return value;
+  }
+
+  return `${match[3]}.${match[2]}.${match[1]}`;
+}
+
 export function ImportExcelModal({
   accessToken,
   refreshAccessToken,
@@ -288,7 +297,7 @@ export function ImportExcelModal({
           <div>
             <div className="text-lg font-semibold text-slate-900">Импорт из Excel</div>
             {!emptyState ? (
-              <div className="text-sm text-slate-500">Структура читается только из столбца “Уровень WBS”, связи только в формате “1ОН”, “2НН+12”.</div>
+              <div className="text-sm text-slate-500">Структура читается только из столбца “Уровень структуры”, связи только в формате “1ОН”, “2НН+12”.</div>
             ) : null}
           </div>
           <button
@@ -450,11 +459,11 @@ export function ImportExcelModal({
                       {preview.columns.map((column) => {
                         const mappedField = mappedFieldByColumnIndex.get(column.index) ?? null;
                         return (
-                          <th className="min-w-[180px] border-r border-slate-100 px-3 py-3 text-left last:border-r-0" key={column.index}>
+                          <th className="min-w-[168px] border-r border-slate-100 px-2.5 py-2 text-left last:border-r-0" key={column.index}>
                             <div className="space-y-2">
                               <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500">{column.header}</div>
                               <select
-                                className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm font-medium text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-medium text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                                 onChange={(event) => {
                                   const nextField = event.target.value as ImportField | '';
                                   setMapping((prev) => {
@@ -502,7 +511,7 @@ export function ImportExcelModal({
                                 ))}
                               </select>
                               {mappedField ? (
-                                <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
                                   <input
                                     checked={mapping[mappedField].enabled}
                                     disabled={preview.supportedFields.find((entry) => entry.field === mappedField)?.required}
@@ -524,7 +533,7 @@ export function ImportExcelModal({
                                   Импортировать
                                 </label>
                               ) : (
-                                <div className="text-xs text-slate-400">Столбец будет пропущен</div>
+                                <div className="text-[11px] text-slate-400">Столбец будет пропущен</div>
                               )}
                             </div>
                           </th>
@@ -537,10 +546,26 @@ export function ImportExcelModal({
                       <tr className="border-t border-slate-100 align-top" key={`${row.rowNumber}-${row.importIndex}`}>
                         {preview.columns.map((column) => {
                           const mappedField = mappedFieldByColumnIndex.get(column.index) ?? null;
-                          const value = mappedField ? row.values[mappedField] ?? '' : '';
+                          const rawValue = mappedField ? row.values[mappedField] ?? '' : '';
+                          const value = mappedField === 'startDate' || mappedField === 'endDate'
+                            ? formatPreviewDate(rawValue)
+                            : rawValue;
+                          const isNameField = mappedField === 'name';
                           return (
-                            <td className="border-r border-slate-100 px-3 py-2.5 text-slate-700 last:border-r-0" key={`${row.rowNumber}-${column.index}`}>
-                              {value || <span className="text-slate-300">—</span>}
+                            <td className="border-r border-slate-100 px-2.5 py-1.5 text-[13px] leading-5 text-slate-700 last:border-r-0" key={`${row.rowNumber}-${column.index}`}>
+                              {value ? (
+                                isNameField ? (
+                                  <div
+                                    className="truncate"
+                                    style={{ paddingLeft: `${Math.max(0, row.normalized.wbsLevel - 1) * 16}px` }}
+                                    title={value}
+                                  >
+                                    {value}
+                                  </div>
+                                ) : (
+                                  value
+                                )
+                              ) : <span className="text-slate-300">—</span>}
                             </td>
                           );
                         })}

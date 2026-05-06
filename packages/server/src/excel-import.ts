@@ -116,7 +116,7 @@ type ParsedImportRow = {
 };
 
 const FIELD_LABELS: Record<ExcelImportField, string> = {
-  wbsLevel: 'Уровень WBS',
+  wbsLevel: 'Уровень структуры',
   name: 'Название задачи',
   startDate: 'Дата начала',
   endDate: 'Дата окончания',
@@ -145,7 +145,7 @@ const ALL_FIELDS: ExcelImportField[] = [
 ];
 
 const FIELD_ALIASES: Record<ExcelImportField, string[]> = {
-  wbsLevel: ['уровеньwbs', 'уровень', 'wbslevel', 'level', 'уровеньwbs/bs'],
+  wbsLevel: ['уровеньструктуры', 'уровеньwbs', 'уровень', 'wbslevel', 'level', 'уровеньwbs/bs'],
   name: ['названиезадачи', 'название', 'задача', 'taskname', 'name'],
   startDate: ['датаначала', 'начало', 'startdate', 'start'],
   endDate: ['датаокончания', 'окончание', 'finish', 'enddate', 'end'],
@@ -562,7 +562,7 @@ function parseImportRows(sheet: ParsedSheet, mapping: ExcelImportMapping): { row
         rowNumber: row.rowNumber,
         importIndex,
         field: 'wbsLevel',
-        message: 'Уровень WBS должен быть целым числом 1 или больше.',
+        message: 'Уровень структуры должен быть целым числом 1 или больше.',
       });
       rowHasFatal = true;
     }
@@ -985,7 +985,7 @@ export async function buildExcelImportTemplateBuffer(): Promise<Buffer> {
       showRowStripes: true,
     },
     columns: [
-      { name: 'Уровень WBS', filterButton: true },
+      { name: 'Уровень структуры', filterButton: true },
       { name: 'Название задачи', filterButton: true },
       { name: 'Дата начала', filterButton: true },
       { name: 'Дата окончания', filterButton: true },
@@ -1007,7 +1007,7 @@ export async function buildExcelImportTemplateBuffer(): Promise<Buffer> {
   hintSheet.columns = [{ width: 110 }];
   hintSheet.addRows([
     ['Как заполнять импорт:'],
-    ['1. Иерархия задаётся только через столбец "Уровень WBS": 1 = корень, 2 = дочерняя, 3 = вложенная под уровень 2.'],
+    ['1. Иерархия задаётся только через столбец "Уровень структуры": 1 = корень, 2 = дочерняя, 3 = вложенная под уровень 2.'],
     ['2. Строки идут линейно сверху вниз. Родитель определяется автоматически по предыдущим строкам.'],
     ['3. Связи задаются только в русском формате: "1ОН", "2НН+12", "5ОО-3". Можно перечислять через запятую или точку с запятой.'],
     ['4. В колонке "Ресурсы" указывайте имена через запятую или точку с запятой. Новые ресурсы будут созданы автоматически.'],

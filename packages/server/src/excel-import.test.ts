@@ -14,7 +14,7 @@ describe('excel import preview', () => {
   it('parses WBS hierarchy and Russian dependency syntax from the first worksheet', async () => {
     const { buildExcelImportPreview } = await import(new URL('./excel-import.ts', import.meta.url).href);
     const fileBase64 = await createImportFile([
-      ['Уровень WBS', 'Название задачи', 'Дата начала', 'Дата окончания', 'Связи', 'Ресурсы'],
+      ['Уровень структуры', 'Название задачи', 'Дата начала', 'Дата окончания', 'Связи', 'Ресурсы'],
       [1, 'Этап 1', '2026-05-10', '2026-05-12', '', ''],
       [2, 'Работа 1', '2026-05-10', '2026-05-11', '', 'Бригада 1'],
       [2, 'Работа 2', '2026-05-12', '2026-05-12', '2ОН, 1НН+3', 'Экскаватор; Бригада 2'],
@@ -36,7 +36,7 @@ describe('excel import preview', () => {
   it('reports invalid WBS jumps and malformed Russian dependencies as validation errors', async () => {
     const { buildExcelImportPreview } = await import(new URL('./excel-import.ts', import.meta.url).href);
     const fileBase64 = await createImportFile([
-      ['Уровень WBS', 'Название задачи', 'Дата начала', 'Дата окончания', 'Связи'],
+      ['Уровень структуры', 'Название задачи', 'Дата начала', 'Дата окончания', 'Связи'],
       [1, 'Этап 1', '2026-05-10', '2026-05-12', ''],
       [3, 'Слишком глубокая', '2026-05-10', '2026-05-11', '1FS'],
     ]);
