@@ -23,16 +23,19 @@ const MANUAL_STATUSES: Exclude<TaskStatus, 'not_started'>[] = ['in_progress', 'd
 
 interface CreateTaskStatusColumnOptions {
   readOnly?: boolean;
+  parentTaskIds?: Set<string>;
   onUpdateStatus: (task: Task, status: TaskStatus) => Promise<{ task: Task }>;
 }
 
 function TaskStatusCell({
   task,
   readOnly = false,
+  isParentTask = false,
   onUpdateStatus,
 }: {
   task: Task;
   readOnly?: boolean;
+  isParentTask?: boolean;
   onUpdateStatus: (task: Task, status: TaskStatus) => Promise<{ task: Task }>;
 }) {
   const [open, setOpen] = useState(false);
@@ -40,6 +43,10 @@ function TaskStatusCell({
   const [error, setError] = useState<string | null>(null);
   const status = task.status ?? 'not_started';
   const hasVisibleStatus = status !== 'not_started';
+
+  if (isParentTask) {
+    return <span aria-hidden="true" className="block w-full px-1.5 py-1" />;
+  }
 
   return (
     <Popover
@@ -135,6 +142,7 @@ function TaskStatusCell({
 
 export function createTaskStatusColumn({
   readOnly = false,
+  parentTaskIds,
   onUpdateStatus,
 }: CreateTaskStatusColumnOptions): TaskListColumn<Task>[] {
   return [{
@@ -144,7 +152,12 @@ export function createTaskStatusColumn({
     minWidth: 58,
     after: 'progress',
     renderCell: ({ task }) => (
-      <TaskStatusCell task={task} readOnly={readOnly} onUpdateStatus={onUpdateStatus} />
+      <TaskStatusCell
+        task={task}
+        readOnly={readOnly}
+        isParentTask={parentTaskIds?.has(task.id) ?? false}
+        onUpdateStatus={onUpdateStatus}
+      />
     ),
   }];
 }

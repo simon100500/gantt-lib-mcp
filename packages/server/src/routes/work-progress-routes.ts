@@ -182,34 +182,6 @@ async function buildTasksProgressResponse(projectId: string, taskIds: string[]):
   };
 }
 
-function collectDescendantTaskIds(
-  rootTaskId: string,
-  tasks: Array<{ id: string; parentId: string | null }>,
-): string[] {
-  const childrenByParent = new Map<string, string[]>();
-  for (const task of tasks) {
-    if (!task.parentId) {
-      continue;
-    }
-    const children = childrenByParent.get(task.parentId) ?? [];
-    children.push(task.id);
-    childrenByParent.set(task.parentId, children);
-  }
-
-  const result: string[] = [];
-  const stack = [rootTaskId];
-  while (stack.length > 0) {
-    const currentId = stack.pop()!;
-    result.push(currentId);
-    const childIds = childrenByParent.get(currentId) ?? [];
-    for (const childId of childIds) {
-      stack.push(childId);
-    }
-  }
-
-  return result;
-}
-
 async function syncProgressEntriesToCompletedVolume(
   tx: Parameters<Parameters<ReturnType<typeof getPrisma>['$transaction']>[0]>[0],
   projectId: string,
@@ -275,6 +247,7 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
           workVolume: true,
           completedVolume: true,
           progress: true,
+          _count: { select: { children: true } },
         },
       });
 
@@ -282,17 +255,13 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
         return reply.status(404).send({ error: 'Task not found' });
       }
 
-      const shouldCascadeToDescendants = status === 'done' || status === 'closed';
-      const affectedTaskIds = shouldCascadeToDescendants
-        ? collectDescendantTaskIds(taskId, await prisma.task.findMany({
-            where: { projectId: req.user!.projectId },
-            select: { id: true, parentId: true },
-          }))
-        : [taskId];
+      if (task._count.children > 0) {
+        return reply.status(400).send({ error: 'Status can only be changed for leaf tasks' });
+      }
 
       await prisma.$transaction(async (tx) => {
         const tasksToUpdate = await tx.task.findMany({
-          where: { projectId: req.user!.projectId, id: { in: affectedTaskIds } },
+          where: { projectId: req.user!.projectId, id: taskId },
           select: {
             id: true,
             status: true,
@@ -328,7 +297,7 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
 
       const [rootResponse, affectedResponse] = await Promise.all([
         buildTaskProgressResponse(req.user!.projectId, taskId),
-        buildTasksProgressResponse(req.user!.projectId, affectedTaskIds),
+        buildTasksProgressResponse(req.user!.projectId, [taskId]),
       ]);
 
       return reply.send({

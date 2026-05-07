@@ -1063,36 +1063,15 @@ export function ProjectWorkspace({
     task: Task,
     status: 'not_started' | 'in_progress' | 'done' | 'closed',
   ) => {
+    if (parentTaskIds.has(task.id)) {
+      throw new Error('Статус можно менять только у конечных задач.');
+    }
+
     if (!accessToken || workspace.kind !== 'project') {
-      const shouldCascadeToDescendants = status === 'done' || status === 'closed';
-      const descendants = shouldCascadeToDescendants
-        ? (() => {
-            const childrenByParent = new Map<string, Task[]>();
-            for (const candidate of tasks) {
-              if (!candidate.parentId) continue;
-              const children = childrenByParent.get(candidate.parentId) ?? [];
-              children.push(candidate);
-              childrenByParent.set(candidate.parentId, children);
-            }
-
-            const collected: Task[] = [];
-            const stack: Task[] = [task];
-            while (stack.length > 0) {
-              const currentTask = stack.pop()!;
-              collected.push(currentTask);
-              const children = childrenByParent.get(currentTask.id) ?? [];
-              for (const child of children) {
-                stack.push(child);
-              }
-            }
-            return collected;
-          })()
-        : [task];
-
       const allNextEntries: TaskProgressEntry[] = [...progressEntries];
       const now = new Date().toISOString();
       const today = new Date().toISOString().split('T')[0] ?? '';
-      const resolvedTasks = descendants.map((currentTask) => {
+      const resolvedTasks = [task].map((currentTask) => {
         let resolvedTask: Task = { ...currentTask, status };
 
         if (status === 'done') {
@@ -1185,7 +1164,7 @@ export function ProjectWorkspace({
     }
 
     return { task: resolvedTask };
-  }, [accessToken, applyTaskWorkMutation, applyTaskWorkMutations, progressEntries, projectId, tasks, workspace.kind]);
+  }, [accessToken, applyTaskWorkMutation, applyTaskWorkMutations, parentTaskIds, progressEntries, projectId, workspace.kind]);
 
   const handleUpdateTaskWorkMetadata = useCallback(async (
     task: Task,
@@ -1758,6 +1737,7 @@ export function ProjectWorkspace({
         onDeleteProgressEntry: handleDeleteTaskProgressEntry,
       }),
       ...createTaskStatusColumn({
+        parentTaskIds,
         readOnly: effectiveReadOnly || shareSelectionActive,
         onUpdateStatus: handleUpdateTaskStatus,
       }),
@@ -2526,7 +2506,7 @@ export function ProjectWorkspace({
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
                   getTaskListRowClassName={(task) => (
-                    strikeClosedTasks && task.status === 'closed' ? 'gantt-tl-row-closed' : undefined
+                    strikeClosedTasks && !parentTaskIds.has(task.id) && task.status === 'closed' ? 'gantt-tl-row-closed' : undefined
                   )}
                   onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
