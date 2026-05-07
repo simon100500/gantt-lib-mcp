@@ -5,7 +5,7 @@
  * All operations replace raw SQL queries from auth-store.ts.
  */
 
-import { getPrisma } from '../prisma.js';
+import { Prisma, getPrisma } from '../prisma.js';
 import type { Project, ProjectGroup, ProjectSectionPermissions, TimelineMarker } from '../types.js';
 import { randomUUID } from 'node:crypto';
 import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
@@ -407,15 +407,19 @@ export class ProjectService {
       resolvedGroupId = group.id;
     }
 
+    const data: Prisma.ProjectUncheckedUpdateInput = {
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
+      ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
+      ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
+      ...(updates.timelineMarkers !== undefined
+        ? { timelineMarkers: updates.timelineMarkers as unknown as Prisma.InputJsonValue }
+        : {}),
+    };
+
     const updated = await this.prisma.project.update({
       where: { id: projectId },
-      data: {
-        ...(updates.name !== undefined ? { name: updates.name } : {}),
-        ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
-        ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
-        ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
-        ...(updates.timelineMarkers !== undefined ? { timelineMarkers: updates.timelineMarkers } : {}),
-      },
+      data,
     });
 
     return this.projectToDomain(updated);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CalendarClock, Plus, Settings2, Trash2 } from 'lucide-react';
 
 import type { TimelineMarker } from '../types.ts';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.tsx';
 
 type EditableTimelineMarker = {
   key: string;
@@ -10,13 +11,36 @@ type EditableTimelineMarker = {
   name: string;
 };
 
-const MARKER_COLORS = ['#2563eb', '#dc2626', '#ea580c', '#16a34a', '#7c3aed'];
+const MARKER_COLORS = [
+  { label: 'Киноварь2', value: '#fe724e' },
+  { label: 'Оранжевый2', value: '#ff991f' },
+  { label: 'Золотой', value: '#e5c800' },
+  { label: 'Бирюза', value: '#58d8a3' },
+  { label: 'Палисандр', value: '#d64a7b' },
+  { label: 'Песочный', value: '#997B10' },
+  { label: 'Шартрез', value: '#A3BE00' },
+  { label: 'Голубой', value: '#03c7e6' },
+  { label: 'Виноград2', value: '#8678d9' },
+  { label: 'Серый2', value: '#6b778c' },
+  { label: 'Лесной', value: '#2B8A3E' },
+] as const;
+
+const MARKER_COLOR_VALUES = new Set(MARKER_COLORS.map((color) => color.value.toLowerCase()));
+
+function normalizeMarkerColor(color: string | null | undefined, index: number): string {
+  const normalized = color?.trim().toLowerCase() ?? '';
+  if (normalized && MARKER_COLOR_VALUES.has(normalized)) {
+    return normalized;
+  }
+
+  return MARKER_COLORS[index % MARKER_COLORS.length]?.value ?? MARKER_COLORS[0].value;
+}
 
 function createEditableMarker(marker?: TimelineMarker, index = 0): EditableTimelineMarker {
   return {
     key: crypto.randomUUID(),
     date: marker?.date?.slice(0, 10) ?? '',
-    color: marker?.color?.trim() || MARKER_COLORS[index % MARKER_COLORS.length],
+    color: normalizeMarkerColor(marker?.color, index),
     name: marker?.name?.trim() ?? '',
   };
 }
@@ -84,7 +108,7 @@ export function ProjectSettingsModal({
     for (const marker of draftMarkers) {
       const date = marker.date.trim();
       const name = marker.name.trim();
-      const color = marker.color.trim();
+      const color = normalizeMarkerColor(marker.color, normalizedMarkers.length);
 
       if (!date) {
         if (name) {
@@ -267,16 +291,39 @@ export function ProjectSettingsModal({
                   </label>
                   <label className="space-y-1">
                     <span className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Цвет</span>
-                    <input
-                      type="color"
-                      value={marker.color}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setDraftMarkers((current) => current.map((entry) => entry.key === marker.key ? { ...entry, color: value } : entry));
-                      }}
-                      disabled={!canEditTimelineMarkers || pending}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 py-1 disabled:cursor-not-allowed disabled:bg-slate-100"
-                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={!canEditTimelineMarkers || pending}
+                          className="flex h-10 w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        >
+                          <span
+                            className="h-4 w-4 shrink-0 rounded-full border border-slate-200"
+                            style={{ backgroundColor: marker.color }}
+                          />
+                          <span className="truncate">Цвет</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-auto p-3">
+                        <div className="grid grid-cols-6 gap-2">
+                          {MARKER_COLORS.map((paletteColor) => (
+                            <button
+                              key={paletteColor.value}
+                              type="button"
+                              onClick={() => {
+                                setDraftMarkers((current) => current.map((entry) => entry.key === marker.key ? { ...entry, color: paletteColor.value } : entry));
+                              }}
+                              disabled={!canEditTimelineMarkers || pending}
+                              className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 ${marker.color.toLowerCase() === paletteColor.value.toLowerCase() ? 'border-slate-900' : 'border-transparent'}`}
+                              style={{ backgroundColor: paletteColor.value }}
+                              aria-label={`Выбрать цвет ${paletteColor.label}`}
+                              title={paletteColor.label}
+                            />
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </label>
                   <div className="flex items-end">
                     <button
