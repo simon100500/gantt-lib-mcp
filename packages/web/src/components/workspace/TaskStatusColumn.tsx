@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { TaskListColumn } from 'gantt-lib';
+import { X } from 'lucide-react';
 
 import type { Task, TaskStatus } from '../../types.ts';
 import { cn } from '../../lib/utils.ts';
@@ -56,23 +57,23 @@ function TaskStatusCell({
           disabled={readOnly}
           onClick={(event) => event.stopPropagation()}
           className={cn(
-            'inline-flex h-7 w-full items-center justify-start gap-1.5 rounded-xl px-2.5 text-xs text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent',
+            'inline-flex w-full items-center justify-start rounded-none px-0 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent',
             !hasVisibleStatus && 'text-slate-300',
           )}
         >
           {hasVisibleStatus ? (
-            <>
+            <span className="inline-flex items-center gap-1.5 px-1.5">
               <span className={cn('h-2 w-2 shrink-0 rounded-full', STATUS_DOT_STYLES[status])} />
               <span className="truncate">{STATUS_LABELS[status]}</span>
-            </>
+            </span>
           ) : (
-            <span className="truncate">&nbsp;</span>
+            <span className="px-1.5">&nbsp;</span>
           )}
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-44 rounded-2xl border-slate-200 p-1.5 shadow-lg"
+        className="w-44 rounded-xl border-slate-200 p-1.5 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex flex-col gap-1">
@@ -82,7 +83,7 @@ function TaskStatusCell({
               type="button"
               disabled={pending}
               className={cn(
-                'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60',
+                'flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60',
                 candidate === status && 'bg-slate-100',
               )}
               onClick={async () => {
@@ -99,7 +100,30 @@ function TaskStatusCell({
               }}
             >
               <span className={cn('h-2 w-2 shrink-0 rounded-full', STATUS_DOT_STYLES[candidate])} />
-              <span>{STATUS_LABELS[candidate]}</span>
+              <span className="min-w-0 flex-1 text-left">{STATUS_LABELS[candidate]}</span>
+              {candidate === status ? (
+                <span
+                  role="button"
+                  aria-label="Снять статус"
+                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600"
+                  onClick={async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setPending(true);
+                    setError(null);
+                    try {
+                      await onUpdateStatus(task, 'not_started');
+                      setOpen(false);
+                    } catch (submissionError) {
+                      setError(submissionError instanceof Error ? submissionError.message : 'Не удалось изменить статус.');
+                    } finally {
+                      setPending(false);
+                    }
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              ) : null}
             </button>
           ))}
           {error ? <p className="text-xs text-rose-600">{error}</p> : null}
@@ -116,8 +140,8 @@ export function createTaskStatusColumn({
   return [{
     id: 'status',
     header: 'Статус',
-    width: 108,
-    minWidth: 76,
+    width: 92,
+    minWidth: 58,
     after: 'progress',
     renderCell: ({ task }) => (
       <TaskStatusCell task={task} readOnly={readOnly} onUpdateStatus={onUpdateStatus} />
