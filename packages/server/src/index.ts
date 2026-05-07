@@ -116,6 +116,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
     taskCount: number;
     archivedAt: string | null;
     deletedAt: string | null;
@@ -176,6 +177,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
       ganttDayMode: projectCalendar.ganttDayMode,
       calendarId: projectCalendar.calendarId,
       calendarDays: projectCalendar.calendarDays,
+      timelineMarkers: accessibleProject?.timelineMarkers ?? [],
       taskCount: tasks.length,
       archivedAt: accessibleProject?.archivedAt ?? null,
       deletedAt: accessibleProject?.deletedAt ?? null,

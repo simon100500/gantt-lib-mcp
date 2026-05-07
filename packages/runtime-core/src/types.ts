@@ -529,6 +529,12 @@ export interface EffectiveCalendarDay {
   kind: CalendarDayKind;
 }
 
+export interface TimelineMarker {
+  date: string;
+  color?: string | null;
+  name?: string | null;
+}
+
 export interface ScheduleCommandOptions {
   businessDays?: boolean;
   weekendPredicate?: (date: Date) => boolean;
@@ -579,6 +585,7 @@ export interface Project {
   ganttDayMode: GanttDayMode;
   calendarId: string | null;
   calendarDays: EffectiveCalendarDay[];
+  timelineMarkers: TimelineMarker[];
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string;

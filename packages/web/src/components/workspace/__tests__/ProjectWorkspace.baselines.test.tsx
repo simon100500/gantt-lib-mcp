@@ -51,7 +51,23 @@ vi.mock('../../layout/Toolbar.tsx', () => ({
 }));
 
 vi.mock('../../GanttChart.tsx', () => ({
-  GanttChart: (props: Record<string, unknown>) => <div data-testid="gantt-chart">{JSON.stringify(props)}</div>,
+  GanttChart: (props: Record<string, unknown>) => {
+    const tasks = Array.isArray(props.tasks)
+      ? (props.tasks as Array<Record<string, unknown>>).map((task) => ({
+          id: task.id,
+          baselineStartDate: task.baselineStartDate,
+          baselineEndDate: task.baselineEndDate,
+        }))
+      : [];
+    const serialized = JSON.stringify({
+      showBaseline: props.showBaseline,
+      businessDays: props.businessDays,
+      timelineMarkers: props.timelineMarkers,
+      tasks,
+    });
+
+    return <div data-testid="gantt-chart">{serialized}</div>;
+  },
 }));
 
 vi.mock('../../ChatSidebar.tsx', () => ({

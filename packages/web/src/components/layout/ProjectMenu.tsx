@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChartNoAxesGantt, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, ShieldCheck, User } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronDown, Eye, Landmark, MessageSquareText, Package, Gem, Lock, LogOut, PanelRightClose, PanelRightOpen, Settings2, ShieldCheck, User } from 'lucide-react';
 
 import type { GanttChartRef } from '../GanttChart';
 import { LoginButton } from '../LoginButton.tsx';
@@ -57,7 +57,6 @@ interface ProjectMenuProps {
   onOpenFinance?: () => void | Promise<void>;
   onOpenChartMode?: () => void | Promise<void>;
   onCreateProjectTemplate?: () => void | Promise<void>;
-  onSaveProjectName: (name: string) => Promise<void>;
   onCreateShareLink: () => Promise<void>;
   onLoginRequired: () => void;
   ganttRef: React.RefObject<GanttChartRef>;
@@ -96,7 +95,6 @@ export function ProjectMenu({
   onOpenFinance,
   onOpenChartMode,
   onCreateProjectTemplate,
-  onSaveProjectName,
   onCreateShareLink,
   onLoginRequired,
   ganttRef,
@@ -109,13 +107,11 @@ export function ProjectMenu({
   const activeTemplate = useTemplateStore((state) => state.activeTemplate);
   const sidebarState = useUIStore((state) => state.sidebarState);
   const setSidebarState = useUIStore((state) => state.setSidebarState);
-  const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
+  const setShowProjectSettingsModal = useUIStore((state) => state.setShowProjectSettingsModal);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
   const subscription = useBillingStore((state) => state.subscription);
   const billingLoading = useBillingStore((state) => state.loading);
   const fetchSubscription = useBillingStore((state) => state.fetchSubscription);
-  const [isRenamingProject, setIsRenamingProject] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
   const [projectActionsMenuOpen, setProjectActionsMenuOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
@@ -271,24 +267,6 @@ export function ProjectMenu({
     };
   }, [activeTemplate?.metadata.name, auth.isAuthenticated, auth.project, localProjectName, workspace]);
 
-  const commitInlineRename = async () => {
-    if (!isRenamingProject || isArchivedProject) {
-      return;
-    }
-
-    setIsRenamingProject(false);
-    const trimmed = renameValue.trim();
-    if (!trimmed || trimmed === currentProjectLabel) {
-      return;
-    }
-
-    try {
-      await onSaveProjectName(trimmed);
-    } catch {
-      setRenameValue('');
-    }
-  };
-
   const startCloseTimer = () => {
     if (hoverTimeoutRef.current !== null) {
       clearTimeout(hoverTimeoutRef.current);
@@ -376,6 +354,7 @@ export function ProjectMenu({
   // Compute whether toggle button should be hidden on desktop
   // Hidden only in sidebar mode (push), NOT in overlay mode
   const hideToggleOnDesktop = sidebarVisible;
+  const showProjectSettingsButton = workspace.kind === 'project' && !hasShareToken;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[#f4f5f7] text-slate-900">
@@ -480,48 +459,27 @@ export function ProjectMenu({
           {showProjectContext && (
             <>
               <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none sm:gap-2.5">
-                {isRenamingProject && !hasShareToken && !isArchivedProject ? (
-                  <input
-                    type="text"
-                    name="project-name"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={renameValue}
-                    onChange={(event) => setRenameValue(event.target.value)}
-                    onBlur={() => { void commitInlineRename(); }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        void commitInlineRename();
-                      } else if (event.key === 'Escape') {
-                        setIsRenamingProject(false);
-                        setRenameValue('');
-                      }
-                    }}
-                    className="min-w-0 max-w-[120px] rounded-md border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[240px]"
-                    autoFocus
-                    onFocus={(event) => event.target.select()}
-                  />
-                ) : tasksLoading ? (
+                {tasksLoading ? (
                   <div className="h-5 w-32 animate-shimmer rounded bg-slate-200" />
                 ) : (
                   <>
                     {isArchivedProject && (
                       <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="Только чтение" />
                     )}
-                    <span
-                      className={cn(
-                        'truncate text-sm font-semibold tracking-tight text-slate-900',
-                        !hasShareToken && !isArchivedProject && 'cursor-pointer rounded-md px-1.5 py-1 -mx-1 hover:bg-slate-100',
-                      )}
-                      title={hasShareToken ? undefined : isArchivedProject ? 'Проект в архиве доступен только для чтения' : 'Нажмите, чтобы переименовать'}
-                      onClick={hasShareToken || isArchivedProject ? undefined : () => {
-                        setRenameValue(currentProjectLabel ?? '');
-                        setIsRenamingProject(true);
-                      }}
-                    >
+                    <span className="truncate rounded-md px-1.5 py-1 text-sm font-semibold tracking-tight text-slate-900">
                       {currentProjectLabel}
                     </span>
+                    {showProjectSettingsButton && (
+                      <button
+                        type="button"
+                        onClick={() => setShowProjectSettingsModal(true)}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-transparent text-slate-400 transition-colors hover:border-slate-200 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                        aria-label="Настройки проекта"
+                        title={isArchivedProject ? 'Настройки проекта' : 'Настройки проекта и название'}
+                      >
+                        <Settings2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </>
                 )}
                 {!hasShareToken && auth.isAuthenticated && projectUsageLabel && (

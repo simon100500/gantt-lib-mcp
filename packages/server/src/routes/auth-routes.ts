@@ -40,14 +40,58 @@ type AuthSuccessResponse = {
       id: string;
       name: string;
       groupId: string;
-      status: 'active' | 'archived' | 'deleted';
+    status: 'active' | 'archived' | 'deleted';
     ganttDayMode: 'business' | 'calendar';
     calendarId: string | null;
     calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
     archivedAt: string | null;
     deletedAt: string | null;
   };
 };
+
+function normalizeTimelineMarkersInput(value: unknown): Array<{ date: string; color?: string; name?: string }> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const normalized: Array<{ date: string; color?: string; name?: string }> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      return null;
+    }
+
+    const marker = entry as { date?: unknown; color?: unknown; name?: unknown };
+    const date = typeof marker.date === 'string' ? marker.date.trim().slice(0, 10) : '';
+    if (!date) {
+      return null;
+    }
+
+    const nextMarker: { date: string; color?: string; name?: string } = { date };
+    if (marker.color !== undefined) {
+      if (typeof marker.color !== 'string') {
+        return null;
+      }
+      const color = marker.color.trim();
+      if (color) {
+        nextMarker.color = color;
+      }
+    }
+    if (marker.name !== undefined) {
+      if (typeof marker.name !== 'string') {
+        return null;
+      }
+      const name = marker.name.trim();
+      if (name) {
+        nextMarker.name = name.slice(0, 200);
+      }
+    }
+
+    normalized.push(nextMarker);
+  }
+
+  return normalized;
+}
 
 async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse> {
   const user = await authService.findOrCreateUser(email);
@@ -79,6 +123,7 @@ async function issueLocalAuthSession(email: string): Promise<AuthSuccessResponse
       ganttDayMode: project.ganttDayMode,
       calendarId: project.calendarId,
       calendarDays: project.calendarDays,
+      timelineMarkers: project.timelineMarkers,
       archivedAt: project.archivedAt,
       deletedAt: project.deletedAt,
     },
@@ -514,6 +559,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        timelineMarkers: project.timelineMarkers,
         archivedAt: project.archivedAt,
         deletedAt: project.deletedAt,
       },
@@ -588,6 +634,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        timelineMarkers: project.timelineMarkers,
         archivedAt: project.archivedAt,
         deletedAt: project.deletedAt,
       },
@@ -677,6 +724,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        timelineMarkers: project.timelineMarkers,
         archivedAt: project.archivedAt,
         deletedAt: project.deletedAt,
       },
@@ -721,6 +769,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
         ganttDayMode: project.ganttDayMode,
         calendarId: project.calendarId,
         calendarDays: project.calendarDays,
+        timelineMarkers: project.timelineMarkers,
       },
       tasks,
     });
@@ -1226,14 +1275,22 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   // ---------------------------------------------------------------------------
   fastify.patch<{ Params: { id: string } }>('/api/projects/:id', { preHandler: [authMiddleware] }, async (req, reply) => {
     const { id: projectId } = req.params;
-    const body = req.body as { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string };
+    const body = req.body as {
+      name?: string;
+      ganttDayMode?: 'business' | 'calendar';
+      calendarId?: string | null;
+      groupId?: string;
+      timelineMarkers?: Array<{ date: string; color?: string | null; name?: string | null }>;
+    };
     const name = body.name?.trim();
     const groupId = body.groupId?.trim();
     const hasName = body.name !== undefined;
     const hasGanttDayMode = body.ganttDayMode === 'business' || body.ganttDayMode === 'calendar';
     const hasGroupId = body.groupId !== undefined;
+    const hasTimelineMarkers = body.timelineMarkers !== undefined;
+    const normalizedTimelineMarkers = hasTimelineMarkers ? normalizeTimelineMarkersInput(body.timelineMarkers) : undefined;
 
-    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasGroupId) {
+    if (!hasName && body.ganttDayMode === undefined && body.calendarId === undefined && !hasGroupId && !hasTimelineMarkers) {
       return reply.status(400).send({ error: 'No project fields provided' });
     }
 
@@ -1247,6 +1304,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
 
     if (hasGroupId && !groupId) {
       return reply.status(400).send({ error: 'groupId required' });
+    }
+
+    if (hasTimelineMarkers && normalizedTimelineMarkers === null) {
+      return reply.status(400).send({ error: 'Invalid timelineMarkers' });
     }
 
     const access = await resolveProjectAccess(req.user!.userId, projectId);
@@ -1268,6 +1329,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       ...(hasGanttDayMode ? { ganttDayMode: body.ganttDayMode } : {}),
       ...(body.calendarId !== undefined ? { calendarId: body.calendarId } : {}),
       ...(hasGroupId ? { groupId } : {}),
+      ...(hasTimelineMarkers ? { timelineMarkers: normalizedTimelineMarkers ?? [] } : {}),
     });
 
     if (!project) {

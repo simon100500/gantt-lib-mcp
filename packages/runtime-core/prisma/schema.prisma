@@ -241,6 +241,7 @@ model Project {
   status       ProjectStatus @default(active)
   ganttDayMode GanttDayMode @default(business) @map("gantt_day_mode")
   calendarId   String?      @map("calendar_id")
+  timelineMarkers Json?     @map("timeline_markers")
   archivedAt   DateTime?    @map("archived_at")
   deletedAt    DateTime?    @map("deleted_at")
   version      Int         @default(0)

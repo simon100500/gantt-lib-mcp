@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ConstraintDenialPayload } from '../lib/constraintUi';
-import type { CalendarDay, ProjectGroup, ProjectGroupMembersPayload, ProjectSectionPermissions } from '../types';
+import type { CalendarDay, ProjectGroup, ProjectGroupMembersPayload, ProjectSectionPermissions, TimelineMarker } from '../types';
 
 function getTokenExpMs(token: string): number | null {
   try {
@@ -39,6 +39,7 @@ export interface AuthProject {
   ganttDayMode: GanttDayMode;
   calendarId?: string | null;
   calendarDays?: CalendarDay[];
+  timelineMarkers?: TimelineMarker[];
   taskCount?: number;
   archivedAt?: string | null;
   deletedAt?: string | null;
@@ -80,7 +81,7 @@ export interface UseAuthResult extends AuthState {
   removeProjectGroupMember(groupId: string, userId: string): Promise<void>;
   updateProjectGroupInvite(groupId: string, inviteId: string, payload: { role?: 'editor' | 'viewer'; permissions: ProjectSectionPermissions }): Promise<void>;
   removeProjectGroupInvite(groupId: string, inviteId: string): Promise<void>;
-  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string }): Promise<AuthProject>;
+  updateProject(projectId: string, updates: { name?: string; ganttDayMode?: GanttDayMode; calendarId?: string | null; groupId?: string; timelineMarkers?: TimelineMarker[] }): Promise<AuthProject>;
   archiveProject(projectId: string): Promise<AuthProject>;
   restoreProject(projectId: string): Promise<AuthProject>;
   deleteProject(projectId: string): Promise<void>;
@@ -194,6 +195,7 @@ function readStoredAuth(): StoredAuthState | null {
       status: value.status ?? 'active',
       accessRole: value.accessRole ?? 'owner',
       permissions: value.permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' },
+      timelineMarkers: Array.isArray(value.timelineMarkers) ? value.timelineMarkers : [],
       archivedAt: value.archivedAt ?? null,
       deletedAt: value.deletedAt ?? null,
     });

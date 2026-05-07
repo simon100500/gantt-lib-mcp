@@ -84,6 +84,7 @@ interface UIState {
   plannerCorrectionTarget: PlannerCorrectionTarget | null;
   showOtpModal: boolean;
   showEditProjectModal: boolean;
+  showProjectSettingsModal: boolean;
   showBillingPage: boolean;
   sidebarState: SidebarMode;
   viewMode: ViewMode;
@@ -124,6 +125,7 @@ interface UIState {
   setPendingPostAuthAction: (action: PendingPostAuthAction) => void;
   setShowOtpModal: (visible: boolean) => void;
   setShowEditProjectModal: (visible: boolean) => void;
+  setShowProjectSettingsModal: (visible: boolean) => void;
   setShowBillingPage: (visible: boolean) => void;
   setSidebarState: (state: SidebarMode) => void;
   setViewMode: (viewMode: ViewMode) => void;
@@ -172,6 +174,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   plannerCorrectionTarget: null,
   showOtpModal: false,
   showEditProjectModal: false,
+  showProjectSettingsModal: false,
   showBillingPage: false,
   sidebarState: readSidebarState(),
   viewMode: 'day',
@@ -227,6 +230,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   },
   setShowOtpModal: (showOtpModal) => set({ showOtpModal }),
   setShowEditProjectModal: (showEditProjectModal) => set({ showEditProjectModal }),
+  setShowProjectSettingsModal: (showProjectSettingsModal) => set({ showProjectSettingsModal }),
   setShowBillingPage: (showBillingPage) => set({ showBillingPage }),
   setSidebarState: (sidebarState) => {
     persistSidebarState(sidebarState);

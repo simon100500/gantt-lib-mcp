@@ -2128,6 +2128,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           ? (
             <ProjectWorkspace
               ganttRef={ganttRef}
+              projectName={currentProjectLabel}
               tasks={visibleTasks}
               setTasks={setTasks}
               loading={loading}
@@ -2171,6 +2172,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               ganttDayMode={effectiveAuthGanttDayMode}
               displayGanttDayMode={effectiveAuthGanttDayMode}
               calendarDays={auth.project?.calendarDays ?? EMPTY_CALENDAR_DAYS}
+              timelineMarkers={auth.project?.timelineMarkers ?? []}
               readOnly={isScheduleReadOnlyProject}
               previewState={previewState.active ? previewState.mode : 'idle'}
               previewMessage={previewState.active ? previewState.message : null}
@@ -2179,6 +2181,16 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
                   console.error('Failed to update gantt day mode:', error);
                 });
               }}
+              onTimelineMarkersChange={auth.project
+                ? async (timelineMarkers) => {
+                    const currentProject = auth.project;
+                    if (!currentProject) {
+                      return;
+                    }
+                    await auth.updateProject(currentProject.id, { timelineMarkers });
+                  }
+                : undefined}
+              onProjectNameChange={handleSaveProjectName}
               onCreateTemplateFromTask={handleCreateTemplateFromTask}
               onInsertTemplateAtTask={handleInsertTemplateAtTask}
               onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
@@ -2281,7 +2293,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
       }}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
-      onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
       ganttRef={ganttRef}

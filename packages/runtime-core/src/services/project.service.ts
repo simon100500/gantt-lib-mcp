@@ -5,8 +5,8 @@
  * All operations replace raw SQL queries from auth-store.ts.
  */
 
-import { getPrisma } from '../prisma.js';
-import type { Project, ProjectGroup, ProjectSectionPermissions } from '../types.js';
+import { Prisma, getPrisma } from '../prisma.js';
+import type { Project, ProjectGroup, ProjectSectionPermissions, TimelineMarker } from '../types.js';
 import { randomUUID } from 'node:crypto';
 import { ensureSystemDefaultCalendar, loadEffectiveCalendarDays } from './projectScheduleOptions.js';
 
@@ -24,6 +24,34 @@ export type SoftDeleteProjectResult =
 
 export class ProjectService {
   private prisma = getPrisma();
+
+  private normalizeTimelineMarkers(value: unknown): TimelineMarker[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return [];
+      }
+
+      const marker = entry as Partial<TimelineMarker>;
+      const date = typeof marker.date === 'string' ? marker.date.trim().slice(0, 10) : '';
+      if (!date) {
+        return [];
+      }
+
+      const normalized: TimelineMarker = { date };
+      if (typeof marker.color === 'string' && marker.color.trim()) {
+        normalized.color = marker.color.trim();
+      }
+      if (typeof marker.name === 'string' && marker.name.trim()) {
+        normalized.name = marker.name.trim();
+      }
+
+      return [normalized];
+    });
+  }
 
   private permissionsFromMembership(membership: {
     scheduleAccess?: 'none' | 'view' | 'edit';
@@ -214,6 +242,7 @@ export class ProjectService {
       ganttDayMode: project.ganttDayMode,
       calendarId: project.calendarId ?? null,
       calendarDays,
+      timelineMarkers: this.normalizeTimelineMarkers(project.timelineMarkers),
       archivedAt: project.archivedAt ? project.archivedAt.toISOString() : null,
       deletedAt: project.deletedAt ? project.deletedAt.toISOString() : null,
       createdAt: project.createdAt.toISOString(),
@@ -334,7 +363,7 @@ export class ProjectService {
   async update(
     projectId: string,
     userId: string,
-    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string },
+    updates: { name?: string; ganttDayMode?: 'business' | 'calendar'; calendarId?: string | null; groupId?: string; timelineMarkers?: TimelineMarker[] },
   ): Promise<Project | null> {
     // Verify ownership
     const existing = await this.prisma.project.findUnique({
@@ -378,14 +407,19 @@ export class ProjectService {
       resolvedGroupId = group.id;
     }
 
+    const data: Prisma.ProjectUncheckedUpdateInput = {
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
+      ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
+      ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
+      ...(updates.timelineMarkers !== undefined
+        ? { timelineMarkers: updates.timelineMarkers as unknown as Prisma.InputJsonValue }
+        : {}),
+    };
+
     const updated = await this.prisma.project.update({
       where: { id: projectId },
-      data: {
-        ...(updates.name !== undefined ? { name: updates.name } : {}),
-        ...(updates.ganttDayMode !== undefined ? { ganttDayMode: updates.ganttDayMode } : {}),
-        ...(updates.calendarId !== undefined ? { calendarId: resolvedCalendarId } : {}),
-        ...(updates.groupId !== undefined ? { groupId: resolvedGroupId } : {}),
-      },
+      data,
     });
 
     return this.projectToDomain(updated);

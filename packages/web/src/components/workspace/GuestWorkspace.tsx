@@ -64,6 +64,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       onCascade={props.onCascade}
       ganttDayMode={props.ganttDayMode}
       calendarDays={[]}
+      timelineMarkers={[]}
       showChat={false}
       shareStatus={props.shareStatus}
       onCreateShareLink={props.onCreateShareLink}

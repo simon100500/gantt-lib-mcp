@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useImperativeHandle } from 'react';
 import { GanttChart as GanttLibChart } from 'gantt-lib';
-import type { Task, ValidationResult } from '../types.ts';
-import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand } from 'gantt-lib';
+import type { Task, TimelineMarker as AppTimelineMarker, ValidationResult } from '../types.ts';
+import type { CustomDayConfig, TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColumnWidthMap, TaskListMenuCommand, TimelineMarker as GanttTimelineMarker } from 'gantt-lib';
 
 export interface ExportToPdfHeaderOptions {
   logoUrl?: string;
@@ -58,6 +58,7 @@ export interface GanttChartProps {
   onSelectedTaskIdsChange?: (taskIds: Set<string>) => void;
   filterMode?: 'highlight' | 'hide';
   businessDays?: boolean;
+  timelineMarkers?: AppTimelineMarker[];
   taskListMenuCommands?: TaskListMenuCommand<Task>[];
   additionalColumns?: TaskListColumn<Task>[];
   hiddenTaskListColumns?: TaskListColumnId[];
@@ -119,6 +120,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onSelectedTaskIdsChange,
   filterMode,
   businessDays,
+  timelineMarkers,
   taskListMenuCommands,
   additionalColumns,
   hiddenTaskListColumns,
@@ -184,6 +186,11 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onSelectedTaskIdsChange={onSelectedTaskIdsChange}
       filterMode={filterMode}
       businessDays={businessDays}
+      timelineMarkers={timelineMarkers?.map((marker): GanttTimelineMarker => ({
+        date: marker.date,
+        ...(marker.color ? { color: marker.color } : {}),
+        ...(marker.name ? { name: marker.name } : {}),
+      }))}
       taskListMenuCommands={taskListMenuCommands}
       additionalColumns={additionalColumns}
       hiddenTaskListColumns={hiddenTaskListColumns}

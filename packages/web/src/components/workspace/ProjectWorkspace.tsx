@@ -7,6 +7,7 @@ import type { TaskDateChangeMode, TaskListColumn, TaskListColumnId, TaskListColu
 import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { HistoryPanel } from '../HistoryPanel.tsx';
+import { ProjectSettingsModal } from '../ProjectSettingsModal.tsx';
 import { SplitTaskModal } from '../SplitTaskModal.tsx';
 import { TaskChatModal } from '../TaskChatModal.tsx';
 import { CreateResourceModal } from './CreateResourceModal.tsx';
@@ -31,7 +32,7 @@ import { cn } from '../../lib/utils.ts';
 import { buildDefaultBaselineName } from '../../lib/baselineNaming.ts';
 import { useProjectBaselines } from '../../hooks/useProjectBaselines.ts';
 import type { BaselineSnapshotResponse, ProjectResource, ResourceScope, ResourceType, TaskAssignmentRecord, TaskProgressEntry } from '../../lib/apiTypes.ts';
-import type { CalendarDay, Task, ValidationResult } from '../../types.ts';
+import type { CalendarDay, Task, TimelineMarker, ValidationResult } from '../../types.ts';
 import {
   collectDescendantLeafIds,
   getAssignableResources,
@@ -41,6 +42,7 @@ import {
 
 interface ProjectWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
+  projectName?: string;
   tasks: Task[];
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   loading: boolean;
@@ -85,7 +87,10 @@ interface ProjectWorkspaceProps {
   ganttDayMode: 'business' | 'calendar';
   displayGanttDayMode?: 'business' | 'calendar';
   calendarDays?: CalendarDay[];
+  timelineMarkers?: TimelineMarker[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
+  onTimelineMarkersChange?: (timelineMarkers: TimelineMarker[]) => void | Promise<void>;
+  onProjectNameChange?: (projectName: string) => void | Promise<void>;
   previewState?: 'idle' | 'rendering' | 'failed';
   previewMessage?: string | null;
   onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
@@ -459,6 +464,7 @@ function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap
 
 export function ProjectWorkspace({
   ganttRef,
+  projectName = 'Мой проект',
   tasks,
   setTasks,
   loading,
@@ -503,7 +509,10 @@ export function ProjectWorkspace({
   ganttDayMode,
   displayGanttDayMode,
   calendarDays = [],
+  timelineMarkers = [],
   onGanttDayModeChange,
+  onTimelineMarkersChange,
+  onProjectNameChange,
   previewState = 'idle',
   previewMessage = null,
   onSplitTask,
@@ -692,11 +701,15 @@ export function ProjectWorkspace({
   const [projectShiftOpen, setProjectShiftOpen] = useState(false);
   const [projectShiftPending, setProjectShiftPending] = useState(false);
   const [projectShiftError, setProjectShiftError] = useState<string | null>(null);
+  const [projectSettingsPending, setProjectSettingsPending] = useState(false);
+  const [projectSettingsError, setProjectSettingsError] = useState<string | null>(null);
   const [undoPreviewEditMode, setUndoPreviewEditMode] = useState(false);
   const [historyBranchConfirmOpen, setHistoryBranchConfirmOpen] = useState(false);
   const [historyBranchConfirmPending, setHistoryBranchConfirmPending] = useState(false);
   const historyBranchConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const projectSettingsOpen = useUIStore((state) => state.showProjectSettingsModal);
+  const setProjectSettingsOpen = useUIStore((state) => state.setShowProjectSettingsModal);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
     ? historyViewer.snapshot.tasks
@@ -1759,6 +1772,7 @@ export function ProjectWorkspace({
   }, [applyProgressColumnVolumeDeltas, batchUpdate, prepareUndoPreviewForEdit]);
 
   const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
+  const canOpenProjectSettings = canShiftProject || Boolean(onGanttDayModeChange) || Boolean(onTimelineMarkersChange) || Boolean(onProjectNameChange);
 
   useEffect(() => {
     if (templateMode && showHistoryPanel) {
@@ -1774,6 +1788,21 @@ export function ProjectWorkspace({
     setProjectShiftError(null);
     setProjectShiftOpen(true);
   }, [canShiftProject]);
+
+  const handleOpenProjectSettings = useCallback(() => {
+    if (!canOpenProjectSettings) {
+      return;
+    }
+
+    setProjectSettingsError(null);
+    setProjectSettingsOpen(true);
+  }, [canOpenProjectSettings]);
+
+  const handleOpenShiftFromSettings = useCallback(() => {
+    setProjectSettingsOpen(false);
+    setProjectSettingsError(null);
+    handleOpenProjectShift();
+  }, [handleOpenProjectShift]);
 
   const handleSubmitProjectShift = useCallback(async (deltaDays: number) => {
     if (!guardedBatchUpdate || !Number.isFinite(deltaDays) || deltaDays === 0) {
@@ -1792,6 +1821,45 @@ export function ProjectWorkspace({
       setProjectShiftPending(false);
     }
   }, [guardedBatchUpdate]);
+
+  const handleSaveProjectSettings = useCallback(async (settings: {
+    projectName: string;
+    ganttDayMode: 'business' | 'calendar';
+    timelineMarkers: TimelineMarker[];
+  }) => {
+    const projectNameChanged = Boolean(onProjectNameChange)
+      && settings.projectName.trim() !== projectName.trim();
+    const markersChanged = Boolean(onTimelineMarkersChange)
+      && JSON.stringify(settings.timelineMarkers) !== JSON.stringify(timelineMarkers);
+    const dayModeChanged = Boolean(onGanttDayModeChange)
+      && settings.ganttDayMode !== ganttDayMode;
+
+    if (!projectNameChanged && !markersChanged && !dayModeChanged) {
+      setProjectSettingsOpen(false);
+      setProjectSettingsError(null);
+      return;
+    }
+
+    setProjectSettingsPending(true);
+    setProjectSettingsError(null);
+    try {
+      if (projectNameChanged && onProjectNameChange) {
+        await onProjectNameChange(settings.projectName.trim());
+      }
+      if (dayModeChanged && onGanttDayModeChange) {
+        await onGanttDayModeChange(settings.ganttDayMode);
+      }
+      if (markersChanged && onTimelineMarkersChange) {
+        await onTimelineMarkersChange(settings.timelineMarkers);
+      }
+      setProjectSettingsOpen(false);
+    } catch (error) {
+      console.error('[ProjectWorkspace] Failed to save project settings:', error);
+      setProjectSettingsError('Не удалось сохранить настройки проекта. Попробуйте ещё раз.');
+    } finally {
+      setProjectSettingsPending(false);
+    }
+  }, [ganttDayMode, onGanttDayModeChange, onProjectNameChange, onTimelineMarkersChange, projectName, setProjectSettingsOpen, timelineMarkers]);
 
   useEffect(() => {
     // Block history shortcuts while preview/read-only modes are active.
@@ -2082,8 +2150,8 @@ export function ProjectWorkspace({
           hiddenTaskListColumns={hiddenTaskListColumns}
           onToggleTaskListColumn={handleToggleTaskListColumn}
           onSetAllTaskListColumnsVisible={handleSetAllTaskListColumnsVisible}
-          onOpenProjectShift={handleOpenProjectShift}
-          canShiftProject={canShiftProject}
+          onOpenProjectSettings={handleOpenProjectSettings}
+          canOpenProjectSettings={canOpenProjectSettings}
           showStructureControls={true}
           showBaselineControls={!templateMode}
           showProjectShiftControl={!templateMode}
@@ -2117,6 +2185,29 @@ export function ProjectWorkspace({
                 }}
                 pending={projectShiftPending}
                 range={projectDateRange}
+              />
+            )}
+            {projectSettingsOpen && (
+              <ProjectSettingsModal
+                projectName={projectName}
+                ganttDayMode={displayGanttDayMode ?? ganttDayMode}
+                timelineMarkers={timelineMarkers}
+                pending={projectSettingsPending}
+                error={projectSettingsError}
+                canEditProjectName={Boolean(onProjectNameChange) && !effectiveReadOnly}
+                canShiftProject={canShiftProject}
+                canEditGanttDayMode={Boolean(onGanttDayModeChange) && !effectiveReadOnly}
+                canEditTimelineMarkers={Boolean(onTimelineMarkersChange) && !effectiveReadOnly}
+                onClose={() => {
+                  if (!projectSettingsPending) {
+                    setProjectSettingsOpen(false);
+                    setProjectSettingsError(null);
+                  }
+                }}
+                onOpenProjectShift={handleOpenShiftFromSettings}
+                onSave={(settings) => {
+                  void handleSaveProjectSettings(settings);
+                }}
               />
             )}
             {assignmentSelectionTaskId && selectedAssignmentTask && (
@@ -2276,6 +2367,7 @@ export function ProjectWorkspace({
                   onSelectedTaskIdsChange={shareSelectionActive ? onSelectedShareTaskIdsChange : templateSelectionActive ? onSelectedTemplateTaskIdsChange : undefined}
                   filterMode={filterMode}
                   businessDays={ganttDayMode !== 'calendar'}
+                  timelineMarkers={timelineMarkers}
                 />
               )}
             </div>
