@@ -44,6 +44,7 @@ import type {
 import { dateToDomain, domainToDate } from './types.js';
 import { randomUUID } from 'node:crypto';
 import { getProjectScheduleOptionsForDayMode, getProjectScheduleOptionsForProject } from './projectScheduleOptions.js';
+import { normalizeStoredTaskStatus, synchronizeTaskStatus } from './task-status.js';
 
 const CORE_VERSION = '0.70.0';
 const INTERACTIVE_TRANSACTION_OPTIONS = {
@@ -146,6 +147,7 @@ function taskRowToSnapshotTask(task: any): Task {
     type: task.type ?? 'task',
     color: task.color || undefined,
     parentId: task.parentId || undefined,
+    status: normalizeStoredTaskStatus(task.status),
     progress: task.progress,
     workVolume: task.workVolume ?? null,
     workUnit: task.workUnit ?? null,
@@ -153,6 +155,75 @@ function taskRowToSnapshotTask(task: any): Task {
     dependencies: deps,
     sortOrder: task.sortOrder,
   };
+}
+
+function applyTaskStatusSync(task: Task, currentTask?: Partial<Task>): Task {
+  const synced = synchronizeTaskStatus({
+    currentStatus: currentTask?.status ?? task.status,
+    currentProgress: currentTask?.progress ?? task.progress,
+    currentWorkVolume: currentTask?.workVolume ?? task.workVolume ?? null,
+    currentCompletedVolume: currentTask?.completedVolume ?? task.completedVolume ?? 0,
+    nextStatus: task.status,
+    nextProgress: task.progress,
+    nextWorkVolume: task.workVolume ?? null,
+    nextCompletedVolume: task.completedVolume ?? 0,
+  });
+
+  return {
+    ...task,
+    status: synced.status,
+    progress: synced.progress,
+    completedVolume: synced.completedVolume,
+  };
+}
+
+function todayEntryDate(): Date {
+  return new Date(`${new Date().toISOString().split('T')[0]}T00:00:00.000Z`);
+}
+
+async function syncTaskProgressEntriesToCompletedVolume(
+  prismaClient: any,
+  projectId: string,
+  taskId: string,
+  targetCompletedVolume: number,
+): Promise<void> {
+  const aggregate = await prismaClient.taskProgressEntry.aggregate({
+    where: { projectId, taskId },
+    _sum: { amount: true },
+  });
+  const currentCompletedVolume = aggregate._sum.amount ?? 0;
+  const delta = targetCompletedVolume - currentCompletedVolume;
+  if (Math.abs(delta) < 0.000001) {
+    return;
+  }
+
+  const entryDate = todayEntryDate();
+  const existingEntry = await prismaClient.taskProgressEntry.findUnique({
+    where: {
+      taskId_entryDate: {
+        taskId,
+        entryDate,
+      },
+    },
+  });
+
+  if (existingEntry) {
+    await prismaClient.taskProgressEntry.update({
+      where: { id: existingEntry.id },
+      data: { amount: existingEntry.amount + delta },
+    });
+    return;
+  }
+
+  await prismaClient.taskProgressEntry.create({
+    data: {
+      id: randomUUID(),
+      projectId,
+      taskId,
+      entryDate,
+      amount: delta,
+    },
+  });
 }
 
 async function loadTaskSnapshot(projectId: string, prismaClient: any): Promise<Task[]> {
@@ -399,6 +470,7 @@ function applyTaskFieldUpdateToSnapshot(
     ...(update.fields.type !== undefined ? { type: update.fields.type } : {}),
     ...(update.fields.color !== undefined ? { color: update.fields.color ?? undefined } : {}),
     ...(update.fields.parentId !== undefined ? { parentId: update.fields.parentId ?? undefined } : {}),
+    ...(update.fields.status !== undefined ? { status: update.fields.status } : {}),
     ...(update.fields.progress !== undefined ? { progress: update.fields.progress } : {}),
     ...(update.fields.workVolume !== undefined ? { workVolume: update.fields.workVolume } : {}),
     ...(update.fields.workUnit !== undefined ? { workUnit: update.fields.workUnit } : {}),
@@ -412,9 +484,10 @@ function applyTaskFieldUpdateToSnapshot(
         }
       : {}),
   };
+  const syncedUpdatedTask = applyTaskStatusSync(updatedTask as Task, task as Task) as CoreTask;
 
   const updatedSnapshot = snapshot.map((candidate) =>
-    candidate.id === update.taskId ? normalizeTaskDatesForType(updatedTask) : candidate,
+    candidate.id === update.taskId ? normalizeTaskDatesForType(syncedUpdatedTask) : candidate,
   );
 
   let coreResult: CoreResult;
@@ -423,30 +496,31 @@ function applyTaskFieldUpdateToSnapshot(
   } else if (update.fields.dependencies !== undefined) {
     coreResult = recalculateTaskFromDependencies(update.taskId, updatedSnapshot, opts);
   } else {
-    coreResult = { changedTasks: [updatedTask], changedIds: [updatedTask.id] };
+    coreResult = { changedTasks: [syncedUpdatedTask], changedIds: [syncedUpdatedTask.id] };
   }
 
-  if (!coreResult.changedIds.includes(updatedTask.id)) {
+  if (!coreResult.changedIds.includes(syncedUpdatedTask.id)) {
     return {
-      changedTasks: [updatedTask, ...coreResult.changedTasks],
-      changedIds: [updatedTask.id, ...coreResult.changedIds],
+      changedTasks: [syncedUpdatedTask, ...coreResult.changedTasks],
+      changedIds: [syncedUpdatedTask.id, ...coreResult.changedIds],
     };
   }
 
   return {
     changedTasks: coreResult.changedTasks.map((candidate) =>
-      candidate.id === updatedTask.id
+      candidate.id === syncedUpdatedTask.id
         ? {
             ...candidate,
-            name: updatedTask.name,
-            type: updatedTask.type,
-            color: updatedTask.color,
-            parentId: updatedTask.parentId,
-            progress: updatedTask.progress,
-            workVolume: (updatedTask as Task).workVolume,
-            workUnit: (updatedTask as Task).workUnit,
-            completedVolume: (updatedTask as Task).completedVolume,
-            dependencies: updatedTask.dependencies,
+            name: syncedUpdatedTask.name,
+            type: syncedUpdatedTask.type,
+            color: syncedUpdatedTask.color,
+            parentId: syncedUpdatedTask.parentId,
+            status: (syncedUpdatedTask as Task).status,
+            progress: syncedUpdatedTask.progress,
+            workVolume: (syncedUpdatedTask as Task).workVolume,
+            workUnit: (syncedUpdatedTask as Task).workUnit,
+            completedVolume: (syncedUpdatedTask as Task).completedVolume,
+            dependencies: syncedUpdatedTask.dependencies,
           }
         : candidate,
     ),
@@ -619,6 +693,7 @@ function buildDeleteInverseCommand(
       type: task.type,
       color: task.color,
       parentId: task.parentId,
+      status: task.status,
       progress: task.progress,
       workVolume: task.workVolume ?? null,
       workUnit: task.workUnit ?? null,
@@ -813,6 +888,7 @@ export class CommandService {
             ...('type' in command.fields ? { type: task.type ?? 'task' } : {}),
             ...('color' in command.fields ? { color: task.color ?? null } : {}),
             ...('parentId' in command.fields ? { parentId: task.parentId ?? null } : {}),
+            ...('status' in command.fields ? { status: task.status ?? 'not_started' } : {}),
             ...('progress' in command.fields ? { progress: task.progress ?? 0 } : {}),
             ...('workVolume' in command.fields ? { workVolume: task.workVolume ?? null } : {}),
             ...('workUnit' in command.fields ? { workUnit: task.workUnit ?? null } : {}),
@@ -836,6 +912,7 @@ export class CommandService {
               ...('type' in update.fields ? { type: task.type ?? 'task' } : {}),
               ...('color' in update.fields ? { color: task.color ?? null } : {}),
               ...('parentId' in update.fields ? { parentId: task.parentId ?? null } : {}),
+              ...('status' in update.fields ? { status: task.status ?? 'not_started' } : {}),
               ...('progress' in update.fields ? { progress: task.progress ?? 0 } : {}),
               ...('workVolume' in update.fields ? { workVolume: task.workVolume ?? null } : {}),
               ...('workUnit' in update.fields ? { workUnit: task.workUnit ?? null } : {}),
@@ -1081,15 +1158,16 @@ export class CommandService {
           }
 
           const beforeTask = taskRowToSnapshotTask(taskBeforeRow);
-          const nextTask: Task = {
+          const nextTask = applyTaskStatusSync({
             ...beforeTask,
             ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
             ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
+            ...(command.fields.status !== undefined ? { status: command.fields.status } : {}),
             ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
             ...(command.fields.workVolume !== undefined ? { workVolume: command.fields.workVolume } : {}),
             ...(command.fields.workUnit !== undefined ? { workUnit: command.fields.workUnit } : {}),
             ...(command.fields.completedVolume !== undefined ? { completedVolume: command.fields.completedVolume } : {}),
-          };
+          }, beforeTask);
           const changedTaskIds = [nextTask.id];
           const changedTasks = [nextTask];
           const changedDependencyIds: string[] = [];
@@ -1103,10 +1181,11 @@ export class CommandService {
           const updateData = {
             ...(command.fields.name !== undefined ? { name: command.fields.name } : {}),
             ...(command.fields.color !== undefined ? { color: command.fields.color ?? null } : {}),
-            ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
+            status: nextTask.status ?? 'not_started',
+            progress: nextTask.progress ?? 0,
             ...(command.fields.workVolume !== undefined ? { workVolume: command.fields.workVolume } : {}),
             ...(command.fields.workUnit !== undefined ? { workUnit: command.fields.workUnit ?? null } : {}),
-            ...(command.fields.completedVolume !== undefined ? { completedVolume: command.fields.completedVolume } : {}),
+            completedVolume: nextTask.completedVolume ?? 0,
           };
           await time('persistTasksMs', async () => {
             if (Object.keys(updateData).length > 0) {
@@ -1114,6 +1193,9 @@ export class CommandService {
                 where: { id: command.taskId },
                 data: updateData,
               });
+              if (command.fields.status === 'done' && nextTask.workVolume && nextTask.workVolume > 0) {
+                await syncTaskProgressEntriesToCompletedVolume(tx, projectId, command.taskId, nextTask.completedVolume ?? 0);
+              }
             }
           });
 
@@ -1143,6 +1225,9 @@ export class CommandService {
                 fields: {
                   ...('name' in command.fields ? { name: beforeTask.name } : {}),
                   ...('color' in command.fields ? { color: beforeTask.color ?? null } : {}),
+                  ...('status' in command.fields || 'progress' in command.fields || 'workVolume' in command.fields || 'completedVolume' in command.fields
+                    ? { status: beforeTask.status ?? 'not_started' }
+                    : {}),
                   ...('progress' in command.fields ? { progress: beforeTask.progress ?? 0 } : {}),
                   ...('workVolume' in command.fields ? { workVolume: beforeTask.workVolume ?? null } : {}),
                   ...('workUnit' in command.fields ? { workUnit: beforeTask.workUnit ?? null } : {}),
@@ -1282,6 +1367,7 @@ export class CommandService {
               parentId: taskChange.task!.parentId && !createdTaskIds.has(taskChange.task!.parentId)
                 ? taskChange.task!.parentId
                 : null,
+              status: taskChange.task!.status ?? 'not_started',
               progress: taskChange.task!.progress ?? 0,
               workVolume: taskChange.task!.workVolume ?? null,
               workUnit: taskChange.task!.workUnit ?? null,
@@ -1351,6 +1437,7 @@ export class CommandService {
                   parentId: taskChange.task.parentId && !createdTaskIds.has(taskChange.task.parentId)
                     ? taskChange.task.parentId
                     : null,
+                  status: taskChange.task.status ?? 'not_started',
                   progress: taskChange.task.progress ?? 0,
                   workVolume: taskChange.task.workVolume ?? null,
                   workUnit: taskChange.task.workUnit ?? null,
@@ -1457,6 +1544,7 @@ export class CommandService {
               type: task.type ?? 'task',
               color: task.color ?? null,
               parentId: task.parentId ?? null,
+              status: (task as Task).status ?? 'not_started',
               progress: task.progress ?? 0,
               workVolume: (task as Task).workVolume ?? null,
               workUnit: (task as Task).workUnit ?? null,
@@ -1855,7 +1943,7 @@ export class CommandService {
 
       case 'create_task': {
         const taskId = command.task.id ?? randomUUID();
-        const newTask: Task = {
+        const newTask = applyTaskStatusSync({
           id: taskId,
           name: command.task.name,
           startDate: command.task.startDate,
@@ -1863,20 +1951,21 @@ export class CommandService {
           type: command.task.type ?? 'task',
           color: command.task.color,
           parentId: command.task.parentId,
+          status: command.task.status,
           progress: command.task.progress,
           workVolume: command.task.workVolume ?? null,
           workUnit: command.task.workUnit ?? null,
           completedVolume: command.task.completedVolume ?? 0,
           dependencies: command.task.dependencies,
           sortOrder: command.task.sortOrder,
-        };
+        });
         taskChanges.push({ action: 'create', task: { ...newTask, id: taskId } });
         coreResult = scheduleCreatedTasks(coreSnapshot, [newTask], opts);
         break;
       }
 
       case 'create_tasks_batch': {
-        const newTasks: Task[] = command.tasks.map((task) => ({
+        const newTasks: Task[] = command.tasks.map((task) => applyTaskStatusSync({
           id: task.id ?? randomUUID(),
           name: task.name,
           startDate: task.startDate,
@@ -1884,6 +1973,7 @@ export class CommandService {
           type: task.type ?? 'task',
           color: task.color,
           parentId: task.parentId,
+          status: task.status,
           progress: task.progress,
           workVolume: task.workVolume ?? null,
           workUnit: task.workUnit ?? null,

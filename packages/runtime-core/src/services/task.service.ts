@@ -8,6 +8,7 @@
 import { getPrisma } from '../prisma.js';
 import type { Task, TaskDependency } from '../types.js';
 import { dateToDomain } from './types.js';
+import { normalizeStoredTaskStatus } from './task-status.js';
 
 export type TaskSearchMatch = {
   taskId: string;
@@ -61,6 +62,7 @@ export class TaskService {
       type: task.type ?? 'task',
       color: task.color || undefined,
       parentId: task.parentId || undefined,
+      status: normalizeStoredTaskStatus(task.status),
       progress: task.progress,
       workVolume: task.workVolume ?? null,
       workUnit: task.workUnit ?? null,

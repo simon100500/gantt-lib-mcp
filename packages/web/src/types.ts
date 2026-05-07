@@ -4,6 +4,8 @@ export interface TaskDependency {
   lag: number;
 }
 
+export type TaskStatus = 'not_started' | 'in_progress' | 'done' | 'closed';
+
 export interface ProjectDependency {
   id: string;
   taskId: string;
@@ -202,6 +204,7 @@ export interface Task {
   type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;          // Optional parent task ID for hierarchy
+  status?: TaskStatus;
   progress?: number;
   workVolume?: number | null;
   workUnit?: string | null;
@@ -255,6 +258,7 @@ export type FrontendProjectCommand =
         type?: 'task' | 'milestone';
         color?: string | null;
         parentId?: string | null;
+        status?: TaskStatus;
         progress?: number;
         workVolume?: number | null;
         workUnit?: string | null;
@@ -271,6 +275,7 @@ export type FrontendProjectCommand =
           type?: 'task' | 'milestone';
           color?: string | null;
           parentId?: string | null;
+          status?: TaskStatus;
           progress?: number;
           workVolume?: number | null;
           workUnit?: string | null;

@@ -23,6 +23,7 @@ import type {
   Task,
   TaskDependency,
 } from '../types.js';
+import { normalizeStoredTaskStatus, synchronizeTaskStatus } from './task-status.js';
 
 function normalizeTaskDatesForType<TTask extends { startDate: string | Date; endDate: string | Date; type?: 'task' | 'milestone' }>(task: TTask): TTask {
   if ((task.type ?? 'task') !== 'milestone') {
@@ -60,6 +61,26 @@ function cloneSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot {
   return {
     tasks: snapshot.tasks.map(cloneTask),
     dependencies: snapshot.dependencies.map((dependency) => ({ ...dependency })),
+  };
+}
+
+function applyTaskStatusSync(task: Task, previousTask?: Partial<Task>): Task {
+  const synced = synchronizeTaskStatus({
+    currentStatus: previousTask?.status,
+    currentProgress: previousTask?.progress,
+    currentWorkVolume: previousTask?.workVolume ?? null,
+    currentCompletedVolume: previousTask?.completedVolume ?? 0,
+    nextStatus: task.status,
+    nextProgress: task.progress,
+    nextWorkVolume: task.workVolume ?? null,
+    nextCompletedVolume: task.completedVolume ?? 0,
+  });
+
+  return {
+    ...task,
+    status: synced.status,
+    progress: synced.progress,
+    completedVolume: synced.completedVolume,
   };
 }
 
@@ -135,6 +156,7 @@ function applyTaskFieldUpdateToSnapshot(
     ...(update.fields.type !== undefined ? { type: update.fields.type } : {}),
     ...(update.fields.color !== undefined ? { color: update.fields.color ?? undefined } : {}),
     ...(update.fields.parentId !== undefined ? { parentId: update.fields.parentId ?? undefined } : {}),
+    ...(update.fields.status !== undefined ? { status: update.fields.status } : {}),
     ...(update.fields.progress !== undefined ? { progress: update.fields.progress } : {}),
     ...(update.fields.workVolume !== undefined ? { workVolume: update.fields.workVolume } : {}),
     ...(update.fields.workUnit !== undefined ? { workUnit: update.fields.workUnit } : {}),
@@ -148,6 +170,19 @@ function applyTaskFieldUpdateToSnapshot(
         }
       : {}),
   };
+  const syncedTask = synchronizeTaskStatus({
+    currentStatus: (task as Task).status,
+    currentProgress: (task as Task).progress,
+    currentWorkVolume: (task as Task).workVolume ?? null,
+    currentCompletedVolume: (task as Task).completedVolume ?? 0,
+    nextStatus: (updatedTask as Task).status,
+    nextProgress: (updatedTask as Task).progress,
+    nextWorkVolume: (updatedTask as Task).workVolume ?? null,
+    nextCompletedVolume: (updatedTask as Task).completedVolume ?? 0,
+  });
+  (updatedTask as Task).status = syncedTask.status;
+  updatedTask.progress = syncedTask.progress;
+  (updatedTask as Task).completedVolume = syncedTask.completedVolume;
 
   const updatedSnapshot = snapshot.map((candidate) =>
     candidate.id === update.taskId ? normalizeTaskDatesForType(updatedTask) : candidate,
@@ -178,6 +213,7 @@ function applyTaskFieldUpdateToSnapshot(
             type: updatedTask.type,
             color: updatedTask.color,
             parentId: updatedTask.parentId,
+            status: (updatedTask as Task).status,
             progress: updatedTask.progress,
             workVolume: (updatedTask as Task).workVolume,
             workUnit: (updatedTask as Task).workUnit,
@@ -252,6 +288,7 @@ function buildTaskSnapshot(tasks: CoreTask[]): Task[] {
     type: task.type ?? 'task',
     color: task.color,
     parentId: task.parentId,
+    status: normalizeStoredTaskStatus((task as Task).status),
     progress: task.progress,
     workVolume: (task as Task).workVolume ?? null,
     workUnit: (task as Task).workUnit ?? null,
@@ -532,7 +569,7 @@ export function applyProjectCommandToSnapshot(
         : recalculateProjectSchedule(workingSnapshot, options);
       break;
     case 'create_task': {
-      const newTask: Task = {
+      const newTask = applyTaskStatusSync({
         id: command.task.id ?? randomUUID(),
         name: command.task.name,
         startDate: command.task.startDate,
@@ -540,18 +577,19 @@ export function applyProjectCommandToSnapshot(
         type: command.task.type ?? 'task',
         color: command.task.color,
         parentId: command.task.parentId,
+        status: command.task.status,
         progress: command.task.progress,
         workVolume: command.task.workVolume ?? null,
         workUnit: command.task.workUnit ?? null,
         completedVolume: command.task.completedVolume ?? 0,
         dependencies: command.task.dependencies,
         sortOrder: command.task.sortOrder,
-      };
+      });
       coreResult = scheduleCreatedTasks(workingSnapshot, [newTask], options);
       break;
     }
     case 'create_tasks_batch': {
-      const newTasks = command.tasks.map((task) => ({
+      const newTasks = command.tasks.map((task) => applyTaskStatusSync({
         id: task.id ?? randomUUID(),
         name: task.name,
         startDate: task.startDate,
@@ -559,6 +597,7 @@ export function applyProjectCommandToSnapshot(
         type: task.type ?? 'task',
         color: task.color,
         parentId: task.parentId,
+        status: task.status,
         progress: task.progress,
         workVolume: task.workVolume ?? null,
         workUnit: task.workUnit ?? null,

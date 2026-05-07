@@ -24,6 +24,13 @@ enum TaskType {
   milestone
 }
 
+enum TaskStatus {
+  not_started
+  in_progress
+  done
+  closed
+}
+
 enum ResourceType {
   human
   equipment
@@ -429,6 +436,7 @@ model Task {
   startDate DateTime @map("start_date")
   endDate   DateTime @map("end_date")
   type      TaskType @default(task)
+  status    TaskStatus @default(not_started)
   color     String?
   progress  Float    @default(0)
   workVolume Float?   @map("work_volume")

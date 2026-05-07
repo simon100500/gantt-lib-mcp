@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { getPrisma } from '@gantt/runtime-core/prisma';
+import { normalizeStoredTaskStatus, synchronizeTaskStatus } from '@gantt/runtime-core/services/task-status';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireActiveSubscriptionForMutation } from '../middleware/constraint-middleware.js';
 import { requireCurrentProjectEditor } from '../access-control.js';
@@ -10,6 +11,7 @@ type WorkProgressResponse = {
     workVolume: number | null;
     workUnit: string | null;
     completedVolume: number;
+    status: 'not_started' | 'in_progress' | 'done' | 'closed';
     progress: number;
   };
   progressEntries: Array<{
@@ -69,6 +71,7 @@ async function buildTaskProgressResponse(projectId: string, taskId: string): Pro
         workVolume: true,
         workUnit: true,
         completedVolume: true,
+        status: true,
         progress: true,
       },
     }),
@@ -88,6 +91,7 @@ async function buildTaskProgressResponse(projectId: string, taskId: string): Pro
       workVolume: task.workVolume ?? null,
       workUnit: task.workUnit ?? null,
       completedVolume: task.completedVolume ?? 0,
+      status: normalizeStoredTaskStatus(task.status),
       progress: task.progress ?? 0,
     },
     progressEntries: progressEntries.map(toEntryResponse),
@@ -104,19 +108,126 @@ async function recomputeTaskProgress(
     where: { projectId, taskId },
     _sum: { amount: true },
   });
+  const task = await tx.task.findUnique({
+    where: { id: taskId },
+    select: { status: true },
+  });
   const completedVolume = aggregate._sum.amount ?? 0;
-  const nextProgress = taskWorkVolume > 0 ? clampProgress((completedVolume / taskWorkVolume) * 100) : 0;
+  const synced = synchronizeTaskStatus({
+    currentStatus: task?.status,
+    currentWorkVolume: taskWorkVolume,
+    nextCompletedVolume: completedVolume,
+  });
 
   await tx.task.update({
     where: { id: taskId },
     data: {
-      completedVolume,
-      progress: nextProgress,
+      completedVolume: synced.completedVolume,
+      progress: synced.progress,
+      status: synced.status,
+    },
+  });
+}
+
+async function syncProgressEntriesToCompletedVolume(
+  tx: Parameters<Parameters<ReturnType<typeof getPrisma>['$transaction']>[0]>[0],
+  projectId: string,
+  taskId: string,
+  targetCompletedVolume: number,
+): Promise<void> {
+  const aggregate = await tx.taskProgressEntry.aggregate({
+    where: { projectId, taskId },
+    _sum: { amount: true },
+  });
+  const currentCompletedVolume = aggregate._sum.amount ?? 0;
+  const delta = targetCompletedVolume - currentCompletedVolume;
+  if (Math.abs(delta) < 0.000001) {
+    return;
+  }
+
+  const entryDate = new Date(`${new Date().toISOString().split('T')[0]}T00:00:00.000Z`);
+  const existingEntry = await tx.taskProgressEntry.findUnique({
+    where: {
+      taskId_entryDate: {
+        taskId,
+        entryDate,
+      },
+    },
+  });
+
+  if (existingEntry) {
+    await tx.taskProgressEntry.update({
+      where: { id: existingEntry.id },
+      data: { amount: existingEntry.amount + delta },
+    });
+    return;
+  }
+
+  await tx.taskProgressEntry.create({
+    data: {
+      projectId,
+      taskId,
+      entryDate,
+      amount: delta,
     },
   });
 }
 
 export async function registerWorkProgressRoutes(fastify: FastifyInstance): Promise<void> {
+  fastify.patch<{ Params: { taskId: string }; Body: { status?: 'not_started' | 'in_progress' | 'done' | 'closed' } }>(
+    '/api/tasks/:taskId/status',
+    { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
+    async (req, reply) => {
+      const prisma = getPrisma();
+      const { taskId } = req.params;
+      const { status } = req.body ?? {};
+
+      if (status !== 'not_started' && status !== 'in_progress' && status !== 'done' && status !== 'closed') {
+        return reply.status(400).send({ error: 'status must be one of not_started, in_progress, done, closed' });
+      }
+
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, projectId: req.user!.projectId },
+        select: {
+          id: true,
+          status: true,
+          workVolume: true,
+          completedVolume: true,
+          progress: true,
+        },
+      });
+
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const synced = synchronizeTaskStatus({
+          currentStatus: task.status,
+          currentProgress: task.progress,
+          currentWorkVolume: task.workVolume,
+          currentCompletedVolume: task.completedVolume,
+          nextStatus: status,
+        });
+
+        await tx.task.update({
+          where: { id: taskId },
+          data: {
+            status: synced.status,
+            progress: synced.progress,
+            completedVolume: synced.completedVolume,
+          },
+        });
+
+        if (status === 'done' && task.workVolume && task.workVolume > 0) {
+          await syncProgressEntriesToCompletedVolume(tx, req.user!.projectId, taskId, synced.completedVolume);
+        }
+      });
+
+      return reply.send(await buildTaskProgressResponse(req.user!.projectId, taskId));
+    },
+  );
+
   fastify.patch<{ Params: { taskId: string }; Body: { workVolume?: number | null; workUnit?: string | null } }>(
     '/api/tasks/:taskId/work-metadata',
     { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] },
@@ -135,7 +246,7 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
 
       const existingTask = await prisma.task.findFirst({
         where: { id: taskId, projectId: req.user!.projectId },
-        select: { id: true, completedVolume: true, workVolume: true, _count: { select: { children: true } } },
+        select: { id: true, status: true, completedVolume: true, workVolume: true, _count: { select: { children: true } } },
       });
 
       if (!existingTask) {
@@ -145,22 +256,21 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
         return reply.status(400).send({ error: 'Work volume can only be entered for leaf tasks' });
       }
 
-      const normalizedWorkVolume = workVolume === undefined
-        ? existingTask.workVolume
-        : workVolume === null
-          ? null
-          : workVolume;
-      const normalizedCompletedVolume = existingTask.completedVolume ?? 0;
-      const nextProgress = normalizedWorkVolume && normalizedWorkVolume > 0
-        ? clampProgress((normalizedCompletedVolume / normalizedWorkVolume) * 100)
-        : 0;
+      const normalizedWorkVolume = workVolume === undefined ? existingTask.workVolume : workVolume;
+      const synced = synchronizeTaskStatus({
+        currentStatus: existingTask.status,
+        currentWorkVolume: existingTask.workVolume,
+        currentCompletedVolume: existingTask.completedVolume ?? 0,
+        nextWorkVolume: normalizedWorkVolume,
+      });
 
       await prisma.task.update({
         where: { id: taskId },
         data: {
           ...(workVolume !== undefined ? { workVolume: workVolume === null ? null : workVolume } : {}),
           ...(workUnit !== undefined ? { workUnit: workUnit?.trim() ? workUnit.trim() : null } : {}),
-          progress: nextProgress,
+          progress: synced.progress,
+          status: synced.status,
         },
       });
 

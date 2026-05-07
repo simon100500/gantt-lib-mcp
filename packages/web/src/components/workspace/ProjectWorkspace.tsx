@@ -13,6 +13,7 @@ import { TaskChatModal } from '../TaskChatModal.tsx';
 import { CreateResourceModal } from './CreateResourceModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
 import { createAssignedResourcesColumn } from './AssignedResourcesColumn.tsx';
+import { createTaskStatusColumn } from './TaskStatusColumn.tsx';
 import { createTaskWorkColumns } from './TaskWorkColumns.tsx';
 import type { StartScreenSendResult } from '../StartScreen.tsx';
 import { Toolbar, type ToolbarTaskListColumnRow } from '../layout/Toolbar.tsx';
@@ -421,6 +422,7 @@ const TASK_LIST_COLUMN_ROWS: ToolbarTaskListColumnRow[] = [
   { id: 'duration', label: 'Длительность' },
   { id: 'work-volume', label: 'Объём' },
   { id: 'completed-volume', label: 'Выполнено' },
+  { id: 'status', label: 'Статус' },
   { id: 'progress', label: '% выполнения' },
   { id: 'assigned-resources', label: 'Ресурсы' },
   { id: 'dependencies', label: 'Связи' },
@@ -436,6 +438,7 @@ const TASK_LIST_COLUMN_WIDTHS: TaskListColumnWidthMap = {
   progress: 50,
   'work-volume': 96,
   'completed-volume': 82,
+  status: 108,
   dependencies: 128,
   'assigned-resources': 132,
 };
@@ -446,6 +449,19 @@ function clampPercent(value: number): number {
   }
   const clamped = Math.max(0, Math.min(100, value));
   return Math.round((clamped + Number.EPSILON) * 100) / 100;
+}
+
+function deriveTaskStatusFromProgress(currentStatus: Task['status'] | undefined, progress: number): NonNullable<Task['status']> {
+  if (currentStatus === 'closed') {
+    return 'closed';
+  }
+  if (progress >= 100) {
+    return 'done';
+  }
+  if (progress > 0) {
+    return 'in_progress';
+  }
+  return currentStatus === 'in_progress' ? 'in_progress' : 'not_started';
 }
 
 function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap {
@@ -1018,6 +1034,92 @@ export function ProjectWorkspace({
     }
   }, [replaceProgressEntriesForTask, setTasks]);
 
+  const handleUpdateTaskStatus = useCallback(async (
+    task: Task,
+    status: 'not_started' | 'in_progress' | 'done' | 'closed',
+  ) => {
+    if (!accessToken || workspace.kind !== 'project') {
+      let resolvedTask: Task = { ...task, status };
+      let nextEntries: TaskProgressEntry[] | undefined;
+
+      if (status === 'done') {
+        const targetCompletedVolume = task.workVolume && task.workVolume > 0
+          ? task.workVolume
+          : (task.completedVolume ?? 0);
+        const delta = targetCompletedVolume - (task.completedVolume ?? 0);
+        if (task.workVolume && task.workVolume > 0 && Math.abs(delta) > 0.000001) {
+          const today = new Date().toISOString().split('T')[0] ?? '';
+          const currentEntries = progressEntries.filter((entry) => entry.taskId === task.id);
+          const existingTodayEntry = currentEntries.find((entry) => entry.entryDate === today);
+          const now = new Date().toISOString();
+          nextEntries = existingTodayEntry
+            ? currentEntries.map((entry) => (
+                entry.id === existingTodayEntry.id
+                  ? { ...entry, amount: entry.amount + delta, updatedAt: now }
+                  : entry
+              ))
+            : [
+                ...currentEntries,
+                {
+                  id: `local-status:${task.id}:${today}`,
+                  projectId: projectId ?? 'local',
+                  taskId: task.id,
+                  entryDate: today,
+                  amount: delta,
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              ];
+        }
+
+        resolvedTask = {
+          ...resolvedTask,
+          progress: 100,
+          completedVolume: targetCompletedVolume,
+        };
+      }
+
+      applyTaskWorkMutation(resolvedTask, nextEntries);
+      return { task: resolvedTask };
+    }
+
+    const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ status }),
+    });
+    const body = await response.json().catch(() => null) as {
+      error?: string;
+      task?: {
+        workVolume: number | null;
+        workUnit: string | null;
+        completedVolume: number;
+        status: 'not_started' | 'in_progress' | 'done' | 'closed';
+        progress: number;
+      };
+      progressEntries?: TaskProgressEntry[];
+    } | null;
+
+    if (!response.ok || !body?.task) {
+      throw new Error(body?.error || `HTTP ${response.status}`);
+    }
+
+    const resolvedTask: Task = {
+      ...task,
+      workVolume: body.task.workVolume,
+      workUnit: body.task.workUnit,
+      completedVolume: body.task.completedVolume,
+      status: body.task.status,
+      progress: body.task.progress,
+    };
+    applyTaskWorkMutation(resolvedTask, body.progressEntries);
+
+    return { task: resolvedTask };
+  }, [accessToken, applyTaskWorkMutation, progressEntries, projectId, workspace.kind]);
+
   const handleUpdateTaskWorkMetadata = useCallback(async (
     task: Task,
     patch: { workVolume?: number | null; workUnit?: string | null },
@@ -1033,6 +1135,7 @@ export function ProjectWorkspace({
         : 0;
       const resolvedTask = {
         ...nextTask,
+        status: deriveTaskStatusFromProgress(task.status, nextProgress),
         progress: nextProgress,
       };
       applyTaskWorkMutation(resolvedTask);
@@ -1049,7 +1152,7 @@ export function ProjectWorkspace({
     });
     const body = await response.json().catch(() => null) as {
       error?: string;
-      task?: { workVolume: number | null; workUnit: string | null; completedVolume: number; progress: number };
+      task?: { workVolume: number | null; workUnit: string | null; completedVolume: number; status: 'not_started' | 'in_progress' | 'done' | 'closed'; progress: number };
       progressEntries?: TaskProgressEntry[];
     } | null;
 
@@ -1057,13 +1160,14 @@ export function ProjectWorkspace({
       throw new Error(body?.error || `HTTP ${response.status}`);
     }
 
-    const resolvedTask: Task = {
-      ...task,
-      workVolume: body.task.workVolume,
-      workUnit: body.task.workUnit,
-      completedVolume: body.task.completedVolume,
-      progress: body.task.progress,
-    };
+      const resolvedTask: Task = {
+        ...task,
+        workVolume: body.task.workVolume,
+        workUnit: body.task.workUnit,
+        completedVolume: body.task.completedVolume,
+        status: body.task.status,
+        progress: body.task.progress,
+      };
     applyTaskWorkMutation(resolvedTask, body.progressEntries);
     return { task: resolvedTask, progressEntries: body.progressEntries };
   }, [accessToken, applyTaskWorkMutation, workspace.kind]);
@@ -1105,6 +1209,7 @@ export function ProjectWorkspace({
       const resolvedTask: Task = {
         ...task,
         completedVolume,
+        status: deriveTaskStatusFromProgress(task.status, clampPercent((completedVolume / task.workVolume) * 100)),
         progress: clampPercent((completedVolume / task.workVolume) * 100),
       };
       applyTaskWorkMutation(resolvedTask, nextEntries);
@@ -1121,7 +1226,7 @@ export function ProjectWorkspace({
     });
     const body = await response.json().catch(() => null) as {
       error?: string;
-      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null };
+      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null; status: 'not_started' | 'in_progress' | 'done' | 'closed' };
       progressEntries?: TaskProgressEntry[];
     } | null;
 
@@ -1134,6 +1239,7 @@ export function ProjectWorkspace({
       workVolume: body.task.workVolume,
       workUnit: body.task.workUnit,
       completedVolume: body.task.completedVolume,
+      status: body.task.status,
       progress: body.task.progress,
     };
     applyTaskWorkMutation(resolvedTask, body.progressEntries);
@@ -1168,6 +1274,7 @@ export function ProjectWorkspace({
       const resolvedTask: Task = {
         ...task,
         completedVolume,
+        status: deriveTaskStatusFromProgress(task.status, clampPercent((completedVolume / task.workVolume) * 100)),
         progress: clampPercent((completedVolume / task.workVolume) * 100),
       };
       applyTaskWorkMutation(resolvedTask, nextEntries);
@@ -1184,7 +1291,7 @@ export function ProjectWorkspace({
     });
     const body = await response.json().catch(() => null) as {
       error?: string;
-      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null };
+      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null; status: 'not_started' | 'in_progress' | 'done' | 'closed' };
       progressEntries?: TaskProgressEntry[];
     } | null;
 
@@ -1197,6 +1304,7 @@ export function ProjectWorkspace({
       workVolume: body.task.workVolume,
       workUnit: body.task.workUnit,
       completedVolume: body.task.completedVolume,
+      status: body.task.status,
       progress: body.task.progress,
     };
     applyTaskWorkMutation(resolvedTask, body.progressEntries);
@@ -1219,6 +1327,7 @@ export function ProjectWorkspace({
       const resolvedTask: Task = {
         ...task,
         completedVolume,
+        status: deriveTaskStatusFromProgress(task.status, clampPercent((completedVolume / task.workVolume) * 100)),
         progress: clampPercent((completedVolume / task.workVolume) * 100),
       };
       applyTaskWorkMutation(resolvedTask, nextEntries);
@@ -1233,7 +1342,7 @@ export function ProjectWorkspace({
     });
     const body = await response.json().catch(() => null) as {
       error?: string;
-      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null };
+      task?: { completedVolume: number; progress: number; workVolume: number | null; workUnit: string | null; status: 'not_started' | 'in_progress' | 'done' | 'closed' };
       progressEntries?: TaskProgressEntry[];
     } | null;
 
@@ -1246,6 +1355,7 @@ export function ProjectWorkspace({
       workVolume: body.task.workVolume,
       workUnit: body.task.workUnit,
       completedVolume: body.task.completedVolume,
+      status: body.task.status,
       progress: body.task.progress,
     };
     applyTaskWorkMutation(resolvedTask, body.progressEntries);
@@ -1574,6 +1684,10 @@ export function ProjectWorkspace({
         onUpdateProgressEntry: handleUpdateTaskProgressEntry,
         onDeleteProgressEntry: handleDeleteTaskProgressEntry,
       }),
+      ...createTaskStatusColumn({
+        readOnly: effectiveReadOnly || shareSelectionActive,
+        onUpdateStatus: handleUpdateTaskStatus,
+      }),
     ];
 
     if (showResourceAssignments) {
@@ -1594,6 +1708,7 @@ export function ProjectWorkspace({
     effectiveReadOnly,
     handleAddTaskProgressEntry,
     handleDeleteTaskProgressEntry,
+    handleUpdateTaskStatus,
     handleUpdateTaskProgressEntry,
     handleUpdateTaskWorkMetadata,
     openAssignmentSelector,
