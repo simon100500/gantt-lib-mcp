@@ -406,6 +406,7 @@ export function Toolbar({
   const viewMode = useUIStore((state) => state.viewMode);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const strikeClosedTasks = useUIStore((state) => state.strikeClosedTasks);
   const disableTaskDrag = externalDisableTaskDrag ?? useUIStore((state) => state.disableTaskDrag);
   const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const setShowTaskList = useUIStore((state) => state.setShowTaskList);
@@ -413,6 +414,7 @@ export function Toolbar({
   const setViewMode = useUIStore((state) => state.setViewMode);
   const setAutoSchedule = useUIStore((state) => state.setAutoSchedule);
   const setHighlightExpiredTasks = useUIStore((state) => state.setHighlightExpiredTasks);
+  const setStrikeClosedTasks = useUIStore((state) => state.setStrikeClosedTasks);
   const setDisableTaskDrag = onToggleDisableTaskDrag ?? useUIStore((state) => state.setDisableTaskDrag);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
   const hiddenTaskListColumnSet = new Set(hiddenTaskListColumns ?? []);
@@ -462,7 +464,8 @@ export function Toolbar({
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
   const hasDataMenu = hasTemplateAction || Boolean(onInsertTemplateToProject) || Boolean(onImportExcel);
-  const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle;
+  const showClosedTaskStrikeToggle = true;
+  const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle || showClosedTaskStrikeToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
   const allTaskListColumnsVisible = taskListColumnRows?.length ? visibleTaskListColumnCount === taskListColumnRows.length : true;
@@ -667,6 +670,26 @@ export function Toolbar({
                     className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
                   />
                   <span className="text-sm">Показать просроченные</span>
+                </DropdownMenuItem>
+              </>
+            )}
+            {showClosedTaskStrikeToggle && (
+              <>
+                <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setStrikeClosedTasks(!strikeClosedTasks);
+                  }}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={strikeClosedTasks}
+                    readOnly
+                    className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                  />
+                  <span className="text-sm">Зачёркивать закрытые</span>
                 </DropdownMenuItem>
               </>
             )}

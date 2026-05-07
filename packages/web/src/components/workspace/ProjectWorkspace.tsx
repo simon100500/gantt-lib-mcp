@@ -548,6 +548,7 @@ export function ProjectWorkspace({
   const showChart = useUIStore((state) => state.showChart);
   const autoSchedule = useUIStore((state) => state.autoSchedule);
   const highlightExpiredTasks = useUIStore((state) => state.highlightExpiredTasks);
+  const strikeClosedTasks = useUIStore((state) => state.strikeClosedTasks);
   const showHistoryPanel = useUIStore((state) => state.showHistoryPanel);
   const setShowHistoryPanel = useUIStore((state) => state.setShowHistoryPanel);
   const historyRefreshRevision = useUIStore((state) => state.historyRefreshRevision);
@@ -2524,7 +2525,7 @@ export function ProjectWorkspace({
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
                   getTaskListRowClassName={(task) => (
-                    task.status === 'closed' ? 'gantt-tl-row-closed' : undefined
+                    strikeClosedTasks && task.status === 'closed' ? 'gantt-tl-row-closed' : undefined
                   )}
                   onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}

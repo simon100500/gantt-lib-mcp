@@ -55,6 +55,12 @@
   border-right: 1px solid #dfe1e6 !important;
 }
 
+.gantt-tl-row-closed .gantt-tl-cell:not(.gantt-tl-cell-number),
+.gantt-tl-row-closed .gantt-tl-name-trigger,
+.gantt-tl-row-closed .gantt-datepicker-trigger {
+  color: #94a3b8 !important;
+}
+
 .finance-money-value {
   display: inline-block;
   max-width: 100%;

@@ -9,6 +9,7 @@ export type ViewMode = 'day' | 'week' | 'month';
 export type AiMutationStage = 'thinking' | 'preview' | 'failed';
 const SIDEBAR_STATE_KEY = 'gantt_sidebar_state';
 const PROJECT_CHAT_OPEN_KEY = 'gantt_project_chat_open';
+const STRIKE_CLOSED_TASKS_KEY = 'gantt_strike_closed_tasks';
 
 function canUseDOM(): boolean {
   return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
@@ -47,6 +48,27 @@ function persistProjectChatOpenState(chatOpen: boolean): void {
   }
 
   window.localStorage.setItem(PROJECT_CHAT_OPEN_KEY, String(chatOpen));
+}
+
+function readStrikeClosedTasksState(): boolean {
+  if (!canUseDOM()) {
+    return true;
+  }
+
+  const stored = window.localStorage.getItem(STRIKE_CLOSED_TASKS_KEY);
+  if (stored === null) {
+    return true;
+  }
+
+  return stored === 'true';
+}
+
+function persistStrikeClosedTasksState(enabled: boolean): void {
+  if (!canUseDOM()) {
+    return;
+  }
+
+  window.localStorage.setItem(STRIKE_CLOSED_TASKS_KEY, String(enabled));
 }
 
 export type WorkspaceMode =
@@ -92,6 +114,7 @@ interface UIState {
   showChart: boolean;
   autoSchedule: boolean;
   highlightExpiredTasks: boolean;
+  strikeClosedTasks: boolean;
   disableTaskDrag: boolean;
   validationErrors: DependencyError[];
   shareStatus: ShareStatus;
@@ -133,6 +156,7 @@ interface UIState {
   setShowChart: (visible: boolean) => void;
   setAutoSchedule: (enabled: boolean) => void;
   setHighlightExpiredTasks: (enabled: boolean) => void;
+  setStrikeClosedTasks: (enabled: boolean) => void;
   setDisableTaskDrag: (enabled: boolean) => void;
   setValidationErrors: (errors: DependencyError[]) => void;
   setShareStatus: (status: ShareStatus) => void;
@@ -182,6 +206,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   showChart: true,
   autoSchedule: true,
   highlightExpiredTasks: true,
+  strikeClosedTasks: readStrikeClosedTasksState(),
   disableTaskDrag: false,
   validationErrors: [],
   shareStatus: 'idle',
@@ -241,6 +266,10 @@ export const useUIStore = create<UIState>()((set, get) => ({
   setShowChart: (showChart) => set({ showChart }),
   setAutoSchedule: (autoSchedule) => set({ autoSchedule }),
   setHighlightExpiredTasks: (highlightExpiredTasks) => set({ highlightExpiredTasks }),
+  setStrikeClosedTasks: (strikeClosedTasks) => {
+    persistStrikeClosedTasksState(strikeClosedTasks);
+    set({ strikeClosedTasks });
+  },
   setDisableTaskDrag: (disableTaskDrag) => set({ disableTaskDrag }),
   setValidationErrors: (validationErrors) => set({ validationErrors }),
   setShareStatus: (shareStatus) => set({ shareStatus }),
