@@ -51,6 +51,13 @@ function formatMetricValue(value: number | null | undefined, maximumFractionDigi
   }).format(value);
 }
 
+function clampPercentValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, value));
+}
+
 function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0] ?? '';
 }
@@ -117,9 +124,13 @@ function TaskWorkMetadataCell({
           <span className={compact ? 'px-1.5' : undefined}>{volumeLabel}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>
+      <PopoverContent
+        align="start"
+        className="w-64 rounded-xl border-slate-200 p-3 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
         <form
-          className="flex flex-col gap-3"
+          className="flex flex-col gap-2.5"
           onSubmit={async (event) => {
             event.preventDefault();
             setPending(true);
@@ -151,7 +162,7 @@ function TaskWorkMetadataCell({
           <div className="flex min-w-0 gap-2">
             <Input
               autoFocus
-              className="min-w-0 flex-[1_1_0]"
+              className="h-9 min-w-0 flex-[1_1_0] rounded-lg border-slate-200 px-3 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0"
               disabled={pending}
               inputMode="decimal"
               onKeyDown={(event) => {
@@ -176,7 +187,7 @@ function TaskWorkMetadataCell({
               value={volumeValue}
             />
             <Input
-              className="min-w-0 flex-[0_1_6rem]"
+              className="h-9 min-w-0 flex-[0_1_6rem] rounded-lg border-slate-200 px-3 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0"
               disabled={pending}
               list="work-unit-suggestions"
               ref={unitInputRef}
@@ -191,13 +202,25 @@ function TaskWorkMetadataCell({
               ))}
             </datalist>
           </div>
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-          <div className="flex items-center gap-2">
-            <Button className="shrink-0 px-3" disabled={pending} size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Отмена
-            </Button>
-            <Button className="flex-1" disabled={pending} size="sm" type="submit">
+          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
+          <div className="flex items-center gap-2 pt-0.5">
+            <Button
+              className="h-8 flex-1 rounded-lg px-3 text-xs"
+              disabled={pending}
+              size="sm"
+              type="submit"
+            >
               Сохранить
+            </Button>
+            <Button
+              className="h-8 shrink-0 rounded-lg px-3 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              disabled={pending}
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={() => setOpen(false)}
+            >
+              Отмена
             </Button>
           </div>
         </form>
@@ -268,6 +291,12 @@ function TaskCompletedVolumeCell({
   const currentAdded = Number.isFinite(parsedAddedVolume) ? parsedAddedVolume : 0;
   const totalAfterAdd = completedVolume + currentAdded;
   const finalPercent = totalVolume > 0 ? (totalAfterAdd / totalVolume) * 100 : 0;
+  const currentPercentClamped = clampPercentValue(currentPercent);
+  const finalPercentClamped = clampPercentValue(finalPercent);
+  const baseProgressPercent = Math.min(currentPercentClamped, finalPercentClamped);
+  const positiveAddedPercent = Math.max(0, finalPercentClamped - currentPercentClamped);
+  const negativeDeltaPercent = Math.max(0, currentPercentClamped - finalPercentClamped);
+  const overflowPercent = Math.max(0, finalPercent - 100);
   const isInputEmpty = valueInUnits.trim() === '' || currentAdded === 0;
   const isOverflow = totalVolume > 0 && totalAfterAdd > totalVolume;
   const isNegativeResult = currentAdded < 0;
@@ -564,20 +593,35 @@ function TaskCompletedVolumeCell({
                       </div>
                     </div>
 
-                    <div className="h-2 overflow-hidden rounded-full bg-[#dfe1e6]">
+                    <div className="relative h-2 overflow-hidden rounded-full bg-[#dfe1e6]">
                       <div
-                        className="flex h-full overflow-hidden rounded-full"
-                        style={{ width: `${Math.min(100, Math.max(finalPercent, currentPercent)).toFixed(2)}%` }}
-                      >
+                        className="absolute inset-y-0 left-0 h-full bg-primary"
+                        style={{ width: `${baseProgressPercent}%` }}
+                      />
+                      {positiveAddedPercent > 0 ? (
                         <div
-                          className="h-full bg-slate-400"
-                          style={{ width: `${totalVolume > 0 ? Math.min(100, (completedVolume / totalVolume) * 100) : 0}%` }}
+                          className="absolute inset-y-0 h-full bg-emerald-500"
+                          style={{
+                            left: `${currentPercentClamped}%`,
+                            width: `${positiveAddedPercent}%`,
+                          }}
                         />
+                      ) : null}
+                      {negativeDeltaPercent > 0 ? (
                         <div
-                          className={isOverflow ? 'h-full bg-red-500' : 'h-full bg-primary'}
-                          style={{ width: `${totalVolume > 0 ? Math.max(0, Math.min(100, (currentAdded / totalVolume) * 100)) : 0}%` }}
+                          className="absolute inset-y-0 h-full bg-amber-500"
+                          style={{
+                            left: `${finalPercentClamped}%`,
+                            width: `${negativeDeltaPercent}%`,
+                          }}
                         />
-                      </div>
+                      ) : null}
+                      {overflowPercent > 0 ? (
+                        <div
+                          className="absolute inset-y-0 right-0 h-full bg-red-500"
+                          style={{ width: `${clampPercentValue(overflowPercent)}%` }}
+                        />
+                      ) : null}
                     </div>
                   </div>
 
