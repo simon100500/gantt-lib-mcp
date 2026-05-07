@@ -66,6 +66,7 @@ export interface GanttChartProps {
   onTaskListColumnWidthsChange?: (widths: TaskListColumnWidthMap) => void;
   taskDateChangeMode?: TaskDateChangeMode;
   onTaskDateChangeModeChange?: (mode: TaskDateChangeMode) => void;
+  getTaskListRowClassName?: (task: Task) => string | undefined;
 }
 
 export interface ScrollToRowOptions {
@@ -128,6 +129,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
   onTaskListColumnWidthsChange,
   taskDateChangeMode,
   onTaskDateChangeModeChange,
+  getTaskListRowClassName,
 }, ref) => {
   const ganttLibRef = useRef<{
     scrollToToday: () => void;
@@ -198,6 +200,7 @@ export const GanttChart = forwardRef<GanttChartRef, GanttChartProps>(({
       onTaskListColumnWidthsChange={onTaskListColumnWidthsChange}
       taskDateChangeMode={taskDateChangeMode}
       onTaskDateChangeModeChange={onTaskDateChangeModeChange}
+      getTaskListRowClassName={getTaskListRowClassName}
     />
   );
 });

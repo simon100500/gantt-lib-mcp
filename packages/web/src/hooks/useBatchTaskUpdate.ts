@@ -19,6 +19,7 @@ function summarizeTasks(tasks: Task[]) {
     endDate: typeof task.endDate === 'string' ? task.endDate : task.endDate.toISOString().split('T')[0],
     type: task.type ?? 'task',
     parentId: task.parentId ?? null,
+    status: task.status ?? 'not_started',
     progress: task.progress ?? 0,
     workVolume: task.workVolume ?? null,
     workUnit: task.workUnit ?? null,
@@ -216,6 +217,7 @@ export function useBatchTaskUpdate({
     && (left.type ?? 'task') === (right.type ?? 'task')
     && (left.parentId ?? null) === (right.parentId ?? null)
     && (left.color ?? null) === (right.color ?? null)
+    && (left.status ?? 'not_started') === (right.status ?? 'not_started')
     && (left.progress ?? 0) === (right.progress ?? 0)
     && (left.workVolume ?? null) === (right.workVolume ?? null)
     && (left.workUnit ?? null) === (right.workUnit ?? null)
@@ -420,6 +422,7 @@ export function useBatchTaskUpdate({
     type: task.type,
     color: task.color,
     parentId: task.parentId,
+    status: task.status,
     progress: task.progress,
     workVolume: task.workVolume ?? null,
     workUnit: task.workUnit ?? null,
@@ -559,6 +562,7 @@ export function useBatchTaskUpdate({
         (original.parentId ?? null) === (t.parentId ?? null) &&
         (original.color ?? null) === (t.color ?? null) &&
         (original.progress ?? 0) === (t.progress ?? 0) &&
+        (original.status ?? 'not_started') === (t.status ?? 'not_started') &&
         (original.workVolume ?? null) === (t.workVolume ?? null) &&
         (original.workUnit ?? null) === (t.workUnit ?? null) &&
         (original.completedVolume ?? 0) === (t.completedVolume ?? 0);
@@ -808,6 +812,7 @@ export function useBatchTaskUpdate({
         type: task.type,
         color: task.color,
         parentId: task.parentId,
+        status: task.status,
         progress: task.progress,
         workVolume: task.workVolume ?? null,
         workUnit: task.workUnit ?? null,
@@ -953,6 +958,7 @@ export function useBatchTaskUpdate({
         type: newTask.type,
         color: newTask.color,
         parentId: newTask.parentId,
+        status: newTask.status,
         progress: newTask.progress,
         workVolume: newTask.workVolume ?? null,
         workUnit: newTask.workUnit ?? null,

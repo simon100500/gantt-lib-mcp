@@ -17,6 +17,7 @@ export interface CreateTaskInput {
   type?: 'task' | 'milestone';
   color?: string;
   parentId?: string;
+  status?: Task['status'];
   progress?: number;
   workVolume?: number | null;
   workUnit?: string | null;
@@ -131,6 +132,9 @@ export function buildCommandsFromDiff(originalTask: Task, nextTask: Task): Front
   }
   if ((nextTask.parentId ?? null) !== (originalTask.parentId ?? null)) {
     fieldUpdates.parentId = nextTask.parentId ?? null;
+  }
+  if ((nextTask.status ?? 'not_started') !== (originalTask.status ?? 'not_started')) {
+    fieldUpdates.status = nextTask.status ?? 'not_started';
   }
   if ((nextTask.progress ?? 0) !== (originalTask.progress ?? 0)) {
     fieldUpdates.progress = nextTask.progress;

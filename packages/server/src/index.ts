@@ -51,6 +51,7 @@ import { registerWorkProgressRoutes } from './routes/work-progress-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
 import { runDirectSplitTask } from './split-task.js';
+import { normalizeStoredTaskStatus } from '@gantt/runtime-core/services/task-status';
 
 const fastify = Fastify({ logger: true });
 const requireAiQueryLimit = requireTrackedLimit('ai_queries', {
@@ -191,6 +192,7 @@ async function buildProjectLoadResponse(projectId: string, requesterEmail?: stri
         type: task.type ?? 'task',
         color: task.color ?? undefined,
         parentId: task.parentId ?? undefined,
+        status: normalizeStoredTaskStatus(task.status),
         progress: task.progress,
         workVolume: task.workVolume ?? null,
         workUnit: task.workUnit ?? null,

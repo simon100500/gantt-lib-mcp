@@ -7,6 +7,7 @@
 
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
 export type TaskType = 'task' | 'milestone';
+export type TaskStatus = 'not_started' | 'in_progress' | 'done' | 'closed';
 
 export interface TaskDependency {
   taskId: string;
@@ -22,6 +23,7 @@ export interface Task {
   type?: TaskType;
   color?: string;
   parentId?: string;
+  status?: TaskStatus;
   progress?: number;
   workVolume?: number | null;
   workUnit?: string | null;
@@ -42,6 +44,7 @@ export interface CreateTaskInput {
   type?: TaskType;
   color?: string;
   parentId?: string;
+  status?: TaskStatus;
   progress?: number;
   workVolume?: number | null;
   workUnit?: string | null;
@@ -59,6 +62,7 @@ export interface UpdateTaskInput {
   type?: TaskType;
   color?: string | null;
   parentId?: string;
+  status?: TaskStatus;
   progress?: number;
   workVolume?: number | null;
   workUnit?: string | null;
@@ -831,6 +835,7 @@ export type ProjectCommand =
         type?: TaskType;
         color?: string | null;
         parentId?: string | null;
+        status?: TaskStatus;
         progress?: number;
         workVolume?: number | null;
         workUnit?: string | null;
@@ -847,6 +852,7 @@ export type ProjectCommand =
           type?: TaskType;
           color?: string | null;
           parentId?: string | null;
+          status?: TaskStatus;
           progress?: number;
           workVolume?: number | null;
           workUnit?: string | null;

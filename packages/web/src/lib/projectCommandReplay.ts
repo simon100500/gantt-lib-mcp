@@ -13,6 +13,65 @@ import {
 } from 'gantt-lib/core/scheduling';
 import type { FrontendProjectCommand, ProjectSnapshot, Task, TaskDependency } from '../types';
 
+function clampTaskProgress(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const clamped = Math.max(0, Math.min(100, value));
+  return Math.round((clamped + Number.EPSILON) * 100) / 100;
+}
+
+function normalizeTaskStatus(value: Task['status'] | undefined): NonNullable<Task['status']> {
+  switch (value) {
+    case 'in_progress':
+    case 'done':
+    case 'closed':
+      return value;
+    default:
+      return 'not_started';
+  }
+}
+
+function synchronizeTaskState(task: Task, currentTask?: Task): Task {
+  const nextWorkVolume = task.workVolume ?? null;
+  const nextCompletedVolume = task.completedVolume ?? 0;
+  const nextProgress = clampTaskProgress(task.progress ?? 0);
+
+  switch (task.status) {
+    case 'done':
+      return {
+        ...task,
+        status: 'done',
+        progress: 100,
+        completedVolume: nextWorkVolume && nextWorkVolume > 0 ? nextWorkVolume : nextCompletedVolume,
+      };
+    case 'closed':
+      return { ...task, status: 'closed', progress: nextProgress, completedVolume: nextCompletedVolume };
+    case 'in_progress':
+      return { ...task, status: 'in_progress', progress: nextProgress, completedVolume: nextCompletedVolume };
+    case 'not_started':
+      return { ...task, status: 'not_started', progress: nextProgress, completedVolume: nextCompletedVolume };
+    default: {
+      const currentStatus = normalizeTaskStatus(currentTask?.status);
+      if (currentStatus === 'closed') {
+        return { ...task, status: 'closed', progress: nextProgress, completedVolume: nextCompletedVolume };
+      }
+      if (nextProgress >= 100) {
+        return { ...task, status: 'done', progress: 100, completedVolume: nextCompletedVolume };
+      }
+      if (nextProgress > 0) {
+        return { ...task, status: 'in_progress', progress: nextProgress, completedVolume: nextCompletedVolume };
+      }
+      return {
+        ...task,
+        status: currentStatus === 'in_progress' ? 'in_progress' : 'not_started',
+        progress: nextProgress,
+        completedVolume: nextCompletedVolume,
+      };
+    }
+  }
+}
+
 function normalizeTaskDependencies(dependencies: TaskDependency[] | undefined): TaskDependency[] {
   return (dependencies ?? []).map((dependency) => ({
     ...dependency,
@@ -235,6 +294,7 @@ export function replayProjectCommand(
         type: command.task.type ?? 'task',
         color: command.task.color,
         parentId: command.task.parentId,
+        status: command.task.status,
         progress: command.task.progress,
         workVolume: command.task.workVolume ?? null,
         workUnit: command.task.workUnit ?? null,
@@ -248,7 +308,7 @@ export function replayProjectCommand(
           ? { ...task, sortOrder: (task.sortOrder ?? createdSortOrder) + 1 }
           : task
       ));
-      return scheduleCreatedTasks(nextTasks.map(normalizeCoreTask), [createdTask], options);
+      return scheduleCreatedTasks(nextTasks.map(normalizeCoreTask), [synchronizeTaskState(createdTask)], options);
     }
 
     case 'create_tasks_batch': {
@@ -257,7 +317,7 @@ export function replayProjectCommand(
 
       for (const taskDef of command.tasks) {
         const taskId = taskDef.id ?? `pending:${requestId ?? crypto.randomUUID()}`;
-        createdTasks.push({
+        createdTasks.push(synchronizeTaskState({
           id: taskId,
           name: taskDef.name,
           startDate: taskDef.startDate,
@@ -265,13 +325,14 @@ export function replayProjectCommand(
           type: taskDef.type ?? 'task',
           color: taskDef.color,
           parentId: taskDef.parentId,
+          status: taskDef.status,
           progress: taskDef.progress,
           workVolume: taskDef.workVolume ?? null,
           workUnit: taskDef.workUnit ?? null,
           completedVolume: taskDef.completedVolume ?? 0,
           dependencies: normalizeTaskDependencies(taskDef.dependencies),
           sortOrder: taskDef.sortOrder,
-        });
+        }));
       }
 
       return scheduleCreatedTasks(nextTasks.map(normalizeCoreTask), createdTasks, options);
@@ -360,6 +421,7 @@ export function replayProjectCommand(
               ...(command.fields.type !== undefined ? { type: command.fields.type } : {}),
               ...(command.fields.color !== undefined ? { color: command.fields.color ?? undefined } : {}),
               ...(command.fields.parentId !== undefined ? { parentId: command.fields.parentId ?? undefined } : {}),
+              ...(command.fields.status !== undefined ? { status: command.fields.status } : {}),
               ...(command.fields.progress !== undefined ? { progress: command.fields.progress } : {}),
               ...(command.fields.workVolume !== undefined ? { workVolume: command.fields.workVolume } : {}),
               ...(command.fields.workUnit !== undefined ? { workUnit: command.fields.workUnit } : {}),
@@ -369,7 +431,10 @@ export function replayProjectCommand(
           : task
       ));
 
-      const normalizedNextTasks = nextTasks.map((task) => normalizeTaskDatesForType(task));
+      const currentTaskById = new Map(snapshot.tasks.map((task) => [task.id, task]));
+      const normalizedNextTasks = nextTasks.map((task) => normalizeTaskDatesForType(
+        synchronizeTaskState(task, currentTaskById.get(task.id)),
+      ));
 
       if (command.fields.parentId !== undefined || command.fields.type !== undefined) {
         const result = recalculateProjectSchedule(normalizedNextTasks.map(normalizeCoreTask), options);
