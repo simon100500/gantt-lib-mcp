@@ -2128,6 +2128,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           ? (
             <ProjectWorkspace
               ganttRef={ganttRef}
+              projectName={currentProjectLabel}
               tasks={visibleTasks}
               setTasks={setTasks}
               loading={loading}
@@ -2189,6 +2190,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
                     await auth.updateProject(currentProject.id, { timelineMarkers });
                   }
                 : undefined}
+              onProjectNameChange={handleSaveProjectName}
               onCreateTemplateFromTask={handleCreateTemplateFromTask}
               onInsertTemplateAtTask={handleInsertTemplateAtTask}
               onCreateTemplateFromProject={handleCreateCurrentProjectTemplate}
@@ -2291,7 +2293,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
       }}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
-      onSaveProjectName={handleSaveProjectName}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
       ganttRef={ganttRef}

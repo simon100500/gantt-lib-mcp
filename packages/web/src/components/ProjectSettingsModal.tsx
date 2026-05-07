@@ -22,23 +22,31 @@ function createEditableMarker(marker?: TimelineMarker, index = 0): EditableTimel
 }
 
 interface ProjectSettingsModalProps {
+  projectName: string;
   ganttDayMode: 'business' | 'calendar';
   timelineMarkers: TimelineMarker[];
   pending: boolean;
   error: string | null;
+  canEditProjectName: boolean;
   canShiftProject: boolean;
   canEditGanttDayMode: boolean;
   canEditTimelineMarkers: boolean;
   onClose: () => void;
   onOpenProjectShift: () => void;
-  onSave: (settings: { ganttDayMode: 'business' | 'calendar'; timelineMarkers: TimelineMarker[] }) => void | Promise<void>;
+  onSave: (settings: {
+    projectName: string;
+    ganttDayMode: 'business' | 'calendar';
+    timelineMarkers: TimelineMarker[];
+  }) => void | Promise<void>;
 }
 
 export function ProjectSettingsModal({
+  projectName,
   ganttDayMode,
   timelineMarkers,
   pending,
   error,
+  canEditProjectName,
   canShiftProject,
   canEditGanttDayMode,
   canEditTimelineMarkers,
@@ -46,11 +54,13 @@ export function ProjectSettingsModal({
   onOpenProjectShift,
   onSave,
 }: ProjectSettingsModalProps) {
+  const [draftProjectName, setDraftProjectName] = useState(projectName);
   const [draftMode, setDraftMode] = useState<'business' | 'calendar'>(ganttDayMode);
   const [draftMarkers, setDraftMarkers] = useState<EditableTimelineMarker[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
+    setDraftProjectName(projectName);
     setDraftMode(ganttDayMode);
     setDraftMarkers(
       timelineMarkers.length > 0
@@ -58,13 +68,19 @@ export function ProjectSettingsModal({
         : [],
     );
     setLocalError(null);
-  }, [ganttDayMode, timelineMarkers]);
+  }, [ganttDayMode, projectName, timelineMarkers]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLocalError(null);
 
     const normalizedMarkers: TimelineMarker[] = [];
+    const normalizedProjectName = draftProjectName.trim();
+    if (!normalizedProjectName) {
+      setLocalError('Укажите название проекта.');
+      return;
+    }
+
     for (const marker of draftMarkers) {
       const date = marker.date.trim();
       const name = marker.name.trim();
@@ -86,6 +102,7 @@ export function ProjectSettingsModal({
     }
 
     await onSave({
+      projectName: normalizedProjectName,
       ganttDayMode: draftMode,
       timelineMarkers: normalizedMarkers,
     });
@@ -111,7 +128,6 @@ export function ProjectSettingsModal({
               <Settings2 className="h-5 w-5 text-primary" />
               Настройки проекта
             </h2>
-            <p className="mt-1 text-sm text-slate-500">Режим расчёта дней, сдвиг графика и пользовательские маркеры.</p>
           </div>
           <button
             type="button"
@@ -133,6 +149,18 @@ export function ProjectSettingsModal({
               {localError ?? error}
             </div>
           )}
+
+          <label className="block space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Название проекта</span>
+            <input
+              type="text"
+              value={draftProjectName}
+              onChange={(event) => setDraftProjectName(event.target.value)}
+              disabled={!canEditProjectName || pending}
+              placeholder="Название проекта"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100"
+            />
+          </label>
 
           <section className="space-y-3">
             <div>

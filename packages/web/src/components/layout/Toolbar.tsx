@@ -1207,48 +1207,6 @@ export function Toolbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="hidden lg:flex h-8 items-center rounded-md border border-slate-300 bg-transparent px-2 text-slate-600 transition-colors hover:border-primary hover:text-primary focus-visible:outline-none"
-                title="Дополнительные параметры"
-              >
-                <Ellipsis className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {showProjectShiftControl && onOpenProjectSettings && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => onOpenProjectSettings()}
-                    disabled={!canOpenProjectSettings}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Columns3Cog className="h-4 w-4" />
-                    <span className="text-sm">Настройки проекта</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                </>
-              )}
-              <DropdownMenuItem
-                disabled={!canChangeGanttDayMode}
-                onSelect={(event) => {
-                  event.preventDefault();
-                  onGanttDayModeChange?.(ganttDayMode === 'business' ? 'calendar' : 'business');
-                }}
-                className="flex cursor-pointer items-center gap-2"
-              >
-                <input
-                  type="checkbox"
-                  checked={ganttDayMode === 'business'}
-                  readOnly
-                  className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-                />
-                <span className="text-sm">Рабочие дни</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </>
       )}
 

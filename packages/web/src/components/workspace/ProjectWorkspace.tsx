@@ -42,6 +42,7 @@ import {
 
 interface ProjectWorkspaceProps {
   ganttRef: RefObject<GanttChartRef | null>;
+  projectName?: string;
   tasks: Task[];
   setTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   loading: boolean;
@@ -89,6 +90,7 @@ interface ProjectWorkspaceProps {
   timelineMarkers?: TimelineMarker[];
   onGanttDayModeChange?: (mode: 'business' | 'calendar') => void;
   onTimelineMarkersChange?: (timelineMarkers: TimelineMarker[]) => void | Promise<void>;
+  onProjectNameChange?: (projectName: string) => void | Promise<void>;
   previewState?: 'idle' | 'rendering' | 'failed';
   previewMessage?: string | null;
   onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
@@ -462,6 +464,7 @@ function normalizeTaskListColumnWidthMap(value: unknown): TaskListColumnWidthMap
 
 export function ProjectWorkspace({
   ganttRef,
+  projectName = 'Мой проект',
   tasks,
   setTasks,
   loading,
@@ -509,6 +512,7 @@ export function ProjectWorkspace({
   timelineMarkers = [],
   onGanttDayModeChange,
   onTimelineMarkersChange,
+  onProjectNameChange,
   previewState = 'idle',
   previewMessage = null,
   onSplitTask,
@@ -697,7 +701,6 @@ export function ProjectWorkspace({
   const [projectShiftOpen, setProjectShiftOpen] = useState(false);
   const [projectShiftPending, setProjectShiftPending] = useState(false);
   const [projectShiftError, setProjectShiftError] = useState<string | null>(null);
-  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [projectSettingsPending, setProjectSettingsPending] = useState(false);
   const [projectSettingsError, setProjectSettingsError] = useState<string | null>(null);
   const [undoPreviewEditMode, setUndoPreviewEditMode] = useState(false);
@@ -705,6 +708,8 @@ export function ProjectWorkspace({
   const [historyBranchConfirmPending, setHistoryBranchConfirmPending] = useState(false);
   const historyBranchConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const historyViewer = useHistoryViewerStore((state) => state.historyViewer);
+  const projectSettingsOpen = useUIStore((state) => state.showProjectSettingsModal);
+  const setProjectSettingsOpen = useUIStore((state) => state.setShowProjectSettingsModal);
   const previewModeActive = historyViewer.mode === 'preview';
   const effectiveTasks = historyViewer.mode === 'preview'
     ? historyViewer.snapshot.tasks
@@ -1767,7 +1772,7 @@ export function ProjectWorkspace({
   }, [applyProgressColumnVolumeDeltas, batchUpdate, prepareUndoPreviewForEdit]);
 
   const canShiftProject = !effectiveReadOnly && Boolean(guardedBatchUpdate) && Boolean(projectDateRange);
-  const canOpenProjectSettings = canShiftProject || Boolean(onGanttDayModeChange) || Boolean(onTimelineMarkersChange);
+  const canOpenProjectSettings = canShiftProject || Boolean(onGanttDayModeChange) || Boolean(onTimelineMarkersChange) || Boolean(onProjectNameChange);
 
   useEffect(() => {
     if (templateMode && showHistoryPanel) {
@@ -1818,15 +1823,18 @@ export function ProjectWorkspace({
   }, [guardedBatchUpdate]);
 
   const handleSaveProjectSettings = useCallback(async (settings: {
+    projectName: string;
     ganttDayMode: 'business' | 'calendar';
     timelineMarkers: TimelineMarker[];
   }) => {
+    const projectNameChanged = Boolean(onProjectNameChange)
+      && settings.projectName.trim() !== projectName.trim();
     const markersChanged = Boolean(onTimelineMarkersChange)
       && JSON.stringify(settings.timelineMarkers) !== JSON.stringify(timelineMarkers);
     const dayModeChanged = Boolean(onGanttDayModeChange)
       && settings.ganttDayMode !== ganttDayMode;
 
-    if (!markersChanged && !dayModeChanged) {
+    if (!projectNameChanged && !markersChanged && !dayModeChanged) {
       setProjectSettingsOpen(false);
       setProjectSettingsError(null);
       return;
@@ -1835,6 +1843,9 @@ export function ProjectWorkspace({
     setProjectSettingsPending(true);
     setProjectSettingsError(null);
     try {
+      if (projectNameChanged && onProjectNameChange) {
+        await onProjectNameChange(settings.projectName.trim());
+      }
       if (dayModeChanged && onGanttDayModeChange) {
         await onGanttDayModeChange(settings.ganttDayMode);
       }
@@ -1848,7 +1859,7 @@ export function ProjectWorkspace({
     } finally {
       setProjectSettingsPending(false);
     }
-  }, [ganttDayMode, onGanttDayModeChange, onTimelineMarkersChange, timelineMarkers]);
+  }, [ganttDayMode, onGanttDayModeChange, onProjectNameChange, onTimelineMarkersChange, projectName, setProjectSettingsOpen, timelineMarkers]);
 
   useEffect(() => {
     // Block history shortcuts while preview/read-only modes are active.
@@ -2178,10 +2189,12 @@ export function ProjectWorkspace({
             )}
             {projectSettingsOpen && (
               <ProjectSettingsModal
+                projectName={projectName}
                 ganttDayMode={displayGanttDayMode ?? ganttDayMode}
                 timelineMarkers={timelineMarkers}
                 pending={projectSettingsPending}
                 error={projectSettingsError}
+                canEditProjectName={Boolean(onProjectNameChange) && !effectiveReadOnly}
                 canShiftProject={canShiftProject}
                 canEditGanttDayMode={Boolean(onGanttDayModeChange) && !effectiveReadOnly}
                 canEditTimelineMarkers={Boolean(onTimelineMarkersChange) && !effectiveReadOnly}
