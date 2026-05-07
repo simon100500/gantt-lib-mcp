@@ -36,6 +36,10 @@ type ImportPreviewResponse = {
   sheetName: string;
   columns: Array<{ index: number; header: string }>;
   mapping: ImportMapping;
+  options?: {
+    includeMaterials?: boolean;
+    includeMechanisms?: boolean;
+  };
   supportedFields: Array<{ field: ImportField; label: string; required: boolean }>;
   rows: Array<{
     rowNumber: number;
@@ -73,6 +77,10 @@ type ImportErrorResponse = {
 };
 
 type ImportKind = 'excel' | 'grandSmeta';
+type GrandSmetaOptions = {
+  includeMaterials: boolean;
+  includeMechanisms: boolean;
+};
 
 interface ImportExcelModalProps {
   accessToken: string | null;
@@ -133,9 +141,11 @@ export function ImportExcelModal({
   isDownloadTemplateLoading = false,
 }: ImportExcelModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastGrandSmetaOptionsKeyRef = useRef('includeMaterials:true|includeMechanisms:true');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [selectedImportKind, setSelectedImportKind] = useState<ImportKind>('excel');
+  const [grandSmetaOptions, setGrandSmetaOptions] = useState<GrandSmetaOptions>({ includeMaterials: true, includeMechanisms: true });
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [mapping, setMapping] = useState<ImportMapping | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -218,9 +228,16 @@ export function ImportExcelModal({
         fileBase64: nextBase64,
         hierarchyMode: 'wbs_level',
         mapping: nextMapping ?? undefined,
+        options: importKind === 'grandSmeta' ? grandSmetaOptions : undefined,
       });
 
       setSelectedImportKind(importKind);
+      if (importKind === 'grandSmeta' && response.options) {
+        setGrandSmetaOptions({
+          includeMaterials: response.options.includeMaterials ?? true,
+          includeMechanisms: response.options.includeMechanisms ?? true,
+        });
+      }
       setPreview(response);
       setMapping(response.mapping);
       setIssues(response.issues);
@@ -269,6 +286,7 @@ export function ImportExcelModal({
         fileBase64,
         hierarchyMode: 'wbs_level',
         mapping,
+        options: selectedImportKind === 'grandSmeta' ? grandSmetaOptions : undefined,
       });
       await onImported(result);
       onClose();
@@ -289,6 +307,28 @@ export function ImportExcelModal({
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
   }, [commitLoading, onClose, previewLoading]);
+
+  useEffect(() => {
+    const nextKey = `includeMaterials:${grandSmetaOptions.includeMaterials}|includeMechanisms:${grandSmetaOptions.includeMechanisms}`;
+    if (lastGrandSmetaOptionsKeyRef.current === nextKey) {
+      return;
+    }
+    lastGrandSmetaOptionsKeyRef.current = nextKey;
+
+    if (!selectedFile || !fileBase64 || !isGrandSmeta || previewLoading || commitLoading) {
+      return;
+    }
+
+    void loadPreview(selectedFile, fileBase64, mapping);
+  }, [
+    commitLoading,
+    fileBase64,
+    grandSmetaOptions.includeMaterials,
+    grandSmetaOptions.includeMechanisms,
+    isGrandSmeta,
+    previewLoading,
+    selectedFile,
+  ]);
 
   const emptyState = !selectedFile && !previewLoading && !preview;
 
@@ -395,6 +435,29 @@ export function ImportExcelModal({
                 {errorMessage}
               </div>
             ) : null}
+            {isGrandSmeta ? (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Назначения из сметы</div>
+                <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-700">
+                  <label className="flex items-center gap-2">
+                    <input
+                      checked={grandSmetaOptions.includeMaterials}
+                      onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMaterials: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    Материалы
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      checked={grandSmetaOptions.includeMechanisms}
+                      onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMechanisms: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    Механизмы
+                  </label>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex min-h-0 max-h-[92vh] flex-col gap-4 overflow-hidden px-5 py-4">
@@ -408,6 +471,26 @@ export function ImportExcelModal({
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {isGrandSmeta ? (
+                  <div className="mr-2 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                    <label className="flex items-center gap-2">
+                      <input
+                        checked={grandSmetaOptions.includeMaterials}
+                        onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMaterials: event.target.checked }))}
+                        type="checkbox"
+                      />
+                      Материалы
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        checked={grandSmetaOptions.includeMechanisms}
+                        onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMechanisms: event.target.checked }))}
+                        type="checkbox"
+                      />
+                      Механизмы
+                    </label>
+                  </div>
+                ) : null}
                 <Button onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
                   <FileSpreadsheet className="h-4 w-4" />
                   Другой файл
@@ -442,11 +525,12 @@ export function ImportExcelModal({
             ) : null}
 
             {visibleIssues ? (
-              <div className="max-h-52 overflow-auto rounded-xl border border-slate-200 bg-white">
-                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+              <details className="rounded-xl border border-slate-200 bg-white" open={blockingIssues.length > 0}>
+                <summary className="cursor-pointer list-none border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
                   Ошибки и предупреждения
-                </div>
-                <div className="space-y-2 p-4">
+                  <span className="ml-2 text-xs font-medium text-slate-500">{issues.length}</span>
+                </summary>
+                <div className="max-h-72 space-y-2 overflow-auto p-4">
                   {issues.map((issue, index) => (
                     <div
                       className={`rounded-lg border px-3 py-2 text-sm ${issue.severity === 'error'
@@ -460,7 +544,7 @@ export function ImportExcelModal({
                     </div>
                   ))}
                 </div>
-              </div>
+              </details>
             ) : null}
 
             <div className="min-h-0 overflow-auto rounded-xl border border-slate-200">

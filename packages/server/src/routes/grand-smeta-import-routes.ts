@@ -11,6 +11,10 @@ import {
 type GrandSmetaImportRequestBody = {
   fileName?: string;
   fileBase64?: string;
+  options?: {
+    includeMaterials?: boolean;
+    includeMechanisms?: boolean;
+  };
 };
 
 function isValidationError(error: unknown): error is GrandSmetaImportValidationError {
@@ -44,6 +48,7 @@ export async function registerGrandSmetaImportRoutes(fastify: FastifyInstance): 
       const response = await buildGrandSmetaImportPreview({
         fileName: body.fileName,
         fileBase64: body.fileBase64,
+        options: body.options,
       });
       return reply.send(response);
     } catch (error) {
@@ -73,6 +78,7 @@ export async function registerGrandSmetaImportRoutes(fastify: FastifyInstance): 
         userId: req.user!.userId,
         fileName: body.fileName,
         fileBase64: body.fileBase64,
+        options: body.options,
       });
       return reply.send(response);
     } catch (error) {

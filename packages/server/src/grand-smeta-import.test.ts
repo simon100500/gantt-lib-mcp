@@ -17,6 +17,7 @@ async function buildFixtureBase64(): Promise<string> {
         <Quantity Result="12,5"/>
         <Resources>
           <Mat Caption="Material from work" Identifier="r1" Code="01.1.01.01" Units="m2" Quantity="12,5"/>
+          <Mch Caption="Machine 1" Code="91.01" Units="mach-h" Quantity="1,25"/>
         </Resources>
       </Position>
       <Position Caption="Catalog material" Number="2" Code="FSBC-01.1.01.01-0001" Units="m2">
@@ -47,9 +48,13 @@ describe('grand smeta import preview', () => {
 
     assert.equal(preview.sheetName, 'Test estimate');
     assert.equal(preview.summary.taskCount, 6);
+    assert.equal(preview.options.includeMaterials, true);
+    assert.equal(preview.options.includeMechanisms, true);
+    assert.equal(preview.summary.resourceNameCount, 2);
     assert.equal(preview.rows[0]?.normalized.name, 'Section 1');
     assert.equal(preview.rows[1]?.normalized.name, 'Group A');
     assert.equal(preview.rows[2]?.normalized.name, '1. Task 1');
+    assert.deepEqual(preview.rows[2]?.normalized.resourceNames, ['Material from work', 'Machine 1']);
     assert.equal(preview.rows[2]?.values.startDate, '2026-05-05');
     assert.equal(preview.rows[3]?.values.startDate, '2026-05-06');
     assert.equal(preview.rows[4]?.normalized.name, 'Section 2');
@@ -58,5 +63,22 @@ describe('grand smeta import preview', () => {
     assert.match(preview.issues[0]?.message ?? '', /GSFX не содержит календарных дат/u);
     assert.ok(preview.rows.every((row) => row.normalized.name !== '2. Catalog material'));
     assert.match(preview.issues[1]?.message ?? '', /Материальные позиции/u);
+    assert.match(preview.issues[2]?.message ?? '', /Назначения из сметы/u);
+  });
+
+  it('can disable materials and keep only mechanisms in assignments preview', async () => {
+    const { buildGrandSmetaImportPreview } = await import(new URL('./grand-smeta-import.ts', import.meta.url).href);
+    const preview = await buildGrandSmetaImportPreview({
+      fileName: 'fixture.gsfx',
+      fileBase64: await buildFixtureBase64(),
+      options: {
+        includeMaterials: false,
+        includeMechanisms: true,
+      },
+    });
+
+    assert.equal(preview.summary.taskCount, 6);
+    assert.equal(preview.summary.resourceNameCount, 1);
+    assert.deepEqual(preview.rows[2]?.normalized.resourceNames, ['Machine 1']);
   });
 });

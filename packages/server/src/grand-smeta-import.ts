@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import { getPrisma } from '@gantt/runtime-core/prisma';
-import { commandService } from '@gantt/mcp/services';
+import { assignmentService, commandService, resourceService } from '@gantt/mcp/services';
 import type {
   ActorType,
   CreateTaskInput,
   HistoryGroupContext,
+  ProjectResource,
+  ResourceType,
   TaskType,
 } from '@gantt/mcp/types';
 
@@ -32,6 +34,11 @@ export type GrandSmetaImportColumnConfig = {
 
 export type GrandSmetaImportMapping = Record<GrandSmetaImportField, GrandSmetaImportColumnConfig>;
 
+export type GrandSmetaImportOptions = {
+  includeMaterials: boolean;
+  includeMechanisms: boolean;
+};
+
 export type GrandSmetaImportIssue = {
   severity: 'error' | 'warning';
   rowNumber?: number;
@@ -45,6 +52,7 @@ export type GrandSmetaImportPreviewResponse = {
   sheetName: string;
   columns: Array<{ index: number; header: string }>;
   mapping: GrandSmetaImportMapping;
+  options: GrandSmetaImportOptions;
   supportedFields: Array<{ field: GrandSmetaImportField; label: string; required: boolean }>;
   rows: Array<{
     rowNumber: number;
@@ -101,7 +109,15 @@ type GrandSmetaParsedRow = {
   parentTempId?: string;
   tempId: string;
   isLeaf: boolean;
+  resourceRefs: GrandSmetaResourceRef[];
   rawValues: Partial<Record<GrandSmetaImportField, string>>;
+};
+
+type GrandSmetaResourceRef = {
+  name: string;
+  type: ResourceType;
+  quantity?: number;
+  unit?: string;
 };
 
 const TEXT_DECODER = new TextDecoder('windows-1251');
@@ -133,6 +149,11 @@ const FIELD_ORDER: GrandSmetaImportField[] = [
   'dependencies',
   'resources',
 ];
+
+const DEFAULT_IMPORT_OPTIONS: GrandSmetaImportOptions = {
+  includeMaterials: true,
+  includeMechanisms: true,
+};
 
 function buildFixedMapping(): GrandSmetaImportMapping {
   return FIELD_ORDER.reduce((acc, field, index) => {
@@ -262,6 +283,58 @@ function parseDecimal(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function sanitizeImportOptions(input?: Partial<GrandSmetaImportOptions>): GrandSmetaImportOptions {
+  return {
+    includeMaterials: input?.includeMaterials ?? DEFAULT_IMPORT_OPTIONS.includeMaterials,
+    includeMechanisms: input?.includeMechanisms ?? DEFAULT_IMPORT_OPTIONS.includeMechanisms,
+  };
+}
+
+function parsePositionResources(positionNode: PreservedXmlNode, options: GrandSmetaImportOptions): GrandSmetaResourceRef[] {
+  const resourcesNode = findFirstChild(positionNode, 'Resources');
+  if (!resourcesNode) {
+    return [];
+  }
+
+  const resources: GrandSmetaResourceRef[] = [];
+  for (const child of getNodeChildren(resourcesNode)) {
+    const kind = getNodeName(child);
+    const attrs = getNodeAttributes(child);
+    const name = attrs.Caption?.trim();
+    if (!name) {
+      continue;
+    }
+
+    if (kind === 'Mat' && options.includeMaterials) {
+      resources.push({
+        name,
+        type: 'material',
+        quantity: parseDecimal(attrs.Quantity),
+        unit: attrs.Units?.trim() || undefined,
+      });
+      continue;
+    }
+
+    if (kind === 'Mch' && options.includeMechanisms) {
+      resources.push({
+        name,
+        type: 'equipment',
+        quantity: parseDecimal(attrs.Quantity),
+        unit: attrs.Units?.trim() || undefined,
+      });
+    }
+  }
+
+  const deduped = new Map<string, GrandSmetaResourceRef>();
+  for (const resource of resources) {
+    const key = `${resource.type}:${resource.name.trim().toLowerCase()}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, resource);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
 function isMaterialCatalogPosition(positionNode: PreservedXmlNode): boolean {
   const attrs = getNodeAttributes(positionNode);
   const code = attrs.Code?.trim() ?? '';
@@ -282,7 +355,7 @@ function isMaterialCatalogPosition(positionNode: PreservedXmlNode): boolean {
   return referencesWorkResource;
 }
 
-function createRawValues(row: Pick<GrandSmetaParsedRow, 'wbsLevel' | 'name' | 'startDate' | 'endDate' | 'type' | 'workVolume' | 'workUnit'>): Partial<Record<GrandSmetaImportField, string>> {
+function createRawValues(row: Pick<GrandSmetaParsedRow, 'wbsLevel' | 'name' | 'startDate' | 'endDate' | 'type' | 'workVolume' | 'workUnit' | 'resourceRefs'>): Partial<Record<GrandSmetaImportField, string>> {
   return {
     wbsLevel: String(row.wbsLevel),
     name: row.name,
@@ -294,11 +367,16 @@ function createRawValues(row: Pick<GrandSmetaParsedRow, 'wbsLevel' | 'name' | 's
     completedVolume: '',
     dependencies: '',
     progress: '',
-    resources: '',
+    resources: row.resourceRefs.map((resource) => resource.name).join('; '),
   };
 }
 
-export function parseGrandSmetaXml(xmlText: string, sourceName: string): { fileName: string; sheetName: string; rows: GrandSmetaParsedRow[]; issues: GrandSmetaImportIssue[] } {
+export function parseGrandSmetaXml(
+  xmlText: string,
+  sourceName: string,
+  inputOptions?: Partial<GrandSmetaImportOptions>,
+): { fileName: string; sheetName: string; rows: GrandSmetaParsedRow[]; issues: GrandSmetaImportIssue[]; options: GrandSmetaImportOptions } {
+  const options = sanitizeImportOptions(inputOptions);
   const parser = new XMLParser({
     preserveOrder: true,
     ignoreAttributes: false,
@@ -364,6 +442,7 @@ export function parseGrandSmetaXml(xmlText: string, sourceName: string): { fileN
       parentImportIndex: null,
       tempId: randomUUID(),
       isLeaf: false,
+      resourceRefs: [],
       rawValues: {},
     };
     rows.push(chapterRow);
@@ -405,6 +484,7 @@ export function parseGrandSmetaXml(xmlText: string, sourceName: string): { fileN
       const positionNumber = positionAttrs.Number?.trim();
       const quantityNode = findFirstChild(childNode, 'Quantity');
       const quantityAttrs = quantityNode ? getNodeAttributes(quantityNode) : {};
+      const resourceRefs = parsePositionResources(childNode, options);
       const startDate = addDays(baseDate, leafIndex);
       const endDate = startDate;
       leafIndex += 1;
@@ -425,6 +505,7 @@ export function parseGrandSmetaXml(xmlText: string, sourceName: string): { fileN
           parentTempId: chapterRow.tempId,
           tempId: randomUUID(),
           isLeaf: false,
+          resourceRefs: [],
           rawValues: {},
         };
         rows.push(activeHeaderRow);
@@ -446,6 +527,7 @@ export function parseGrandSmetaXml(xmlText: string, sourceName: string): { fileN
         parentTempId: parentRow.tempId,
         tempId: randomUUID(),
         isLeaf: true,
+        resourceRefs,
         rawValues: {},
       };
       positionRow.rawValues = createRawValues(positionRow);
@@ -492,21 +574,33 @@ export function parseGrandSmetaXml(xmlText: string, sourceName: string): { fileN
     });
   }
 
+  const selectedResourceCount = new Set(
+    rows.flatMap((row) => row.resourceRefs.map((resource) => `${resource.type}:${resource.name.trim().toLowerCase()}`)),
+  ).size;
+  if (selectedResourceCount > 0) {
+    issues.push({
+      severity: 'warning',
+      message: `Назначения из сметы будут импортированы по именам ресурсов. Количества (${selectedResourceCount} уник. ресурсов) пока не сохраняются в assignment-модели.`,
+    });
+  }
+
   return {
     fileName: sourceName,
     sheetName: description,
     rows,
     issues,
+    options,
   };
 }
 
 export async function buildGrandSmetaImportPreview(input: {
   fileName: string;
   fileBase64: string;
+  options?: Partial<GrandSmetaImportOptions>;
 }): Promise<GrandSmetaImportPreviewResponse> {
   const fileBuffer = decodeGsfxFileBase64(input.fileName, input.fileBase64);
   const xmlText = await extractGsfxXml(input.fileName, fileBuffer);
-  const parsed = parseGrandSmetaXml(xmlText, input.fileName);
+  const parsed = parseGrandSmetaXml(xmlText, input.fileName, input.options);
   const mapping = buildFixedMapping();
 
   return {
@@ -514,6 +608,7 @@ export async function buildGrandSmetaImportPreview(input: {
     sheetName: parsed.sheetName,
     columns: FIELD_ORDER.map((field, index) => ({ index, header: FIELD_LABELS[field] })),
     mapping,
+    options: parsed.options,
     supportedFields: FIELD_ORDER.map((field) => ({
       field,
       label: FIELD_LABELS[field],
@@ -528,7 +623,7 @@ export async function buildGrandSmetaImportPreview(input: {
         wbsLevel: row.wbsLevel,
         parentImportIndex: row.parentImportIndex,
         type: row.type,
-        resourceNames: [],
+        resourceNames: row.resourceRefs.map((resource) => resource.name),
         dependencyLabels: [],
         isLeaf: row.isLeaf,
       },
@@ -538,9 +633,64 @@ export async function buildGrandSmetaImportPreview(input: {
       parsedRowCount: parsed.rows.length,
       taskCount: parsed.rows.length,
       dependencyCount: 0,
-      resourceNameCount: 0,
+      resourceNameCount: new Set(
+        parsed.rows.flatMap((row) => row.resourceRefs.map((resource) => `${resource.type}:${resource.name.trim().toLowerCase()}`)),
+      ).size,
     },
   };
+}
+
+async function resolveTypedImportResources(
+  projectId: string,
+  resources: GrandSmetaResourceRef[],
+): Promise<{ resources: ProjectResource[]; createdCount: number }> {
+  if (resources.length === 0) {
+    return { resources: [], createdCount: 0 };
+  }
+
+  const catalog = await resourceService.list({ projectId, includeInactive: true });
+  const resourcesByName = new Map<string, ProjectResource[]>();
+  for (const resource of catalog.resources) {
+    const key = resource.name.trim().toLowerCase();
+    const bucket = resourcesByName.get(key) ?? [];
+    bucket.push(resource);
+    resourcesByName.set(key, bucket);
+  }
+
+  const resolved: ProjectResource[] = [];
+  let createdCount = 0;
+
+  for (const requested of resources) {
+    const key = requested.name.trim().toLowerCase();
+    const existing = resourcesByName.get(key) ?? [];
+    let resource = existing.find((entry) => entry.isActive && entry.type === requested.type)
+      ?? existing.find((entry) => entry.isActive)
+      ?? null;
+
+    if (!resource && existing[0]) {
+      resource = await resourceService.update({
+        projectId,
+        resourceId: existing[0].id,
+        isActive: true,
+      });
+      existing[0] = resource;
+    }
+
+    if (!resource) {
+      resource = await resourceService.create({
+        projectId,
+        name: requested.name,
+        type: requested.type,
+        scope: 'project',
+      });
+      createdCount += 1;
+      resourcesByName.set(key, [...existing, resource]);
+    }
+
+    resolved.push(resource);
+  }
+
+  return { resources: resolved, createdCount };
 }
 
 export async function commitGrandSmetaImport(input: {
@@ -548,10 +698,12 @@ export async function commitGrandSmetaImport(input: {
   userId: string;
   fileName: string;
   fileBase64: string;
+  options?: Partial<GrandSmetaImportOptions>;
 }): Promise<GrandSmetaImportCommitResult> {
   const preview = await buildGrandSmetaImportPreview({
     fileName: input.fileName,
     fileBase64: input.fileBase64,
+    options: input.options,
   });
   const blockingIssues = preview.issues.filter((issue) => issue.severity === 'error');
   if (blockingIssues.length > 0) {
@@ -560,7 +712,7 @@ export async function commitGrandSmetaImport(input: {
 
   const fileBuffer = decodeGsfxFileBase64(input.fileName, input.fileBase64);
   const xmlText = await extractGsfxXml(input.fileName, fileBuffer);
-  const parsed = parseGrandSmetaXml(xmlText, input.fileName);
+  const parsed = parseGrandSmetaXml(xmlText, input.fileName, input.options);
 
   const createTasks: CreateTaskInput[] = parsed.rows.map((row) => ({
     id: row.tempId,
@@ -622,10 +774,43 @@ export async function commitGrandSmetaImport(input: {
     }]);
   }
 
+  const uniqueResources = Array.from(new Map(
+    parsed.rows
+      .filter((row) => row.isLeaf)
+      .flatMap((row) => row.resourceRefs)
+      .map((resource) => [`${resource.type}:${resource.name.trim().toLowerCase()}`, resource] as const),
+  ).values());
+  const { resources: importResources, createdCount } = await resolveTypedImportResources(input.projectId, uniqueResources);
+  const resourceIdByKey = new Map(importResources.map((resource) => [`${resource.type}:${resource.name.trim().toLowerCase()}`, resource.id]));
+
+  let assignedTaskCount = 0;
+  for (const row of parsed.rows) {
+    if (!row.isLeaf || row.resourceRefs.length === 0) {
+      continue;
+    }
+
+    const resourceIds = Array.from(new Set(
+      row.resourceRefs
+        .map((resource) => resourceIdByKey.get(`${resource.type}:${resource.name.trim().toLowerCase()}`) ?? null)
+        .filter((value): value is string => Boolean(value)),
+    ));
+
+    if (resourceIds.length === 0) {
+      continue;
+    }
+
+    await assignmentService.replaceForTask({
+      projectId: input.projectId,
+      taskId: row.tempId,
+      resourceIds,
+    });
+    assignedTaskCount += 1;
+  }
+
   return {
     importedTaskCount: parsed.rows.length,
-    createdResourceCount: 0,
-    assignedTaskCount: 0,
+    createdResourceCount: createdCount,
+    assignedTaskCount,
     newVersion: commitResponse.newVersion,
   };
 }
