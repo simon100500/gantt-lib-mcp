@@ -64,6 +64,7 @@ interface ProjectWorkspaceProps {
   onExportPdf?: () => void;
   onExportExcel?: () => void;
   onImportExcel?: () => void;
+  onInsertTemplateToProject?: () => void | Promise<void>;
   isExportExcelLoading?: boolean;
   onValidation: (result: ValidationResult) => void;
   onCascade?: (shiftedTasks: Task[]) => void;
@@ -481,6 +482,7 @@ export function ProjectWorkspace({
   onExportPdf,
   onExportExcel,
   onImportExcel,
+  onInsertTemplateToProject,
   isExportExcelLoading = false,
   onValidation,
   onCascade,
@@ -2029,6 +2031,7 @@ export function ProjectWorkspace({
           onExportPdf={onExportPdf}
           onExportExcel={onExportExcel}
           onImportExcel={onImportExcel}
+          onInsertTemplateToProject={effectiveReadOnly || hasShareToken ? null : onInsertTemplateToProject}
           isExportExcelLoading={isExportExcelLoading}
           shareStatus={shareStatus}
           onCreateShareLink={onCreateShareLink}

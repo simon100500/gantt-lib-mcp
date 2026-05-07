@@ -2152,6 +2152,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onExportPdf={handleExportPdf}
               onExportExcel={handleExportExcel}
               onImportExcel={() => setShowImportExcelModal(true)}
+              onInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
               isExportExcelLoading={isExportExcelLoading}
               onValidation={handleValidation}
               onCascade={handleCascade}
@@ -2261,7 +2262,6 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       onInsertTemplateToProject={handleInsertTemplateIntoCurrentProject}
       onOpenInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
       canInsertTemplateToProject={workspace.kind === 'project' && !isScheduleReadOnlyProject && visibleTasks.length > 0}
-      onOpenImportExcel={workspace.kind === 'project' && !isScheduleReadOnlyProject ? () => setShowImportExcelModal(true) : undefined}
       onCreateProjectGroup={handleCreateProjectGroup}
       onRenameProjectGroup={handleRenameProjectGroup}
       onDeleteProjectGroup={handleDeleteProjectGroup}

@@ -69,6 +69,7 @@ interface ToolbarProps {
   onExportPdf?: () => void;
   onExportExcel?: () => void;
   onImportExcel?: () => void;
+  onInsertTemplateToProject?: (() => void | Promise<void>) | null;
   isExportExcelLoading?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
   onCreateShareLink?: () => void;
@@ -323,6 +324,7 @@ export function Toolbar({
   onExportPdf,
   onExportExcel,
   onImportExcel,
+  onInsertTemplateToProject = null,
   isExportExcelLoading = false,
   shareStatus = 'idle',
   onCreateShareLink,
@@ -434,8 +436,9 @@ export function Toolbar({
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
-  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onImportExcel || (showShareButton && onCreateShareLink));
+  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
+  const hasDataMenu = hasTemplateAction || Boolean(onInsertTemplateToProject) || Boolean(onImportExcel);
   const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
@@ -692,6 +695,57 @@ export function Toolbar({
               onRequestDeleteBaseline: setBaselineDeleteCandidateId,
               onRefreshBaselines,
             })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {hasDataMenu && (
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={cn(
+                actionButtonClassName,
+                'hidden h-8 shrink-0 gap-1.5 px-2.5 sm:inline-flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
+              )}
+              title="Операции с данными"
+            >
+              <span className="hidden md:inline text-xs">Данные</span>
+              <ChevronDown className="h-3 w-3 text-current/70" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            {hasTemplateAction && (
+              <DropdownMenuItem
+                onClick={() => { void onStartTemplateSelection?.(); }}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2',
+                  templateSelectionActive && 'bg-primary/5 text-primary',
+                )}
+              >
+                <ToyBrick className="h-4 w-4" />
+                <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
+              </DropdownMenuItem>
+            )}
+            {onInsertTemplateToProject && (
+              <DropdownMenuItem
+                onClick={() => { void onInsertTemplateToProject(); }}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <ToyBrick className="h-4 w-4" />
+                <span className="text-sm">Вставить шаблон</span>
+              </DropdownMenuItem>
+            )}
+            {onImportExcel && (
+              <DropdownMenuItem
+                onClick={onImportExcel}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="text-sm">Импорт Excel</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -1033,27 +1087,6 @@ export function Toolbar({
                   <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
                 </DropdownMenuItem>
               )}
-              {hasTemplateAction && (
-                <DropdownMenuItem
-                  onClick={() => { void onStartTemplateSelection?.(); }}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-2',
-                    templateSelectionActive && 'bg-primary/5 text-primary',
-                  )}
-                >
-                  <ToyBrick className="h-4 w-4" />
-                  <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
-                </DropdownMenuItem>
-              )}
-              {onImportExcel && (
-                <DropdownMenuItem
-                  onClick={onImportExcel}
-                  className="flex cursor-pointer items-center gap-2"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span className="text-sm">Импорт Excel</span>
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
               {taskListColumnRows && taskListColumnRows.length > 0 && (
                 <>
@@ -1171,33 +1204,6 @@ export function Toolbar({
                   >
                     <CalendarClock className="h-4 w-4" />
                     <span className="text-sm">Сдвинуть проект ...</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                </>
-              )}
-              {hasTemplateAction && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => { void onStartTemplateSelection?.(); }}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2',
-                      templateSelectionActive && 'bg-primary/5 text-primary',
-                    )}
-                  >
-                    <ToyBrick className="h-4 w-4" />
-                    <span className="text-sm">{templateSelectionActive ? 'Выбор блока для шаблона' : 'Сохранить шаблон'}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-                </>
-              )}
-              {onImportExcel && (
-                <>
-                  <DropdownMenuItem
-                    onClick={onImportExcel}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    <span className="text-sm">Импорт Excel</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>
