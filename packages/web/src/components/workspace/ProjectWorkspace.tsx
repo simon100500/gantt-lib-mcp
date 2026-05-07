@@ -2523,6 +2523,9 @@ export function ProjectWorkspace({
                   onTaskListColumnWidthsChange={handleTaskListColumnWidthsChange}
                   taskDateChangeMode={taskDateChangeMode}
                   onTaskDateChangeModeChange={handleTaskDateChangeModeChange}
+                  getTaskListRowClassName={(task) => (
+                    task.status === 'closed' ? 'gantt-tl-row-closed' : undefined
+                  )}
                   onTasksChange={effectiveReadOnly || externalSelectionActive ? undefined : guardedBatchUpdate?.handleTasksChange}
                   dayWidth={viewMode === 'week' ? 8 : viewMode === 'month' ? 2 : 24}
                   rowHeight={36}

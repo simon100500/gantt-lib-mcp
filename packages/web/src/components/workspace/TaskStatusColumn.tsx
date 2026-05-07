@@ -16,7 +16,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 const STATUS_DOT_STYLES: Record<Exclude<TaskStatus, 'not_started'>, string> = {
   in_progress: 'bg-amber-400',
   done: 'bg-emerald-500',
-  closed: 'bg-violet-500',
+  closed: 'bg-slate-400',
 };
 
 const MANUAL_STATUSES: Exclude<TaskStatus, 'not_started'>[] = ['in_progress', 'done', 'closed'];
