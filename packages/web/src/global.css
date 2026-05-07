@@ -55,10 +55,16 @@
   border-right: 1px solid #dfe1e6 !important;
 }
 
+.gantt-tl-row-closed {
+  --gantt-closed-row-strike-color: #888;
+  text-decoration-thickness: 0.5px;
+}
+
 .gantt-tl-row-closed .gantt-tl-cell:not(.gantt-tl-cell-number),
 .gantt-tl-row-closed .gantt-tl-name-trigger,
 .gantt-tl-row-closed .gantt-datepicker-trigger {
-  color: #94a3b8 !important;
+  color: #999 !important;
+  text-decoration-thickness: 0.5px !important;
 }
 
 .finance-money-value {
@@ -286,6 +292,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -295,6 +302,7 @@
   from {
     transform: translate3d(100%, 0, 0);
   }
+
   to {
     transform: translate3d(0, 0, 0);
   }
