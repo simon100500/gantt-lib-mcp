@@ -72,6 +72,8 @@ type ImportErrorResponse = {
   issues?: ImportIssue[];
 };
 
+type ImportKind = 'excel' | 'grandSmeta';
+
 interface ImportExcelModalProps {
   accessToken: string | null;
   refreshAccessToken: () => Promise<string | null>;
@@ -117,6 +119,10 @@ function formatPreviewDate(value: string): string {
   return `${match[3]}.${match[2]}.${match[1]}`;
 }
 
+function detectImportKind(fileName: string): ImportKind {
+  return /\.gsfx$/iu.test(fileName) ? 'grandSmeta' : 'excel';
+}
+
 export function ImportExcelModal({
   accessToken,
   refreshAccessToken,
@@ -129,6 +135,7 @@ export function ImportExcelModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
+  const [selectedImportKind, setSelectedImportKind] = useState<ImportKind>('excel');
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [mapping, setMapping] = useState<ImportMapping | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -139,6 +146,7 @@ export function ImportExcelModal({
 
   const blockingIssues = useMemo(() => issues.filter((issue) => issue.severity === 'error'), [issues]);
   const visibleIssues = issues.length > 0;
+  const isGrandSmeta = selectedImportKind === 'grandSmeta';
 
   const mappedFieldByColumnIndex = useMemo(() => {
     if (!mapping) {
@@ -203,14 +211,16 @@ export function ImportExcelModal({
   const loadPreview = async (file: File, nextBase64: string, nextMapping?: ImportMapping | null) => {
     setPreviewLoading(true);
     setErrorMessage(null);
+    const importKind = detectImportKind(file.name);
     try {
-      const response = await invokeAuthorized<ImportPreviewResponse>('/api/import/excel/preview', {
+      const response = await invokeAuthorized<ImportPreviewResponse>(importKind === 'grandSmeta' ? '/api/import/grandsmeta/preview' : '/api/import/excel/preview', {
         fileName: file.name,
         fileBase64: nextBase64,
         hierarchyMode: 'wbs_level',
         mapping: nextMapping ?? undefined,
       });
 
+      setSelectedImportKind(importKind);
       setPreview(response);
       setMapping(response.mapping);
       setIssues(response.issues);
@@ -224,6 +234,7 @@ export function ImportExcelModal({
 
   const handleFile = async (file: File) => {
     setSelectedFile(file);
+    setSelectedImportKind(detectImportKind(file.name));
     setPreview(null);
     setMapping(null);
     setIssues([]);
@@ -253,7 +264,7 @@ export function ImportExcelModal({
     setCommitLoading(true);
     setErrorMessage(null);
     try {
-      const result = await invokeAuthorized<ImportCommitResponse>('/api/import/excel/commit', {
+      const result = await invokeAuthorized<ImportCommitResponse>(selectedImportKind === 'grandSmeta' ? '/api/import/grandsmeta/commit' : '/api/import/excel/commit', {
         fileName: selectedFile.name,
         fileBase64,
         hierarchyMode: 'wbs_level',
@@ -295,9 +306,13 @@ export function ImportExcelModal({
       <div className={`flex w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] ${emptyState ? 'max-w-xl' : 'max-w-6xl'}`}>
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div>
-            <div className="text-lg font-semibold text-slate-900">Импорт из Excel</div>
+            <div className="text-lg font-semibold text-slate-900">Импорт из файла</div>
             {!emptyState ? (
-              <div className="text-sm text-slate-500">Структура читается только из столбца “Уровень структуры”, связи только в формате “1ОН”, “2НН+12”.</div>
+              <div className="text-sm text-slate-500">
+                {isGrandSmeta
+                  ? 'Для GSFX структура берётся из разделов и позиций сметы. Даты задач генерируются автоматически.'
+                  : 'Структура читается только из столбца “Уровень структуры”, связи только в формате “1ОН”, “2НН+12”.'}
+              </div>
             ) : null}
           </div>
           <button
@@ -342,14 +357,14 @@ export function ImportExcelModal({
               <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm">
                 <Upload className="h-6 w-6" />
               </div>
-              <div className="text-base font-medium text-slate-800">Перетащите `.xlsx` файл сюда</div>
+              <div className="text-base font-medium text-slate-800">Перетащите `.xlsx` или `.gsfx` файл сюда</div>
               <div className="mt-1 text-sm text-slate-500">или выберите его вручную</div>
               <Button className="mt-5" onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
                 <FileSpreadsheet className="h-4 w-4" />
                 Выбрать файл
               </Button>
               <input
-                accept=".xlsx"
+                accept=".xlsx,.gsfx"
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
@@ -363,7 +378,7 @@ export function ImportExcelModal({
             </div>
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Шаблон</div>
-              <div className="mt-1 text-sm text-slate-600">Можно скачать пример файла с готовой таблицей Excel.</div>
+              <div className="mt-1 text-sm text-slate-600">Для Excel можно скачать пример файла с готовой таблицей. GSFX берётся из Grand Сметы без шаблона.</div>
               <Button
                 className="mt-3"
                 disabled={isDownloadTemplateLoading}
@@ -407,7 +422,7 @@ export function ImportExcelModal({
                 </Button>
               </div>
               <input
-                accept=".xlsx"
+                accept=".xlsx,.gsfx"
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
@@ -450,7 +465,7 @@ export function ImportExcelModal({
 
             <div className="min-h-0 overflow-auto rounded-xl border border-slate-200">
               <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-                Превью и сопоставление столбцов
+                {isGrandSmeta ? 'Превью импорта' : 'Превью и сопоставление столбцов'}
               </div>
               {preview && mapping ? (
                 <table className="min-w-full text-sm">
@@ -464,6 +479,7 @@ export function ImportExcelModal({
                               <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-slate-500">{column.header}</div>
                               <select
                                 className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-medium text-slate-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                disabled={isGrandSmeta}
                                 onChange={(event) => {
                                   const nextField = event.target.value as ImportField | '';
                                   setMapping((prev) => {
@@ -514,7 +530,7 @@ export function ImportExcelModal({
                                 <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
                                   <input
                                     checked={mapping[mappedField].enabled}
-                                    disabled={preview.supportedFields.find((entry) => entry.field === mappedField)?.required}
+                                    disabled={isGrandSmeta || preview.supportedFields.find((entry) => entry.field === mappedField)?.required}
                                     onChange={(event) => {
                                       setMapping((prev) => (
                                         prev
@@ -580,10 +596,12 @@ export function ImportExcelModal({
 
             {preview && mapping ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                {(Object.keys(mapping) as ImportField[])
-                  .filter((field) => mapping[field].enabled && mapping[field].columnIndex !== null)
-                  .map((field) => getFieldLabel(preview, field))
-                  .join(' · ')}
+                {isGrandSmeta
+                  ? 'GSFX сопоставляется автоматически по структуре сметы.'
+                  : (Object.keys(mapping) as ImportField[])
+                    .filter((field) => mapping[field].enabled && mapping[field].columnIndex !== null)
+                    .map((field) => getFieldLabel(preview, field))
+                    .join(' · ')}
               </div>
             ) : null}
           </div>
