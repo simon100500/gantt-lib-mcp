@@ -186,6 +186,12 @@ export interface CalendarDay {
   kind: 'working' | 'non_working' | 'shortened';
 }
 
+export interface TimelineMarker {
+  date: string;
+  color?: string | null;
+  name?: string | null;
+}
+
 export interface Task {
   id: string;
   name: string;

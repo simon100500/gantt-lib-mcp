@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { normalizeTasks, type CalendarDay, type ProjectDependency, type Task } from '../types.ts';
+import { normalizeTasks, type CalendarDay, type ProjectDependency, type Task, type TimelineMarker } from '../types.ts';
 import type { ProjectLoadResponse } from '../lib/apiTypes.ts';
 import { useAuthStore } from './useAuthStore.ts';
 import { useProjectStore } from './useProjectStore.ts';
@@ -15,6 +15,7 @@ export interface SharedTaskProject {
   ganttDayMode: 'business' | 'calendar';
   calendarId?: string | null;
   calendarDays?: CalendarDay[];
+  timelineMarkers?: TimelineMarker[];
 }
 
 export type TaskSource = 'local' | 'auth' | 'shared';

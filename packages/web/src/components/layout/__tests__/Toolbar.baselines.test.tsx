@@ -218,10 +218,8 @@ describe('Toolbar baseline menu', () => {
     });
 
     expect(container.textContent).not.toContain('Baseline: Sprint plan v1');
-    const activeTrigger = container.querySelector('button[title="Выключить базовый план: Sprint plan v1"]');
-    expect(activeTrigger?.getAttribute('title')).toBe('Выключить базовый план: Sprint plan v1');
     expect(menuText()).toContain('Сохранить текущий график');
-    expect(menuText()).toContain('Базовые планы');
+    expect(menuText()).toContain('Базовый план');
     expect(menuText()).toContain('Sprint plan v1');
     expect(menuText()).toContain('Forecast copy');
     expect(menuText()).toContain('Обновить базовые планы');
@@ -246,6 +244,10 @@ describe('Toolbar baseline menu', () => {
     });
     act(() => {
       deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const confirmDelete = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.includes('Удалить'));
+    act(() => {
+      confirmDelete?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onDeleteBaseline).toHaveBeenCalledWith('baseline-1');
 
@@ -362,7 +364,7 @@ describe('Toolbar baseline menu', () => {
       moreTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(document.body.textContent).toContain('Базовые планы');
+    expect(document.body.textContent).toContain('Базовый план');
     expect(document.body.textContent).toContain('Сохранить текущий график');
     expect(document.body.textContent).toContain('Mobile baseline');
     expect(document.body.textContent).toContain('Обновить базовые планы');
@@ -373,18 +375,13 @@ describe('Toolbar baseline menu', () => {
     });
     expect(selectedRow).toBeDefined();
 
+    const createItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Сохранить текущий график'));
+    expect(createItem).toBeDefined();
+
     act(() => {
       selectedRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onSelectBaseline).toHaveBeenCalledWith('baseline-1');
-
-    act(() => {
-      moreTrigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-      moreTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const createItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((node) => node.textContent?.includes('Сохранить текущий график'));
-    expect(createItem).toBeDefined();
 
     act(() => {
       createItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

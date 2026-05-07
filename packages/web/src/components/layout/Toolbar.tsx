@@ -1,7 +1,6 @@
 import {
   AlertCircle,
   Bot,
-  CalendarClock,
   ChartNoAxesGantt,
   Check,
   ChevronDown,
@@ -109,8 +108,8 @@ interface ToolbarProps {
   hiddenTaskListColumns?: string[] | null;
   onToggleTaskListColumn?: (columnId: string) => void;
   onSetAllTaskListColumnsVisible?: (visible: boolean) => void;
-  onOpenProjectShift?: (() => void) | null;
-  canShiftProject?: boolean;
+  onOpenProjectSettings?: (() => void) | null;
+  canOpenProjectSettings?: boolean;
   templateSelectionActive?: boolean;
   onCreateTemplateFromProject?: (() => void) | null;
   onStartTemplateSelection?: (() => void) | null;
@@ -386,8 +385,8 @@ export function Toolbar({
   hiddenTaskListColumns = [],
   onToggleTaskListColumn,
   onSetAllTaskListColumnsVisible,
-  onOpenProjectShift = null,
-  canShiftProject = false,
+  onOpenProjectSettings = null,
+  canOpenProjectSettings = false,
   templateSelectionActive = false,
   onCreateTemplateFromProject = null,
   onStartTemplateSelection = null,
@@ -1082,14 +1081,14 @@ export function Toolbar({
                   </DropdownMenuItem>
                 </>
               )}
-              {showProjectShiftControl && onOpenProjectShift && (
+              {showProjectShiftControl && onOpenProjectSettings && (
                 <DropdownMenuItem
-                  onClick={() => onOpenProjectShift()}
-                  disabled={!canShiftProject}
+                  onClick={() => onOpenProjectSettings()}
+                  disabled={!canOpenProjectSettings}
                   className="flex cursor-pointer items-center gap-2"
                 >
-                  <CalendarClock className="h-4 w-4" />
-                  <span className="text-sm">Сдвинуть проект ...</span>
+                  <Columns3Cog className="h-4 w-4" />
+                  <span className="text-sm">Настройки проекта</span>
                 </DropdownMenuItem>
               )}
               {onExportPdf && (
@@ -1219,15 +1218,15 @@ export function Toolbar({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              {showProjectShiftControl && onOpenProjectShift && (
+              {showProjectShiftControl && onOpenProjectSettings && (
                 <>
                   <DropdownMenuItem
-                    onClick={() => onOpenProjectShift()}
-                    disabled={!canShiftProject}
+                    onClick={() => onOpenProjectSettings()}
+                    disabled={!canOpenProjectSettings}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <CalendarClock className="h-4 w-4" />
-                    <span className="text-sm">Сдвинуть проект ...</span>
+                    <Columns3Cog className="h-4 w-4" />
+                    <span className="text-sm">Настройки проекта</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>
