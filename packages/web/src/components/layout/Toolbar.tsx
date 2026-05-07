@@ -39,6 +39,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx';
 import { cn } from '../../lib/utils.ts';
@@ -433,6 +436,7 @@ export function Toolbar({
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
   const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onImportExcel || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
+  const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
   const visibleTaskListColumnCount = (taskListColumnRows ?? []).filter((column) => !hiddenTaskListColumnSet.has(column.id)).length;
   const allTaskListColumnsVisible = taskListColumnRows?.length ? visibleTaskListColumnCount === taskListColumnRows.length : true;
@@ -522,32 +526,6 @@ export function Toolbar({
         </button>
       </div>
 
-      {showStructureControls && (
-        <>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onCollapseAll}
-            aria-label="Свернуть все"
-            title="Свернуть все родительские задачи"
-            className={cn(actionButtonClassName, 'hidden lg:flex')}
-          >
-            <ChevronsDownUp className="h-3.5 w-3.5" />
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onExpandAll}
-            aria-label="Развернуть все"
-            title="Развернуть все родительские задачи"
-            className={cn(actionButtonClassName, 'hidden lg:flex')}
-          >
-            <ChevronsUpDown className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      )}
-
       <Button
         size="sm"
         variant="ghost"
@@ -558,62 +536,114 @@ export function Toolbar({
         <span className="hidden md:inline text-xs">Сегодня</span>
       </Button>
 
-      {taskListColumnRows && taskListColumnRows.length > 0 && (
+      {hasViewMenu && (
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
-              variant={hasHiddenTaskListColumns ? 'secondary' : 'ghost'}
+              variant="ghost"
               className={cn(
                 actionButtonClassName,
-                hasHiddenTaskListColumns && 'border-primary text-primary bg-primary/5 hover:bg-primary/10',
-                'hidden gap-1.5 lg:flex focus-visible:ring-0 focus-visible:ring-offset-0',
+                'hidden gap-1.5 sm:flex focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-transparent data-[state=open]:bg-transparent data-[state=open]:text-slate-600',
               )}
-              title="Настроить столбцы списка задач"
+              title="Параметры отображения"
             >
-              <Columns3Cog className="h-3.5 w-3.5" />
-              <span className="hidden md:inline text-xs">Столбцы</span>
+              <span className="text-xs">Вид</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-            <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
-              Столбцы задач
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                onSetAllTaskListColumnsVisible?.(!allTaskListColumnsVisible);
-              }}
-              className="flex cursor-pointer items-center gap-2"
-            >
-              <TriStateCheckbox
-                checked={allTaskListColumnsVisible}
-                indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
-              />
-              <span className="text-sm">Выбрать всё</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
-            {taskListColumnRows.map((column) => {
-              const checked = !hiddenTaskListColumnSet.has(column.id);
-              return (
+            {showStructureControls && (
+              <>
                 <DropdownMenuItem
-                  key={column.id}
+                  onClick={onExpandAll}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <ChevronsUpDown className="h-4 w-4" />
+                  <span className="text-sm">Развернуть все</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={onCollapseAll}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <ChevronsDownUp className="h-4 w-4" />
+                  <span className="text-sm">Свернуть все</span>
+                </DropdownMenuItem>
+              </>
+            )}
+            {showStructureControls && taskListColumnRows && taskListColumnRows.length > 0 && (
+              <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+            )}
+            {taskListColumnRows && taskListColumnRows.length > 0 && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="flex items-center gap-2">
+                  <Columns3Cog className="h-4 w-4" />
+                  <span className="text-sm">Столбцы</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                  <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">
+                    Столбцы задач
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onSetAllTaskListColumnsVisible?.(!allTaskListColumnsVisible);
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <TriStateCheckbox
+                      checked={allTaskListColumnsVisible}
+                      indeterminate={someTaskListColumnsVisible && !allTaskListColumnsVisible}
+                    />
+                    <span className="text-sm">Выбрать всё</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                  {taskListColumnRows.map((column) => {
+                    const checked = !hiddenTaskListColumnSet.has(column.id);
+                    return (
+                      <DropdownMenuItem
+                        key={column.id}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onToggleTaskListColumn?.(column.id);
+                        }}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          readOnly
+                          className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                        />
+                        <span className="text-sm">{column.label}</span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
+            {showExpiredToggle && (
+              <>
+                {(showStructureControls || Boolean(taskListColumnRows?.length)) && (
+                  <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
+                )}
+                <DropdownMenuItem
                   onSelect={(event) => {
                     event.preventDefault();
-                    onToggleTaskListColumn?.(column.id);
+                    setHighlightExpiredTasks(!highlightExpiredTasks);
                   }}
                   className="flex cursor-pointer items-center gap-2"
                 >
                   <input
                     type="checkbox"
-                    checked={checked}
+                    checked={highlightExpiredTasks}
                     readOnly
                     className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
                   />
-                  <span className="text-sm">{column.label}</span>
+                  <span className="text-sm">Показать просроченные</span>
                 </DropdownMenuItem>
-              );
-            })}
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -635,7 +665,6 @@ export function Toolbar({
               aria-label={normalizedBaselineActiveLabel ? `Базовый план: ${normalizedBaselineActiveLabel}` : 'Меню базовых планов'}
               aria-pressed={Boolean(normalizedBaselineActiveLabel && baselineVisible)}
             >
-              <Layers3 className="h-3.5 w-3.5" />
               <span className="hidden md:inline text-xs">Базовый</span>
               <ChevronDown className="h-3 w-3 text-current/70" />
             </Button>
@@ -1103,23 +1132,6 @@ export function Toolbar({
                   {previewMode ? 'Просмотр версии' : readOnly ? 'Только чтение' : disableTaskDrag ? 'Разблокировать' : 'Заблокировать'}
                 </span>
               </DropdownMenuItem>
-              {showExpiredToggle && (
-                <DropdownMenuItem
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    setHighlightExpiredTasks(!highlightExpiredTasks);
-                  }}
-                  className="flex cursor-pointer items-center gap-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={highlightExpiredTasks}
-                    readOnly
-                    className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-                  />
-                  <span className="text-sm">Просроченные</span>
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem
                 disabled={!canChangeGanttDayMode}
                 onSelect={(event) => {
