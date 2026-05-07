@@ -1390,15 +1390,21 @@ export function ProjectWorkspace({
       }
 
       if (parentTaskIds.has(originalTask.id)) {
+        const normalizedProgress = nextProgress >= 100 ? 100 : 0;
         passthroughTasks.push({
           ...changedTask,
-          progress: nextProgress >= 100 ? 100 : 0,
+          progress: normalizedProgress,
+          status: deriveTaskStatusFromProgress(originalTask.status, normalizedProgress),
         });
         continue;
       }
 
       if (!originalTask.workVolume || originalTask.workVolume <= 0) {
-        passthroughTasks.push(changedTask);
+        passthroughTasks.push({
+          ...changedTask,
+          progress: clampPercent(nextProgress),
+          status: deriveTaskStatusFromProgress(originalTask.status, clampPercent(nextProgress)),
+        });
         continue;
       }
 
