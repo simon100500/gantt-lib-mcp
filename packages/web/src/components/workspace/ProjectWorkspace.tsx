@@ -1064,7 +1064,8 @@ export function ProjectWorkspace({
     status: 'not_started' | 'in_progress' | 'done' | 'closed',
   ) => {
     if (!accessToken || workspace.kind !== 'project') {
-      const descendants = status === 'done'
+      const shouldCascadeToDescendants = status === 'done' || status === 'closed';
+      const descendants = shouldCascadeToDescendants
         ? (() => {
             const childrenByParent = new Map<string, Task[]>();
             for (const candidate of tasks) {

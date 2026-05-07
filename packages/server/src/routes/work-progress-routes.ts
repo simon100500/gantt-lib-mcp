@@ -282,7 +282,8 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
         return reply.status(404).send({ error: 'Task not found' });
       }
 
-      const affectedTaskIds = status === 'done'
+      const shouldCascadeToDescendants = status === 'done' || status === 'closed';
+      const affectedTaskIds = shouldCascadeToDescendants
         ? collectDescendantTaskIds(taskId, await prisma.task.findMany({
             where: { projectId: req.user!.projectId },
             select: { id: true, parentId: true },
