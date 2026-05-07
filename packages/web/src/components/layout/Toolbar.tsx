@@ -1202,23 +1202,6 @@ export function Toolbar({
                   <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />
                 </>
               )}
-              {showExpiredToggle && (
-                <DropdownMenuItem
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    setHighlightExpiredTasks(!highlightExpiredTasks);
-                  }}
-                  className="flex cursor-pointer items-center gap-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={highlightExpiredTasks}
-                    readOnly
-                    className="pointer-events-none h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
-                  />
-                  <span className="text-sm">Просроченные</span>
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem
                 disabled={!canChangeGanttDayMode}
                 onSelect={(event) => {
