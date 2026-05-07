@@ -1034,53 +1034,112 @@ export function ProjectWorkspace({
     }
   }, [replaceProgressEntriesForTask, setTasks]);
 
+  const applyTaskWorkMutations = useCallback((updatedTasks: Task[], nextEntries?: TaskProgressEntry[]) => {
+    const taskMap = new Map(updatedTasks.map((task) => [task.id, task]));
+    setTasks((prev) => prev.map((task) => taskMap.get(task.id) ?? task));
+
+    const projectStoreState = useProjectStore.getState();
+    projectStoreState.mergeConfirmedSnapshot({
+      ...projectStoreState.confirmed.snapshot,
+      tasks: projectStoreState.confirmed.snapshot.tasks.map((task) => {
+        const updatedTask = taskMap.get(task.id);
+        return updatedTask ? { ...task, ...updatedTask } : task;
+      }),
+    });
+
+    if (nextEntries) {
+      const taskIds = new Set(updatedTasks.map((task) => task.id));
+      for (const currentTaskId of taskIds) {
+        replaceProgressEntriesForTask(
+          currentTaskId,
+          nextEntries.filter((entry) => entry.taskId === currentTaskId),
+        );
+      }
+    }
+  }, [replaceProgressEntriesForTask, setTasks]);
+
   const handleUpdateTaskStatus = useCallback(async (
     task: Task,
     status: 'not_started' | 'in_progress' | 'done' | 'closed',
   ) => {
     if (!accessToken || workspace.kind !== 'project') {
-      let resolvedTask: Task = { ...task, status };
-      let nextEntries: TaskProgressEntry[] | undefined;
+      const descendants = status === 'done'
+        ? (() => {
+            const childrenByParent = new Map<string, Task[]>();
+            for (const candidate of tasks) {
+              if (!candidate.parentId) continue;
+              const children = childrenByParent.get(candidate.parentId) ?? [];
+              children.push(candidate);
+              childrenByParent.set(candidate.parentId, children);
+            }
 
-      if (status === 'done') {
-        const targetCompletedVolume = task.workVolume && task.workVolume > 0
-          ? task.workVolume
-          : (task.completedVolume ?? 0);
-        const delta = targetCompletedVolume - (task.completedVolume ?? 0);
-        if (task.workVolume && task.workVolume > 0 && Math.abs(delta) > 0.000001) {
-          const today = new Date().toISOString().split('T')[0] ?? '';
-          const currentEntries = progressEntries.filter((entry) => entry.taskId === task.id);
-          const existingTodayEntry = currentEntries.find((entry) => entry.entryDate === today);
-          const now = new Date().toISOString();
-          nextEntries = existingTodayEntry
-            ? currentEntries.map((entry) => (
-                entry.id === existingTodayEntry.id
-                  ? { ...entry, amount: entry.amount + delta, updatedAt: now }
-                  : entry
-              ))
-            : [
-                ...currentEntries,
-                {
-                  id: `local-status:${task.id}:${today}`,
-                  projectId: projectId ?? 'local',
-                  taskId: task.id,
-                  entryDate: today,
-                  amount: delta,
-                  createdAt: now,
-                  updatedAt: now,
-                },
-              ];
+            const collected: Task[] = [];
+            const stack: Task[] = [task];
+            while (stack.length > 0) {
+              const currentTask = stack.pop()!;
+              collected.push(currentTask);
+              const children = childrenByParent.get(currentTask.id) ?? [];
+              for (const child of children) {
+                stack.push(child);
+              }
+            }
+            return collected;
+          })()
+        : [task];
+
+      const allNextEntries: TaskProgressEntry[] = [...progressEntries];
+      const now = new Date().toISOString();
+      const today = new Date().toISOString().split('T')[0] ?? '';
+      const resolvedTasks = descendants.map((currentTask) => {
+        let resolvedTask: Task = { ...currentTask, status };
+
+        if (status === 'done') {
+          const targetCompletedVolume = currentTask.workVolume && currentTask.workVolume > 0
+            ? currentTask.workVolume
+            : (currentTask.completedVolume ?? 0);
+          const delta = targetCompletedVolume - (currentTask.completedVolume ?? 0);
+          if (currentTask.workVolume && currentTask.workVolume > 0 && Math.abs(delta) > 0.000001) {
+            const currentEntries = allNextEntries.filter((entry) => entry.taskId === currentTask.id);
+            const existingTodayEntry = currentEntries.find((entry) => entry.entryDate === today);
+            const replacementEntries = existingTodayEntry
+              ? currentEntries.map((entry) => (
+                  entry.id === existingTodayEntry.id
+                    ? { ...entry, amount: entry.amount + delta, updatedAt: now }
+                    : entry
+                ))
+              : [
+                  ...currentEntries,
+                  {
+                    id: `local-status:${currentTask.id}:${today}`,
+                    projectId: projectId ?? 'local',
+                    taskId: currentTask.id,
+                    entryDate: today,
+                    amount: delta,
+                    createdAt: now,
+                    updatedAt: now,
+                  },
+                ];
+
+            for (let index = allNextEntries.length - 1; index >= 0; index -= 1) {
+              if (allNextEntries[index]?.taskId === currentTask.id) {
+                allNextEntries.splice(index, 1);
+              }
+            }
+            allNextEntries.push(...replacementEntries);
+          }
+
+          resolvedTask = {
+            ...resolvedTask,
+            progress: 100,
+            completedVolume: targetCompletedVolume,
+          };
         }
 
-        resolvedTask = {
-          ...resolvedTask,
-          progress: 100,
-          completedVolume: targetCompletedVolume,
-        };
-      }
+        return resolvedTask;
+      });
 
-      applyTaskWorkMutation(resolvedTask, nextEntries);
-      return { task: resolvedTask };
+      applyTaskWorkMutations(resolvedTasks, allNextEntries);
+      return { task: resolvedTasks[0] ?? task };
     }
 
     const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/status`, {
@@ -1101,6 +1160,8 @@ export function ProjectWorkspace({
         progress: number;
       };
       progressEntries?: TaskProgressEntry[];
+      affectedTasks?: Task[];
+      affectedProgressEntries?: TaskProgressEntry[];
     } | null;
 
     if (!response.ok || !body?.task) {
@@ -1115,10 +1176,14 @@ export function ProjectWorkspace({
       status: body.task.status,
       progress: body.task.progress,
     };
-    applyTaskWorkMutation(resolvedTask, body.progressEntries);
+    if (body.affectedTasks?.length) {
+      applyTaskWorkMutations(body.affectedTasks, body.affectedProgressEntries);
+    } else {
+      applyTaskWorkMutation(resolvedTask, body.progressEntries);
+    }
 
     return { task: resolvedTask };
-  }, [accessToken, applyTaskWorkMutation, progressEntries, projectId, workspace.kind]);
+  }, [accessToken, applyTaskWorkMutation, applyTaskWorkMutations, progressEntries, projectId, tasks, workspace.kind]);
 
   const handleUpdateTaskWorkMetadata = useCallback(async (
     task: Task,

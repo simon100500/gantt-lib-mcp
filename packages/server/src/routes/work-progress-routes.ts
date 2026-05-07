@@ -23,6 +23,23 @@ type WorkProgressResponse = {
     createdAt: string;
     updatedAt: string;
   }>;
+  affectedTasks?: Array<{
+    id: string;
+    workVolume: number | null;
+    workUnit: string | null;
+    completedVolume: number;
+    status: 'not_started' | 'in_progress' | 'done' | 'closed';
+    progress: number;
+  }>;
+  affectedProgressEntries?: Array<{
+    id: string;
+    projectId: string;
+    taskId: string;
+    entryDate: string;
+    amount: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
 };
 
 function clampProgress(value: number): number {
@@ -129,6 +146,70 @@ async function recomputeTaskProgress(
   });
 }
 
+async function buildTasksProgressResponse(projectId: string, taskIds: string[]): Promise<{
+  tasks: WorkProgressResponse['affectedTasks'];
+  progressEntries: WorkProgressResponse['affectedProgressEntries'];
+}> {
+  const prisma = getPrisma();
+  const [tasks, progressEntries] = await Promise.all([
+    prisma.task.findMany({
+      where: { projectId, id: { in: taskIds } },
+      select: {
+        id: true,
+        workVolume: true,
+        workUnit: true,
+        completedVolume: true,
+        status: true,
+        progress: true,
+      },
+    }),
+    prisma.taskProgressEntry.findMany({
+      where: { projectId, taskId: { in: taskIds } },
+      orderBy: [{ taskId: 'asc' }, { entryDate: 'asc' }, { createdAt: 'asc' }],
+    }),
+  ]);
+
+  return {
+    tasks: tasks.map((task) => ({
+      id: task.id,
+      workVolume: task.workVolume ?? null,
+      workUnit: task.workUnit ?? null,
+      completedVolume: task.completedVolume ?? 0,
+      status: normalizeStoredTaskStatus(task.status),
+      progress: task.progress ?? 0,
+    })),
+    progressEntries: progressEntries.map(toEntryResponse),
+  };
+}
+
+function collectDescendantTaskIds(
+  rootTaskId: string,
+  tasks: Array<{ id: string; parentId: string | null }>,
+): string[] {
+  const childrenByParent = new Map<string, string[]>();
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+    const children = childrenByParent.get(task.parentId) ?? [];
+    children.push(task.id);
+    childrenByParent.set(task.parentId, children);
+  }
+
+  const result: string[] = [];
+  const stack = [rootTaskId];
+  while (stack.length > 0) {
+    const currentId = stack.pop()!;
+    result.push(currentId);
+    const childIds = childrenByParent.get(currentId) ?? [];
+    for (const childId of childIds) {
+      stack.push(childId);
+    }
+  }
+
+  return result;
+}
+
 async function syncProgressEntriesToCompletedVolume(
   tx: Parameters<Parameters<ReturnType<typeof getPrisma>['$transaction']>[0]>[0],
   projectId: string,
@@ -201,30 +282,59 @@ export async function registerWorkProgressRoutes(fastify: FastifyInstance): Prom
         return reply.status(404).send({ error: 'Task not found' });
       }
 
-      await prisma.$transaction(async (tx) => {
-        const synced = synchronizeTaskStatus({
-          currentStatus: task.status,
-          currentProgress: task.progress,
-          currentWorkVolume: task.workVolume,
-          currentCompletedVolume: task.completedVolume,
-          nextStatus: status,
-        });
+      const affectedTaskIds = status === 'done'
+        ? collectDescendantTaskIds(taskId, await prisma.task.findMany({
+            where: { projectId: req.user!.projectId },
+            select: { id: true, parentId: true },
+          }))
+        : [taskId];
 
-        await tx.task.update({
-          where: { id: taskId },
-          data: {
-            status: synced.status,
-            progress: synced.progress,
-            completedVolume: synced.completedVolume,
+      await prisma.$transaction(async (tx) => {
+        const tasksToUpdate = await tx.task.findMany({
+          where: { projectId: req.user!.projectId, id: { in: affectedTaskIds } },
+          select: {
+            id: true,
+            status: true,
+            workVolume: true,
+            completedVolume: true,
+            progress: true,
           },
         });
 
-        if (status === 'done' && task.workVolume && task.workVolume > 0) {
-          await syncProgressEntriesToCompletedVolume(tx, req.user!.projectId, taskId, synced.completedVolume);
+        for (const currentTask of tasksToUpdate) {
+          const synced = synchronizeTaskStatus({
+            currentStatus: currentTask.status,
+            currentProgress: currentTask.progress,
+            currentWorkVolume: currentTask.workVolume,
+            currentCompletedVolume: currentTask.completedVolume,
+            nextStatus: status,
+          });
+
+          await tx.task.update({
+            where: { id: currentTask.id },
+            data: {
+              status: synced.status,
+              progress: synced.progress,
+              completedVolume: synced.completedVolume,
+            },
+          });
+
+          if (status === 'done' && currentTask.workVolume && currentTask.workVolume > 0) {
+            await syncProgressEntriesToCompletedVolume(tx, req.user!.projectId, currentTask.id, synced.completedVolume);
+          }
         }
       });
 
-      return reply.send(await buildTaskProgressResponse(req.user!.projectId, taskId));
+      const [rootResponse, affectedResponse] = await Promise.all([
+        buildTaskProgressResponse(req.user!.projectId, taskId),
+        buildTasksProgressResponse(req.user!.projectId, affectedTaskIds),
+      ]);
+
+      return reply.send({
+        ...rootResponse,
+        affectedTasks: affectedResponse.tasks,
+        affectedProgressEntries: affectedResponse.progressEntries,
+      });
     },
   );
 
