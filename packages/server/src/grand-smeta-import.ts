@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import JSZip from 'jszip';
+import iconv from 'iconv-lite';
 import { XMLParser } from 'fast-xml-parser';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 import { assignmentService, commandService, resourceService } from '@gantt/mcp/services';
@@ -121,8 +122,6 @@ type GrandSmetaResourceRef = {
   unit?: string;
 };
 
-const TEXT_DECODER = new TextDecoder('windows-1251');
-
 const FIELD_LABELS: Record<GrandSmetaImportField, string> = {
   wbsLevel: 'Уровень структуры',
   name: 'Название задачи',
@@ -206,7 +205,7 @@ async function extractGsfxXml(fileName: string, fileBuffer: Buffer): Promise<str
   }
 
   const xmlBuffer = await xmlEntry.async('nodebuffer');
-  return TEXT_DECODER.decode(xmlBuffer);
+  return iconv.decode(xmlBuffer, 'win1251');
 }
 
 function getNodeName(node: PreservedXmlNode): string | null {

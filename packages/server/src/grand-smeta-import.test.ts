@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import iconv from 'iconv-lite';
 import JSZip from 'jszip';
 
 async function buildFixtureBase64(): Promise<string> {
   const zip = new JSZip();
   zip.file('Properties.txt', 'DocType=sdtSmeta');
   zip.file('Data.sign', 'signature');
-  zip.file('Data.xml', `<?xml version="1.0" encoding="windows-1251"?>
+  zip.file('Data.xml', iconv.encode(`<?xml version="1.0" encoding="windows-1251"?>
 <Document Generator="GrandSmeta">
   <Properties Description="Test estimate"/>
   <DocDates CreationDate="05.05.2026"/>
@@ -33,7 +34,7 @@ async function buildFixtureBase64(): Promise<string> {
       </Position>
     </Chapter>
   </Chapters>
-</Document>`);
+</Document>`, 'win1251'));
   const buffer = await zip.generateAsync({ type: 'nodebuffer' });
   return buffer.toString('base64');
 }
