@@ -209,7 +209,7 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
             </div>
           )}
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-2 gap-3">
             {PRIMARY_ACTIONS.map((action) => (
               <button
                 key={action.label}
@@ -217,7 +217,7 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                 onClick={() => handleChipClick(action)}
                 disabled={isSubmitting}
                 className={cn(
-                  'group flex min-h-[60px] w-full items-start gap-3 rounded-2xl border px-4 py-2.5 text-left',
+                  'group flex min-h-[60px] w-full items-start rounded-2xl border px-3 py-2.5 text-left sm:gap-3 sm:px-4',
                   'border-slate-200 bg-slate-50 text-slate-900 hover:border-primary hover:text-primary',
                   'transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
@@ -225,7 +225,7 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                 )}
               >
                 {action.icon && (
-                  <div className="flex h-8 w-8 shrink-0 items-start justify-center pt-1 text-slate-700 transition-colors group-hover:text-primary">
+                  <div className="hidden h-8 w-8 shrink-0 items-start justify-center pt-1 text-slate-700 transition-colors group-hover:text-primary sm:flex">
                     <action.icon className="h-4.5 w-4.5" />
                   </div>
                 )}
@@ -254,7 +254,6 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                   'disabled:cursor-wait disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600',
                 )}
               >
-                {chip.icon && <chip.icon className="w-3.5 h-3.5" />}
                 {chip.label}
               </button>
             ))}
