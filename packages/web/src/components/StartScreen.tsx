@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ArrowUp, GanttChart, LoaderCircle } from 'lucide-react';
+import { ArrowUp, GanttChart, LoaderCircle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface StartScreenSendResult {
@@ -10,11 +10,32 @@ export interface StartScreenSendResult {
 export interface StartScreenProps {
   onSend: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   onEmptyChart: () => void;
+  onImport?: () => void;
   isAuthenticated?: boolean;
   onLoginRequired?: () => void;
 }
 
-const CHIPS: Array<{ label: string; prompt: string; icon?: React.ComponentType<{ className?: string }> }> = [
+type StartChip = {
+  label: string;
+  prompt?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  action?: 'emptyChart' | 'import';
+  featured?: boolean;
+};
+
+const CHIPS: StartChip[] = [
+  {
+    label: 'Пустой график',
+    icon: GanttChart,
+    action: 'emptyChart',
+    featured: true,
+  },
+  {
+    label: 'Импорт',
+    icon: Upload,
+    action: 'import',
+    featured: true,
+  },
   {
     label: 'Загородный дом',
     prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт',
@@ -31,14 +52,9 @@ const CHIPS: Array<{ label: string; prompt: string; icon?: React.ComponentType<{
     label: 'Мероприятие',
     prompt: 'Создай график подготовки мероприятия: площадка, кейтеринг, программа, продвижение, проведение',
   },
-  {
-    label: 'Пустой график',
-    prompt: '',
-    icon: GanttChart,
-  },
 ];
 
-export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLoginRequired }: StartScreenProps) {
+export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = true, onLoginRequired }: StartScreenProps) {
   const [inputValue, setInputValue] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -78,7 +94,7 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
     }
   }
 
-  function handleChipClick(prompt: string) {
+  function handlePromptChipClick(prompt: string) {
     if (isSubmitting) {
       return;
     }
@@ -97,6 +113,34 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
       await onEmptyChart();
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function handleImportClick() {
+    if (isSubmitting) {
+      return;
+    }
+    if (!isAuthenticated) {
+      onLoginRequired?.();
+      return;
+    }
+    setSubmitError(null);
+    onImport?.();
+  }
+
+  function handleChipClick(chip: StartChip) {
+    if (chip.action === 'emptyChart') {
+      void handleEmptyChartClick();
+      return;
+    }
+
+    if (chip.action === 'import') {
+      handleImportClick();
+      return;
+    }
+
+    if (chip.prompt) {
+      handlePromptChipClick(chip.prompt);
     }
   }
 
@@ -167,16 +211,19 @@ export function StartScreen({ onSend, onEmptyChart, isAuthenticated = true, onLo
 
           {/* Chips row */}
           <div className="flex flex-wrap gap-2 mt-3">
-            {CHIPS.map((chip, index) => (
+            {CHIPS.map((chip) => (
               <button
                 key={chip.label}
                 type="button"
-                onClick={index === CHIPS.length - 1 ? () => { void handleEmptyChartClick(); } : () => handleChipClick(chip.prompt)}
+                onClick={() => handleChipClick(chip)}
                 disabled={isSubmitting}
                 className={cn(
-                  'text-sm px-3 py-1.5 rounded-full border border-slate-200 text-slate-600',
+                  'text-sm px-3 py-1.5 rounded-full border',
                   'flex items-center gap-1.5',
-                  'transition-colors hover:border-primary hover:text-primary',
+                  chip.featured
+                    ? 'border-primary/30 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
+                    : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary',
+                  'transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                   'disabled:cursor-wait disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600',
                 )}

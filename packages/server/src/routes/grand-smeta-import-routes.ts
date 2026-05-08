@@ -14,6 +14,7 @@ type GrandSmetaImportRequestBody = {
   options?: {
     includeMaterials?: boolean;
     includeMechanisms?: boolean;
+    normalizeUnitMultipliers?: boolean;
   };
 };
 

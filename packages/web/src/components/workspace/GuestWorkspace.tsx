@@ -15,6 +15,7 @@ interface GuestWorkspaceProps {
   batchUpdate: UseBatchTaskUpdateResult;
   onSend: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
   onEmptyChart: () => void | Promise<void>;
+  onImport?: () => void;
   onLoginRequired: () => void;
   onScrollToToday: () => void;
   onCollapseAll: () => void;
@@ -35,6 +36,7 @@ export function GuestWorkspace(props: GuestWorkspaceProps) {
       <StartScreen
         onSend={props.onSend}
         onEmptyChart={() => { void props.onEmptyChart(); }}
+        onImport={props.onImport}
         isAuthenticated={props.isAuthenticated}
         onLoginRequired={props.onLoginRequired}
       />

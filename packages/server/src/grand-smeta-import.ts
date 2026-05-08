@@ -37,6 +37,7 @@ export type GrandSmetaImportMapping = Record<GrandSmetaImportField, GrandSmetaIm
 export type GrandSmetaImportOptions = {
   includeMaterials: boolean;
   includeMechanisms: boolean;
+  normalizeUnitMultipliers: boolean;
 };
 
 export type GrandSmetaImportIssue = {
@@ -153,6 +154,7 @@ const FIELD_ORDER: GrandSmetaImportField[] = [
 const DEFAULT_IMPORT_OPTIONS: GrandSmetaImportOptions = {
   includeMaterials: true,
   includeMechanisms: true,
+  normalizeUnitMultipliers: true,
 };
 
 function buildFixedMapping(): GrandSmetaImportMapping {
@@ -287,6 +289,43 @@ function sanitizeImportOptions(input?: Partial<GrandSmetaImportOptions>): GrandS
   return {
     includeMaterials: input?.includeMaterials ?? DEFAULT_IMPORT_OPTIONS.includeMaterials,
     includeMechanisms: input?.includeMechanisms ?? DEFAULT_IMPORT_OPTIONS.includeMechanisms,
+    normalizeUnitMultipliers: input?.normalizeUnitMultipliers ?? DEFAULT_IMPORT_OPTIONS.normalizeUnitMultipliers,
+  };
+}
+
+function normalizeWorkUnit(
+  workUnit: string | undefined,
+  workVolume: number | undefined,
+  options: GrandSmetaImportOptions,
+): { workUnit?: string; workVolume?: number } {
+  const trimmedUnit = workUnit?.trim();
+  if (!trimmedUnit || !options.normalizeUnitMultipliers) {
+    return {
+      workUnit: trimmedUnit || undefined,
+      workVolume,
+    };
+  }
+
+  const match = trimmedUnit.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/u);
+  if (!match) {
+    return {
+      workUnit: trimmedUnit,
+      workVolume,
+    };
+  }
+
+  const multiplier = parseDecimal(match[1]);
+  const normalizedUnit = match[2]?.trim();
+  if (!multiplier || !normalizedUnit) {
+    return {
+      workUnit: trimmedUnit,
+      workVolume,
+    };
+  }
+
+  return {
+    workUnit: normalizedUnit,
+    workVolume: workVolume === undefined ? undefined : workVolume * multiplier,
   };
 }
 
@@ -490,8 +529,11 @@ export function parseGrandSmetaXml(
       leafIndex += 1;
       chapterHasLeaf = true;
 
-      const workVolume = parseDecimal(quantityAttrs.Result);
-      const workUnit = positionAttrs.Units?.trim() || undefined;
+      const normalizedWork = normalizeWorkUnit(
+        positionAttrs.Units?.trim() || undefined,
+        parseDecimal(quantityAttrs.Result),
+        options,
+      );
       if (!activeHeaderRow && pendingHeaderName) {
         activeHeaderRow = {
           rowNumber: importIndex,
@@ -521,8 +563,8 @@ export function parseGrandSmetaXml(
         startDate,
         endDate,
         type: 'task',
-        workVolume,
-        workUnit,
+        workVolume: normalizedWork.workVolume,
+        workUnit: normalizedWork.workUnit,
         parentImportIndex: parentRow.importIndex,
         parentTempId: parentRow.tempId,
         tempId: randomUUID(),

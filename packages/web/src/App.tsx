@@ -2121,6 +2121,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               isAuthenticated={auth.isAuthenticated}
               onSend={handleStartScreenSend}
               onEmptyChart={handleEmptyChart}
+              onImport={() => setShowImportExcelModal(true)}
               onLoginRequired={onLoginRequired}
             />
           )

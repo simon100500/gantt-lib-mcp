@@ -39,6 +39,7 @@ type ImportPreviewResponse = {
   options?: {
     includeMaterials?: boolean;
     includeMechanisms?: boolean;
+    normalizeUnitMultipliers?: boolean;
   };
   supportedFields: Array<{ field: ImportField; label: string; required: boolean }>;
   rows: Array<{
@@ -80,6 +81,7 @@ type ImportKind = 'excel' | 'grandSmeta';
 type GrandSmetaOptions = {
   includeMaterials: boolean;
   includeMechanisms: boolean;
+  normalizeUnitMultipliers: boolean;
 };
 
 interface ImportExcelModalProps {
@@ -141,11 +143,15 @@ export function ImportExcelModal({
   isDownloadTemplateLoading = false,
 }: ImportExcelModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const lastGrandSmetaOptionsKeyRef = useRef('includeMaterials:true|includeMechanisms:true');
+  const lastGrandSmetaOptionsKeyRef = useRef('includeMaterials:true|includeMechanisms:true|normalizeUnitMultipliers:true');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [selectedImportKind, setSelectedImportKind] = useState<ImportKind>('excel');
-  const [grandSmetaOptions, setGrandSmetaOptions] = useState<GrandSmetaOptions>({ includeMaterials: true, includeMechanisms: true });
+  const [grandSmetaOptions, setGrandSmetaOptions] = useState<GrandSmetaOptions>({
+    includeMaterials: true,
+    includeMechanisms: true,
+    normalizeUnitMultipliers: true,
+  });
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [mapping, setMapping] = useState<ImportMapping | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -236,6 +242,7 @@ export function ImportExcelModal({
         setGrandSmetaOptions({
           includeMaterials: response.options.includeMaterials ?? true,
           includeMechanisms: response.options.includeMechanisms ?? true,
+          normalizeUnitMultipliers: response.options.normalizeUnitMultipliers ?? true,
         });
       }
       setPreview(response);
@@ -309,7 +316,7 @@ export function ImportExcelModal({
   }, [commitLoading, onClose, previewLoading]);
 
   useEffect(() => {
-    const nextKey = `includeMaterials:${grandSmetaOptions.includeMaterials}|includeMechanisms:${grandSmetaOptions.includeMechanisms}`;
+    const nextKey = `includeMaterials:${grandSmetaOptions.includeMaterials}|includeMechanisms:${grandSmetaOptions.includeMechanisms}|normalizeUnitMultipliers:${grandSmetaOptions.normalizeUnitMultipliers}`;
     if (lastGrandSmetaOptionsKeyRef.current === nextKey) {
       return;
     }
@@ -325,6 +332,7 @@ export function ImportExcelModal({
     fileBase64,
     grandSmetaOptions.includeMaterials,
     grandSmetaOptions.includeMechanisms,
+    grandSmetaOptions.normalizeUnitMultipliers,
     isGrandSmeta,
     previewLoading,
     selectedFile,
@@ -458,6 +466,18 @@ export function ImportExcelModal({
                 </div>
               </div>
             ) : null}
+            {isGrandSmeta ? (
+              <div className="mt-3 text-sm text-slate-700">
+                <label className="flex items-center gap-2">
+                  <input
+                    checked={grandSmetaOptions.normalizeUnitMultipliers}
+                    onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, normalizeUnitMultipliers: event.target.checked }))}
+                    type="checkbox"
+                  />
+                  Приводить единицы измерения из смет к единичным (100 м2 → м2)
+                </label>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex min-h-0 max-h-[92vh] flex-col gap-4 overflow-hidden px-5 py-4">
@@ -472,23 +492,25 @@ export function ImportExcelModal({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {isGrandSmeta ? (
-                  <div className="mr-2 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                    <label className="flex items-center gap-2">
-                      <input
-                        checked={grandSmetaOptions.includeMaterials}
-                        onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMaterials: event.target.checked }))}
-                        type="checkbox"
-                      />
-                      Материалы
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        checked={grandSmetaOptions.includeMechanisms}
-                        onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMechanisms: event.target.checked }))}
-                        type="checkbox"
-                      />
-                      Механизмы
-                    </label>
+                  <div className="mr-2 text-sm text-slate-700">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          checked={grandSmetaOptions.includeMaterials}
+                          onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMaterials: event.target.checked }))}
+                          type="checkbox"
+                        />
+                        Материалы
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          checked={grandSmetaOptions.includeMechanisms}
+                          onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, includeMechanisms: event.target.checked }))}
+                          type="checkbox"
+                        />
+                        Механизмы
+                      </label>
+                    </div>
                   </div>
                 ) : null}
                 <Button onClick={() => fileInputRef.current?.click()} type="button" variant="outline">
@@ -686,6 +708,18 @@ export function ImportExcelModal({
                     .filter((field) => mapping[field].enabled && mapping[field].columnIndex !== null)
                     .map((field) => getFieldLabel(preview, field))
                     .join(' · ')}
+              </div>
+            ) : null}
+            {isGrandSmeta ? (
+              <div className="text-sm text-slate-700">
+                <label className="flex items-center gap-2">
+                  <input
+                    checked={grandSmetaOptions.normalizeUnitMultipliers}
+                    onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, normalizeUnitMultipliers: event.target.checked }))}
+                    type="checkbox"
+                  />
+                  Приводить единицы измерения из смет к единичным (100 м2 → м2)
+                </label>
               </div>
             ) : null}
           </div>

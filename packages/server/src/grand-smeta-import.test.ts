@@ -13,7 +13,7 @@ async function buildFixtureBase64(): Promise<string> {
   <Chapters>
     <Chapter Caption="Section 1">
       <Header Caption="Group A"/>
-      <Position Caption="Task 1" Number="1" Code="GESN01-01-001-01" Units="m2" Identifier="F1">
+      <Position Caption="Task 1" Number="1" Code="GESN01-01-001-01" Units="100 m2" Identifier="F1">
         <Quantity Result="12,5"/>
         <Resources>
           <Mat Caption="Material from work" Identifier="r1" Code="01.1.01.01" Units="m2" Quantity="12,5"/>
@@ -50,10 +50,13 @@ describe('grand smeta import preview', () => {
     assert.equal(preview.summary.taskCount, 6);
     assert.equal(preview.options.includeMaterials, true);
     assert.equal(preview.options.includeMechanisms, true);
+    assert.equal(preview.options.normalizeUnitMultipliers, true);
     assert.equal(preview.summary.resourceNameCount, 2);
     assert.equal(preview.rows[0]?.normalized.name, 'Section 1');
     assert.equal(preview.rows[1]?.normalized.name, 'Group A');
     assert.equal(preview.rows[2]?.normalized.name, '1. Task 1');
+    assert.equal(preview.rows[2]?.values.workVolume, '1250');
+    assert.equal(preview.rows[2]?.values.workUnit, 'm2');
     assert.deepEqual(preview.rows[2]?.normalized.resourceNames, ['Material from work', 'Machine 1']);
     assert.equal(preview.rows[2]?.values.startDate, '2026-05-05');
     assert.equal(preview.rows[3]?.values.startDate, '2026-05-06');
@@ -80,5 +83,21 @@ describe('grand smeta import preview', () => {
     assert.equal(preview.summary.taskCount, 6);
     assert.equal(preview.summary.resourceNameCount, 1);
     assert.deepEqual(preview.rows[2]?.normalized.resourceNames, ['Machine 1']);
+  });
+
+  it('can keep multiplier in unit when normalization is disabled', async () => {
+    const { buildGrandSmetaImportPreview } = await import(new URL('./grand-smeta-import.ts', import.meta.url).href);
+    const preview = await buildGrandSmetaImportPreview({
+      fileName: 'fixture.gsfx',
+      fileBase64: await buildFixtureBase64(),
+      options: {
+        includeMaterials: true,
+        includeMechanisms: true,
+        normalizeUnitMultipliers: false,
+      },
+    });
+
+    assert.equal(preview.rows[2]?.values.workVolume, '12.5');
+    assert.equal(preview.rows[2]?.values.workUnit, '100 m2');
   });
 });
