@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Copy,
+  Download,
   ExternalLink,
   LoaderCircle,
   Pencil,
@@ -12,6 +13,7 @@ import {
 
 import { Button } from './ui/button.tsx';
 import type { ShareLinkListItem } from '../lib/apiTypes.ts';
+import { printShareLinkSheet } from '../lib/shareLinkPrint.ts';
 
 interface ShareLinksManagerModalProps {
   accessToken: string;
@@ -57,6 +59,15 @@ function getSharePreviewText(link: ShareLinkListItem): string | null {
   return titles.join(', ');
 }
 
+function getSharePrintDetails(link: ShareLinkListItem): string {
+  const previewText = getSharePreviewText(link);
+  if (link.scope === 'project') {
+    return 'Весь график';
+  }
+
+  return previewText ? `Разделы: ${previewText}` : 'Часть графика';
+}
+
 function resolveShareUrl(token: string): string {
   if (typeof window === 'undefined') {
     return `/?share=${encodeURIComponent(token)}`;
@@ -83,6 +94,7 @@ export function ShareLinksManagerModal({
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
   const [renamingLinkId, setRenamingLinkId] = useState<string | null>(null);
+  const [downloadingLinkId, setDownloadingLinkId] = useState<string | null>(null);
   const visibleLinks = links.filter((link) => !link.revokedAt);
 
   const loadLinks = useCallback(async () => {
@@ -127,6 +139,30 @@ export function ShareLinksManagerModal({
   const handleOpen = useCallback((link: ShareLinkListItem) => {
     window.open(resolveShareUrl(link.id), '_blank', 'noopener,noreferrer');
   }, []);
+
+  const handleDownloadPdf = useCallback(async (link: ShareLinkListItem) => {
+    if (downloadingLinkId === link.id) {
+      return;
+    }
+
+    setDownloadingLinkId(link.id);
+    setError(null);
+
+    try {
+      await printShareLinkSheet({
+        shareUrl: resolveShareUrl(link.id),
+        projectName,
+        logoUrl: `${window.location.origin}/favicon.svg`,
+        serviceName: 'GetGantt',
+        descriptor: 'Сервис для быстрого создания графиков с помощью ИИ, а так же полноценного управления проектами. Легкая и простая онлайн-замена MS Project, Primavera и GanttPRO',
+        details: getSharePrintDetails(link),
+      });
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : String(downloadError));
+    } finally {
+      setDownloadingLinkId(null);
+    }
+  }, [downloadingLinkId, projectName]);
 
   const handleStartRename = useCallback((link: ShareLinkListItem) => {
     setEditingLinkId(link.id);
@@ -389,6 +425,18 @@ export function ShareLinksManagerModal({
                       >
                         {copiedLinkId === link.id ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                         <span>{copiedLinkId === link.id ? 'Скопировано' : 'Копировать'}</span>
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => { void handleDownloadPdf(link); }}
+                        disabled={submitting || renamingLinkId === link.id || downloadingLinkId === link.id}
+                        className="h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-slate-600"
+                        title="Скачать QR-код"
+                      >
+                        {downloadingLinkId === link.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        <span>QR-код</span>
                       </Button>
 
                       <Button
