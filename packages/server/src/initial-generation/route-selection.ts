@@ -95,6 +95,7 @@ export async function selectAgentRoute(input: SelectAgentRouteInput): Promise<Ag
       hasHierarchy: input.hasHierarchy,
       isEmptyProject,
     },
+    recentConversationSummary: input.recentConversationSummary,
     model: input.model ?? 'unavailable',
     interpretationQuery: async (queryInput) => {
       if (!input.routeDecisionQuery || !input.model) {

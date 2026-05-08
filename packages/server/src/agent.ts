@@ -532,6 +532,27 @@ function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
   return latestVisibleGroupId ?? 'initial';
 }
 
+function summarizeRecentConversation(
+  messages: Array<{ role: string; content: string }>,
+  limit: number = 4,
+): string | undefined {
+  const recent = messages
+    .slice(-limit)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.trim().replace(/\s+/g, ' '),
+    }))
+    .filter((message) => message.content.length > 0);
+
+  if (recent.length === 0) {
+    return undefined;
+  }
+
+  return recent
+    .map((message) => `${message.role}: ${message.content.slice(0, 240)}`)
+    .join('\n');
+}
+
 function buildAgentHistoryTitle(userMessage: string, undoable: boolean): string {
   if (!undoable) {
     return 'AI — Неотменяемое действие';
@@ -1085,12 +1106,17 @@ export async function runAgentWithHistory(
     ]);
     broadcastToSession = wsModule.broadcastToSession;
     const runId = crypto.randomUUID();
-    const { tasks: tasksBefore } = await taskService.list(projectId);
+    const [{ tasks: tasksBefore }, recentMessages] = await Promise.all([
+      taskService.list(projectId),
+      messageService.list(projectId, 6),
+    ]);
     const env = resolveEnv();
+    const recentConversationSummary = summarizeRecentConversation(recentMessages);
     const routeSelection = await selectAgentRoute({
       userMessage,
       taskCount: tasksBefore.length,
       hasHierarchy: tasksBefore.some((task) => Boolean(task.parentId)),
+      recentConversationSummary,
       model: env.OPENAI_MODEL,
       routeDecisionQuery: executeInitialGenerationRouteDecisionQuery,
     });
@@ -1130,6 +1156,7 @@ export async function runAgentWithHistory(
       hasHierarchy: routeSelection.hasHierarchy,
       taskCount: routeSelection.taskCount,
       usedModelDecision: routeSelection.usedModelDecision,
+      recentConversationSummary,
     });
 
     await writeServerDebugLog('route_decision_evidence', {
@@ -1143,6 +1170,7 @@ export async function runAgentWithHistory(
       signals: routeSelection.signals,
       projectStateSummary: routeSelection.projectStateSummary,
       usedModelDecision: routeSelection.usedModelDecision,
+      recentConversationSummary,
     });
 
     if (routeSelection.route === 'initial_generation') {
