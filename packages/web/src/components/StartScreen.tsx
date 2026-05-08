@@ -230,8 +230,8 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                   </div>
                 )}
                 <div className="pt-0.5">
-                  <div className="text-base font-semibold">{action.label}</div>
-                  <div className="mt-1 text-sm text-slate-600 transition-colors group-hover:text-primary">
+                  <div className="text-sm font-semibold">{action.label}</div>
+                  <div className="mt-0.5 text-xs text-slate-600 transition-colors group-hover:text-primary">
                     {action.action === 'emptyChart' ? 'Создать пустой график и начать с нуля' : 'Импортировать Excel или Грандсмета GSFX'}
                   </div>
                 </div>
