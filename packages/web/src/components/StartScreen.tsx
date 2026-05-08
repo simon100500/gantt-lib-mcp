@@ -217,7 +217,7 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                 onClick={() => handleChipClick(action)}
                 disabled={isSubmitting}
                 className={cn(
-                  'flex min-h-[72px] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left',
+                  'group flex min-h-[60px] w-full items-start gap-3 rounded-2xl border px-4 py-2.5 text-left',
                   'border-slate-200 bg-slate-50 text-slate-900 hover:border-primary hover:text-primary',
                   'transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
@@ -225,13 +225,13 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                 )}
               >
                 {action.icon && (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm">
-                    <action.icon className="h-5 w-5" />
+                  <div className="flex h-8 w-8 shrink-0 items-start justify-center pt-1 text-slate-700 transition-colors group-hover:text-primary">
+                    <action.icon className="h-4.5 w-4.5" />
                   </div>
                 )}
-                <div>
+                <div className="pt-0.5">
                   <div className="text-base font-semibold">{action.label}</div>
-                  <div className="mt-1 text-sm text-slate-600">
+                  <div className="mt-1 text-sm text-slate-600 transition-colors group-hover:text-primary">
                     {action.action === 'emptyChart' ? 'Создать пустой график и начать с нуля' : 'Импортировать Excel или Грандсмета GSFX'}
                   </div>
                 </div>
