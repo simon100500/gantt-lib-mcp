@@ -275,35 +275,37 @@ export function ResourceAssignmentModal({
               </div>
             )}
             {hasAssignableResources ? (
-              <div className="max-h-72 overflow-auto rounded-md border border-[#dfe1e6] bg-white" data-testid="assignment-modal-resource-options">
+              <div className="max-h-72 overflow-auto rounded-md border border-[#dfe1e6] bg-white p-2" data-testid="assignment-modal-resource-options">
                 {hasFilteredResources ? resourceGroups.map((group) => (
-                  <div key={group.type} className="border-b border-[#dfe1e6] last:border-b-0">
-                    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-[#f7f8fa] px-3 py-1.5 text-[11px] font-bold text-[#44546f]">
+                  <section key={group.type} className="not-last:mb-3">
+                    <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[10px] font-bold uppercase tracking-[0.02em] text-[#44546f]">
                       <span>{group.label}</span>
-                      <span className="ml-auto rounded-full bg-[#dfe1e6] px-1.5 py-0.5 text-[10px] text-[#42526e]">
+                      <span className="ml-auto rounded-full bg-[#f1f2f4] px-1.5 py-0.5 text-[10px] normal-case text-[#42526e]">
                         {group.resources.length}
                       </span>
                     </div>
-                    {group.resources.map((resource) => {
-                      const label = formatResourceLabel(resource);
-                      return (
-                        <button
-                          className="group flex w-full min-w-0 items-start gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
-                          data-testid={`assignment-resource-option-${resource.id}`}
-                          disabled={pending || !task}
-                          key={resource.id}
-                          onClick={() => onSelectionChange([...selectedIds, resource.id])}
-                          type="button"
-                        >
-                          <ResourceTypeIcon type={resource.type} className="mt-0.5 h-4 w-4 shrink-0" />
-                          <span className="min-w-0 flex-1 whitespace-normal break-words text-[12px] font-bold leading-4">{label}</span>
-                          <span className="shrink-0 text-[10px] font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                            Добавить
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {group.resources.map((resource) => {
+                        const label = formatResourceLabel(resource);
+                        return (
+                          <button
+                            className="group flex min-w-0 items-start gap-2 rounded-lg border border-[#dfe1e6] bg-[#fcfdff] px-2.5 py-2 text-left text-[#172b4d] transition-colors hover:border-[#b3d4ff] hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            data-testid={`assignment-resource-option-${resource.id}`}
+                            disabled={pending || !task}
+                            key={resource.id}
+                            onClick={() => onSelectionChange([...selectedIds, resource.id])}
+                            type="button"
+                          >
+                            <ResourceTypeIcon type={resource.type} className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span className="min-w-0 flex-1 whitespace-normal break-words text-[12px] font-bold leading-4">{label}</span>
+                            <span className="shrink-0 self-center text-[10px] font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                              Добавить
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
                 )) : (
                   <p className="px-3 py-3 text-[12px] font-medium text-[#6b778c]" data-testid="assignment-modal-all-resources-selected">
                     {hasSearchOrTypeFilter ? 'По текущим фильтрам ресурсы не найдены.' : 'Все доступные ресурсы назначены.'}
