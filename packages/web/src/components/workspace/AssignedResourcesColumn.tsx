@@ -13,6 +13,13 @@ const DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH = 132;
 const TEXT_CHIP_MIN_WIDTH = 44;
 const ICON_ONLY_CHIP_MIN_WIDTH = 26;
 const CHIP_GAP_PX = 4;
+const RESOURCE_TYPE_SORT_ORDER: Record<ProjectResource['type'] | 'unknown', number> = {
+  human: 0,
+  equipment: 1,
+  material: 2,
+  other: 3,
+  unknown: 4,
+};
 
 export interface AssignedResourcesColumnCellProps {
   task: Task;
@@ -54,6 +61,17 @@ function dedupeAssignmentViews(views: TaskResourceAssignmentView[]): TaskResourc
 
 function dedupeResourceIds(resourceIds: string[]): string[] {
   return Array.from(new Set(resourceIds.filter(Boolean)));
+}
+
+function sortAssignmentViewsByResourceType(views: TaskResourceAssignmentView[]): TaskResourceAssignmentView[] {
+  return [...views].sort((left, right) => {
+    const typeDelta = RESOURCE_TYPE_SORT_ORDER[left.resource.type] - RESOURCE_TYPE_SORT_ORDER[right.resource.type];
+    if (typeDelta !== 0) {
+      return typeDelta;
+    }
+
+    return formatResourceLabel(left.resource).localeCompare(formatResourceLabel(right.resource), 'ru');
+  });
 }
 
 type ResourceChipSummary = {
@@ -159,8 +177,8 @@ function InlineTooltip({
 
 export function normalizeAssignedResourceGroups(groups: TaskAssignmentResourceGroups): TaskAssignmentResourceGroups {
   return {
-    activeAssignedResources: dedupeAssignmentViews(groups.activeAssignedResources),
-    inactiveAssignedResources: dedupeAssignmentViews(groups.inactiveAssignedResources),
+    activeAssignedResources: sortAssignmentViewsByResourceType(dedupeAssignmentViews(groups.activeAssignedResources)),
+    inactiveAssignedResources: sortAssignmentViewsByResourceType(dedupeAssignmentViews(groups.inactiveAssignedResources)),
     unknownAssignedResourceIds: dedupeResourceIds(groups.unknownAssignedResourceIds),
   };
 }
@@ -177,8 +195,8 @@ function renderResourceChips(
     const variantClasses = variant === 'active'
       ? 'border-[#dfe1e6] bg-white text-[#172b4d]'
       : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#6b778c] opacity-75';
-    const className = `inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md border ${
-      displayMode === 'icon' ? 'h-7 justify-center px-1.5 py-0.5' : 'gap-1 px-1.5 py-0.5'
+    const className = `inline-flex h-7 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md border ${
+      displayMode === 'icon' ? 'justify-center px-1.5 py-0.5' : 'gap-1 px-1.5 py-0.5'
     } text-[10px] font-medium leading-4 ${variantClasses} ${
       onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
     }`;
@@ -265,7 +283,18 @@ function buildResourceChipSummaries(
     appendSummary('unknown', false);
   }
 
-  return Array.from(summaryMap.values());
+  return Array.from(summaryMap.values()).sort((left, right) => {
+    const typeDelta = RESOURCE_TYPE_SORT_ORDER[left.type] - RESOURCE_TYPE_SORT_ORDER[right.type];
+    if (typeDelta !== 0) {
+      return typeDelta;
+    }
+
+    if (left.isInactive !== right.isInactive) {
+      return left.isInactive ? 1 : -1;
+    }
+
+    return left.key.localeCompare(right.key, 'ru');
+  });
 }
 
 function renderSummaryChip(
@@ -278,7 +307,7 @@ function renderSummaryChip(
     : summary.type === 'unknown'
       ? 'border-red-200 bg-red-50 text-red-700'
       : 'border-[#dfe1e6] bg-white text-[#172b4d]';
-  const className = `inline-flex h-5 min-w-0 flex-1 basis-0 items-center gap-1 overflow-hidden rounded-md border px-1.5 text-[10px] font-semibold leading-none ${baseClassName} ${
+  const className = `inline-flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${baseClassName} ${
     onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
   }`;
   const title = getResourceSummaryLabel(summary);
@@ -436,8 +465,8 @@ export function AssignedResourcesColumnCell({
                     <InlineTooltip content={`Неизвестный ресурс: ${resourceId}`} key={`unknown-${resourceId}`}>
                       <button
                         aria-label={`Изменить назначения ресурсов для задачи ${task.name || task.id}`}
-                        className={`inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
-                          chipDisplayMode === 'icon' ? 'h-7 justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
+                        className={`inline-flex h-7 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+                          chipDisplayMode === 'icon' ? 'justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
                         }`}
                         data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
                         onClick={(event) => {
@@ -461,8 +490,8 @@ export function AssignedResourcesColumnCell({
                   ) : (
                     <InlineTooltip content={`Неизвестный ресурс: ${resourceId}`} key={`unknown-${resourceId}`}>
                       <span
-                        className={`inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 ${
-                          chipDisplayMode === 'icon' ? 'h-7 justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
+                        className={`inline-flex h-7 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 ${
+                          chipDisplayMode === 'icon' ? 'justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
                         }`}
                         data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
                       >
