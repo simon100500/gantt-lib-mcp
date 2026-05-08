@@ -138,7 +138,7 @@ describe('AssignedResourcesColumnCell', () => {
     const inactiveChip = container.querySelector('[data-testid="assigned-resources-inactive-task-1-resource-inactive"]');
     expect(inactiveChip?.textContent).toContain('Архивная бригада');
     expect(inactiveChip?.textContent).toContain('неактивен');
-    expect(inactiveChip?.getAttribute('title')).toContain('неактивный ресурс');
+    expect(inactiveChip?.getAttribute('title')).toBeNull();
 
     unmount(root);
   });
@@ -163,6 +163,63 @@ describe('AssignedResourcesColumnCell', () => {
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')?.textContent).toContain('Бригада монтажников');
     expect(container.querySelector('[data-testid="assigned-resources-edit-task-1"]')).toBeNull();
     expect(onEdit).not.toHaveBeenCalled();
+
+    unmount(root);
+  });
+
+  it('collapses crowded cells into summary chips by type only when total assignments exceed the threshold', () => {
+    const materialResources: ProjectResource[] = Array.from({ length: 5 }, (_, index) => ({
+      ...activeResource,
+      id: `resource-material-${index + 1}`,
+      type: 'material',
+      name: `Материал ${index + 1}`,
+    }));
+    const equipmentResource: ProjectResource = {
+      ...activeResource,
+      id: 'resource-equipment',
+      type: 'equipment',
+      name: 'Автокран',
+    };
+    const { container, root, onEdit } = renderCell({}, [activeResource, equipmentResource, ...materialResources], [
+      assignment({ id: 'assignment-active-1', resourceId: activeResource.id }),
+      assignment({ id: 'assignment-equipment', resourceId: equipmentResource.id }),
+      ...materialResources.map((resource, index) => assignment({ id: `assignment-material-${index + 1}`, resourceId: resource.id })),
+    ]);
+
+    expect(container.querySelector('[data-testid="assigned-resources-cell-task-1"]')?.getAttribute('data-assigned-resource-count')).toBe('7');
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-equipment"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-material"]')?.textContent).toContain('5');
+    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-human"]')?.textContent).toContain('1');
+    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-equipment"]')?.textContent).toContain('1');
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-material-1"]')).toBeNull();
+
+    act(() => {
+      (container.querySelector('[data-testid="assigned-resources-summary-task-1-active-material"]') as HTMLButtonElement).click();
+    });
+
+    expect(onEdit).toHaveBeenCalledWith(task);
+
+    unmount(root);
+  });
+
+  it('keeps named chips visible while total assignments stay within the threshold', () => {
+    const equipmentResource: ProjectResource = {
+      ...activeResource,
+      id: 'resource-equipment',
+      type: 'equipment',
+      name: 'Автокран',
+    };
+    const { container, root } = renderCell({ estimatedWidth: 240 }, [activeResource, secondActiveResource, equipmentResource], [
+      assignment({ id: 'assignment-active-1', resourceId: activeResource.id }),
+      assignment({ id: 'assignment-active-2', resourceId: secondActiveResource.id }),
+      assignment({ id: 'assignment-equipment', resourceId: equipmentResource.id }),
+    ]);
+
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')?.textContent).toContain('Бригада монтажников');
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-second-active"]')?.textContent).toContain('Крановщик');
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-equipment"]')?.textContent).toContain('Автокран');
+    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-human"]')).toBeNull();
 
     unmount(root);
   });
