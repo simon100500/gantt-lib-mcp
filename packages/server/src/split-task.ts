@@ -195,9 +195,15 @@ export function parseExplicitSplitList(value?: string): ParsedExplicitListItem[]
     }));
 }
 
-function buildSplitTaskUserTrace(taskName: string, input: { details?: string; explicitListMode?: boolean; explicitItems?: ParsedExplicitListItem[] }): string {
+function buildSplitTaskUserTrace(taskName: string, input: {
+  taskId: string;
+  details?: string;
+  explicitListMode?: boolean;
+  explicitItems?: ParsedExplicitListItem[];
+}): string {
+  const mention = `[task:${input.taskId}|${taskName}]`;
   const trimmedDetails = input.details?.trim();
-  const parts = [`Разбить задачу «${taskName}» на подзадачи.`];
+  const parts = [mention, `Разбить задачу «${taskName}» на подзадачи.`];
 
   if (input.explicitListMode && input.explicitItems && input.explicitItems.length > 0) {
     parts.push(`Используй только этот явный список подзадач:\n${input.explicitItems.map((item) => item.text).join('\n')}`);
@@ -207,7 +213,7 @@ function buildSplitTaskUserTrace(taskName: string, input: { details?: string; ex
     parts.push(`Уточнения: ${trimmedDetails}`);
   }
 
-  return parts.join(' ');
+  return parts.join('\n');
 }
 
 function buildSystemPrompt(input: {
@@ -490,6 +496,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     throw new Error('Explicit split list is empty');
   }
   const userTrace = buildSplitTaskUserTrace(taskName, {
+    taskId: input.taskId,
     details: input.details,
     explicitListMode: input.explicitListMode,
     explicitItems,

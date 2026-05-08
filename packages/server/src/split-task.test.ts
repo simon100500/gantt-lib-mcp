@@ -162,6 +162,7 @@ describe('runDirectSplitTask', () => {
     assert.equal(committedCommands[0]?.tasks?.[0]?.parentId, 'task-slab');
     assert.equal(committedCommands[1]?.type, 'create_dependency');
     assert.match(result.assistantResponse, /детализирована на 2 подзадач/i);
+    assert.match(messages[0]?.content ?? '', /\[task:task-slab\|Бетонирование перекрытий 12-17 этажей\]/);
     assert.deepEqual(broadcasts, ['token', 'tasks', 'history_changed', 'done']);
     assert.deepEqual(messages.map((entry) => entry.role), ['user', 'assistant']);
   });
@@ -317,6 +318,7 @@ describe('runDirectSplitTask', () => {
     assert.match(plannerSystemPrompt, /item-2: Чистовая электрика/i);
     assert.match(plannerSystemPrompt, /item-3: Пусконаладка/i);
     assert.equal(plannerMaxSessionTurns, 1);
+    assert.match(messages[0]?.content ?? '', /\[task:task-fitout\|Электромонтаж\]/);
     assert.match(messages[0]?.content ?? '', /Используй только этот явный список подзадач/i);
     assert.doesNotMatch(messages[0]?.content ?? '', /Уточнения:/i);
     assert.deepEqual(result.fragmentPlan.nodes.map((node) => node.title), [

@@ -30,8 +30,9 @@ function normalizeDate(value: Task['startDate'] | Task['endDate']): string {
 }
 
 export function buildSplitTaskTrace(task: Task, payload: SplitTaskSubmitPayload): string {
+  const mention = `[task:${task.id}|${task.name}]`;
   const trimmedDetails = payload.details.trim();
-  const parts = [`Разбить задачу «${task.name}» на подзадачи.`];
+  const parts = [mention, `Разбить задачу «${task.name}» на подзадачи.`];
 
   if (payload.explicitListMode && trimmedDetails) {
     parts.push(`Используй только этот явный список подзадач:\n${trimmedDetails}`);
@@ -39,7 +40,7 @@ export function buildSplitTaskTrace(task: Task, payload: SplitTaskSubmitPayload)
     parts.push(`Уточнения: ${trimmedDetails}`);
   }
 
-  return parts.join(' ');
+  return parts.join('\n');
 }
 
 export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps) {

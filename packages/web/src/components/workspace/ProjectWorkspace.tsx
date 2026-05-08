@@ -125,6 +125,30 @@ function formatTaskCount(count: number) {
   return `${count} задач`;
 }
 
+function SaveTemplateIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="18" height="12" x="3" y="8" rx="1" />
+      <path d="M10 8V5c0-.6-.4-1-1-1H6a1 1 0 0 0-1 1v3" />
+      <path d="M19 8V5c0-.6-.4-1-1-1h-3a1 1 0 0 0-1 1v3" />
+      <path d="M12 11v6" />
+      <path d="M9 14h6" />
+    </svg>
+  );
+}
+
 function parseTaskDate(value: string | Date): Date | null {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
@@ -985,6 +1009,13 @@ export function ProjectWorkspace({
   }, [setChatComposerDraft, setWorkspace]);
 
   const handleTaskReferenceClick = useCallback((taskId: string) => {
+    setTempHighlightedTaskId(taskId);
+    window.setTimeout(() => {
+      if (useUIStore.getState().tempHighlightedTaskId === taskId) {
+        useUIStore.getState().setTempHighlightedTaskId(null);
+      }
+    }, 2000);
+
     if (typeof ganttRef.current?.scrollToRow === 'function') {
       ganttRef.current.scrollToRow(taskId, { behavior: 'auto' });
     }
@@ -993,7 +1024,7 @@ export function ProjectWorkspace({
         ganttRef.current?.scrollToTask(taskId);
       });
     }
-  }, [ganttRef]);
+  }, [ganttRef, setTempHighlightedTaskId]);
 
   useEffect(() => () => {
     historyBranchConfirmResolverRef.current?.(false);
@@ -1090,22 +1121,22 @@ export function ProjectWorkspace({
             const existingTodayEntry = currentEntries.find((entry) => entry.entryDate === today);
             const replacementEntries = existingTodayEntry
               ? currentEntries.map((entry) => (
-                  entry.id === existingTodayEntry.id
-                    ? { ...entry, amount: entry.amount + delta, updatedAt: now }
-                    : entry
-                ))
+                entry.id === existingTodayEntry.id
+                  ? { ...entry, amount: entry.amount + delta, updatedAt: now }
+                  : entry
+              ))
               : [
-                  ...currentEntries,
-                  {
-                    id: `local-status:${currentTask.id}:${today}`,
-                    projectId: projectId ?? 'local',
-                    taskId: currentTask.id,
-                    entryDate: today,
-                    amount: delta,
-                    createdAt: now,
-                    updatedAt: now,
-                  },
-                ];
+                ...currentEntries,
+                {
+                  id: `local-status:${currentTask.id}:${today}`,
+                  projectId: projectId ?? 'local',
+                  taskId: currentTask.id,
+                  entryDate: today,
+                  amount: delta,
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              ];
 
             for (let index = allNextEntries.length - 1; index >= 0; index -= 1) {
               if (allNextEntries[index]?.taskId === currentTask.id) {
@@ -1212,14 +1243,14 @@ export function ProjectWorkspace({
       throw new Error(body?.error || `HTTP ${response.status}`);
     }
 
-      const resolvedTask: Task = {
-        ...task,
-        workVolume: body.task.workVolume,
-        workUnit: body.task.workUnit,
-        completedVolume: body.task.completedVolume,
-        status: body.task.status,
-        progress: body.task.progress,
-      };
+    const resolvedTask: Task = {
+      ...task,
+      workVolume: body.task.workVolume,
+      workUnit: body.task.workUnit,
+      completedVolume: body.task.completedVolume,
+      status: body.task.status,
+      progress: body.task.progress,
+    };
     applyTaskWorkMutation(resolvedTask, body.progressEntries);
     return { task: resolvedTask, progressEntries: body.progressEntries };
   }, [accessToken, applyTaskWorkMutation, workspace.kind]);
@@ -1241,22 +1272,22 @@ export function ProjectWorkspace({
       const now = new Date().toISOString();
       const nextEntries = currentEntry
         ? existingEntries.map((entry) => (
-            entry.id === currentEntry.id
-              ? { ...entry, amount: entry.amount + nextAmount, updatedAt: now }
-              : entry
-          ))
+          entry.id === currentEntry.id
+            ? { ...entry, amount: entry.amount + nextAmount, updatedAt: now }
+            : entry
+        ))
         : [
-            ...existingEntries,
-            {
-              id: `local:${task.id}:${input.entryDate}`,
-              projectId: projectId ?? 'local',
-              taskId: task.id,
-              entryDate: input.entryDate,
-              amount: nextAmount,
-              createdAt: now,
-              updatedAt: now,
-            },
-          ];
+          ...existingEntries,
+          {
+            id: `local:${task.id}:${input.entryDate}`,
+            projectId: projectId ?? 'local',
+            taskId: task.id,
+            entryDate: input.entryDate,
+            amount: nextAmount,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ];
       const completedVolume = nextEntries.reduce((sum, entry) => sum + entry.amount, 0);
       const resolvedTask: Task = {
         ...task,
@@ -1694,6 +1725,7 @@ export function ProjectWorkspace({
         id: 'send-task-to-chat',
         label: 'Выполнить...',
         icon: <WandSparkles className="h-4 w-4" />,
+        divider: 'top',
         onSelect: (row) => setTaskChatDraft(row),
       });
     }
@@ -1703,6 +1735,7 @@ export function ProjectWorkspace({
         id: 'split-task-with-ai',
         label: 'Разбить задачу...',
         icon: <ListTree className="h-4 w-4" />,
+        divider: showChat ? undefined : 'top',
         scope: 'linear',
         onSelect: (row) => setSplitTaskDraft(row),
       });
@@ -1713,6 +1746,7 @@ export function ProjectWorkspace({
         id: 'insert-template-at-task',
         label: 'Вставить шаблон...',
         icon: <ToyBrick className="h-4 w-4" />,
+        divider: 'top',
         scope: 'linear',
         onSelect: (row) => { void onInsertTemplateAtTask(row); },
       });
@@ -1721,8 +1755,8 @@ export function ProjectWorkspace({
     if (onCreateTemplateFromTask) {
       commands.push({
         id: 'create-template-from-task',
-        label: 'В шаблон...',
-        icon: <ToyBrick className="h-4 w-4" />,
+        label: 'Сохранить шаблон...',
+        icon: <SaveTemplateIcon className="h-4 w-4" />,
         onSelect: (row) => { void onCreateTemplateFromTask(row); },
       });
     }
