@@ -20,22 +20,22 @@ type StartChip = {
   prompt?: string;
   icon?: React.ComponentType<{ className?: string }>;
   action?: 'emptyChart' | 'import';
-  featured?: boolean;
 };
 
-const CHIPS: StartChip[] = [
+const PRIMARY_ACTIONS: StartChip[] = [
   {
-    label: 'Пустой график',
+    label: 'Новый график',
     icon: GanttChart,
     action: 'emptyChart',
-    featured: true,
   },
   {
     label: 'Импорт',
     icon: Upload,
     action: 'import',
-    featured: true,
   },
+];
+
+const CHIPS: StartChip[] = [
   {
     label: 'Загородный дом',
     prompt: 'Создай график строительства загородного дома: фундамент, стены, кровля, отделка, ландшафт',
@@ -209,8 +209,37 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
             </div>
           )}
 
-          {/* Chips row */}
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {PRIMARY_ACTIONS.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                onClick={() => handleChipClick(action)}
+                disabled={isSubmitting}
+                className={cn(
+                  'flex min-h-[88px] w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left',
+                  'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300 hover:bg-slate-100',
+                  'transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                  'disabled:cursor-wait disabled:opacity-50',
+                )}
+              >
+                {action.icon && (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm">
+                    <action.icon className="h-5 w-5" />
+                  </div>
+                )}
+                <div>
+                  <div className="text-base font-semibold">{action.label}</div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    {action.action === 'emptyChart' ? 'Создать пустой график и начать с нуля' : 'Импортировать Excel или Грандсмета GSFX'}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
             {CHIPS.map((chip) => (
               <button
                 key={chip.label}
@@ -218,12 +247,9 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                 onClick={() => handleChipClick(chip)}
                 disabled={isSubmitting}
                 className={cn(
-                  'text-sm px-3 py-1.5 rounded-full border',
+                  'text-sm px-3 py-1.5 rounded-full border border-slate-200 text-slate-600',
                   'flex items-center gap-1.5',
-                  chip.featured
-                    ? 'border-primary/30 bg-primary/5 text-primary hover:border-primary hover:bg-primary/10'
-                    : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary',
-                  'transition-colors',
+                  'transition-colors hover:border-primary hover:text-primary',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                   'disabled:cursor-wait disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600',
                 )}
