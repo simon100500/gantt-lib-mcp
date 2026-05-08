@@ -2,6 +2,22 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 describe('runDirectSplitTask', () => {
+  it('parses explicit split lists from lines and semicolons', async () => {
+    const { parseExplicitSplitList } = await import('./split-task.js');
+
+    assert.deepEqual(parseExplicitSplitList('1. Подготовка\n2. Монтаж\n- Пусконаладка'), [
+      { key: 'item-1', text: 'Подготовка' },
+      { key: 'item-2', text: 'Монтаж' },
+      { key: 'item-3', text: 'Пусконаладка' },
+    ]);
+
+    assert.deepEqual(parseExplicitSplitList('Подготовка; Монтаж; Пусконаладка'), [
+      { key: 'item-1', text: 'Подготовка' },
+      { key: 'item-2', text: 'Монтаж' },
+      { key: 'item-3', text: 'Пусконаладка' },
+    ]);
+  });
+
   it('executes split-task plans through authoritative mutation commands', async () => {
     process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/test';
     const { runDirectSplitTask } = await import('./split-task.js');
@@ -148,5 +164,118 @@ describe('runDirectSplitTask', () => {
     assert.match(result.assistantResponse, /детализирована на 2 подзадач/i);
     assert.deepEqual(broadcasts, ['token', 'tasks', 'history_changed', 'done']);
     assert.deepEqual(messages.map((entry) => entry.role), ['user', 'assistant']);
+  });
+
+  it('keeps explicit split lists strict and ordered', async () => {
+    process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/test';
+    const { runDirectSplitTask } = await import('./split-task.js');
+    let plannerPrompt = '';
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+    const result = await runDirectSplitTask({
+      projectId: 'project-1',
+      sessionId: 'session-1',
+      runId: 'run-explicit',
+      taskId: 'task-fitout',
+      details: 'Добавь реальные связи, но не придумывай этапы.',
+      explicitListMode: true,
+      explicitListText: '1. Черновая электрика\n2. Чистовая электрика\n3. Пусконаладка',
+      env: {
+        OPENAI_API_KEY: '',
+        OPENAI_BASE_URL: 'https://example.test',
+        OPENAI_MODEL: 'gpt-main',
+      },
+      services: {
+        messageService: {
+          add: async (role, content) => {
+            messages.push({ role, content });
+            return {} as never;
+          },
+        },
+        taskService: {
+          list: async () => ({
+            tasks: [{
+              id: 'task-fitout',
+              name: 'Электромонтаж',
+              startDate: '2026-04-01',
+              endDate: '2026-04-08',
+            }],
+            hasMore: false,
+            total: 1,
+          }),
+          get: async () => ({
+            id: 'task-fitout',
+            name: 'Электромонтаж',
+            startDate: '2026-04-01',
+            endDate: '2026-04-08',
+            children: [],
+          }),
+        },
+        commandService: {
+          commitCommand: async (request: { baseVersion: number; command: { type: string } }) => ({
+            accepted: true,
+            clientRequestId: 'req-1',
+            baseVersion: request.baseVersion,
+            newVersion: request.baseVersion + 1,
+            result: {
+              snapshot: { tasks: [], dependencies: [] },
+              changedTaskIds: ['task-fitout'],
+              changedDependencyIds: [],
+              conflicts: [],
+              patches: [],
+            },
+            snapshot: { tasks: [], dependencies: [] },
+          }),
+        },
+      },
+      broadcastToSession: () => undefined,
+      plannerQuery: async (prompt) => {
+        plannerPrompt = prompt;
+        return JSON.stringify({
+          title: 'Электромонтаж',
+          why: 'Strict explicit split',
+          nodes: [
+            {
+              nodeKey: 'finish',
+              sourceItemKey: 'item-3',
+              title: 'Пусконаладочные работы',
+              taskType: 'task',
+              durationDays: 1,
+              dependsOnNodeKeys: ['clean'],
+            },
+            {
+              nodeKey: 'rough',
+              sourceItemKey: 'item-1',
+              title: 'Черновая электрика',
+              taskType: 'task',
+              durationDays: 3,
+              dependsOnNodeKeys: [],
+            },
+            {
+              nodeKey: 'clean',
+              sourceItemKey: 'item-2',
+              title: 'Чистовая электрика',
+              taskType: 'task',
+              durationDays: 2,
+              dependsOnNodeKeys: ['rough'],
+            },
+          ],
+        });
+      },
+      loadProjectVersion: async () => 7,
+      writeDebugLog: async () => undefined,
+      getLatestVisibleGroupId: async () => 'history-1',
+    });
+
+    assert.match(plannerPrompt, /Use exactly the explicit user-supplied worklist below/i);
+    assert.match(plannerPrompt, /item-1: Черновая электрика/i);
+    assert.match(plannerPrompt, /item-2: Чистовая электрика/i);
+    assert.match(plannerPrompt, /item-3: Пусконаладка/i);
+    assert.match(messages[0]?.content ?? '', /Используй только этот явный список подзадач/i);
+    assert.deepEqual(result.fragmentPlan.nodes.map((node) => node.title), [
+      'Черновая электрика',
+      'Чистовая электрика',
+      'Пусконаладочные работы',
+    ]);
   });
 });

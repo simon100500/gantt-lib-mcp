@@ -59,6 +59,8 @@ export type RunDirectSplitTaskInput = {
   runId: string;
   taskId: string;
   details?: string;
+  explicitListMode?: boolean;
+  explicitListText?: string;
   handoff?: Extract<SpecializedExecutorResolution, { executor: 'split_task' }>;
   env: SplitTaskEnv;
   services: SplitTaskServices;
@@ -81,6 +83,11 @@ type DirectSplitPayload = {
   title?: unknown;
   why?: unknown;
   nodes?: unknown;
+};
+
+type ParsedExplicitListItem = {
+  key: string;
+  text: string;
 };
 
 async function loadAllProjectTasks(
@@ -165,6 +172,41 @@ export function buildSplitTaskTrace(taskName: string, details?: string): string 
   return `Разбить задачу «${taskName}» на подзадачи. Уточнения: ${trimmedDetails}`;
 }
 
+export function parseExplicitSplitList(value?: string): ParsedExplicitListItem[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  const normalized = value.includes('\n')
+    ? value
+    : value.replace(/;/g, '\n');
+
+  return normalized
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .map((line) => line.replace(/^(?:[-*•]|\d+[.)])\s*/u, '').trim())
+    .filter((line) => line.length > 0)
+    .map((text, index) => ({
+      key: `item-${index + 1}`,
+      text,
+    }));
+}
+
+function buildSplitTaskUserTrace(taskName: string, input: { details?: string; explicitListMode?: boolean; explicitItems?: ParsedExplicitListItem[] }): string {
+  const trimmedDetails = input.details?.trim();
+  const parts = [`Разбить задачу «${taskName}» на подзадачи.`];
+
+  if (input.explicitListMode && input.explicitItems && input.explicitItems.length > 0) {
+    parts.push(`Используй только этот явный список подзадач:\n${input.explicitItems.map((item) => item.text).join('\n')}`);
+  }
+
+  if (trimmedDetails) {
+    parts.push(`Уточнения: ${trimmedDetails}`);
+  }
+
+  return parts.join(' ');
+}
+
 function buildPrompt(input: {
   taskName: string;
   startDate: string;
@@ -172,6 +214,8 @@ function buildPrompt(input: {
   parentDurationDays: number;
   existingChildNames: string[];
   details?: string;
+  explicitItems?: ParsedExplicitListItem[];
+  explicitListMode?: boolean;
 }): string {
   const existingChildrenBlock = input.existingChildNames.length > 0
     ? input.existingChildNames.map((name) => `- ${name}`).join('\n')
@@ -179,37 +223,56 @@ function buildPrompt(input: {
   const detailsLine = input.details?.trim()
     ? `Additional user details: ${input.details.trim()}`
     : 'Additional user details: none';
+  const explicitItemsBlock = input.explicitItems?.length
+    ? input.explicitItems.map((item) => `- ${item.key}: ${item.text}`).join('\n')
+    : '- none';
+  const schema = input.explicitListMode
+    ? '{"title":"parent task title","why":"short rationale","nodes":[{"nodeKey":"stable-key","sourceItemKey":"item-1","title":"child title","taskType":"task","durationDays":1,"dependsOnNodeKeys":["previous-node-key"]}]}'
+    : '{"title":"parent task title","why":"short rationale","nodes":[{"nodeKey":"stable-key","title":"child title","taskType":"task","durationDays":1,"dependsOnNodeKeys":["previous-node-key"]}]}';
 
   return [
     'Return strict JSON only. No markdown, no prose, no code fences.',
     'You are generating child tasks for one existing parent task in a Gantt chart.',
     'The parent task already exists and must remain the parent. Do not recreate it. Do not create top-level items or sibling branches.',
-    'Create 4 to 8 concrete child tasks unless the scope clearly requires fewer.',
+    input.explicitListMode
+      ? 'Use exactly the explicit user-supplied worklist below. Do not add extra child tasks, do not omit items, and do not merge multiple source items into one task.'
+      : 'Create 4 to 8 concrete child tasks unless the scope clearly requires fewer.',
     'Avoid vague titles like "Основные работы" or "Прочее".',
     'Avoid duplicates with existing child tasks listed below.',
     'Use regular tasks, not milestones. Do not emit milestone nodes for this split-task flow.',
     'Do not force a fully sequential chain. Some child tasks may run in parallel, some may have dependencies, and some may have none.',
     'Choose dependencies only when they reflect real execution logic. Parallel work is allowed and often desirable.',
     'Schema:',
-    '{"title":"parent task title","why":"short rationale","nodes":[{"nodeKey":"stable-key","title":"child title","taskType":"task","durationDays":1,"dependsOnNodeKeys":["previous-node-key"]}]}',
+    schema,
     'Rules:',
     '1. Every node must have integer durationDays >= 1.',
     '2. dependsOnNodeKeys may reference only nodeKeys that appear earlier in the nodes array, but dependencies are optional.',
     '3. Use parallel branches when appropriate instead of inventing unnecessary FS links.',
     '4. Keep the total duration reasonably close to the parent time window.',
+    ...(input.explicitListMode
+      ? [
+          '5. Emit exactly one node per explicit source item.',
+          '6. Every node must include sourceItemKey and it must match one explicit source item key exactly once.',
+          '7. You may clean up wording in titles, but scope must stay strictly inside the explicit user list.',
+        ]
+      : []),
     `Parent task: ${input.taskName}`,
     `Parent range: ${input.startDate} to ${input.endDate}`,
     `Parent duration days: ${input.parentDurationDays}`,
     detailsLine,
+    'Explicit user list:',
+    explicitItemsBlock,
     'Existing child tasks to avoid duplicating:',
     existingChildrenBlock,
   ].join('\n');
 }
 
-function parseFragmentPlan(payloadText: string): StructuredFragmentPlan {
+function parseFragmentPlan(payloadText: string, explicitItems: ParsedExplicitListItem[] = []): StructuredFragmentPlan {
   const parsed = JSON.parse(payloadText) as DirectSplitPayload;
   const rawNodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
   const seenKeys = new Set<string>();
+  const explicitItemMap = new Map(explicitItems.map((item) => [item.key, item]));
+  const usedExplicitItemKeys = new Set<string>();
 
   const nodes = rawNodes.flatMap((node, index) => {
     if (!node || typeof node !== 'object') {
@@ -222,6 +285,7 @@ function parseFragmentPlan(payloadText: string): StructuredFragmentPlan {
       taskType?: unknown;
       durationDays?: unknown;
       dependsOnNodeKeys?: unknown;
+      sourceItemKey?: unknown;
     };
 
     const title = typeof raw.title === 'string' ? raw.title.trim() : '';
@@ -245,6 +309,14 @@ function parseFragmentPlan(payloadText: string): StructuredFragmentPlan {
     const dependsOnNodeKeys = Array.isArray(raw.dependsOnNodeKeys)
       ? raw.dependsOnNodeKeys.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
       : [];
+    const sourceItemKey = typeof raw.sourceItemKey === 'string' ? raw.sourceItemKey.trim() : '';
+
+    if (explicitItemMap.size > 0) {
+      if (!explicitItemMap.has(sourceItemKey) || usedExplicitItemKeys.has(sourceItemKey)) {
+        return [];
+      }
+      usedExplicitItemKeys.add(sourceItemKey);
+    }
 
     const taskType: 'task' | 'milestone' | undefined = raw.taskType === 'milestone'
       ? 'milestone'
@@ -258,8 +330,21 @@ function parseFragmentPlan(payloadText: string): StructuredFragmentPlan {
       taskType,
       durationDays,
       dependsOnNodeKeys: dependsOnNodeKeys.filter((depKey) => depKey !== nodeKey),
+      sourceItemKey,
     }];
   });
+
+  if (explicitItemMap.size > 0) {
+    if (usedExplicitItemKeys.size !== explicitItemMap.size) {
+      throw new Error('Split task planner must return exactly the explicit user list with no omissions.');
+    }
+
+    nodes.sort((left, right) => {
+      const leftIndex = explicitItems.findIndex((item) => item.key === left.sourceItemKey);
+      const rightIndex = explicitItems.findIndex((item) => item.key === right.sourceItemKey);
+      return leftIndex - rightIndex;
+    });
+  }
 
   if (nodes.length === 0) {
     throw new Error('Split task planner returned no valid child tasks.');
@@ -268,7 +353,7 @@ function parseFragmentPlan(payloadText: string): StructuredFragmentPlan {
   return {
     title: typeof parsed.title === 'string' && parsed.title.trim().length > 0 ? parsed.title.trim() : 'Task split',
     why: typeof parsed.why === 'string' && parsed.why.trim().length > 0 ? parsed.why.trim() : 'Direct split-task planning response.',
-    nodes,
+    nodes: nodes.map(({ sourceItemKey: _sourceItemKey, ...node }) => node),
   };
 }
 
@@ -364,7 +449,15 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const startDate = normalizeIsoDate(task.startDate);
   const endDate = normalizeIsoDate(task.endDate);
   const existingChildNames = (task.children ?? []).map((child) => child.name.trim()).filter(Boolean);
-  const userTrace = buildSplitTaskTrace(taskName, input.details);
+  const explicitItems = input.explicitListMode ? parseExplicitSplitList(input.explicitListText) : [];
+  if (input.explicitListMode && explicitItems.length === 0) {
+    throw new Error('Explicit split list is empty');
+  }
+  const userTrace = buildSplitTaskUserTrace(taskName, {
+    details: input.details,
+    explicitListMode: input.explicitListMode,
+    explicitItems,
+  });
   const historyGroupId = randomUUID();
   const checkpointGroupId = resolveCheckpointGroupId(await resolveLatestVisibleGroupId(input.projectId));
 
@@ -379,6 +472,8 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     taskId: input.taskId,
     taskName,
     details: input.details?.trim() || undefined,
+    explicitListMode: input.explicitListMode === true,
+    explicitListItems: explicitItems.map((item) => item.text),
     existingChildCount: existingChildNames.length,
   });
 
@@ -389,10 +484,12 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     parentDurationDays: getInclusiveDurationDays(startDate, endDate),
     existingChildNames,
     details: input.details,
+    explicitItems,
+    explicitListMode: input.explicitListMode,
   });
 
   const plannerOutput = await executePlannerQuery(plannerPrompt, input.env);
-  const fragmentPlan = parseFragmentPlan(plannerOutput);
+  const fragmentPlan = parseFragmentPlan(plannerOutput, explicitItems);
   const projectVersion = await loadProjectVersion(input.projectId);
 
   const resolutionContext: ResolvedMutationContext = {
