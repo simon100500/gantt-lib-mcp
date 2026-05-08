@@ -669,8 +669,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
   const queuedPromptRef = useRef<string | null>(null);
-  const aiDoneGraceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const aiMutationWatchdogRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const aiDoneGraceTimerRef = useRef<number | null>(null);
+  const aiMutationWatchdogRef = useRef<number | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
