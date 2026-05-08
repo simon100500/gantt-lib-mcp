@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   FlagTriangleRight,
   Funnel,
+  GalleryThumbnails,
   History,
   Layers3,
   Link,
@@ -68,6 +69,7 @@ interface ToolbarProps {
   onExportPdf?: () => void;
   onExportExcel?: () => void;
   onImportExcel?: () => void;
+  onReturnToWizard?: () => void;
   onInsertTemplateToProject?: (() => void | Promise<void>) | null;
   isExportExcelLoading?: boolean;
   shareStatus?: 'idle' | 'creating' | 'copied' | 'error';
@@ -347,6 +349,7 @@ export function Toolbar({
   onExportPdf,
   onExportExcel,
   onImportExcel,
+  onReturnToWizard,
   onInsertTemplateToProject = null,
   isExportExcelLoading = false,
   shareStatus = 'idle',
@@ -870,6 +873,17 @@ export function Toolbar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+      )}
+
+      {onReturnToWizard && (
+        <Button
+          size="sm"
+          onClick={onReturnToWizard}
+          className="hidden h-8 gap-1.5 rounded-md px-2.5 text-xs font-medium sm:inline-flex"
+        >
+          <GalleryThumbnails className="h-3.5 w-3.5" />
+          <span className="text-xs">Вернуться в мастер</span>
+        </Button>
       )}
 
       <div className="flex-1" />

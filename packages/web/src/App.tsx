@@ -1839,6 +1839,12 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     && !hasQueuedProjectPrompt
     && !projectChatOpen
     && activeEmptyProjectModeProjectId !== workspace.projectId;
+  const canReturnEmptyProjectToWizard = workspace.kind === 'project'
+    && !hasShareToken
+    && currentProjectIsEmpty
+    && !previewState.active
+    && !hasQueuedProjectPrompt
+    && activeEmptyProjectModeProjectId === workspace.projectId;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'template'
@@ -2154,6 +2160,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onExportPdf={handleExportPdf}
               onExportExcel={handleExportExcel}
               onImportExcel={() => setShowImportExcelModal(true)}
+              onReturnToWizard={canReturnEmptyProjectToWizard ? () => setActiveEmptyProjectModeProjectId(null) : undefined}
               onInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
               isExportExcelLoading={isExportExcelLoading}
               onValidation={handleValidation}
