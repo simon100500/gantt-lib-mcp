@@ -195,7 +195,7 @@ function renderResourceChips(
     const variantClasses = variant === 'active'
       ? 'border-[#dfe1e6] bg-white text-[#172b4d]'
       : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#6b778c] opacity-75';
-    const className = `inline-flex h-7 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md border ${
+    const className = `inline-flex h-6 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md border ${
       displayMode === 'icon' ? 'justify-center px-1.5 py-0.5' : 'gap-1 px-1.5 py-0.5'
     } text-[10px] font-medium leading-4 ${variantClasses} ${
       onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
@@ -307,7 +307,7 @@ function renderSummaryChip(
     : summary.type === 'unknown'
       ? 'border-red-200 bg-red-50 text-red-700'
       : 'border-[#dfe1e6] bg-white text-[#172b4d]';
-  const className = `inline-flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${baseClassName} ${
+  const className = `inline-flex h-6 min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${baseClassName} ${
     onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
   }`;
   const title = getResourceSummaryLabel(summary);
@@ -465,7 +465,7 @@ export function AssignedResourcesColumnCell({
                     <InlineTooltip content={`Неизвестный ресурс: ${resourceId}`} key={`unknown-${resourceId}`}>
                       <button
                         aria-label={`Изменить назначения ресурсов для задачи ${task.name || task.id}`}
-                        className={`inline-flex h-7 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+                        className={`inline-flex h-6 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
                           chipDisplayMode === 'icon' ? 'justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
                         }`}
                         data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
@@ -490,7 +490,7 @@ export function AssignedResourcesColumnCell({
                   ) : (
                     <InlineTooltip content={`Неизвестный ресурс: ${resourceId}`} key={`unknown-${resourceId}`}>
                       <span
-                        className={`inline-flex h-7 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 ${
+                        className={`inline-flex h-6 min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 ${
                           chipDisplayMode === 'icon' ? 'justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
                         }`}
                         data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
