@@ -23,12 +23,12 @@ async function buildFixtureBase64(): Promise<string> {
       <Position Caption="Catalog material" Number="2" Code="FSBC-01.1.01.01-0001" Units="m2">
         <Quantity Fx="F1.r1" Result="12,5"/>
       </Position>
-      <Position Caption="Task 2" Number="3" Code="GESN01-01-001-02" Units="pcs">
+      <Position Caption="Task 2" Number="3" Code="GESN01-01-001-02" Units="100 pcs">
         <Quantity Result="3"/>
       </Position>
     </Chapter>
     <Chapter Caption="Section 2">
-      <Position Caption="Task 3" Number="4" Code="47-1" Units="m3">
+      <Position Caption="Task 3" Number="4" Code="47-1" Units="100m3">
         <Quantity Result="7,25"/>
       </Position>
     </Chapter>
@@ -60,9 +60,12 @@ describe('grand smeta import preview', () => {
     assert.deepEqual(preview.rows[2]?.normalized.resourceNames, ['Material from work', 'Machine 1']);
     assert.equal(preview.rows[2]?.values.startDate, '2026-05-05');
     assert.equal(preview.rows[3]?.values.startDate, '2026-05-06');
+    assert.equal(preview.rows[3]?.values.workVolume, '300');
+    assert.equal(preview.rows[3]?.values.workUnit, 'pcs');
     assert.equal(preview.rows[4]?.normalized.name, 'Section 2');
     assert.equal(preview.rows[5]?.values.startDate, '2026-05-07');
-    assert.equal(preview.rows[5]?.values.workVolume, '7.25');
+    assert.equal(preview.rows[5]?.values.workVolume, '725');
+    assert.equal(preview.rows[5]?.values.workUnit, 'm3');
     assert.match(preview.issues[0]?.message ?? '', /GSFX не содержит календарных дат/u);
     assert.ok(preview.rows.every((row) => row.normalized.name !== '2. Catalog material'));
     assert.match(preview.issues[1]?.message ?? '', /Материальные позиции/u);
@@ -99,5 +102,9 @@ describe('grand smeta import preview', () => {
 
     assert.equal(preview.rows[2]?.values.workVolume, '12.5');
     assert.equal(preview.rows[2]?.values.workUnit, '100 m2');
+    assert.equal(preview.rows[3]?.values.workVolume, '3');
+    assert.equal(preview.rows[3]?.values.workUnit, '100 pcs');
+    assert.equal(preview.rows[5]?.values.workVolume, '7.25');
+    assert.equal(preview.rows[5]?.values.workUnit, '100m3');
   });
 });

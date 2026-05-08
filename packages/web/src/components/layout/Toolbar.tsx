@@ -792,7 +792,7 @@ export function Toolbar({
                 className="flex cursor-pointer items-center gap-2"
               >
                 <Upload className="h-4 w-4" />
-                <span className="text-sm">Импорт файла</span>
+                <span className="text-sm">Импортировать из файла</span>
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

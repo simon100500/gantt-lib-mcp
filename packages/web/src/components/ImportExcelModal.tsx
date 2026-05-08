@@ -426,7 +426,7 @@ export function ImportExcelModal({
             </div>
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.04em] text-slate-500">Шаблон</div>
-              <div className="mt-1 text-sm text-slate-600">Для Excel можно скачать пример файла с готовой таблицей. GSFX берётся из Grand Сметы без шаблона.</div>
+              <div className="mt-1 text-sm text-slate-600">Для Excel можно скачать пример файла с готовой таблицей. GSFX берётся из ГРАНД-Смета без шаблона.</div>
               <Button
                 className="mt-3"
                 disabled={isDownloadTemplateLoading}
@@ -464,18 +464,16 @@ export function ImportExcelModal({
                     Механизмы
                   </label>
                 </div>
-              </div>
-            ) : null}
-            {isGrandSmeta ? (
-              <div className="mt-3 text-sm text-slate-700">
-                <label className="flex items-center gap-2">
-                  <input
-                    checked={grandSmetaOptions.normalizeUnitMultipliers}
-                    onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, normalizeUnitMultipliers: event.target.checked }))}
-                    type="checkbox"
-                  />
-                  Приводить единицы измерения из смет к единичным (100 м2 → м2)
-                </label>
+                <div className="mt-3 text-sm text-slate-700">
+                  <label className="flex items-center gap-2">
+                    <input
+                      checked={grandSmetaOptions.normalizeUnitMultipliers}
+                      onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, normalizeUnitMultipliers: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    Приводить единицы измерения из смет к единичным (100 м2 → м2)
+                  </label>
+                </div>
               </div>
             ) : null}
           </div>
@@ -509,6 +507,16 @@ export function ImportExcelModal({
                           type="checkbox"
                         />
                         Механизмы
+                      </label>
+                    </div>
+                    <div className="mt-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          checked={grandSmetaOptions.normalizeUnitMultipliers}
+                          onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, normalizeUnitMultipliers: event.target.checked }))}
+                          type="checkbox"
+                        />
+                        Приводить единицы измерения из смет к единичным (100 м2 → м2)
                       </label>
                     </div>
                   </div>
@@ -556,8 +564,8 @@ export function ImportExcelModal({
                   {issues.map((issue, index) => (
                     <div
                       className={`rounded-lg border px-3 py-2 text-sm ${issue.severity === 'error'
-                          ? 'border-rose-200 bg-rose-50 text-rose-700'
-                          : 'border-amber-200 bg-amber-50 text-amber-800'
+                        ? 'border-rose-200 bg-rose-50 text-rose-700'
+                        : 'border-amber-200 bg-amber-50 text-amber-800'
                         }`}
                       key={`${issue.severity}-${issue.rowNumber ?? 'global'}-${index}`}
                     >
@@ -700,26 +708,12 @@ export function ImportExcelModal({
               )}
             </div>
 
-            {preview && mapping ? (
+            {preview && mapping && !isGrandSmeta ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                {isGrandSmeta
-                  ? 'GSFX сопоставляется автоматически по структуре сметы.'
-                  : (Object.keys(mapping) as ImportField[])
-                    .filter((field) => mapping[field].enabled && mapping[field].columnIndex !== null)
-                    .map((field) => getFieldLabel(preview, field))
-                    .join(' · ')}
-              </div>
-            ) : null}
-            {isGrandSmeta ? (
-              <div className="text-sm text-slate-700">
-                <label className="flex items-center gap-2">
-                  <input
-                    checked={grandSmetaOptions.normalizeUnitMultipliers}
-                    onChange={(event) => setGrandSmetaOptions((prev) => ({ ...prev, normalizeUnitMultipliers: event.target.checked }))}
-                    type="checkbox"
-                  />
-                  Приводить единицы измерения из смет к единичным (100 м2 → м2)
-                </label>
+                {(Object.keys(mapping) as ImportField[])
+                  .filter((field) => mapping[field].enabled && mapping[field].columnIndex !== null)
+                  .map((field) => getFieldLabel(preview, field))
+                  .join(' · ')}
               </div>
             ) : null}
           </div>

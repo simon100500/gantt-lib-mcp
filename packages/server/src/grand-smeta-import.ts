@@ -179,7 +179,7 @@ function decodeGsfxFileBase64(fileName: string, fileBase64: string): Buffer {
   if (!/\.gsfx$/iu.test(fileName)) {
     throw new GrandSmetaImportValidationError('Неподдерживаемый формат файла', [{
       severity: 'error',
-      message: 'Для импорта из Grand Сметы поддерживаются только файлы .gsfx.',
+      message: 'Для импорта из ГРАНД-Смета поддерживаются только файлы .gsfx.',
     }]);
   }
 
@@ -306,7 +306,8 @@ function normalizeWorkUnit(
     };
   }
 
-  const match = trimmedUnit.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/u);
+  const normalizedSpacingUnit = trimmedUnit.replace(/[\u00A0\u202F]/gu, ' ');
+  const match = normalizedSpacingUnit.match(/^(\d+(?:[.,]\d+)?)(?:\s*)([^\d].*)$/u);
   if (!match) {
     return {
       workUnit: trimmedUnit,
@@ -316,7 +317,7 @@ function normalizeWorkUnit(
 
   const multiplier = parseDecimal(match[1]);
   const normalizedUnit = match[2]?.trim();
-  if (!multiplier || !normalizedUnit) {
+  if (multiplier === undefined || !normalizedUnit) {
     return {
       workUnit: trimmedUnit,
       workVolume,
@@ -444,7 +445,7 @@ export function parseGrandSmetaXml(
   if (!chaptersNode) {
     throw new GrandSmetaImportValidationError('Разделы сметы не найдены', [{
       severity: 'error',
-      message: 'В файле Grand Сметы не найден блок Chapters.',
+      message: 'В файле ГРАНД-Смета не найден блок Chapters.',
     }]);
   }
 
@@ -800,7 +801,7 @@ export async function commitGrandSmetaImport(input: {
       history: {
         ...historySeed,
         origin: 'user_ui',
-        title: 'Импорт из Grand Сметы',
+        title: 'Импорт из ГРАНД-Смета',
         finalizeGroup: true,
       },
       includeSnapshot: false,
