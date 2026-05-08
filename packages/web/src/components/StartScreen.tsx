@@ -217,8 +217,8 @@ export function StartScreen({ onSend, onEmptyChart, onImport, isAuthenticated = 
                 onClick={() => handleChipClick(action)}
                 disabled={isSubmitting}
                 className={cn(
-                  'flex min-h-[88px] w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left',
-                  'border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300 hover:bg-slate-100',
+                  'flex min-h-[72px] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left',
+                  'border-slate-200 bg-slate-50 text-slate-900 hover:border-primary hover:text-primary',
                   'transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                   'disabled:cursor-wait disabled:opacity-50',
