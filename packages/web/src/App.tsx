@@ -14,6 +14,7 @@ import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx'
 import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
 import { InsertTemplateModal } from './components/InsertTemplateModal.tsx';
 import { ImportExcelModal } from './components/ImportExcelModal.tsx';
+import { ProjectSettingsModal } from './components/ProjectSettingsModal.tsx';
 import { YandexCallbackPage } from './components/YandexCallbackPage.tsx';
 import type { GanttChartRef } from './components/GanttChart.tsx';
 import { ProjectMenu } from './components/layout/ProjectMenu.tsx';
@@ -46,7 +47,7 @@ import { useTemplateStore } from './stores/useTemplateStore.ts';
 import { readProjectChatOpenState, useUIStore } from './stores/useUIStore.ts';
 import { useProjectUIStore } from './stores/useProjectUIStore.ts';
 import { useProjectStore } from './stores/useProjectStore.ts';
-import { normalizeTasks, type ProjectSectionPermissions, type Task, type ValidationResult } from './types.ts';
+import { normalizeTasks, type ProjectSectionPermissions, type Task, type TimelineMarker, type ValidationResult } from './types.ts';
 
 const ACCESS_TOKEN_KEY = 'gantt_access_token';
 const EMPTY_CALENDAR_DAYS: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }> = [];
@@ -258,6 +259,8 @@ export default function App() {
   const showEditProjectModal = useUIStore((state) => state.showEditProjectModal);
   const setShowOtpModal = useUIStore((state) => state.setShowOtpModal);
   const setShowEditProjectModal = useUIStore((state) => state.setShowEditProjectModal);
+  const showProjectSettingsModal = useUIStore((state) => state.showProjectSettingsModal);
+  const setShowProjectSettingsModal = useUIStore((state) => state.setShowProjectSettingsModal);
   const [route, setRoute] = useState<RouteState>(() => ({
     pathname: window.location.pathname,
     search: window.location.search,
@@ -494,6 +497,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const setShowChart = useUIStore((state) => state.setShowChart);
   const showBillingPage = useUIStore((state) => state.showBillingPage);
   const setShowBillingPage = useUIStore((state) => state.setShowBillingPage);
+  const showProjectSettingsModal = useUIStore((state) => state.showProjectSettingsModal);
+  const setShowProjectSettingsModal = useUIStore((state) => state.setShowProjectSettingsModal);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
@@ -509,6 +514,8 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
   const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const [startScreenProjectSettingsPending, setStartScreenProjectSettingsPending] = useState(false);
+  const [startScreenProjectSettingsError, setStartScreenProjectSettingsError] = useState<string | null>(null);
   const [shareSelectionMode, setShareSelectionMode] = useState(false);
   const [selectedShareTaskIds, setSelectedShareTaskIds] = useState<Set<string>>(new Set());
   const [templateSelectionMode, setTemplateSelectionMode] = useState(false);
@@ -1845,6 +1852,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     && !previewState.active
     && !hasQueuedProjectPrompt
     && activeEmptyProjectModeProjectId === workspace.projectId;
+  const shouldRenderStartScreenProjectSettingsModal = showProjectStartScreen
+    && showProjectSettingsModal
+    && Boolean(auth.project)
+    && !hasShareToken;
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'template'
@@ -1852,6 +1863,45 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     : auth.isAuthenticated
       ? auth.project?.name
       : (localTasks.projectName || 'Мой проект');
+  const handleSaveStartScreenProjectSettings = useCallback(async (settings: {
+    projectName: string;
+    ganttDayMode: 'business' | 'calendar';
+    timelineMarkers: TimelineMarker[];
+  }) => {
+    if (!auth.project || isScheduleReadOnlyProject) {
+      return;
+    }
+
+    const projectNameChanged = settings.projectName.trim() !== (auth.project.name ?? '').trim();
+    const markersChanged = JSON.stringify(settings.timelineMarkers) !== JSON.stringify(auth.project.timelineMarkers ?? []);
+    const dayModeChanged = settings.ganttDayMode !== effectiveAuthGanttDayMode;
+
+    if (!projectNameChanged && !markersChanged && !dayModeChanged) {
+      setShowProjectSettingsModal(false);
+      setStartScreenProjectSettingsError(null);
+      return;
+    }
+
+    setStartScreenProjectSettingsPending(true);
+    setStartScreenProjectSettingsError(null);
+    try {
+      if (projectNameChanged) {
+        await handleSaveProjectName(settings.projectName.trim());
+      }
+      if (dayModeChanged) {
+        await handleGanttDayModeChange(settings.ganttDayMode);
+      }
+      if (markersChanged) {
+        await auth.updateProject(auth.project.id, { timelineMarkers: settings.timelineMarkers });
+      }
+      setShowProjectSettingsModal(false);
+    } catch (error) {
+      console.error('[App] Failed to save project settings from start screen:', error);
+      setStartScreenProjectSettingsError('Не удалось сохранить настройки проекта. Попробуйте ещё раз.');
+    } finally {
+      setStartScreenProjectSettingsPending(false);
+    }
+  }, [auth, effectiveAuthGanttDayMode, handleGanttDayModeChange, handleSaveProjectName, isScheduleReadOnlyProject, setShowProjectSettingsModal]);
   const doExportPdf = useCallback(async () => {
     const projectName = currentProjectLabel?.trim() || 'Мой проект';
     const exportDate = new Date();
@@ -2240,6 +2290,29 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         onImported={handleImportExcelCompleted}
         onLoginRequired={onLoginRequired}
         isDownloadTemplateLoading={isImportTemplateLoading}
+      />
+    )}
+    {shouldRenderStartScreenProjectSettingsModal && auth.project && (
+      <ProjectSettingsModal
+        projectName={auth.project.name ?? 'Мой проект'}
+        ganttDayMode={effectiveAuthGanttDayMode}
+        timelineMarkers={auth.project.timelineMarkers ?? []}
+        pending={startScreenProjectSettingsPending}
+        error={startScreenProjectSettingsError}
+        canEditProjectName={!isScheduleReadOnlyProject}
+        canShiftProject={false}
+        canEditGanttDayMode={!isScheduleReadOnlyProject}
+        canEditTimelineMarkers={!isScheduleReadOnlyProject}
+        onClose={() => {
+          if (!startScreenProjectSettingsPending) {
+            setShowProjectSettingsModal(false);
+            setStartScreenProjectSettingsError(null);
+          }
+        }}
+        onOpenProjectShift={() => {}}
+        onSave={(settings) => {
+          void handleSaveStartScreenProjectSettings(settings);
+        }}
       />
     )}
     {updateAvailable && (
