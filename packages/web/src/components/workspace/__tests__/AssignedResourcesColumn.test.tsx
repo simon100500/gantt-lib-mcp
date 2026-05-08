@@ -223,6 +223,40 @@ describe('AssignedResourcesColumnCell', () => {
 
     unmount(root);
   });
+
+  it('switches four assigned resources into compact icon chips without collapsing into summary', () => {
+    const equipmentResource: ProjectResource = {
+      ...activeResource,
+      id: 'resource-equipment',
+      type: 'equipment',
+      name: 'Автокран',
+    };
+    const materialResource: ProjectResource = {
+      ...activeResource,
+      id: 'resource-material',
+      type: 'material',
+      name: 'Кабель',
+    };
+    const { container, root } = renderCell({}, [activeResource, secondActiveResource, equipmentResource, materialResource], [
+      assignment({ id: 'assignment-active-1', resourceId: activeResource.id }),
+      assignment({ id: 'assignment-active-2', resourceId: secondActiveResource.id }),
+      assignment({ id: 'assignment-equipment', resourceId: equipmentResource.id }),
+      assignment({ id: 'assignment-material', resourceId: materialResource.id }),
+    ]);
+
+    const humanChip = container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]');
+    const secondHumanChip = container.querySelector('[data-testid="assigned-resources-active-task-1-resource-second-active"]');
+    const equipmentChip = container.querySelector('[data-testid="assigned-resources-active-task-1-resource-equipment"]');
+    const materialChip = container.querySelector('[data-testid="assigned-resources-active-task-1-resource-material"]');
+
+    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-human"]')).toBeNull();
+    expect(humanChip?.textContent).toBe('');
+    expect(secondHumanChip?.textContent).toBe('');
+    expect(equipmentChip?.textContent).toBe('');
+    expect(materialChip?.textContent).toBe('');
+
+    unmount(root);
+  });
 });
 
 describe('createAssignedResourcesColumn', () => {
