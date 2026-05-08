@@ -1752,6 +1752,7 @@ export function ProjectWorkspace({
           assignments,
           editable: !effectiveReadOnly && !shareSelectionActive,
           readOnly: effectiveReadOnly || shareSelectionActive,
+          width: taskListColumnWidths['assigned-resources'] ?? TASK_LIST_COLUMN_WIDTHS['assigned-resources'],
           onEdit: openAssignmentSelector,
         }),
       );
@@ -1772,6 +1773,7 @@ export function ProjectWorkspace({
     resources,
     shareSelectionActive,
     showResourceAssignments,
+    taskListColumnWidths,
     workProgressLoadingTaskIds,
   ]);
 

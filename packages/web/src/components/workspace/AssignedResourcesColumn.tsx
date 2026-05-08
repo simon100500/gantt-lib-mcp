@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { TaskListColumn } from 'gantt-lib';
 import { Plus } from 'lucide-react';
@@ -10,13 +10,16 @@ import { getTaskAssignmentResourceGroups } from './resourceAssignmentUtils.ts';
 import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
 const DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH = 132;
-const MAX_VISIBLE_RESOURCE_CHIPS = 4;
+const TEXT_CHIP_MIN_WIDTH = 44;
+const ICON_ONLY_CHIP_MIN_WIDTH = 26;
+const CHIP_GAP_PX = 4;
 
 export interface AssignedResourcesColumnCellProps {
   task: Task;
   groups: TaskAssignmentResourceGroups;
   editable?: boolean;
   readOnly?: boolean;
+  estimatedWidth?: number;
   onEdit?: (task: Task) => void;
 }
 
@@ -341,8 +344,11 @@ export function AssignedResourcesColumnCell({
   groups,
   editable = true,
   readOnly = false,
+  estimatedWidth = DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH,
   onEdit,
 }: AssignedResourcesColumnCellProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(estimatedWidth);
   const normalizedGroups = normalizeAssignedResourceGroups(groups);
   const activeResources = normalizedGroups.activeAssignedResources;
   const inactiveResources = normalizedGroups.inactiveAssignedResources;
@@ -354,11 +360,39 @@ export function AssignedResourcesColumnCell({
     ? 'Назначено ресурсов: 0'
     : `Назначено ресурсов: ${totalVisibleCount}`;
   const openEditor = canEdit ? () => onEdit?.(task) : undefined;
-  const chipDisplayMode: 'full' | 'icon' = totalVisibleCount === MAX_VISIBLE_RESOURCE_CHIPS ? 'icon' : 'full';
-  const shouldCollapseToSummary = totalVisibleCount > MAX_VISIBLE_RESOURCE_CHIPS;
+  const availableWidthPerChip = totalVisibleCount > 0
+    ? (containerWidth - CHIP_GAP_PX * Math.max(0, totalVisibleCount - 1)) / totalVisibleCount
+    : containerWidth;
+  const shouldCollapseToSummary = totalVisibleCount > 0 && availableWidthPerChip < ICON_ONLY_CHIP_MIN_WIDTH;
+  const chipDisplayMode: 'full' | 'icon' = !shouldCollapseToSummary && availableWidthPerChip >= TEXT_CHIP_MIN_WIDTH ? 'full' : 'icon';
   const resourceSummaries = shouldCollapseToSummary
     ? buildResourceChipSummaries(activeResources, inactiveResources, unknownResourceIds)
     : [];
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const updateWidth = () => {
+      const nextWidth = Math.round(element.getBoundingClientRect().width);
+      if (nextWidth > 0) {
+        setContainerWidth(nextWidth);
+      }
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => updateWidth());
+      observer.observe(element);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [estimatedWidth]);
 
   return (
     <div
@@ -366,6 +400,7 @@ export function AssignedResourcesColumnCell({
       className="flex min-w-0 items-center gap-1 px-1.5 py-1 text-xs text-slate-700"
       data-assigned-resource-count={String(totalVisibleCount)}
       data-testid={`assigned-resources-cell-${task.id}`}
+      ref={containerRef}
     >
       <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
         {totalVisibleCount === 0 ? (
@@ -458,17 +493,19 @@ export function createAssignedResourcesColumn({
   assignments,
   editable = true,
   readOnly = false,
+  width = DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH,
   onEdit,
 }: CreateAssignedResourcesColumnOptions): TaskListColumn<Task> {
   return {
     id: 'assigned-resources',
     header: 'Ресурсы',
-    width: DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH,
+    width,
     minWidth: 108,
     after: 'progress',
     renderCell: ({ task }) => (
       <AssignedResourcesColumnCell
         editable={editable}
+        estimatedWidth={width}
         groups={getTaskAssignmentResourceGroups(task.id, resources, assignments)}
         onEdit={onEdit}
         readOnly={readOnly}

@@ -203,7 +203,34 @@ describe('AssignedResourcesColumnCell', () => {
     unmount(root);
   });
 
-  it('keeps named chips visible while total assignments stay within the threshold', () => {
+  it('expands back out of summary when a wider cell can fit icon chips again', () => {
+    const materialResources: ProjectResource[] = Array.from({ length: 5 }, (_, index) => ({
+      ...activeResource,
+      id: `resource-material-wide-${index + 1}`,
+      type: 'material',
+      name: `Материал ${index + 1}`,
+    }));
+
+    const narrow = renderCell({}, materialResources, materialResources.map((resource, index) => (
+      assignment({ id: `assignment-narrow-${index + 1}`, resourceId: resource.id })
+    )));
+
+    expect(narrow.container.querySelector('[data-testid="assigned-resources-summary-task-1-active-material"]')?.textContent).toContain('5');
+    expect(narrow.container.querySelector('[data-testid="assigned-resources-active-task-1-resource-material-wide-1"]')).toBeNull();
+    unmount(narrow.root);
+
+    const wide = renderCell({ estimatedWidth: 180 }, materialResources, materialResources.map((resource, index) => (
+      assignment({ id: `assignment-wide-${index + 1}`, resourceId: resource.id })
+    )));
+
+    expect(wide.container.querySelector('[data-testid="assigned-resources-summary-task-1-active-material"]')).toBeNull();
+    expect(wide.container.querySelector('[data-testid="assigned-resources-active-task-1-resource-material-wide-1"]')).not.toBeNull();
+    expect(wide.container.querySelector('[data-testid="assigned-resources-active-task-1-resource-material-wide-1"]')?.textContent).toBe('');
+
+    unmount(wide.root);
+  });
+
+  it('switches three long assigned resources into icon chips when text no longer fits', () => {
     const equipmentResource: ProjectResource = {
       ...activeResource,
       id: 'resource-equipment',
@@ -216,10 +243,30 @@ describe('AssignedResourcesColumnCell', () => {
       assignment({ id: 'assignment-equipment', resourceId: equipmentResource.id }),
     ]);
 
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')?.textContent).toBe('');
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-second-active"]')?.textContent).toBe('');
+    expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-equipment"]')?.textContent).toBe('');
+    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-human"]')).toBeNull();
+
+    unmount(root);
+  });
+
+  it('keeps named chips visible in wider cells while assignments still fit', () => {
+    const equipmentResource: ProjectResource = {
+      ...activeResource,
+      id: 'resource-equipment',
+      type: 'equipment',
+      name: 'Автокран',
+    };
+    const { container, root } = renderCell({ estimatedWidth: 360 }, [activeResource, secondActiveResource, equipmentResource], [
+      assignment({ id: 'assignment-active-1', resourceId: activeResource.id }),
+      assignment({ id: 'assignment-active-2', resourceId: secondActiveResource.id }),
+      assignment({ id: 'assignment-equipment', resourceId: equipmentResource.id }),
+    ]);
+
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-active"]')?.textContent).toContain('Бригада монтажников');
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-second-active"]')?.textContent).toContain('Крановщик');
     expect(container.querySelector('[data-testid="assigned-resources-active-task-1-resource-equipment"]')?.textContent).toContain('Автокран');
-    expect(container.querySelector('[data-testid="assigned-resources-summary-task-1-active-human"]')).toBeNull();
 
     unmount(root);
   });
