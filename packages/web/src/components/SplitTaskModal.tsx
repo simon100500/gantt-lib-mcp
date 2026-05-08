@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ListTree } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import type { Task } from '../types.ts';
 export interface SplitTaskSubmitPayload {
   details: string;
   explicitListMode: boolean;
-  explicitListText: string;
 }
 
 interface SplitTaskModalProps {
@@ -32,14 +31,11 @@ function normalizeDate(value: Task['startDate'] | Task['endDate']): string {
 
 export function buildSplitTaskTrace(task: Task, payload: SplitTaskSubmitPayload): string {
   const trimmedDetails = payload.details.trim();
-  const trimmedExplicitList = payload.explicitListText.trim();
   const parts = [`Разбить задачу «${task.name}» на подзадачи.`];
 
-  if (payload.explicitListMode && trimmedExplicitList) {
-    parts.push(`Используй только этот явный список подзадач:\n${trimmedExplicitList}`);
-  }
-
-  if (trimmedDetails) {
+  if (payload.explicitListMode && trimmedDetails) {
+    parts.push(`Используй только этот явный список подзадач:\n${trimmedDetails}`);
+  } else if (trimmedDetails) {
     parts.push(`Уточнения: ${trimmedDetails}`);
   }
 
@@ -49,20 +45,44 @@ export function buildSplitTaskTrace(task: Task, payload: SplitTaskSubmitPayload)
 export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps) {
   const [details, setDetails] = useState('');
   const [explicitListMode, setExplicitListMode] = useState(false);
-  const [explicitListText, setExplicitListText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const dateRange = useMemo(
     () => `${normalizeDate(task.startDate)} - ${normalizeDate(task.endDate)}`,
     [task.endDate, task.startDate],
   );
 
+  useEffect(() => {
+    if (!explicitListMode) {
+      return;
+    }
+
+    setDetailsOpen(true);
+  }, [explicitListMode]);
+
+  useEffect(() => {
+    if (!explicitListMode || !detailsOpen) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      detailsTextareaRef.current?.focus();
+      detailsTextareaRef.current?.setSelectionRange(
+        detailsTextareaRef.current.value.length,
+        detailsTextareaRef.current.value.length,
+      );
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [detailsOpen, explicitListMode]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (explicitListMode && !explicitListText.trim()) {
-      setError('Заполните явный список подзадач.');
+    if (explicitListMode && !details.trim()) {
+      setError('Заполните список подзадач в поле комментария.');
       return;
     }
 
@@ -73,7 +93,6 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
       const result = await onSubmit({
         details,
         explicitListMode,
-        explicitListText,
       });
       if (result.accepted) {
         onClose();
@@ -122,6 +141,10 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
 
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            <p className="text-sm leading-6 text-slate-600">
+              Исходная задача станет родительской. Под ней появятся более детальные подзадачи.
+            </p>
+
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-base font-semibold text-slate-900">{task.name}</div>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
@@ -129,12 +152,8 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
               </div>
             </div>
 
-            <p className="text-sm leading-6 text-slate-600">
-              Исходная задача станет родительской. Под ней появятся более детальные подзадачи.
-            </p>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <label className="flex cursor-pointer items-start gap-3">
+            <div className="space-y-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={explicitListMode}
@@ -145,35 +164,10 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
                     }
                   }}
                   disabled={loading}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-300"
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-300"
                 />
-                <span>
-                  <span className="block text-sm font-medium text-slate-900">Указать список явно</span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-500">
-                    Возьмём только перечисленные вами пункты, а AI лишь причесает названия и расставит сроки, связи и параллельность.
-                  </span>
-                </span>
+                <span>Указать свой список задач</span>
               </label>
-
-              {explicitListMode && (
-                <div className="pt-3">
-                  <textarea
-                    id="split-task-explicit-list"
-                    value={explicitListText}
-                    onChange={(event) => setExplicitListText(event.target.value)}
-                    disabled={loading}
-                    rows={6}
-                    placeholder={'Каждый пункт с новой строки.\nНапример:\nПодготовка\nМонтаж\nПусконаладка'}
-                    className={cn(
-                      'flex min-h-[140px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60',
-                      error && !explicitListText.trim() && 'border-red-300 focus:border-red-300 focus:ring-red-100',
-                    )}
-                  />
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Лучше по одному пункту на строку. Дополнительные этапы не будут придумываться сверх этого списка.
-                  </p>
-                </div>
-              )}
             </div>
 
             <details
@@ -187,19 +181,22 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
               </summary>
               <div className="pt-3">
                 <textarea
+                  ref={detailsTextareaRef}
                   id="split-task-details"
                   value={details}
                   onChange={(event) => setDetails(event.target.value)}
                   disabled={loading}
                   rows={5}
-                  placeholder="Необязательно. Например: учти проектную документацию, выдели согласование, монтаж и проверку."
+                  placeholder={explicitListMode
+                    ? 'Каждый пункт с новой строки.\nНапример:\nПодготовка\nМонтаж\nПусконаладка'
+                    : 'Необязательно. Например: учти проектную документацию, выдели согласование, монтаж и проверку.'}
                   className={cn(
                     'flex min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-60',
                     error && 'border-red-300 focus:border-red-300 focus:ring-red-100',
                   )}
                 />
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Можно оставить пустым.
+                  {explicitListMode ? 'В этом режиме поле обязательно.' : 'Можно оставить пустым.'}
                 </p>
               </div>
             </details>
@@ -215,7 +212,7 @@ export function SplitTaskModal({ task, onClose, onSubmit }: SplitTaskModalProps)
             <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="flex-1 rounded-lg">
               Отмена
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 rounded-lg bg-slate-900 text-white hover:bg-slate-800">
+            <Button type="submit" disabled={loading} className="flex-1 rounded-lg">
               {loading ? 'Отправка...' : 'Разбить задачу'}
             </Button>
           </CardFooter>

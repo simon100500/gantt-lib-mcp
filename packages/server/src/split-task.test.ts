@@ -170,16 +170,18 @@ describe('runDirectSplitTask', () => {
     process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/test';
     const { runDirectSplitTask } = await import('./split-task.js');
     let plannerPrompt = '';
+    let plannerSystemPrompt = '';
+    let plannerMaxSessionTurns = 0;
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    let listCallCount = 0;
 
     const result = await runDirectSplitTask({
       projectId: 'project-1',
       sessionId: 'session-1',
       runId: 'run-explicit',
       taskId: 'task-fitout',
-      details: 'Добавь реальные связи, но не придумывай этапы.',
+      details: '1. Черновая электрика\n2. Чистовая электрика\n3. Пусконаладка',
       explicitListMode: true,
-      explicitListText: '1. Черновая электрика\n2. Чистовая электрика\n3. Пусконаладка',
       env: {
         OPENAI_API_KEY: '',
         OPENAI_BASE_URL: 'https://example.test',
@@ -193,16 +195,55 @@ describe('runDirectSplitTask', () => {
           },
         },
         taskService: {
-          list: async () => ({
-            tasks: [{
-              id: 'task-fitout',
-              name: 'Электромонтаж',
-              startDate: '2026-04-01',
-              endDate: '2026-04-08',
-            }],
-            hasMore: false,
-            total: 1,
-          }),
+          list: async () => {
+            listCallCount += 1;
+            if (listCallCount === 1) {
+              return {
+                tasks: [{
+                  id: 'task-fitout',
+                  name: 'Электромонтаж',
+                  startDate: '2026-04-01',
+                  endDate: '2026-04-08',
+                }],
+                hasMore: false,
+                total: 1,
+              };
+            }
+
+            return {
+              tasks: [
+                {
+                  id: 'task-fitout',
+                  name: 'Электромонтаж',
+                  startDate: '2026-04-01',
+                  endDate: '2026-04-08',
+                },
+                {
+                  id: 'task-fitout:rough',
+                  name: 'Черновая электрика',
+                  parentId: 'task-fitout',
+                  startDate: '2026-04-01',
+                  endDate: '2026-04-03',
+                },
+                {
+                  id: 'task-fitout:clean',
+                  name: 'Чистовая электрика',
+                  parentId: 'task-fitout',
+                  startDate: '2026-04-04',
+                  endDate: '2026-04-05',
+                },
+                {
+                  id: 'task-fitout:finish',
+                  name: 'Пусконаладочные работы',
+                  parentId: 'task-fitout',
+                  startDate: '2026-04-06',
+                  endDate: '2026-04-06',
+                },
+              ],
+              hasMore: false,
+              total: 4,
+            };
+          },
           get: async () => ({
             id: 'task-fitout',
             name: 'Электромонтаж',
@@ -219,8 +260,8 @@ describe('runDirectSplitTask', () => {
             newVersion: request.baseVersion + 1,
             result: {
               snapshot: { tasks: [], dependencies: [] },
-              changedTaskIds: ['task-fitout'],
-              changedDependencyIds: [],
+              changedTaskIds: ['task-fitout', 'task-fitout:rough', 'task-fitout:clean', 'task-fitout:finish'],
+              changedDependencyIds: ['dep-1', 'dep-2'],
               conflicts: [],
               patches: [],
             },
@@ -229,8 +270,10 @@ describe('runDirectSplitTask', () => {
         },
       },
       broadcastToSession: () => undefined,
-      plannerQuery: async (prompt) => {
+      plannerQuery: async (prompt, _env, options) => {
         plannerPrompt = prompt;
+        plannerSystemPrompt = options?.systemPrompt ?? '';
+        plannerMaxSessionTurns = options?.maxSessionTurns ?? 0;
         return JSON.stringify({
           title: 'Электромонтаж',
           why: 'Strict explicit split',
@@ -267,11 +310,15 @@ describe('runDirectSplitTask', () => {
       getLatestVisibleGroupId: async () => 'history-1',
     });
 
-    assert.match(plannerPrompt, /Use exactly the explicit user-supplied worklist below/i);
-    assert.match(plannerPrompt, /item-1: Черновая электрика/i);
-    assert.match(plannerPrompt, /item-2: Чистовая электрика/i);
-    assert.match(plannerPrompt, /item-3: Пусконаладка/i);
+    assert.doesNotMatch(plannerPrompt, /Черновая электрика/i);
+    assert.doesNotMatch(plannerPrompt, /Use exactly the explicit user-supplied worklist below/i);
+    assert.match(plannerSystemPrompt, /Use exactly the explicit user-supplied worklist below/i);
+    assert.match(plannerSystemPrompt, /item-1: Черновая электрика/i);
+    assert.match(plannerSystemPrompt, /item-2: Чистовая электрика/i);
+    assert.match(plannerSystemPrompt, /item-3: Пусконаладка/i);
+    assert.equal(plannerMaxSessionTurns, 1);
     assert.match(messages[0]?.content ?? '', /Используй только этот явный список подзадач/i);
+    assert.doesNotMatch(messages[0]?.content ?? '', /Уточнения:/i);
     assert.deepEqual(result.fragmentPlan.nodes.map((node) => node.title), [
       'Черновая электрика',
       'Чистовая электрика',

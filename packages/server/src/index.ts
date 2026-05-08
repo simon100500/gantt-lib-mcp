@@ -285,7 +285,6 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
   const body = (req.body ?? {}) as {
     details?: string;
     explicitListMode?: boolean;
-    explicitListText?: string;
   };
   const taskId = params.taskId?.trim();
 
@@ -303,7 +302,6 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
     taskId,
     details: typeof body.details === 'string' ? body.details : '',
     explicitListMode: body.explicitListMode === true,
-    explicitListText: typeof body.explicitListText === 'string' ? body.explicitListText : '',
     env: {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
       OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',

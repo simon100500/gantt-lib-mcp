@@ -60,12 +60,15 @@ export type RunDirectSplitTaskInput = {
   taskId: string;
   details?: string;
   explicitListMode?: boolean;
-  explicitListText?: string;
   handoff?: Extract<SpecializedExecutorResolution, { executor: 'split_task' }>;
   env: SplitTaskEnv;
   services: SplitTaskServices;
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
-  plannerQuery?: (prompt: string, env: SplitTaskEnv) => Promise<string>;
+  plannerQuery?: (
+    prompt: string,
+    env: SplitTaskEnv,
+    options?: { systemPrompt?: string; maxSessionTurns?: number },
+  ) => Promise<string>;
   loadProjectVersion?: (projectId: string) => Promise<number>;
   writeDebugLog?: typeof writeServerDebugLog;
   getLatestVisibleGroupId?: (projectId: string) => Promise<string | null>;
@@ -200,29 +203,25 @@ function buildSplitTaskUserTrace(taskName: string, input: { details?: string; ex
     parts.push(`Используй только этот явный список подзадач:\n${input.explicitItems.map((item) => item.text).join('\n')}`);
   }
 
-  if (trimmedDetails) {
+  if (trimmedDetails && !input.explicitListMode) {
     parts.push(`Уточнения: ${trimmedDetails}`);
   }
 
   return parts.join(' ');
 }
 
-function buildPrompt(input: {
+function buildSystemPrompt(input: {
   taskName: string;
   startDate: string;
   endDate: string;
   parentDurationDays: number;
   existingChildNames: string[];
-  details?: string;
   explicitItems?: ParsedExplicitListItem[];
   explicitListMode?: boolean;
 }): string {
   const existingChildrenBlock = input.existingChildNames.length > 0
     ? input.existingChildNames.map((name) => `- ${name}`).join('\n')
     : '- none';
-  const detailsLine = input.details?.trim()
-    ? `Additional user details: ${input.details.trim()}`
-    : 'Additional user details: none';
   const explicitItemsBlock = input.explicitItems?.length
     ? input.explicitItems.map((item) => `- ${item.key}: ${item.text}`).join('\n')
     : '- none';
@@ -259,12 +258,44 @@ function buildPrompt(input: {
     `Parent task: ${input.taskName}`,
     `Parent range: ${input.startDate} to ${input.endDate}`,
     `Parent duration days: ${input.parentDurationDays}`,
-    detailsLine,
     'Explicit user list:',
     explicitItemsBlock,
     'Existing child tasks to avoid duplicating:',
     existingChildrenBlock,
   ].join('\n');
+}
+
+function buildPrompt(input: {
+  taskName: string;
+  startDate: string;
+  endDate: string;
+  parentDurationDays: number;
+  existingChildNames: string[];
+  details?: string;
+  explicitListMode?: boolean;
+}): string {
+  const existingChildrenBlock = input.existingChildNames.length > 0
+    ? input.existingChildNames.map((name) => `- ${name}`).join('\n')
+    : '- none';
+  const lines = [
+    'Plan child tasks for the existing parent task using the system instructions.',
+    `Parent task: ${input.taskName}`,
+    `Parent range: ${input.startDate} to ${input.endDate}`,
+    `Parent duration days: ${input.parentDurationDays}`,
+    'Existing child tasks to avoid duplicating:',
+    existingChildrenBlock,
+  ];
+
+  if (!input.explicitListMode) {
+    lines.push(
+      input.details?.trim()
+        ? `Additional user details: ${input.details.trim()}`
+        : 'Additional user details: none',
+    );
+  }
+
+  lines.push('Return strict JSON only.');
+  return lines.join('\n');
 }
 
 function parseFragmentPlan(payloadText: string, explicitItems: ParsedExplicitListItem[] = []): StructuredFragmentPlan {
@@ -357,7 +388,11 @@ function parseFragmentPlan(payloadText: string, explicitItems: ParsedExplicitLis
   };
 }
 
-async function executeDirectSplitPlanningQuery(prompt: string, env: SplitTaskEnv): Promise<string> {
+async function executeDirectSplitPlanningQuery(
+  prompt: string,
+  env: SplitTaskEnv,
+  options?: { systemPrompt?: string; maxSessionTurns?: number },
+): Promise<string> {
   if (!env.OPENAI_API_KEY) {
     throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
   }
@@ -367,10 +402,11 @@ async function executeDirectSplitPlanningQuery(prompt: string, env: SplitTaskEnv
     options: {
       authType: 'openai',
       model: env.OPENAI_MODEL,
+      systemPrompt: options?.systemPrompt,
       cwd: process.cwd(),
       permissionMode: 'yolo',
       env: buildSdkEnv(env),
-      maxSessionTurns: 2,
+      maxSessionTurns: options?.maxSessionTurns ?? 2,
       excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],
     },
   });
@@ -449,7 +485,7 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
   const startDate = normalizeIsoDate(task.startDate);
   const endDate = normalizeIsoDate(task.endDate);
   const existingChildNames = (task.children ?? []).map((child) => child.name.trim()).filter(Boolean);
-  const explicitItems = input.explicitListMode ? parseExplicitSplitList(input.explicitListText) : [];
+  const explicitItems = input.explicitListMode ? parseExplicitSplitList(input.details) : [];
   if (input.explicitListMode && explicitItems.length === 0) {
     throw new Error('Explicit split list is empty');
   }
@@ -477,6 +513,15 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     existingChildCount: existingChildNames.length,
   });
 
+  const plannerSystemPrompt = buildSystemPrompt({
+    taskName,
+    startDate,
+    endDate,
+    parentDurationDays: getInclusiveDurationDays(startDate, endDate),
+    existingChildNames,
+    explicitItems,
+    explicitListMode: input.explicitListMode,
+  });
   const plannerPrompt = buildPrompt({
     taskName,
     startDate,
@@ -484,11 +529,13 @@ export async function runDirectSplitTask(input: RunDirectSplitTaskInput): Promis
     parentDurationDays: getInclusiveDurationDays(startDate, endDate),
     existingChildNames,
     details: input.details,
-    explicitItems,
     explicitListMode: input.explicitListMode,
   });
 
-  const plannerOutput = await executePlannerQuery(plannerPrompt, input.env);
+  const plannerOutput = await executePlannerQuery(plannerPrompt, input.env, {
+    systemPrompt: plannerSystemPrompt,
+    maxSessionTurns: input.explicitListMode ? 1 : 2,
+  });
   const fragmentPlan = parseFragmentPlan(plannerOutput, explicitItems);
   const projectVersion = await loadProjectVersion(input.projectId);
 
