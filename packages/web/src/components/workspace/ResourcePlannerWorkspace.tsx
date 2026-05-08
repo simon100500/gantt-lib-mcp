@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Funnel, LoaderCircle, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
 import { GanttChart } from 'gantt-lib';
-import type { ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
+import type { ResourceTableColumnWidthMap, ResourceTimelineMove, ResourceTimelineResourceMenuCommand } from 'gantt-lib';
 
 import type { PlannerScope, ProjectLoadResponse, ProjectResource, ResourcePlannerInterval, ResourcePlannerResult, ResourceScope, ResourceType, TaskAssignmentRecord } from '../../lib/apiTypes.ts';
 import { replayProjectCommand } from '../../lib/projectCommandReplay.ts';
@@ -268,6 +268,21 @@ function countPlannerAssignments(data: ResourcePlannerResult | null): number {
   return data?.resources.reduce((total, resource) => total + resource.intervals.length, 0) ?? 0;
 }
 
+function normalizeResourceTableColumnWidthMap(widths?: ResourceTableColumnWidthMap): ResourceTableColumnWidthMap {
+  if (!widths) {
+    return {};
+  }
+
+  return Object.entries(widths).reduce<ResourceTableColumnWidthMap>((acc, [columnId, width]) => {
+    if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0) {
+      return acc;
+    }
+
+    acc[columnId] = Math.round(width);
+    return acc;
+  }, {});
+}
+
 function isOptimisticPlannerMove(classification: ResourcePlannerMoveClassification): classification is OptimisticPlannerMove {
   return classification.kind === 'date-only'
     || classification.kind === 'resource-only'
@@ -354,6 +369,9 @@ export function ResourcePlannerWorkspace({
   const lastAutoRefreshAtRef = useRef(0);
   const plannerSectionRef = useRef<HTMLElement | null>(null);
   const selectionHydratedRef = useRef(false);
+  const resourceTableColumnWidths = useMemo<ResourceTableColumnWidthMap>(() => (
+    normalizeResourceTableColumnWidthMap(projectStates[projectId]?.plannerResourceTableColumnWidths)
+  ), [projectId, projectStates]);
 
   const loadResourceCatalog = useCallback(async (catalogProjectId = projectId) => {
     if (!accessToken) {
@@ -494,6 +512,12 @@ export function ResourcePlannerWorkspace({
       setGlobalViewMode(projectState.viewMode);
     }
   }, [getProjectState, projectId, setGlobalViewMode]);
+
+  const handleResourceTableColumnWidthsChange = useCallback((widths: ResourceTableColumnWidthMap) => {
+    setProjectState(projectId, {
+      plannerResourceTableColumnWidths: normalizeResourceTableColumnWidthMap(widths),
+    });
+  }, [projectId, setProjectState]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -1425,7 +1449,7 @@ export function ResourcePlannerWorkspace({
   }, [pendingCommandCount, savingState]);
 
   useEffect(() => {
-    const plannerScrollElement = plannerSectionRef.current?.querySelector('.gantt-resourceTimeline-scrollContainer');
+    const plannerScrollElement = plannerSectionRef.current?.querySelector('.gantt-scrollContainer, .gantt-resourceTimeline-scrollContainer');
     if (!(plannerScrollElement instanceof HTMLElement)) {
       return;
     }
@@ -1702,7 +1726,7 @@ export function ResourcePlannerWorkspace({
               <div className="flex min-h-0 flex-1" data-testid="planner-data-state">
                 <section
                   aria-label="Ресурсный календарь"
-                  className="min-h-0 flex-1 overflow-hidden bg-white [&_.gantt-resourceTimeline-scrollContainer]:h-full"
+                  className="min-h-0 flex-1 overflow-hidden bg-white"
                   data-testid="resource-planner-gantt-section"
                   ref={(element) => {
                     plannerSectionRef.current = element;
@@ -1711,6 +1735,7 @@ export function ResourcePlannerWorkspace({
                   <GanttChart
                     mode="resource-planner"
                     resources={filteredTimelineResources}
+                    containerHeight="calc(100dvh - 132px)"
                     dayWidth={plannerDayWidth}
                     laneHeight={42}
                     rowHeaderWidth={420}
@@ -1722,6 +1747,8 @@ export function ResourcePlannerWorkspace({
                     readonly={effectiveReadonly}
                     disableResourceReassignment={false}
                     resourceGrouping="type"
+                    resourceTableColumnWidths={resourceTableColumnWidths}
+                    onResourceTableColumnWidthsChange={handleResourceTableColumnWidthsChange}
                     onResourceChange={effectiveReadonly ? undefined : handleResourceChange}
                     onAddResource={effectiveReadonly ? undefined : handleAddResource}
                     enableAddResource={!effectiveReadonly}

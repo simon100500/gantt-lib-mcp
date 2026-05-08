@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { ViewMode } from './useUIStore.ts';
-import type { TaskDateChangeMode, TaskListColumnWidthMap } from 'gantt-lib';
+import type { ResourceTableColumnWidthMap, TaskDateChangeMode, TaskListColumnWidthMap } from 'gantt-lib';
 
 interface ProjectBaselineSelectionState {
   id: string;
@@ -25,6 +25,7 @@ interface ProjectUIState {
   hiddenFinanceTaskListColumns: string[];
   taskListColumnWidths: TaskListColumnWidthMap;
   financeTaskListColumnWidths: TaskListColumnWidthMap;
+  plannerResourceTableColumnWidths: ResourceTableColumnWidthMap;
   selectedBaseline: ProjectBaselineSelectionState | null;
   selectedBaselineVisible: boolean;
   plannerSelectedAssignmentId: string | null;
@@ -53,6 +54,7 @@ const DEFAULT_STATE: ProjectUIState = {
   hiddenFinanceTaskListColumns: [],
   taskListColumnWidths: {},
   financeTaskListColumnWidths: {},
+  plannerResourceTableColumnWidths: {},
   selectedBaseline: null,
   selectedBaselineVisible: false,
   plannerSelectedAssignmentId: null,
