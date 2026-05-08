@@ -102,7 +102,7 @@ function InlineTooltip({
   children,
 }: {
   content: string;
-  children: ReactElement;
+  children: ReactElement<any>;
 }) {
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
 
@@ -133,11 +133,18 @@ function InlineTooltip({
   };
 
   const hideTooltip = () => setAnchor(null);
-  const childProps = children.props as Record<string, unknown>;
+  const childProps = children.props as {
+    title?: string;
+    onMouseEnter?: (event: React.MouseEvent<HTMLElement>) => void;
+    onMouseLeave?: (event: React.MouseEvent<HTMLElement>) => void;
+    onFocus?: (event: React.FocusEvent<HTMLElement>) => void;
+    onBlur?: (event: React.FocusEvent<HTMLElement>) => void;
+    onPointerDown?: (event: React.PointerEvent<HTMLElement>) => void;
+  };
 
   return (
     <>
-      {cloneElement(children, {
+      {cloneElement(children as ReactElement<any>, {
         title: undefined,
         onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {
           childProps.onMouseEnter?.(event);
