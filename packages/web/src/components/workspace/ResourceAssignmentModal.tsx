@@ -1,8 +1,9 @@
-import type { FormEvent } from 'react';
-import { ExternalLink, Plus, X } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
+import { ExternalLink, Plus, Search, X } from 'lucide-react';
 
 import type { ProjectResource } from '../../lib/apiTypes.ts';
 import type { Task } from '../../types.ts';
+import { Input } from '../ui/input.tsx';
 import type { TaskResourceAssignmentView } from './resourceAssignmentUtils.ts';
 import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
@@ -25,6 +26,14 @@ function formatResourceLabel(resource: ProjectResource): string {
   return resource.name?.trim() || resource.id;
 }
 
+const RESOURCE_TYPE_FILTERS = [
+  { type: 'all' as const, label: 'Все' },
+  { type: 'human' as const, label: 'Люди' },
+  { type: 'equipment' as const, label: 'Оборудование' },
+  { type: 'material' as const, label: 'Материалы' },
+  { type: 'other' as const, label: 'Другое' },
+];
+
 export function ResourceAssignmentModal({
   task,
   activeAssignedResources,
@@ -38,12 +47,15 @@ export function ResourceAssignmentModal({
   onCreateResource,
   onOpenPlannerAssignment,
 }: ResourceAssignmentModalProps) {
+  const [searchValue, setSearchValue] = useState('');
+  const [typeFilter, setTypeFilter] = useState<(typeof RESOURCE_TYPE_FILTERS)[number]['type']>('all');
   const selectedIds = Array.isArray(selectedResourceIds) ? selectedResourceIds : [];
   const selectedIdSet = new Set(selectedIds);
   const hasAssignableResources = assignableResources.length > 0;
   const isSubmitDisabled = pending || !task || !hasAssignableResources;
   const taskName = task?.name?.trim() || 'Задача не выбрана';
   const availableResources = assignableResources.filter((resource) => !selectedIdSet.has(resource.id));
+  const normalizedSearch = searchValue.trim().toLocaleLowerCase('ru-RU');
   const resourceLabelsById = new Map<string, string>();
   const resourcesById = new Map<string, ProjectResource>();
   const activeAssignmentsByResourceId = new Map<string, TaskResourceAssignmentView>();
@@ -59,12 +71,27 @@ export function ResourceAssignmentModal({
     resourcesById.set(resource.id, resource);
   }
 
-  const resourceGroups = [
-    { type: 'human' as const, label: 'Люди', resources: availableResources.filter((resource) => resource.type === 'human') },
-    { type: 'equipment' as const, label: 'Оборудование', resources: availableResources.filter((resource) => resource.type === 'equipment') },
-    { type: 'material' as const, label: 'Материалы', resources: availableResources.filter((resource) => resource.type === 'material') },
-    { type: 'other' as const, label: 'Другое', resources: availableResources.filter((resource) => resource.type === 'other') },
-  ].filter((group) => group.resources.length > 0);
+  const filteredAvailableResources = useMemo(() => availableResources.filter((resource) => {
+    if (typeFilter !== 'all' && resource.type !== typeFilter) {
+      return false;
+    }
+
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    return formatResourceLabel(resource).toLocaleLowerCase('ru-RU').includes(normalizedSearch);
+  }), [availableResources, normalizedSearch, typeFilter]);
+
+  const resourceGroups = useMemo(() => [
+    { type: 'human' as const, label: 'Люди', resources: filteredAvailableResources.filter((resource) => resource.type === 'human') },
+    { type: 'equipment' as const, label: 'Оборудование', resources: filteredAvailableResources.filter((resource) => resource.type === 'equipment') },
+    { type: 'material' as const, label: 'Материалы', resources: filteredAvailableResources.filter((resource) => resource.type === 'material') },
+    { type: 'other' as const, label: 'Другое', resources: filteredAvailableResources.filter((resource) => resource.type === 'other') },
+  ].filter((group) => group.resources.length > 0), [filteredAvailableResources]);
+  const hasResourceFilters = hasAssignableResources && availableResources.length > 0;
+  const hasFilteredResources = resourceGroups.length > 0;
+  const hasSearchOrTypeFilter = normalizedSearch.length > 0 || typeFilter !== 'all';
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,7 +149,7 @@ export function ResourceAssignmentModal({
           )}
         </div>
 
-        <div className="flex flex-col gap-4 overflow-y-auto p-4 text-sm text-[#44546f]">
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-4 text-sm text-[#44546f]">
           {error && (
             <div
               aria-atomic="true"
@@ -140,25 +167,28 @@ export function ResourceAssignmentModal({
               Текущие назначения
             </h3>
             {selectedIds.length > 0 ? (
-              <div className="flex flex-wrap gap-2" data-testid="assignment-modal-selected-resources">
+              <div
+                className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2"
+                data-testid="assignment-modal-selected-resources"
+              >
                 {selectedIds.map((resourceId) => {
                   const label = resourceLabelsById.get(resourceId) ?? resourceId;
                   const resource = resourcesById.get(resourceId);
                   const activeAssignment = activeAssignmentsByResourceId.get(resourceId);
                   return (
                     <div
-                      className="flex min-w-[220px] max-w-full items-start justify-between gap-3 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-3 py-2.5 text-[#172b4d]"
+                      className="flex min-w-0 max-w-full items-start justify-between gap-2 rounded-lg border border-[#dfe1e6] bg-[#f7f8fa] px-2.5 py-2 text-[#172b4d]"
                       data-testid={`assigned-selected-resource-${resourceId}`}
                       key={resourceId}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex min-w-0 items-center gap-2">
-                          {resource && <ResourceTypeIcon type={resource.type} className="h-4 w-4 shrink-0" />}
-                          <span className="min-w-0 truncate text-[13px] font-semibold leading-5 text-[#172b4d]">{label}</span>
+                        <div className="flex min-w-0 items-start gap-1.5">
+                          {resource && <ResourceTypeIcon type={resource.type} className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                          <span className="min-w-0 whitespace-normal break-words text-[12px] font-semibold leading-4 text-[#172b4d]">{label}</span>
                         </div>
                         {activeAssignment && onOpenPlannerAssignment && (
                           <button
-                            className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium leading-none text-[#6b778c] transition-colors hover:text-[#44546f] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium leading-none text-[#6b778c] transition-colors hover:text-[#44546f] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
                             data-testid={`assignment-selected-resource-chip-${resourceId}`}
                             disabled={pending}
                             onClick={() => onOpenPlannerAssignment(activeAssignment)}
@@ -172,7 +202,7 @@ export function ResourceAssignmentModal({
                       </div>
                       <button
                         aria-label={`Снять ресурс ${label}`}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-[#6b778c] transition-colors hover:bg-white hover:text-[#172b4d] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-[#6b778c] transition-colors hover:bg-white hover:text-[#172b4d] focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25"
                         data-testid={`assignment-selected-resource-remove-${resourceId}`}
                         disabled={pending || !task}
                         onClick={() => removeSelectedResource(resourceId)}
@@ -207,11 +237,48 @@ export function ResourceAssignmentModal({
                 </button>
               )}
             </div>
+            {hasResourceFilters && (
+              <div className="space-y-2" data-testid="assignment-modal-resource-filters">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6b778c]" />
+                  <Input
+                    className="h-9 border-[#dfe1e6] pl-8 pr-3 text-[13px] text-[#172b4d] placeholder:text-[#6b778c] focus-visible:ring-[#4c9aff]/25"
+                    data-testid="assignment-modal-search-input"
+                    disabled={pending || !task}
+                    onChange={(event) => setSearchValue(event.target.value)}
+                    placeholder="Поиск по названию ресурса"
+                    type="search"
+                    value={searchValue}
+                  />
+                </label>
+                <div className="flex flex-wrap gap-1.5" data-testid="assignment-modal-type-filters">
+                  {RESOURCE_TYPE_FILTERS.map((filter) => {
+                    const selected = filter.type === typeFilter;
+                    return (
+                      <button
+                        key={filter.type}
+                        type="button"
+                        className={`inline-flex h-7 items-center rounded-full border px-2.5 text-[11px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-[#4c9aff]/25 ${
+                          selected
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-[#dfe1e6] bg-white text-[#44546f] hover:bg-[#f7f8fa]'
+                        }`}
+                        data-testid={`assignment-modal-type-filter-${filter.type}`}
+                        disabled={pending || !task}
+                        onClick={() => setTypeFilter(filter.type)}
+                      >
+                        {filter.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {hasAssignableResources ? (
               <div className="max-h-72 overflow-auto rounded-md border border-[#dfe1e6] bg-white" data-testid="assignment-modal-resource-options">
-                {resourceGroups.length > 0 ? resourceGroups.map((group) => (
+                {hasFilteredResources ? resourceGroups.map((group) => (
                   <div key={group.type} className="border-b border-[#dfe1e6] last:border-b-0">
-                    <div className="flex items-center gap-1.5 bg-[#f7f8fa] px-3 py-1.5 text-[11px] font-bold text-[#44546f]">
+                    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-[#f7f8fa] px-3 py-1.5 text-[11px] font-bold text-[#44546f]">
                       <span>{group.label}</span>
                       <span className="ml-auto rounded-full bg-[#dfe1e6] px-1.5 py-0.5 text-[10px] text-[#42526e]">
                         {group.resources.length}
@@ -221,16 +288,16 @@ export function ResourceAssignmentModal({
                       const label = formatResourceLabel(resource);
                       return (
                         <button
-                          className="group flex w-full min-w-0 items-center gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group flex w-full min-w-0 items-start gap-2 border-t border-[#ebecf0] px-3 py-2 text-left text-[#172b4d] transition-colors hover:bg-[#f4f8ff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#4c9aff]/25 disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`assignment-resource-option-${resource.id}`}
                           disabled={pending || !task}
                           key={resource.id}
                           onClick={() => onSelectionChange([...selectedIds, resource.id])}
                           type="button"
                         >
-                          <ResourceTypeIcon type={resource.type} className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 flex-1 break-words text-[13px] font-bold">{label}</span>
-                          <span className="shrink-0 text-[11px] font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                          <ResourceTypeIcon type={resource.type} className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 whitespace-normal break-words text-[12px] font-bold leading-4">{label}</span>
+                          <span className="shrink-0 text-[10px] font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                             Добавить
                           </span>
                         </button>
@@ -239,7 +306,7 @@ export function ResourceAssignmentModal({
                   </div>
                 )) : (
                   <p className="px-3 py-3 text-[12px] font-medium text-[#6b778c]" data-testid="assignment-modal-all-resources-selected">
-                    Все доступные ресурсы назначены.
+                    {hasSearchOrTypeFilter ? 'По текущим фильтрам ресурсы не найдены.' : 'Все доступные ресурсы назначены.'}
                   </p>
                 )}
               </div>

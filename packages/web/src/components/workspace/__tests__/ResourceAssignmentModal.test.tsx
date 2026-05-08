@@ -52,6 +52,13 @@ const secondActiveResource: ProjectResource = {
   name: 'Second Active Crew',
 };
 
+const equipmentResource: ProjectResource = {
+  ...activeResource,
+  id: 'resource-equipment',
+  type: 'equipment',
+  name: 'Tower Crane 16t',
+};
+
 const assignments: TaskAssignmentRecord[] = [
   {
     id: 'assignment-active',
@@ -92,7 +99,7 @@ function renderModal(
     root.render(
       <ResourceAssignmentModal
         activeAssignedResources={groups.activeAssignedResources}
-        assignableResources={[activeResource, secondActiveResource]}
+        assignableResources={[activeResource, secondActiveResource, equipmentResource]}
         error={null}
         inactiveAssignedResources={groups.inactiveAssignedResources}
         onCancel={onCancel}
@@ -114,6 +121,12 @@ function unmount(root: Root): void {
   act(() => {
     root.unmount();
   });
+}
+
+function setInputValue(input: HTMLInputElement, nextValue: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+  descriptor?.set?.call(input, nextValue);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 afterEach(() => {
@@ -184,6 +197,59 @@ describe('ResourceAssignmentModal', () => {
     });
 
     expect(onSelectionChange).toHaveBeenCalledWith([activeResource.id, secondActiveResource.id]);
+
+    unmount(root);
+  });
+
+  it('filters available resources by search query and type', () => {
+    const { container, root } = renderModal({ selectedResourceIds: [] });
+
+    const searchInput = container.querySelector('[data-testid="assignment-modal-search-input"]') as HTMLInputElement;
+    const equipmentFilter = container.querySelector('[data-testid="assignment-modal-type-filter-equipment"]') as HTMLButtonElement;
+    const humanFilter = container.querySelector('[data-testid="assignment-modal-type-filter-human"]') as HTMLButtonElement;
+
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')?.textContent).toContain('Active Crew');
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]')?.textContent).toContain('Tower Crane 16t');
+
+    act(() => {
+      setInputValue(searchInput, 'tower');
+    });
+
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]')?.textContent).toContain('Tower Crane 16t');
+
+    act(() => {
+      setInputValue(searchInput, '');
+      equipmentFilter.click();
+    });
+
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]')?.textContent).toContain('Tower Crane 16t');
+
+    act(() => {
+      humanFilter.click();
+    });
+
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')?.textContent).toContain('Active Crew');
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]')?.textContent).toContain('Second Active Crew');
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]')).toBeNull();
+
+    unmount(root);
+  });
+
+  it('shows a filtered empty state when search does not match any resource', () => {
+    const { container, root } = renderModal({ selectedResourceIds: [] });
+    const searchInput = container.querySelector('[data-testid="assignment-modal-search-input"]') as HTMLInputElement;
+
+    act(() => {
+      setInputValue(searchInput, 'no matches here');
+    });
+
+    expect(container.querySelector('[data-testid="assignment-modal-all-resources-selected"]')?.textContent).toContain('По текущим фильтрам ресурсы не найдены');
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]')).toBeNull();
 
     unmount(root);
   });
@@ -263,9 +329,11 @@ describe('ResourceAssignmentModal', () => {
 
     const activeOption = container.querySelector('[data-testid="assignment-resource-option-resource-active"]') as HTMLButtonElement | null;
     const secondOption = container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]') as HTMLButtonElement | null;
+    const equipmentOption = container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]') as HTMLButtonElement | null;
 
     expect(activeOption).toBeNull();
     expect(secondOption).not.toBeNull();
+    expect(equipmentOption).not.toBeNull();
     expect(container.querySelector('[data-testid^="assignment-resource-checkbox-"]')).toBeNull();
 
     unmount(root);
@@ -309,11 +377,12 @@ describe('ResourceAssignmentModal', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     const { container, root, onSubmit } = renderModal({
-      selectedResourceIds: [activeResource.id, secondActiveResource.id],
+      selectedResourceIds: [activeResource.id, secondActiveResource.id, equipmentResource.id],
     });
 
     expect(container.querySelector('[data-testid="assignment-resource-option-resource-active"]')).toBeNull();
     expect(container.querySelector('[data-testid="assignment-resource-option-resource-second-active"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assignment-resource-option-resource-equipment"]')).toBeNull();
     expect(container.querySelector('[data-testid="assignment-modal-all-resources-selected"]')?.textContent).toContain('Все доступные ресурсы назначены');
 
     const submitButton = container.querySelector('[data-testid="assignment-modal-submit"]') as HTMLButtonElement;
@@ -321,7 +390,7 @@ describe('ResourceAssignmentModal', () => {
       submitButton.click();
     });
 
-    expect(onSubmit).toHaveBeenCalledWith([activeResource.id, secondActiveResource.id]);
+    expect(onSubmit).toHaveBeenCalledWith([activeResource.id, secondActiveResource.id, equipmentResource.id]);
     expect(fetchSpy).not.toHaveBeenCalled();
 
     unmount(root);
