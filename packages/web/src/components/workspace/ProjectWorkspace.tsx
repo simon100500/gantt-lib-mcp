@@ -8,7 +8,7 @@ import { ChatSidebar } from '../ChatSidebar.tsx';
 import { GanttChart, type GanttChartRef } from '../GanttChart.tsx';
 import { HistoryPanel } from '../HistoryPanel.tsx';
 import { ProjectSettingsModal } from '../ProjectSettingsModal.tsx';
-import { SplitTaskModal } from '../SplitTaskModal.tsx';
+import { SplitTaskModal, type SplitTaskSubmitPayload } from '../SplitTaskModal.tsx';
 import { TaskChatModal } from '../TaskChatModal.tsx';
 import { CreateResourceModal } from './CreateResourceModal.tsx';
 import { ResourceAssignmentModal } from './ResourceAssignmentModal.tsx';
@@ -66,7 +66,9 @@ interface ProjectWorkspaceProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  onExportBackup?: () => void;
   onImportExcel?: () => void;
+  onImportBackup?: () => void;
   onReturnToWizard?: () => void;
   onInsertTemplateToProject?: () => void | Promise<void>;
   isExportExcelLoading?: boolean;
@@ -95,7 +97,7 @@ interface ProjectWorkspaceProps {
   onProjectNameChange?: (projectName: string) => void | Promise<void>;
   previewState?: 'idle' | 'rendering' | 'failed';
   previewMessage?: string | null;
-  onSplitTask?: (task: Task, details: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
+  onSplitTask?: (task: Task, payload: SplitTaskSubmitPayload) => StartScreenSendResult | Promise<StartScreenSendResult>;
   showResourceAssignments?: boolean;
   onCreateTemplateFromTask?: (task: Task) => void | Promise<void>;
   onInsertTemplateAtTask?: (task: Task) => void | Promise<void>;
@@ -504,7 +506,9 @@ export function ProjectWorkspace({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  onExportBackup,
   onImportExcel,
+  onImportBackup,
   onReturnToWizard,
   onInsertTemplateToProject,
   isExportExcelLoading = false,
@@ -1010,7 +1014,7 @@ export function ProjectWorkspace({
     handleTaskReferenceClick(correctionTarget.taskId);
   }, [consumePlannerCorrectionTarget, handleTaskReferenceClick, projectId]);
 
-  const handleSplitTaskSubmit = useCallback(async (details: string) => {
+  const handleSplitTaskSubmit = useCallback(async (payload: SplitTaskSubmitPayload) => {
     if (!splitTaskDraft || !onSplitTask) {
       return {
         accepted: false,
@@ -1018,7 +1022,7 @@ export function ProjectWorkspace({
       };
     }
 
-    return await Promise.resolve(onSplitTask(splitTaskDraft, details));
+    return await Promise.resolve(onSplitTask(splitTaskDraft, payload));
   }, [onSplitTask, splitTaskDraft]);
 
   const applyTaskWorkMutation = useCallback((updatedTask: Task, nextEntries?: TaskProgressEntry[]) => {
@@ -2270,7 +2274,9 @@ export function ProjectWorkspace({
           onExpandAll={onExpandAll}
           onExportPdf={onExportPdf}
           onExportExcel={onExportExcel}
+          onExportBackup={onExportBackup}
           onImportExcel={onImportExcel}
+          onImportBackup={onImportBackup}
           onReturnToWizard={onReturnToWizard}
           onInsertTemplateToProject={effectiveReadOnly || hasShareToken ? null : onInsertTemplateToProject}
           isExportExcelLoading={isExportExcelLoading}

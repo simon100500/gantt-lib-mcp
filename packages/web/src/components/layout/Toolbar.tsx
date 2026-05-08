@@ -20,6 +20,8 @@ import {
   Lock,
   LockOpen,
   Pencil,
+  Package,
+  PackageOpen,
   Plus,
   RefreshCw,
   Rows3,
@@ -68,7 +70,9 @@ interface ToolbarProps {
   onExpandAll: () => void;
   onExportPdf?: () => void;
   onExportExcel?: () => void;
+  onExportBackup?: () => void;
   onImportExcel?: () => void;
+  onImportBackup?: () => void;
   onReturnToWizard?: () => void;
   onInsertTemplateToProject?: (() => void | Promise<void>) | null;
   isExportExcelLoading?: boolean;
@@ -348,7 +352,9 @@ export function Toolbar({
   onExpandAll,
   onExportPdf,
   onExportExcel,
+  onExportBackup,
   onImportExcel,
+  onImportBackup,
   onReturnToWizard,
   onInsertTemplateToProject = null,
   isExportExcelLoading = false,
@@ -464,9 +470,9 @@ export function Toolbar({
   const effectiveDisableTaskDrag = mutationLocked || disableTaskDrag;
   const canChangeGanttDayMode = !mutationLocked && Boolean(onGanttDayModeChange);
   const canTriggerUndo = !mutationLocked && canUndo && Boolean(onUndo) && !undoLoading;
-  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || (showShareButton && onCreateShareLink));
+  const hasShareMenuActions = Boolean(onExportPdf || onExportExcel || onExportBackup || (showShareButton && onCreateShareLink));
   const hasTemplateAction = Boolean(onStartTemplateSelection);
-  const hasDataMenu = hasTemplateAction || Boolean(onInsertTemplateToProject) || Boolean(onImportExcel);
+  const hasDataMenu = hasTemplateAction || Boolean(onInsertTemplateToProject) || Boolean(onImportExcel) || Boolean(onImportBackup);
   const showClosedTaskStrikeToggle = true;
   const hasViewMenu = showStructureControls || Boolean(taskListColumnRows?.length) || showExpiredToggle || showClosedTaskStrikeToggle;
   const hasHiddenTaskListColumns = hiddenTaskListColumnSet.size > 0;
@@ -792,7 +798,16 @@ export function Toolbar({
                 className="flex cursor-pointer items-center gap-2"
               >
                 <Upload className="h-4 w-4" />
-                <span className="text-sm">Импортировать из файла</span>
+                <span className="text-sm">Импортировать из Excel</span>
+              </DropdownMenuItem>
+            )}
+            {onImportBackup && (
+              <DropdownMenuItem
+                onClick={onImportBackup}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <PackageOpen className="h-4 w-4" />
+                <span className="text-sm">Из резервной копии</span>
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -869,6 +884,15 @@ export function Toolbar({
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
+              </DropdownMenuItem>
+            )}
+            {onExportBackup && (
+              <DropdownMenuItem
+                onClick={onExportBackup}
+                className="flex cursor-pointer items-center gap-2"
+              >
+                <Package className="h-4 w-4" />
+                <span className="text-sm">Резервная копия</span>
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -1145,6 +1169,24 @@ export function Toolbar({
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   <span className="text-sm">{isExportExcelLoading ? 'Генерируем Excel...' : 'Excel'}</span>
+                </DropdownMenuItem>
+              )}
+              {onExportBackup && (
+                <DropdownMenuItem
+                  onClick={onExportBackup}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <Package className="h-4 w-4" />
+                  <span className="text-sm">Резервная копия</span>
+                </DropdownMenuItem>
+              )}
+              {onImportBackup && (
+                <DropdownMenuItem
+                  onClick={onImportBackup}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <PackageOpen className="h-4 w-4" />
+                  <span className="text-sm">Из резервной копии</span>
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator className="mx-1 my-1 h-0 border-0 border-t border-slate-200 bg-transparent" />

@@ -37,6 +37,7 @@ import { incrementAiUsage } from './middleware/subscription-middleware.js';
 import { registerAdminRoutes } from './admin.js';
 import { registerAdminApiRoutes } from './routes/admin-routes.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
+import { registerBackupRoutes } from './routes/backup-routes.js';
 import { registerBillingRoutes } from './routes/billing-routes.js';
 import { registerBaselineRoutes } from './routes/baseline-routes.js';
 import { registerCommandRoutes } from './routes/command-routes.js';
@@ -64,6 +65,7 @@ await registerAuthRoutes(fastify);
 await registerAdminRoutes(fastify);
 await registerAdminApiRoutes(fastify);
 await registerBillingRoutes(fastify);
+await registerBackupRoutes(fastify);
 await registerBaselineRoutes(fastify);
 await registerCommandRoutes(fastify);
 await registerExcelImportRoutes(fastify);
@@ -280,7 +282,11 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireCurrentProjectEd
 
 fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
   const params = req.params as { taskId?: string };
-  const body = (req.body ?? {}) as { details?: string };
+  const body = (req.body ?? {}) as {
+    details?: string;
+    explicitListMode?: boolean;
+    explicitListText?: string;
+  };
   const taskId = params.taskId?.trim();
 
   if (!taskId) {
@@ -296,6 +302,8 @@ fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireC
     sessionId: req.user!.sessionId,
     taskId,
     details: typeof body.details === 'string' ? body.details : '',
+    explicitListMode: body.explicitListMode === true,
+    explicitListText: typeof body.explicitListText === 'string' ? body.explicitListText : '',
     env: {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '',
       OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4/',

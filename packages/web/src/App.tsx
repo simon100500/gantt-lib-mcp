@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import { AccountPage } from './components/AccountPage.tsx';
 import { AdminPage } from './components/AdminPage.tsx';
@@ -11,7 +11,8 @@ import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModa
 import { PurchasePage } from './components/PurchasePage.tsx';
 import { SaveTemplateModal } from './components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
-import { buildSplitTaskTrace } from './components/SplitTaskModal.tsx';
+import { BackupRestoreModal, type BackupRestoreSummary } from './components/BackupRestoreModal.tsx';
+import { buildSplitTaskTrace, type SplitTaskSubmitPayload } from './components/SplitTaskModal.tsx';
 import { InsertTemplateModal } from './components/InsertTemplateModal.tsx';
 import { ImportExcelModal } from './components/ImportExcelModal.tsx';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal.tsx';
@@ -244,6 +245,11 @@ async function triggerBlobDownload(blob: Blob, fileName: string): Promise<void> 
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+type BackupImportResponse = {
+  ok: true;
+  summary: BackupRestoreSummary;
+};
 
 type PreviewState = {
   tasks: Task[];
@@ -514,6 +520,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
   const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const backupImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedBackupFile, setSelectedBackupFile] = useState<File | null>(null);
+  const [backupRestorePending, setBackupRestorePending] = useState(false);
+  const [backupRestoreError, setBackupRestoreError] = useState<string | null>(null);
+  const [backupRestoreSummary, setBackupRestoreSummary] = useState<BackupRestoreSummary | null>(null);
   const [startScreenProjectSettingsPending, setStartScreenProjectSettingsPending] = useState(false);
   const [startScreenProjectSettingsError, setStartScreenProjectSettingsError] = useState<string | null>(null);
   const [shareSelectionMode, setShareSelectionMode] = useState(false);
@@ -999,7 +1010,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     return true;
   }, [armAiMutationWatchdog, auth, isScheduleReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
 
-  const submitSplitTask = useCallback(async (task: Task, details: string): Promise<StartScreenSendResult> => {
+  const submitSplitTask = useCallback(async (task: Task, payload: SplitTaskSubmitPayload): Promise<StartScreenSendResult> => {
     if (hasShareToken) {
       return { accepted: false };
     }
@@ -1024,7 +1035,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       return { accepted: false, message: 'Нет access token для AI-запроса.' };
     }
 
-    useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, details) });
+    useChatStore.getState().addMessage({ role: 'user', content: buildSplitTaskTrace(task, payload) });
     openProjectChat();
     armAiMutationWatchdog();
     setAiMutationLock({
@@ -1039,7 +1050,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ details }),
+      body: JSON.stringify(payload),
     });
 
     if (response.status === 401) {
@@ -1055,7 +1066,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ details }),
+        body: JSON.stringify(payload),
       });
     }
 
@@ -2010,6 +2021,64 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     }
   }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
 
+  const handleExportBackup = useCallback(async () => {
+    const proactiveExportDenial = buildProactiveConstraintDenial('export', billingStatus);
+    if (proactiveExportDenial) {
+      await openLimitModal(proactiveExportDenial);
+      return;
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      onLoginRequired();
+      return;
+    }
+
+    let response = await fetch('/api/export/backup', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        onLoginRequired();
+        return;
+      }
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch('/api/export/backup', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+
+    if (response.status === 403) {
+      try {
+        const body = await response.json() as Partial<ConstraintDenialPayload>;
+        if (isConstraintCode(body.code)) {
+          await openLimitModal(body);
+          return;
+        }
+      } catch {
+        // fall through to generic error
+      }
+      throw new Error('HTTP 403');
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const projectName = currentProjectLabel?.trim() || 'Мой проект';
+    const fallbackFileName = `ГетГант - ${projectName} - backup.gantt.json`;
+    const fileName = getAttachmentFileName(response.headers.get('Content-Disposition'), fallbackFileName);
+    await triggerBlobDownload(blob, fileName);
+  }, [auth, billingStatus, currentProjectLabel, onLoginRequired, openLimitModal]);
+
   const reloadAuthenticatedProjectSnapshot = useCallback(async () => {
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
     let token = getLatestAccessToken();
@@ -2052,6 +2121,116 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       progressEntries: payload.snapshot.progressEntries ?? [],
     });
   }, [auth, onLoginRequired]);
+
+  const handleOpenBackupImport = useCallback(() => {
+    backupImportInputRef.current?.click();
+  }, []);
+
+  const handleBackupImportChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+
+    if (hasShareToken) {
+      return;
+    }
+
+    if (!auth.isAuthenticated) {
+      onLoginRequired();
+      return;
+    }
+
+    if (isScheduleReadOnlyProject) {
+      return;
+    }
+    setSelectedBackupFile(file);
+    setBackupRestoreError(null);
+    setBackupRestoreSummary(null);
+  }, [auth.isAuthenticated, hasShareToken, isScheduleReadOnlyProject, onLoginRequired]);
+
+  const handleCloseBackupRestoreModal = useCallback(() => {
+    if (backupRestorePending) {
+      return;
+    }
+    setSelectedBackupFile(null);
+    setBackupRestoreError(null);
+    setBackupRestoreSummary(null);
+  }, [backupRestorePending]);
+
+  const handleConfirmBackupRestore = useCallback(async () => {
+    if (!selectedBackupFile) {
+      return;
+    }
+
+    let backup: unknown;
+    try {
+      backup = JSON.parse(await selectedBackupFile.text());
+    } catch {
+      setBackupRestoreError('Файл backup не является корректным JSON.');
+      return;
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      onLoginRequired();
+      return;
+    }
+
+    setBackupRestorePending(true);
+    setBackupRestoreError(null);
+    try {
+      let response = await fetch('/api/import/backup', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ backup }),
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          onLoginRequired();
+          return;
+        }
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch('/api/import/backup', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ backup }),
+        });
+      }
+
+      if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+          const payload = await response.json() as { error?: string };
+          if (payload.error) {
+            message = payload.error;
+          }
+        } catch {
+          // ignore invalid error body
+        }
+        setBackupRestoreError(`Не удалось восстановить backup: ${message}`);
+        return;
+      }
+
+      const payload = await response.json() as BackupImportResponse;
+      useProjectStore.getState().clearTransientState();
+      await refreshProjects();
+      await reloadAuthenticatedProjectSnapshot();
+      setBackupRestoreSummary(payload.summary);
+    } finally {
+      setBackupRestorePending(false);
+    }
+  }, [auth, onLoginRequired, refreshProjects, reloadAuthenticatedProjectSnapshot, selectedBackupFile]);
 
   const handleDownloadImportTemplate = useCallback(async () => {
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
@@ -2209,7 +2388,9 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
               onExpandAll={handleExpandAll}
               onExportPdf={handleExportPdf}
               onExportExcel={handleExportExcel}
+              onExportBackup={handleExportBackup}
               onImportExcel={() => setShowImportExcelModal(true)}
+              onImportBackup={handleOpenBackupImport}
               onReturnToWizard={canReturnEmptyProjectToWizard ? () => setActiveEmptyProjectModeProjectId(null) : undefined}
               onInsertTemplateToProject={handleOpenInsertTemplateIntoCurrentProject}
               isExportExcelLoading={isExportExcelLoading}
@@ -2384,6 +2565,27 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         workspaceShell
       )}
     </ProjectMenu>
+
+    <input
+      ref={backupImportInputRef}
+      type="file"
+      accept="application/json,.json,.gantt.json"
+      className="hidden"
+      onChange={(event) => {
+        void handleBackupImportChange(event);
+      }}
+    />
+
+    {selectedBackupFile && (
+      <BackupRestoreModal
+        fileName={selectedBackupFile.name}
+        loading={backupRestorePending}
+        error={backupRestoreError}
+        summary={backupRestoreSummary}
+        onConfirm={handleConfirmBackupRestore}
+        onClose={handleCloseBackupRestoreModal}
+      />
+    )}
 
     {limitModal && (
       <LimitReachedModal
