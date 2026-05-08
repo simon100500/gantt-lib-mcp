@@ -3,6 +3,7 @@ import type {
   CommitProjectCommandResponse,
   Conflict,
   CreateTasksInput,
+  ChangeTaskDurationInput,
   DeleteTasksInput,
   DependencyType,
   GetProjectSummaryInput,
@@ -45,6 +46,7 @@ export type NormalizedToolInputMap = {
   update_tasks: UpdateTasksInput;
   move_tasks: MoveTasksInput;
   shift_tasks: ShiftTasksInput;
+  change_task_duration: ChangeTaskDurationInput;
   delete_tasks: DeleteTasksInput;
   link_tasks: LinkTasksInput;
   unlink_tasks: UnlinkTasksInput;
@@ -74,6 +76,7 @@ export type NormalizedToolResultMap = {
   update_tasks: NormalizedMutationResult;
   move_tasks: NormalizedMutationResult;
   shift_tasks: NormalizedMutationResult;
+  change_task_duration: NormalizedMutationResult;
   delete_tasks: NormalizedMutationResult;
   link_tasks: NormalizedMutationResult;
   unlink_tasks: NormalizedMutationResult;
@@ -92,6 +95,7 @@ export type ToolHandlerKey =
   | 'updateTasks'
   | 'moveTasks'
   | 'shiftTasks'
+  | 'changeTaskDuration'
   | 'deleteTasks'
   | 'linkTasks'
   | 'unlinkTasks'

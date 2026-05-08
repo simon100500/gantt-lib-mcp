@@ -491,6 +491,16 @@ export interface ShiftTasksInput {
   includeSnapshot?: boolean;
 }
 
+export interface ChangeTaskDurationInput {
+  projectId?: string;
+  changes: Array<{
+    taskId: string;
+    durationDays: number;
+    anchor?: 'start' | 'end';
+  }>;
+  includeSnapshot?: boolean;
+}
+
 export interface RecalculateProjectInput {
   projectId?: string;
   includeSnapshot?: boolean;

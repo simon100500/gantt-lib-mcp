@@ -12,6 +12,7 @@
     "build:mcp": "npm run build -w packages/mcp",
     "build:server": "npm run build -w packages/server",
     "prisma:generate": "npm run prisma:generate -w packages/runtime-core",
+    "eval:agent-e2e": "tsx scripts/agent-e2e-live.ts",
     "dump:db": "node scripts/dump-db.js",
     "dev:server": "npm run dev -w packages/server",
     "dev:web": "npm run dev -w packages/web",
