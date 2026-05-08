@@ -210,7 +210,7 @@ describe('AssignedResourcesColumnCell', () => {
       type: 'equipment',
       name: 'Автокран',
     };
-    const { container, root } = renderCell({ estimatedWidth: 240 }, [activeResource, secondActiveResource, equipmentResource], [
+    const { container, root } = renderCell({}, [activeResource, secondActiveResource, equipmentResource], [
       assignment({ id: 'assignment-active-1', resourceId: activeResource.id }),
       assignment({ id: 'assignment-active-2', resourceId: secondActiveResource.id }),
       assignment({ id: 'assignment-equipment', resourceId: equipmentResource.id }),

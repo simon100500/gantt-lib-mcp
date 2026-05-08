@@ -323,10 +323,9 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
 
     const assignedCell = renderColumnCell(column, tasks[1]!);
     expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-cell-leaf-1"]')?.getAttribute('data-assigned-resource-count')).toBe('3');
-    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-active-leaf-1-resource-1"]')).toBeNull();
-    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-summary-leaf-1-active-human"]')?.textContent).toContain('1');
-    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-summary-leaf-1-inactive-human"]')?.textContent).toContain('1');
-    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-summary-leaf-1-active-unknown"]')?.textContent).toContain('1');
+    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-active-leaf-1-resource-1"]')?.textContent).toContain('Alpha Crew');
+    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-inactive-leaf-1-resource-2"]')?.textContent).toContain('Dormant Crew');
+    expect(assignedCell.cellContainer.querySelector('[data-testid="assigned-resources-unknown-leaf-1-resource-missing"]')?.textContent).toContain('Неизвестный ресурс');
 
     const emptyCell = renderColumnCell(column, tasks[2]!);
     expect(emptyCell.cellContainer.querySelector('[data-testid="assigned-resources-cell-leaf-2"]')?.getAttribute('data-assigned-resource-count')).toBe('0');
@@ -348,7 +347,7 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
     const { cellContainer, cellRoot } = renderColumnCell(column, tasks[1]!);
 
     await act(async () => {
-      (cellContainer.querySelector('[data-testid="assigned-resources-summary-leaf-1-active-human"]') as HTMLButtonElement).click();
+      (cellContainer.querySelector('[data-testid="assigned-resources-active-leaf-1-resource-1"]') as HTMLButtonElement).click();
       await Promise.resolve();
     });
 
@@ -371,7 +370,7 @@ describe('ProjectWorkspace assigned-resources Gantt column', () => {
     const column = getAssignedResourcesColumn();
     const { cellContainer, cellRoot } = renderColumnCell(column, tasks[1]!);
 
-    expect(cellContainer.querySelector('[data-testid="assigned-resources-summary-leaf-1-active-human"]')?.textContent).toContain('1');
+    expect(cellContainer.querySelector('[data-testid="assigned-resources-active-leaf-1-resource-1"]')?.textContent).toContain('Alpha Crew');
     expect(cellContainer.querySelector('[data-testid="assigned-resources-edit-leaf-1"]')).toBeNull();
 
     act(() => {

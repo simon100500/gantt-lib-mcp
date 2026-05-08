@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { TaskListColumn } from 'gantt-lib';
 import { Plus } from 'lucide-react';
@@ -10,15 +10,13 @@ import { getTaskAssignmentResourceGroups } from './resourceAssignmentUtils.ts';
 import { ResourceTypeIcon } from './ResourceTypeIcon.tsx';
 
 const DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH = 132;
-const MIN_NAMED_RESOURCE_CHIP_WIDTH = 48;
-const CHIP_GAP_PX = 4;
+const MAX_VISIBLE_RESOURCE_CHIPS = 4;
 
 export interface AssignedResourcesColumnCellProps {
   task: Task;
   groups: TaskAssignmentResourceGroups;
   editable?: boolean;
   readOnly?: boolean;
-  estimatedWidth?: number;
   onEdit?: (task: Task) => void;
 }
 
@@ -61,6 +59,22 @@ type ResourceChipSummary = {
   count: number;
   isInactive: boolean;
 };
+
+function getResourceSummaryLabel(summary: ResourceChipSummary): string {
+  if (summary.type === 'unknown') {
+    return `Неизвестных ${summary.count}`;
+  }
+
+  const labels: Record<ProjectResource['type'], { active: string; inactive: string }> = {
+    human: { active: 'Людей', inactive: 'Неактивных людей' },
+    equipment: { active: 'Оборудование', inactive: 'Неактивного оборудования' },
+    material: { active: 'Материалов', inactive: 'Неактивных материалов' },
+    other: { active: 'Прочих', inactive: 'Неактивных прочих' },
+  };
+
+  const entry = labels[summary.type];
+  return `${summary.isInactive ? entry.inactive : entry.active} ${summary.count}`;
+}
 
 function InlineTooltip({
   content,
@@ -128,7 +142,7 @@ function InlineTooltip({
       {anchor && typeof document !== 'undefined'
         ? createPortal(
           <div
-            className="pointer-events-none fixed z-[80] -translate-x-1/2 -translate-y-full rounded-md bg-[#172b4d] px-2 py-1 text-[10px] font-medium leading-4 text-white shadow-[0_10px_30px_rgba(9,30,66,0.24)]"
+            className="pointer-events-none fixed z-[80] -translate-x-1/2 -translate-y-full rounded-md border border-[#dfe1e6] bg-white px-2 py-1 text-[10px] font-medium leading-4 text-[#172b4d] shadow-[0_10px_30px_rgba(9,30,66,0.18)]"
             style={{ left: anchor.left, top: anchor.top }}
           >
             {content}
@@ -152,6 +166,7 @@ function renderResourceChips(
   taskId: string,
   resources: TaskResourceAssignmentView[],
   variant: 'active' | 'inactive',
+  displayMode: 'full' | 'icon',
   onChipClick?: () => void,
 ): ReactNode {
   return resources.map(({ resource, assignment }) => {
@@ -159,7 +174,9 @@ function renderResourceChips(
     const variantClasses = variant === 'active'
       ? 'border-[#dfe1e6] bg-white text-[#172b4d]'
       : 'border-[#dfe1e6] bg-[#f7f8fa] text-[#6b778c] opacity-75';
-    const className = `inline-flex min-w-0 max-w-full flex-1 basis-0 items-center gap-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-4 ${variantClasses} ${
+    const className = `inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md border ${
+      displayMode === 'icon' ? 'h-7 justify-center px-1.5 py-0.5' : 'gap-1 px-1.5 py-0.5'
+    } text-[10px] font-medium leading-4 ${variantClasses} ${
       onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
     }`;
     const children = (
@@ -167,8 +184,8 @@ function renderResourceChips(
         <span className="inline-flex h-3 w-3 min-w-3 shrink-0 items-center justify-center overflow-hidden">
           <ResourceTypeIcon type={resource.type} className="h-3 w-3 shrink-0" />
         </span>
-        <span className="min-w-0 truncate">{label}</span>
-        {variant === 'inactive' && <span className="ml-0.5 shrink-0 text-[#6b778c]">неактивен</span>}
+        {displayMode === 'full' ? <span className="min-w-0 truncate">{label}</span> : null}
+        {displayMode === 'full' && variant === 'inactive' ? <span className="ml-0.5 shrink-0 text-[#6b778c]">неактивен</span> : null}
       </>
     );
 
@@ -261,9 +278,7 @@ function renderSummaryChip(
   const className = `inline-flex h-5 min-w-0 flex-1 basis-0 items-center gap-1 overflow-hidden rounded-md border px-1.5 text-[10px] font-semibold leading-none ${baseClassName} ${
     onChipClick ? 'cursor-pointer transition-colors hover:border-[#4c9aff] hover:bg-[#f4f8ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c9aff]/25' : ''
   }`;
-  const title = summary.type === 'unknown'
-    ? `Неизвестные ресурсы: ${summary.count}`
-    : `${summary.isInactive ? 'Неактивные' : 'Активные'} ресурсы типа ${summary.type}: ${summary.count}`;
+  const title = getResourceSummaryLabel(summary);
   const content = (
     <>
       {summary.type === 'unknown' ? (
@@ -291,7 +306,6 @@ function renderSummaryChip(
           event.stopPropagation();
           onChipClick();
         }}
-        title={title}
         type="button"
       >
         {content}
@@ -327,11 +341,8 @@ export function AssignedResourcesColumnCell({
   groups,
   editable = true,
   readOnly = false,
-  estimatedWidth = DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH,
   onEdit,
 }: AssignedResourcesColumnCellProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [containerWidth, setContainerWidth] = useState(estimatedWidth);
   const normalizedGroups = normalizeAssignedResourceGroups(groups);
   const activeResources = normalizedGroups.activeAssignedResources;
   const inactiveResources = normalizedGroups.inactiveAssignedResources;
@@ -343,35 +354,11 @@ export function AssignedResourcesColumnCell({
     ? 'Назначено ресурсов: 0'
     : `Назначено ресурсов: ${totalVisibleCount}`;
   const openEditor = canEdit ? () => onEdit?.(task) : undefined;
-  const maxNamedChipsByWidth = Math.max(1, Math.floor((containerWidth + CHIP_GAP_PX) / (MIN_NAMED_RESOURCE_CHIP_WIDTH + CHIP_GAP_PX)));
-  const shouldCollapseToSummary = totalVisibleCount > maxNamedChipsByWidth;
+  const chipDisplayMode: 'full' | 'icon' = totalVisibleCount === MAX_VISIBLE_RESOURCE_CHIPS ? 'icon' : 'full';
+  const shouldCollapseToSummary = totalVisibleCount > MAX_VISIBLE_RESOURCE_CHIPS;
   const resourceSummaries = shouldCollapseToSummary
     ? buildResourceChipSummaries(activeResources, inactiveResources, unknownResourceIds)
     : [];
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return undefined;
-    }
-
-    const updateWidth = () => {
-      const nextWidth = Math.round(element.getBoundingClientRect().width);
-      if (nextWidth > 0) {
-        setContainerWidth(nextWidth);
-      }
-    };
-
-    updateWidth();
-
-    if (typeof ResizeObserver === 'undefined') {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => updateWidth());
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [estimatedWidth]);
 
   return (
     <div
@@ -379,7 +366,6 @@ export function AssignedResourcesColumnCell({
       className="flex min-w-0 items-center gap-1 px-1.5 py-1 text-xs text-slate-700"
       data-assigned-resource-count={String(totalVisibleCount)}
       data-testid={`assigned-resources-cell-${task.id}`}
-      ref={containerRef}
     >
       <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
         {totalVisibleCount === 0 ? (
@@ -407,14 +393,16 @@ export function AssignedResourcesColumnCell({
               resourceSummaries.map((summary) => renderSummaryChip(task, summary, openEditor))
             ) : (
               <>
-                {renderResourceChips(task.id, activeResources, 'active', openEditor)}
-                {renderResourceChips(task.id, inactiveResources, 'inactive', openEditor)}
+                {renderResourceChips(task.id, activeResources, 'active', chipDisplayMode, openEditor)}
+                {renderResourceChips(task.id, inactiveResources, 'inactive', chipDisplayMode, openEditor)}
                 {unknownResourceIds.map((resourceId) => (
                   openEditor ? (
                     <InlineTooltip content={`Неизвестный ресурс: ${resourceId}`} key={`unknown-${resourceId}`}>
                       <button
                         aria-label={`Изменить назначения ресурсов для задачи ${task.name || task.id}`}
-                        className="inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                        className={`inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 transition-colors hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+                          chipDisplayMode === 'icon' ? 'h-7 justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
+                        }`}
                         data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -422,18 +410,36 @@ export function AssignedResourcesColumnCell({
                         }}
                         type="button"
                       >
-                        <span className="min-w-0 truncate">Неизвестный ресурс</span>
-                        <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
+                        {chipDisplayMode === 'icon' ? (
+                          <span className="inline-flex h-3 w-3 min-w-3 shrink-0 items-center justify-center rounded-full bg-red-100 text-[9px] font-bold text-red-700">
+                            ?
+                          </span>
+                        ) : (
+                          <>
+                            <span className="min-w-0 truncate">Неизвестный ресурс</span>
+                            <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
+                          </>
+                        )}
                       </button>
                     </InlineTooltip>
                   ) : (
                     <InlineTooltip content={`Неизвестный ресурс: ${resourceId}`} key={`unknown-${resourceId}`}>
                       <span
-                        className="inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-medium leading-4 text-red-700"
+                        className={`inline-flex min-w-0 max-w-full flex-1 basis-0 items-center overflow-hidden rounded-md bg-red-50 text-[10px] font-medium leading-4 text-red-700 ${
+                          chipDisplayMode === 'icon' ? 'h-7 justify-center px-1.5 py-0.5' : 'px-1.5 py-0.5'
+                        }`}
                         data-testid={`assigned-resources-unknown-${task.id}-${resourceId}`}
                       >
-                        <span className="min-w-0 truncate">Неизвестный ресурс</span>
-                        <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
+                        {chipDisplayMode === 'icon' ? (
+                          <span className="inline-flex h-3 w-3 min-w-3 shrink-0 items-center justify-center rounded-full bg-red-100 text-[9px] font-bold text-red-700">
+                            ?
+                          </span>
+                        ) : (
+                          <>
+                            <span className="min-w-0 truncate">Неизвестный ресурс</span>
+                            <span className="ml-1 shrink-0 font-mono text-[10px]">{resourceId}</span>
+                          </>
+                        )}
                       </span>
                     </InlineTooltip>
                   )
@@ -452,19 +458,17 @@ export function createAssignedResourcesColumn({
   assignments,
   editable = true,
   readOnly = false,
-  width = DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH,
   onEdit,
 }: CreateAssignedResourcesColumnOptions): TaskListColumn<Task> {
   return {
     id: 'assigned-resources',
     header: 'Ресурсы',
-    width,
+    width: DEFAULT_ASSIGNED_RESOURCES_COLUMN_WIDTH,
     minWidth: 108,
     after: 'progress',
     renderCell: ({ task }) => (
       <AssignedResourcesColumnCell
         editable={editable}
-        estimatedWidth={width}
         groups={getTaskAssignmentResourceGroups(task.id, resources, assignments)}
         onEdit={onEdit}
         readOnly={readOnly}
