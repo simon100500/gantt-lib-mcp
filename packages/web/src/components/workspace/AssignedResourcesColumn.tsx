@@ -376,7 +376,8 @@ export function AssignedResourcesColumnCell({
     }
 
     const updateWidth = () => {
-      const nextWidth = Math.round(element.getBoundingClientRect().width);
+      const host = element.parentElement instanceof HTMLElement ? element.parentElement : element;
+      const nextWidth = Math.round(host.getBoundingClientRect().width);
       if (nextWidth > 0) {
         setContainerWidth(nextWidth);
       }
@@ -397,7 +398,7 @@ export function AssignedResourcesColumnCell({
   return (
     <div
       aria-label={summaryLabel}
-      className="flex min-w-0 items-center gap-1 px-1.5 py-1 text-xs text-slate-700"
+      className="flex w-full min-w-0 items-center gap-1 px-1.5 py-1 text-xs text-slate-700"
       data-assigned-resource-count={String(totalVisibleCount)}
       data-testid={`assigned-resources-cell-${task.id}`}
       ref={containerRef}
