@@ -33,6 +33,7 @@ export type ServerMessage =
   | { type: 'token'; content: string }
   | { type: 'tasks'; tasks: unknown[] }
   | { type: 'preview_tasks'; tasks: unknown[]; provisional: true }
+  | { type: 'preview_tasks_replace'; tasks: unknown[]; provisional: true; wave: number }
   | { type: 'preview_failed'; message: string }
   | { type: 'history_changed' }
   | { type: 'error'; message: string }
@@ -90,7 +91,10 @@ export function broadcastToSession(sessionId: string, msg: ServerMessage): void 
     messageType: msg.type,
     socketCount: sockets.size,
     contentLength: msg.type === 'token' ? msg.content?.length ?? 0 : undefined,
-    taskCount: msg.type === 'tasks' || msg.type === 'preview_tasks' ? msg.tasks?.length ?? 0 : undefined,
+    taskCount: msg.type === 'tasks' || msg.type === 'preview_tasks' || msg.type === 'preview_tasks_replace'
+      ? msg.tasks?.length ?? 0
+      : undefined,
+    wave: msg.type === 'preview_tasks_replace' ? msg.wave : undefined,
     errorMessage: msg.type === 'error' || msg.type === 'preview_failed' ? msg.message : undefined,
   });
   for (const socket of sockets) {

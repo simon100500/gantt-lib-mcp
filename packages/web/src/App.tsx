@@ -256,6 +256,7 @@ type PreviewState = {
   active: boolean;
   mode: 'rendering' | 'failed';
   message: string | null;
+  wave: number;
 };
 
 export default function App() {
@@ -664,7 +665,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     saveTemplateSnapshot,
   });
   const ganttRef = useRef<GanttChartRef>(null);
-  const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false, mode: 'rendering', message: null });
+  const [previewState, setPreviewState] = useState<PreviewState>({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
   const [pendingGanttDayMode, setPendingGanttDayMode] = useState<'business' | 'calendar' | null>(null);
   const activationInFlightRef = useRef(false);
   const createEmptyChartAfterActivationRef = useRef(false);
@@ -715,7 +716,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     aiMutationWatchdogRef.current = window.setTimeout(() => {
       aiMutationWatchdogRef.current = null;
       clearAiMutationLock();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       useChatStore.getState().finishStreaming();
     }, AI_MUTATION_LOCK_TIMEOUT_MS);
   }, [clearAiMutationLock]);
@@ -730,7 +731,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
 
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     console.log('[WS] message', msg);
-    if (msg.type === 'preview_tasks') {
+    if (msg.type === 'preview_tasks' || msg.type === 'preview_tasks_replace') {
       const normalizedPreviewTasks = normalizeTasks(msg.tasks as Task[]);
       armAiMutationWatchdog();
       setAiMutationLock({
@@ -743,6 +744,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         active: true,
         mode: 'rendering',
         message: null,
+        wave: msg.type === 'preview_tasks_replace' ? (msg.wave ?? 1) : 1,
       });
       return;
     }
@@ -775,7 +777,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       });
       releaseAiMutationLock();
       scheduleAiDoneGraceExit();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       useTaskStore.getState().replaceFromSystem(normalizedTasks);
 
       if (!hasShareToken && auth.isAuthenticated) {
@@ -799,7 +801,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (msg.type === 'done') {
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
       useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
@@ -807,7 +809,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     if (msg.type === 'error') {
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
-      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
   }, [
@@ -883,7 +885,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
   const resetWorkspacePresentation = useCallback(() => {
     clearAiDoneGraceTimer();
     releaseAiMutationLock();
-    setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null });
+    setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
     useChatStore.getState().reset();

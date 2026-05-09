@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 import type { ScheduleCommandOptions } from '@gantt/mcp/types';
 import { historyService } from '@gantt/mcp/services';
+import type { CompiledInitialSchedule } from './compiler.js';
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
 import { classifyInitialRequest } from './classification.js';
@@ -25,6 +26,16 @@ import type {
 } from './types.js';
 
 type ListedTask = {
+  id: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  parentId?: string;
+  dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
+  sortOrder?: number;
+};
+
+type PreviewTaskMessage = {
   id: string;
   name: string;
   startDate?: string;
@@ -196,6 +207,101 @@ function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): 
   }
 
   return 'Не удалось подготовить надежный стартовый график по этому запросу.';
+}
+
+function normalizePreviewTasks(tasks: CompiledInitialSchedule['command']['tasks']): PreviewTaskMessage[] {
+  return tasks.map((task, index) => {
+    if (typeof task.id !== 'string' || task.id.length === 0) {
+      throw new Error(`Compiled preview task at index ${index} is missing an id`);
+    }
+
+    return {
+      id: task.id,
+      name: task.name,
+      startDate: task.startDate,
+      endDate: task.endDate,
+      parentId: task.parentId,
+      dependencies: task.dependencies,
+      sortOrder: task.sortOrder,
+    };
+  });
+}
+
+function buildProgressivePreviewWaves(tasks: PreviewTaskMessage[]): PreviewTaskMessage[][] {
+  if (tasks.length === 0) {
+    return [];
+  }
+
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const childIdsByParent = new Map<string, string[]>();
+
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+    const siblings = childIdsByParent.get(task.parentId) ?? [];
+    siblings.push(task.id);
+    childIdsByParent.set(task.parentId, siblings);
+  }
+
+  const rootIds = tasks.filter((task) => !task.parentId).map((task) => task.id);
+  const rootIdSet = new Set(rootIds);
+  const secondWaveIds = new Set<string>(rootIds);
+
+  for (const rootId of rootIds) {
+    for (const childId of childIdsByParent.get(rootId) ?? []) {
+      secondWaveIds.add(childId);
+    }
+  }
+
+  const orderedRootWave = tasks.filter((task) => rootIdSet.has(task.id));
+  const orderedSecondWave = tasks.filter((task) => secondWaveIds.has(task.id));
+  const orderedFullWave = [...tasks];
+
+  const candidateWaves = [orderedRootWave, orderedSecondWave, orderedFullWave]
+    .filter((wave) => wave.length > 0);
+
+  const uniqueWaves: PreviewTaskMessage[][] = [];
+  let previousSignature = '';
+  for (const wave of candidateWaves) {
+    const signature = wave.map((task) => task.id).join('|');
+    if (signature === previousSignature) {
+      continue;
+    }
+    uniqueWaves.push(wave);
+    previousSignature = signature;
+  }
+
+  return uniqueWaves.length > 0 ? uniqueWaves : [orderedFullWave];
+}
+
+async function broadcastPreviewWaves(
+  input: RunInitialGenerationInput,
+  compiledSchedule: CompiledInitialSchedule,
+): Promise<number> {
+  const previewTasks = normalizePreviewTasks(compiledSchedule.command.tasks);
+  const waves = buildProgressivePreviewWaves(previewTasks);
+
+  for (let index = 0; index < waves.length; index += 1) {
+    const wave = waves[index]!;
+    input.broadcastToSession(input.sessionId, {
+      type: 'preview_tasks_replace',
+      tasks: wave,
+      provisional: true,
+      wave: index + 1,
+    });
+    await input.logger.debug('preview_tasks_broadcast', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      wave: index + 1,
+      taskCount: wave.length,
+      taskIds: wave.map((task) => task.id),
+      taskNames: wave.map((task) => task.name),
+    });
+  }
+
+  return waves.length;
 }
 
 async function saveAssistantMessage(
@@ -467,7 +573,7 @@ export async function runInitialGeneration(
   });
 
   let repairAttempted = false;
-  let previewBroadcasted = false;
+  let previewWaveCount = 0;
   const historyGroupId = randomUUID();
   const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
@@ -584,26 +690,7 @@ export async function runInitialGeneration(
         finalizeGroup: true,
       },
       onCompiled: async (compiledSchedule) => {
-        const previewTasks = compiledSchedule.command.tasks.map((task) => ({
-          id: task.id,
-          name: task.name,
-          startDate: task.startDate,
-          endDate: task.endDate,
-          parentId: task.parentId,
-          dependencies: task.dependencies,
-          sortOrder: task.sortOrder,
-        }));
-
-        input.broadcastToSession(input.sessionId, { type: 'preview_tasks', tasks: previewTasks, provisional: true });
-        previewBroadcasted = true;
-        await input.logger.debug('preview_tasks_broadcast', {
-          runId: input.runId,
-          projectId: input.projectId,
-          sessionId: input.sessionId,
-          taskCount: previewTasks.length,
-          taskIds: previewTasks.map((task) => task.id),
-          taskNames: previewTasks.map((task) => task.name),
-        });
+        previewWaveCount = await broadcastPreviewWaves(input, compiledSchedule);
       },
     });
 
@@ -632,7 +719,7 @@ export async function runInitialGeneration(
 
     if (!execution.ok) {
       const assistantResponse = buildFailureResponse('compile');
-      if (previewBroadcasted) {
+      if (previewWaveCount > 0) {
         input.broadcastToSession(input.sessionId, {
           type: 'preview_failed',
           message: 'Предварительный график не был сохранён. Проверьте ошибку и повторите запуск.',

@@ -42,7 +42,7 @@ function createHarness(options?: {
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const messages: Array<{ role: string; content: string }> = [];
-  const broadcasts: Array<{ sessionId: string; message: { type: string; tasks?: unknown[]; provisional?: boolean; message?: string; chatMessage?: { requestContextId?: string | null; historyGroupId?: string | null; systemMessage?: string | null } } }> = [];
+  const broadcasts: Array<{ sessionId: string; message: { type: string; tasks?: unknown[]; provisional?: boolean; wave?: number; message?: string; chatMessage?: { requestContextId?: string | null; historyGroupId?: string | null; systemMessage?: string | null } } }> = [];
   const committedCommands: Array<{ type: string }> = [];
   let commitCall = 0;
 
@@ -316,7 +316,7 @@ function createHarness(options?: {
         },
       },
       deps: options?.deps,
-      broadcastToSession(sessionId: string, message: { type: string; tasks?: unknown[]; provisional?: boolean; message?: string; chatMessage?: { requestContextId?: string | null; historyGroupId?: string | null; systemMessage?: string | null } }) {
+      broadcastToSession(sessionId: string, message: { type: string; tasks?: unknown[]; provisional?: boolean; wave?: number; message?: string; chatMessage?: { requestContextId?: string | null; historyGroupId?: string | null; systemMessage?: string | null } }) {
         broadcasts.push({ sessionId, message });
       },
     },
@@ -366,7 +366,10 @@ describe('runInitialGeneration', () => {
     assert.ok(harness.events.some((entry) => entry.event === 'schedule_metadata_output'));
     assert.ok(harness.events.some((entry) => entry.event === 'scheduling_gate_verdict'));
     assert.equal(harness.events.some((entry) => entry.event === 'preview_tasks_broadcast'), true);
-    assert.equal(harness.broadcasts.some((entry) => entry.message.type === 'preview_tasks'), true);
+    const previewBroadcasts = harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks_replace');
+    assert.equal(previewBroadcasts.length, 3);
+    assert.deepEqual(previewBroadcasts.map((entry) => entry.message.wave), [1, 2, 3]);
+    assert.deepEqual(previewBroadcasts.map((entry) => entry.message.tasks?.length), [4, 12, 28]);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 1);
     const doneBroadcast = harness.broadcasts.find((entry) => entry.message.type === 'done');
     assert.equal(doneBroadcast?.message.chatMessage?.systemMessage, 'Стартовый график составлен в календарных днях. Изменить режим можно в меню проекта.');
@@ -671,10 +674,10 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_request').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_response').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 0);
-    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks').length, 1);
+    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks_replace').length, 3);
     assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_failed').length, 1);
     assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'done').length, 1);
-    const previewBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_tasks');
+    const previewBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_tasks_replace');
     const previewFailedBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_failed');
     const doneBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'done');
     assert.notEqual(previewBroadcastIndex, -1);
