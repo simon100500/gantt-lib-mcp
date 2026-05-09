@@ -374,6 +374,30 @@ function buildPreviewSignature(tasks: PreviewTaskMessage[]): string {
     .join('\n');
 }
 
+function mergePreviewTasks(
+  currentTasks: PreviewTaskMessage[],
+  incomingTasks: PreviewTaskMessage[],
+): PreviewTaskMessage[] {
+  if (currentTasks.length === 0) {
+    return [...incomingTasks];
+  }
+
+  const merged = new Map(currentTasks.map((task) => [task.id, { ...task }]));
+  for (const task of incomingTasks) {
+    const previous = merged.get(task.id);
+    merged.set(task.id, previous ? { ...previous, ...task } : { ...task });
+  }
+
+  return [...merged.values()].sort((left, right) => {
+    const leftOrder = left.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
 function buildPhaseOnlyPreviewTasks(
   structure: StructuredProjectPlan,
   anchorDate: string,
@@ -786,8 +810,25 @@ export async function runInitialGeneration(
   let previewWaveCount = 0;
   const previewAnchorDate = getServerDate(input.serverDate);
   const streamingPreviewSignatures = new Map<'structure' | 'scheduled', string>();
+  let visiblePreviewTasks: PreviewTaskMessage[] = [];
+  let visiblePreviewSignature = '';
   const historyGroupId = randomUUID();
   const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
+  const emitMergedPreview = async (
+    source: 'structure_phases' | 'structure_subphases' | 'scheduled_tasks',
+    incomingTasks: PreviewTaskMessage[],
+  ): Promise<void> => {
+    const mergedTasks = mergePreviewTasks(visiblePreviewTasks, incomingTasks);
+    const mergedSignature = buildPreviewSignature(mergedTasks);
+    if (mergedSignature === visiblePreviewSignature) {
+      return;
+    }
+
+    visiblePreviewTasks = mergedTasks;
+    visiblePreviewSignature = mergedSignature;
+    previewWaveCount += 1;
+    await broadcastPreviewWave(input, previewWaveCount, mergedTasks, source);
+  };
   const maybeBroadcastStreamingPreview = async (
     family: 'structure' | 'scheduled',
     fullText: string,
@@ -803,12 +844,9 @@ export async function runInitialGeneration(
     }
 
     streamingPreviewSignatures.set(family, signature);
-    previewWaveCount += 1;
-    await broadcastPreviewWave(
-      input,
-      previewWaveCount,
-      previewTasks,
+    await emitMergedPreview(
       family === 'structure' ? 'structure_subphases' : 'scheduled_tasks',
+      previewTasks,
     );
   };
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
@@ -875,23 +913,20 @@ export async function runInitialGeneration(
       onStructureReady: async (structure) => {
         const phasePreview = buildPhaseOnlyPreviewTasks(structure, previewAnchorDate);
         if (phasePreview.length > 0) {
-          previewWaveCount += 1;
-          await broadcastPreviewWave(input, previewWaveCount, phasePreview, 'structure_phases');
+          await emitMergedPreview('structure_phases', phasePreview);
         }
 
         const structurePreview = buildStructurePreviewTasks(structure, previewAnchorDate);
         const phaseSignature = phasePreview.map((task) => task.id).join('|');
         const structureSignature = structurePreview.map((task) => task.id).join('|');
         if (structurePreview.length > 0 && structureSignature !== phaseSignature) {
-          previewWaveCount += 1;
-          await broadcastPreviewWave(input, previewWaveCount, structurePreview, 'structure_subphases');
+          await emitMergedPreview('structure_subphases', structurePreview);
         }
       },
       onScheduledReady: async (scheduled) => {
         const scheduledPreview = buildScheduledPreviewTasks(scheduled, previewAnchorDate);
         if (scheduledPreview.length > 0) {
-          previewWaveCount += 1;
-          await broadcastPreviewWave(input, previewWaveCount, scheduledPreview, 'scheduled_tasks');
+          await emitMergedPreview('scheduled_tasks', scheduledPreview);
         }
       },
     });
