@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import FeaturesChatDemo from "../components/FeaturesChatDemo";
 import FeaturesPromptDemo from "../components/FeaturesPromptDemo";
 
 const features = [
@@ -231,10 +232,11 @@ const extras = [
             <div class="flex-1">
               {feature.id === "ai-planning" ? (
                 <FeaturesPromptDemo client:load />
+              ) : feature.id === "ai-editing" ? (
+                <FeaturesChatDemo client:load />
               ) : (
                 <div class="aspect-[4/3] rounded-2xl border border-border bg-muted/40 flex items-center justify-center">
                   <span class="text-4xl opacity-20">
-                    {feature.id === "ai-editing" && "🖱️"}
                     {feature.id === "imports" && "📥"}
                     {feature.id === "workdays" && "📅"}
                     {feature.id === "table-control" && "📋"}
