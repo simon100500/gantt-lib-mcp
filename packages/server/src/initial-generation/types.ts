@@ -71,10 +71,19 @@ export type LocationScope = {
   zones?: string[];
 };
 
+export type ExplicitScheduleItem = {
+  rawLine: string;
+  title: string;
+  startDate?: string;
+  endDate?: string;
+  durationDays?: number;
+};
+
 export type NormalizedInitialRequest = {
   rawRequest: string;
   normalizedRequest: string;
   explicitWorkItems: string[];
+  explicitScheduleItems?: ExplicitScheduleItem[];
   locationScope?: LocationScope;
   projectDateRange?: {
     startDate: string;

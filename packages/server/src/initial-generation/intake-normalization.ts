@@ -1,4 +1,5 @@
 import type {
+  ExplicitScheduleItem,
   LocationScope,
   NormalizedInitialRequest,
   SourceConfidence,
@@ -42,6 +43,10 @@ function normalizeTableCell(value: string): string {
   return value
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function daysInUtcMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 function isExplicitWorkItemLine(line: string): boolean {
@@ -104,6 +109,11 @@ function extractTabularWorkItems(rawRequest: string): string[] {
 }
 
 function extractExplicitWorkItems(rawRequest: string): string[] {
+  const directScheduleItems = extractExplicitScheduleItems(rawRequest);
+  if (directScheduleItems.length >= 3) {
+    return directScheduleItems.map((item) => item.title);
+  }
+
   const tabularLines = extractTabularWorkItems(rawRequest);
   if (tabularLines.length >= 3) {
     return tabularLines;
@@ -132,6 +142,144 @@ function extractExplicitWorkItems(rawRequest: string): string[] {
   return [];
 }
 
+function normalizeDateToken(token: string): string | null {
+  const trimmed = token.trim();
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
+  if (isoMatch) {
+    return toIsoDate(Number.parseInt(isoMatch[1] ?? '', 10), Number.parseInt(isoMatch[2] ?? '', 10), Number.parseInt(isoMatch[3] ?? '', 10));
+  }
+
+  const ruMatch = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/u);
+  if (ruMatch) {
+    return toIsoDate(Number.parseInt(ruMatch[3] ?? '', 10), Number.parseInt(ruMatch[2] ?? '', 10), Number.parseInt(ruMatch[1] ?? '', 10));
+  }
+
+  return null;
+}
+
+function stripMetadataSeparators(value: string): string {
+  return value.replace(/[\s\-–—:;,.]+$/u, '').trim();
+}
+
+function parseMonthRangeToken(token: string): { startDate: string; endDate: string } | null {
+  const normalized = token.trim().replace(/ё/g, 'е');
+  const monthYearMatch = normalized.match(/^([а-я]+)\s+(\d{4})$/iu);
+  if (monthYearMatch) {
+    const month = resolveMonthToken(monthYearMatch[1] ?? '');
+    const year = Number.parseInt(monthYearMatch[2] ?? '', 10);
+    if (!month || !Number.isInteger(year)) {
+      return null;
+    }
+
+    return {
+      startDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`,
+      endDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(daysInUtcMonth(year, month)).padStart(2, '0')}`,
+    };
+  }
+
+  const compactMatch = normalized.match(/^(\d{1,2})\.(\d{4})$/u);
+  if (!compactMatch) {
+    return null;
+  }
+
+  const month = Number.parseInt(compactMatch[1] ?? '', 10);
+  const year = Number.parseInt(compactMatch[2] ?? '', 10);
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return null;
+  }
+
+  return {
+    startDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`,
+    endDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(daysInUtcMonth(year, month)).padStart(2, '0')}`,
+  };
+}
+
+function parseExplicitScheduleLine(line: string): ExplicitScheduleItem | null {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const directRangeMatch = trimmed.match(
+    /^(?<title>.+?)\s+[–—-]\s+(?<start>\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})\s+[–—-]\s+(?<end>\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})$/u,
+  );
+  if (directRangeMatch?.groups) {
+    const startDate = normalizeDateToken(directRangeMatch.groups.start);
+    const endDate = normalizeDateToken(directRangeMatch.groups.end);
+    const title = stripMetadataSeparators(normalizeItemText(directRangeMatch.groups.title));
+    if (title && startDate && endDate && startDate <= endDate) {
+      return {
+        rawLine: trimmed,
+        title,
+        startDate,
+        endDate,
+      };
+    }
+  }
+
+  const monthMatch = trimmed.match(/^(?<title>.+?)\s+[–—-]\s+(?<month>(?:[а-яё]+)\s+\d{4}|\d{1,2}\.\d{4})$/iu);
+  if (monthMatch?.groups) {
+    const title = stripMetadataSeparators(normalizeItemText(monthMatch.groups.title));
+    const monthRange = parseMonthRangeToken(monthMatch.groups.month);
+    if (title && monthRange) {
+      return {
+        rawLine: trimmed,
+        title,
+        ...monthRange,
+      };
+    }
+  }
+
+  const durationMatch = trimmed.match(/^(?<title>.+?)\s+[–—-]\s+(?<duration>\d+)\s*(?:рабоч(?:их|ие|ий)?\s+)?дн(?:ей|я|\.?)?$/iu);
+  if (durationMatch?.groups) {
+    const title = stripMetadataSeparators(normalizeItemText(durationMatch.groups.title));
+    const durationDays = Number.parseInt(durationMatch.groups.duration ?? '', 10);
+    if (title && Number.isInteger(durationDays) && durationDays >= 1) {
+      return {
+        rawLine: trimmed,
+        title,
+        durationDays,
+      };
+    }
+  }
+
+  const deadlineMatch = trimmed.match(
+    /^(?<title>.+?)\s+[–—-]\s+(?:до|к)\s+(?<end>\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})(?:\s+[–—-]\s+(?<duration>\d+)\s*(?:рабоч(?:их|ие|ий)?\s+)?дн(?:ей|я|\.?)?)?$/iu,
+  );
+  if (deadlineMatch?.groups) {
+    const title = stripMetadataSeparators(normalizeItemText(deadlineMatch.groups.title));
+    const endDate = normalizeDateToken(deadlineMatch.groups.end);
+    const durationDays = deadlineMatch.groups.duration ? Number.parseInt(deadlineMatch.groups.duration, 10) : undefined;
+    if (title && endDate) {
+      return {
+        rawLine: trimmed,
+        title,
+        ...(durationDays && durationDays >= 1 ? { durationDays } : {}),
+        endDate,
+      };
+    }
+  }
+
+  return null;
+}
+
+function extractExplicitScheduleItems(rawRequest: string): ExplicitScheduleItem[] {
+  const lines = rawRequest
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const items = lines
+    .map((line) => parseExplicitScheduleLine(line))
+    .filter((item): item is ExplicitScheduleItem => item !== null);
+
+  if (items.length < 3) {
+    return [];
+  }
+
+  return items.filter((item, index) =>
+    items.findIndex((candidate) => candidate.title.toLowerCase() === item.title.toLowerCase()) === index);
+}
+
 function expandRange(start: string, end: string): string[] {
   const startMatch = start.match(/^(\d+)\.(\d+)$/);
   const endMatch = end.match(/^(\d+)\.(\d+)$/);
@@ -151,11 +299,11 @@ function expandRange(start: string, end: string): string[] {
 
 function extractSections(rawRequest: string): string[] {
   const sections = new Set<string>();
-  for (const match of rawRequest.matchAll(/\b\d+\.\d+\b(?!\.\d{2,4}\b)/g)) {
+  for (const match of rawRequest.matchAll(/(?<!\d\.)\b\d+\.\d+\b(?!\.\d{2,4}\b)/g)) {
     sections.add(match[0]);
   }
 
-  for (const match of rawRequest.matchAll(/\b(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)\b(?!\.\d{2,4}\b)/g)) {
+  for (const match of rawRequest.matchAll(/(?<!\d\.)(\b\d+\.\d+)\s*[-–]\s*(\d+\.\d+\b)(?!\.\d{2,4}\b)/g)) {
     for (const section of expandRange(match[1], match[2])) {
       sections.add(section);
     }
@@ -293,6 +441,7 @@ function inferSourceConfidence(
 
 export function normalizeInitialRequest(rawRequest: string): NormalizedInitialRequest {
   const normalizedRequest = normalizeWhitespace(rawRequest);
+  const explicitScheduleItems = extractExplicitScheduleItems(rawRequest);
   const explicitWorkItems = extractExplicitWorkItems(rawRequest);
   const locationScope = buildLocationScope(normalizedRequest);
   const projectDateRange = extractProjectDateRange(normalizedRequest);
@@ -302,6 +451,7 @@ export function normalizeInitialRequest(rawRequest: string): NormalizedInitialRe
     rawRequest,
     normalizedRequest,
     explicitWorkItems,
+    ...(explicitScheduleItems.length > 0 ? { explicitScheduleItems } : {}),
     ...(locationScope ? { locationScope } : {}),
     ...(projectDateRange ? { projectDateRange } : {}),
     sourceConfidence,

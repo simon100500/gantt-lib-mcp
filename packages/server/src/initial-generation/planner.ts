@@ -13,6 +13,7 @@ import { normalizeGeneratedTitle } from './title-policy.js';
 import type { DomainSkeleton } from './domain/contracts.js';
 import type {
   ClarificationDecision,
+  ExplicitScheduleItem,
   ExecutableProjectPlan,
   GenerationBrief,
   InitialGenerationClassification,
@@ -64,6 +65,18 @@ function buildDeterministicTaskKey(title: string, index: number, seenKeys: Set<s
 
 function stripLeadingEnumeration(value: string): string {
   return value.replace(/^\s*\d+[.)]\s*/u, '').trim();
+}
+
+function diffDaysInclusive(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T00:00:00.000Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00.000Z`).getTime();
+  return Math.max(1, Math.round((end - start) / 86_400_000) + 1);
+}
+
+function subtractUtcDays(isoDate: string, deltaDays: number): string {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - deltaDays);
+  return date.toISOString().slice(0, 10);
 }
 
 function normalizeWorkItemTitle(value: string): string {
@@ -138,7 +151,10 @@ function isFlatExplicitWorklist(input: PlanInitialProjectInput): boolean {
 }
 
 function buildFlatWorklistStructure(input: PlanInitialProjectInput): StructuredProjectPlan {
-  const explicitWorkItems = input.normalizedRequest?.explicitWorkItems ?? input.brief.explicitWorkItems ?? [];
+  const explicitScheduleItems = input.normalizedRequest?.explicitScheduleItems ?? [];
+  const explicitWorkItems = explicitScheduleItems.length > 0
+    ? explicitScheduleItems.map((item) => item.title)
+    : input.normalizedRequest?.explicitWorkItems ?? input.brief.explicitWorkItems ?? [];
   const taskKeys = new Set<string>();
   const taskTitles = explicitWorkItems.map((item) => normalizeWorkItemTitle(item) || stripLeadingEnumeration(item));
   const phaseTitle = deriveWorklistPhaseTitle(taskTitles);
@@ -162,6 +178,91 @@ function buildFlatWorklistStructure(input: PlanInitialProjectInput): StructuredP
         })),
       }],
     }],
+  };
+}
+
+function hasDirectScheduleExecutionInput(input: PlanInitialProjectInput): boolean {
+  const explicitScheduleItems = input.normalizedRequest?.explicitScheduleItems ?? [];
+  if (explicitScheduleItems.length < 3) {
+    return false;
+  }
+
+  return explicitScheduleItems.every((item) =>
+    Boolean(
+      (item.startDate && item.endDate)
+      || item.durationDays
+      || (item.endDate && item.durationDays),
+    ));
+}
+
+function buildDeterministicScheduledTask(
+  fallbackTask: StructuredTask,
+  sourceItem: ExplicitScheduleItem | undefined,
+): ScheduledTask {
+  if (!sourceItem) {
+    return {
+      taskKey: fallbackTask.taskKey,
+      title: fallbackTask.title,
+      durationDays: 1,
+      dependsOn: [],
+    };
+  }
+
+  if (sourceItem.startDate && sourceItem.endDate) {
+    return {
+      taskKey: fallbackTask.taskKey,
+      title: fallbackTask.title,
+      durationDays: sourceItem.durationDays ?? diffDaysInclusive(sourceItem.startDate, sourceItem.endDate),
+      dependsOn: [],
+      startDate: sourceItem.startDate,
+      endDate: sourceItem.endDate,
+    };
+  }
+
+  if (sourceItem.endDate && sourceItem.durationDays) {
+    const startDate = subtractUtcDays(sourceItem.endDate, Math.max(0, sourceItem.durationDays - 1));
+    return {
+      taskKey: fallbackTask.taskKey,
+      title: fallbackTask.title,
+      durationDays: sourceItem.durationDays,
+      dependsOn: [],
+      startDate,
+      endDate: sourceItem.endDate,
+    };
+  }
+
+  return {
+    taskKey: fallbackTask.taskKey,
+    title: fallbackTask.title,
+    durationDays: sourceItem.durationDays ?? 1,
+    dependsOn: [],
+  };
+}
+
+function buildDeterministicScheduledWorklist(
+  structure: StructuredProjectPlan,
+  input: PlanInitialProjectInput,
+): ScheduledProjectPlan {
+  const explicitScheduleItems = input.normalizedRequest?.explicitScheduleItems ?? [];
+  const taskSourceByKey = new Map(
+    (structure.phases[0]?.subphases[0]?.tasks ?? []).map((task, index) => [task.taskKey, explicitScheduleItems[index]]),
+  );
+
+  return {
+    projectType: structure.projectType,
+    assumptions: [
+      ...structure.assumptions,
+      'Явно указанные пользователем даты и длительности применены детерминированно без переинтерпретации структуры',
+    ],
+    phases: structure.phases.map((phase) => ({
+      phaseKey: phase.phaseKey,
+      title: phase.title,
+      subphases: phase.subphases.map((subphase) => ({
+        subphaseKey: subphase.subphaseKey,
+        title: subphase.title,
+        tasks: subphase.tasks.map((task) => buildDeterministicScheduledTask(task, taskSourceByKey.get(task.taskKey))),
+      })),
+    })),
   };
 }
 
@@ -574,6 +675,7 @@ async function requestScheduledProject(
 export async function planInitialProject(input: PlanInitialProjectInput): Promise<PlanInitialProjectResult> {
   let repairAttempted = false;
   const flatExplicitWorklist = isFlatExplicitWorklist(input);
+  const directScheduleExecution = hasDirectScheduleExecutionInput(input);
 
   let structure = flatExplicitWorklist
     ? buildFlatWorklistStructure(input)
@@ -610,13 +712,15 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
     });
   }
 
-  let scheduled = await requestScheduledProject(
-    buildSchedulingPrompt({ ...input, structure }),
-    'schedule_metadata',
-    input.schedulingModelDecision.selectedModel,
-    input.sdkQuery,
-    structure,
-  );
+  let scheduled = directScheduleExecution
+    ? buildDeterministicScheduledWorklist(structure, input)
+    : await requestScheduledProject(
+        buildSchedulingPrompt({ ...input, structure }),
+        'schedule_metadata',
+        input.schedulingModelDecision.selectedModel,
+        input.sdkQuery,
+        structure,
+      );
   let plan = flattenScheduledPlan(scheduled, {
     collapseSingleSubphaseWorklist: flatExplicitWorklist,
   });
@@ -630,13 +734,15 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
 
   if (!schedulingVerdict.accepted) {
     repairAttempted = true;
-    scheduled = await requestScheduledProject(
-      buildSchedulingRepairPrompt({ ...input, structure, scheduled, verdict: schedulingVerdict }),
-      'schedule_metadata_repair',
-      input.schedulingModelDecision.selectedModel,
-      input.sdkQuery,
-      structure,
-    );
+    scheduled = directScheduleExecution
+      ? buildDeterministicScheduledWorklist(structure, input)
+      : await requestScheduledProject(
+          buildSchedulingRepairPrompt({ ...input, structure, scheduled, verdict: schedulingVerdict }),
+          'schedule_metadata_repair',
+          input.schedulingModelDecision.selectedModel,
+          input.sdkQuery,
+          structure,
+        );
     plan = flattenScheduledPlan(scheduled, {
       collapseSingleSubphaseWorklist: flatExplicitWorklist,
     });

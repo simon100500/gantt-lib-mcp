@@ -403,6 +403,80 @@ describe('initial-generation planner', () => {
     );
   });
 
+  it('uses deterministic scheduling for direct dated worklists instead of freeform schedule inference', async () => {
+    const userMessage = [
+      'Раздел 1. Сваи (Секция 1В) – 01.07.2025 – 31.08.2025',
+      'Раздел 2. Подвал (Секция 1В) – 01.09.2025 – 31.10.2025',
+      'Раздел 1. Сваи (Секция 1Б) – 01.09.2025 – 31.10.2025',
+    ].join('\n');
+    const normalizedRequest = normalizeInitialRequest(userMessage);
+    const interpretation = createInterpretation({
+      requestKind: 'explicit_worklist',
+      planningMode: 'worklist_bootstrap',
+      scopeMode: 'explicit_worklist',
+      projectArchetype: 'new_building',
+      worklistPolicy: 'strict_worklist',
+    });
+    const classification = classifyInitialRequest({ normalizedRequest, interpretation });
+    const clarificationDecision = decideInitialClarification({ normalizedRequest, interpretation, classification });
+    const domainSkeleton = assembleDomainSkeleton({
+      normalizedRequest,
+      interpretation,
+      classification,
+      clarificationDecision,
+    });
+    const calls: string[] = [];
+
+    const result = await planInitialProject({
+      userMessage,
+      brief: buildGenerationBrief({
+        userMessage,
+        normalizedRequest,
+        interpretation,
+        classification,
+        clarificationDecision,
+        domainSkeleton,
+      }),
+      normalizedRequest,
+      classification,
+      clarificationDecision,
+      domainSkeleton,
+      structureModelDecision: { selectedModel: 'gpt-strong' },
+      schedulingModelDecision: { selectedModel: 'gpt-cheap' },
+      sdkQuery: async ({ stage }) => {
+        calls.push(stage);
+        throw new Error(`unexpected stage ${stage}`);
+      },
+    });
+
+    assert.deepEqual(calls, []);
+    assert.deepEqual(
+      result.scheduled.phases[0]?.subphases[0]?.tasks.map((task) => ({
+        title: task.title,
+        startDate: task.startDate,
+        endDate: task.endDate,
+      })),
+      [
+        {
+          title: 'Раздел 1. Сваи (Секция 1В)',
+          startDate: '2025-07-01',
+          endDate: '2025-08-31',
+        },
+        {
+          title: 'Раздел 2. Подвал (Секция 1В)',
+          startDate: '2025-09-01',
+          endDate: '2025-10-31',
+        },
+        {
+          title: 'Раздел 1. Сваи (Секция 1Б)',
+          startDate: '2025-09-01',
+          endDate: '2025-10-31',
+        },
+      ],
+    );
+    assert.equal(result.schedulingVerdict.accepted, true);
+  });
+
   it('adds a section-floor decomposition rule when counts are explicit in the request', () => {
     const userMessage = 'График каменной кладки внутренних и наружных стен: на 5 секциях, 3 этажа на каждой.';
     const normalizedRequest = normalizeInitialRequest(userMessage);

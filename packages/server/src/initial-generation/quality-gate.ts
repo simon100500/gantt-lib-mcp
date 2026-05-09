@@ -138,6 +138,20 @@ function isFlatWorklistMode(context: QualityGateContext): boolean {
     && (context.normalizedRequest?.explicitWorkItems.length ?? context.brief.explicitWorkItems?.length ?? 0) >= 3;
 }
 
+function hasExplicitPerItemScheduleFacts(context: QualityGateContext | undefined): boolean {
+  const explicitScheduleItems = context?.normalizedRequest?.explicitScheduleItems ?? [];
+  if (explicitScheduleItems.length < 3) {
+    return false;
+  }
+
+  return explicitScheduleItems.every((item) =>
+    Boolean(
+      (item.startDate && item.endDate)
+      || item.durationDays
+      || (item.endDate && item.durationDays),
+    ));
+}
+
 function evaluateModeAwareStructure(
   structure: StructuredProjectPlan,
   context: QualityGateContext,
@@ -391,7 +405,7 @@ export function evaluateSchedulingQuality(
     }
   }
 
-  if (metrics.dependencyCount < Math.max(1, Math.floor(metrics.taskCount / 3))) {
+  if (!hasExplicitPerItemScheduleFacts(context) && metrics.dependencyCount < Math.max(1, Math.floor(metrics.taskCount / 3))) {
     reasons.push('missing_dependency_graph');
   }
 

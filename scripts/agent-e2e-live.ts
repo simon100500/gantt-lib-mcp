@@ -1,9 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import dotenv from 'dotenv';
-import { query, isSDKAssistantMessage, isSDKPartialAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
 
 dotenv.config({ path: join(process.cwd(), '.env') });
 
@@ -28,6 +28,9 @@ const {
 const {
   selectAgentRoute,
 } = await import('../packages/server/dist/initial-generation/route-selection.js');
+const {
+  completeTextPrompt,
+} = await import('../packages/server/dist/agent/pi-model.js');
 
 type TaskSnapshot = {
   id: string;
@@ -82,6 +85,10 @@ type ScenarioExpectation = {
   parentTask?: {
     taskName: string;
     parentName: string;
+  };
+  directListMatch?: {
+    sourceFile: string;
+    minMatchRatio: number;
   };
 };
 
@@ -159,7 +166,18 @@ const env = {
 };
 
 const ARTIFACT_ROOT = join(process.cwd(), '.artifacts', 'agent-e2e');
-const REPORT_LABEL = process.argv[2]?.trim() || `run-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+const cliArgs = process.argv.slice(2);
+const REPORT_LABEL = cliArgs.find((arg) => !arg.startsWith('--'))?.trim() || `run-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+const SCENARIO_FILTER = (() => {
+  const index = cliArgs.findIndex((arg) => arg === '--scenario');
+  return index >= 0 ? cliArgs[index + 1]?.trim() ?? '' : '';
+})();
+
+type DirectListExpectationEntry = {
+  title: string;
+  startDate: string;
+  endDate: string;
+};
 
 function normalizeName(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -177,6 +195,33 @@ function diffDaysInclusive(startDate: string, endDate: string): number {
 
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
+}
+
+function parseDirectListExpectation(filePath: string): DirectListExpectationEntry[] {
+  const content = readFileSync(filePath, 'utf8');
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(?<title>.+?)\s+[–—-]\s+(?<start>\d{2}\.\d{2}\.\d{4})\s+[–—-]\s+(?<end>\d{2}\.\d{2}\.\d{4})$/u);
+      if (!match?.groups) {
+        return null;
+      }
+
+      const [, startDay, startMonth, startYear] = match.groups.start.match(/^(\d{2})\.(\d{2})\.(\d{4})$/u) ?? [];
+      const [, endDay, endMonth, endYear] = match.groups.end.match(/^(\d{2})\.(\d{2})\.(\d{4})$/u) ?? [];
+      if (!startDay || !startMonth || !startYear || !endDay || !endMonth || !endYear) {
+        return null;
+      }
+
+      return {
+        title: match.groups.title.trim(),
+        startDate: `${startYear}-${startMonth}-${startDay}`,
+        endDate: `${endYear}-${endMonth}-${endDay}`,
+      };
+    })
+    .filter((entry): entry is DirectListExpectationEntry => entry !== null);
 }
 
 function buildCloseoutFixture(): FixtureSnapshot {
@@ -222,6 +267,20 @@ const FIXTURES: Record<Exclude<Scenario['fixture'], 'empty'>, FixtureSnapshot> =
 };
 
 const SCENARIOS: Scenario[] = [
+  {
+    id: 'direct-list-explicit-dates',
+    origin: 'synthetic',
+    description: 'Initial generation should preserve a direct list of dated tasks without regrouping or date drift',
+    userMessage: readFileSync(join(process.cwd(), '.artifacts', 'agent-e2e', 'direct-list.md'), 'utf8'),
+    fixture: 'empty',
+    expectation: {
+      route: 'initial_generation',
+      directListMatch: {
+        sourceFile: join(process.cwd(), '.artifacts', 'agent-e2e', 'direct-list.md'),
+        minMatchRatio: 0.8,
+      },
+    },
+  },
   {
     id: 'log-initial-operator-room',
     origin: 'log',
@@ -422,71 +481,16 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
-function buildSdkEnv(extraEnv: Record<string, string> = {}): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-    ...extraEnv,
-  };
-
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
-  }
-
-  return sdkEnv;
-}
-
-function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
-  return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
-    .map((block) => block.text ?? '')
-    .join('');
-}
-
 async function executeInitialGenerationPlannerQuery(prompt: string, model: string): Promise<string> {
-  const session = query({
-    prompt,
-    options: {
-      authType: 'openai',
-      model,
-      cwd: process.cwd(),
-      permissionMode: 'yolo',
-      env: buildSdkEnv(),
-      maxSessionTurns: 3,
+  return completeTextPrompt({
+    env: {
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      OPENAI_MODEL: model,
     },
+    prompt,
+    maxTokens: 4096,
   });
-
-  let content = '';
-  for await (const event of session) {
-    if (isSDKPartialAssistantMessage(event)) {
-      continue;
-    }
-
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'initial generation planner failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
-
-  if (content.trim().length === 0) {
-    throw new Error('initial generation planner returned empty response');
-  }
-
-  return content;
 }
 
 async function fetchSourceLogMessage(requestContextId: string | undefined): Promise<ScenarioResult['sourceLogMessage']> {
@@ -910,6 +914,21 @@ function evaluateStructuralExpectations(
     }
   }
 
+  if (scenario.expectation.directListMatch) {
+    const expectedEntries = parseDirectListExpectation(scenario.expectation.directListMatch.sourceFile);
+    const matchedCount = expectedEntries.filter((entry) => afterTasks.some((task) =>
+      normalizeName(task.name) === normalizeName(entry.title)
+      && task.startDate === entry.startDate
+      && task.endDate === entry.endDate)).length;
+    const ratio = expectedEntries.length === 0 ? 0 : matchedCount / expectedEntries.length;
+    if (ratio < scenario.expectation.directListMatch.minMatchRatio) {
+      pass = false;
+      notes.push(`direct list match ratio ${ratio.toFixed(2)} < expected ${scenario.expectation.directListMatch.minMatchRatio.toFixed(2)} (${matchedCount}/${expectedEntries.length})`);
+    } else {
+      notes.push(`direct list match ratio ${ratio.toFixed(2)} (${matchedCount}/${expectedEntries.length})`);
+    }
+  }
+
   return { pass, notes };
 }
 
@@ -923,6 +942,17 @@ async function callJudge(input: {
   afterTasks: Array<{ id: string; name: string; parentId?: string; startDate: string; endDate: string }>;
   diffLines: string[];
 }): Promise<JudgeVerdict> {
+  if (input.scenario.expectation.directListMatch) {
+    return {
+      verdict: input.hardError || !input.structuralPass ? 'failure' : 'success',
+      matchedRequest: !input.hardError && input.structuralPass,
+      hasError: input.hardError || !input.structuralPass,
+      score: input.hardError || !input.structuralPass ? 0 : 1,
+      explanation: 'Direct-list evaluation uses structural fidelity to the explicit user-supplied list as the primary acceptance gate.',
+      issues: input.structuralNotes,
+    };
+  }
+
   if (!env.OPENAI_API_KEY) {
     return {
       verdict: input.hardError || !input.structuralPass ? 'failure' : 'success',
@@ -1185,7 +1215,15 @@ async function main(): Promise<void> {
   const owner = await resolveOwnerContext();
   const results: ScenarioResult[] = [];
 
-  for (const scenario of SCENARIOS) {
+  const scenariosToRun = SCENARIO_FILTER
+    ? SCENARIOS.filter((scenario) => scenario.id === SCENARIO_FILTER)
+    : SCENARIOS;
+
+  if (SCENARIO_FILTER && scenariosToRun.length === 0) {
+    throw new Error(`Scenario not found: ${SCENARIO_FILTER}`);
+  }
+
+  for (const scenario of scenariosToRun) {
     console.log(`[agent-e2e] running ${scenario.id}`);
     const result = await runScenario(owner, scenario);
     results.push(result);
