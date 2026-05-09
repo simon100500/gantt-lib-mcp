@@ -49,6 +49,7 @@ import { registerGrandSmetaImportRoutes } from './routes/grand-smeta-import-rout
 import { registerHistoryRoutes } from './routes/history-routes.js';
 import { registerResourceRoutes } from './routes/resource-routes.js';
 import { registerTemplateRoutes } from './routes/template-routes.js';
+import { registerTemplatePublicationRoutes } from './routes/template-publication-routes.js';
 import { registerWorkProgressRoutes } from './routes/work-progress-routes.js';
 import { writeServerDebugLog } from './debug-log.js';
 import { isAdminEmail } from './middleware/admin-middleware.js';
@@ -76,6 +77,7 @@ await registerGrandSmetaImportRoutes(fastify);
 await registerHistoryRoutes(fastify);
 await registerResourceRoutes(fastify);
 await registerTemplateRoutes(fastify);
+await registerTemplatePublicationRoutes(fastify);
 await registerWorkProgressRoutes(fastify);
 
 // ---------------------------------------------------------------------------

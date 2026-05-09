@@ -1,0 +1,29 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { fetchSitePublicationList } from "../../lib/publications";
+
+const publications = await fetchSitePublicationList('template');
+---
+
+<Layout
+  title="Шаблоны проектов — GetGantt"
+  description="Публичный каталог шаблонов проектов GetGantt для SEO и быстрого старта в продукте."
+>
+  <section class="mx-auto max-w-6xl px-4 py-16">
+    <h1 class="text-4xl font-extrabold text-slate-950">Шаблоны проектов</h1>
+    <p class="mt-4 max-w-3xl text-lg text-slate-600">
+      Каталог публичных шаблонов GetGantt. Каждый шаблон собирается из зафиксированного snapshot, а не из live-проекта.
+    </p>
+
+    <div class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      {publications.map((publication) => (
+        <a href={`/templates/${publication.slug}`} class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+          <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">{publication.category ?? "Template"}</div>
+          <h2 class="mt-3 text-2xl font-bold text-slate-950">{publication.title}</h2>
+          <p class="mt-3 text-sm leading-6 text-slate-600">{publication.summary ?? publication.subtitle ?? "Публичный шаблон проекта"}</p>
+          <div class="mt-4 text-sm text-slate-500">{publication.taskCount} задач</div>
+        </a>
+      ))}
+    </div>
+  </section>
+</Layout>

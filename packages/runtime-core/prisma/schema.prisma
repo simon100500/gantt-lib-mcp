@@ -132,6 +132,32 @@ enum TemplateSourceKind {
   task_selection
 }
 
+enum TemplatePublicationKind {
+  template
+  block
+}
+
+enum TemplatePublicationStatus {
+  draft
+  published
+  archived
+  rejected
+}
+
+enum TemplatePublicationVisibility {
+  private
+  marketplace
+  site
+  both
+}
+
+enum TemplatePublicationVerificationStatus {
+  unverified
+  reviewed
+  verified
+  editorial
+}
+
 enum ProjectGroupMemberRole {
   editor
   viewer
@@ -160,6 +186,7 @@ model User {
   projects        Project[]
   projectGroups   ProjectGroup[]
   templates       Template[]
+  templatePublications TemplatePublication[] @relation("TemplatePublicationSourceUser")
   resources       Resource[]
   sessions        Session[]
   subscriptions   Subscription[]
@@ -266,6 +293,7 @@ model Project {
   messages       Message[]
   agentSessionState AgentSessionState?
   shareLinks     ShareLink[]
+  templatePublications TemplatePublication[] @relation("TemplatePublicationSourceProject")
   projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
   baselines      Baseline[]
@@ -589,6 +617,7 @@ model Template {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   owner        User                 @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  publications TemplatePublication[] @relation("TemplatePublicationSourceTemplate")
   tasks        TemplateTask[]
   dependencies TemplateDependency[]
 
@@ -632,6 +661,49 @@ model TemplateDependency {
   @@index([templateId])
   @@index([templateId, sourceLocalId])
   @@index([templateId, targetLocalId])
+}
+
+model TemplatePublication {
+  id                 String                               @id @default(uuid())
+  slug               String                               @unique
+  kind               TemplatePublicationKind
+  sourceProjectId    String                               @map("source_project_id")
+  sourceUserId       String                               @map("source_user_id")
+  sourceTemplateId   String?                              @map("source_template_id")
+  sourceKind         TemplateSourceKind                   @map("source_kind")
+  sourceSelectionTaskIds String[]                         @default([]) @map("source_selection_task_ids")
+  title              String
+  subtitle           String?
+  summary            String?
+  category           String?
+  industry           String?
+  tags               String[]                             @default([])
+  status             TemplatePublicationStatus            @default(draft)
+  visibility         TemplatePublicationVisibility        @default(private)
+  verificationStatus TemplatePublicationVerificationStatus @default(unverified) @map("verification_status")
+  seoTitle           String?                              @map("seo_title")
+  seoDescription     String?                              @map("seo_description")
+  seoBody            String?                              @map("seo_body")
+  coverImageUrl      String?                              @map("cover_image_url")
+  previewImageUrl    String?                              @map("preview_image_url")
+  snapshot           Json
+  taskCount          Int                                  @default(0) @map("task_count")
+  publishedAt        DateTime?                            @map("published_at")
+  archivedAt         DateTime?                            @map("archived_at")
+  createdAt          DateTime                             @default(now()) @map("created_at")
+  updatedAt          DateTime                             @updatedAt @map("updated_at")
+
+  sourceProject  Project  @relation("TemplatePublicationSourceProject", fields: [sourceProjectId], references: [id], onDelete: Cascade)
+  sourceUser     User     @relation("TemplatePublicationSourceUser", fields: [sourceUserId], references: [id], onDelete: Cascade)
+  sourceTemplate Template? @relation("TemplatePublicationSourceTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+
+  @@map("template_publications")
+  @@index([sourceProjectId, updatedAt(sort: Desc)])
+  @@index([sourceUserId, updatedAt(sort: Desc)])
+  @@index([kind, status, visibility, verificationStatus])
+  @@index([status, visibility, verificationStatus, updatedAt(sort: Desc)])
+  @@index([category, kind])
+  @@index([industry, kind])
 }
 
 // Messages table

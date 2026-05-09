@@ -801,6 +801,144 @@ export interface InsertTemplateInput {
   placement: 'after' | 'inside';
 }
 
+export type TemplatePublicationKind = 'template' | 'block';
+export type TemplatePublicationStatus = 'draft' | 'published' | 'archived' | 'rejected';
+export type TemplatePublicationVisibility = 'private' | 'marketplace' | 'site' | 'both';
+export type TemplatePublicationVerificationStatus = 'unverified' | 'reviewed' | 'verified' | 'editorial';
+export type PublicationVisibilityTarget = 'marketplace' | 'site';
+
+export interface TemplatePublicationSnapshot {
+  tasks: Task[];
+  dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number }>;
+  ganttDayMode: GanttDayMode;
+  calendarDays: EffectiveCalendarDay[];
+  timelineMarkers: TimelineMarker[];
+}
+
+export interface TemplatePublicationItem {
+  id: string;
+  slug: string;
+  kind: TemplatePublicationKind;
+  sourceProjectId: string;
+  sourceUserId: string;
+  sourceTemplateId: string | null;
+  sourceKind: TemplateSourceKind;
+  sourceSelectionTaskIds: string[];
+  title: string;
+  subtitle: string | null;
+  summary: string | null;
+  category: string | null;
+  industry: string | null;
+  tags: string[];
+  status: TemplatePublicationStatus;
+  visibility: TemplatePublicationVisibility;
+  verificationStatus: TemplatePublicationVerificationStatus;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoBody: string | null;
+  coverImageUrl: string | null;
+  previewImageUrl: string | null;
+  taskCount: number;
+  publishedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplatePublicationDetail extends TemplatePublicationItem {
+  snapshot: TemplatePublicationSnapshot;
+}
+
+export interface ListTemplatePublicationsInput {
+  kind?: TemplatePublicationKind;
+  status?: TemplatePublicationStatus;
+  visibility?: TemplatePublicationVisibility;
+  visibilityTarget?: PublicationVisibilityTarget;
+  verificationStatus?: TemplatePublicationVerificationStatus;
+  category?: string;
+  industry?: string;
+  tag?: string;
+  query?: string;
+  sourceUserId?: string;
+  includeNonPublic?: boolean;
+}
+
+export interface ListTemplatePublicationsResponse {
+  publications: TemplatePublicationItem[];
+}
+
+export interface GetTemplatePublicationInput {
+  publicationId: string;
+}
+
+export interface GetTemplatePublicationBySlugInput {
+  slug: string;
+  visibilityTarget?: PublicationVisibilityTarget;
+}
+
+export interface CreateTemplatePublicationFromProjectInput {
+  sourceUserId: string;
+  projectId: string;
+  kind: TemplatePublicationKind;
+  title: string;
+  slug?: string;
+  subtitle?: string;
+  summary?: string;
+  category?: string;
+  industry?: string;
+  tags?: string[];
+  status?: TemplatePublicationStatus;
+  visibility?: TemplatePublicationVisibility;
+  verificationStatus?: TemplatePublicationVerificationStatus;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoBody?: string;
+  coverImageUrl?: string;
+  previewImageUrl?: string;
+  sourceTemplateId?: string;
+}
+
+export interface CreateTemplatePublicationFromSelectionInput extends CreateTemplatePublicationFromProjectInput {
+  rootTaskIds: string[];
+}
+
+export interface UpdateTemplatePublicationInput {
+  publicationId: string;
+  title?: string;
+  slug?: string;
+  subtitle?: string | null;
+  summary?: string | null;
+  category?: string | null;
+  industry?: string | null;
+  tags?: string[];
+  status?: TemplatePublicationStatus;
+  visibility?: TemplatePublicationVisibility;
+  verificationStatus?: TemplatePublicationVerificationStatus;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoBody?: string | null;
+  coverImageUrl?: string | null;
+  previewImageUrl?: string | null;
+}
+
+export interface RepublishTemplatePublicationInput {
+  publicationId: string;
+}
+
+export interface CreateProjectFromTemplatePublicationInput {
+  publicationId: string;
+  ownerUserId: string;
+  groupId?: string;
+  projectName?: string;
+}
+
+export interface InsertTemplatePublicationInput {
+  publicationId: string;
+  projectId: string;
+  anchorTaskId: string;
+  placement: 'after' | 'inside';
+}
+
 export type ProjectSnapshot = {
   tasks: Task[];
   dependencies: Array<{ id: string; taskId: string; depTaskId: string; type: DependencyType; lag: number }>;

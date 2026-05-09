@@ -182,7 +182,7 @@ export default function DemoSection() {
               <br className="hidden sm:block" /> Легко управлять
             </h2>
             <p className="mx-auto mt-8 max-w-2xl text-base leading-7 text-slate-500 sm:text-xl sm:leading-8">
-              Новый стандарт графиков Ганта. Просто, красиво, онлайн.
+              Новый стандарт диаграмм Ганта с мощными ИИ функциями. Просто, красиво, онлайн.
             </p>
 
             <div className="mt-8">

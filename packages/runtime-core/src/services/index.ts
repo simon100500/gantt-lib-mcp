@@ -20,6 +20,8 @@ export { plannerService } from './planner.service.js';
 export { PlannerService, PlannerValidationError } from './planner.service.js';
 export { templateService } from './template.service.js';
 export { TemplateService, TemplateValidationError } from './template.service.js';
+export { templatePublicationService } from './template-publication.service.js';
+export { TemplatePublicationService, TemplatePublicationValidationError } from './template-publication.service.js';
 export {
   enforcementService,
   createEnforcementService,
