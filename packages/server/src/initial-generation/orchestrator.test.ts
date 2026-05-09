@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
@@ -32,9 +35,10 @@ function createCommitResponse(newVersion: number): Extract<CommitProjectCommandR
 }
 
 function createHarness(options?: {
-  plannerQuery?: (input: { stage: string; prompt: string; model: string }) => Promise<string | { content?: string }>;
+  plannerQuery?: (input: { stage: string; prompt: string; model: string; onTextDelta?: (delta: string, fullText: string) => Promise<void> | void }) => Promise<string | { content?: string }>;
   commitReject?: boolean;
   deps?: Record<string, unknown>;
+  routingEnv?: Record<string, string>;
   taskService?: {
     list(projectId: string): Promise<{ tasks: HarnessTask[] }>;
     listAll(projectId: string): Promise<HarnessTask[]>;
@@ -71,6 +75,7 @@ function createHarness(options?: {
         selectedModel: 'gpt-cheap',
         reason: 'mutation_prefers_cheap_model' as const,
       },
+      routingEnv: options?.routingEnv,
       plannerQuery: options?.plannerQuery ?? (async ({ stage }) => {
         if (stage === 'structure_planning') {
           return JSON.stringify({
@@ -660,6 +665,156 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_request').length, 4);
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_response').length, 4);
     assert.equal(harness.events.find((entry) => entry.event === 'structure_gate_verdict')?.payload.accepted, false);
+  });
+
+  it('coalesces redundant late scheduled preview replays and writes debug capture artifacts', async () => {
+    const debugDir = await mkdtemp(join(tmpdir(), 'gantt-init-debug-'));
+    const scheduleStreamPayload = JSON.stringify({
+      projectType: 'renovation',
+      assumptions: [],
+      phases: [{
+        phaseKey: 'user-worklist',
+        title: 'Core work',
+        subphases: [{
+          subphaseKey: 'user-work-items',
+          title: 'Core work',
+          tasks: [
+            {
+              taskKey: 'demontazh-okon',
+              title: 'Window demolition',
+              durationDays: 2,
+              dependsOn: [],
+              startDate: '2026-04-08',
+              endDate: '2026-04-09',
+            },
+            {
+              taskKey: 'gruntovanie-sten',
+              title: 'Wall priming',
+              durationDays: 2,
+              dependsOn: [],
+              startDate: '2026-04-10',
+              endDate: '2026-04-11',
+            },
+            {
+              taskKey: 'okraska-sten',
+              title: 'Wall painting',
+              durationDays: 2,
+              dependsOn: [],
+              startDate: '2026-04-12',
+              endDate: '2026-04-13',
+            },
+          ],
+        }],
+      }],
+    });
+    const finalScheduledPayload = JSON.stringify({
+      projectType: 'renovation',
+      assumptions: [],
+      phases: [{
+        phaseKey: 'user-worklist',
+        title: 'Основные работы',
+        subphases: [{
+          subphaseKey: 'user-work-items',
+          title: 'Основные работы',
+          tasks: [
+            {
+              taskKey: 'demontazh-okon',
+              title: 'Демонтаж окон',
+              durationDays: 2,
+              dependsOn: [],
+              startDate: '2026-04-08',
+              endDate: '2026-04-09',
+            },
+            {
+              taskKey: 'gruntovanie-sten',
+              title: 'Грунтование стен',
+              durationDays: 2,
+              dependsOn: [{ taskKey: 'demontazh-okon', type: 'FS', lagDays: 0 }],
+              startDate: '2026-04-10',
+              endDate: '2026-04-11',
+            },
+            {
+              taskKey: 'okraska-sten',
+              title: 'Окраска стен',
+              durationDays: 2,
+              dependsOn: [{ taskKey: 'gruntovanie-sten', type: 'FS', lagDays: 0 }],
+              startDate: '2026-04-12',
+              endDate: '2026-04-13',
+            },
+          ],
+        }],
+      }],
+    });
+    const harness = createHarness({
+      deps: {
+        async interpretRequest() {
+          return {
+            interpretation: {
+              route: 'initial_generation',
+              confidence: 0.9,
+              requestKind: 'explicit_worklist',
+              planningMode: 'worklist_bootstrap',
+              scopeMode: 'explicit_worklist',
+              objectProfile: 'unknown',
+              projectArchetype: 'renovation',
+              locationScope: {
+                sections: [],
+                floors: [],
+                zones: [],
+              },
+              worklistPolicy: 'strict_worklist',
+              clarification: {
+                needed: false,
+                reason: 'none',
+              },
+              signals: ['explicit_worklist'],
+            },
+            usedModelDecision: true,
+            repairAttempted: false,
+            fallbackReason: 'none',
+          };
+        },
+      },
+      routingEnv: {
+        INITIAL_GENERATION_DEBUG_CAPTURE: '1',
+        INITIAL_GENERATION_DEBUG_CAPTURE_DIR: debugDir,
+      },
+      plannerQuery: async (input) => {
+        if (input.stage === 'schedule_metadata') {
+          await input.onTextDelta?.(scheduleStreamPayload, scheduleStreamPayload);
+          return finalScheduledPayload;
+        }
+
+        throw new Error(`Unexpected stage ${input.stage}`);
+      },
+    });
+    harness.input.userMessage = [
+      'Виды работ:',
+      '1. Демонтаж окон',
+      '2. Грунтование стен',
+      '3. Окраска стен',
+    ].join('\n');
+
+    const result = await runInitialGeneration(harness.input);
+
+    assert.equal(result.ok, true);
+    const scheduledPreviewEvents = harness.events.filter((entry) =>
+      entry.event === 'preview_tasks_broadcast' && entry.payload.source === 'scheduled_tasks');
+    assert.equal(scheduledPreviewEvents.length, 1);
+    const previewBroadcasts = harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks_replace');
+    assert.equal(previewBroadcasts.length, 3);
+    assert.equal(previewBroadcasts[2]?.message.tasks?.length, 5);
+
+    const debugArtifact = JSON.parse(await readFile(join(debugDir, 'run-41.json'), 'utf-8')) as {
+      outcome: string;
+      plannerStreams: { scheduled: { deltas: string[] } };
+      previewWaves: Array<{ source: string; taskCount: number }>;
+      finalTasks: Array<{ id: string }>;
+    };
+    assert.equal(debugArtifact.outcome, 'complete');
+    assert.equal(debugArtifact.plannerStreams.scheduled.deltas.length, 1);
+    assert.equal(debugArtifact.previewWaves.some((wave) => wave.source === 'scheduled_tasks' && wave.taskCount === 5), true);
+    assert.equal(Array.isArray(debugArtifact.finalTasks), true);
   });
 
   it('returns compile failure if the final commit is rejected', async () => {

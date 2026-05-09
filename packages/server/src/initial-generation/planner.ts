@@ -33,6 +33,7 @@ import type {
   StructuredTask,
   StructureQualityVerdict,
 } from './types.js';
+import { shouldTreatAsStrictExplicitWorklist } from './worklist-policy.js';
 
 function slugify(value: string): string {
   const map: Record<string, string> = {
@@ -145,9 +146,48 @@ function deriveWorklistSubphaseTitle(phaseTitle: string, taskTitles: string[]): 
   return phaseTitle;
 }
 
+function normalizeHierarchyTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ё/gu, 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function shouldCollapseDegenerateSubphase(
+  phaseTitle: string,
+  subphaseTitle: string,
+  taskTitles: string[],
+): boolean {
+  if (taskTitles.length !== 1) {
+    return false;
+  }
+
+  const normalizedPhase = normalizeHierarchyTitle(phaseTitle);
+  const normalizedSubphase = normalizeHierarchyTitle(subphaseTitle);
+  const normalizedTask = normalizeHierarchyTitle(taskTitles[0] ?? '');
+  if (!normalizedSubphase) {
+    return false;
+  }
+
+  return normalizedSubphase === normalizedPhase
+    || normalizedSubphase === normalizedTask
+    || normalizedPhase.includes(normalizedSubphase)
+    || normalizedSubphase.includes(normalizedPhase)
+    || normalizedTask.includes(normalizedSubphase)
+    || normalizedSubphase.includes(normalizedTask);
+}
+
 function isFlatExplicitWorklist(input: PlanInitialProjectInput): boolean {
   return (input.classification?.planningMode ?? input.brief.planningMode) === 'worklist_bootstrap'
-    && (input.normalizedRequest?.explicitWorkItems.length ?? input.brief.explicitWorkItems?.length ?? 0) >= 3;
+    && shouldTreatAsStrictExplicitWorklist({
+      userMessage: input.userMessage,
+      normalizedRequest: input.normalizedRequest ?? {
+        normalizedRequest: input.userMessage,
+        explicitWorkItems: input.brief.explicitWorkItems ?? [],
+      },
+    });
 }
 
 function buildFlatWorklistStructure(input: PlanInitialProjectInput): StructuredProjectPlan {
@@ -610,7 +650,12 @@ function flattenScheduledPlan(plan: ScheduledProjectPlan, options?: { collapseSi
     });
 
     for (const subphase of phase.subphases) {
-      const collapseSubphase = collapseSingleSubphaseWorklist && phase.subphases.length === 1;
+      const collapseSubphase = (collapseSingleSubphaseWorklist && phase.subphases.length === 1)
+        || shouldCollapseDegenerateSubphase(
+          phase.title,
+          subphase.title,
+          subphase.tasks.map((task) => task.title),
+        );
       if (!collapseSubphase) {
         nodes.push({
           nodeKey: subphase.subphaseKey,

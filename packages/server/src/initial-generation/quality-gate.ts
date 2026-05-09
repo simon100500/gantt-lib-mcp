@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 import type { DomainSkeleton } from './domain/contracts.js';
 import { isEnumerativeTitle, isTitleTooLong } from './title-policy.js';
+import { shouldTreatAsStrictExplicitWorklist } from './worklist-policy.js';
 
 const PLACEHOLDER_TITLE_PATTERN = /^(?:этап|подэтап|задача|phase|subphase|task)\s+\d+$/i;
 const GENERIC_TITLE_PATTERN = /^(?:строительн(?:ые)?\s+работы|общ(?:ие)?\s+работы|работы|construction works|general works|phase|stage|subphase|task)$/i;
@@ -135,7 +136,14 @@ function getMode(context: QualityGateContext | undefined): GenerationBrief['plan
 
 function isFlatWorklistMode(context: QualityGateContext): boolean {
   return getMode(context) === 'worklist_bootstrap'
-    && (context.normalizedRequest?.explicitWorkItems.length ?? context.brief.explicitWorkItems?.length ?? 0) >= 3;
+    && shouldTreatAsStrictExplicitWorklist({
+      userMessage: context.userMessage,
+      normalizedRequest: {
+        normalizedRequest: context.normalizedRequest?.normalizedRequest ?? context.userMessage,
+        explicitWorkItems: context.normalizedRequest?.explicitWorkItems ?? context.brief.explicitWorkItems ?? [],
+        explicitScheduleItems: context.normalizedRequest?.explicitScheduleItems,
+      },
+    });
 }
 
 function hasExplicitPerItemScheduleFacts(context: QualityGateContext | undefined): boolean {

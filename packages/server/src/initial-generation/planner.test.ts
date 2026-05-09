@@ -477,6 +477,61 @@ describe('initial-generation planner', () => {
     assert.equal(result.schedulingVerdict.accepted, true);
   });
 
+  it('collapses meaningless single-child subphase chains in the executable plan', async () => {
+    const result = await planInitialProject({
+      userMessage: 'Сделай стартовый график',
+      brief: buildGenerationBrief({
+        userMessage: 'Сделай стартовый график',
+      }),
+      structureModelDecision: { selectedModel: 'gpt-strong' },
+      schedulingModelDecision: { selectedModel: 'gpt-cheap' },
+      sdkQuery: async ({ stage }) => {
+        if (stage === 'structure_planning') {
+          return JSON.stringify({
+            projectType: 'renovation',
+            assumptions: [],
+            phases: [{
+              phaseKey: 'phase-shell',
+              title: 'Монтаж окон',
+              subphases: [{
+                subphaseKey: 'subphase-shell',
+                title: 'Монтаж окон',
+                tasks: [{ taskKey: 'task-shell', title: 'Монтаж окон' }],
+              }],
+            }],
+          });
+        }
+
+        return JSON.stringify({
+          projectType: 'renovation',
+          assumptions: [],
+          phases: [{
+            phaseKey: 'phase-shell',
+            title: 'Монтаж окон',
+            subphases: [{
+              subphaseKey: 'subphase-shell',
+              title: 'Монтаж окон',
+              tasks: [{
+                taskKey: 'task-shell',
+                title: 'Монтаж окон',
+                durationDays: 2,
+                dependsOn: [],
+              }],
+            }],
+          }],
+        });
+      },
+    });
+
+    assert.deepEqual(
+      result.plan.nodes.map((node) => ({ kind: node.kind, title: node.title, parentNodeKey: node.parentNodeKey })),
+      [
+        { kind: 'phase', title: 'Монтаж окон', parentNodeKey: undefined },
+        { kind: 'task', title: 'Монтаж окон', parentNodeKey: 'phase-shell' },
+      ],
+    );
+  });
+
   it('adds a section-floor decomposition rule when counts are explicit in the request', () => {
     const userMessage = 'График каменной кладки внутренних и наружных стен: на 5 секциях, 3 этажа на каждой.';
     const normalizedRequest = normalizeInitialRequest(userMessage);

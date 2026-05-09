@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
 
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 import type { ScheduleCommandOptions } from '@gantt/mcp/types';
@@ -225,8 +227,61 @@ type LoosePreviewEntity = {
   order: number;
 };
 
+type PreviewWaveSource = 'structure_phases' | 'structure_subphases' | 'scheduled_tasks';
+
+type PreviewDebugWave = {
+  wave: number;
+  source: PreviewWaveSource;
+  taskCount: number;
+  tree: Array<{ id: string; name: string; parentId?: string }>;
+};
+
+type InitialGenerationDebugCapture = {
+  enabled: boolean;
+  outputDir: string;
+  plannerStreams: {
+    structure: { deltas: string[]; latestFullText: string };
+    scheduled: { deltas: string[]; latestFullText: string };
+  };
+  previewWaves: PreviewDebugWave[];
+  finalTasks: Array<{ id: string; name: string; parentId?: string }>;
+};
+
 function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeHierarchyTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ё/gu, 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function shouldCollapsePreviewSubphase(
+  phaseTitle: string,
+  subphaseTitle: string,
+  taskTitles: string[],
+): boolean {
+  if (taskTitles.length !== 1) {
+    return false;
+  }
+
+  const normalizedPhase = normalizeHierarchyTitle(phaseTitle);
+  const normalizedSubphase = normalizeHierarchyTitle(subphaseTitle);
+  const normalizedTask = normalizeHierarchyTitle(taskTitles[0] ?? '');
+  if (!normalizedSubphase) {
+    return false;
+  }
+
+  return normalizedSubphase === normalizedPhase
+    || normalizedSubphase === normalizedTask
+    || normalizedPhase.includes(normalizedSubphase)
+    || normalizedSubphase.includes(normalizedPhase)
+    || normalizedTask.includes(normalizedSubphase)
+    || normalizedSubphase.includes(normalizedTask);
 }
 
 function parseLoosePreviewEntities(rawText: string): LoosePreviewEntity[] {
@@ -374,6 +429,17 @@ function buildPreviewSignature(tasks: PreviewTaskMessage[]): string {
     .join('\n');
 }
 
+function buildPreviewSemanticSignature(tasks: PreviewTaskMessage[]): string {
+  return tasks
+    .map((task) => [
+      task.id,
+      task.parentId ?? '',
+      task.startDate,
+      task.endDate,
+    ].join('|'))
+    .join('\n');
+}
+
 function mergePreviewTasks(
   currentTasks: PreviewTaskMessage[],
   incomingTasks: PreviewTaskMessage[],
@@ -428,6 +494,10 @@ function buildStructurePreviewTasks(
     });
 
     for (const subphase of phase.subphases) {
+      if (shouldCollapsePreviewSubphase(phase.title, subphase.title, subphase.tasks.map((task) => task.title))) {
+        continue;
+      }
+
       rows.push({
         id: buildPreviewId(subphase.subphaseKey),
         name: subphase.title,
@@ -482,14 +552,21 @@ function buildScheduledPreviewTasks(
         ? subphaseTaskDates.reduce((max, entry) => entry.endDate > max ? entry.endDate : max, subphaseTaskDates[0]!.endDate)
         : anchorDate;
 
-      rows.push({
-        id: buildPreviewId(subphase.subphaseKey),
-        name: subphase.title,
-        startDate: subphaseStartDate,
-        endDate: subphaseEndDate,
-        parentId: buildPreviewId(phase.phaseKey),
-        sortOrder: sortOrder++,
-      });
+      const collapseSubphase = shouldCollapsePreviewSubphase(
+        phase.title,
+        subphase.title,
+        subphase.tasks.map((task) => task.title),
+      );
+      if (!collapseSubphase) {
+        rows.push({
+          id: buildPreviewId(subphase.subphaseKey),
+          name: subphase.title,
+          startDate: subphaseStartDate,
+          endDate: subphaseEndDate,
+          parentId: buildPreviewId(phase.phaseKey),
+          sortOrder: sortOrder++,
+        });
+      }
 
       for (const task of subphase.tasks) {
         const taskStartDate = task.startDate ?? anchorDate;
@@ -499,7 +576,7 @@ function buildScheduledPreviewTasks(
           name: task.title,
           startDate: taskStartDate,
           endDate: taskEndDate,
-          parentId: buildPreviewId(subphase.subphaseKey),
+          parentId: collapseSubphase ? buildPreviewId(phase.phaseKey) : buildPreviewId(subphase.subphaseKey),
           dependencies: task.dependsOn.map((dependency) => ({
             taskId: buildPreviewId(dependency.nodeKey),
             type: dependency.type,
@@ -518,7 +595,8 @@ async function broadcastPreviewWave(
   input: RunInitialGenerationInput,
   waveNumber: number,
   previewTasks: PreviewTaskMessage[],
-  source: 'structure_phases' | 'structure_subphases' | 'scheduled_tasks',
+  source: PreviewWaveSource,
+  debugCapture?: InitialGenerationDebugCapture,
 ): Promise<void> {
   input.broadcastToSession(input.sessionId, {
     type: 'preview_tasks_replace',
@@ -535,6 +613,16 @@ async function broadcastPreviewWave(
     taskCount: previewTasks.length,
     taskIds: previewTasks.map((task) => task.id),
     taskNames: previewTasks.map((task) => task.name),
+  });
+  debugCapture?.previewWaves.push({
+    wave: waveNumber,
+    source,
+    taskCount: previewTasks.length,
+    tree: previewTasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      parentId: task.parentId,
+    })),
   });
 }
 
@@ -557,6 +645,7 @@ function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
 async function broadcastTasksSnapshot(
   input: RunInitialGenerationInput,
   reason: string,
+  debugCapture?: InitialGenerationDebugCapture,
 ): Promise<ListedTask[]> {
   const tasks = await input.services.taskService.listAll(input.projectId);
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks });
@@ -569,6 +658,13 @@ async function broadcastTasksSnapshot(
     taskIds: tasks.map((task) => task.id),
     taskNames: tasks.map((task) => task.name),
   });
+  if (debugCapture) {
+    debugCapture.finalTasks = tasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      parentId: task.parentId,
+    }));
+  }
 
   return tasks;
 }
@@ -576,13 +672,14 @@ async function broadcastTasksSnapshot(
 async function finishSuccessfulRun(
   input: RunInitialGenerationInput,
   assistantResponse: string,
+  debugCapture?: InitialGenerationDebugCapture,
   metadata?: {
     requestContextId?: string;
     historyGroupId?: string;
     systemMessage?: string | null;
   },
 ): Promise<ListedTask[]> {
-  const tasks = await broadcastTasksSnapshot(input, 'final_state');
+  const tasks = await broadcastTasksSnapshot(input, 'final_state', debugCapture);
   input.broadcastToSession(input.sessionId, { type: 'history_changed' });
   input.broadcastToSession(input.sessionId, {
     type: 'done',
@@ -596,6 +693,55 @@ async function finishSuccessfulRun(
   });
 
   return tasks;
+}
+
+function createDebugCapture(input: RunInitialGenerationInput): InitialGenerationDebugCapture | null {
+  const env = input.routingEnv ?? process.env;
+  if (env.INITIAL_GENERATION_DEBUG_CAPTURE !== '1') {
+    return null;
+  }
+
+  return {
+    enabled: true,
+    outputDir: env.INITIAL_GENERATION_DEBUG_CAPTURE_DIR ?? '.planning/debug',
+    plannerStreams: {
+      structure: { deltas: [], latestFullText: '' },
+      scheduled: { deltas: [], latestFullText: '' },
+    },
+    previewWaves: [],
+    finalTasks: [],
+  };
+}
+
+async function flushDebugCapture(
+  input: RunInitialGenerationInput,
+  debugCapture: InitialGenerationDebugCapture | null,
+  outcome: 'complete' | 'compile_failed' | 'planning_failed',
+): Promise<void> {
+  if (!debugCapture?.enabled) {
+    return;
+  }
+
+  const outputDir = resolvePath(debugCapture.outputDir);
+  await mkdir(outputDir, { recursive: true });
+  const outputPath = resolvePath(outputDir, `${input.runId}.json`);
+  await writeFile(outputPath, JSON.stringify({
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    userMessage: input.userMessage,
+    outcome,
+    plannerStreams: debugCapture.plannerStreams,
+    previewWaves: debugCapture.previewWaves,
+    finalTasks: debugCapture.finalTasks,
+  }, null, 2));
+  await input.logger.debug('initial_generation_debug_capture_written', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    outputPath,
+    outcome,
+  });
 }
 
 async function finishFailedRun(
@@ -810,8 +956,10 @@ export async function runInitialGeneration(
   let previewWaveCount = 0;
   const previewAnchorDate = getServerDate(input.serverDate);
   const streamingPreviewSignatures = new Map<'structure' | 'scheduled', string>();
+  const debugCapture = createDebugCapture(input);
   let visiblePreviewTasks: PreviewTaskMessage[] = [];
   let visiblePreviewSignature = '';
+  let visiblePreviewSemanticSignature = '';
   const historyGroupId = randomUUID();
   const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
   const emitMergedPreview = async (
@@ -820,14 +968,19 @@ export async function runInitialGeneration(
   ): Promise<void> => {
     const mergedTasks = mergePreviewTasks(visiblePreviewTasks, incomingTasks);
     const mergedSignature = buildPreviewSignature(mergedTasks);
+    const mergedSemanticSignature = buildPreviewSemanticSignature(mergedTasks);
     if (mergedSignature === visiblePreviewSignature) {
+      return;
+    }
+    if (source === 'scheduled_tasks' && mergedSemanticSignature === visiblePreviewSemanticSignature) {
       return;
     }
 
     visiblePreviewTasks = mergedTasks;
     visiblePreviewSignature = mergedSignature;
+    visiblePreviewSemanticSignature = mergedSemanticSignature;
     previewWaveCount += 1;
-    await broadcastPreviewWave(input, previewWaveCount, mergedTasks, source);
+    await broadcastPreviewWave(input, previewWaveCount, mergedTasks, source, debugCapture ?? undefined);
   };
   const maybeBroadcastStreamingPreview = async (
     family: 'structure' | 'scheduled',
@@ -869,6 +1022,13 @@ export async function runInitialGeneration(
           const family = plannerInput.stage === 'structure_planning' || plannerInput.stage === 'structure_planning_repair'
             ? 'structure'
             : 'scheduled';
+          const streamBucket = family === 'structure'
+            ? debugCapture?.plannerStreams.structure
+            : debugCapture?.plannerStreams.scheduled;
+          if (streamBucket) {
+            streamBucket.deltas.push(delta);
+            streamBucket.latestFullText = fullText;
+          }
           await maybeBroadcastStreamingPreview(family, fullText);
         },
       });
@@ -1039,6 +1199,7 @@ export async function runInitialGeneration(
       await finishFailedRun(input, assistantResponse, {
         requestContextId: input.runId,
       });
+      await flushDebugCapture(input, debugCapture, 'compile_failed');
 
       return {
         ok: false,
@@ -1062,11 +1223,12 @@ export async function runInitialGeneration(
       repairAttempted,
       assistantResponse,
     });
-    const tasksAfter = await finishSuccessfulRun(input, assistantResponse, {
+    const tasksAfter = await finishSuccessfulRun(input, assistantResponse, debugCapture ?? undefined, {
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
       systemMessage: buildInitialGenerationSystemMessage(),
     });
+    await flushDebugCapture(input, debugCapture, 'complete');
 
     return {
       ok: true,
@@ -1093,6 +1255,7 @@ export async function runInitialGeneration(
     await finishFailedRun(input, assistantResponse, {
       requestContextId: input.runId,
     });
+    await flushDebugCapture(input, debugCapture, 'planning_failed');
 
     return {
       ok: false,

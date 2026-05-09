@@ -6,6 +6,7 @@ import type {
   NormalizedInitialRequest,
 } from './types.js';
 import type { DomainSkeleton } from './domain/contracts.js';
+import { shouldTreatAsStrictExplicitWorklist } from './worklist-policy.js';
 
 export type BuildGenerationBriefInput = {
   userMessage: string;
@@ -19,6 +20,7 @@ export type BuildGenerationBriefInput = {
 function buildScopeSignals(
   interpretation?: InitialRequestInterpretation,
   normalizedRequest?: NormalizedInitialRequest,
+  userMessage?: string,
 ): string[] {
   const signals = new Set<string>();
 
@@ -37,7 +39,10 @@ function buildScopeSignals(
     signals.add('fragment_request');
   }
 
-  if (interpretation.scopeMode === 'explicit_worklist' || normalizedRequest?.explicitWorkItems.length) {
+  if (
+    interpretation.scopeMode === 'explicit_worklist'
+    || (normalizedRequest && userMessage && shouldTreatAsStrictExplicitWorklist({ userMessage, normalizedRequest }))
+  ) {
     signals.add('explicit_worklist');
   }
 
@@ -76,7 +81,7 @@ export function buildGenerationBrief(input: BuildGenerationBriefInput): Generati
       ? [input.clarificationDecision.fallbackAssumption]
       : [];
 
-  const scopeSignals = buildScopeSignals(interpretation, normalized);
+  const scopeSignals = buildScopeSignals(interpretation, normalized, input.userMessage);
 
   let objectType = 'project';
   if (interpretation?.objectProfile && interpretation.objectProfile !== 'unknown') {
