@@ -284,6 +284,8 @@ export type PlanInitialProjectInput = {
   structureModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   schedulingModelDecision: Pick<ModelRoutingDecision, 'selectedModel'>;
   sdkQuery: (input: PlannerQueryInput) => Promise<PlannerQueryResult>;
+  onStructureReady?: (structure: StructuredProjectPlan) => Promise<void> | void;
+  onScheduledReady?: (scheduled: ScheduledProjectPlan) => Promise<void> | void;
 };
 
 export type PlanInitialProjectResult = {
@@ -712,6 +714,8 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
     });
   }
 
+  await input.onStructureReady?.(structure);
+
   let scheduled = directScheduleExecution
     ? buildDeterministicScheduledWorklist(structure, input)
     : await requestScheduledProject(
@@ -754,6 +758,8 @@ export async function planInitialProject(input: PlanInitialProjectInput): Promis
       domainSkeleton: input.domainSkeleton,
     });
   }
+
+  await input.onScheduledReady?.(scheduled);
 
   return {
     structure,

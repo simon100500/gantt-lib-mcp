@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 import type { ScheduleCommandOptions } from '@gantt/mcp/types';
 import { historyService } from '@gantt/mcp/services';
-import type { CompiledInitialSchedule } from './compiler.js';
 import type { ServerMessage } from '../ws.js';
 import { buildGenerationBrief, type BuildGenerationBriefInput } from './brief.js';
 import { classifyInitialRequest } from './classification.js';
@@ -23,6 +22,8 @@ import type {
   InitialRequestInterpretation,
   ModelRoutingDecision,
   NormalizedInitialRequest,
+  ScheduledProjectPlan,
+  StructuredProjectPlan,
 } from './types.js';
 
 type ListedTask = {
@@ -38,8 +39,8 @@ type ListedTask = {
 type PreviewTaskMessage = {
   id: string;
   name: string;
-  startDate?: string;
-  endDate?: string;
+  startDate: string;
+  endDate: string;
   parentId?: string;
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
   sortOrder?: number;
@@ -209,99 +210,148 @@ function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): 
   return 'Не удалось подготовить надежный стартовый график по этому запросу.';
 }
 
-function normalizePreviewTasks(tasks: CompiledInitialSchedule['command']['tasks']): PreviewTaskMessage[] {
-  return tasks.map((task, index) => {
-    if (typeof task.id !== 'string' || task.id.length === 0) {
-      throw new Error(`Compiled preview task at index ${index} is missing an id`);
-    }
-
-    return {
-      id: task.id,
-      name: task.name,
-      startDate: task.startDate,
-      endDate: task.endDate,
-      parentId: task.parentId,
-      dependencies: task.dependencies,
-      sortOrder: task.sortOrder,
-    };
-  });
+function buildPreviewId(nodeKey: string): string {
+  return `preview:${nodeKey}`;
 }
 
-function buildProgressivePreviewWaves(tasks: PreviewTaskMessage[]): PreviewTaskMessage[][] {
-  if (tasks.length === 0) {
-    return [];
-  }
-
-  const taskById = new Map(tasks.map((task) => [task.id, task]));
-  const childIdsByParent = new Map<string, string[]>();
-
-  for (const task of tasks) {
-    if (!task.parentId) {
-      continue;
-    }
-    const siblings = childIdsByParent.get(task.parentId) ?? [];
-    siblings.push(task.id);
-    childIdsByParent.set(task.parentId, siblings);
-  }
-
-  const rootIds = tasks.filter((task) => !task.parentId).map((task) => task.id);
-  const rootIdSet = new Set(rootIds);
-  const secondWaveIds = new Set<string>(rootIds);
-
-  for (const rootId of rootIds) {
-    for (const childId of childIdsByParent.get(rootId) ?? []) {
-      secondWaveIds.add(childId);
-    }
-  }
-
-  const orderedRootWave = tasks.filter((task) => rootIdSet.has(task.id));
-  const orderedSecondWave = tasks.filter((task) => secondWaveIds.has(task.id));
-  const orderedFullWave = [...tasks];
-
-  const candidateWaves = [orderedRootWave, orderedSecondWave, orderedFullWave]
-    .filter((wave) => wave.length > 0);
-
-  const uniqueWaves: PreviewTaskMessage[][] = [];
-  let previousSignature = '';
-  for (const wave of candidateWaves) {
-    const signature = wave.map((task) => task.id).join('|');
-    if (signature === previousSignature) {
-      continue;
-    }
-    uniqueWaves.push(wave);
-    previousSignature = signature;
-  }
-
-  return uniqueWaves.length > 0 ? uniqueWaves : [orderedFullWave];
+function buildPhaseOnlyPreviewTasks(
+  structure: StructuredProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  return structure.phases.map((phase, index) => ({
+    id: buildPreviewId(phase.phaseKey),
+    name: phase.title,
+    startDate: anchorDate,
+    endDate: anchorDate,
+    sortOrder: index,
+  }));
 }
 
-async function broadcastPreviewWaves(
+function buildStructurePreviewTasks(
+  structure: StructuredProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const rows: PreviewTaskMessage[] = [];
+  let sortOrder = 0;
+
+  for (const phase of structure.phases) {
+    rows.push({
+      id: buildPreviewId(phase.phaseKey),
+      name: phase.title,
+      startDate: anchorDate,
+      endDate: anchorDate,
+      sortOrder: sortOrder++,
+    });
+
+    for (const subphase of phase.subphases) {
+      rows.push({
+        id: buildPreviewId(subphase.subphaseKey),
+        name: subphase.title,
+        startDate: anchorDate,
+        endDate: anchorDate,
+        parentId: buildPreviewId(phase.phaseKey),
+        sortOrder: sortOrder++,
+      });
+    }
+  }
+
+  return rows;
+}
+
+function buildScheduledPreviewTasks(
+  scheduled: ScheduledProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const rows: PreviewTaskMessage[] = [];
+  let sortOrder = 0;
+
+  for (const phase of scheduled.phases) {
+    const phaseTaskDates = phase.subphases.flatMap((subphase) => subphase.tasks.flatMap((task) => {
+      const startDate = task.startDate ?? anchorDate;
+      const endDate = task.endDate ?? startDate;
+      return [{ startDate, endDate }];
+    }));
+    const phaseStartDate = phaseTaskDates.length > 0
+      ? phaseTaskDates.reduce((min, entry) => entry.startDate < min ? entry.startDate : min, phaseTaskDates[0]!.startDate)
+      : anchorDate;
+    const phaseEndDate = phaseTaskDates.length > 0
+      ? phaseTaskDates.reduce((max, entry) => entry.endDate > max ? entry.endDate : max, phaseTaskDates[0]!.endDate)
+      : anchorDate;
+
+    rows.push({
+      id: buildPreviewId(phase.phaseKey),
+      name: phase.title,
+      startDate: phaseStartDate,
+      endDate: phaseEndDate,
+      sortOrder: sortOrder++,
+    });
+
+    for (const subphase of phase.subphases) {
+      const subphaseTaskDates = subphase.tasks.map((task) => ({
+        startDate: task.startDate ?? anchorDate,
+        endDate: task.endDate ?? task.startDate ?? anchorDate,
+      }));
+      const subphaseStartDate = subphaseTaskDates.length > 0
+        ? subphaseTaskDates.reduce((min, entry) => entry.startDate < min ? entry.startDate : min, subphaseTaskDates[0]!.startDate)
+        : anchorDate;
+      const subphaseEndDate = subphaseTaskDates.length > 0
+        ? subphaseTaskDates.reduce((max, entry) => entry.endDate > max ? entry.endDate : max, subphaseTaskDates[0]!.endDate)
+        : anchorDate;
+
+      rows.push({
+        id: buildPreviewId(subphase.subphaseKey),
+        name: subphase.title,
+        startDate: subphaseStartDate,
+        endDate: subphaseEndDate,
+        parentId: buildPreviewId(phase.phaseKey),
+        sortOrder: sortOrder++,
+      });
+
+      for (const task of subphase.tasks) {
+        const taskStartDate = task.startDate ?? anchorDate;
+        const taskEndDate = task.endDate ?? taskStartDate;
+        rows.push({
+          id: buildPreviewId(task.taskKey),
+          name: task.title,
+          startDate: taskStartDate,
+          endDate: taskEndDate,
+          parentId: buildPreviewId(subphase.subphaseKey),
+          dependencies: task.dependsOn.map((dependency) => ({
+            taskId: buildPreviewId(dependency.nodeKey),
+            type: dependency.type,
+            lag: dependency.lagDays ?? 0,
+          })),
+          sortOrder: sortOrder++,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+async function broadcastPreviewWave(
   input: RunInitialGenerationInput,
-  compiledSchedule: CompiledInitialSchedule,
-): Promise<number> {
-  const previewTasks = normalizePreviewTasks(compiledSchedule.command.tasks);
-  const waves = buildProgressivePreviewWaves(previewTasks);
-
-  for (let index = 0; index < waves.length; index += 1) {
-    const wave = waves[index]!;
-    input.broadcastToSession(input.sessionId, {
-      type: 'preview_tasks_replace',
-      tasks: wave,
-      provisional: true,
-      wave: index + 1,
-    });
-    await input.logger.debug('preview_tasks_broadcast', {
-      runId: input.runId,
-      projectId: input.projectId,
-      sessionId: input.sessionId,
-      wave: index + 1,
-      taskCount: wave.length,
-      taskIds: wave.map((task) => task.id),
-      taskNames: wave.map((task) => task.name),
-    });
-  }
-
-  return waves.length;
+  waveNumber: number,
+  previewTasks: PreviewTaskMessage[],
+  source: 'structure_phases' | 'structure_subphases' | 'scheduled_tasks',
+): Promise<void> {
+  input.broadcastToSession(input.sessionId, {
+    type: 'preview_tasks_replace',
+    tasks: previewTasks,
+    provisional: true,
+    wave: waveNumber,
+  });
+  await input.logger.debug('preview_tasks_broadcast', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    wave: waveNumber,
+    source,
+    taskCount: previewTasks.length,
+    taskIds: previewTasks.map((task) => task.id),
+    taskNames: previewTasks.map((task) => task.name),
+  });
 }
 
 async function saveAssistantMessage(
@@ -618,6 +668,7 @@ export async function runInitialGeneration(
   };
 
   try {
+    const previewAnchorDate = getServerDate(input.serverDate);
     const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,
@@ -628,6 +679,28 @@ export async function runInitialGeneration(
       structureModelDecision: structureModelRoutingDecision,
       schedulingModelDecision: schedulingModelRoutingDecision,
       sdkQuery: loggedPlannerQuery,
+      onStructureReady: async (structure) => {
+        const phasePreview = buildPhaseOnlyPreviewTasks(structure, previewAnchorDate);
+        if (phasePreview.length > 0) {
+          previewWaveCount += 1;
+          await broadcastPreviewWave(input, previewWaveCount, phasePreview, 'structure_phases');
+        }
+
+        const structurePreview = buildStructurePreviewTasks(structure, previewAnchorDate);
+        const phaseSignature = phasePreview.map((task) => task.id).join('|');
+        const structureSignature = structurePreview.map((task) => task.id).join('|');
+        if (structurePreview.length > 0 && structureSignature !== phaseSignature) {
+          previewWaveCount += 1;
+          await broadcastPreviewWave(input, previewWaveCount, structurePreview, 'structure_subphases');
+        }
+      },
+      onScheduledReady: async (scheduled) => {
+        const scheduledPreview = buildScheduledPreviewTasks(scheduled, previewAnchorDate);
+        if (scheduledPreview.length > 0) {
+          previewWaveCount += 1;
+          await broadcastPreviewWave(input, previewWaveCount, scheduledPreview, 'scheduled_tasks');
+        }
+      },
     });
     repairAttempted = planning.repairAttempted;
 
@@ -689,9 +762,7 @@ export async function runInitialGeneration(
         requestContextId: input.runId,
         finalizeGroup: true,
       },
-      onCompiled: async (compiledSchedule) => {
-        previewWaveCount = await broadcastPreviewWaves(input, compiledSchedule);
-      },
+      onCompiled: async (_compiledSchedule) => {},
     });
 
     await input.logger.debug('compile_verdict', {
