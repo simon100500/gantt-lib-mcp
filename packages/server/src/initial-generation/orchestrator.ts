@@ -372,21 +372,43 @@ function parseLoosePreviewEntities(rawText: string): LoosePreviewEntity[] {
     .filter((entity): entity is LoosePreviewEntity => Boolean(entity));
 }
 
+type PreviewDepth = 'phase' | 'subphase' | 'task';
+
 function buildLoosePreviewTasks(
   rawText: string,
   anchorDate: string,
+  options?: { maxDepth?: PreviewDepth },
 ): PreviewTaskMessage[] {
   const entities = parseLoosePreviewEntities(rawText);
   if (entities.length === 0) {
     return [];
   }
 
-  const rows = entities.map((entity) => ({
+  const maxDepth = options?.maxDepth ?? 'task';
+  const filteredEntities = entities.filter((entity) => {
+    if (maxDepth === 'task') {
+      return true;
+    }
+    if (maxDepth === 'subphase') {
+      return entity.kind !== 'task';
+    }
+    return entity.kind === 'phase';
+  });
+  if (filteredEntities.length === 0) {
+    return [];
+  }
+
+  const keptEntityIds = new Set(filteredEntities.map((entity) => `${entity.kind}:${entity.key}`));
+  const rows = filteredEntities.map((entity) => ({
     id: buildPreviewId(entity.key),
     name: entity.title || entity.key,
     startDate: entity.startDate ?? anchorDate,
     endDate: entity.endDate ?? entity.startDate ?? anchorDate,
-    parentId: entity.parentKey ? buildPreviewId(entity.parentKey) : undefined,
+    parentId: entity.parentKey && keptEntityIds.has(`phase:${entity.parentKey}`)
+      ? buildPreviewId(entity.parentKey)
+      : entity.parentKey && keptEntityIds.has(`subphase:${entity.parentKey}`)
+        ? buildPreviewId(entity.parentKey)
+        : undefined,
     sortOrder: entity.order,
   }));
 
@@ -506,6 +528,55 @@ function buildStructurePreviewTasks(
         parentId: buildPreviewId(phase.phaseKey),
         sortOrder: sortOrder++,
       });
+    }
+  }
+
+  return rows;
+}
+
+function buildStructureTaskPreviewTasks(
+  structure: StructuredProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const rows: PreviewTaskMessage[] = [];
+  let sortOrder = 0;
+
+  for (const phase of structure.phases) {
+    rows.push({
+      id: buildPreviewId(phase.phaseKey),
+      name: phase.title,
+      startDate: anchorDate,
+      endDate: anchorDate,
+      sortOrder: sortOrder++,
+    });
+
+    for (const subphase of phase.subphases) {
+      const collapseSubphase = shouldCollapsePreviewSubphase(
+        phase.title,
+        subphase.title,
+        subphase.tasks.map((task) => task.title),
+      );
+      if (!collapseSubphase) {
+        rows.push({
+          id: buildPreviewId(subphase.subphaseKey),
+          name: subphase.title,
+          startDate: anchorDate,
+          endDate: anchorDate,
+          parentId: buildPreviewId(phase.phaseKey),
+          sortOrder: sortOrder++,
+        });
+      }
+
+      for (const task of subphase.tasks) {
+        rows.push({
+          id: buildPreviewId(task.taskKey),
+          name: task.title,
+          startDate: anchorDate,
+          endDate: anchorDate,
+          parentId: collapseSubphase ? buildPreviewId(phase.phaseKey) : buildPreviewId(subphase.subphaseKey),
+          sortOrder: sortOrder++,
+        });
+      }
     }
   }
 
@@ -990,7 +1061,7 @@ export async function runInitialGeneration(
       return;
     }
 
-    const previewTasks = buildLoosePreviewTasks(fullText, previewAnchorDate);
+    const previewTasks = buildLoosePreviewTasks(fullText, previewAnchorDate, { maxDepth: 'subphase' });
     if (previewTasks.length === 0) {
       return;
     }
@@ -1080,7 +1151,7 @@ export async function runInitialGeneration(
           await emitMergedPreview('structure_phases', phasePreview);
         }
 
-        const structurePreview = buildStructurePreviewTasks(structure, previewAnchorDate);
+        const structurePreview = buildStructureTaskPreviewTasks(structure, previewAnchorDate);
         const phaseSignature = phasePreview.map((task) => task.id).join('|');
         const structureSignature = structurePreview.map((task) => task.id).join('|');
         if (structurePreview.length > 0 && structureSignature !== phaseSignature) {

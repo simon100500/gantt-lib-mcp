@@ -372,9 +372,9 @@ describe('runInitialGeneration', () => {
     assert.ok(harness.events.some((entry) => entry.event === 'scheduling_gate_verdict'));
     assert.equal(harness.events.some((entry) => entry.event === 'preview_tasks_broadcast'), true);
     const previewBroadcasts = harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks_replace');
-    assert.equal(previewBroadcasts.length, 3);
-    assert.deepEqual(previewBroadcasts.map((entry) => entry.message.wave), [1, 2, 3]);
-    assert.deepEqual(previewBroadcasts.map((entry) => entry.message.tasks?.length), [4, 12, 28]);
+    assert.equal(previewBroadcasts.length, 2);
+    assert.deepEqual(previewBroadcasts.map((entry) => entry.message.wave), [1, 2]);
+    assert.deepEqual(previewBroadcasts.map((entry) => entry.message.tasks?.length), [4, 28]);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 1);
     const doneBroadcast = harness.broadcasts.find((entry) => entry.message.type === 'done');
     assert.equal(doneBroadcast?.message.chatMessage?.systemMessage, 'Стартовый график составлен в календарных днях. Изменить режим можно в меню проекта.');
@@ -829,7 +829,7 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_request').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'planner_query_response').length, 2);
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 0);
-    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks_replace').length, 3);
+    assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_tasks_replace').length, 2);
     assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'preview_failed').length, 1);
     assert.equal(harness.broadcasts.filter((entry) => entry.message.type === 'done').length, 1);
     const previewBroadcastIndex = harness.broadcasts.findIndex((entry) => entry.message.type === 'preview_tasks_replace');
