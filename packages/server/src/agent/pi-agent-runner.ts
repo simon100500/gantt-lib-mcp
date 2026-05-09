@@ -58,6 +58,51 @@ export type PiAgentRunResult = {
   };
 };
 
+type PiContextUserMessage = {
+  role: 'user';
+  content: string;
+  timestamp: number;
+};
+
+type PiContextAssistantMessage = {
+  role: 'assistant';
+  content: Array<{ type: 'text'; text: string }>;
+  api: 'openai-completions';
+  provider: 'session-memory';
+  model: 'session-memory';
+  usage: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    totalTokens: number;
+    cost: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+      total: number;
+    };
+  };
+  stopReason: 'stop';
+  timestamp: number;
+};
+
+const EMPTY_ASSISTANT_USAGE: PiContextAssistantMessage['usage'] = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0,
+  },
+};
+
 export type BuildPiAgentToolsInput = {
   projectId: string;
   runId: string;
@@ -416,6 +461,27 @@ function clipText(value: string, limit: number): string {
   return `${trimmed.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
+function createAssistantContextMessage(content: string, timestamp: number): PiContextAssistantMessage {
+  return {
+    role: 'assistant',
+    content: [{ type: 'text', text: content }],
+    api: 'openai-completions',
+    provider: 'session-memory',
+    model: 'session-memory',
+    usage: EMPTY_ASSISTANT_USAGE,
+    stopReason: 'stop',
+    timestamp,
+  };
+}
+
+function createUserContextMessage(content: string, timestamp: number): PiContextUserMessage {
+  return {
+    role: 'user',
+    content,
+    timestamp,
+  };
+}
+
 function buildSessionMemoryMessage(input: {
   projectId: string;
   rollingSummary?: string | null;
@@ -456,17 +522,10 @@ function buildInitialMessages(input: {
   rollingSummary?: string | null;
   openThreads?: AgentOpenThreadState | null;
 }): any[] {
-  const initialMessages: Array<
-    | { role: 'user'; content: string; timestamp: number }
-    | { role: 'assistant'; content: string; timestamp: number }
-  > = [];
+  const initialMessages: Array<PiContextUserMessage | PiContextAssistantMessage> = [];
   const sessionMemoryMessage = buildSessionMemoryMessage(input);
   if (sessionMemoryMessage) {
-    initialMessages.push({
-      role: 'assistant',
-      content: sessionMemoryMessage,
-      timestamp: Date.now(),
-    });
+    initialMessages.push(createAssistantContextMessage(sessionMemoryMessage, Date.now()));
   }
 
   for (const message of input.messages.slice(-MAX_SESSION_RESTORE_MESSAGES)) {
@@ -475,19 +534,15 @@ function buildInitialMessages(input: {
       continue;
     }
 
-    initialMessages.push({
-      role: message.role,
-      content,
-      timestamp: message.timestamp,
-    });
+    initialMessages.push(
+      message.role === 'assistant'
+        ? createAssistantContextMessage(content, message.timestamp)
+        : createUserContextMessage(content, message.timestamp),
+    );
   }
 
   if (initialMessages.length === 0) {
-    initialMessages.push({
-      role: 'assistant',
-      content: `projectId: ${input.projectId}`,
-      timestamp: Date.now(),
-    });
+    initialMessages.push(createAssistantContextMessage(`projectId: ${input.projectId}`, Date.now()));
   }
 
   return initialMessages as any[];
@@ -501,7 +556,7 @@ export async function compactSessionContext<TMessage extends { role?: unknown; c
   }
 
   const memoryMessage = messages.find((message) => (
-    typeof message?.content === 'string' && message.content.startsWith(SESSION_MEMORY_PREFIX)
+    extractMessageTextContent(message?.content).startsWith(SESSION_MEMORY_PREFIX)
   ));
   const tail = messages.filter((message) => message !== memoryMessage).slice(-(MAX_CONTEXT_MESSAGES - (memoryMessage ? 1 : 0)));
 

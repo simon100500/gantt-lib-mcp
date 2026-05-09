@@ -395,6 +395,20 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    id: 'synthetic-shift-plaster-by-days',
+    origin: 'synthetic',
+    description: 'Shift a task by an explicit number of days',
+    userMessage: 'сдвинь штукатурные работы на 2 дня',
+    fixture: 'renovation',
+    expectation: {
+      route: 'mutation',
+      shiftedTask: {
+        name: 'Штукатурные работы',
+        minStartDeltaDays: 2,
+      },
+    },
+  },
+  {
     id: 'synthetic-rename-rough-electrical',
     origin: 'synthetic',
     description: 'Rename a task',
@@ -598,6 +612,8 @@ async function createProjectFromFixture(owner: OwnerContext, fixture: Scenario['
 
   const snapshot = FIXTURES[fixture];
   const prisma = getPrisma();
+  const taskIdMap = new Map(snapshot.tasks.map((task) => [task.id, `${projectId}:${task.id}`]));
+  const dependencyIdMap = new Map(snapshot.dependencies.map((dependency) => [dependency.id, `${projectId}:${dependency.id}`]));
   const tasksByDepth = new Map<number, TaskSnapshot[]>();
 
   for (const task of snapshot.tasks) {
@@ -622,7 +638,7 @@ async function createProjectFromFixture(owner: OwnerContext, fixture: Scenario['
 
     await prisma.task.createMany({
       data: batch.map((task) => ({
-        id: task.id,
+        id: taskIdMap.get(task.id) ?? `${projectId}:${task.id}`,
         projectId,
         name: task.name,
         startDate: new Date(`${task.startDate}T00:00:00Z`),
@@ -634,7 +650,7 @@ async function createProjectFromFixture(owner: OwnerContext, fixture: Scenario['
         workVolume: null,
         workUnit: null,
         completedVolume: 0,
-        parentId: task.parentId ?? null,
+        parentId: task.parentId ? (taskIdMap.get(task.parentId) ?? `${projectId}:${task.parentId}`) : null,
         sortOrder: task.sortOrder ?? 0,
       })),
     });
@@ -643,9 +659,9 @@ async function createProjectFromFixture(owner: OwnerContext, fixture: Scenario['
   if (snapshot.dependencies.length > 0) {
     await prisma.dependency.createMany({
       data: snapshot.dependencies.map((dependency) => ({
-        id: dependency.id,
-        taskId: dependency.taskId,
-        depTaskId: dependency.depTaskId,
+        id: dependencyIdMap.get(dependency.id) ?? `${projectId}:${dependency.id}`,
+        taskId: taskIdMap.get(dependency.taskId) ?? `${projectId}:${dependency.taskId}`,
+        depTaskId: taskIdMap.get(dependency.depTaskId) ?? `${projectId}:${dependency.depTaskId}`,
         type: dependency.type,
         lag: dependency.lag ?? 0,
       })),
