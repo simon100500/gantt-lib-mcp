@@ -477,6 +477,61 @@ describe('initial-generation planner', () => {
     assert.equal(result.schedulingVerdict.accepted, true);
   });
 
+  it('collapses meaningless single-child subphase chains in the executable plan', async () => {
+    const result = await planInitialProject({
+      userMessage: 'Сделай стартовый график',
+      brief: buildGenerationBrief({
+        userMessage: 'Сделай стартовый график',
+      }),
+      structureModelDecision: { selectedModel: 'gpt-strong' },
+      schedulingModelDecision: { selectedModel: 'gpt-cheap' },
+      sdkQuery: async ({ stage }) => {
+        if (stage === 'structure_planning') {
+          return JSON.stringify({
+            projectType: 'renovation',
+            assumptions: [],
+            phases: [{
+              phaseKey: 'phase-shell',
+              title: 'Монтаж окон',
+              subphases: [{
+                subphaseKey: 'subphase-shell',
+                title: 'Монтаж окон',
+                tasks: [{ taskKey: 'task-shell', title: 'Монтаж окон' }],
+              }],
+            }],
+          });
+        }
+
+        return JSON.stringify({
+          projectType: 'renovation',
+          assumptions: [],
+          phases: [{
+            phaseKey: 'phase-shell',
+            title: 'Монтаж окон',
+            subphases: [{
+              subphaseKey: 'subphase-shell',
+              title: 'Монтаж окон',
+              tasks: [{
+                taskKey: 'task-shell',
+                title: 'Монтаж окон',
+                durationDays: 2,
+                dependsOn: [],
+              }],
+            }],
+          }],
+        });
+      },
+    });
+
+    assert.deepEqual(
+      result.plan.nodes.map((node) => ({ kind: node.kind, title: node.title, parentNodeKey: node.parentNodeKey })),
+      [
+        { kind: 'phase', title: 'Монтаж окон', parentNodeKey: undefined },
+        { kind: 'task', title: 'Монтаж окон', parentNodeKey: 'phase-shell' },
+      ],
+    );
+  });
+
   it('adds a section-floor decomposition rule when counts are explicit in the request', () => {
     const userMessage = 'График каменной кладки внутренних и наружных стен: на 5 секциях, 3 этажа на каждой.';
     const normalizedRequest = normalizeInitialRequest(userMessage);
@@ -585,6 +640,20 @@ describe('initial-generation planner', () => {
     assert.match(prompt, /you may add only durationDays, dependsOn, startDate, and endDate to leaf tasks/i);
     assert.match(prompt, /if you output explicit task dates, output both startDate and endDate in yyyy-mm-dd format/i);
     assert.match(prompt, /fit the schedule inside that user-provided window instead of anchoring from today or the server date/i);
+  });
+
+  it('forces Russian task titles into construction nominal form instead of infinitive task-tracker phrasing', () => {
+    const prompt = buildStructurePrompt({
+      userMessage: 'Сделай стартовый график строительства',
+      brief: buildGenerationBrief({
+        userMessage: 'Сделай стартовый график строительства',
+      }),
+    });
+
+    assert.match(prompt, /nominal operation form/i);
+    assert.match(prompt, /Prefer titles such as "Устройство \.\.\.", "Монтаж \.\.\.", "Укладка \.\.\."/i);
+    assert.match(prompt, /Bad task title examples: "Устроить цементную стяжку пола", "Уложить чистовое напольное покрытие"/i);
+    assert.match(prompt, /Good task title examples: "Устройство цементной стяжки пола", "Укладка чистового напольного покрытия"/i);
   });
 
   it('builds a two-step whole-project plan and forbids structural edits in scheduling prompt', async () => {

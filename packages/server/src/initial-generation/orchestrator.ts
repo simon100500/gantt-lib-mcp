@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
 
 import type { ActorType, CommitProjectCommandRequest, CommitProjectCommandResponse } from '@gantt/mcp/types';
 import type { ScheduleCommandOptions } from '@gantt/mcp/types';
@@ -22,6 +24,8 @@ import type {
   InitialRequestInterpretation,
   ModelRoutingDecision,
   NormalizedInitialRequest,
+  ScheduledProjectPlan,
+  StructuredProjectPlan,
 } from './types.js';
 
 type ListedTask = {
@@ -34,10 +38,21 @@ type ListedTask = {
   sortOrder?: number;
 };
 
+type PreviewTaskMessage = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+  dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
+  sortOrder?: number;
+};
+
 type PlannerQueryInput = {
   prompt: string;
   model: string;
   stage: InitialGenerationPlannerStage;
+  onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
 };
 
 type PlannerQueryResult = string | { content?: string };
@@ -198,6 +213,490 @@ function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): 
   return 'Не удалось подготовить надежный стартовый график по этому запросу.';
 }
 
+function buildPreviewId(nodeKey: string): string {
+  return `preview:${nodeKey}`;
+}
+
+type LoosePreviewEntity = {
+  kind: 'phase' | 'subphase' | 'task';
+  key: string;
+  title: string;
+  parentKey?: string;
+  startDate?: string;
+  endDate?: string;
+  order: number;
+};
+
+type PreviewWaveSource = 'structure_phases' | 'structure_subphases' | 'scheduled_tasks';
+
+type PreviewDebugWave = {
+  wave: number;
+  source: PreviewWaveSource;
+  taskCount: number;
+  tree: Array<{ id: string; name: string; parentId?: string }>;
+};
+
+type InitialGenerationDebugCapture = {
+  enabled: boolean;
+  outputDir: string;
+  plannerStreams: {
+    structure: { deltas: string[]; latestFullText: string };
+    scheduled: { deltas: string[]; latestFullText: string };
+  };
+  previewWaves: PreviewDebugWave[];
+  finalTasks: Array<{ id: string; name: string; parentId?: string }>;
+};
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeHierarchyTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ё/gu, 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function shouldCollapsePreviewSubphase(
+  phaseTitle: string,
+  subphaseTitle: string,
+  taskTitles: string[],
+): boolean {
+  if (taskTitles.length !== 1) {
+    return false;
+  }
+
+  const normalizedPhase = normalizeHierarchyTitle(phaseTitle);
+  const normalizedSubphase = normalizeHierarchyTitle(subphaseTitle);
+  const normalizedTask = normalizeHierarchyTitle(taskTitles[0] ?? '');
+  if (!normalizedSubphase) {
+    return false;
+  }
+
+  return normalizedSubphase === normalizedPhase
+    || normalizedSubphase === normalizedTask
+    || normalizedPhase.includes(normalizedSubphase)
+    || normalizedSubphase.includes(normalizedPhase)
+    || normalizedTask.includes(normalizedSubphase)
+    || normalizedSubphase.includes(normalizedTask);
+}
+
+function parseLoosePreviewEntities(rawText: string): LoosePreviewEntity[] {
+  const tokenPattern = /"(phaseKey|subphaseKey|taskKey|title|startDate|endDate)"\s*:\s*"([^"]*)"/g;
+  const entityMap = new Map<string, LoosePreviewEntity>();
+  const orderedKeys: string[] = [];
+  let currentPhaseKey: string | undefined;
+  let currentSubphaseKey: string | undefined;
+  let pendingEntityId: string | undefined;
+  let order = 0;
+
+  const ensureEntity = (kind: LoosePreviewEntity['kind'], key: string, parentKey?: string): LoosePreviewEntity => {
+    const id = `${kind}:${key}`;
+    const existing = entityMap.get(id);
+    if (existing) {
+      if (parentKey && !existing.parentKey) {
+        existing.parentKey = parentKey;
+      }
+      return existing;
+    }
+
+    const entity: LoosePreviewEntity = {
+      kind,
+      key,
+      title: key,
+      ...(parentKey ? { parentKey } : {}),
+      order: order++,
+    };
+    entityMap.set(id, entity);
+    orderedKeys.push(id);
+    return entity;
+  };
+
+  for (const match of rawText.matchAll(tokenPattern)) {
+    const field = match[1];
+    const value = match[2]?.trim() ?? '';
+    if (!field || !value) {
+      continue;
+    }
+
+    if (field === 'phaseKey') {
+      const entity = ensureEntity('phase', value);
+      currentPhaseKey = entity.key;
+      currentSubphaseKey = undefined;
+      pendingEntityId = `phase:${value}`;
+      continue;
+    }
+
+    if (field === 'subphaseKey') {
+      const entity = ensureEntity('subphase', value, currentPhaseKey);
+      currentSubphaseKey = entity.key;
+      pendingEntityId = `subphase:${value}`;
+      continue;
+    }
+
+    if (field === 'taskKey') {
+      const entity = ensureEntity('task', value, currentSubphaseKey ?? currentPhaseKey);
+      pendingEntityId = `task:${value}`;
+      continue;
+    }
+
+    if (!pendingEntityId) {
+      continue;
+    }
+
+    const entity = entityMap.get(pendingEntityId);
+    if (!entity) {
+      continue;
+    }
+
+    if (field === 'title') {
+      entity.title = value;
+      continue;
+    }
+
+    if (field === 'startDate' && isIsoDate(value)) {
+      entity.startDate = value;
+      continue;
+    }
+
+    if (field === 'endDate' && isIsoDate(value)) {
+      entity.endDate = value;
+    }
+  }
+
+  return orderedKeys
+    .map((id) => entityMap.get(id))
+    .filter((entity): entity is LoosePreviewEntity => Boolean(entity));
+}
+
+type PreviewDepth = 'phase' | 'subphase' | 'task';
+
+function buildLoosePreviewTasks(
+  rawText: string,
+  anchorDate: string,
+  options?: { maxDepth?: PreviewDepth },
+): PreviewTaskMessage[] {
+  const entities = parseLoosePreviewEntities(rawText);
+  if (entities.length === 0) {
+    return [];
+  }
+
+  const maxDepth = options?.maxDepth ?? 'task';
+  const filteredEntities = entities.filter((entity) => {
+    if (maxDepth === 'task') {
+      return true;
+    }
+    if (maxDepth === 'subphase') {
+      return entity.kind !== 'task';
+    }
+    return entity.kind === 'phase';
+  });
+  if (filteredEntities.length === 0) {
+    return [];
+  }
+
+  const keptEntityIds = new Set(filteredEntities.map((entity) => `${entity.kind}:${entity.key}`));
+  const rows = filteredEntities.map((entity) => ({
+    id: buildPreviewId(entity.key),
+    name: entity.title || entity.key,
+    startDate: entity.startDate ?? anchorDate,
+    endDate: entity.endDate ?? entity.startDate ?? anchorDate,
+    parentId: entity.parentKey && keptEntityIds.has(`phase:${entity.parentKey}`)
+      ? buildPreviewId(entity.parentKey)
+      : entity.parentKey && keptEntityIds.has(`subphase:${entity.parentKey}`)
+        ? buildPreviewId(entity.parentKey)
+        : undefined,
+    sortOrder: entity.order,
+  }));
+
+  const childrenByParent = new Map<string, PreviewTaskMessage[]>();
+  for (const row of rows) {
+    if (!row.parentId) {
+      continue;
+    }
+    const children = childrenByParent.get(row.parentId) ?? [];
+    children.push(row);
+    childrenByParent.set(row.parentId, children);
+  }
+
+  const applyRollup = (row: PreviewTaskMessage): { startDate: string; endDate: string } => {
+    const children = childrenByParent.get(row.id) ?? [];
+    if (children.length === 0) {
+      return { startDate: row.startDate, endDate: row.endDate };
+    }
+
+    const childRanges = children.map((child) => applyRollup(child));
+    const startDate = childRanges.reduce((min, range) => range.startDate < min ? range.startDate : min, childRanges[0]!.startDate);
+    const endDate = childRanges.reduce((max, range) => range.endDate > max ? range.endDate : max, childRanges[0]!.endDate);
+    row.startDate = startDate;
+    row.endDate = endDate;
+    return { startDate, endDate };
+  };
+
+  for (const row of rows) {
+    if (!row.parentId) {
+      applyRollup(row);
+    }
+  }
+
+  return rows;
+}
+
+function buildPreviewSignature(tasks: PreviewTaskMessage[]): string {
+  return tasks
+    .map((task) => `${task.id}|${task.parentId ?? ''}|${task.name}|${task.startDate}|${task.endDate}|${task.sortOrder ?? 0}`)
+    .join('\n');
+}
+
+function buildPreviewSemanticSignature(tasks: PreviewTaskMessage[]): string {
+  return tasks
+    .map((task) => [
+      task.id,
+      task.parentId ?? '',
+      task.startDate,
+      task.endDate,
+    ].join('|'))
+    .join('\n');
+}
+
+function mergePreviewTasks(
+  currentTasks: PreviewTaskMessage[],
+  incomingTasks: PreviewTaskMessage[],
+): PreviewTaskMessage[] {
+  if (currentTasks.length === 0) {
+    return [...incomingTasks];
+  }
+
+  const merged = new Map(currentTasks.map((task) => [task.id, { ...task }]));
+  for (const task of incomingTasks) {
+    const previous = merged.get(task.id);
+    merged.set(task.id, previous ? { ...previous, ...task } : { ...task });
+  }
+
+  return [...merged.values()].sort((left, right) => {
+    const leftOrder = left.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
+function buildPhaseOnlyPreviewTasks(
+  structure: StructuredProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  return structure.phases.map((phase, index) => ({
+    id: buildPreviewId(phase.phaseKey),
+    name: phase.title,
+    startDate: anchorDate,
+    endDate: anchorDate,
+    sortOrder: index,
+  }));
+}
+
+function buildStructurePreviewTasks(
+  structure: StructuredProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const rows: PreviewTaskMessage[] = [];
+  let sortOrder = 0;
+
+  for (const phase of structure.phases) {
+    rows.push({
+      id: buildPreviewId(phase.phaseKey),
+      name: phase.title,
+      startDate: anchorDate,
+      endDate: anchorDate,
+      sortOrder: sortOrder++,
+    });
+
+    for (const subphase of phase.subphases) {
+      if (shouldCollapsePreviewSubphase(phase.title, subphase.title, subphase.tasks.map((task) => task.title))) {
+        continue;
+      }
+
+      rows.push({
+        id: buildPreviewId(subphase.subphaseKey),
+        name: subphase.title,
+        startDate: anchorDate,
+        endDate: anchorDate,
+        parentId: buildPreviewId(phase.phaseKey),
+        sortOrder: sortOrder++,
+      });
+    }
+  }
+
+  return rows;
+}
+
+function buildStructureTaskPreviewTasks(
+  structure: StructuredProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const rows: PreviewTaskMessage[] = [];
+  let sortOrder = 0;
+
+  for (const phase of structure.phases) {
+    rows.push({
+      id: buildPreviewId(phase.phaseKey),
+      name: phase.title,
+      startDate: anchorDate,
+      endDate: anchorDate,
+      sortOrder: sortOrder++,
+    });
+
+    for (const subphase of phase.subphases) {
+      const collapseSubphase = shouldCollapsePreviewSubphase(
+        phase.title,
+        subphase.title,
+        subphase.tasks.map((task) => task.title),
+      );
+      if (!collapseSubphase) {
+        rows.push({
+          id: buildPreviewId(subphase.subphaseKey),
+          name: subphase.title,
+          startDate: anchorDate,
+          endDate: anchorDate,
+          parentId: buildPreviewId(phase.phaseKey),
+          sortOrder: sortOrder++,
+        });
+      }
+
+      for (const task of subphase.tasks) {
+        rows.push({
+          id: buildPreviewId(task.taskKey),
+          name: task.title,
+          startDate: anchorDate,
+          endDate: anchorDate,
+          parentId: collapseSubphase ? buildPreviewId(phase.phaseKey) : buildPreviewId(subphase.subphaseKey),
+          sortOrder: sortOrder++,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+function buildScheduledPreviewTasks(
+  scheduled: ScheduledProjectPlan,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const rows: PreviewTaskMessage[] = [];
+  let sortOrder = 0;
+
+  for (const phase of scheduled.phases) {
+    const phaseTaskDates = phase.subphases.flatMap((subphase) => subphase.tasks.flatMap((task) => {
+      const startDate = task.startDate ?? anchorDate;
+      const endDate = task.endDate ?? startDate;
+      return [{ startDate, endDate }];
+    }));
+    const phaseStartDate = phaseTaskDates.length > 0
+      ? phaseTaskDates.reduce((min, entry) => entry.startDate < min ? entry.startDate : min, phaseTaskDates[0]!.startDate)
+      : anchorDate;
+    const phaseEndDate = phaseTaskDates.length > 0
+      ? phaseTaskDates.reduce((max, entry) => entry.endDate > max ? entry.endDate : max, phaseTaskDates[0]!.endDate)
+      : anchorDate;
+
+    rows.push({
+      id: buildPreviewId(phase.phaseKey),
+      name: phase.title,
+      startDate: phaseStartDate,
+      endDate: phaseEndDate,
+      sortOrder: sortOrder++,
+    });
+
+    for (const subphase of phase.subphases) {
+      const subphaseTaskDates = subphase.tasks.map((task) => ({
+        startDate: task.startDate ?? anchorDate,
+        endDate: task.endDate ?? task.startDate ?? anchorDate,
+      }));
+      const subphaseStartDate = subphaseTaskDates.length > 0
+        ? subphaseTaskDates.reduce((min, entry) => entry.startDate < min ? entry.startDate : min, subphaseTaskDates[0]!.startDate)
+        : anchorDate;
+      const subphaseEndDate = subphaseTaskDates.length > 0
+        ? subphaseTaskDates.reduce((max, entry) => entry.endDate > max ? entry.endDate : max, subphaseTaskDates[0]!.endDate)
+        : anchorDate;
+
+      const collapseSubphase = shouldCollapsePreviewSubphase(
+        phase.title,
+        subphase.title,
+        subphase.tasks.map((task) => task.title),
+      );
+      if (!collapseSubphase) {
+        rows.push({
+          id: buildPreviewId(subphase.subphaseKey),
+          name: subphase.title,
+          startDate: subphaseStartDate,
+          endDate: subphaseEndDate,
+          parentId: buildPreviewId(phase.phaseKey),
+          sortOrder: sortOrder++,
+        });
+      }
+
+      for (const task of subphase.tasks) {
+        const taskStartDate = task.startDate ?? anchorDate;
+        const taskEndDate = task.endDate ?? taskStartDate;
+        rows.push({
+          id: buildPreviewId(task.taskKey),
+          name: task.title,
+          startDate: taskStartDate,
+          endDate: taskEndDate,
+          parentId: collapseSubphase ? buildPreviewId(phase.phaseKey) : buildPreviewId(subphase.subphaseKey),
+          dependencies: task.dependsOn.map((dependency) => ({
+            taskId: buildPreviewId(dependency.nodeKey),
+            type: dependency.type,
+            lag: dependency.lagDays ?? 0,
+          })),
+          sortOrder: sortOrder++,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+async function broadcastPreviewWave(
+  input: RunInitialGenerationInput,
+  waveNumber: number,
+  previewTasks: PreviewTaskMessage[],
+  source: PreviewWaveSource,
+  debugCapture?: InitialGenerationDebugCapture,
+): Promise<void> {
+  input.broadcastToSession(input.sessionId, {
+    type: 'preview_tasks_replace',
+    tasks: previewTasks,
+    provisional: true,
+    wave: waveNumber,
+  });
+  await input.logger.debug('preview_tasks_broadcast', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    wave: waveNumber,
+    source,
+    taskCount: previewTasks.length,
+    taskIds: previewTasks.map((task) => task.id),
+    taskNames: previewTasks.map((task) => task.name),
+  });
+  debugCapture?.previewWaves.push({
+    wave: waveNumber,
+    source,
+    taskCount: previewTasks.length,
+    tree: previewTasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      parentId: task.parentId,
+    })),
+  });
+}
+
 async function saveAssistantMessage(
   input: RunInitialGenerationInput,
   assistantResponse: string,
@@ -217,6 +716,7 @@ function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
 async function broadcastTasksSnapshot(
   input: RunInitialGenerationInput,
   reason: string,
+  debugCapture?: InitialGenerationDebugCapture,
 ): Promise<ListedTask[]> {
   const tasks = await input.services.taskService.listAll(input.projectId);
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks });
@@ -229,6 +729,13 @@ async function broadcastTasksSnapshot(
     taskIds: tasks.map((task) => task.id),
     taskNames: tasks.map((task) => task.name),
   });
+  if (debugCapture) {
+    debugCapture.finalTasks = tasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      parentId: task.parentId,
+    }));
+  }
 
   return tasks;
 }
@@ -236,13 +743,14 @@ async function broadcastTasksSnapshot(
 async function finishSuccessfulRun(
   input: RunInitialGenerationInput,
   assistantResponse: string,
+  debugCapture?: InitialGenerationDebugCapture,
   metadata?: {
     requestContextId?: string;
     historyGroupId?: string;
     systemMessage?: string | null;
   },
 ): Promise<ListedTask[]> {
-  const tasks = await broadcastTasksSnapshot(input, 'final_state');
+  const tasks = await broadcastTasksSnapshot(input, 'final_state', debugCapture);
   input.broadcastToSession(input.sessionId, { type: 'history_changed' });
   input.broadcastToSession(input.sessionId, {
     type: 'done',
@@ -256,6 +764,55 @@ async function finishSuccessfulRun(
   });
 
   return tasks;
+}
+
+function createDebugCapture(input: RunInitialGenerationInput): InitialGenerationDebugCapture | null {
+  const env = input.routingEnv ?? process.env;
+  if (env.INITIAL_GENERATION_DEBUG_CAPTURE !== '1') {
+    return null;
+  }
+
+  return {
+    enabled: true,
+    outputDir: env.INITIAL_GENERATION_DEBUG_CAPTURE_DIR ?? '.planning/debug',
+    plannerStreams: {
+      structure: { deltas: [], latestFullText: '' },
+      scheduled: { deltas: [], latestFullText: '' },
+    },
+    previewWaves: [],
+    finalTasks: [],
+  };
+}
+
+async function flushDebugCapture(
+  input: RunInitialGenerationInput,
+  debugCapture: InitialGenerationDebugCapture | null,
+  outcome: 'complete' | 'compile_failed' | 'planning_failed',
+): Promise<void> {
+  if (!debugCapture?.enabled) {
+    return;
+  }
+
+  const outputDir = resolvePath(debugCapture.outputDir);
+  await mkdir(outputDir, { recursive: true });
+  const outputPath = resolvePath(outputDir, `${input.runId}.json`);
+  await writeFile(outputPath, JSON.stringify({
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    userMessage: input.userMessage,
+    outcome,
+    plannerStreams: debugCapture.plannerStreams,
+    previewWaves: debugCapture.previewWaves,
+    finalTasks: debugCapture.finalTasks,
+  }, null, 2));
+  await input.logger.debug('initial_generation_debug_capture_written', {
+    runId: input.runId,
+    projectId: input.projectId,
+    sessionId: input.sessionId,
+    outputPath,
+    outcome,
+  });
 }
 
 async function finishFailedRun(
@@ -467,9 +1024,59 @@ export async function runInitialGeneration(
   });
 
   let repairAttempted = false;
-  let previewBroadcasted = false;
+  let previewWaveCount = 0;
+  const previewAnchorDate = getServerDate(input.serverDate);
+  const streamingPreviewSignatures = new Map<'structure' | 'scheduled', string>();
+  const debugCapture = createDebugCapture(input);
+  let visiblePreviewTasks: PreviewTaskMessage[] = [];
+  let visiblePreviewSignature = '';
+  let visiblePreviewSemanticSignature = '';
   const historyGroupId = randomUUID();
   const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
+  const emitMergedPreview = async (
+    source: 'structure_phases' | 'structure_subphases' | 'scheduled_tasks',
+    incomingTasks: PreviewTaskMessage[],
+  ): Promise<void> => {
+    const mergedTasks = mergePreviewTasks(visiblePreviewTasks, incomingTasks);
+    const mergedSignature = buildPreviewSignature(mergedTasks);
+    const mergedSemanticSignature = buildPreviewSemanticSignature(mergedTasks);
+    if (mergedSignature === visiblePreviewSignature) {
+      return;
+    }
+    if (source === 'scheduled_tasks' && mergedSemanticSignature === visiblePreviewSemanticSignature) {
+      return;
+    }
+
+    visiblePreviewTasks = mergedTasks;
+    visiblePreviewSignature = mergedSignature;
+    visiblePreviewSemanticSignature = mergedSemanticSignature;
+    previewWaveCount += 1;
+    await broadcastPreviewWave(input, previewWaveCount, mergedTasks, source, debugCapture ?? undefined);
+  };
+  const maybeBroadcastStreamingPreview = async (
+    family: 'structure' | 'scheduled',
+    fullText: string,
+  ): Promise<void> => {
+    if (family !== 'structure') {
+      return;
+    }
+
+    const previewTasks = buildLoosePreviewTasks(fullText, previewAnchorDate, { maxDepth: 'subphase' });
+    if (previewTasks.length === 0) {
+      return;
+    }
+
+    const signature = buildPreviewSignature(previewTasks);
+    if (signature === streamingPreviewSignatures.get(family)) {
+      return;
+    }
+
+    streamingPreviewSignatures.set(family, signature);
+    await emitMergedPreview(
+      family === 'structure' ? 'structure_subphases' : 'scheduled_tasks',
+      previewTasks,
+    );
+  };
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
     const startedAt = Date.now();
     await input.logger.debug('planner_query_request', {
@@ -483,7 +1090,23 @@ export async function runInitialGeneration(
     });
 
     try {
-      const result = await input.plannerQuery(plannerInput);
+      const result = await input.plannerQuery({
+        ...plannerInput,
+        onTextDelta: async (delta, fullText) => {
+          await plannerInput.onTextDelta?.(delta, fullText);
+          const family = plannerInput.stage === 'structure_planning' || plannerInput.stage === 'structure_planning_repair'
+            ? 'structure'
+            : 'scheduled';
+          const streamBucket = family === 'structure'
+            ? debugCapture?.plannerStreams.structure
+            : debugCapture?.plannerStreams.scheduled;
+          if (streamBucket) {
+            streamBucket.deltas.push(delta);
+            streamBucket.latestFullText = fullText;
+          }
+          await maybeBroadcastStreamingPreview(family, fullText);
+        },
+      });
       const content = readPlannerQueryContent(result);
       await input.logger.debug('planner_query_response', {
         runId: input.runId,
@@ -522,6 +1145,25 @@ export async function runInitialGeneration(
       structureModelDecision: structureModelRoutingDecision,
       schedulingModelDecision: schedulingModelRoutingDecision,
       sdkQuery: loggedPlannerQuery,
+      onStructureReady: async (structure) => {
+        const phasePreview = buildPhaseOnlyPreviewTasks(structure, previewAnchorDate);
+        if (phasePreview.length > 0) {
+          await emitMergedPreview('structure_phases', phasePreview);
+        }
+
+        const structurePreview = buildStructureTaskPreviewTasks(structure, previewAnchorDate);
+        const phaseSignature = phasePreview.map((task) => task.id).join('|');
+        const structureSignature = structurePreview.map((task) => task.id).join('|');
+        if (structurePreview.length > 0 && structureSignature !== phaseSignature) {
+          await emitMergedPreview('structure_subphases', structurePreview);
+        }
+      },
+      onScheduledReady: async (scheduled) => {
+        const scheduledPreview = buildScheduledPreviewTasks(scheduled, previewAnchorDate);
+        if (scheduledPreview.length > 0) {
+          await emitMergedPreview('scheduled_tasks', scheduledPreview);
+        }
+      },
     });
     repairAttempted = planning.repairAttempted;
 
@@ -583,28 +1225,7 @@ export async function runInitialGeneration(
         requestContextId: input.runId,
         finalizeGroup: true,
       },
-      onCompiled: async (compiledSchedule) => {
-        const previewTasks = compiledSchedule.command.tasks.map((task) => ({
-          id: task.id,
-          name: task.name,
-          startDate: task.startDate,
-          endDate: task.endDate,
-          parentId: task.parentId,
-          dependencies: task.dependencies,
-          sortOrder: task.sortOrder,
-        }));
-
-        input.broadcastToSession(input.sessionId, { type: 'preview_tasks', tasks: previewTasks, provisional: true });
-        previewBroadcasted = true;
-        await input.logger.debug('preview_tasks_broadcast', {
-          runId: input.runId,
-          projectId: input.projectId,
-          sessionId: input.sessionId,
-          taskCount: previewTasks.length,
-          taskIds: previewTasks.map((task) => task.id),
-          taskNames: previewTasks.map((task) => task.name),
-        });
-      },
+      onCompiled: async (_compiledSchedule) => {},
     });
 
     await input.logger.debug('compile_verdict', {
@@ -632,7 +1253,7 @@ export async function runInitialGeneration(
 
     if (!execution.ok) {
       const assistantResponse = buildFailureResponse('compile');
-      if (previewBroadcasted) {
+      if (previewWaveCount > 0) {
         input.broadcastToSession(input.sessionId, {
           type: 'preview_failed',
           message: 'Предварительный график не был сохранён. Проверьте ошибку и повторите запуск.',
@@ -653,6 +1274,7 @@ export async function runInitialGeneration(
       await finishFailedRun(input, assistantResponse, {
         requestContextId: input.runId,
       });
+      await flushDebugCapture(input, debugCapture, 'compile_failed');
 
       return {
         ok: false,
@@ -676,11 +1298,12 @@ export async function runInitialGeneration(
       repairAttempted,
       assistantResponse,
     });
-    const tasksAfter = await finishSuccessfulRun(input, assistantResponse, {
+    const tasksAfter = await finishSuccessfulRun(input, assistantResponse, debugCapture ?? undefined, {
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
       systemMessage: buildInitialGenerationSystemMessage(),
     });
+    await flushDebugCapture(input, debugCapture, 'complete');
 
     return {
       ok: true,
@@ -707,6 +1330,7 @@ export async function runInitialGeneration(
     await finishFailedRun(input, assistantResponse, {
       requestContextId: input.runId,
     });
+    await flushDebugCapture(input, debugCapture, 'planning_failed');
 
     return {
       ok: false,

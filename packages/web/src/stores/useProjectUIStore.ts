@@ -44,6 +44,13 @@ interface ProjectUIStore {
   clearProjectState: (projectId: string) => void;
 }
 
+export const DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS = [
+  'work-volume',
+  'completed-volume',
+  'status',
+  'assigned-resources',
+] as const;
+
 const DEFAULT_STATE: ProjectUIState = {
   viewMode: 'day',
   activeWorkspace: 'project',

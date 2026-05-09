@@ -11,6 +11,7 @@ import type {
   ScopeMode,
   WorklistPolicy,
 } from './types.js';
+import { assessExplicitWorklistIntent } from './worklist-policy.js';
 
 type InterpretationQueryInput = {
   prompt: string;
@@ -332,6 +333,15 @@ function buildPrompt(input: InterpretInitialRequestInput): string {
     'If the request is a targeted_edit against an existing schedule, set route to "mutation".',
     'If the current message is a short follow-up answer to a previous clarification, resolve it using the recent conversation summary instead of treating it as a standalone request.',
     'If the recent conversation is about editing or splitting existing tasks in a non-empty project, keep the request in the mutation route unless the user explicitly starts a new starter schedule.',
+    'When a list is present, estimate the probability that it is a strict explicit worklist using several criteria together:',
+    '- strong evidence for strict explicit worklist: concrete per-item date ranges, concrete durations, explicit "follow only this list" framing, tabular schedule-like formatting',
+    '- weaker evidence for strict explicit worklist: list-dominant formatting, clear task-level granularity, very complete-looking standalone list',
+    '- evidence against strict explicit worklist: the list looks like directions or seed scope for a broader starter schedule, or substantial non-list context dominates the message',
+    'Distinguish between two cases when the message contains a list:',
+    '- explicit_worklist: the user clearly frames the list as the exact scope to preserve and follow closely',
+    '- broad starter request with named directions: the list is only a basis or set of work directions, and the graph should still be enriched',
+    'Do not treat every listed set of items as explicit_worklist.',
+    'If the request names several directions but still asks for a starter schedule or project graph, prefer whole_project/full_project with worklist_plus_inferred_supporting_tasks unless the user clearly says to follow only the provided list.',
     'If the request provides an explicit_worklist for a starter schedule, set scopeMode to "explicit_worklist".',
     'Schema:',
     '{"route":"initial_generation|mutation","confidence":0.0,"requestKind":"whole_project|partial_scope|explicit_worklist|targeted_edit|ambiguous","planningMode":"whole_project_bootstrap|partial_scope_bootstrap|worklist_bootstrap","scopeMode":"full_project|partial_scope|explicit_worklist","objectProfile":"unknown|office_fitout|kindergarten|residential_multi_section","projectArchetype":"unknown|new_building|renovation","locationScope":{"sections":["..."],"floors":["..."],"zones":["..."]},"worklistPolicy":"strict_worklist|worklist_plus_inferred_supporting_tasks","clarification":{"needed":false,"reason":"none|ambiguous_list|missing_scope|scope_boundary_ambiguity|fragment_target_ambiguity|worklist_completeness_ambiguity"},"signals":["..."]}',
@@ -367,31 +377,36 @@ function buildRepairPrompt(input: InterpretInitialRequestInput, previousResponse
 function fallbackInterpretation(input: InterpretInitialRequestInput, fallbackReason: InterpretationFallbackReason): InitialRequestInterpretationResult {
   const locationScope = buildLocationScope(input.normalizedRequest.locationScope);
   const explicitWorklistCount = input.normalizedRequest.explicitWorkItems.length;
+  const explicitWorklistIntent = assessExplicitWorklistIntent({
+    userMessage: input.userMessage,
+    normalizedRequest: input.normalizedRequest,
+  });
+  const strictExplicitWorklist = explicitWorklistIntent.isStrict;
   const hasLocationScope = locationScope.sections.length > 0
     || locationScope.floors.length > 0
     || locationScope.zones.length > 0;
   const projectIsEmpty = input.projectState.isEmptyProject ?? input.projectState.taskCount === 0;
-  const route: InitialRequestInterpretationRoute = explicitWorklistCount >= 3 || projectIsEmpty
+  const route: InitialRequestInterpretationRoute = strictExplicitWorklist || projectIsEmpty
     ? 'initial_generation'
     : 'mutation';
-  const requestKind: InitialRequestKind = explicitWorklistCount >= 3
+  const requestKind: InitialRequestKind = strictExplicitWorklist
     ? 'explicit_worklist'
     : hasLocationScope
       ? 'partial_scope'
       : projectIsEmpty
         ? 'whole_project'
         : 'ambiguous';
-  const planningMode: PlanningMode = explicitWorklistCount >= 3
+  const planningMode: PlanningMode = strictExplicitWorklist
     ? 'worklist_bootstrap'
     : hasLocationScope || !projectIsEmpty
       ? 'partial_scope_bootstrap'
       : 'whole_project_bootstrap';
-  const scopeMode: ScopeMode = explicitWorklistCount >= 3
+  const scopeMode: ScopeMode = strictExplicitWorklist
     ? 'explicit_worklist'
     : hasLocationScope
       ? 'partial_scope'
       : 'full_project';
-  const worklistPolicy: WorklistPolicy = explicitWorklistCount >= 3
+  const worklistPolicy: WorklistPolicy = strictExplicitWorklist
     ? 'strict_worklist'
     : 'worklist_plus_inferred_supporting_tasks';
   const clarificationNeeded = requestKind === 'ambiguous';
@@ -415,9 +430,14 @@ function fallbackInterpretation(input: InterpretInitialRequestInput, fallbackRea
       signals: [
         projectIsEmpty ? 'empty_project' : 'non_empty_project',
         input.projectState.hasHierarchy ? 'has_hierarchy' : 'flat_project',
-        explicitWorklistCount >= 3 ? `explicit_worklist_count:${explicitWorklistCount}` : 'no_explicit_worklist',
+        explicitWorklistCount > 0 ? `explicit_worklist_count:${explicitWorklistCount}` : 'no_explicit_worklist',
+        `explicit_worklist_probability:${explicitWorklistIntent.probability}`,
+        strictExplicitWorklist ? 'strict_explicit_worklist' : 'directional_or_incomplete_worklist',
         hasLocationScope ? 'location_scope_present' : 'location_scope_absent',
         `fallback:${fallbackReason}`,
+        ...explicitWorklistIntent.criteria
+          .filter((criterion) => criterion.matched)
+          .map((criterion) => `worklist_signal:${criterion.key}`),
       ],
     },
     usedModelDecision: false,
