@@ -430,6 +430,7 @@ export async function runPiOrdinaryAgent(input: {
   mutationRoute: boolean;
   taskService: {
     list(projectId: string): Promise<{ tasks: unknown[] }>;
+    listAll(projectId: string): Promise<unknown[]>;
   };
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
   logger?: {
@@ -581,7 +582,7 @@ export async function runPiOrdinaryAgent(input: {
 
   const shouldRefreshTasks = facts.some((fact) => fact.mutating);
   const tasksAfter = shouldRefreshTasks
-    ? (await input.taskService.list(input.projectId)).tasks
+    ? await input.taskService.listAll(input.projectId)
     : undefined;
 
   return {

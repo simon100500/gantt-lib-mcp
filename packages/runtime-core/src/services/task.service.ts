@@ -231,6 +231,24 @@ export class TaskService {
   }
 
   /**
+   * Load all tasks for a project branch without relying on the default page size.
+   */
+  async listAll(projectId?: string, parentId?: string | null): Promise<Task[]> {
+    const pageSize = 1000;
+    let offset = 0;
+    const allTasks: Task[] = [];
+
+    while (true) {
+      const page = await this.list(projectId, parentId, pageSize, offset);
+      allTasks.push(...page.tasks);
+      if (!page.hasMore || page.tasks.length === 0) {
+        return allTasks;
+      }
+      offset += page.tasks.length;
+    }
+  }
+
+  /**
    * Get a task by ID with dependencies and optional children.
    */
   async get(id: string, includeChildren: boolean | 'shallow' | 'deep' = false): Promise<Task | undefined> {

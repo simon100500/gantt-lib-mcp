@@ -71,6 +71,7 @@ export type InitialGenerationServices = {
   };
   taskService: {
     list(projectId: string): Promise<{ tasks: ListedTask[] }>;
+    listAll(projectId: string): Promise<ListedTask[]>;
   };
 };
 
@@ -217,7 +218,7 @@ async function broadcastTasksSnapshot(
   input: RunInitialGenerationInput,
   reason: string,
 ): Promise<ListedTask[]> {
-  const { tasks } = await input.services.taskService.list(input.projectId);
+  const tasks = await input.services.taskService.listAll(input.projectId);
   input.broadcastToSession(input.sessionId, { type: 'tasks', tasks });
   await input.logger.debug('tasks_broadcast', {
     runId: input.runId,
