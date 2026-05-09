@@ -50,6 +50,7 @@ type PlannerQueryInput = {
   prompt: string;
   model: string;
   stage: InitialGenerationPlannerStage;
+  onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
 };
 
 type PlannerQueryResult = string | { content?: string };
@@ -212,6 +213,165 @@ function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): 
 
 function buildPreviewId(nodeKey: string): string {
   return `preview:${nodeKey}`;
+}
+
+type LoosePreviewEntity = {
+  kind: 'phase' | 'subphase' | 'task';
+  key: string;
+  title: string;
+  parentKey?: string;
+  startDate?: string;
+  endDate?: string;
+  order: number;
+};
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function parseLoosePreviewEntities(rawText: string): LoosePreviewEntity[] {
+  const tokenPattern = /"(phaseKey|subphaseKey|taskKey|title|startDate|endDate)"\s*:\s*"([^"]*)"/g;
+  const entityMap = new Map<string, LoosePreviewEntity>();
+  const orderedKeys: string[] = [];
+  let currentPhaseKey: string | undefined;
+  let currentSubphaseKey: string | undefined;
+  let pendingEntityId: string | undefined;
+  let order = 0;
+
+  const ensureEntity = (kind: LoosePreviewEntity['kind'], key: string, parentKey?: string): LoosePreviewEntity => {
+    const id = `${kind}:${key}`;
+    const existing = entityMap.get(id);
+    if (existing) {
+      if (parentKey && !existing.parentKey) {
+        existing.parentKey = parentKey;
+      }
+      return existing;
+    }
+
+    const entity: LoosePreviewEntity = {
+      kind,
+      key,
+      title: key,
+      ...(parentKey ? { parentKey } : {}),
+      order: order++,
+    };
+    entityMap.set(id, entity);
+    orderedKeys.push(id);
+    return entity;
+  };
+
+  for (const match of rawText.matchAll(tokenPattern)) {
+    const field = match[1];
+    const value = match[2]?.trim() ?? '';
+    if (!field || !value) {
+      continue;
+    }
+
+    if (field === 'phaseKey') {
+      const entity = ensureEntity('phase', value);
+      currentPhaseKey = entity.key;
+      currentSubphaseKey = undefined;
+      pendingEntityId = `phase:${value}`;
+      continue;
+    }
+
+    if (field === 'subphaseKey') {
+      const entity = ensureEntity('subphase', value, currentPhaseKey);
+      currentSubphaseKey = entity.key;
+      pendingEntityId = `subphase:${value}`;
+      continue;
+    }
+
+    if (field === 'taskKey') {
+      const entity = ensureEntity('task', value, currentSubphaseKey ?? currentPhaseKey);
+      pendingEntityId = `task:${value}`;
+      continue;
+    }
+
+    if (!pendingEntityId) {
+      continue;
+    }
+
+    const entity = entityMap.get(pendingEntityId);
+    if (!entity) {
+      continue;
+    }
+
+    if (field === 'title') {
+      entity.title = value;
+      continue;
+    }
+
+    if (field === 'startDate' && isIsoDate(value)) {
+      entity.startDate = value;
+      continue;
+    }
+
+    if (field === 'endDate' && isIsoDate(value)) {
+      entity.endDate = value;
+    }
+  }
+
+  return orderedKeys
+    .map((id) => entityMap.get(id))
+    .filter((entity): entity is LoosePreviewEntity => Boolean(entity));
+}
+
+function buildLoosePreviewTasks(
+  rawText: string,
+  anchorDate: string,
+): PreviewTaskMessage[] {
+  const entities = parseLoosePreviewEntities(rawText);
+  if (entities.length === 0) {
+    return [];
+  }
+
+  const rows = entities.map((entity) => ({
+    id: buildPreviewId(entity.key),
+    name: entity.title || entity.key,
+    startDate: entity.startDate ?? anchorDate,
+    endDate: entity.endDate ?? entity.startDate ?? anchorDate,
+    parentId: entity.parentKey ? buildPreviewId(entity.parentKey) : undefined,
+    sortOrder: entity.order,
+  }));
+
+  const childrenByParent = new Map<string, PreviewTaskMessage[]>();
+  for (const row of rows) {
+    if (!row.parentId) {
+      continue;
+    }
+    const children = childrenByParent.get(row.parentId) ?? [];
+    children.push(row);
+    childrenByParent.set(row.parentId, children);
+  }
+
+  const applyRollup = (row: PreviewTaskMessage): { startDate: string; endDate: string } => {
+    const children = childrenByParent.get(row.id) ?? [];
+    if (children.length === 0) {
+      return { startDate: row.startDate, endDate: row.endDate };
+    }
+
+    const childRanges = children.map((child) => applyRollup(child));
+    const startDate = childRanges.reduce((min, range) => range.startDate < min ? range.startDate : min, childRanges[0]!.startDate);
+    const endDate = childRanges.reduce((max, range) => range.endDate > max ? range.endDate : max, childRanges[0]!.endDate);
+    row.startDate = startDate;
+    row.endDate = endDate;
+    return { startDate, endDate };
+  };
+
+  for (const row of rows) {
+    if (!row.parentId) {
+      applyRollup(row);
+    }
+  }
+
+  return rows;
+}
+
+function buildPreviewSignature(tasks: PreviewTaskMessage[]): string {
+  return tasks
+    .map((task) => `${task.id}|${task.parentId ?? ''}|${task.name}|${task.startDate}|${task.endDate}|${task.sortOrder ?? 0}`)
+    .join('\n');
 }
 
 function buildPhaseOnlyPreviewTasks(
@@ -624,8 +784,33 @@ export async function runInitialGeneration(
 
   let repairAttempted = false;
   let previewWaveCount = 0;
+  const previewAnchorDate = getServerDate(input.serverDate);
+  const streamingPreviewSignatures = new Map<'structure' | 'scheduled', string>();
   const historyGroupId = randomUUID();
   const checkpointGroupId = resolveCheckpointGroupId(await historyService.getLatestVisibleGroupId(input.projectId));
+  const maybeBroadcastStreamingPreview = async (
+    family: 'structure' | 'scheduled',
+    fullText: string,
+  ): Promise<void> => {
+    const previewTasks = buildLoosePreviewTasks(fullText, previewAnchorDate);
+    if (previewTasks.length === 0) {
+      return;
+    }
+
+    const signature = buildPreviewSignature(previewTasks);
+    if (signature === streamingPreviewSignatures.get(family)) {
+      return;
+    }
+
+    streamingPreviewSignatures.set(family, signature);
+    previewWaveCount += 1;
+    await broadcastPreviewWave(
+      input,
+      previewWaveCount,
+      previewTasks,
+      family === 'structure' ? 'structure_subphases' : 'scheduled_tasks',
+    );
+  };
   const loggedPlannerQuery = async (plannerInput: PlannerQueryInput): Promise<PlannerQueryResult> => {
     const startedAt = Date.now();
     await input.logger.debug('planner_query_request', {
@@ -639,7 +824,16 @@ export async function runInitialGeneration(
     });
 
     try {
-      const result = await input.plannerQuery(plannerInput);
+      const result = await input.plannerQuery({
+        ...plannerInput,
+        onTextDelta: async (delta, fullText) => {
+          await plannerInput.onTextDelta?.(delta, fullText);
+          const family = plannerInput.stage === 'structure_planning' || plannerInput.stage === 'structure_planning_repair'
+            ? 'structure'
+            : 'scheduled';
+          await maybeBroadcastStreamingPreview(family, fullText);
+        },
+      });
       const content = readPlannerQueryContent(result);
       await input.logger.debug('planner_query_response', {
         runId: input.runId,
@@ -668,7 +862,6 @@ export async function runInitialGeneration(
   };
 
   try {
-    const previewAnchorDate = getServerDate(input.serverDate);
     const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,

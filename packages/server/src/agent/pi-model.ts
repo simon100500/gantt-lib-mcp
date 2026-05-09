@@ -1,4 +1,4 @@
-import { complete, type Context, type Model } from '@mariozechner/pi-ai';
+import { complete, stream, type AssistantMessage, type Context, type Model } from '@mariozechner/pi-ai';
 
 export type PiOpenAIEnv = {
   OPENAI_API_KEY: string;
@@ -44,6 +44,7 @@ export async function completeTextPrompt(input: {
   prompt: string;
   systemPrompt?: string;
   maxTokens?: number;
+  onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
 }): Promise<string> {
   const model = buildPiOpenAICompletionsModel(input.env);
   const context: Context = {
@@ -54,11 +55,50 @@ export async function completeTextPrompt(input: {
       timestamp: Date.now(),
     }],
   };
-  const message = await complete(model, context, {
+  if (!input.onTextDelta) {
+    const message = await complete(model, context, {
+      apiKey: input.env.OPENAI_API_KEY,
+      maxTokens: input.maxTokens,
+    });
+
+    const content = extractTextFromAssistantContent(message.content);
+    if (message.stopReason === 'error' || message.stopReason === 'aborted') {
+      throw new Error(message.errorMessage || content || 'Model query failed');
+    }
+
+    if (!content.trim()) {
+      throw new Error('Model query returned an empty response');
+    }
+
+    return content;
+  }
+
+  const eventStream = stream(model, context, {
     apiKey: input.env.OPENAI_API_KEY,
     maxTokens: input.maxTokens,
   });
+  let streamedText = '';
+  let finalMessage: AssistantMessage | null = null;
 
+  for await (const event of eventStream) {
+    if (event.type === 'text_delta') {
+      streamedText += event.delta;
+      await input.onTextDelta(event.delta, streamedText);
+      continue;
+    }
+
+    if (event.type === 'done') {
+      finalMessage = event.message;
+      continue;
+    }
+
+    if (event.type === 'error') {
+      const content = extractTextFromAssistantContent(event.error.content);
+      throw new Error(event.error.errorMessage || content || 'Model query failed');
+    }
+  }
+
+  const message = finalMessage ?? await eventStream.result();
   const content = extractTextFromAssistantContent(message.content);
   if (message.stopReason === 'error' || message.stopReason === 'aborted') {
     throw new Error(message.errorMessage || content || 'Model query failed');

@@ -270,6 +270,7 @@ type PlannerQueryInput = {
   prompt: string;
   model: string;
   stage: InitialGenerationPlannerStage;
+  onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
 };
 
 type PlannerQueryResult = string | { content?: string };

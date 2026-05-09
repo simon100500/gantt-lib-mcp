@@ -37,6 +37,7 @@ type InitialGenerationPlannerQueryInput = {
   prompt: string;
   model: string;
   stage: 'structure_planning' | 'structure_planning_repair' | 'schedule_metadata' | 'schedule_metadata_repair';
+  onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
 };
 
 type InitialGenerationRouteDecisionQueryInput = {
@@ -158,6 +159,7 @@ async function executeInitialGenerationPlannerQuery(
       OPENAI_MODEL: input.model,
     },
     prompt: input.prompt,
+    onTextDelta: input.onTextDelta,
   });
 
   return { content };
