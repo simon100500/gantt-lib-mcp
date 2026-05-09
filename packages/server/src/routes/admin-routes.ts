@@ -7,6 +7,7 @@ import { signAccessToken } from '../auth.js';
 import { authMiddleware } from '../middleware/auth-middleware.js';
 import { requireAdminAccess } from '../middleware/admin-middleware.js';
 import { BillingService } from '../services/billing-service.js';
+import { templateGenerationAdminService } from '../services/template-generation-admin-service.js';
 import { TrialService } from '../services/trial-service.js';
 
 interface AdminUpdateSubscriptionBody {
@@ -42,6 +43,10 @@ function normalizePlan(value: unknown): PlanId | null {
 
 function normalizePeriod(value: unknown): BillingPeriod | null {
   return value === 'monthly' || value === 'yearly' ? value : null;
+}
+
+function normalizeTemplatePublicationKind(value: unknown): 'template' | 'block' | null {
+  return value === 'template' || value === 'block' ? value : null;
 }
 
 async function buildAdminUserSummary(user: { id: string; email: string; createdAt: Date; lastActiveAt?: Date | null }) {
@@ -279,6 +284,87 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
     return reply.send({
       isAdmin: isAdminEmail(user?.email),
     });
+  });
+
+  fastify.get('/api/admin/template-generation/jobs', { preHandler: [authMiddleware, requireAdminAccess] }, async (_req, reply) => {
+    const jobs = await templateGenerationAdminService.listJobs();
+    return reply.send({ jobs });
+  });
+
+  fastify.get('/api/admin/template-generation/sources', { preHandler: [authMiddleware, requireAdminAccess] }, async (_req, reply) => {
+    const sources = await templateGenerationAdminService.listSources();
+    return reply.send({ sources });
+  });
+
+  fastify.get('/api/admin/template-generation/publications', { preHandler: [authMiddleware, requireAdminAccess] }, async (_req, reply) => {
+    const publications = await templateGenerationAdminService.listPublications();
+    return reply.send({ publications });
+  });
+
+  fastify.post('/api/admin/template-generation/jobs', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      description?: unknown;
+      kind?: unknown;
+      category?: unknown;
+      industry?: unknown;
+      autoPublish?: unknown;
+      groupId?: unknown;
+    };
+    const description = typeof body.description === 'string' ? body.description.trim() : '';
+    const kind = normalizeTemplatePublicationKind(body.kind);
+    if (!description || !kind) {
+      return reply.status(400).send({ error: 'description and kind are required' });
+    }
+
+    const result = await templateGenerationAdminService.createJobFromDescription({
+      requestedByUserId: req.user!.userId,
+      description,
+      kind,
+      category: typeof body.category === 'string' ? body.category : undefined,
+      industry: typeof body.industry === 'string' ? body.industry : undefined,
+      autoPublish: body.autoPublish === true,
+      groupId: typeof body.groupId === 'string' ? body.groupId : undefined,
+    });
+
+    return reply.status(result.job.status === 'failed' ? 500 : 201).send(result);
+  });
+
+  fastify.post('/api/admin/template-generation/jobs/:id/publish', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const jobId = (req.params as { id?: string }).id?.trim();
+    const body = (req.body ?? {}) as {
+      visibility?: unknown;
+      verificationStatus?: unknown;
+    };
+    if (!jobId) {
+      return reply.status(400).send({ error: 'job id is required' });
+    }
+
+    const visibility = body.visibility === 'private' || body.visibility === 'marketplace' || body.visibility === 'site' || body.visibility === 'both'
+      ? body.visibility
+      : undefined;
+    const verificationStatus = body.verificationStatus === 'unverified'
+      || body.verificationStatus === 'reviewed'
+      || body.verificationStatus === 'verified'
+      || body.verificationStatus === 'editorial'
+      ? body.verificationStatus
+      : undefined;
+
+    const result = await templateGenerationAdminService.publishJob({
+      jobId,
+      visibility,
+      verificationStatus,
+    });
+    return reply.send(result);
+  });
+
+  fastify.post('/api/admin/template-generation/publications/:id/regenerate-seo', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const publicationId = (req.params as { id?: string }).id?.trim();
+    if (!publicationId) {
+      return reply.status(400).send({ error: 'publication id is required' });
+    }
+
+    const publication = await templateGenerationAdminService.regenerateSeoDraft(publicationId);
+    return reply.send({ publication });
   });
 
   fastify.get('/api/admin/users', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {

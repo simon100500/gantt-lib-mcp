@@ -2561,6 +2561,11 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         setWorkspace({ kind: 'project', projectId: targetProjectId, chatOpen: readProjectChatOpenState() });
       }}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
+      adminTemplateLinks={[
+        { id: 'admin-template-jobs', label: 'Jobs', href: '/admin?section=templates&tab=jobs' },
+        { id: 'admin-template-sources', label: 'Sources', href: '/admin?section=templates&tab=sources' },
+        { id: 'admin-template-publications', label: 'Publications', href: '/admin?section=templates&tab=publications' },
+      ]}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
       ganttRef={ganttRef}

@@ -36,6 +36,7 @@ interface ProjectSwitcherProps {
   onInsertTemplateToProject?: (templateId: string) => void | Promise<void>;
   canInsertTemplateToProject?: boolean;
   onOpenResourcePool?: () => void | Promise<void>;
+  adminTemplateLinks?: Array<{ id: string; label: string; href: string }>;
   onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
   footer?: ReactNode;
@@ -450,6 +451,7 @@ export function ProjectSwitcher({
   onDeleteTemplate,
   onInsertTemplateToProject,
   canInsertTemplateToProject = false,
+  adminTemplateLinks = [],
   onMenuOpenChange,
   onClose,
   footer,
@@ -663,6 +665,29 @@ export function ProjectSwitcher({
                 )) : (
                   <div className="px-3 py-2 text-xs text-slate-400">Нет шаблонов</div>
                 )}
+              </ProjectSection>
+            </div>
+          ) : null}
+
+          {adminTemplateLinks.length > 0 ? (
+            <div>
+              <div className="mx-3 mb-2 border-t border-slate-200" />
+              <ProjectSection
+                title="Шаблоны"
+                icon={<ToyBrick className="h-4 w-4" />}
+                open
+                onToggle={() => {}}
+              >
+                {adminTemplateLinks.map((link) => (
+                  <button
+                    key={link.id}
+                    type="button"
+                    onClick={() => { window.location.href = link.href; }}
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 hover:text-primary sm:text-xs"
+                  >
+                    {link.label}
+                  </button>
+                ))}
               </ProjectSection>
             </div>
           ) : null}

@@ -158,6 +158,15 @@ enum TemplatePublicationVerificationStatus {
   editorial
 }
 
+enum TemplateGenerationJobStatus {
+  queued
+  in_progress
+  review_required
+  ready_to_publish
+  published
+  failed
+}
+
 enum ProjectGroupMemberRole {
   editor
   viewer
@@ -187,6 +196,7 @@ model User {
   projectGroups   ProjectGroup[]
   templates       Template[]
   templatePublications TemplatePublication[] @relation("TemplatePublicationSourceUser")
+  templateGenerationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobRequestedByUser")
   resources       Resource[]
   sessions        Session[]
   subscriptions   Subscription[]
@@ -294,6 +304,7 @@ model Project {
   agentSessionState AgentSessionState?
   shareLinks     ShareLink[]
   templatePublications TemplatePublication[] @relation("TemplatePublicationSourceProject")
+  templateGenerationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobSourceProject")
   projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
   baselines      Baseline[]
@@ -696,6 +707,7 @@ model TemplatePublication {
   sourceProject  Project  @relation("TemplatePublicationSourceProject", fields: [sourceProjectId], references: [id], onDelete: Cascade)
   sourceUser     User     @relation("TemplatePublicationSourceUser", fields: [sourceUserId], references: [id], onDelete: Cascade)
   sourceTemplate Template? @relation("TemplatePublicationSourceTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  generationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobPublication")
 
   @@map("template_publications")
   @@index([sourceProjectId, updatedAt(sort: Desc)])
@@ -704,6 +716,39 @@ model TemplatePublication {
   @@index([status, visibility, verificationStatus, updatedAt(sort: Desc)])
   @@index([category, kind])
   @@index([industry, kind])
+}
+
+model TemplateGenerationJob {
+  id                 String                      @id @default(uuid())
+  requestedByUserId  String                      @map("requested_by_user_id")
+  sourceProjectId    String?                     @map("source_project_id")
+  publicationId      String?                     @map("publication_id")
+  sourceDescription  String                      @map("source_description")
+  kind               TemplatePublicationKind
+  category           String?
+  industry           String?
+  title              String?
+  slug               String?
+  autoPublish        Boolean                     @default(false) @map("auto_publish")
+  status             TemplateGenerationJobStatus @default(queued)
+  seoTitle           String?                     @map("seo_title")
+  seoDescription     String?                     @map("seo_description")
+  seoBody            String?                     @map("seo_body")
+  errorMessage       String?                     @map("error_message")
+  lastRunAt          DateTime?                   @map("last_run_at")
+  completedAt        DateTime?                   @map("completed_at")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @updatedAt @map("updated_at")
+
+  requestedByUser User                 @relation("TemplateGenerationJobRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  sourceProject    Project?            @relation("TemplateGenerationJobSourceProject", fields: [sourceProjectId], references: [id], onDelete: SetNull)
+  publication      TemplatePublication? @relation("TemplateGenerationJobPublication", fields: [publicationId], references: [id], onDelete: SetNull)
+
+  @@map("template_generation_jobs")
+  @@index([requestedByUserId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([sourceProjectId])
+  @@index([publicationId])
 }
 
 // Messages table

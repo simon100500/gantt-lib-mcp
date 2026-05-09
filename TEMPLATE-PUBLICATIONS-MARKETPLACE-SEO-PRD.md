@@ -518,3 +518,7 @@ Automation и skill-flow не являются внешним костылём.
 - admin and skill publish flow;
 - site build integration;
 - marketplace UX contract.
+
+Для следующего продуктового слоя — admin workflow, automation pipeline и skill orchestration — смотри follow-up документ:
+
+- `TEMPLATE-PUBLICATIONS-ADMIN-AUTOMATION-PRD.md`
