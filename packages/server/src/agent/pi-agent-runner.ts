@@ -1,14 +1,21 @@
 import { Agent, type AgentEvent, type AgentTool } from '@mariozechner/pi-agent-core';
-import { Type, type Model, type TSchema } from '@mariozechner/pi-ai';
+import { Type, type TSchema } from '@mariozechner/pi-ai';
 import { NORMALIZED_TOOL_CATALOG } from '@gantt/runtime-core/tool-core/catalog';
 import { createToolContext } from '@gantt/runtime-core/tool-core/context';
 import { executeToolCall } from '@gantt/runtime-core/tool-core/handlers';
+import type {
+  AgentOpenThreadState,
+  AgentSessionSnapshotMessage,
+} from '@gantt/runtime-core/types';
 import type {
   NormalizedToolInputMap,
   NormalizedToolName,
   ToolCallContext,
 } from '@gantt/runtime-core/tool-core/types';
 import type { ServerMessage } from '../ws.js';
+import { buildPiOpenAICompletionsModel, type PiOpenAIEnv } from './pi-model.js';
+
+export { buildPiOpenAICompletionsModel } from './pi-model.js';
 
 type JsonSchemaProperty = {
   type?: string;
@@ -22,11 +29,7 @@ type JsonSchemaProperty = {
   required?: readonly string[];
 };
 
-export type PiAgentEnv = {
-  OPENAI_API_KEY: string;
-  OPENAI_BASE_URL: string;
-  OPENAI_MODEL: string;
-};
+export type PiAgentEnv = PiOpenAIEnv;
 
 export type PiToolExecutionFact = {
   toolCallId: string;
@@ -47,6 +50,7 @@ export type PiAgentRunResult = {
   acceptedMutatingToolCalls: PiToolExecutionFact[];
   rejectedMutatingToolCalls: PiToolExecutionFact[];
   tasksAfter?: unknown[];
+  sessionMessages: AgentSessionSnapshotMessage[];
   metrics: {
     durationMs: number;
     timeToFirstToolCallMs: number | null;
@@ -108,6 +112,7 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- update_tasks: изменить имя, цвет, прогресс; не использовать для дат и связей.',
   '- move_tasks: изменить родителя или порядок задач.',
   '- shift_tasks: сдвинуть даты на N дней по текущему режиму дней проекта и выбранному календарю. Не выбирай режим сам.',
+  '- change_task_duration: изменить длительность задачи в днях с якорем start/end. Используй для "увеличь срок", "сделай 10 дней", "уменьши на 3 дня".',
   '- delete_tasks: удалить задачи.',
   '- link_tasks: создать predecessor-successor связь между существующими задачами; если тип не указан, используй FS.',
   '- unlink_tasks: удалить связь.',
@@ -118,19 +123,21 @@ export const GANTT_PI_AGENT_SYSTEM_PROMPT = [
   '- Если пользователь просит просто добавить новую работу/задачу и не дал даты, не задавай уточняющий вопрос.',
   '- Для такой новой задачи сначала получи get_project_summary, затем создай top-level задачу длительностью 1 день.',
   '- Дату по умолчанию ставь в effectiveDateRange.endDate проекта; если endDate нет, используй сегодняшнюю дату.',
+  '- Если пользователь просит добавить задачу "в конце работ", "в финале", "после завершения", создай её после последней релевантной задачи и задай зависимость FS, а не только ту же дату.',
   '- Если пользователь сказал "туда же", "рядом", "после", "в блок", но объект неясен, используй короткую историю и find_tasks для ближайшего контекста.',
   '- Уточняй только когда неверный выбор может удалить, переместить, связать или массово изменить существующие задачи.',
   '- Если пользователь просит добавить подробный/последовательный фрагмент работ, создавай реалистичные FS-зависимости между явно последовательными задачами.',
   '- Для зависимостей внутри одного create_tasks вызова задай стабильные id новым задачам и указывай dependencies через эти id; не жди отдельного поиска.',
   '- Если создаёшь задачу "после X", сначала найди X, затем создай новую задачу и свяжи X -> новая задача через link_tasks, если зависимость явно нужна.',
   '- Если пользователь просит связать две существующие задачи, найди обе через find_tasks и вызови link_tasks; не заменяй это update_tasks или ручным редактированием dependencies.',
+  '- Если find_tasks вернул один точный match по названию и остальные более длинные частичные совпадения, выбирай точный match без уточнения.',
   '',
   'Процесс:',
   '1. Если запрос read-only, используй read tool или ответь из уже доступного контекста.',
   '2. Если запрос mutating и нужны taskId, сначала используй find_tasks.',
   '3. Если результат find_tasks неоднозначен и выбор изменит проект, задай один короткий уточняющий вопрос.',
   '4. Если taskId известен, сразу вызывай подходящий mutation tool.',
-  '5. Для одного намерения предпочитай один mutation tool.',
+  '5. Для одного намерения предпочитай минимальное число mutation tool calls.',
   '6. Не делай validate_schedule после успешного изменения, если пользователь не просил проверить.',
   '7. Не делай второй проход, если tool уже дал достаточный результат.',
   '',
@@ -152,30 +159,9 @@ const MUTATING_TOOL_NAMES = new Set<string>(
     .filter((definition) => definition.mutating)
     .map((definition) => definition.name),
 );
-
-export function buildPiOpenAICompletionsModel(env: PiAgentEnv): Model<'openai-completions'> {
-  return {
-    id: env.OPENAI_MODEL,
-    name: env.OPENAI_MODEL,
-    api: 'openai-completions',
-    provider: 'gantt-openai-compatible',
-    baseUrl: env.OPENAI_BASE_URL,
-    reasoning: false,
-    input: ['text'],
-    cost: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-    },
-    contextWindow: 128000,
-    maxTokens: 4096,
-    compat: {
-      supportsStore: false,
-      supportsReasoningEffort: false,
-    },
-  };
-}
+const SESSION_MEMORY_PREFIX = '[SESSION_MEMORY]';
+const MAX_SESSION_RESTORE_MESSAGES = 12;
+const MAX_CONTEXT_MESSAGES = 32;
 
 function schemaOptions(property: JsonSchemaProperty | undefined): Record<string, unknown> {
   return {
@@ -336,7 +322,7 @@ export function buildPiAgentTools(input: BuildPiAgentToolsInput): AgentTool[] {
     label: definition.name,
     description: definition.description,
     parameters: convertToolInputSchemaToTypeBox(definition.inputSchema),
-    executionMode: 'parallel',
+    executionMode: definition.mutating ? 'sequential' : 'parallel',
     execute: async (_toolCallId, params, signal) => {
       if (signal?.aborted) {
         throw new Error('Tool call aborted');
@@ -401,26 +387,141 @@ function extractAssistantText(message: unknown): string {
     .join('');
 }
 
+function extractMessageTextContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  return content
+    .filter((block): block is { type: 'text'; text: string } => (
+      Boolean(block)
+      && typeof block === 'object'
+      && (block as { type?: unknown }).type === 'text'
+      && typeof (block as { text?: unknown }).text === 'string'
+    ))
+    .map((block) => block.text)
+    .join('');
+}
+
+function clipText(value: string, limit: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= limit) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+}
+
+function buildSessionMemoryMessage(input: {
+  projectId: string;
+  rollingSummary?: string | null;
+  openThreads?: AgentOpenThreadState | null;
+}): string | null {
+  const summary = input.rollingSummary?.trim();
+  const openThread = input.openThreads;
+  const lines = [
+    `${SESSION_MEMORY_PREFIX}`,
+    `projectId: ${input.projectId}`,
+  ];
+
+  if (summary) {
+    lines.push(`rollingSummary: ${summary}`);
+  }
+
+  if (openThread?.unresolved) {
+    if (openThread.activeOperationKind) {
+      lines.push(`activeOperationKind: ${openThread.activeOperationKind}`);
+    }
+    if (openThread.recentAssistantQuestion) {
+      lines.push(`recentAssistantQuestion: ${openThread.recentAssistantQuestion}`);
+    }
+    if (openThread.lastUserMessage) {
+      lines.push(`lastUserMessage: ${openThread.lastUserMessage}`);
+    }
+    if (Array.isArray(openThread.targetEntityHints) && openThread.targetEntityHints.length > 0) {
+      lines.push(`targetEntityHints: ${openThread.targetEntityHints.join(', ')}`);
+    }
+  }
+
+  return lines.length > 2 ? lines.join('\n') : null;
+}
+
 function buildInitialMessages(input: {
   projectId: string;
-  messages: Array<{ role: string; content: string }>;
-}) {
-  const recent = input.messages.slice(-6);
-  const content = [
-    `projectId: ${input.projectId}`,
-    recent.length > 0
-      ? [
-          'Короткая история диалога:',
-          ...recent.map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`),
-        ].join('\n')
-      : '',
-  ].filter(Boolean).join('\n\n');
+  messages: AgentSessionSnapshotMessage[];
+  rollingSummary?: string | null;
+  openThreads?: AgentOpenThreadState | null;
+}): any[] {
+  const initialMessages: Array<
+    | { role: 'user'; content: string; timestamp: number }
+    | { role: 'assistant'; content: string; timestamp: number }
+  > = [];
+  const sessionMemoryMessage = buildSessionMemoryMessage(input);
+  if (sessionMemoryMessage) {
+    initialMessages.push({
+      role: 'assistant',
+      content: sessionMemoryMessage,
+      timestamp: Date.now(),
+    });
+  }
 
-  return [{
-    role: 'user' as const,
-    content,
-    timestamp: Date.now(),
-  }];
+  for (const message of input.messages.slice(-MAX_SESSION_RESTORE_MESSAGES)) {
+    const content = clipText(message.content, 4_000);
+    if (!content || content.startsWith(SESSION_MEMORY_PREFIX)) {
+      continue;
+    }
+
+    initialMessages.push({
+      role: message.role,
+      content,
+      timestamp: message.timestamp,
+    });
+  }
+
+  if (initialMessages.length === 0) {
+    initialMessages.push({
+      role: 'assistant',
+      content: `projectId: ${input.projectId}`,
+      timestamp: Date.now(),
+    });
+  }
+
+  return initialMessages as any[];
+}
+
+export async function compactSessionContext<TMessage extends { role?: unknown; content?: unknown }>(
+  messages: TMessage[],
+): Promise<TMessage[]> {
+  if (messages.length <= MAX_CONTEXT_MESSAGES) {
+    return messages;
+  }
+
+  const memoryMessage = messages.find((message) => (
+    typeof message?.content === 'string' && message.content.startsWith(SESSION_MEMORY_PREFIX)
+  ));
+  const tail = messages.filter((message) => message !== memoryMessage).slice(-(MAX_CONTEXT_MESSAGES - (memoryMessage ? 1 : 0)));
+
+  return memoryMessage ? [memoryMessage, ...tail] : tail;
+}
+
+export function extractSessionSnapshotMessages(messages: unknown[]): AgentSessionSnapshotMessage[] {
+  return messages
+    .filter((message): message is Record<string, unknown> => Boolean(message) && typeof message === 'object')
+    .map((message) => ({
+      role: message.role === 'assistant' ? 'assistant' : message.role === 'user' ? 'user' : null,
+      content: clipText(extractMessageTextContent(message.content), 4_000),
+      timestamp: typeof message.timestamp === 'number' ? message.timestamp : Date.now(),
+    }))
+    .filter((message): message is AgentSessionSnapshotMessage => (
+      message.role !== null
+      && message.content.length > 0
+      && !message.content.startsWith(SESSION_MEMORY_PREFIX)
+    ))
+    .slice(-MAX_SESSION_RESTORE_MESSAGES);
 }
 
 function buildNoToolCallMutationMessage(): string {
@@ -445,13 +546,16 @@ export async function runPiOrdinaryAgent(input: {
   runId: string;
   userId?: string;
   env: PiAgentEnv;
-  messages: Array<{ role: string; content: string }>;
+  messages: AgentSessionSnapshotMessage[];
   historyGroupId: string;
   requestContextId: string;
   historyTitle: string;
   mutationRoute: boolean;
+  rollingSummary?: string | null;
+  openThreads?: AgentOpenThreadState | null;
   taskService: {
     list(projectId: string): Promise<{ tasks: unknown[] }>;
+    listAll(projectId: string): Promise<unknown[]>;
   };
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
   logger?: {
@@ -483,8 +587,11 @@ export async function runPiOrdinaryAgent(input: {
       messages: buildInitialMessages({
         projectId: input.projectId,
         messages: input.messages,
+        rollingSummary: input.rollingSummary,
+        openThreads: input.openThreads,
       }),
     },
+    transformContext: compactSessionContext,
     toolExecution: 'parallel',
     getApiKey: () => input.env.OPENAI_API_KEY,
     sessionId: input.sessionId,
@@ -603,8 +710,9 @@ export async function runPiOrdinaryAgent(input: {
 
   const shouldRefreshTasks = facts.some((fact) => fact.mutating);
   const tasksAfter = shouldRefreshTasks
-    ? (await input.taskService.list(input.projectId)).tasks
+    ? await input.taskService.listAll(input.projectId)
     : undefined;
+  const sessionMessages = extractSessionSnapshotMessages(agent.state.messages);
 
   return {
     assistantResponse: assistantResponse.trim(),
@@ -614,6 +722,7 @@ export async function runPiOrdinaryAgent(input: {
     acceptedMutatingToolCalls,
     rejectedMutatingToolCalls,
     tasksAfter,
+    sessionMessages,
     metrics: {
       durationMs: Date.now() - startedAt,
       timeToFirstToolCallMs,

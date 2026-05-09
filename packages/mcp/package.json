@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@mariozechner/pi-ai": "^0.70.2",
     "@prisma/client": "^5.22.0",
-    "@qwen-code/sdk": "^0.1.6",
     "@gantt/runtime-core": "^0.1.0",
     "dotenv": "^17.3.1",
     "gantt-lib": "^0.70.0"

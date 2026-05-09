@@ -137,6 +137,55 @@ describe('initial-request interpreter', () => {
     assert.equal(result.interpretation.requestKind, 'targeted_edit');
   });
 
+  it('uses recent conversation context for short follow-up clarifications on non-empty projects', async () => {
+    let prompt = '';
+
+    const result = await interpretInitialRequest({
+      userMessage: 'ВО ВСЕХ!',
+      normalizedRequest: normalizeInitialRequest('ВО ВСЕХ!'),
+      projectState: {
+        taskCount: 100,
+        hasHierarchy: true,
+        isEmptyProject: false,
+      },
+      recentConversationSummary: [
+        'user: РАЗБЕЙ МОНОЛИТ НА ПЛИТУ ПЕРЕКРЫТИЯ И СТЕНЫ И КОЛОННЫ!',
+        'assistant: Уточните, пожалуйста, в какой секции или на каком этаже нужно разбить "Возведение монолитных конструкций"? Найдено несколько однотипных задач для разных секций и этажей.',
+      ].join('\n'),
+      model: 'gpt-test',
+      interpretationQuery: async (input) => {
+        prompt = input.prompt;
+        return JSON.stringify({
+          route: 'mutation',
+          confidence: 0.93,
+          requestKind: 'targeted_edit',
+          planningMode: 'partial_scope_bootstrap',
+          scopeMode: 'partial_scope',
+          objectProfile: 'residential_multi_section',
+          projectArchetype: 'new_building',
+          locationScope: {
+            sections: ['1А', '1Б', '1В', '1Г'],
+            floors: [],
+            zones: [],
+          },
+          worklistPolicy: 'worklist_plus_inferred_supporting_tasks',
+          clarification: {
+            needed: false,
+            reason: 'none',
+          },
+          signals: ['follow_up_clarification', 'existing_scope_edit'],
+        });
+      },
+    });
+
+    assert.equal(result.interpretation.route, 'mutation');
+    assert.equal(result.interpretation.requestKind, 'targeted_edit');
+    assert.match(prompt, /Recent conversation summary:/);
+    assert.match(prompt, /РАЗБЕЙ МОНОЛИТ/);
+    assert.match(prompt, /short follow-up answer/i);
+    assert.match(prompt, /non-empty project/i);
+  });
+
   it('repairs invalid JSON once before accepting the interpretation', async () => {
     const payloads = [
       '{invalid JSON',

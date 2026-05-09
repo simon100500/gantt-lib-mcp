@@ -5,6 +5,15 @@ import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 
 import { runInitialGeneration } from './orchestrator.js';
 
+type HarnessTask = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+  sortOrder?: number;
+};
+
 function createCommitResponse(newVersion: number): Extract<CommitProjectCommandResponse, { accepted: true }> {
   return {
     clientRequestId: `client-${newVersion}`,
@@ -26,6 +35,10 @@ function createHarness(options?: {
   plannerQuery?: (input: { stage: string; prompt: string; model: string }) => Promise<string | { content?: string }>;
   commitReject?: boolean;
   deps?: Record<string, unknown>;
+  taskService?: {
+    list(projectId: string): Promise<{ tasks: HarnessTask[] }>;
+    listAll(projectId: string): Promise<HarnessTask[]>;
+  };
 }) {
   const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const messages: Array<{ role: string; content: string }> = [];
@@ -287,6 +300,14 @@ function createHarness(options?: {
               ],
             };
           },
+          async listAll() {
+            return [
+              { id: 'prep', name: 'Подготовка участка', startDate: '2026-04-08', endDate: '2026-04-10' },
+              { id: 'prep-layout', name: 'Разбивка и ограждение', startDate: '2026-04-08', endDate: '2026-04-09', parentId: 'prep' },
+              { id: 'task-survey', name: 'Геодезическая разбивка', startDate: '2026-04-08', endDate: '2026-04-08', parentId: 'prep-layout' },
+            ];
+          },
+          ...options?.taskService,
         },
       },
       logger: {
@@ -349,6 +370,41 @@ describe('runInitialGeneration', () => {
     assert.equal(harness.events.filter((entry) => entry.event === 'tasks_broadcast').length, 1);
     const doneBroadcast = harness.broadcasts.find((entry) => entry.message.type === 'done');
     assert.equal(doneBroadcast?.message.chatMessage?.systemMessage, 'Стартовый график составлен в календарных днях. Изменить режим можно в меню проекта.');
+  });
+
+  it('broadcasts the full final task snapshot after generation when project has more than 100 tasks', async () => {
+    const allTasks = Array.from({ length: 127 }, (_, index) => ({
+      id: `task-${index + 1}`,
+      name: `Task ${index + 1}`,
+      startDate: '2026-04-08',
+      endDate: '2026-04-08',
+      sortOrder: index,
+    }));
+    let listCalls = 0;
+    let listAllCalls = 0;
+    const harness = createHarness({
+      taskService: {
+        async list() {
+          listCalls += 1;
+          return { tasks: allTasks.slice(0, 100) };
+        },
+        async listAll() {
+          listAllCalls += 1;
+          return allTasks;
+        },
+      },
+    });
+
+    const result = await runInitialGeneration(harness.input);
+
+    assert.equal(result.ok, true);
+    const tasksBroadcast = harness.broadcasts.find((entry) => entry.message.type === 'tasks');
+    assert.ok(tasksBroadcast);
+    assert.equal(tasksBroadcast.message.tasks?.length, 127);
+    assert.equal(listCalls, 0);
+    assert.equal(listAllCalls, 1);
+    const tasksBroadcastEvent = getEvent(harness, 'tasks_broadcast');
+    assert.equal(tasksBroadcastEvent.payload.taskCount, 127);
   });
 
   it('logs the structured interpretation lifecycle and normalized downstream decisions', async () => {

@@ -59,6 +59,7 @@ describe('pi ordinary runtime integration surface', () => {
       'update_tasks',
       'move_tasks',
       'shift_tasks',
+      'change_task_duration',
       'delete_tasks',
       'link_tasks',
       'unlink_tasks',

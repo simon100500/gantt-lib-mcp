@@ -519,6 +519,28 @@ export function createToolHandlers(context: ToolCallContext): ToolHandlerMap {
       }
       return finalizeAccepted(aggregation, input.includeSnapshot ?? false);
     },
+    change_task_duration: async (input) => {
+      const projectId = resolveProjectIdOrThrow(context, input.projectId, 'Duration changes require a project ID');
+      if (!input.changes || input.changes.length === 0) {
+        return emptyMutation(0, 'invalid_request');
+      }
+
+      const commands: ProjectCommand[] = [];
+      for (const change of input.changes) {
+        if (!change.taskId || !Number.isFinite(change.durationDays) || change.durationDays < 1) {
+          return emptyMutation(0, 'invalid_request');
+        }
+
+        commands.push({
+          type: 'change_duration',
+          taskId: change.taskId,
+          duration: Math.max(1, Math.round(change.durationDays)),
+          anchor: change.anchor ?? 'end',
+        });
+      }
+
+      return runBatch(context, projectId, commands, input.includeSnapshot ?? false);
+    },
     delete_tasks: async (input) => {
       const projectId = resolveProjectIdOrThrow(context, input.projectId, 'Task deletion requires a project ID');
       if (!input.taskIds || input.taskIds.length === 0) {

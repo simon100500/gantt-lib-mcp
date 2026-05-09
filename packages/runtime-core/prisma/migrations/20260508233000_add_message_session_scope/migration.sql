@@ -1,0 +1,3 @@
+-- No-op placeholder migration.
+-- This file restores a missing migration artifact so Prisma can apply
+-- subsequent migrations in sequence.

@@ -125,6 +125,41 @@ describe('initial-generation classification', () => {
     assert.deepEqual(normalized.locationScope?.sections ?? [], []);
   });
 
+  it('extracts direct line-based worklists with explicit date ranges', () => {
+    const normalized = normalizeInitialRequest([
+      'Раздел 1. Сваи (Секция 1В) – 01.07.2025 – 31.08.2025',
+      'Раздел 2. Подвал (Секция 1В) – 01.09.2025 – 31.10.2025',
+      'Раздел 1. Сваи (Секция 1Б) – 01.09.2025 – 31.10.2025',
+    ].join('\n'));
+
+    assert.deepEqual(normalized.explicitWorkItems, [
+      'Раздел 1. Сваи (Секция 1В)',
+      'Раздел 2. Подвал (Секция 1В)',
+      'Раздел 1. Сваи (Секция 1Б)',
+    ]);
+    assert.deepEqual(normalized.explicitScheduleItems?.map((item) => ({
+      title: item.title,
+      startDate: item.startDate,
+      endDate: item.endDate,
+    })), [
+      {
+        title: 'Раздел 1. Сваи (Секция 1В)',
+        startDate: '2025-07-01',
+        endDate: '2025-08-31',
+      },
+      {
+        title: 'Раздел 2. Подвал (Секция 1В)',
+        startDate: '2025-09-01',
+        endDate: '2025-10-31',
+      },
+      {
+        title: 'Раздел 1. Сваи (Секция 1Б)',
+        startDate: '2025-09-01',
+        endDate: '2025-10-31',
+      },
+    ]);
+  });
+
   it('keeps fallback-driven unknown classification deterministic for Russian and English paraphrases', () => {
     const russian = normalizeInitialRequest('Построй график только по секции 5.1');
     const english = normalizeInitialRequest('Build a starter schedule only for section 5.1');

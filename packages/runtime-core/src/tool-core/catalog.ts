@@ -191,6 +191,32 @@ export const NORMALIZED_TOOL_CATALOG = [
     mutating: true,
   },
   {
+    name: 'change_task_duration',
+    description: 'Change task duration in days while preserving either the start or the end anchor. Use this for requests like "increase duration", "reduce duration", or "make it 10 days".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        includeSnapshot: { type: 'boolean' },
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              taskId: { type: 'string' },
+              durationDays: { type: 'number', minimum: 1 },
+              anchor: { type: 'string', enum: ['start', 'end'] },
+            },
+            required: ['taskId', 'durationDays'],
+          },
+        },
+      },
+      required: ['changes'],
+    },
+    handler: 'changeTaskDuration',
+    mutating: true,
+  },
+  {
     name: 'delete_tasks',
     description: 'Delete one or more tasks through the authoritative command pipeline.',
     inputSchema: {

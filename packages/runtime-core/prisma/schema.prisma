@@ -264,6 +264,7 @@ model Project {
   resources      Resource[]
   taskAssignments TaskAssignment[]
   messages       Message[]
+  agentSessionState AgentSessionState?
   shareLinks     ShareLink[]
   projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
@@ -653,6 +654,25 @@ model Message {
   @@index([projectId, requestContextId])
   @@index([projectId, historyGroupId])
   @@index([projectId, deletedAt])
+}
+
+model AgentSessionState {
+  id                 String   @id @default(uuid())
+  projectId          String   @unique @map("project_id")
+  sessionKey         String   @default("project-chat") @map("session_key")
+  messagesSnapshot   Json     @map("messages_snapshot")
+  rollingSummary     String?  @map("rolling_summary")
+  openThreads        Json?    @map("open_threads")
+  lastRequestContextId String? @map("last_request_context_id")
+  compactionVersion  Int      @default(1) @map("compaction_version")
+  schemaVersion      Int      @default(1) @map("schema_version")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("agent_session_states")
+  @@index([updatedAt])
 }
 
 // Share links table

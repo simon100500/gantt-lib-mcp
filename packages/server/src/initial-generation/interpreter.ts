@@ -30,6 +30,7 @@ export type InterpretInitialRequestInput = {
   userMessage: string;
   normalizedRequest: NormalizedInitialRequest;
   projectState: InitialRequestProjectState;
+  recentConversationSummary?: string;
   model: string;
   interpretationQuery: (input: InterpretationQueryInput) => Promise<InterpretationQueryResult>;
 };
@@ -312,6 +313,7 @@ function buildPrompt(input: InterpretInitialRequestInput): string {
   const projectIsEmpty = input.projectState.isEmptyProject ?? input.projectState.taskCount === 0;
   const locationScope = buildLocationScope(input.normalizedRequest.locationScope);
   const explicitWorklistCount = input.normalizedRequest.explicitWorkItems.length;
+  const recentConversationSummary = input.recentConversationSummary?.trim() ?? '';
 
   return [
     'Return strict JSON only. No markdown, no prose, no code fences.',
@@ -328,6 +330,8 @@ function buildPrompt(input: InterpretInitialRequestInput): string {
     'Runtime keyword logic is forbidden. Do not emulate semantic regexes, word lists, or lexical fallbacks.',
     'Infer semantics from the whole request meaning and the project state facts only.',
     'If the request is a targeted_edit against an existing schedule, set route to "mutation".',
+    'If the current message is a short follow-up answer to a previous clarification, resolve it using the recent conversation summary instead of treating it as a standalone request.',
+    'If the recent conversation is about editing or splitting existing tasks in a non-empty project, keep the request in the mutation route unless the user explicitly starts a new starter schedule.',
     'If the request provides an explicit_worklist for a starter schedule, set scopeMode to "explicit_worklist".',
     'Schema:',
     '{"route":"initial_generation|mutation","confidence":0.0,"requestKind":"whole_project|partial_scope|explicit_worklist|targeted_edit|ambiguous","planningMode":"whole_project_bootstrap|partial_scope_bootstrap|worklist_bootstrap","scopeMode":"full_project|partial_scope|explicit_worklist","objectProfile":"unknown|office_fitout|kindergarten|residential_multi_section","projectArchetype":"unknown|new_building|renovation","locationScope":{"sections":["..."],"floors":["..."],"zones":["..."]},"worklistPolicy":"strict_worklist|worklist_plus_inferred_supporting_tasks","clarification":{"needed":false,"reason":"none|ambiguous_list|missing_scope|scope_boundary_ambiguity|fragment_target_ambiguity|worklist_completeness_ambiguity"},"signals":["..."]}',
@@ -345,6 +349,7 @@ function buildPrompt(input: InterpretInitialRequestInput): string {
       explicitWorklistCount,
       locationScope,
     })}`,
+    `Recent conversation summary: ${recentConversationSummary || '<none>'}`,
     `Normalized request: ${input.normalizedRequest.normalizedRequest}`,
     `Original request: ${input.userMessage}`,
   ].join('\n');
