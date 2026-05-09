@@ -986,6 +986,10 @@ export async function runInitialGeneration(
     family: 'structure' | 'scheduled',
     fullText: string,
   ): Promise<void> => {
+    if (family !== 'structure') {
+      return;
+    }
+
     const previewTasks = buildLoosePreviewTasks(fullText, previewAnchorDate);
     if (previewTasks.length === 0) {
       return;
