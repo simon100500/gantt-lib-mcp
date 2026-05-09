@@ -10,6 +10,11 @@ import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
+import {
+  buildRouteContextSummary,
+  buildSessionSnapshotMessages,
+  buildSessionStateFromTranscript,
+} from './agent/session-state.js';
 import { completeTextPrompt } from './agent/pi-model.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -452,18 +457,22 @@ export async function runAgentWithHistory(
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
-    const [{ taskService, messageService, commandService, getProjectScheduleOptionsForProject, historyService }, wsModule] = await Promise.all([
+    const [{ taskService, messageService, commandService, getProjectScheduleOptionsForProject, historyService, agentSessionStateService }, wsModule] = await Promise.all([
       getServicesModule(),
       getWsModule(),
     ]);
     broadcastToSession = wsModule.broadcastToSession;
     const runId = crypto.randomUUID();
-    const [{ tasks: tasksBefore }, recentMessages] = await Promise.all([
+    const [{ tasks: tasksBefore }, recentMessages, sessionState] = await Promise.all([
       taskService.list(projectId),
-      messageService.list(projectId, 6),
+      messageService.list(projectId, 24),
+      agentSessionStateService.getByProjectId(projectId),
     ]);
     const env = resolveEnv();
-    const recentConversationSummary = summarizeRecentConversation(recentMessages);
+    const recentConversationSummary = buildRouteContextSummary({
+      sessionState,
+      recentMessages,
+    }) || summarizeRecentConversation(recentMessages);
     const routeSelection = await selectAgentRoute({
       userMessage,
       taskCount: tasksBefore.length,
@@ -574,6 +583,22 @@ export async function runAgentWithHistory(
         },
         broadcastToSession,
       });
+
+      const transcriptAfterInitialGeneration = await messageService.list(projectId, 24);
+      const rebuiltState = buildSessionStateFromTranscript({
+        projectId,
+        recentMessages: transcriptAfterInitialGeneration,
+        priorState: sessionState,
+        userMessage,
+        mutationAccepted: true,
+      });
+      await agentSessionStateService.upsert({
+        projectId,
+        messagesSnapshot: rebuiltState.messagesSnapshot,
+        rollingSummary: rebuiltState.rollingSummary,
+        openThreads: rebuiltState.openThreads,
+        lastRequestContextId: runId,
+      });
       return;
     }
 
@@ -592,7 +617,7 @@ export async function runAgentWithHistory(
       projectRoot: PROJECT_ROOT,
     });
 
-    const messages = await messageService.list(projectId, 20);
+    const messages = await messageService.list(projectId, 24);
     const piHistoryGroupId = checkpointGroupId ?? crypto.randomUUID();
     const piResult = await runPiOrdinaryAgent({
       userMessage,
@@ -605,11 +630,15 @@ export async function runAgentWithHistory(
         OPENAI_BASE_URL: env.OPENAI_BASE_URL,
         OPENAI_MODEL: env.OPENAI_MODEL,
       },
-      messages: messages.slice(0, -1),
+      messages: sessionState?.messagesSnapshot?.length
+        ? sessionState.messagesSnapshot
+        : buildSessionSnapshotMessages(messages.slice(0, -1)),
       historyGroupId: piHistoryGroupId,
       requestContextId: runId,
       historyTitle: buildAgentHistoryTitle(userMessage, true),
       mutationRoute: likelyMutationRequest,
+      rollingSummary: sessionState?.rollingSummary ?? null,
+      openThreads: sessionState?.openThreads ?? null,
       taskService,
       broadcastToSession,
       logger: {
@@ -642,6 +671,22 @@ export async function runAgentWithHistory(
         historyGroupId: piHistoryGroupId,
       });
     }
+    const transcriptAfterRun = await messageService.list(projectId, 24);
+    const rebuiltState = buildSessionStateFromTranscript({
+      projectId,
+      recentMessages: transcriptAfterRun,
+      priorState: sessionState,
+      userMessage,
+      assistantResponse,
+      mutationAccepted: piResult.acceptedMutatingToolCalls.length > 0,
+    });
+    await agentSessionStateService.upsert({
+      projectId,
+      messagesSnapshot: piResult.sessionMessages.length > 0 ? piResult.sessionMessages : rebuiltState.messagesSnapshot,
+      rollingSummary: rebuiltState.rollingSummary,
+      openThreads: rebuiltState.openThreads,
+      lastRequestContextId: runId,
+    });
     await writeServerDebugLog('agent_response_saved', {
       runId,
       projectId,

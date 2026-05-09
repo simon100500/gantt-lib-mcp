@@ -331,6 +331,37 @@ export interface Message {
   createdAt: string;
 }
 
+export type AgentOpenThreadOperationKind = 'split' | 'move' | 'create' | 'link' | 'validate' | 'update' | 'delete';
+
+export interface AgentSessionSnapshotMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface AgentOpenThreadState {
+  unresolved: boolean;
+  activeOperationKind?: AgentOpenThreadOperationKind | null;
+  recentAssistantQuestion?: string | null;
+  lastUserMessage?: string | null;
+  lastAssistantMessage?: string | null;
+  targetEntityHints?: string[];
+}
+
+export interface AgentSessionStateRecord {
+  id: string;
+  projectId: string;
+  sessionKey: string;
+  messagesSnapshot: AgentSessionSnapshotMessage[];
+  rollingSummary: string | null;
+  openThreads: AgentOpenThreadState | null;
+  lastRequestContextId: string | null;
+  compactionVersion: number;
+  schemaVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GetConversationHistoryInput {
   projectId?: string;
   limit?: number;

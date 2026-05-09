@@ -4,6 +4,10 @@ import { NORMALIZED_TOOL_CATALOG } from '@gantt/runtime-core/tool-core/catalog';
 import { createToolContext } from '@gantt/runtime-core/tool-core/context';
 import { executeToolCall } from '@gantt/runtime-core/tool-core/handlers';
 import type {
+  AgentOpenThreadState,
+  AgentSessionSnapshotMessage,
+} from '@gantt/runtime-core/types';
+import type {
   NormalizedToolInputMap,
   NormalizedToolName,
   ToolCallContext,
@@ -46,6 +50,7 @@ export type PiAgentRunResult = {
   acceptedMutatingToolCalls: PiToolExecutionFact[];
   rejectedMutatingToolCalls: PiToolExecutionFact[];
   tasksAfter?: unknown[];
+  sessionMessages: AgentSessionSnapshotMessage[];
   metrics: {
     durationMs: number;
     timeToFirstToolCallMs: number | null;
@@ -154,6 +159,9 @@ const MUTATING_TOOL_NAMES = new Set<string>(
     .filter((definition) => definition.mutating)
     .map((definition) => definition.name),
 );
+const SESSION_MEMORY_PREFIX = '[SESSION_MEMORY]';
+const MAX_SESSION_RESTORE_MESSAGES = 12;
+const MAX_CONTEXT_MESSAGES = 32;
 
 function schemaOptions(property: JsonSchemaProperty | undefined): Record<string, unknown> {
   return {
@@ -379,26 +387,141 @@ function extractAssistantText(message: unknown): string {
     .join('');
 }
 
+function extractMessageTextContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  return content
+    .filter((block): block is { type: 'text'; text: string } => (
+      Boolean(block)
+      && typeof block === 'object'
+      && (block as { type?: unknown }).type === 'text'
+      && typeof (block as { text?: unknown }).text === 'string'
+    ))
+    .map((block) => block.text)
+    .join('');
+}
+
+function clipText(value: string, limit: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= limit) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+}
+
+function buildSessionMemoryMessage(input: {
+  projectId: string;
+  rollingSummary?: string | null;
+  openThreads?: AgentOpenThreadState | null;
+}): string | null {
+  const summary = input.rollingSummary?.trim();
+  const openThread = input.openThreads;
+  const lines = [
+    `${SESSION_MEMORY_PREFIX}`,
+    `projectId: ${input.projectId}`,
+  ];
+
+  if (summary) {
+    lines.push(`rollingSummary: ${summary}`);
+  }
+
+  if (openThread?.unresolved) {
+    if (openThread.activeOperationKind) {
+      lines.push(`activeOperationKind: ${openThread.activeOperationKind}`);
+    }
+    if (openThread.recentAssistantQuestion) {
+      lines.push(`recentAssistantQuestion: ${openThread.recentAssistantQuestion}`);
+    }
+    if (openThread.lastUserMessage) {
+      lines.push(`lastUserMessage: ${openThread.lastUserMessage}`);
+    }
+    if (Array.isArray(openThread.targetEntityHints) && openThread.targetEntityHints.length > 0) {
+      lines.push(`targetEntityHints: ${openThread.targetEntityHints.join(', ')}`);
+    }
+  }
+
+  return lines.length > 2 ? lines.join('\n') : null;
+}
+
 function buildInitialMessages(input: {
   projectId: string;
-  messages: Array<{ role: string; content: string }>;
-}) {
-  const recent = input.messages.slice(-6);
-  const content = [
-    `projectId: ${input.projectId}`,
-    recent.length > 0
-      ? [
-          'Короткая история диалога:',
-          ...recent.map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`),
-        ].join('\n')
-      : '',
-  ].filter(Boolean).join('\n\n');
+  messages: AgentSessionSnapshotMessage[];
+  rollingSummary?: string | null;
+  openThreads?: AgentOpenThreadState | null;
+}): any[] {
+  const initialMessages: Array<
+    | { role: 'user'; content: string; timestamp: number }
+    | { role: 'assistant'; content: string; timestamp: number }
+  > = [];
+  const sessionMemoryMessage = buildSessionMemoryMessage(input);
+  if (sessionMemoryMessage) {
+    initialMessages.push({
+      role: 'assistant',
+      content: sessionMemoryMessage,
+      timestamp: Date.now(),
+    });
+  }
 
-  return [{
-    role: 'user' as const,
-    content,
-    timestamp: Date.now(),
-  }];
+  for (const message of input.messages.slice(-MAX_SESSION_RESTORE_MESSAGES)) {
+    const content = clipText(message.content, 4_000);
+    if (!content || content.startsWith(SESSION_MEMORY_PREFIX)) {
+      continue;
+    }
+
+    initialMessages.push({
+      role: message.role,
+      content,
+      timestamp: message.timestamp,
+    });
+  }
+
+  if (initialMessages.length === 0) {
+    initialMessages.push({
+      role: 'assistant',
+      content: `projectId: ${input.projectId}`,
+      timestamp: Date.now(),
+    });
+  }
+
+  return initialMessages as any[];
+}
+
+export async function compactSessionContext<TMessage extends { role?: unknown; content?: unknown }>(
+  messages: TMessage[],
+): Promise<TMessage[]> {
+  if (messages.length <= MAX_CONTEXT_MESSAGES) {
+    return messages;
+  }
+
+  const memoryMessage = messages.find((message) => (
+    typeof message?.content === 'string' && message.content.startsWith(SESSION_MEMORY_PREFIX)
+  ));
+  const tail = messages.filter((message) => message !== memoryMessage).slice(-(MAX_CONTEXT_MESSAGES - (memoryMessage ? 1 : 0)));
+
+  return memoryMessage ? [memoryMessage, ...tail] : tail;
+}
+
+export function extractSessionSnapshotMessages(messages: unknown[]): AgentSessionSnapshotMessage[] {
+  return messages
+    .filter((message): message is Record<string, unknown> => Boolean(message) && typeof message === 'object')
+    .map((message) => ({
+      role: message.role === 'assistant' ? 'assistant' : message.role === 'user' ? 'user' : null,
+      content: clipText(extractMessageTextContent(message.content), 4_000),
+      timestamp: typeof message.timestamp === 'number' ? message.timestamp : Date.now(),
+    }))
+    .filter((message): message is AgentSessionSnapshotMessage => (
+      message.role !== null
+      && message.content.length > 0
+      && !message.content.startsWith(SESSION_MEMORY_PREFIX)
+    ))
+    .slice(-MAX_SESSION_RESTORE_MESSAGES);
 }
 
 function buildNoToolCallMutationMessage(): string {
@@ -423,11 +546,13 @@ export async function runPiOrdinaryAgent(input: {
   runId: string;
   userId?: string;
   env: PiAgentEnv;
-  messages: Array<{ role: string; content: string }>;
+  messages: AgentSessionSnapshotMessage[];
   historyGroupId: string;
   requestContextId: string;
   historyTitle: string;
   mutationRoute: boolean;
+  rollingSummary?: string | null;
+  openThreads?: AgentOpenThreadState | null;
   taskService: {
     list(projectId: string): Promise<{ tasks: unknown[] }>;
     listAll(projectId: string): Promise<unknown[]>;
@@ -462,8 +587,11 @@ export async function runPiOrdinaryAgent(input: {
       messages: buildInitialMessages({
         projectId: input.projectId,
         messages: input.messages,
+        rollingSummary: input.rollingSummary,
+        openThreads: input.openThreads,
       }),
     },
+    transformContext: compactSessionContext,
     toolExecution: 'parallel',
     getApiKey: () => input.env.OPENAI_API_KEY,
     sessionId: input.sessionId,
@@ -584,6 +712,7 @@ export async function runPiOrdinaryAgent(input: {
   const tasksAfter = shouldRefreshTasks
     ? await input.taskService.listAll(input.projectId)
     : undefined;
+  const sessionMessages = extractSessionSnapshotMessages(agent.state.messages);
 
   return {
     assistantResponse: assistantResponse.trim(),
@@ -593,6 +722,7 @@ export async function runPiOrdinaryAgent(input: {
     acceptedMutatingToolCalls,
     rejectedMutatingToolCalls,
     tasksAfter,
+    sessionMessages,
     metrics: {
       durationMs: Date.now() - startedAt,
       timeToFirstToolCallMs,

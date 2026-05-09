@@ -10,6 +10,8 @@ export { projectService } from './project.service.js';
 export { ProjectService } from './project.service.js';
 export { messageService } from './message.service.js';
 export { MessageService } from './message.service.js';
+export { agentSessionStateService } from './agent-session-state.service.js';
+export { AgentSessionStateService } from './agent-session-state.service.js';
 export { resourceService } from './resource.service.js';
 export { ResourceService, ResourceValidationError } from './resource.service.js';
 export { assignmentService } from './assignment.service.js';
