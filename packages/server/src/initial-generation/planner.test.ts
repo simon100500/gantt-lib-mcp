@@ -642,6 +642,20 @@ describe('initial-generation planner', () => {
     assert.match(prompt, /fit the schedule inside that user-provided window instead of anchoring from today or the server date/i);
   });
 
+  it('forces Russian task titles into construction nominal form instead of infinitive task-tracker phrasing', () => {
+    const prompt = buildStructurePrompt({
+      userMessage: 'Сделай стартовый график строительства',
+      brief: buildGenerationBrief({
+        userMessage: 'Сделай стартовый график строительства',
+      }),
+    });
+
+    assert.match(prompt, /nominal operation form/i);
+    assert.match(prompt, /Prefer titles such as "Устройство \.\.\.", "Монтаж \.\.\.", "Укладка \.\.\."/i);
+    assert.match(prompt, /Bad task title examples: "Устроить цементную стяжку пола", "Уложить чистовое напольное покрытие"/i);
+    assert.match(prompt, /Good task title examples: "Устройство цементной стяжки пола", "Укладка чистового напольного покрытия"/i);
+  });
+
   it('builds a two-step whole-project plan and forbids structural edits in scheduling prompt', async () => {
     const prompts: Array<{ stage: string; model: string; prompt: string }> = [];
     const normalizedRequest = normalizeInitialRequest('График строительства жилого дома на 3 этажа + гараж');
