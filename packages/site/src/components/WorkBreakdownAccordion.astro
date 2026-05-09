@@ -1,0 +1,39 @@
+---
+import WorkBreakdownNode from './WorkBreakdownNode.astro';
+
+type WorkTask = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+};
+
+interface Props {
+  tasks: WorkTask[];
+  title: string;
+}
+
+const { tasks, title } = Astro.props;
+
+const childrenByParent = new Map<string, WorkTask[]>();
+for (const task of tasks) {
+  const parentKey = task.parentId ?? '__root__';
+  const bucket = childrenByParent.get(parentKey) ?? [];
+  bucket.push(task);
+  childrenByParent.set(parentKey, bucket);
+}
+
+const rootNodes = childrenByParent.get('__root__') ?? tasks.filter((task) => !task.parentId);
+---
+
+<section>
+  <h2 class="text-2xl font-bold text-slate-950">{title}</h2>
+  <div class="mt-4 space-y-4">
+    {rootNodes.map((node) => (
+      <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <WorkBreakdownNode node={node} childrenByParent={childrenByParent} depth={0} />
+      </div>
+    ))}
+  </div>
+</section>

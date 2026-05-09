@@ -33,9 +33,16 @@ const getAllDescendants = (parentId: string, tasks: Task[]): Task[] => {
 interface GanttPreviewProps {
   initialTasks?: Task[];
   title?: string;
+  fullWidth?: boolean;
+  containerHeight?: string;
 }
 
-function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
+function GanttPreview({
+  initialTasks,
+  title,
+  fullWidth = false,
+  containerHeight = '500px',
+}: GanttPreviewProps) {
   const allTasks = initialTasks ?? [];
   const [tasks, setTasks] = useState<Task[]>([]);
   const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
@@ -167,7 +174,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
   }, []);
 
   return (
-    <div ref={previewRootRef} className="mx-auto w-[90%]">
+    <div ref={previewRootRef} className={fullWidth ? 'w-full' : 'mx-auto w-[90%]'}>
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
         {/* Chart header */}
@@ -251,7 +258,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
         {/* Gantt Chart */}
         <div>
           {tasks.length === 0 ? (
-            <div className="flex items-center justify-center text-slate-400 text-sm animate-pulse" style={{ height: '500px' }}>
+            <div className="flex items-center justify-center text-slate-400 text-sm animate-pulse" style={{ height: containerHeight }}>
               Генерирую график…
             </div>
           ) : <GanttChart
@@ -259,7 +266,7 @@ function GanttPreview({ initialTasks, title }: GanttPreviewProps) {
             tasks={tasks}
             dayWidth={DAY_WIDTHS[viewMode]}
             rowHeight={36}
-            containerHeight="500px"
+            containerHeight={containerHeight}
             onTasksChange={handleChange}
             onAdd={handleAdd}
             onDelete={handleDelete}
