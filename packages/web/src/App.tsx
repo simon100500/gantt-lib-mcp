@@ -46,7 +46,7 @@ import { useChatStore } from './stores/useChatStore.ts';
 import { useTaskStore } from './stores/useTaskStore.ts';
 import { useTemplateStore } from './stores/useTemplateStore.ts';
 import { readProjectChatOpenState, useUIStore } from './stores/useUIStore.ts';
-import { useProjectUIStore } from './stores/useProjectUIStore.ts';
+import { DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS, useProjectUIStore } from './stores/useProjectUIStore.ts';
 import { useProjectStore } from './stores/useProjectStore.ts';
 import { normalizeTasks, type ProjectSectionPermissions, type Task, type TimelineMarker, type ValidationResult } from './types.ts';
 
@@ -917,6 +917,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
         return null;
       }
 
+      setProjectState(newProject.id, {
+        hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
+      });
+
       await auth.switchProject(newProject.id);
       setSidebarState('closed');
       if (options.createEmptyChart) {
@@ -938,7 +942,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     } finally {
       activationInFlightRef.current = false;
     }
-  }, [auth, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setSidebarState, setWorkspace]);
+  }, [auth, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setProjectState, setSidebarState, setWorkspace]);
 
   const submitChatMessage = useCallback(async (message: string) => {
     if (isScheduleReadOnlyProject) {
