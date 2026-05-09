@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { query, isSDKAssistantMessage, isSDKResultMessage } from '@qwen-code/sdk';
 
 import type { CommandService } from '@gantt/mcp/services';
 import { getPrisma } from '@gantt/runtime-core/prisma';
 
 import { writeServerDebugLog } from './debug-log.js';
+import { completeTextPrompt } from './agent/pi-model.js';
 import { buildMutationPlan } from './mutation/plan-builder.js';
 import { executeMutationPlan } from './mutation/execution.js';
 import type {
@@ -112,27 +112,6 @@ async function loadAllProjectTasks(
       return allTasks;
     }
   }
-}
-
-function buildSdkEnv(env: SplitTaskEnv): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-  };
-
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
-  }
-
-  return sdkEnv;
-}
-
-function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
-  return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
-    .map((block) => block.text ?? '')
-    .join('');
 }
 
 function normalizeIsoDate(value?: string | Date): string {
@@ -403,47 +382,15 @@ async function executeDirectSplitPlanningQuery(
     throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
   }
 
-  const session = query({
-    prompt,
-    options: {
-      authType: 'openai',
-      model: env.OPENAI_MODEL,
-      systemPrompt: options?.systemPrompt,
-      cwd: process.cwd(),
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: options?.maxSessionTurns ?? 2,
-      excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],
+  return completeTextPrompt({
+    env: {
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      OPENAI_MODEL: env.OPENAI_MODEL,
     },
+    prompt,
+    systemPrompt: options?.systemPrompt,
   });
-
-  let content = '';
-
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Split task planner failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
-
-  if (content.trim().length === 0) {
-    throw new Error('Split task planner returned an empty response');
-  }
-
-  return content;
 }
 
 async function getProjectVersion(projectId: string): Promise<number> {

@@ -1,4 +1,3 @@
-import { createSdkMcpServer, tool } from '@qwen-code/sdk';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
@@ -33,6 +32,16 @@ export type BuildDirectToolDefinitionsInput = {
   requestContextId?: string;
   historyTitle?: string;
   userId?: string;
+};
+
+export type DirectToolDefinition = {
+  name: string;
+  description: string;
+  parameters: z.ZodObject<Record<string, z.ZodTypeAny>>;
+  execute(args: Record<string, unknown>): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+    isError?: boolean;
+  }>;
 };
 
 export type ResolveOrdinaryAgentMcpServersInput = BuildDirectToolDefinitionsInput & {
@@ -91,7 +100,9 @@ function convertJsonSchemaPropertyToZodSchema(
   return required ? schema : schema.optional();
 }
 
-function convertToolInputSchemaToZodShape(schema: { properties: Record<string, JsonSchemaProperty>; required?: readonly string[] }): Record<string, z.ZodTypeAny> {
+function convertToolInputSchemaToZodShape(
+  schema: { properties: Record<string, JsonSchemaProperty>; required?: readonly string[] },
+): Record<string, z.ZodTypeAny> {
   const required = new Set(schema.required ?? []);
   const shape: Record<string, z.ZodTypeAny> = {};
 
@@ -102,12 +113,12 @@ function convertToolInputSchemaToZodShape(schema: { properties: Record<string, J
   return shape;
 }
 
-export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInput) {
-  return NORMALIZED_TOOL_CATALOG.map((definition) => tool(
-    definition.name,
-    definition.description,
-    convertToolInputSchemaToZodShape(definition.inputSchema),
-    async (args) => {
+export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInput): DirectToolDefinition[] {
+  return NORMALIZED_TOOL_CATALOG.map((definition) => ({
+    name: definition.name,
+    description: definition.description,
+    parameters: z.object(convertToolInputSchemaToZodShape(definition.inputSchema)),
+    execute: async (args) => {
       const context = createToolContext({
         actorType: 'agent',
         actorId: input.userId,
@@ -131,7 +142,7 @@ export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInpu
 
       return {
         content: [{
-          type: 'text' as const,
+          type: 'text',
           text: JSON.stringify(
             result.ok
               ? result.data
@@ -149,7 +160,7 @@ export function buildDirectToolDefinitions(input: BuildDirectToolDefinitionsInpu
         ...(result.ok ? {} : { isError: true }),
       };
     },
-  ));
+  }));
 }
 
 export function resolveOrdinaryAgentCompatibilityMode(mode?: OrdinaryAgentCompatibilityMode): OrdinaryAgentCompatibilityMode {
@@ -185,9 +196,9 @@ export function resolveOrdinaryAgentMcpServers(input: ResolveOrdinaryAgentMcpSer
   }
 
   return {
-    gantt: createSdkMcpServer({
-      name: 'gantt',
+    gantt: {
+      transport: 'embedded-direct',
       tools: buildDirectToolDefinitions(input),
-    }),
+    },
   };
 }

@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent, type AgentTool } from '@mariozechner/pi-agent-core';
-import { Type, type Model, type TSchema } from '@mariozechner/pi-ai';
+import { Type, type TSchema } from '@mariozechner/pi-ai';
 import { NORMALIZED_TOOL_CATALOG } from '@gantt/runtime-core/tool-core/catalog';
 import { createToolContext } from '@gantt/runtime-core/tool-core/context';
 import { executeToolCall } from '@gantt/runtime-core/tool-core/handlers';
@@ -9,6 +9,9 @@ import type {
   ToolCallContext,
 } from '@gantt/runtime-core/tool-core/types';
 import type { ServerMessage } from '../ws.js';
+import { buildPiOpenAICompletionsModel, type PiOpenAIEnv } from './pi-model.js';
+
+export { buildPiOpenAICompletionsModel } from './pi-model.js';
 
 type JsonSchemaProperty = {
   type?: string;
@@ -22,11 +25,7 @@ type JsonSchemaProperty = {
   required?: readonly string[];
 };
 
-export type PiAgentEnv = {
-  OPENAI_API_KEY: string;
-  OPENAI_BASE_URL: string;
-  OPENAI_MODEL: string;
-};
+export type PiAgentEnv = PiOpenAIEnv;
 
 export type PiToolExecutionFact = {
   toolCallId: string;
@@ -155,30 +154,6 @@ const MUTATING_TOOL_NAMES = new Set<string>(
     .filter((definition) => definition.mutating)
     .map((definition) => definition.name),
 );
-
-export function buildPiOpenAICompletionsModel(env: PiAgentEnv): Model<'openai-completions'> {
-  return {
-    id: env.OPENAI_MODEL,
-    name: env.OPENAI_MODEL,
-    api: 'openai-completions',
-    provider: 'gantt-openai-compatible',
-    baseUrl: env.OPENAI_BASE_URL,
-    reasoning: false,
-    input: ['text'],
-    cost: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-    },
-    contextWindow: 128000,
-    maxTokens: 4096,
-    compat: {
-      supportsStore: false,
-      supportsReasoningEffort: false,
-    },
-  };
-}
 
 function schemaOptions(property: JsonSchemaProperty | undefined): Record<string, unknown> {
   return {

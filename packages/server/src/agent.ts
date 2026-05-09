@@ -2,29 +2,15 @@
  * Agent runner for the Gantt server.
  */
 
-import {
-  query,
-  isSDKResultMessage,
-  isSDKAssistantMessage,
-  isSDKPartialAssistantMessage,
-  type ContentBlock,
-} from '@qwen-code/sdk';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
-import { readFile } from 'fs/promises';
 import * as dotenv from 'dotenv';
 import { writeServerDebugLog } from './debug-log.js';
 import type { CommitProjectCommandResponse } from '@gantt/mcp/types';
-import {
-  resolveOrdinaryAgentCompatibilityMode,
-  resolveOrdinaryAgentMcpServers,
-  type OrdinaryAgentCompatibilityMode,
-} from './agent/direct-tools.js';
 import { runInitialGeneration } from './initial-generation/orchestrator.js';
-import { resolveModelRoutingDecision } from './initial-generation/model-routing.js';
 import { selectAgentRoute } from './initial-generation/route-selection.js';
 import { runPiOrdinaryAgent } from './agent/pi-agent-runner.js';
+import { completeTextPrompt } from './agent/pi-model.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,36 +26,6 @@ type ComparableTask = {
   type?: 'task' | 'milestone';
   parentId?: string;
   dependencies?: Array<{ taskId: string; type: string; lag?: number }>;
-};
-
-type AgentAttemptResult = {
-  assistantResponse: string;
-  streamedContent: boolean;
-  mutationToolCalls: MutationToolCall[];
-  toolCallCount: number;
-  metrics: {
-    durationMs: number;
-    timeToFirstToolCallMs: number | null;
-    timeToFirstAssistantTextMs: number | null;
-    timeToResultMs: number | null;
-    partialEventCount: number;
-    assistantMessageCount: number;
-    textDeltaCount: number;
-    toolResultCount: number;
-    observedToolUseCount: number;
-    assistantResponseChars: number;
-  };
-};
-
-type VerificationResult = {
-  tasksAfter: ComparableTask[];
-  tasksChanged: boolean;
-  actualChangedTaskIds: string[];
-  mutationAttempted: boolean;
-  acceptedMutationCalls: MutationToolCall[];
-  rejectedMutationCalls: MutationToolCall[];
-  acceptedChangedTaskIds: string[];
-  acceptedChangedTaskIdMismatch: boolean;
 };
 
 type InitialGenerationPlannerQueryInput = {
@@ -124,33 +80,12 @@ export type OrdinaryAgentPathTelemetry = {
   accepted_changed_task_id_mismatch: boolean;
 };
 
-const ORDINARY_AGENT_PATH_CONTRACT =
-  'Ordinary conversational mutations use the direct path by default with no external MCP subprocess; compatibility fallback remains explicit and bounded.';
-const ENABLE_STAGED_MUTATION_FALLBACK = false;
-const COMPACT_MUTATION_SYSTEM_PROMPT = [
-  'You edit a Gantt project through normalized tools.',
-  'For read-only requests, answer directly.',
-  'For mutation requests, act quickly and use as few tool calls as possible.',
-  'Use reads only when you truly need IDs, hierarchy, dates, or dependency context.',
-  'Never guess placement or dependencies for schedule edits.',
-  'Do not create standalone tasks when the request implies sequence, parent container, or semantic placement.',
-  'If placement or dependency semantics are unclear, gather the minimum context first.',
-  'Use only normalized tools: get_project_summary, get_task_context, get_schedule_slice, create_tasks, update_tasks, move_tasks, delete_tasks, link_tasks, unlink_tasks, shift_tasks, recalculate_project.',
-  'Never invent task IDs.',
-  'Reply briefly with only what changed.',
-  'Respond in the user language.',
-].join(' ');
+type OrdinaryAgentCompatibilityMode = 'embedded-direct' | 'legacy-subprocess';
 
 const MUTATION_HISTORY_MESSAGE_LIMIT = 2;
 const READONLY_HISTORY_MESSAGE_LIMIT = 12;
 const MUTATION_HISTORY_CHAR_LIMIT = 300;
 const READONLY_HISTORY_CHAR_LIMIT = 4_000;
-const MUTATION_ATTEMPT_TIMEOUT_MS = 90_000;
-const READONLY_ATTEMPT_TIMEOUT_MS = 60_000;
-const SIMPLE_MUTATION_MAX_SESSION_TURNS = 4;
-const DEFAULT_MUTATION_MAX_SESSION_TURNS = 6;
-const READONLY_MAX_SESSION_TURNS = 12;
-const ENABLE_RAW_SDK_EVENT_LOGGING = process.env.GANTT_DEBUG_RAW_SDK === 'true';
 const NORMALIZED_MUTATION_TOOL_NAMES = new Set<NormalizedMutationToolName>([
   'create_tasks',
   'update_tasks',
@@ -203,50 +138,6 @@ function resolveEnv(): {
   };
 }
 
-function buildSdkEnv(
-  env: ReturnType<typeof resolveEnv>,
-  extraEnv: Record<string, string> = {},
-): Record<string, string> {
-  const sdkEnv: Record<string, string> = {
-    OPENAI_API_KEY: env.OPENAI_API_KEY,
-    OPENAI_BASE_URL: env.OPENAI_BASE_URL,
-    OPENAI_MODEL: env.OPENAI_MODEL,
-    ...extraEnv,
-  };
-
-  if (env.OPENAI_CHEAP_MODEL) {
-    sdkEnv.OPENAI_CHEAP_MODEL = env.OPENAI_CHEAP_MODEL;
-  }
-
-  return sdkEnv;
-}
-
-function extractAssistantText(content: Array<{ type: string; text?: string }>): string {
-  return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.length > 0)
-    .map((block) => block.text ?? '')
-    .join('');
-}
-
-function summarizeTextPayload(text: string): { chars: number; lines: number } {
-  if (!text) {
-    return { chars: 0, lines: 0 };
-  }
-
-  return {
-    chars: text.length,
-    lines: text.split('\n').length,
-  };
-}
-
-function sanitizeRawPayload(value: unknown): unknown {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch {
-    return String(value);
-  }
-}
-
 async function executeInitialGenerationPlannerQuery(
   input: InitialGenerationPlannerQueryInput,
 ): Promise<{ content: string }> {
@@ -255,43 +146,14 @@ async function executeInitialGenerationPlannerQuery(
     throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
   }
 
-  const session = query({
-    prompt: input.prompt,
-    options: {
-      authType: 'openai',
-      model: input.model,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: input.stage === 'structure_planning_repair' || input.stage === 'schedule_metadata_repair' ? 4 : 3,
+  const content = await completeTextPrompt({
+    env: {
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      OPENAI_MODEL: input.model,
     },
+    prompt: input.prompt,
   });
-
-  let content = '';
-
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Initial generation planner failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
-
-  if (content.trim().length === 0) {
-    throw new Error('Initial generation planner returned an empty response');
-  }
 
   return { content };
 }
@@ -304,43 +166,14 @@ async function executeInitialGenerationRouteDecisionQuery(
     throw new Error('API key not configured. Set OPENAI_API_KEY or ANTHROPIC_AUTH_TOKEN in .env');
   }
 
-  const session = query({
-    prompt: input.prompt,
-    options: {
-      authType: 'openai',
-      model: input.model,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      env: buildSdkEnv(env),
-      maxSessionTurns: input.stage === 'initial_request_interpretation_repair' ? 3 : 2,
+  const content = await completeTextPrompt({
+    env: {
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      OPENAI_MODEL: input.model,
     },
+    prompt: input.prompt,
   });
-
-  let content = '';
-
-  for await (const event of session) {
-    if (isSDKAssistantMessage(event)) {
-      const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-      if (text.trim().length > 0) {
-        content = text;
-      }
-    }
-
-    if (isSDKResultMessage(event)) {
-      if (event.is_error) {
-        throw new Error(typeof event.error === 'string' ? event.error : 'Initial route decision failed');
-      }
-
-      if (typeof event.result === 'string' && event.result.trim().length > 0) {
-        content = event.result;
-      }
-      break;
-    }
-  }
-
-  if (content.trim().length === 0) {
-    throw new Error('Initial route decision returned an empty response');
-  }
 
   return { content };
 }
@@ -461,73 +294,6 @@ export function assessMutationOutcome(
   };
 }
 
-async function collectMutationToolCallsFromMcpLog(runId: string, attempt: number): Promise<MutationToolCall[]> {
-  const { getPrisma } = await getPrismaModule();
-  const rows = await ((getPrisma() as any).agentDebugLog.findMany({
-    where: {
-      source: 'mcp',
-      runId,
-      attempt,
-      tool: {
-        in: [...NORMALIZED_MUTATION_TOOL_NAMES],
-      },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: 2000,
-  }) as Promise<Array<{ event: string; tool?: string | null; toolUseId?: string | null; payload?: unknown }>>);
-  const toolCalls = new Map<string, MutationToolCall>();
-  let syntheticIndex = 0;
-
-  for (const row of rows) {
-    const payload = row.payload && typeof row.payload === 'object'
-      ? row.payload as Record<string, unknown>
-      : undefined;
-    if (!payload) {
-      continue;
-    }
-
-    const toolName = resolveNormalizedMutationToolName(row.tool ?? payload.tool);
-    if (!toolName) {
-      continue;
-    }
-
-    const toolUseId = row.toolUseId
-      ?? (typeof payload.toolUseId === 'string' ? payload.toolUseId : `${toolName}:${syntheticIndex++}`);
-
-    const existing = toolCalls.get(toolUseId) ?? {
-      toolUseId,
-      toolName,
-    };
-
-    if (row.event === 'tool_call_failed') {
-      existing.status = 'rejected';
-      existing.reason = typeof payload.error === 'string' ? payload.error : 'tool_error';
-    }
-
-    const result = payload.result;
-    if (result && typeof result === 'object') {
-      const status = (result as { status?: unknown }).status;
-      const reason = (result as { reason?: unknown }).reason;
-      const changedTaskIds = (result as { changedTaskIds?: unknown }).changedTaskIds;
-      if (status === 'accepted' || status === 'rejected') {
-        existing.status = status;
-        existing.reason = typeof reason === 'string' ? reason : undefined;
-        existing.changedTaskIds = Array.isArray(changedTaskIds)
-          ? changedTaskIds.filter((value): value is string => typeof value === 'string')
-          : [];
-      }
-    }
-
-    toolCalls.set(toolUseId, existing);
-  }
-
-  return [...toolCalls.values()];
-}
-
-function buildNoMutationMessage(): string {
-  return 'Изменение не применилось: модель не выполнила ни одного валидного mutation tool call, поэтому проект не изменился.';
-}
-
 function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {
   return latestVisibleGroupId ?? 'initial';
 }
@@ -560,26 +326,6 @@ function buildAgentHistoryTitle(userMessage: string, undoable: boolean): string 
 
   const normalized = userMessage.trim().replace(/\s+/g, ' ');
   return normalized.length > 0 ? `AI — ${normalized}` : 'AI — Изменение графика';
-}
-
-function buildRejectedMutationMessage(rejectedCalls: MutationToolCall[]): string {
-  const first = rejectedCalls[0];
-  const reason = first?.reason ? ` (${first.reason})` : '';
-  return `Изменение не применилось: mutation tool вернул отклонение${reason}.`;
-}
-
-function buildInconsistentMutationMessage(): string {
-  return 'Изменение не подтверждено: mutation tool был принят, но итоговый изменённый набор задач не подтвердился в проекте.';
-}
-
-function buildTimeoutRetryInstruction(): string {
-  return [
-    'The previous attempt timed out before completing.',
-    'Start with the smallest targeted read: `get_project_summary`, `get_task_context`, or `get_schedule_slice`.',
-    'Then perform the smallest valid normalized mutation that satisfies the user request.',
-    'If the container is still ambiguous after one targeted read, choose the closest existing phase or the top level and proceed.',
-    'Do not spend extra turns on optional restructuring or validation.',
-  ].join('\n');
 }
 
 export function buildHistoryContext(
@@ -660,81 +406,6 @@ function buildPrompt(
   ].join('');
 }
 
-function tryParseToolResultPayload(content?: string | ContentBlock[]): unknown {
-  if (typeof content === 'string') {
-    try {
-      return JSON.parse(content);
-    } catch {
-      return undefined;
-    }
-  }
-
-  if (Array.isArray(content)) {
-    const text = content
-      .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-      .map((block) => block.text)
-      .join('');
-    if (!text) {
-      return undefined;
-    }
-    try {
-      return JSON.parse(text);
-    } catch {
-      return undefined;
-    }
-  }
-
-  return undefined;
-}
-
-function collectMutationToolCalls(blocks: ContentBlock[]): MutationToolCall[] {
-  const toolUseById = new Map<string, MutationToolCall>();
-
-  for (const block of blocks) {
-    const toolName = block.type === 'tool_use'
-      ? resolveNormalizedMutationToolName(block.name)
-      : undefined;
-    if (block.type === 'tool_use' && toolName) {
-      toolUseById.set(block.id, {
-        toolUseId: block.id,
-        toolName,
-      });
-    }
-  }
-
-  for (const block of blocks) {
-    if (block.type !== 'tool_result') {
-      continue;
-    }
-
-    const toolCall = toolUseById.get(block.tool_use_id);
-    if (!toolCall) {
-      continue;
-    }
-
-    const payload = tryParseToolResultPayload(block.content) as
-      | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
-      | undefined;
-
-    if (payload?.status) {
-      toolCall.status = payload.status;
-      toolCall.reason = payload.reason;
-      toolCall.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
-    } else if (block.is_error) {
-      toolCall.status = 'rejected';
-      toolCall.reason = 'tool_error';
-    }
-  }
-
-  return [...toolUseById.values()];
-}
-
-function collectToolUseIds(blocks: ContentBlock[]): string[] {
-  return blocks
-    .filter((block): block is Extract<ContentBlock, { type: 'tool_use'; id: string }> => block.type === 'tool_use')
-    .map((block) => block.id);
-}
-
 async function getServicesModule(): Promise<TaskServiceModule> {
   if (!servicesModulePromise) {
     servicesModulePromise = import('@gantt/mcp/services');
@@ -771,325 +442,6 @@ async function getProjectBaseVersion(projectId: string): Promise<number> {
   }
 
   return project.version;
-}
-
-async function executeAgentAttempt(
-  prompt: string,
-  systemPrompt: string,
-  runId: string,
-  projectId: string,
-  sessionId: string,
-  historyGroupId: string,
-  requestContextId: string,
-  historyTitle: string,
-  userId: string | undefined,
-  attempt: number,
-  simpleMutationRequested: boolean,
-  compatibilityMode: OrdinaryAgentCompatibilityMode | undefined,
-  env: ReturnType<typeof resolveEnv>,
-  model: string,
-  broadcastToSession: WsModule['broadcastToSession'],
-): Promise<AgentAttemptResult> {
-  const abortController = new AbortController();
-  const timeoutMs = MUTATION_ATTEMPT_TIMEOUT_MS;
-  const mcpServers = resolveOrdinaryAgentMcpServers({
-    projectId,
-    runId,
-    sessionId,
-    attempt,
-    historyGroupId,
-    requestContextId,
-    historyTitle,
-    userId,
-    compatibilityMode,
-    projectRoot: PROJECT_ROOT,
-    databaseUrl: process.env.DATABASE_URL,
-  });
-
-  const session = query({
-    prompt,
-    options: {
-      authType: 'openai',
-      model,
-      systemPrompt,
-      cwd: PROJECT_ROOT,
-      permissionMode: 'yolo',
-      includePartialMessages: true,
-      maxSessionTurns: simpleMutationRequested ? SIMPLE_MUTATION_MAX_SESSION_TURNS : DEFAULT_MUTATION_MAX_SESSION_TURNS,
-      abortController,  // HARD-02: Timeout protection
-      excludeTools: ['write_file', 'edit_file', 'run_terminal_cmd', 'run_python_code'],  // HARD-03: MCP-only access
-      env: buildSdkEnv(env),
-      mcpServers,
-    },
-  });
-
-  let assistantResponse = '';
-  let streamedContent = false;
-  let capturedPartialContent = false;
-  let timeoutHandle: NodeJS.Timeout | undefined;
-  const mutationToolCalls = new Map<string, MutationToolCall>();
-  const observedToolUseIds = new Set<string>();
-  const startedAt = Date.now();
-  let firstToolCallAt: number | null = null;
-  let firstAssistantTextAt: number | null = null;
-  let resultAt: number | null = null;
-  let partialEventCount = 0;
-  let assistantMessageCount = 0;
-  let textDeltaCount = 0;
-  let toolResultCount = 0;
-
-  try {
-    const sessionPromise = (async () => {
-      for await (const event of session) {
-        if (isSDKPartialAssistantMessage(event)) {
-          partialEventCount += 1;
-          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
-            await writeServerDebugLog('sdk_raw_event', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              streamType: 'partial_assistant',
-              raw: sanitizeRawPayload(event),
-            });
-          }
-          if (
-            event.event.type === 'content_block_start'
-            && event.event.content_block.type === 'tool_use'
-          ) {
-            observedToolUseIds.add(event.event.content_block.id);
-            if (firstToolCallAt === null) {
-              firstToolCallAt = Date.now();
-            }
-            const toolName = resolveNormalizedMutationToolName(event.event.content_block.name);
-            if (toolName) {
-              mutationToolCalls.set(event.event.content_block.id, {
-                toolUseId: event.event.content_block.id,
-                toolName,
-              });
-            }
-          }
-
-          if (
-            event.event.type === 'content_block_start'
-            && event.event.content_block.type === 'tool_result'
-          ) {
-            toolResultCount += 1;
-            const existing = mutationToolCalls.get(event.event.content_block.tool_use_id);
-            if (existing) {
-              const payload = tryParseToolResultPayload(event.event.content_block.content) as
-                | { status?: 'accepted' | 'rejected'; reason?: string; changedTaskIds?: string[] }
-                | undefined;
-              if (payload?.status) {
-                existing.status = payload.status;
-                existing.reason = payload.reason;
-                existing.changedTaskIds = Array.isArray(payload.changedTaskIds) ? payload.changedTaskIds : [];
-              } else if (event.event.content_block.is_error) {
-                existing.status = 'rejected';
-                existing.reason = 'tool_error';
-              }
-            }
-          }
-
-          if (
-            event.event.type === 'content_block_delta'
-            && event.event.delta.type === 'text_delta'
-            && event.event.delta.text
-          ) {
-            textDeltaCount += 1;
-            assistantResponse += event.event.delta.text;
-            capturedPartialContent = true;
-            if (firstAssistantTextAt === null) {
-              firstAssistantTextAt = Date.now();
-            }
-            await writeServerDebugLog('sdk_text_delta', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              text: event.event.delta.text,
-            });
-          }
-          continue;
-        }
-
-        if (isSDKAssistantMessage(event)) {
-          assistantMessageCount += 1;
-          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
-            await writeServerDebugLog('sdk_raw_event', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              streamType: 'assistant_message',
-              raw: sanitizeRawPayload(event),
-            });
-          }
-          for (const toolUseId of collectToolUseIds(event.message.content)) {
-            observedToolUseIds.add(toolUseId);
-            if (firstToolCallAt === null) {
-              firstToolCallAt = Date.now();
-            }
-          }
-          for (const toolCall of collectMutationToolCalls(event.message.content)) {
-            const existing = mutationToolCalls.get(toolCall.toolUseId);
-            mutationToolCalls.set(toolCall.toolUseId, {
-              ...existing,
-              ...toolCall,
-            });
-          }
-
-          const text = extractAssistantText(event.message.content as Array<{ type: string; text?: string }>);
-          if (!capturedPartialContent && text) {
-            assistantResponse += text;
-            if (firstAssistantTextAt === null) {
-              firstAssistantTextAt = Date.now();
-            }
-          }
-          await writeServerDebugLog('sdk_assistant_message', {
-            runId,
-            attempt,
-            sessionId,
-            projectId,
-            text,
-            capturedPartialContent,
-          });
-        }
-
-        if (isSDKResultMessage(event)) {
-          resultAt = Date.now();
-          if (ENABLE_RAW_SDK_EVENT_LOGGING) {
-            await writeServerDebugLog('sdk_raw_event', {
-              runId,
-              attempt,
-              sessionId,
-              projectId,
-              streamType: 'result_message',
-              raw: sanitizeRawPayload(event),
-            });
-          }
-          const resultText = typeof event.result === 'string' ? event.result : '';
-          if (!event.is_error && assistantResponse.trim().length === 0 && resultText.trim().length > 0) {
-            assistantResponse = resultText;
-          }
-          await writeServerDebugLog('sdk_result_message', {
-            runId,
-            attempt,
-            sessionId,
-            projectId,
-            subtype: event.subtype,
-            isError: event.is_error,
-            result: resultText,
-            error: event.is_error ? event.error : undefined,
-            turns: event.num_turns,
-          });
-          break;
-        }
-      }
-    })();
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        abortController.abort();
-        reject(new Error(`Agent attempt timed out after ${Math.floor(timeoutMs / 1000)}s.`));
-      }, timeoutMs);
-    });
-
-    await Promise.race([sessionPromise, timeoutPromise]);
-  } finally {
-    if (timeoutHandle) {
-      clearTimeout(timeoutHandle);
-    }
-  }
-
-  if (mutationToolCalls.size === 0) {
-    for (const toolCall of await collectMutationToolCallsFromMcpLog(runId, attempt)) {
-      mutationToolCalls.set(toolCall.toolUseId, toolCall);
-    }
-  }
-
-  const durationMs = Date.now() - startedAt;
-  await writeServerDebugLog('agent_attempt_metrics', {
-    runId,
-    attempt,
-    projectId,
-    sessionId,
-    durationMs,
-    timeToFirstToolCallMs: firstToolCallAt === null ? null : firstToolCallAt - startedAt,
-    timeToFirstAssistantTextMs: firstAssistantTextAt === null ? null : firstAssistantTextAt - startedAt,
-    timeToResultMs: resultAt === null ? null : resultAt - startedAt,
-    partialEventCount,
-    assistantMessageCount,
-    textDeltaCount,
-    toolResultCount,
-    observedToolUseCount: observedToolUseIds.size,
-    assistantResponseChars: assistantResponse.length,
-  });
-
-  return {
-    assistantResponse,
-    streamedContent,
-    mutationToolCalls: [...mutationToolCalls.values()],
-    toolCallCount: observedToolUseIds.size,
-    metrics: {
-      durationMs,
-      timeToFirstToolCallMs: firstToolCallAt === null ? null : firstToolCallAt - startedAt,
-      timeToFirstAssistantTextMs: firstAssistantTextAt === null ? null : firstAssistantTextAt - startedAt,
-      timeToResultMs: resultAt === null ? null : resultAt - startedAt,
-      partialEventCount,
-      assistantMessageCount,
-      textDeltaCount,
-      toolResultCount,
-      observedToolUseCount: observedToolUseIds.size,
-      assistantResponseChars: assistantResponse.length,
-    },
-  };
-}
-
-async function verifyMutationAttempt(
-  runId: string,
-  projectId: string,
-  sessionId: string,
-  attempt: number,
-  tasksBefore: ComparableTask[],
-  assistantResponse: string,
-  mutationToolCalls: MutationToolCall[],
-  taskService: TaskServiceModule['taskService'],
-): Promise<VerificationResult> {
-  const { tasks: tasksAfter } = await taskService.list(projectId);
-  const tasksChanged = haveTasksChanged(tasksBefore, tasksAfter);
-  const actualChangedTaskIds = getChangedTaskIds(tasksBefore, tasksAfter);
-  const mutationOutcome = assessMutationOutcome(mutationToolCalls, actualChangedTaskIds);
-
-  await writeServerDebugLog('mutation_verification', {
-    runId,
-    attempt,
-    projectId,
-    sessionId,
-    mutationRequested: mutationOutcome.mutationAttempted || tasksChanged,
-    mutationAttempted: mutationOutcome.mutationAttempted,
-    mutationToolCalls,
-    acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
-    rejectedMutationCalls: mutationOutcome.rejectedMutationCalls,
-    acceptedChangedTaskIds: mutationOutcome.acceptedChangedTaskIds,
-    acceptedChangedTaskIdMismatch: mutationOutcome.acceptedChangedTaskIdMismatch,
-    tasksChanged,
-    actualChangedTaskIds,
-    tasksAfterCount: tasksAfter.length,
-    tasksAfterNames: tasksAfter.map((task) => task.name),
-    assistantResponse,
-  });
-
-  return {
-    tasksAfter,
-    tasksChanged,
-    actualChangedTaskIds,
-    mutationAttempted: mutationOutcome.mutationAttempted,
-    acceptedMutationCalls: mutationOutcome.acceptedMutationCalls,
-    rejectedMutationCalls: mutationOutcome.rejectedMutationCalls,
-    acceptedChangedTaskIds: mutationOutcome.acceptedChangedTaskIds,
-    acceptedChangedTaskIdMismatch: mutationOutcome.acceptedChangedTaskIdMismatch,
-  };
 }
 
 export async function runAgentWithHistory(
