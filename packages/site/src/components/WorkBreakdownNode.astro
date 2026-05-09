@@ -16,23 +16,22 @@ interface Props {
 const { node, childrenByParent, depth = 0 } = Astro.props;
 const children = childrenByParent.get(node.id) ?? [];
 const hasChildren = children.length > 0;
-const rowPadding = 14 + depth * 18;
+const rowPadding = 16 + depth * 18;
 ---
 
 {hasChildren ? (
   <details class="group" open={depth < 1}>
     <summary
-      class={`grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_140px] items-center gap-4 border-b border-slate-100 py-2.5 pr-3 text-left transition-colors hover:bg-slate-50 ${depth === 0 ? 'bg-white' : 'bg-transparent'}`}
+      class={`grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_160px] items-center gap-4 border-b border-slate-100 py-2.5 pr-4 text-left transition-colors hover:bg-slate-50 ${depth === 0 ? 'bg-slate-50/70' : 'bg-transparent'}`}
       style={`padding-left:${rowPadding}px;`}
     >
       <div class="relative min-w-0">
         {depth > 0 && <span class="absolute left-[-12px] top-0 h-full w-px bg-slate-200"></span>}
         <div class="flex items-center gap-2">
-          <span class="text-sm font-semibold text-slate-900">{node.name}</span>
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{children.length}</span>
+          <span class={`${depth === 0 ? 'font-semibold text-slate-950' : 'font-medium text-slate-800'} text-sm`}>{node.name}</span>
         </div>
       </div>
-      <div class="text-right text-xs font-medium uppercase tracking-[0.08em] text-slate-400">
+      <div class="text-right text-xs font-medium text-slate-500">
         {node.startDate} - {node.endDate}
       </div>
     </summary>
@@ -45,14 +44,14 @@ const rowPadding = 14 + depth * 18;
   </details>
 ) : (
   <div
-    class={`grid grid-cols-[minmax(0,1fr)_140px] items-center gap-4 border-b border-slate-100 py-2.5 pr-3 ${depth === 0 ? 'bg-white' : 'bg-transparent'}`}
+    class={`grid grid-cols-[minmax(0,1fr)_160px] items-center gap-4 border-b border-slate-100 py-2.5 pr-4 ${depth === 0 ? 'bg-slate-50/70' : 'bg-transparent'}`}
     style={`padding-left:${rowPadding}px;`}
   >
     <div class="relative min-w-0">
       {depth > 0 && <span class="absolute left-[-12px] top-0 h-full w-px bg-slate-200"></span>}
-      <span class="block truncate text-sm text-slate-700">{node.name}</span>
+      <span class={`block truncate text-sm ${depth === 0 ? 'font-semibold text-slate-950' : 'text-slate-700'}`}>{node.name}</span>
     </div>
-    <div class="text-right text-xs text-slate-400">
+    <div class="text-right text-xs text-slate-500">
       {node.startDate} - {node.endDate}
     </div>
   </div>
