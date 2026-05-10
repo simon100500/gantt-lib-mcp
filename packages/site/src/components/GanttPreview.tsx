@@ -34,6 +34,8 @@ interface GanttPreviewProps {
   title?: string;
   fullWidth?: boolean;
   containerHeight?: string;
+  headerNote?: string;
+  headerNoteHref?: string;
 }
 
 function toDate(value: string | Date): Date {
@@ -103,11 +105,22 @@ function shiftTasksToStart(tasks: Task[], nextStartDate: string): Task[] {
   });
 }
 
+function mergeChangedTasks(currentTasks: Task[], changedTasks: Task[]): Task[] {
+  if (changedTasks.length === 0) {
+    return currentTasks;
+  }
+
+  const changedById = new Map(changedTasks.map((task) => [task.id, task]));
+  return currentTasks.map((task) => changedById.get(task.id) ?? task);
+}
+
 function GanttPreview({
   initialTasks,
   title,
   fullWidth = false,
   containerHeight = '500px',
+  headerNote,
+  headerNoteHref,
 }: GanttPreviewProps) {
   const allTasks = initialTasks ?? [];
   const todayIso = useMemo(() => formatLocalIsoDate(new Date()), []);
@@ -191,7 +204,7 @@ function GanttPreview({
   }, [taskMetrics, tasks.length]);
 
   const handleChange = useCallback((updatedTasks: Task[]) => {
-    setTasks(updatedTasks);
+    setTasks((currentTasks) => mergeChangedTasks(currentTasks, updatedTasks));
   }, []);
 
   const handleAdd = useCallback((newTask: Task) => {
@@ -260,7 +273,7 @@ function GanttPreview({
     <div ref={previewRootRef} className={fullWidth ? 'w-full' : 'mx-auto w-[90%]'}>
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
-        <div className="grid gap-3 border-b border-slate-200 bg-white px-4 py-3 lg:grid-cols-[220px_220px_120px] lg:items-center">
+        <div className={`grid gap-3 border-b border-slate-200 bg-white px-4 py-3 ${headerNote ? 'lg:grid-cols-[220px_220px_120px_minmax(0,1fr)]' : 'lg:grid-cols-[220px_220px_120px]'} lg:items-start`}>
           <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
             <span>Старт проекта</span>
             <input
@@ -285,6 +298,22 @@ function GanttPreview({
               {taskMetrics?.totalDays ?? 0}
             </div>
           </div>
+          {headerNote ? (
+            <div className="pt-[22px] text-sm leading-6 text-slate-600">
+              <span>{headerNote}</span>
+              {headerNoteHref ? (
+                <>
+                  {' '}
+                  <a
+                    href={headerNoteHref}
+                    className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
+                  >
+                    Использовать шаблон
+                  </a>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {/* Chart header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">

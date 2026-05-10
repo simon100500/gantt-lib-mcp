@@ -712,9 +712,11 @@ export class TemplatePublicationService {
 
     const createInputs: CreateTaskInput[] = sortedTasks.map((task) => {
       const relativeStartOffset = diffDays(domainToDate(task.startDate), earliestStart);
-      const durationDays = Math.max(1, diffDays(domainToDate(task.endDate), domainToDate(task.startDate)) + 1);
+      const durationDays = task.type === 'milestone'
+        ? 0
+        : Math.max(1, diffDays(domainToDate(task.endDate), domainToDate(task.startDate)) + 1);
       const start = addDays(anchorStartDate, relativeStartOffset);
-      const end = addDays(start, durationDays - 1);
+      const end = task.type === 'milestone' ? start : addDays(start, durationDays - 1);
       const parentId = task.parentId
         ? taskIdMap.get(task.parentId)!
         : (rootParentId ?? undefined);
@@ -1046,9 +1048,11 @@ export class TemplatePublicationService {
 
     const createInputs: CreateTaskInput[] = sortedTasks.map((task) => {
       const relativeStartOffset = diffDays(domainToDate(task.startDate), earliestStart);
-      const durationDays = Math.max(1, diffDays(domainToDate(task.endDate), domainToDate(task.startDate)) + 1);
+      const durationDays = task.type === 'milestone'
+        ? 0
+        : Math.max(1, diffDays(domainToDate(task.endDate), domainToDate(task.startDate)) + 1);
       const start = addDays(today, relativeStartOffset);
-      const end = addDays(start, durationDays - 1);
+      const end = task.type === 'milestone' ? start : addDays(start, durationDays - 1);
       const dependencies: TaskDependency[] = snapshot.dependencies
         .filter((dependency) => dependency.taskId === task.id)
         .map((dependency) => ({

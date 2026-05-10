@@ -23,6 +23,10 @@ export type SitePublicationDetail = SitePublicationItem & {
       startDate: string;
       endDate: string;
       parentId?: string;
+      type?: 'task' | 'milestone';
+      color?: string;
+      progress?: number;
+      sortOrder?: number;
     }>;
     dependencies: Array<{
       id: string;

@@ -527,6 +527,10 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
     }
   }, []);
 
+  const openEditableProjectById = useCallback(async (projectId: string) => {
+    window.location.href = `/?projectId=${encodeURIComponent(projectId)}`;
+  }, []);
+
   const openProjectChat = useCallback(async (projectId: string, projectName: string) => {
     setLoadingChat(true);
     setError(null);
@@ -779,7 +783,7 @@ export function AdminPage({ isAuthenticated, userEmail, onLoginRequired }: Admin
           {adminSection === 'templates' ? (
             <TemplateAutomationAdminPanel
               fetchAdmin={fetchAdminWithRetry}
-              onAssumeProject={assumeProjectSession}
+              onOpenSourceProject={openEditableProjectById}
             />
           ) : (
           <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">

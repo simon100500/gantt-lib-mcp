@@ -175,6 +175,11 @@ function parseBlockIntentPath(pathname: string): { publicationId: string } | nul
   return publicationId ? { publicationId } : null;
 }
 
+function parseProjectOpenSearch(search: string): { projectId: string } | null {
+  const projectId = new URLSearchParams(search).get('projectId')?.trim() ?? '';
+  return projectId ? { projectId } : null;
+}
+
 function sanitizeNextPath(value: string | null): string | null {
   if (!value) {
     return null;
@@ -319,6 +324,7 @@ export default function App() {
     search: window.location.search,
   }));
   const [workspaceTemplateCreateIntentId, setWorkspaceTemplateCreateIntentId] = useState<string | null>(null);
+  const [workspaceProjectOpenIntentId, setWorkspaceProjectOpenIntentId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleRouteChange = () => {
@@ -467,6 +473,7 @@ export default function App() {
   const isLoginRoute = normalizedPathname === '/login';
   const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname) || Boolean(templateCreateRoute) || Boolean(blockIntentRoute);
   const authModalMethod = new URLSearchParams(route.search).get('auth') === 'otp' ? 'otp' : 'yandex';
+  const projectOpenRoute = parseProjectOpenSearch(route.search);
   const isYandexCallbackRoute = normalizedPathname === '/auth/yandex/callback';
   const isPurchaseRoute = normalizedPathname === '/purchase';
   const isAccountRoute = normalizedPathname === '/account';
@@ -511,6 +518,20 @@ export default function App() {
 
     navigate(buildLoginRoute(`${route.pathname}${route.search}`));
   }, [auth.isAuthenticated, blockIntentRoute, navigate, route.pathname, route.search, templateCreateRoute]);
+
+  useEffect(() => {
+    if (!projectOpenRoute) {
+      return;
+    }
+
+    if (!auth.isAuthenticated) {
+      navigate(buildLoginRoute(`${route.pathname}${route.search}`));
+      return;
+    }
+
+    setWorkspaceProjectOpenIntentId(projectOpenRoute.projectId);
+    navigate('/');
+  }, [auth.isAuthenticated, navigate, projectOpenRoute, route.pathname, route.search]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !templateCreateRoute) {
@@ -566,6 +587,8 @@ export default function App() {
           onLoginRequired={() => setShowOtpModal(true)}
           templateCreateIntentId={workspaceTemplateCreateIntentId}
           onConsumeTemplateCreateIntent={() => setWorkspaceTemplateCreateIntentId(null)}
+          projectOpenIntentId={workspaceProjectOpenIntentId}
+          onConsumeProjectOpenIntent={() => setWorkspaceProjectOpenIntentId(null)}
         />
       )}
 
@@ -605,6 +628,8 @@ interface WorkspaceAppProps {
   onLoginRequired: () => void;
   templateCreateIntentId: string | null;
   onConsumeTemplateCreateIntent: () => void;
+  projectOpenIntentId: string | null;
+  onConsumeProjectOpenIntent: () => void;
 }
 
 interface PendingProjectCreation {
@@ -623,6 +648,8 @@ function WorkspaceApp({
   onLoginRequired,
   templateCreateIntentId,
   onConsumeTemplateCreateIntent,
+  projectOpenIntentId,
+  onConsumeProjectOpenIntent,
 }: WorkspaceAppProps) {
   const sharedProject = useSharedProject();
   const workspace = useUIStore((state) => state.workspace);
@@ -1495,6 +1522,38 @@ function WorkspaceApp({
     await openTemplate(templateId);
     setWorkspace({ kind: 'template', templateId });
   }, [openTemplate, setWorkspace]);
+
+  useEffect(() => {
+    if (!projectOpenIntentId || !auth.isAuthenticated) {
+      return;
+    }
+
+    if (auth.project?.id === projectOpenIntentId) {
+      const activeWorkspace = getProjectState(projectOpenIntentId)?.activeWorkspace ?? 'project';
+      setWorkspace(
+        activeWorkspace === 'planner'
+          ? { kind: 'planner', projectId: projectOpenIntentId }
+          : activeWorkspace === 'finance'
+            ? { kind: 'finance', projectId: projectOpenIntentId }
+            : { kind: 'project', projectId: projectOpenIntentId, chatOpen: readProjectChatOpenState() },
+      );
+      onConsumeProjectOpenIntent();
+      return;
+    }
+
+    void handleSwitchProject(projectOpenIntentId)
+      .finally(() => {
+        onConsumeProjectOpenIntent();
+      });
+  }, [
+    auth.isAuthenticated,
+    auth.project?.id,
+    getProjectState,
+    handleSwitchProject,
+    onConsumeProjectOpenIntent,
+    projectOpenIntentId,
+    setWorkspace,
+  ]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || !auth.project?.id || !plannerCorrectionTarget) {
