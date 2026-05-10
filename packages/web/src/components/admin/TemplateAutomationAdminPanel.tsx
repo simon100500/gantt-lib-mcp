@@ -536,6 +536,25 @@ export function TemplateAutomationAdminPanel({
     }
   };
 
+  const republishPublication = async (publicationId: string) => {
+    setSavingPublicationId(publicationId);
+    setError(null);
+    try {
+      const response = await fetchAdmin(`/api/template-publications/${publicationId}/republish`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+      await load();
+    } catch (republishError) {
+      setError(republishError instanceof Error ? republishError.message : 'Failed to republish publication');
+    } finally {
+      setSavingPublicationId(null);
+    }
+  };
+
   const deleteAllForEntity = async (entity: TemplateAdminEntity) => {
     setDeletingAction(`all:${entity.id}`);
     setError(null);
@@ -818,91 +837,52 @@ export function TemplateAutomationAdminPanel({
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(getPrimaryStatus(selectedEntity))}`}>
-                        {statusLabel(getPrimaryStatus(selectedEntity))}
-                      </span>
-                      {selectedEntity.job && (
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(selectedEntity.job.status)}`}>
-                          pipeline: {statusLabel(selectedEntity.job.status)}
-                        </span>
-                      )}
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-                        {buildKindLabel(getEntityKind(selectedEntity))}
-                      </span>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-                        {getEntityCategory(selectedEntity)}
-                      </span>
-                    </div>
-                    <h3 className="mt-3 text-xl font-semibold text-slate-900">{buildEntityTitle(selectedEntity)}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{buildEntityDescription(selectedEntity)}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedEntity.source?.projectId && (
-                      <button
-                        type="button"
-                        onClick={() => { void onAssumeProject(selectedEntity.source!.projectId); }}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
-                      >
-                        Открыть source
-                      </button>
-                    )}
-                    {selectedEntity.publication && (
-                      <button
-                        type="button"
-                        onClick={() => { void regenerateSeo(selectedEntity.publication!.id); }}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
-                      >
-                        {savingPublicationId === selectedEntity.publication.id ? 'SEO…' : 'Обновить SEO'}
-                      </button>
-                    )}
-                    {selectedEntity.publication && selectedEntity.publication.status !== 'published' && (
-                      <button
-                        type="button"
-                        onClick={() => { void publishPublication(selectedEntity.publication!.id); }}
-                        className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
-                      >
-                        Опубликовать
-                      </button>
-                    )}
-                    {!selectedEntity.publication && selectedEntity.job.publicationId && (
-                      <button
-                        type="button"
-                        onClick={() => { void publishJob(selectedEntity.job.id); }}
-                        className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
-                      >
-                        Довести до публикации
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="mb-3 text-sm font-medium text-slate-900">Сводка</div>
-                  <div className="space-y-2 text-sm text-slate-600">
-                    <div><span className="text-slate-400">Slug:</span> {getEntitySlug(selectedEntity)}</div>
-                    <div><span className="text-slate-400">Раздел:</span> {getEntityCategory(selectedEntity)}</div>
-                    <div><span className="text-slate-400">Отрасль:</span> {getEntityIndustry(selectedEntity)}</div>
-                    <div><span className="text-slate-400">Source:</span> {selectedEntity.source?.projectName ?? 'Не создан'}</div>
-                    <div><span className="text-slate-400">Обновлено:</span> {formatDateTime(selectedEntity.sortDate)}</div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="mb-3 text-sm font-medium text-slate-900">Публикация и pipeline</div>
-                  <div className="space-y-2 text-sm text-slate-600">
-                    <div><span className="text-slate-400">Статус:</span> {statusLabel(getPrimaryStatus(selectedEntity))}</div>
-                    <div><span className="text-slate-400">Pipeline:</span> {selectedEntity.job ? statusLabel(selectedEntity.job.status) : '—'}</div>
-                    <div><span className="text-slate-400">Видимость:</span> {selectedEntity.publication ? visibilityLabel(selectedEntity.publication.visibility) : '—'}</div>
-                    <div><span className="text-slate-400">Проверка:</span> {selectedEntity.publication ? verificationLabel(selectedEntity.publication.verificationStatus) : '—'}</div>
-                    <div><span className="text-slate-400">Задач:</span> {selectedEntity.publication?.taskCount ?? '—'}</div>
-                  </div>
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedEntity.source?.projectId && (
+                  <button
+                    type="button"
+                    onClick={() => { void onAssumeProject(selectedEntity.source!.projectId); }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    Открыть source
+                  </button>
+                )}
+                {selectedEntity.publication && (
+                  <button
+                    type="button"
+                    onClick={() => { void republishPublication(selectedEntity.publication.id); }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    {savingPublicationId === selectedEntity.publication.id ? 'Пересборка…' : 'Пересобрать из source'}
+                  </button>
+                )}
+                {selectedEntity.publication && (
+                  <button
+                    type="button"
+                    onClick={() => { void regenerateSeo(selectedEntity.publication.id); }}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    {savingPublicationId === selectedEntity.publication.id ? 'SEO…' : 'Обновить SEO'}
+                  </button>
+                )}
+                {selectedEntity.publication && selectedEntity.publication.status !== 'published' && (
+                  <button
+                    type="button"
+                    onClick={() => { void publishPublication(selectedEntity.publication.id); }}
+                    className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
+                  >
+                    Опубликовать
+                  </button>
+                )}
+                {!selectedEntity.publication && selectedEntity.job.publicationId && (
+                  <button
+                    type="button"
+                    onClick={() => { void publishJob(selectedEntity.job.id); }}
+                    className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
+                  >
+                    Довести до публикации
+                  </button>
+                )}
               </div>
 
               {selectedEntity.job?.errorMessage && (
