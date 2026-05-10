@@ -193,6 +193,7 @@ model User {
 
   // Relations
   projects        Project[]
+  projectCreationIntents ProjectCreationIntent[]
   projectGroups   ProjectGroup[]
   templates       Template[]
   templatePublications TemplatePublication[] @relation("TemplatePublicationSourceUser")
@@ -749,6 +750,25 @@ model TemplateGenerationJob {
   @@index([status, createdAt(sort: Desc)])
   @@index([sourceProjectId])
   @@index([publicationId])
+}
+
+model ProjectCreationIntent {
+  id           String   @id @default(uuid())
+  source       String
+  text         String
+  userId       String?  @map("user_id")
+  templateSlug String?  @map("template_slug")
+  createdAt    DateTime @default(now()) @map("created_at")
+  expiresAt    DateTime @map("expires_at")
+  consumedAt   DateTime? @map("consumed_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("project_creation_intents")
+  @@index([userId])
+  @@index([templateSlug])
+  @@index([expiresAt])
+  @@index([consumedAt])
 }
 
 // Messages table

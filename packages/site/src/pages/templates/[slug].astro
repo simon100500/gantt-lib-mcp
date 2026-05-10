@@ -1,12 +1,13 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import GanttPreview from "../../components/GanttPreview.tsx";
+import { TemplateCustomRequestSection } from "../../components/TemplateCustomRequestSection";
 import WorkBreakdownAccordion from "../../components/WorkBreakdownAccordion.astro";
 import {
   fetchSitePublicationDetail,
   fetchSitePublicationList,
 } from "../../lib/publications";
-import { buildAppTemplateCreateUrl } from "../../lib/utils";
+import { buildAppTemplateCreateUrl, getSiteApiOrigin } from "../../lib/utils";
 import { splitSeoMarkdownSections } from "../../lib/renderSeoMarkdown";
 
 export async function getStaticPaths() {
@@ -57,6 +58,7 @@ const previewTasks = tasks.map((task) => ({
 const createProjectUrl = publication
   ? buildAppTemplateCreateUrl(publication.id)
   : "https://ai.getgantt.ru";
+const apiBaseUrl = getSiteApiOrigin();
 const seoSections = splitSeoMarkdownSections(publication?.seoBody);
 const introSeoHtml = seoSections[0]?.html ?? "";
 ---
@@ -173,4 +175,14 @@ const introSeoHtml = seoSections[0]?.html ?? "";
       ) : null
     }
   </section>
+
+  {
+    publication?.slug && (
+      <TemplateCustomRequestSection
+        client:load
+        apiBaseUrl={apiBaseUrl}
+        templateSlug={publication.slug}
+      />
+    )
+  }
 </Layout>

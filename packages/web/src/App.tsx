@@ -180,6 +180,15 @@ function parseProjectOpenSearch(search: string): { projectId: string } | null {
   return projectId ? { projectId } : null;
 }
 
+function parseProjectCreationIntentRoute(pathname: string, search: string): { intentId: string | null } | null {
+  if (pathname !== '/app/new') {
+    return null;
+  }
+
+  const intentId = new URLSearchParams(search).get('intent')?.trim() ?? '';
+  return { intentId: intentId || null };
+}
+
 function sanitizeNextPath(value: string | null): string | null {
   if (!value) {
     return null;
@@ -324,6 +333,7 @@ export default function App() {
     search: window.location.search,
   }));
   const [workspaceTemplateCreateIntentId, setWorkspaceTemplateCreateIntentId] = useState<string | null>(null);
+  const [workspaceProjectCreationIntentId, setWorkspaceProjectCreationIntentId] = useState<string | null>(null);
   const [workspaceProjectOpenIntentId, setWorkspaceProjectOpenIntentId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -470,8 +480,12 @@ export default function App() {
   const normalizedPathname = normalizePathname(route.pathname);
   const templateCreateRoute = parseTemplateCreatePath(normalizedPathname);
   const blockIntentRoute = parseBlockIntentPath(normalizedPathname);
+  const projectCreationIntentRoute = parseProjectCreationIntentRoute(normalizedPathname, route.search);
   const isLoginRoute = normalizedPathname === '/login';
-  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname) || Boolean(templateCreateRoute) || Boolean(blockIntentRoute);
+  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname)
+    || Boolean(templateCreateRoute)
+    || Boolean(blockIntentRoute)
+    || Boolean(projectCreationIntentRoute);
   const authModalMethod = new URLSearchParams(route.search).get('auth') === 'otp' ? 'otp' : 'yandex';
   const projectOpenRoute = parseProjectOpenSearch(route.search);
   const isYandexCallbackRoute = normalizedPathname === '/auth/yandex/callback';
@@ -518,6 +532,20 @@ export default function App() {
 
     navigate(buildLoginRoute(`${route.pathname}${route.search}`));
   }, [auth.isAuthenticated, blockIntentRoute, navigate, route.pathname, route.search, templateCreateRoute]);
+
+  useEffect(() => {
+    if (!projectCreationIntentRoute) {
+      return;
+    }
+
+    if (!auth.isAuthenticated) {
+      navigate(buildLoginRoute(`${route.pathname}${route.search}`));
+      return;
+    }
+
+    setWorkspaceProjectCreationIntentId(projectCreationIntentRoute.intentId);
+    navigate('/');
+  }, [auth.isAuthenticated, navigate, projectCreationIntentRoute, route.pathname, route.search]);
 
   useEffect(() => {
     if (!projectOpenRoute) {
@@ -587,6 +615,8 @@ export default function App() {
           onLoginRequired={() => setShowOtpModal(true)}
           templateCreateIntentId={workspaceTemplateCreateIntentId}
           onConsumeTemplateCreateIntent={() => setWorkspaceTemplateCreateIntentId(null)}
+          projectCreationIntentId={workspaceProjectCreationIntentId}
+          onConsumeProjectCreationIntent={() => setWorkspaceProjectCreationIntentId(null)}
           projectOpenIntentId={workspaceProjectOpenIntentId}
           onConsumeProjectOpenIntent={() => setWorkspaceProjectOpenIntentId(null)}
         />
@@ -628,6 +658,8 @@ interface WorkspaceAppProps {
   onLoginRequired: () => void;
   templateCreateIntentId: string | null;
   onConsumeTemplateCreateIntent: () => void;
+  projectCreationIntentId: string | null;
+  onConsumeProjectCreationIntent: () => void;
   projectOpenIntentId: string | null;
   onConsumeProjectOpenIntent: () => void;
 }
@@ -636,6 +668,7 @@ interface PendingProjectCreation {
   firstPrompt?: string;
   createEmptyChart?: boolean;
   groupId?: string;
+  projectIntentId?: string;
   templatePublicationId?: string;
   initialProjectName?: string;
   title?: string;
@@ -648,6 +681,8 @@ function WorkspaceApp({
   onLoginRequired,
   templateCreateIntentId,
   onConsumeTemplateCreateIntent,
+  projectCreationIntentId,
+  onConsumeProjectCreationIntent,
   projectOpenIntentId,
   onConsumeProjectOpenIntent,
 }: WorkspaceAppProps) {
@@ -1158,6 +1193,19 @@ function WorkspaceApp({
       if (options.firstPrompt) {
         useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt });
       }
+      if (options.projectIntentId) {
+        const token = localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+        if (token) {
+          void fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/consume`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch((consumeError) => {
+            console.error('Failed to consume project creation intent:', consumeError);
+          });
+        }
+      }
       setWorkspace({
         kind: 'project',
         projectId: newProject.id,
@@ -1170,6 +1218,91 @@ function WorkspaceApp({
       activationInFlightRef.current = false;
     }
   }, [auth, hasShareToken, openLimitModal, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setProjectState, setSidebarState, setWorkspace]);
+
+  useEffect(() => {
+    if (!projectCreationIntentId || !auth.isAuthenticated || hasShareToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const openProjectIntentModal = async () => {
+      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+      let token = getLatestAccessToken();
+      if (!token) {
+        onConsumeProjectCreationIntent();
+        return;
+      }
+
+      let response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          onConsumeProjectCreationIntent();
+          return;
+        }
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch(`/api/project-intents/${encodeURIComponent(projectCreationIntentId)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      if (response.status === 410) {
+        window.alert('Черновик запроса устарел. Опишите проект ещё раз.');
+        onConsumeProjectCreationIntent();
+        return;
+      }
+
+      if (!response.ok) {
+        window.alert('Не удалось подготовить запрос. Попробуйте ещё раз.');
+        onConsumeProjectCreationIntent();
+        return;
+      }
+
+      const intent = await response.json() as { text: string };
+
+      if (cancelled) {
+        return;
+      }
+
+      openCreateProjectModal({
+        firstPrompt: intent.text,
+        projectIntentId: projectCreationIntentId,
+        groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+        initialProjectName: 'Новый проект',
+        title: 'Новый проект по вашему описанию',
+        description: 'Запрос уже подготовлен. Создайте проект, и стартовый prompt появится в рабочем пространстве.',
+      });
+      onConsumeProjectCreationIntent();
+    };
+
+    void openProjectIntentModal();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    auth.accessToken,
+    auth.isAuthenticated,
+    auth.project?.groupId,
+    auth.projectGroups,
+    auth.refreshAccessToken,
+    hasShareToken,
+    onConsumeProjectCreationIntent,
+    openCreateProjectModal,
+    projectCreationIntentId,
+  ]);
 
   useEffect(() => {
     if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
