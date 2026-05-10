@@ -170,6 +170,21 @@ export type RunInitialGenerationInput = {
   services: InitialGenerationServices;
   logger: InitialGenerationLogger;
   broadcastToSession: (sessionId: string, message: ServerMessage) => void;
+  generationJob?: {
+    id: string;
+    markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string): Promise<void>;
+    markPreviewAvailable(): Promise<void>;
+    markSucceeded(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
+    markFailed(input: {
+      statusMessage?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    }): Promise<void>;
+  };
   deps?: Partial<InitialGenerationDeps>;
 };
 
@@ -935,6 +950,7 @@ export async function runInitialGeneration(
     },
   });
   const interpretation = interpretationResult.interpretation;
+  await input.generationJob?.markRunning('interpreting', 'Понимаем запрос и состав проекта');
   const classification = deps.classifyInitialRequest({
     normalizedRequest,
     interpretation,
@@ -1075,6 +1091,7 @@ export async function runInitialGeneration(
     visiblePreviewTasks = mergedTasks;
     visiblePreviewSignature = mergedSignature;
     visiblePreviewSemanticSignature = mergedSemanticSignature;
+    await input.generationJob?.markPreviewAvailable();
     previewWaveCount += 1;
     await broadcastPreviewWave(input, previewWaveCount, mergedTasks, source, debugCapture ?? undefined);
   };
@@ -1160,6 +1177,7 @@ export async function runInitialGeneration(
   };
 
   try {
+    await input.generationJob?.markRunning('planning', 'Строим структуру графика');
     const planning = await planInitialProject({
       userMessage: input.userMessage,
       brief,
@@ -1234,6 +1252,7 @@ export async function runInitialGeneration(
       plan: planning.plan,
     });
 
+    await input.generationJob?.markRunning('compiling', 'Рассчитываем календарь и связи');
     const execution = await executeInitialProjectPlan({
       projectId: input.projectId,
       baseVersion: input.baseVersion,
@@ -1277,6 +1296,11 @@ export async function runInitialGeneration(
     });
 
     if (!execution.ok) {
+      await input.generationJob?.markFailed({
+        statusMessage: 'Не удалось собрать и сохранить стартовый график',
+        errorCode: execution.reason,
+        errorMessage: execution.message,
+      });
       const assistantResponse = buildFailureResponse('compile');
       if (previewWaveCount > 0) {
         input.broadcastToSession(input.sessionId, {
@@ -1310,6 +1334,7 @@ export async function runInitialGeneration(
     }
 
     const assistantResponse = buildSuccessResponse();
+    await input.generationJob?.markRunning('finalizing', 'Сохраняем итоговый график в проект');
     await saveAssistantMessage(input, assistantResponse, {
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
@@ -1328,6 +1353,11 @@ export async function runInitialGeneration(
       historyGroupId: checkpointGroupId,
       systemMessage: buildInitialGenerationSystemMessage(),
     });
+    await input.generationJob?.markSucceeded({
+      requestContextId: input.runId,
+      historyGroupId: checkpointGroupId,
+      statusMessage: 'График готов',
+    });
     await flushDebugCapture(input, debugCapture, 'complete');
 
     return {
@@ -1338,6 +1368,11 @@ export async function runInitialGeneration(
       tasksAfter,
     };
   } catch (error) {
+    await input.generationJob?.markFailed({
+      statusMessage: 'Не удалось подготовить стартовый график',
+      errorCode: 'planning_error',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     const assistantResponse = buildFailureResponse('planning');
     await saveAssistantMessage(input, assistantResponse, {
       requestContextId: input.runId,

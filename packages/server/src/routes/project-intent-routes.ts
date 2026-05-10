@@ -10,6 +10,18 @@ import { runInitialGeneration } from '../initial-generation/orchestrator.js';
 import { writeServerDebugLog } from '../debug-log.js';
 import { broadcastToSession } from '../ws.js';
 import { completeTextPrompt } from '../agent/pi-model.js';
+import {
+  findActiveProjectGenerationJobForProject,
+  findLatestProjectGenerationJobForIntent,
+  findLatestProjectGenerationJobForProject,
+  getProjectGenerationJobById,
+  markProjectGenerationJobFailed,
+  markProjectGenerationJobPreviewAvailable,
+  markProjectGenerationJobRunning,
+  markProjectGenerationJobSucceeded,
+  serializeProjectGenerationJob,
+  startProjectGenerationJob,
+} from '../services/project-generation-service.js';
 
 const DEFAULT_INTENT_TTL_HOURS = 24;
 const MIN_TEXT_LENGTH = 10;
@@ -119,6 +131,32 @@ function mapProjectForAuth(project: any, taskCount = 0) {
     permissions: project.permissions ?? { schedule: 'edit', resources: 'edit', finance: 'edit' },
     archivedAt: project.archivedAt ?? null,
     deletedAt: project.deletedAt ?? null,
+  };
+}
+
+function createProjectGenerationJobTracker(jobId: string) {
+  return {
+    id: jobId,
+    async markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string) {
+      await markProjectGenerationJobRunning(jobId, stage, statusMessage);
+    },
+    async markPreviewAvailable() {
+      await markProjectGenerationJobPreviewAvailable(jobId);
+    },
+    async markSucceeded(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }) {
+      await markProjectGenerationJobSucceeded(jobId, input);
+    },
+    async markFailed(input: {
+      statusMessage?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    }) {
+      await markProjectGenerationJobFailed(jobId, input);
+    },
   };
 }
 
@@ -337,6 +375,55 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
     });
   });
 
+  fastify.get('/api/project-generation-jobs/active', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const projectId = asNonEmptyString((req.query as { projectId?: unknown }).projectId);
+    if (!projectId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'projectId required' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ reason: 'not_found', error: 'Project not found' });
+    }
+
+    const job = await findActiveProjectGenerationJobForProject(projectId);
+    return reply.send({ job: job ? serializeProjectGenerationJob(job) : null });
+  });
+
+  fastify.get('/api/project-generation-jobs/latest', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const projectId = asNonEmptyString((req.query as { projectId?: unknown }).projectId);
+    if (!projectId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'projectId required' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, projectId);
+    if (!access) {
+      return reply.status(404).send({ reason: 'not_found', error: 'Project not found' });
+    }
+
+    const job = await findLatestProjectGenerationJobForProject(projectId);
+    return reply.send({ job: job ? serializeProjectGenerationJob(job) : null });
+  });
+
+  fastify.get('/api/project-generation-jobs/:jobId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const jobId = asNonEmptyString((req.params as { jobId?: unknown }).jobId);
+    if (!jobId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'jobId required' });
+    }
+
+    const job = await getProjectGenerationJobById(jobId);
+    if (!job || !job.projectId) {
+      return reply.status(404).send({ reason: 'not_found', error: 'Generation job not found' });
+    }
+
+    const access = await resolveProjectAccess(req.user!.userId, job.projectId);
+    if (!access) {
+      return reply.status(404).send({ reason: 'not_found', error: 'Generation job not found' });
+    }
+
+    return reply.send({ job: serializeProjectGenerationJob(job) });
+  });
+
   fastify.post('/api/project-intents/:intentId/start-generation', { preHandler: [authMiddleware] }, async (req, reply) => {
     const intentId = asNonEmptyString((req.params as { intentId?: unknown }).intentId);
     if (!intentId) {
@@ -356,8 +443,18 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       return reply.status(404).send({ reason: 'not_found', error: 'Intent not found' });
     }
 
+    const latestIntentJob = await findLatestProjectGenerationJobForIntent(intent.id);
+    if (latestIntentJob && ['queued', 'running', 'succeeded'].includes(latestIntentJob.status)) {
+      return reply.send({
+        ok: true,
+        started: latestIntentJob.status === 'queued' || latestIntentJob.status === 'running',
+        alreadyStarted: true,
+        job: serializeProjectGenerationJob(latestIntentJob),
+      });
+    }
+
     if (intent.consumedAt) {
-      return reply.send({ ok: true, alreadyStarted: true });
+      return reply.send({ ok: true, alreadyStarted: true, job: latestIntentJob ? serializeProjectGenerationJob(latestIntentJob) : null });
     }
 
     if (intent.expiresAt.getTime() <= Date.now()) {
@@ -375,6 +472,26 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
     const { tasks } = await taskService.list(intent.projectId);
     if (tasks.length > 0) {
       return reply.status(409).send({ reason: 'project_not_empty', error: 'Initial generation requires an empty project' });
+    }
+
+    const { job, reused } = await startProjectGenerationJob({
+      projectId: intent.projectId,
+      intentId: intent.id,
+      userId: req.user!.userId,
+      source: 'project_creation_intent',
+      type: 'initial_generation',
+      requestContextId: intent.requestContextId,
+      historyGroupId: intent.historyGroupId,
+      previewMode: 'ephemeral',
+    });
+
+    if (reused) {
+      return reply.send({
+        ok: true,
+        started: true,
+        alreadyStarted: true,
+        job: serializeProjectGenerationJob(job),
+      });
     }
 
     await prisma.projectCreationIntent.update({
@@ -411,12 +528,18 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
         },
       },
       broadcastToSession,
+      generationJob: createProjectGenerationJobTracker(job.id),
     }).catch((error: unknown) => {
+      void markProjectGenerationJobFailed(job.id, {
+        statusMessage: 'Генерация завершилась ошибкой',
+        errorCode: 'unhandled_error',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       broadcastToSession(req.user!.sessionId, { type: 'error', message: String(error) });
       fastify.log.error(error, 'project intent initial generation error');
     });
 
-    return reply.send({ ok: true, started: true });
+    return reply.send({ ok: true, started: true, job: serializeProjectGenerationJob(job) });
   });
 
   fastify.post('/api/project-intents/:intentId/consume', { preHandler: [authMiddleware] }, async (req, reply) => {

@@ -167,6 +167,31 @@ enum TemplateGenerationJobStatus {
   failed
 }
 
+enum ProjectGenerationJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+}
+
+enum ProjectGenerationJobStage {
+  queued
+  interpreting
+  planning
+  compiling
+  committing
+  finalizing
+  succeeded
+  failed
+}
+
+enum ProjectGenerationPreviewMode {
+  none
+  ephemeral
+  persisted
+}
+
 enum ProjectGroupMemberRole {
   editor
   viewer
@@ -198,6 +223,7 @@ model User {
   templates       Template[]
   templatePublications TemplatePublication[] @relation("TemplatePublicationSourceUser")
   templateGenerationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobRequestedByUser")
+  projectGenerationJobs ProjectGenerationJob[]
   resources       Resource[]
   sessions        Session[]
   subscriptions   Subscription[]
@@ -306,6 +332,7 @@ model Project {
   shareLinks     ShareLink[]
   templatePublications TemplatePublication[] @relation("TemplatePublicationSourceProject")
   templateGenerationJobs TemplateGenerationJob[] @relation("TemplateGenerationJobSourceProject")
+  projectGenerationJobs ProjectGenerationJob[]
   projectEvents  ProjectEvent[]
   mutationGroups MutationGroup[]
   baselines      Baseline[]
@@ -766,6 +793,7 @@ model ProjectCreationIntent {
   consumedAt   DateTime? @map("consumed_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  generationJobs ProjectGenerationJob[]
 
   @@map("project_creation_intents")
   @@index([userId])
@@ -773,6 +801,40 @@ model ProjectCreationIntent {
   @@index([templateSlug])
   @@index([expiresAt])
   @@index([consumedAt])
+}
+
+model ProjectGenerationJob {
+  id               String                       @id @default(uuid())
+  projectId        String?                      @map("project_id")
+  intentId         String?                      @map("intent_id")
+  userId           String                       @map("user_id")
+  source           String
+  type             String
+  status           ProjectGenerationJobStatus   @default(queued)
+  stage            ProjectGenerationJobStage    @default(queued)
+  statusMessage    String?                      @map("status_message")
+  requestContextId String?                      @map("request_context_id")
+  historyGroupId   String?                      @map("history_group_id")
+  progressPercent  Int?                         @map("progress_percent")
+  previewMode      ProjectGenerationPreviewMode @default(none) @map("preview_mode")
+  previewAvailable Boolean                      @default(false) @map("preview_available")
+  errorCode        String?                      @map("error_code")
+  errorMessage     String?                      @map("error_message")
+  startedAt        DateTime?                    @map("started_at")
+  finishedAt       DateTime?                    @map("finished_at")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+  updatedAt        DateTime                     @updatedAt @map("updated_at")
+
+  project Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  intent  ProjectCreationIntent? @relation(fields: [intentId], references: [id], onDelete: SetNull)
+  user    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("project_generation_jobs")
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([intentId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([projectId, status, createdAt(sort: Desc)])
 }
 
 // Messages table

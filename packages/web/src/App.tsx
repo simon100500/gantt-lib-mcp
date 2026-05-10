@@ -319,6 +319,33 @@ type PreviewState = {
   wave: number;
 };
 
+type ProjectGenerationJobView = {
+  id: string;
+  projectId: string | null;
+  intentId: string | null;
+  userId: string;
+  source: string;
+  type: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  stage: 'queued' | 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing' | 'succeeded' | 'failed';
+  statusMessage: string | null;
+  requestContextId: string | null;
+  historyGroupId: string | null;
+  progressPercent: number | null;
+  previewMode: 'none' | 'ephemeral' | 'persisted';
+  previewAvailable: boolean;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function isActiveProjectGenerationJob(job: ProjectGenerationJobView | null): boolean {
+  return Boolean(job && (job.status === 'queued' || job.status === 'running'));
+}
+
 export default function App() {
   const auth = useAuth();
   const localTasks = useLocalTasks();
@@ -713,6 +740,7 @@ function WorkspaceApp({
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
   const [pendingPreparedIntentStart, setPendingPreparedIntentStart] = useState<{ intentId: string; projectId: string } | null>(null);
   const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
+  const [activeGenerationJob, setActiveGenerationJob] = useState<ProjectGenerationJobView | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
@@ -868,12 +896,14 @@ function WorkspaceApp({
   const queuedPromptRef = useRef<string | null>(null);
   const aiDoneGraceTimerRef = useRef<number | null>(null);
   const aiMutationWatchdogRef = useRef<number | null>(null);
+  const lastGenerationFailureJobIdRef = useRef<string | null>(null);
   const [activeEmptyProjectModeProjectId, setActiveEmptyProjectModeProjectId] = useState<string | null>(null);
   const bumpHistoryRefreshRevision = useUIStore((state) => state.bumpHistoryRefreshRevision);
   const setAiMutationLock = useUIStore((state) => state.setAiMutationLock);
   const clearAiMutationLock = useUIStore((state) => state.clearAiMutationLock);
   const effectiveAuthGanttDayMode = pendingGanttDayMode ?? (auth.project?.ganttDayMode ?? 'calendar');
   const visibleTasks = previewState.active ? previewState.tasks : tasks;
+  const activeWorkspaceProjectId = workspace.kind === 'project' ? workspace.projectId : null;
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -924,6 +954,56 @@ function WorkspaceApp({
     }
     clearAiMutationLock();
   }, [clearAiMutationLock]);
+
+  useEffect(() => {
+    if (!activeWorkspaceProjectId || !activeGenerationJob || activeGenerationJob.projectId !== activeWorkspaceProjectId) {
+      return;
+    }
+
+    if (activeGenerationJob.status === 'queued' || activeGenerationJob.status === 'running') {
+      clearAiDoneGraceTimer();
+      setAiMutationLock({
+        active: true,
+        stage: activeGenerationJob.previewAvailable ? 'preview' : 'thinking',
+        message: activeGenerationJob.statusMessage ?? 'AI формирует стартовый график и сохраняет его в проект.',
+      });
+      useChatStore.setState((state) => ({
+        ...state,
+        aiThinking: true,
+        error: null,
+      }));
+      return;
+    }
+
+    if (activeGenerationJob.status === 'failed') {
+      releaseAiMutationLock();
+      setPreparedIntentChatProjectId(null);
+      setPreviewState((current) => ({
+        tasks: current.tasks,
+        active: true,
+        mode: 'failed',
+        message: activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.',
+        wave: current.wave,
+      }));
+      if (lastGenerationFailureJobIdRef.current !== activeGenerationJob.id) {
+        lastGenerationFailureJobIdRef.current = activeGenerationJob.id;
+        useChatStore.getState().setError(activeGenerationJob.errorMessage ?? activeGenerationJob.statusMessage ?? 'Генерация завершилась ошибкой.');
+      }
+      return;
+    }
+
+    if (activeGenerationJob.status === 'succeeded' || activeGenerationJob.status === 'canceled') {
+      releaseAiMutationLock();
+      setPreparedIntentChatProjectId(null);
+      setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+    }
+  }, [
+    activeGenerationJob,
+    activeWorkspaceProjectId,
+    clearAiDoneGraceTimer,
+    releaseAiMutationLock,
+    setAiMutationLock,
+  ]);
 
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     console.log('[WS] message', msg);
@@ -988,6 +1068,9 @@ function WorkspaceApp({
           dependencies: buildDependencyRowsFromTasks(normalizedTasks),
         });
       }
+      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
+        ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
+        : current);
       return;
     }
     if (msg.type === 'token') {
@@ -1001,6 +1084,9 @@ function WorkspaceApp({
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
+        ? { ...current, status: 'succeeded', stage: 'succeeded', statusMessage: 'График готов', errorCode: null, errorMessage: null }
+        : current);
       useChatStore.getState().attachCheckpointToLatestUserMessage(msg.chatMessage);
       useChatStore.getState().finishStreaming(msg.chatMessage);
       return;
@@ -1010,6 +1096,9 @@ function WorkspaceApp({
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
+      setActiveGenerationJob((current) => current && isActiveProjectGenerationJob(current)
+        ? { ...current, status: 'failed', stage: 'failed', statusMessage: msg.message ?? 'unknown error', errorMessage: msg.message ?? 'unknown error' }
+        : current);
       useChatStore.getState().setError(msg.message ?? 'unknown error');
     }
   }, [
@@ -1030,6 +1119,87 @@ function WorkspaceApp({
     hasShareToken ? undefined : auth.refreshAccessToken,
   );
   const displayConnected = hasShareToken ? true : auth.isAuthenticated ? connected : true;
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !auth.accessToken || hasShareToken || workspace.kind !== 'project') {
+      setActiveGenerationJob(null);
+      return;
+    }
+
+    let cancelled = false;
+    let pollTimer: number | null = null;
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+
+    const loadLatestGenerationJob = async () => {
+      let token = getLatestAccessToken();
+      if (!token) {
+        return;
+      }
+
+      let response = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await auth.refreshAccessToken();
+        if (!refreshedToken) {
+          return;
+        }
+        token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+        response = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      if (!response.ok || cancelled) {
+        return;
+      }
+
+      const payload = await response.json() as { job: ProjectGenerationJobView | null };
+      if (cancelled) {
+        return;
+      }
+
+      if (!payload.job) {
+        setActiveGenerationJob(null);
+        return;
+      }
+
+      if (payload.job.status === 'succeeded' && payload.job.projectId === workspace.projectId) {
+        setActiveGenerationJob(null);
+        return;
+      }
+
+      setActiveGenerationJob(payload.job);
+
+      if ((payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer === null) {
+        pollTimer = window.setInterval(() => {
+          void loadLatestGenerationJob();
+        }, 2000);
+      }
+
+      if (!(payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer !== null) {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    void loadLatestGenerationJob();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
+      }
+    };
+  }, [
+    auth.accessToken,
+    auth.isAuthenticated,
+    auth.refreshAccessToken,
+    hasShareToken,
+    workspace,
+  ]);
 
   useEffect(() => {
     if (hasShareToken) {
@@ -1085,6 +1255,7 @@ function WorkspaceApp({
   const resetWorkspacePresentation = useCallback(() => {
     clearAiDoneGraceTimer();
     releaseAiMutationLock();
+    setActiveGenerationJob(null);
     setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
     replaceTasksFromSystem([]);
     useProjectStore.getState().hydrateConfirmed(0, { tasks: [], dependencies: [] });
@@ -1381,9 +1552,6 @@ function WorkspaceApp({
     if (workspace.projectId !== pendingPreparedIntentStart.projectId) {
       return;
     }
-    if (!connected || connectedToken !== auth.accessToken) {
-      return;
-    }
 
     const token = localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
     if (!token) {
@@ -1404,13 +1572,18 @@ function WorkspaceApp({
           const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
           throw new Error(payload.error ?? `HTTP ${response.status}`);
         }
+        const payload = await response.json() as { job?: ProjectGenerationJobView | null };
+        if (payload.job) {
+          setActiveGenerationJob(payload.job);
+          setPreparedIntentChatProjectId(payload.job.projectId ?? currentIntentStart.projectId);
+        }
       })
       .catch((startError) => {
         setPreparedIntentChatProjectId(null);
         console.error('Failed to start prepared project intent generation:', startError);
         useChatStore.getState().setError(String(startError));
       });
-  }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, pendingPreparedIntentStart, workspace]);
+  }, [auth.accessToken, auth.isAuthenticated, pendingPreparedIntentStart, workspace]);
 
   useEffect(() => {
     if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
@@ -2144,7 +2317,8 @@ function WorkspaceApp({
     }
 
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
-    const isPreparedIntentProject = preparedIntentChatProjectId === auth.project.id;
+    const isPreparedIntentProject = preparedIntentChatProjectId === auth.project.id
+      || (activeGenerationJob?.projectId === auth.project.id && isActiveProjectGenerationJob(activeGenerationJob));
     if (!hasQueuedFirstPrompt && !isPreparedIntentProject) {
       useChatStore.getState().reset();
     } else {
@@ -2193,13 +2367,10 @@ function WorkspaceApp({
         useChatStore.getState().replaceMessages(normalizedMessages);
       })
       .catch(() => {});
-  }, [auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
+  }, [activeGenerationJob, auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
 
   useEffect(() => {
-    if (!auth.isAuthenticated || !connected || workspace.kind !== 'project') {
-      return;
-    }
-    if (!auth.accessToken || connectedToken !== auth.accessToken) {
+    if (!auth.isAuthenticated || workspace.kind !== 'project') {
       return;
     }
     const promptToSend = queuedPromptRef.current;
@@ -2210,7 +2381,7 @@ function WorkspaceApp({
     void submitChatMessage(promptToSend).catch((submitError) => {
       useChatStore.getState().setError(String(submitError));
     });
-  }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, submitChatMessage, workspace.kind]);
+  }, [auth.isAuthenticated, submitChatMessage, workspace.kind]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || hasShareToken || pendingPostAuthAction?.kind !== 'send_prompt') {

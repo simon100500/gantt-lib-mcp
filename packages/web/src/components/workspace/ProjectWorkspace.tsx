@@ -2594,6 +2594,11 @@ export function ProjectWorkspace({
                   <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-primary" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">AI готовит график. Подождите</p>
+                    {aiMutationLock.message && (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {aiMutationLock.message}
+                      </p>
+                    )}
                   </div>
                   {canOpenChatFromLoader && (
                     <button
