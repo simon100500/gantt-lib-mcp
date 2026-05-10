@@ -70,7 +70,7 @@ const postSeoHtml = seoSections.slice(1).map((section) => section.html).join("\n
     publication?.summary ??
     "Публичный шаблон проекта GetGantt"}
 >
-  <section class="border-b border-slate-200 bg-white">
+  <section>
     <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
       <div class="max-w-4xl">
         <div
@@ -79,7 +79,7 @@ const postSeoHtml = seoSections.slice(1).map((section) => section.html).join("\n
           Шаблон графика работ
         </div>
         <h1
-          class="mt-4 text-4xl font-extrabold tracking-tight text-slate-950 lg:text-6xl"
+          class="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl"
         >
           {publication?.title ?? "Шаблон проекта"}
         </h1>
@@ -96,27 +96,6 @@ const postSeoHtml = seoSections.slice(1).map((section) => section.html).join("\n
               "Публичный шаблон проекта из publication-базы GetGantt."
           }
         </p>
-      </div>
-
-      <div
-        class="mt-10 grid gap-4 rounded-[2rem] border border-white/80 bg-white/70 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-2"
-      >
-        <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
-            Категория
-          </div>
-          <div class="mt-2 font-semibold text-slate-900">
-            {publication?.category ?? "Не указана"}
-          </div>
-        </div>
-        <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
-            Дней
-          </div>
-          <div class="mt-2 font-semibold text-slate-900">
-            {totalDays}
-          </div>
-        </div>
       </div>
 
       <div class="mt-6 flex flex-wrap gap-3">
