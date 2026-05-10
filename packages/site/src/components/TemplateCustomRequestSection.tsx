@@ -23,7 +23,7 @@ export function TemplateCustomRequestSection({
   const submitDisabled = loading || trimmedText.length < MIN_TEXT_LENGTH || text.length > MAX_TEXT_LENGTH;
   const helperText = useMemo(() => {
     if (!text.length) {
-      return 'Следующий шаг откроется в GetGantt. Сам план будет создан уже внутри рабочего пространства.';
+      return '';
     }
     if (trimmedText.length < MIN_TEXT_LENGTH) {
       return `Добавьте ещё ${MIN_TEXT_LENGTH - trimmedText.length} символов, чтобы мы могли подготовить стартовый запрос.`;
@@ -83,17 +83,11 @@ export function TemplateCustomRequestSection({
         <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.12),_transparent_65%)] lg:block" />
         <div className="relative grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
           <div className="max-w-xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">
-              Альтернативный сценарий
-            </p>
             <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-4xl">
               Не нашли нужный шаблон?
             </h2>
             <p className="mt-4 text-lg leading-8 text-slate-700">
               Опишите проект и получите готовый план проекта
-            </p>
-            <p className="mt-5 max-w-lg text-sm leading-7 text-slate-500">
-              Мы подготовим стартовый запрос и передадим его в GetGantt. Само создание проекта и генерация останутся внутри приложения.
             </p>
           </div>
 
@@ -123,9 +117,6 @@ export function TemplateCustomRequestSection({
               </p>
             ) : null}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs leading-6 text-slate-500">
-                После входа в GetGantt вы создадите новый проект и продолжите с уже подготовленным запросом.
-              </p>
               <button
                 type="submit"
                 disabled={submitDisabled}
