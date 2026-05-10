@@ -814,27 +814,41 @@ export function TemplateAutomationAdminPanel({
 
       {drawerOpen && selectedEntity && (
         <aside className="fixed inset-y-0 right-0 z-50 flex w-[560px] max-w-[calc(100vw-24px)] flex-col border-l border-slate-200 bg-white shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-            <div>
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Редактирование</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{buildEntityTitle(selectedEntity)}</div>
+          <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Редактирование</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">{buildEntityTitle(selectedEntity)}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedEntity.publication && draft && (
+                  <button
+                    type="button"
+                    disabled={savingPublicationId === selectedEntity.publication.id || !draft.title.trim() || !draft.slug.trim()}
+                    onClick={() => { void savePublication(selectedEntity.publication!.id); }}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingPublicationId === selectedEntity.publication.id ? 'Сохранение…' : 'Сохранить'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(false)}
+                  className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  Закрыть
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(false)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
-            >
-              Закрыть
-            </button>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
             <div className="flex flex-wrap gap-2">
               {selectedEntity.source?.projectId && (
                 <button
                   type="button"
                   onClick={() => { void onOpenSourceProject(selectedEntity.source!.projectId); }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
                 >
                   Открыть source
                 </button>
@@ -843,7 +857,7 @@ export function TemplateAutomationAdminPanel({
                 <button
                   type="button"
                   onClick={() => { void republishPublication(selectedEntity.publication.id); }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
                 >
                   {savingPublicationId === selectedEntity.publication.id ? 'Пересборка…' : 'Пересобрать из source'}
                 </button>
@@ -852,7 +866,7 @@ export function TemplateAutomationAdminPanel({
                 <button
                   type="button"
                   onClick={() => { void regenerateSeo(selectedEntity.publication.id); }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
                 >
                   {savingPublicationId === selectedEntity.publication.id ? 'SEO…' : 'Обновить SEO'}
                 </button>
@@ -861,7 +875,7 @@ export function TemplateAutomationAdminPanel({
                 <button
                   type="button"
                   onClick={() => { void publishPublication(selectedEntity.publication.id); }}
-                  className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
+                  className="rounded-lg bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
                 >
                   Опубликовать
                 </button>
@@ -870,162 +884,161 @@ export function TemplateAutomationAdminPanel({
                 <button
                   type="button"
                   onClick={() => { void publishJob(selectedEntity.job.id); }}
-                  className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
+                  className="rounded-lg bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
                 >
                   Довести до публикации
                 </button>
               )}
             </div>
 
-            {selectedEntity.job?.errorMessage && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {selectedEntity.job.errorMessage}
-              </div>
-            )}
-
-            {selectedEntity.publication && draft ? (
-              <>
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">Контент</div>
-                      <div className="text-sm text-slate-500">Каталогизация и карточка материала.</div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={savingPublicationId === selectedEntity.publication.id || !draft.title.trim() || !draft.slug.trim()}
-                      onClick={() => { void savePublication(selectedEntity.publication!.id); }}
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {savingPublicationId === selectedEntity.publication.id ? 'Сохранение…' : 'Сохранить'}
-                    </button>
-                  </div>
-
-                  <div className="grid gap-3">
-                    <div>
-                      <FieldLabel>Title</FieldLabel>
-                      <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Slug</FieldLabel>
-                      <input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Раздел</FieldLabel>
-                      <input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Отрасль</FieldLabel>
-                      <input value={draft.industry} onChange={(event) => setDraft({ ...draft, industry: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Статус публикации</FieldLabel>
-                      <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TemplatePublicationStatus })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
-                        <option value="draft">draft</option>
-                        <option value="published">published</option>
-                        <option value="archived">archived</option>
-                        <option value="rejected">rejected</option>
-                      </select>
-                    </div>
-                    <div>
-                      <FieldLabel>Видимость</FieldLabel>
-                      <select value={draft.visibility} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as TemplatePublicationVisibility })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
-                        <option value="private">private</option>
-                        <option value="marketplace">marketplace</option>
-                        <option value="site">site</option>
-                        <option value="both">both</option>
-                      </select>
-                    </div>
-                    <div>
-                      <FieldLabel>Статус проверки</FieldLabel>
-                      <select value={draft.verificationStatus} onChange={(event) => setDraft({ ...draft, verificationStatus: event.target.value as TemplatePublicationVerificationStatus })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
-                        <option value="unverified">unverified</option>
-                        <option value="reviewed">reviewed</option>
-                        <option value="verified">verified</option>
-                        <option value="editorial">editorial</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <FieldLabel>Subtitle</FieldLabel>
-                      <input value={draft.subtitle} onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Summary</FieldLabel>
-                      <textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Tags</FieldLabel>
-                      <input value={draft.tags} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="mb-4 text-sm font-medium text-slate-900">SEO</div>
-                  <div className="space-y-4">
-                    <div>
-                      <FieldLabel>SEO title</FieldLabel>
-                      <input value={draft.seoTitle} onChange={(event) => setDraft({ ...draft, seoTitle: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>SEO description</FieldLabel>
-                      <textarea value={draft.seoDescription} onChange={(event) => setDraft({ ...draft, seoDescription: event.target.value })} className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>SEO body</FieldLabel>
-                      <textarea value={draft.seoBody} onChange={(event) => setDraft({ ...draft, seoBody: event.target.value })} className="min-h-36 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="mb-4 text-sm font-medium text-slate-900">Медиа и ссылки</div>
-                  <div className="grid gap-3">
-                    <div>
-                      <FieldLabel>Cover image URL</FieldLabel>
-                      <input value={draft.coverImageUrl} onChange={(event) => setDraft({ ...draft, coverImageUrl: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                    <div>
-                      <FieldLabel>Preview image URL</FieldLabel>
-                      <input value={draft.previewImageUrl} onChange={(event) => setDraft({ ...draft, previewImageUrl: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}/${selectedEntity.publication.slug}`} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50">
-                      Открыть detail page
-                    </a>
-                    <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}`} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50">
-                      Открыть каталог
-                    </a>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                Эта запись пока существует как pipeline-job. Когда появится publication, справа откроется полная CMS-форма редактирования.
-              </div>
-            )}
-
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-              <div className="mb-2 text-sm font-medium text-red-900">Удаление</div>
-              <div className="mb-4 text-sm text-red-700">
-                Удаляет запись вместе со связанным job/source хвостом.
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Удалить запись целиком?')) {
-                    void deleteAllForEntity(selectedEntity);
-                  }
-                }}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
-              >
-                {deletingAction === `all:${selectedEntity.id}` ? 'Удаление…' : 'Удалить запись'}
-              </button>
+          {selectedEntity.job?.errorMessage && (
+            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+              {selectedEntity.job.errorMessage}
             </div>
+          )}
+
+          {selectedEntity.publication && draft ? (
+            <>
+              <section className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-slate-900">Контент</div>
+                  <div className="mt-1 text-sm text-slate-500">Каталогизация и карточка материала.</div>
+                </div>
+
+                <div className="grid gap-3">
+                  <div>
+                    <FieldLabel>Title</FieldLabel>
+                    <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Slug</FieldLabel>
+                    <input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Раздел</FieldLabel>
+                    <input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Отрасль</FieldLabel>
+                    <input value={draft.industry} onChange={(event) => setDraft({ ...draft, industry: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Статус публикации</FieldLabel>
+                    <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TemplatePublicationStatus })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
+                      <option value="draft">draft</option>
+                      <option value="published">published</option>
+                      <option value="archived">archived</option>
+                      <option value="rejected">rejected</option>
+                    </select>
+                  </div>
+                  <div>
+                    <FieldLabel>Видимость</FieldLabel>
+                    <select value={draft.visibility} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as TemplatePublicationVisibility })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
+                      <option value="private">private</option>
+                      <option value="marketplace">marketplace</option>
+                      <option value="site">site</option>
+                      <option value="both">both</option>
+                    </select>
+                  </div>
+                  <div>
+                    <FieldLabel>Статус проверки</FieldLabel>
+                    <select value={draft.verificationStatus} onChange={(event) => setDraft({ ...draft, verificationStatus: event.target.value as TemplatePublicationVerificationStatus })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
+                      <option value="unverified">unverified</option>
+                      <option value="reviewed">reviewed</option>
+                      <option value="verified">verified</option>
+                      <option value="editorial">editorial</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-4 border-t border-slate-100 pt-4">
+                  <div>
+                    <FieldLabel>Subtitle</FieldLabel>
+                    <input value={draft.subtitle} onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Summary</FieldLabel>
+                    <textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} className="min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Tags</FieldLabel>
+                    <input value={draft.tags} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4 border-t border-slate-100 pt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-slate-900">SEO</div>
+                  <button
+                    type="button"
+                    onClick={() => { void regenerateSeo(selectedEntity.publication.id); }}
+                    className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    {savingPublicationId === selectedEntity.publication.id ? 'SEO…' : 'Обновить SEO'}
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <FieldLabel>SEO title</FieldLabel>
+                    <input value={draft.seoTitle} onChange={(event) => setDraft({ ...draft, seoTitle: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>SEO description</FieldLabel>
+                    <textarea value={draft.seoDescription} onChange={(event) => setDraft({ ...draft, seoDescription: event.target.value })} className="min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>SEO body</FieldLabel>
+                    <textarea value={draft.seoBody} onChange={(event) => setDraft({ ...draft, seoBody: event.target.value })} className="min-h-36 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4 border-t border-slate-100 pt-5">
+                <div className="text-sm font-medium text-slate-900">Медиа и ссылки</div>
+                <div className="grid gap-3">
+                  <div>
+                    <FieldLabel>Cover image URL</FieldLabel>
+                    <input value={draft.coverImageUrl} onChange={(event) => setDraft({ ...draft, coverImageUrl: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                  <div>
+                    <FieldLabel>Preview image URL</FieldLabel>
+                    <input value={draft.previewImageUrl} onChange={(event) => setDraft({ ...draft, previewImageUrl: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}/${selectedEntity.publication.slug}`} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100">
+                    Открыть detail page
+                  </a>
+                  <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}`} target="_blank" rel="noreferrer" className="rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100">
+                    Открыть каталог
+                  </a>
+                </div>
+              </section>
+            </>
+          ) : (
+            <div className="rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+              Эта запись пока существует как pipeline-job. Когда появится publication, справа откроется полная CMS-форма редактирования.
+            </div>
+          )}
+
+          <div className="border-t border-slate-100 pt-5">
+            <div className="mb-2 text-sm font-medium text-red-900">Удаление</div>
+            <div className="mb-4 text-sm text-red-700">
+              Удаляет запись вместе со связанным job/source хвостом.
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Удалить запись целиком?')) {
+                  void deleteAllForEntity(selectedEntity);
+                }
+              }}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+            >
+              {deletingAction === `all:${selectedEntity.id}` ? 'Удаление…' : 'Удалить запись'}
+            </button>
+          </div>
           </div>
         </aside>
       )}
