@@ -1,355 +1,479 @@
-# CUSTOM-REQUEST-SERVER-OWNED-GENERATION-PRD
+# GENERATION-MUST-LIVE-ON-THE-SERVER-PRD
 
 ## Название
-Server-owned generation для custom request flow в GetGantt
+Server-owned generation для любого generation flow в GetGantt
 
 ## Статус
 Draft
 
+## Для кого этот документ
+Внутренний продуктовый и backend/frontend документ для команды, которая будет переводить generation lifecycle с client-owned модели на server-owned.
+
+После прочтения читатель должен понимать:
+
+- какой архитектурный инвариант теперь обязателен для любой generation;
+- какие flow входят в первую волну migration;
+- какой backend/frontend/data contract должен появиться;
+- как staged rollout сделать без повторного проектирования под каждый новый generation flow.
+
+## Кратко
+Любая generation, которая:
+
+- строит стартовый график;
+- делает AI-driven изменение графика;
+- компилирует план в persisted project result;
+- занимает дольше обычного sync request;
+- зависит от stream/status/progress;
+
+должна жить как серверная job.
+
+Клиент может:
+
+- создать job;
+- читать её статус;
+- подписаться на live updates;
+- показать persisted result или persisted failure.
+
+Клиент не должен быть владельцем generation lifecycle.
+
 ## Контекст
-Сейчас custom request flow уже умеет:
+Сейчас в продукте уже есть несколько generation-подобных сценариев с разной степенью связности с UI:
 
-1. принять свободное описание проекта на site
-2. создать `ProjectCreationIntent`
-3. открыть app
-4. создать новый проект
-5. запустить `runInitialGeneration(...)`
+1. custom request при создании нового проекта;
+2. initial generation для пустого проекта;
+3. возможные последующие AI-driven generation/mutation flow;
+4. другие долгие generation pipeline, где UI ждёт stream, preview или финальный commit.
 
-Но фактическая генерация всё ещё слишком сильно завязана на живую клиентскую сессию, текущее WS-соединение и локальное chat/UI state.
+Текущая проблема не в одном конкретном custom request flow. Проблема системная:
 
-Это приводит к нестабильному UX:
+- generation стартует из UI-контекста;
+- визуальное состояние живёт в chat/session/local refs;
+- WS часто становится единственным наблюдаемым источником прогресса;
+- refresh/reconnect/dev-restart ломают понимание, что реально происходит;
+- preview может выглядеть как уже сохранённый результат;
+- финальный commit и пользовательский UX разъезжаются.
 
-- в чате может пропадать loader
-- preview задач может показываться до финального сохранения
-- после refresh пользователь может увидеть пустой проект
-- при проблемах с WS или dev-restart generation выглядит зависшей
-- источник истины о состоянии generation размазан между сервером, WS и локальным состоянием клиента
+Из-за этого пользователь не знает:
+
+- generation ещё идёт или уже умерла;
+- preview это черновик или итог;
+- результат уже сохранён в проект или ещё нет;
+- можно ли безопасно перезагрузить страницу.
 
 ## Проблема
-Для сценария `создать новый график по описанию` generation должна быть серверной задачей, а не хрупким клиентским процессом.
+Пока generation считается частью живой клиентской сессии, продукт остаётся хрупким.
 
-Текущий поток допускает ситуации, когда:
+Симптомы:
 
-- generation уже стартовала, но клиент теряет визуальное состояние
-- клиент видит временный preview как будто это уже результат
-- финал generation не переживает refresh прозрачно
-- пользователь не может надёжно восстановить прогресс после перезагрузки страницы
+- loader исчезает раньше времени;
+- preview переживает reload хуже, чем сама серверная работа;
+- финальное состояние job не восстанавливается прозрачно;
+- retry/idempotency не формализованы;
+- один и тот же generation flow приходится каждый раз отдельно "докручивать" под refresh, WS и local state.
 
-Главный продуктовый дефект:
+Главный дефект:
 
-пользователь не понимает, идёт ли generation сейчас, завершилась ли она, сломалась ли она, и сохранён ли результат в проекте.
+источник истины о generation размазан между сервером, сокетом и клиентской памятью.
 
 ## Цель
-Сделать generation в custom request flow полностью server-owned:
+Сделать любой generation flow server-owned по общему контракту.
 
-1. generation job создаётся и хранится на сервере
-2. generation продолжает жить независимо от открытого чата
-3. refresh страницы не ломает generation
-4. клиент может заново прочитать состояние job и восстановить UX
-5. preview и финальный результат имеют чётко разные статусы
-6. итоговый проект никогда не зависит от локального chat state
+Это означает:
 
-## Не-цель
+1. каждый generation run существует как persisted job на сервере;
+2. сервер является единственным владельцем lifecycle job;
+3. generation продолжает жить без открытого чата и без активной вкладки;
+4. клиент в любой момент может восстановиться из persisted job state;
+5. preview, live stream и финальный persisted result строго разведены;
+6. результат проекта никогда не зависит от локального chat state.
 
-- не переводить generation на generic agent path
-- не отдавать построение проекта внешнему агенту
-- не менять алгоритмическую основу `runInitialGeneration(...)`
-- не переписывать весь чат целиком
-- не делать универсальную job-систему для всех AI-фич на первом этапе
+## Не-цели
+
+- не переписывать весь AI runtime за один шаг;
+- не строить сразу универсальный distributed queue framework для всех background задач продукта;
+- не менять алгоритмическую основу `runInitialGeneration(...)` только ради этого PRD;
+- не переводить всё на generic external agent path;
+- не обещать cross-process durability уровня отдельного worker cluster в первой итерации;
+- не требовать, чтобы любой generation flow сразу поддержал preview.
 
 ## Product Principle
-Генерация стартового графика должна быть алгоритмической и серверной. Клиент может только:
+Любая generation, которая меняет или создаёт project result, должна быть серверной задачей с persisted lifecycle.
 
-- создать job
-- показать её состояние
-- получить финальный результат
+WS, чат, loader, preview, optimistic UI и локальные refs могут ускорять UX, но не могут быть source of truth.
 
-Но клиент не должен быть владельцем жизненного цикла generation.
+## Инвариант платформы
+Новый обязательный контракт:
 
-## User Story
-Как пользователь, который создаёт новый проект по свободному описанию, я хочу чтобы генерация шла надёжно и продолжалась даже после refresh, чтобы я всегда видел понятный статус и не терял результат.
+`generation = persisted server job + optional live transport + authoritative persisted result`
+
+Не допускается архитектура вида:
+
+- клиент держит единственное состояние generation;
+- финальный результат существует только в памяти до закрытия сокета;
+- refresh обнуляет понимание того, что происходит;
+- preview визуально неотличим от committed project state.
+
+## Какие flow покрывает этот PRD
+
+### Первая волна migration
+
+- custom request -> создание нового проекта -> initial generation;
+- initial generation в пустом проекте;
+- любой новый flow, который строит schedule дольше одного обычного sync roundtrip.
+
+### Вторая волна migration
+
+- long-running in-project AI generation/mutation;
+- generation flow с repair loop;
+- flow с persisted preview или стадийным compiler pipeline.
+
+### Вне scope первой реализации
+
+- мелкие синхронные операции, где generation фактически не существует как отдельный lifecycle;
+- не-AI background задачи, если им не нужен такой же UX/state contract;
+- полный re-platforming всех существующих automation jobs в продукте.
+
+## User Stories
+Как пользователь, я хочу чтобы любая генерация графика жила на сервере и не терялась после refresh, чтобы я всегда видел понятный статус и не терял результат.
+
+Как пользователь, я хочу чтобы черновой preview не маскировался под уже сохранённый график.
+
+Как пользователь, я хочу чтобы при ошибке generation сервер сохранил понятный failure state, который можно увидеть даже после перезахода.
 
 ## JTBD
-When I describe a new project and ask GetGantt to generate a starting schedule, I want the server to own the generation lifecycle so that progress and final results survive reconnects, refreshes, and transient UI failures.
-
-## Симптомы текущей версии
-
-- loader в чате может появляться и исчезать не в тот момент
-- stream preview-задач может показать структуру до коммита
-- после refresh проект может выглядеть пустым
-- пользователь не понимает, это preview, pending commit или уже сохранённый график
-- WS сейчас ускоряет UX, но фактически стал критичным для понимания состояния generation
+When I ask GetGantt to generate or substantially transform a schedule, I want the server to own the entire generation lifecycle so that progress, failure, and final results survive reconnects, refreshes, and transient UI issues.
 
 ## Целевой UX
 
-### После создания нового проекта из intent
-Пользователь попадает в новый проект и видит не пустой чат, а серверный статус generation.
+### Во время любой generation
+Пользователь видит server-backed status:
 
-Например:
+- `queued`
+- `running`
+- текущий `stage`
+- понятный `statusMessage`
 
-- `Подготавливаем структуру графика`
-- `Рассчитываем календарь и связи`
-- `Сохраняем итоговый график в проект`
-- `График готов`
+Если доступен live transport, UI получает быстрые обновления. Если transport пропал, пользователь не теряет generation.
 
-### При refresh
+### После refresh
 
-- проект снова открывается
-- клиент читает active generation job для этого проекта
-- если job ещё `queued/running`, UI восстанавливает loader и статус
-- если job `succeeded`, UI показывает сохранённый результат
-- если job `failed`, UI показывает понятную ошибку и возможность повторить
+- проект или экран открывается заново;
+- клиент запрашивает active generation jobs для текущего контекста;
+- если job активна, UI восстанавливает loader/stage;
+- если job завершена, UI показывает persisted result или persisted failure;
+- пользователь не должен угадывать состояние по косвенным признакам.
 
-### Важное правило UX
-Preview не должен выглядеть как уже сохранённый результат.
+### Preview rule
+Если preview существует, он обязан быть одним из двух типов:
 
-Если preview остаётся:
+1. `persisted preview`
+2. `ephemeral preview`, явно помеченный как provisional и не authoritative
 
-- он должен быть явно помечен как временный
-- после refresh пользователь должен понимать, что финальный commit ещё не завершён
+Запрещён третий вариант:
 
-Если preview мешает надёжности:
-
-- для этого flow допустимо вовсе отказаться от него и оставить только stage/status stream
+- ephemeral preview, который выглядит как уже сохранённый график и после reload оставляет пользователя в неясности.
 
 ## Предлагаемое решение
 
-### 1. Ввести persisted generation job
+### 1. Ввести единый persisted generation job
 Новая серверная сущность:
 
 - `project_generation_jobs`
 
-Каждый запуск initial generation создаёт отдельную job.
+Каждый значимый generation run создаёт или переиспользует job.
 
-### 2. Привязать generation к `jobId`, а не к локальному chat state
-`runInitialGeneration(...)` должен запускаться как server-owned процесс с persisted metadata:
+### 2. Отвязать generation от локального chat/UI state
+Любой generation pipeline должен запускаться по `jobId`, а не по временному состоянию вкладки.
 
-- `jobId`
-- `projectId`
-- `intentId`
-- `userId`
-- `sessionId` nullable
+Важное следствие:
 
-`sessionId` нужен только для live-push, но не как единственный носитель состояния.
+- чат отображает generation;
+- чат не владеет generation.
 
 ### 3. Сделать БД источником истины
-Источник истины о generation:
+Истина о generation живёт в persisted job record:
 
-- не `aiThinking` в клиенте
-- не наличие preview в памяти
-- не открытый чат
-
-Источник истины:
-
-- запись job в БД
-- её status/stage/progress metadata
-- итоговый persisted result
-
-### 4. Оставить WS как ускоритель, а не как единственный канал
-WS по-прежнему нужен для live UX:
-
-- статусы этапов
-- preview wave, если сохранится
-- финальный `tasks`
-- `done`
-
-Но если WS умер:
-
-- job всё равно идёт
-- клиент после reconnect/reload дочитывает состояние job по REST
-
-## Data Model
-
-### Новая таблица
-`project_generation_jobs`
-
-Поля:
-
-- `id`
-- `projectId`
-- `intentId` nullable
-- `userId`
-- `source`
-  Рекомендуемое значение: `project_creation_intent`
-- `type`
-  Рекомендуемое значение: `initial_generation`
-- `status`
-  `queued | running | succeeded | failed | canceled`
-- `stage`
-  `queued | interpreting | structure_planning | schedule_planning | compiling | committing | finalizing | succeeded | failed`
-- `statusMessage` nullable
-- `requestContextId` nullable
-- `historyGroupId` nullable
-- `previewAvailable` boolean default false
-- `errorCode` nullable
-- `errorMessage` nullable
-- `startedAt` nullable
-- `finishedAt` nullable
-- `createdAt`
-- `updatedAt`
-
-### Опциональные persisted payloads
-
-- `metadata` JSON
-- `previewSummary` JSON nullable
-- `resultSummary` JSON nullable
-
-## Backend Requirements
-
-### Новый lifecycle
-
-#### `POST /api/project-intents/:intentId/start-generation`
-Должен:
-
-1. проверить prepared project
-2. создать `project_generation_job`
-3. вернуть `jobId`
-4. асинхронно стартовать `runInitialGeneration(...)`
-
-Важно:
-
-- endpoint не должен быть владельцем long-running state
-- даже если HTTP request уже завершился, job продолжает жить
-
-### Новый endpoint
-`GET /api/project-generation-jobs/:jobId`
-
-Возвращает:
-
-- `id`
-- `projectId`
 - `status`
 - `stage`
 - `statusMessage`
-- `previewAvailable`
-- `errorMessage`
-- `startedAt`
-- `finishedAt`
+- `progress`
+- `preview metadata`
+- `error state`
+- `result linkage`
 
-### Новый endpoint для текущего проекта
-`GET /api/project-generation-jobs/active?projectId=:id`
+### 4. Оставить live transport ускорителем
+WS/SSE могут доставлять:
 
-Нужен чтобы после refresh клиент мог быстро понять:
+- смену stage;
+- progress;
+- preview;
+- финальные уведомления;
 
-- есть ли активная generation job для этого проекта
-- в каком она состоянии
+но отсутствие live transport не должно ломать job lifecycle.
 
-### Изменения в `runInitialGeneration(...)`
-`runInitialGeneration(...)` должен уметь:
+### 5. Развести orchestration и projection
+Сервер делает две разные вещи:
 
-1. обновлять persisted stage в БД
-2. писать `statusMessage`
-3. сохранять `requestContextId/historyGroupId`
-4. финализировать job как `succeeded` или `failed`
-5. не зависеть от того, открыт ли чат
+1. исполняет generation lifecycle;
+2. проецирует его состояние в удобный для UI read model
+
+Это позволит не перепридумывать UX contract для каждого нового generation flow.
+
+## Domain Model
+
+### Таблица
+`project_generation_jobs`
+
+### Базовые поля
+
+- `id`
+- `projectId` nullable
+- `intentId` nullable
+- `userId`
+- `organizationId` nullable
+- `source`
+- `type`
+- `status`
+- `stage`
+- `statusMessage` nullable
+- `requestContextId` nullable
+- `historyGroupId` nullable
+- `progressPercent` nullable
+- `previewMode`
+- `previewAvailable` boolean default false
+- `resultRefType` nullable
+- `resultRefId` nullable
+- `errorCode` nullable
+- `errorMessage` nullable
+- `createdAt`
+- `startedAt` nullable
+- `finishedAt` nullable
+- `updatedAt`
+
+### Рекомендуемые enum
+
+#### `status`
+`queued | running | succeeded | failed | canceled`
+
+#### `previewMode`
+`none | ephemeral | persisted`
+
+#### `type`
+Минимально:
+
+- `initial_generation`
+- `project_mutation_generation`
+- `custom_request_generation`
+
+Допускается расширение без смены базового контракта.
+
+#### `source`
+Примеры:
+
+- `project_creation_intent`
+- `project_chat`
+- `template_request`
+- `system_retry`
+
+### Опциональные payloads
+
+- `metadata` JSON
+- `stageDetails` JSON
+- `previewSummary` JSON nullable
+- `resultSummary` JSON nullable
+
+## Lifecycle Contract
+
+### Job creation
+Сервер при старте generation обязан:
+
+1. определить idempotency scope;
+2. найти существующую активную job, если запуск повторный;
+3. создать новую job, если активной нет;
+4. зафиксировать initial status/stage;
+5. вернуть `jobId` сразу, не дожидаясь финала.
+
+### Job execution
+Pipeline обязан:
+
+1. обновлять persisted `stage`;
+2. писать `statusMessage`;
+3. фиксировать runtime references;
+4. отдельно отмечать preview state;
+5. завершать job как `succeeded | failed | canceled`;
+6. связывать job с persisted result.
+
+### Job restoration
+Любой клиент должен мочь:
+
+1. запросить active job по project/context;
+2. получить её текущее состояние;
+3. восстановить UX без скрытых локальных флагов;
+4. дочитать финальный результат после reconnect/reload.
+
+## Backend Requirements
+
+### Общий контракт старта generation
+У каждого generation flow должен быть server endpoint или server action, который:
+
+1. валидирует вход;
+2. определяет `type/source`;
+3. создаёт или переиспользует job;
+4. запускает orchestration асинхронно;
+5. возвращает `jobId` и первичный snapshot job.
+
+Важно:
+
+- HTTP request не является носителем long-running state;
+- завершение HTTP request не должно влиять на жизнь job.
+
+### Read endpoints
+Нужны как минимум:
+
+- `GET /api/project-generation-jobs/:jobId`
+- `GET /api/project-generation-jobs/active?projectId=:id`
+
+Опционально позже:
+
+- list endpoint по пользователю;
+- list endpoint по проекту;
+- admin endpoint по stuck/failed jobs.
+
+### Изменения в generation pipeline
+Любой pipeline, включая `runInitialGeneration(...)`, должен уметь работать в server-owned режиме:
+
+1. принять `jobId` и context;
+2. обновлять persisted state по этапам;
+3. не зависеть от открытого чата;
+4. переживать потерю live transport на уровне UX contract;
+5. финализировать authoritative result отдельно от preview.
+
+### Idempotency
+Повторный старт одного и того же логического generation scope не должен плодить параллельные job без явного решения сервера.
+
+Минимальные требования:
+
+- один prepared intent -> одна активная initial generation job;
+- один project + один mutually-exclusive generation type -> не больше одной активной job, если не разрешено иное;
+- повторный `start-generation` возвращает существующую активную job, а не создаёт новую.
+
+### Concurrency guard
+Сервер должен явно проверять:
+
+- не идёт ли уже generation для этого project;
+- не пытается ли новый flow писать в тот же project в конфликтующем режиме;
+- не применится ли результат одной job в чужой project.
 
 ## Stage Model
+Нужна маленькая и жёсткая стадийная модель, общая для платформы, с возможностью type-specific детализации.
 
-Рекомендуемые этапы:
+### Базовые стадии
 
 1. `queued`
 2. `interpreting`
-3. `structure_planning`
-4. `schedule_planning`
-5. `compiling`
-6. `committing`
-7. `finalizing`
-8. `succeeded`
-9. `failed`
+3. `planning`
+4. `compiling`
+5. `committing`
+6. `finalizing`
+7. `succeeded`
+8. `failed`
 
-Примеры `statusMessage`:
+### Расширение
+Отдельные flow могут вводить подэтапы в `stageDetails`, но внешний read model должен оставаться маленьким и стабильным.
 
-- `Понимаем запрос и состав проекта`
-- `Строим структуру графика`
-- `Рассчитываем сроки и зависимости`
+### Примеры `statusMessage`
+
+- `Понимаем запрос`
+- `Строим план графика`
+- `Рассчитываем календарь и связи`
 - `Сохраняем график в проект`
 - `Завершаем генерацию`
 
 ## Frontend Requirements
 
-### App startup after intent project creation
-После `create-project` клиент больше не должен полагаться на локальную магию вида:
+### Что запрещено как архитектура
 
-- `pendingPreparedIntentStart`
-- `queuedPromptRef`
-- временный локальный chat-only lifecycle
+- локальные флаги вида `pendingPreparedIntentStart` как единственный lifecycle;
+- chat-only generation state;
+- assumption, что если WS молчит, generation завершилась;
+- показ preview как confirmed project state без маркировки.
 
-Вместо этого:
+### Что обязано делать приложение
 
-1. вызвать `start-generation`
-2. получить `jobId`
-3. сохранить `jobId` в состоянии проекта
-4. подписаться на live updates
-5. параллельно уметь восстанавливаться по REST
-
-### После refresh
-При открытии проекта app должна:
-
-1. запросить `active generation job` для текущего проекта
-2. если job `queued/running`, включить loader и stage UI
-3. если job `succeeded`, загрузить обычный persisted проект
-4. если job `failed`, показать ошибку
+1. запускать generation через server-owned start endpoint;
+2. сохранять `jobId` в runtime state экрана;
+3. подписываться на live updates, если доступны;
+4. уметь полностью восстановиться по REST;
+5. читать active job при открытии project screen;
+6. показывать persisted failure, а не только transient toast.
 
 ### Chat behavior
-Чат в этом сценарии должен быть только UI-поверхностью для отображения generation status и итоговых assistant messages.
+Чат может быть UX-поверхностью для:
 
-Чат не должен быть единственным местом, где живёт state generation.
+- статусов;
+- assistant messages;
+- next steps;
+- ошибок;
+
+но generation state не должен жить только в чате.
 
 ## Preview Policy
 
-Есть два допустимых варианта:
+### Вариант A. Preview нет
+Для самых хрупких flow допустимо начать без preview и оставить только:
 
-### Вариант A. Persisted preview
-Если preview нужен продуктово, он должен быть persisted как часть job-state.
+- stage/status stream;
+- финальный persisted result.
 
-Тогда после refresh клиент понимает:
+### Вариант B. Preview ephemeral
+Разрешено только если UI явно показывает, что это черновик и не authoritative.
 
-- preview есть
-- final commit ещё не завершён
+### Вариант C. Preview persisted
+Предпочтительный вариант для зрелого UX, если preview реально нужен после refresh.
 
-### Вариант B. No preview for this flow
-Если preview остаётся слишком рискованным, для custom request flow можно отключить именно preview задач, но оставить:
+### Рекомендация для первой волны
 
-- server-owned stage stream
-- финальный persisted результат
+- не делать preview источником истины;
+- не делать product behavior зависимым от preview;
+- для custom request и initial generation приоритетнее надёжный stage/status, чем красивый, но хрупкий stream задач.
 
-Рекомендация на первый надёжный релиз:
-
-- не делать preview источником истины
-- либо persist preview
-- либо убрать его именно из этого flow
-
-## Надёжность
+## Reliability Requirements
 
 ### Обязательные гарантии
 
-- generation не должна теряться после refresh
-- generation не должна зависеть от открытого чата
-- один intent не должен запускать несколько параллельных initial generations для одного проекта
-- один project не должен случайно принять generation другого проекта
-- финальный persisted result должен быть проверяемым через job status
+- generation не теряется после refresh;
+- generation не зависит от открытого чата;
+- отсутствие WS не убивает job lifecycle;
+- итоговый persisted result проверяем через job status;
+- failure state не теряется вместе с сокетом;
+- один project не принимает результат чужой job.
 
-### Idempotency
+### Что считается допустимым в первой итерации
 
-- если `start-generation` вызван повторно для того же prepared project
-- и активная job уже существует
-- сервер должен вернуть существующую job, а не запускать вторую
+- live updates могут теряться, если reconnect случился посередине;
+- dev-process restart всё ещё может убить process-local execution;
+- но даже в dev архитектурный контракт должен быть server-owned, а не client-owned.
+
+### Что желательно следующим этапом
+
+- stuck job detection;
+- heartbeat/lease;
+- retry policy;
+- reaper/cleanup для старых job;
+- перенос execution в отдельный durable worker, если latency и устойчивость этого потребуют.
 
 ## Error Handling
+При любой ошибке generation сервер обязан:
 
-Если generation падает:
+1. записать `status = failed`;
+2. сохранить `errorCode/errorMessage`;
+3. закончить lifecycle в БД;
+4. отдать failure через read endpoint;
+5. позволить UI восстановить понятное состояние после refresh.
 
-- job status = `failed`
-- в БД фиксируется `errorMessage`
-- UI после refresh всё равно видит, что generation завершилась ошибкой
-- пользователь получает понятный next step
-
-Важно:
-
-- ошибка не должна теряться только потому, что WS-сокет уже закрыт
+Ошибка не должна быть observable только в live stream.
 
 ## Analytics
-
 Новые события:
 
 - `project_generation_job_created`
@@ -358,54 +482,78 @@ WS по-прежнему нужен для live UX:
 - `project_generation_job_succeeded`
 - `project_generation_job_failed`
 - `project_generation_job_restored_after_refresh`
+- `project_generation_job_reused_via_idempotency`
 
-Поля:
+Минимальные поля:
 
 - `jobId`
 - `projectId`
 - `intentId`
 - `source`
+- `type`
 - `stage`
 - `status`
 
+## Rollout Plan
+
+### Phase 1
+Сделать общий job model и read API.
+
+### Phase 2
+Перевести custom request creation flow на server-owned generation.
+
+### Phase 3
+Перевести initial generation в пустом проекте на тот же lifecycle contract.
+
+### Phase 4
+Расширить контракт на long-running in-project generation/mutation flows.
+
+### Phase 5
+Решить, где нужен persisted preview, а где он должен быть отключён.
+
 ## Risks
 
-- усложнение backend lifecycle
-- понадобится persisted job-state и cleanup policy
-- preview logic может конфликтовать с persisted final state
-- dev-mode `node --watch` всё ещё может убивать процесс посреди job
+- backend lifecycle станет сложнее;
+- появится новая persisted state machine, которую нужно поддерживать;
+- preview может конфликтовать с authoritative result;
+- часть старых UI shortcut-ов придётся удалить, а не "сохранить для удобства";
+- без отдельного worker process durability всё ещё будет ограничена жизнью server process.
 
 ## Risk Mitigation
 
-- хранить job-state в БД
-- сделать stage model маленькой и жёсткой
-- запускать generation независимо от chat state
-- не считать preview финальным результатом
-- в dev явно принимать, что live process может умереть, но job architecture должна быть готова к продовой стабильности
+- держать stage model маленькой;
+- сделать БД единственным source of truth;
+- вводить migration flow-by-flow, но по одному контракту;
+- не смешивать preview и committed result;
+- жёстко ввести idempotency и concurrency guard;
+- сначала решить restoration/read model, потом наращивать live UX.
 
 ## Open Questions
 
-1. Сохраняем ли preview для этого flow или убираем полностью?
-   Рекомендация: сначала убрать как источник истины.
+1. Должен ли polling fallback быть обязательным, если live transport не подключён?
+   Рекомендация: да.
 
-2. Нужен ли отдельный polling fallback, если WS не подключён?
-   Рекомендация: да, короткий polling для active job.
+2. Нужен ли persisted preview в первой волне?
+   Рекомендация: нет, сначала persisted status/stage.
 
-3. Нужен ли retry failed job?
-   Рекомендация: не в первом этапе. Сначала read-only failure visibility.
+3. Нужен ли retry failed job в первой итерации?
+   Рекомендация: нет, сначала failure visibility и manual restart.
 
-4. Должна ли новая job-system позже переиспользоваться для других AI flows?
-   Рекомендация: да, но не раздувать первый scope.
+4. Когда выносить execution в отдельный worker?
+   Рекомендация: после стабилизации общего job contract и первой волны migration.
+
+5. Нужен ли единый job contract только для project generation или шире для любых AI jobs?
+   Рекомендация: сейчас проектировать под project generation, но не закрывать путь к расширению.
 
 ## Acceptance Criteria
 
-- После запуска generation создаётся persisted `project_generation_job`.
-- Generation продолжает жить независимо от открытого чата.
-- После refresh клиент восстанавливает состояние active generation job.
-- Пользователь видит понятный persisted status generation.
-- Если generation завершилась успешно, итоговый график доступен после refresh.
-- Если generation завершилась с ошибкой, ошибка видна после refresh.
-- Повторный вызов `start-generation` не создаёт дубликат job для того же prepared project.
-- Генерация стартового графика остаётся алгоритмической через `runInitialGeneration(...)`.
-- Текущий активный соседний проект не может стать accidental target этой generation.
-
+- Любой новый существенный generation flow проектируется как persisted server job.
+- Custom request generation больше не зависит от client-owned lifecycle.
+- Initial generation в пустом проекте восстанавливается после refresh через active job read model.
+- Клиент может восстановить состояние generation без скрытых локальных флагов и без открытого чата.
+- `status`, `stage`, `error`, `result linkage` читаются из persisted job state.
+- Повторный старт в том же logical scope не создаёт дубликат активной job.
+- Preview, если существует, не считается authoritative result.
+- Итоговый persisted project result не зависит от локального chat state.
+- Failure state виден после refresh.
+- Общий контракт подходит не только для custom request, но и для следующих generation flow без нового архитектурного разворота.
