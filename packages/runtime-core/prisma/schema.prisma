@@ -757,6 +757,9 @@ model ProjectCreationIntent {
   source       String
   text         String
   userId       String?  @map("user_id")
+  projectId    String?  @map("project_id")
+  requestContextId String? @map("request_context_id")
+  historyGroupId String? @map("history_group_id")
   templateSlug String?  @map("template_slug")
   createdAt    DateTime @default(now()) @map("created_at")
   expiresAt    DateTime @map("expires_at")
@@ -766,6 +769,7 @@ model ProjectCreationIntent {
 
   @@map("project_creation_intents")
   @@index([userId])
+  @@index([projectId])
   @@index([templateSlug])
   @@index([expiresAt])
   @@index([consumedAt])

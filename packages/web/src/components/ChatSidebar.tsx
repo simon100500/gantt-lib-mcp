@@ -482,7 +482,8 @@ export function ChatSidebar({
 
         {loading && !streaming && (
           <div className="flex justify-start animate-fade-up motion-reduce:animate-none">
-            <div className="flex items-center gap-2 rounded-lg rounded-bl-sm bg-transparent px-0 py-2.5">
+            <div className="max-w-[88%] rounded-lg rounded-bl-sm bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-700">
+              <div className="flex items-center gap-2">
               <div className="flex shrink-0 items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.3s]" />
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none [animation-delay:-0.15s]" />
@@ -491,6 +492,7 @@ export function ChatSidebar({
               <span className="text-sm text-slate-600">
                 {currentPhrase || "Загружаем..."}
               </span>
+            </div>
             </div>
           </div>
         )}

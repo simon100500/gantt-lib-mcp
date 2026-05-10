@@ -161,7 +161,12 @@ export default function DemoSection() {
 
       {/* Gantt preview */}
       <div id="gantt-preview" ref={ganttRef}>
-        <GanttPreview initialTasks={activeTasks} title={activeTitle} />
+        <GanttPreview
+          initialTasks={activeTasks}
+          title={activeTitle}
+          showDateHeader={false}
+          progressiveReveal={true}
+        />
       </div>
 
       {/* CTA */}

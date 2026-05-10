@@ -97,6 +97,22 @@ type PromptTask = {
   }>;
 };
 
+type SourceProjectTaskRow = {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  parentId: string | null;
+  type?: string | null;
+  sortOrder: number;
+  dependencies: Array<{
+    id: string;
+    depTaskId: string;
+    type: string;
+    lag: number | null;
+  }>;
+};
+
 function trimToNull(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -205,6 +221,289 @@ function summarizeTaskGraph(tasks: PromptTask[]): string {
   }
 
   return lines.join('\n');
+}
+
+function buildTopLevelRootByTaskId(tasks: Array<{ id: string; parentId?: string | null }>): Map<string, string> {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const rootByTaskId = new Map<string, string>();
+
+  const resolveRoot = (taskId: string): string => {
+    const cached = rootByTaskId.get(taskId);
+    if (cached) {
+      return cached;
+    }
+
+    const task = taskById.get(taskId);
+    if (!task || !task.parentId) {
+      rootByTaskId.set(taskId, taskId);
+      return taskId;
+    }
+
+    const rootId = resolveRoot(task.parentId);
+    rootByTaskId.set(taskId, rootId);
+    return rootId;
+  };
+
+  for (const task of tasks) {
+    resolveRoot(task.id);
+  }
+
+  return rootByTaskId;
+}
+
+function buildChildrenByParentId(tasks: Array<{ id: string; parentId?: string | null }>): Map<string, string[]> {
+  const childrenByParentId = new Map<string, string[]>();
+  for (const task of tasks) {
+    if (!task.parentId) {
+      continue;
+    }
+    const bucket = childrenByParentId.get(task.parentId) ?? [];
+    bucket.push(task.id);
+    childrenByParentId.set(task.parentId, bucket);
+  }
+  return childrenByParentId;
+}
+
+function compareTaskOrder(
+  left: { sortOrder: number; startDate: Date; id: string },
+  right: { sortOrder: number; startDate: Date; id: string },
+): number {
+  if (left.sortOrder !== right.sortOrder) {
+    return left.sortOrder - right.sortOrder;
+  }
+  const startDiff = left.startDate.getTime() - right.startDate.getTime();
+  if (startDiff !== 0) {
+    return startDiff;
+  }
+  return left.id.localeCompare(right.id, 'en');
+}
+
+function compareCrossPhaseDependencyPriority(
+  left: {
+    targetSortOrder: number;
+    targetStartMs: number;
+    sourceEndMs: number;
+    dependencyId: string;
+  },
+  right: {
+    targetSortOrder: number;
+    targetStartMs: number;
+    sourceEndMs: number;
+    dependencyId: string;
+  },
+): number {
+  if (left.targetSortOrder !== right.targetSortOrder) {
+    return left.targetSortOrder - right.targetSortOrder;
+  }
+  if (left.targetStartMs !== right.targetStartMs) {
+    return left.targetStartMs - right.targetStartMs;
+  }
+  if (left.sourceEndMs !== right.sourceEndMs) {
+    return right.sourceEndMs - left.sourceEndMs;
+  }
+  return left.dependencyId.localeCompare(right.dependencyId, 'en');
+}
+
+type DependencyNormalizationPlan = {
+  dependencyIdsToPrune: string[];
+  dependenciesToCreate: Array<{
+    taskId: string;
+    depTaskId: string;
+    type: 'FS';
+    lag: 0;
+  }>;
+};
+
+export function planTemplateSourceDependencyNormalization(tasks: SourceProjectTaskRow[]): DependencyNormalizationPlan {
+  if (tasks.length === 0) {
+    return {
+      dependencyIdsToPrune: [],
+      dependenciesToCreate: [],
+    };
+  }
+
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const rootByTaskId = buildTopLevelRootByTaskId(tasks);
+  const childrenByParentId = buildChildrenByParentId(tasks);
+  const rootTasks = tasks
+    .filter((task) => !task.parentId)
+    .sort(compareTaskOrder);
+  const leafTasks = tasks.filter((task) => !childrenByParentId.has(task.id));
+  const leavesByRootId = new Map<string, SourceProjectTaskRow[]>();
+  for (const leafTask of leafTasks) {
+    const rootId = rootByTaskId.get(leafTask.id) ?? leafTask.id;
+    const bucket = leavesByRootId.get(rootId) ?? [];
+    bucket.push(leafTask);
+    leavesByRootId.set(rootId, bucket);
+  }
+  for (const bucket of leavesByRootId.values()) {
+    bucket.sort(compareTaskOrder);
+  }
+
+  const keptDependencyIdsByTargetRoot = new Map<string, Set<string>>();
+  const candidatesByTargetRoot = new Map<string, Array<{
+    dependencyId: string;
+    taskId: string;
+    depTaskId: string;
+    targetSortOrder: number;
+    targetStartMs: number;
+    sourceEndMs: number;
+  }>>();
+  const existingDependencySignatures = new Set<string>();
+  const sameRootIncomingByTaskId = new Map<string, number>();
+
+  for (const task of tasks) {
+    const targetRootId = rootByTaskId.get(task.id) ?? task.id;
+    for (const dependency of task.dependencies) {
+      existingDependencySignatures.add(`${dependency.depTaskId}->${task.id}`);
+      const sourceTask = taskById.get(dependency.depTaskId);
+      if (!sourceTask) {
+        continue;
+      }
+      const sourceRootId = rootByTaskId.get(sourceTask.id) ?? sourceTask.id;
+      if (sourceRootId === targetRootId) {
+        sameRootIncomingByTaskId.set(task.id, (sameRootIncomingByTaskId.get(task.id) ?? 0) + 1);
+        continue;
+      }
+
+      const bucket = candidatesByTargetRoot.get(targetRootId) ?? [];
+      bucket.push({
+        dependencyId: dependency.id,
+        taskId: task.id,
+        depTaskId: dependency.depTaskId,
+        targetSortOrder: task.sortOrder,
+        targetStartMs: task.startDate.getTime(),
+        sourceEndMs: sourceTask.endDate.getTime(),
+      });
+      candidatesByTargetRoot.set(targetRootId, bucket);
+    }
+  }
+
+  for (const [targetRootId, candidates] of candidatesByTargetRoot) {
+    candidates.sort(compareCrossPhaseDependencyPriority);
+    const keepIds = new Set(candidates.slice(0, 2).map((candidate) => candidate.dependencyId));
+    if (keepIds.size > 0) {
+      keptDependencyIdsByTargetRoot.set(targetRootId, keepIds);
+    }
+  }
+
+  const dependencyIdsToPrune: string[] = [];
+  for (const [targetRootId, candidates] of candidatesByTargetRoot) {
+    const keepIds = keptDependencyIdsByTargetRoot.get(targetRootId) ?? new Set<string>();
+    for (const candidate of candidates) {
+      if (!keepIds.has(candidate.dependencyId)) {
+        dependencyIdsToPrune.push(candidate.dependencyId);
+      }
+    }
+  }
+
+  const dependenciesToCreate: DependencyNormalizationPlan['dependenciesToCreate'] = [];
+  for (let index = 1; index < rootTasks.length; index += 1) {
+    const currentRoot = rootTasks[index];
+    if (!currentRoot) {
+      continue;
+    }
+    const currentRootId = currentRoot.id;
+    const currentLeaves = leavesByRootId.get(currentRootId) ?? [];
+    const currentFirstLeaf = currentLeaves[0];
+    if (!currentFirstLeaf) {
+      continue;
+    }
+
+    const keptCrossRootCount = (keptDependencyIdsByTargetRoot.get(currentRootId)?.size ?? 0);
+    if (keptCrossRootCount > 0) {
+      continue;
+    }
+
+    const previousRoot = rootTasks[index - 1];
+    const previousLeaves = previousRoot ? (leavesByRootId.get(previousRoot.id) ?? []) : [];
+    const previousLastLeaf = previousLeaves[previousLeaves.length - 1];
+    if (!previousLastLeaf) {
+      continue;
+    }
+
+    const signature = `${previousLastLeaf.id}->${currentFirstLeaf.id}`;
+    if (existingDependencySignatures.has(signature)) {
+      continue;
+    }
+    existingDependencySignatures.add(signature);
+    dependenciesToCreate.push({
+      taskId: currentFirstLeaf.id,
+      depTaskId: previousLastLeaf.id,
+      type: 'FS',
+      lag: 0,
+    });
+  }
+
+  for (const rootTask of rootTasks) {
+    const rootLeaves = leavesByRootId.get(rootTask.id) ?? [];
+    for (let index = 1; index < rootLeaves.length; index += 1) {
+      const currentLeaf = rootLeaves[index];
+      const previousLeaf = rootLeaves[index - 1];
+      if (!currentLeaf || !previousLeaf) {
+        continue;
+      }
+
+      if ((sameRootIncomingByTaskId.get(currentLeaf.id) ?? 0) > 0) {
+        continue;
+      }
+
+      const signature = `${previousLeaf.id}->${currentLeaf.id}`;
+      if (existingDependencySignatures.has(signature)) {
+        continue;
+      }
+      existingDependencySignatures.add(signature);
+      dependenciesToCreate.push({
+        taskId: currentLeaf.id,
+        depTaskId: previousLeaf.id,
+        type: 'FS',
+        lag: 0,
+      });
+    }
+  }
+
+  return {
+    dependencyIdsToPrune,
+    dependenciesToCreate,
+  };
+}
+
+async function normalizeSourceProjectDependencies(projectId: string): Promise<{ prunedCount: number; createdCount: number }> {
+  const prisma = getPrisma();
+  const tasks = await prisma.task.findMany({
+    where: { projectId },
+    include: { dependencies: true },
+    orderBy: { sortOrder: 'asc' },
+  }) as Array<SourceProjectTaskRow & { type?: string | null }>;
+
+  const plan = planTemplateSourceDependencyNormalization(tasks);
+  let prunedCount = 0;
+  let createdCount = 0;
+
+  if (plan.dependencyIdsToPrune.length > 0) {
+    const pruneResult = await (prisma as any).dependency.deleteMany({
+      where: { id: { in: plan.dependencyIdsToPrune } },
+    }) as { count?: number };
+    prunedCount = pruneResult.count ?? plan.dependencyIdsToPrune.length;
+  }
+
+  if (plan.dependenciesToCreate.length > 0) {
+    const createResult = await (prisma as any).dependency.createMany({
+      data: plan.dependenciesToCreate.map((dependency) => ({
+        id: randomUUID(),
+        taskId: dependency.taskId,
+        depTaskId: dependency.depTaskId,
+        type: dependency.type,
+        lag: dependency.lag,
+      })),
+    }) as { count?: number };
+    createdCount = createResult.count ?? plan.dependenciesToCreate.length;
+  }
+
+  return {
+    prunedCount,
+    createdCount,
+  };
 }
 
 function toPromptTasks(tasks: Array<{
@@ -613,6 +912,15 @@ export class TemplateGenerationAdminService {
         throw new Error(generation.assistantResponse);
       }
 
+      const dependencyNormalization = await normalizeSourceProjectDependencies(sourceProject.id);
+      if (dependencyNormalization.prunedCount > 0 || dependencyNormalization.createdCount > 0) {
+        await writeServerDebugLog('template_generation_normalized_source_dependencies', {
+          jobId: queuedJob.id,
+          sourceProjectId: sourceProject.id,
+          prunedDependencyCount: dependencyNormalization.prunedCount,
+          createdDependencyCount: dependencyNormalization.createdCount,
+        });
+      }
       const generatedTasks = await taskService.listAll(sourceProject.id);
       const metadata = await generateMetadataDraft({
         description,

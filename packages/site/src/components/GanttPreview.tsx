@@ -36,6 +36,8 @@ interface GanttPreviewProps {
   containerHeight?: string;
   headerNote?: string;
   headerNoteHref?: string;
+  showDateHeader?: boolean;
+  progressiveReveal?: boolean;
 }
 
 function toDate(value: string | Date): Date {
@@ -121,6 +123,8 @@ function GanttPreview({
   containerHeight = '500px',
   headerNote,
   headerNoteHref,
+  showDateHeader = true,
+  progressiveReveal = false,
 }: GanttPreviewProps) {
   const allTasks = initialTasks ?? [];
   const todayIso = useMemo(() => formatLocalIsoDate(new Date()), []);
@@ -131,6 +135,7 @@ function GanttPreview({
   const [showTaskList, setShowTaskList] = useState(true);
   const ganttRef = useRef<GanttChartHandle>(null);
   const previewRootRef = useRef<HTMLDivElement>(null);
+  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Hide task list on mobile screens
   useEffect(() => {
@@ -143,6 +148,8 @@ function GanttPreview({
   }, []);
 
   useEffect(() => {
+    revealTimersRef.current.forEach(clearTimeout);
+    revealTimersRef.current = [];
     setCollapsedParentIds(new Set());
 
     if (!allTasks.length) {
@@ -151,9 +158,31 @@ function GanttPreview({
     }
 
     const shiftedTasks = shiftTasksToStart(allTasks, todayIso);
-    setTasks(shiftedTasks);
     setProjectStartDate(todayIso);
-  }, [allTasks, todayIso]);
+
+    if (!progressiveReveal) {
+      setTasks(shiftedTasks);
+      return;
+    }
+
+    setTasks([]);
+
+    let index = 0;
+    const reveal = () => {
+      index += 1;
+      setTasks(shiftedTasks.slice(0, index));
+      if (index < shiftedTasks.length) {
+        revealTimersRef.current.push(setTimeout(reveal, 110));
+      }
+    };
+
+    revealTimersRef.current.push(setTimeout(reveal, 150));
+
+    return () => {
+      revealTimersRef.current.forEach(clearTimeout);
+      revealTimersRef.current = [];
+    };
+  }, [allTasks, todayIso, progressiveReveal]);
 
   useEffect(() => {
     const container = previewRootRef.current?.querySelector<HTMLElement>('.gantt-container');
@@ -164,11 +193,12 @@ function GanttPreview({
 
   // Scroll to first task once it appears
   useEffect(() => {
-    if (tasks.length > 0 && allTasks[0]) {
+    const shouldScroll = progressiveReveal ? tasks.length === 1 : tasks.length > 0;
+    if (shouldScroll && allTasks[0]) {
       ganttRef.current?.scrollToTask(allTasks[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks.length]);
+  }, [tasks.length, progressiveReveal]);
 
   const taskMetrics = useMemo(() => getTaskMetrics(tasks), [tasks]);
 
@@ -273,48 +303,54 @@ function GanttPreview({
     <div ref={previewRootRef} className={fullWidth ? 'w-full' : 'mx-auto w-[90%]'}>
       {/* Gantt Chart Container */}
       <div className="border border-slate-200 rounded-xl shadow-md bg-white overflow-hidden">
-        <div className={`grid gap-3 border-b border-slate-200 bg-white px-4 py-3 ${headerNote ? 'lg:grid-cols-[220px_220px_120px_minmax(0,1fr)]' : 'lg:grid-cols-[220px_220px_120px]'} lg:items-start`}>
-          <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
-            <span>Старт проекта</span>
-            <input
-              type="date"
-              value={projectStartDate}
-              onChange={(event) => handleProjectStartChange(event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition-colors focus:border-primary"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
-            <span>Финиш (фикс дата)</span>
-            <input
-              type="date"
-              value={finishDate ?? ''}
-              onChange={(event) => handleFinishDateChange(event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition-colors focus:border-primary"
-            />
-          </label>
-          <div className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
-            <span>Дней</span>
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700">
-              {taskMetrics?.totalDays ?? 0}
-            </div>
+        {(showDateHeader || headerNote) ? (
+          <div className={`grid gap-3 border-b border-slate-200 bg-white px-4 py-3 ${showDateHeader ? (headerNote ? 'lg:grid-cols-[220px_220px_120px_minmax(0,1fr)]' : 'lg:grid-cols-[220px_220px_120px]') : 'lg:grid-cols-[minmax(0,1fr)]'} lg:items-start`}>
+            {showDateHeader ? (
+              <>
+                <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span>Старт проекта</span>
+                  <input
+                    type="date"
+                    value={projectStartDate}
+                    onChange={(event) => handleProjectStartChange(event.target.value)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition-colors focus:border-primary"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span>Финиш (фикс дата)</span>
+                  <input
+                    type="date"
+                    value={finishDate ?? ''}
+                    onChange={(event) => handleFinishDateChange(event.target.value)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none transition-colors focus:border-primary"
+                  />
+                </label>
+                <div className="flex flex-col gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span>Дней</span>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700">
+                    {taskMetrics?.totalDays ?? 0}
+                  </div>
+                </div>
+              </>
+            ) : null}
+            {headerNote ? (
+              <div className={showDateHeader ? 'pt-[22px] text-sm leading-6 text-slate-600' : 'text-sm leading-6 text-slate-600'}>
+                <span>{headerNote}</span>
+                {headerNoteHref ? (
+                  <>
+                    {' '}
+                    <a
+                      href={headerNoteHref}
+                      className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
+                    >
+                      Использовать шаблон
+                    </a>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          {headerNote ? (
-            <div className="pt-[22px] text-sm leading-6 text-slate-600">
-              <span>{headerNote}</span>
-              {headerNoteHref ? (
-                <>
-                  {' '}
-                  <a
-                    href={headerNoteHref}
-                    className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
-                  >
-                    Использовать шаблон
-                  </a>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        ) : null}
         {/* Chart header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
           {/* Project name */}

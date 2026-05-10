@@ -205,6 +205,8 @@ function buildInitialGenerationSystemMessage(): string {
   return 'Стартовый график составлен в календарных днях. Изменить режим можно в меню проекта.';
 }
 
+const ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS = 3000;
+
 function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): string {
   if (stage === 'compile') {
     return 'Не удалось собрать и сохранить стартовый график полностью.';
@@ -705,8 +707,31 @@ async function saveAssistantMessage(
     historyGroupId?: string;
   },
 ): Promise<void> {
-  await input.services.messageService.add('assistant', assistantResponse, input.projectId, metadata);
   input.broadcastToSession(input.sessionId, { type: 'token', content: assistantResponse });
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  try {
+    await Promise.race([
+      input.services.messageService.add('assistant', assistantResponse, input.projectId, metadata),
+      new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`assistant message save timed out after ${ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS}ms`));
+        }, ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    await input.logger.debug('assistant_message_save_failed', {
+      runId: input.runId,
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      requestContextId: metadata?.requestContextId ?? null,
+      historyGroupId: metadata?.historyGroupId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 }
 
 function resolveCheckpointGroupId(latestVisibleGroupId: string | null): string {

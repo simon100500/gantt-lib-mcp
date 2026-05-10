@@ -20,7 +20,6 @@ export function TemplateCustomRequestSection({
 
   const trimmedText = text.trim();
   const remaining = MAX_TEXT_LENGTH - text.length;
-  const submitDisabled = loading || trimmedText.length < MIN_TEXT_LENGTH || text.length > MAX_TEXT_LENGTH;
   const helperText = useMemo(() => {
     if (!text.length) {
       return '';
@@ -79,54 +78,47 @@ export function TemplateCustomRequestSection({
 
   return (
     <section className="mx-auto max-w-6xl px-4 pb-16 lg:pb-24">
-      <div className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(97,88,224,0.16),_transparent_42%),linear-gradient(135deg,_rgba(255,255,255,0.98),_rgba(244,247,255,0.96))] p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] md:p-8 lg:p-10">
-        <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.12),_transparent_65%)] lg:block" />
-        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
-          <div className="max-w-xl">
-            <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-4xl">
-              Не нашли нужный шаблон?
-            </h2>
-            <p className="mt-4 text-lg leading-8 text-slate-700">
-              Опишите проект и получите готовый план проекта
+      <div className="mx-auto flex max-w-3xl flex-col items-center">
+        <div className="max-w-2xl text-center">
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl">
+            Не нашли нужный шаблон?
+          </h2>
+          <p className="mt-4 text-lg leading-8 text-slate-700">
+            Опишите проект и получите готовый план проекта
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-8 w-full rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.08)] sm:p-5 md:p-6">
+          <textarea
+            id="template-custom-request"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder={PLACEHOLDER}
+            rows={6}
+            maxLength={MAX_TEXT_LENGTH}
+            disabled={loading}
+            className="w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-70"
+          />
+          <div className="mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-slate-500">{helperText}</p>
+            <p className={`font-medium ${remaining < 200 ? 'text-amber-600' : 'text-slate-400'}`}>
+              {text.length}/{MAX_TEXT_LENGTH}
             </p>
           </div>
-
-          <form onSubmit={handleSubmit} className="relative rounded-[28px] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur sm:p-5">
-            <label htmlFor="template-custom-request" className="text-sm font-semibold text-slate-900">
-              Коротко опишите проект
-            </label>
-            <textarea
-              id="template-custom-request"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder={PLACEHOLDER}
-              rows={6}
-              maxLength={MAX_TEXT_LENGTH}
-              disabled={loading}
-              className="mt-3 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-70"
-            />
-            <div className="mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-slate-500">{helperText}</p>
-              <p className={`font-medium ${remaining < 200 ? 'text-amber-600' : 'text-slate-400'}`}>
-                {text.length}/{MAX_TEXT_LENGTH}
-              </p>
-            </div>
-            {error ? (
-              <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
-              </p>
-            ) : null}
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="submit"
-                disabled={submitDisabled}
-                className="inline-flex min-w-[168px] items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? 'Подготавливаем...' : 'Получить план'}
-              </button>
-            </div>
-          </form>
-        </div>
+          {error ? (
+            <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </p>
+          ) : null}
+          <div className="mt-5 flex justify-center sm:justify-start">
+            <button
+              type="submit"
+              className="inline-flex min-w-[168px] items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+            >
+              {loading ? 'Подготавливаем...' : 'Получить план'}
+            </button>
+          </div>
+        </form>
       </div>
     </section>
   );

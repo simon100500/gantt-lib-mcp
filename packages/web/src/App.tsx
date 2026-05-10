@@ -711,6 +711,8 @@ function WorkspaceApp({
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showPdfHelper, setShowPdfHelper] = useState(false);
   const [pendingProjectCreation, setPendingProjectCreation] = useState<PendingProjectCreation | null>(null);
+  const [pendingPreparedIntentStart, setPendingPreparedIntentStart] = useState<{ intentId: string; projectId: string } | null>(null);
+  const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
@@ -949,6 +951,7 @@ function WorkspaceApp({
         stage: 'failed',
         message: msg.message ?? 'Предварительный график не был сохранён.',
       });
+      setPreparedIntentChatProjectId(null);
       setPreviewState((current) => current.active
         ? {
             ...current,
@@ -988,11 +991,13 @@ function WorkspaceApp({
       return;
     }
     if (msg.type === 'token') {
+      setPreparedIntentChatProjectId(null);
       armAiMutationWatchdog();
       useChatStore.getState().appendToken(msg.content ?? '');
       return;
     }
     if (msg.type === 'done') {
+      setPreparedIntentChatProjectId(null);
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
@@ -1001,6 +1006,7 @@ function WorkspaceApp({
       return;
     }
     if (msg.type === 'error') {
+      setPreparedIntentChatProjectId(null);
       clearAiDoneGraceTimer();
       releaseAiMutationLock();
       setPreviewState({ tasks: [], active: false, mode: 'rendering', message: null, wave: 0 });
@@ -1106,7 +1112,87 @@ function WorkspaceApp({
     try {
       let newProject: AuthProject | null = null;
 
-      if (options.templatePublicationId) {
+      if (options.projectIntentId) {
+        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+        let token = getLatestAccessToken();
+        if (!token || !auth.user) {
+          queuedPromptRef.current = null;
+          createEmptyChartAfterActivationRef.current = false;
+          return null;
+        }
+
+        let response = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/create-project`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            projectName: name.trim(),
+            groupId: options.groupId ?? auth.project?.groupId,
+          }),
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (!refreshedToken) {
+            queuedPromptRef.current = null;
+            createEmptyChartAfterActivationRef.current = false;
+            return null;
+          }
+          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+          response = await fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/create-project`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              projectName: name.trim(),
+              groupId: options.groupId ?? auth.project?.groupId,
+            }),
+          });
+        }
+
+        if (response.status === 403) {
+          try {
+            const body = await response.json() as Partial<ConstraintDenialPayload>;
+            if (isConstraintCode(body.code)) {
+              await openLimitModal(body);
+              queuedPromptRef.current = null;
+              createEmptyChartAfterActivationRef.current = false;
+              return null;
+            }
+          } catch {
+            // fall through
+          }
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json() as {
+          accessToken: string;
+          refreshToken: string;
+          project: AuthProject;
+        };
+        auth.login(
+          { accessToken: payload.accessToken, refreshToken: payload.refreshToken },
+          auth.user,
+          payload.project,
+        );
+        newProject = payload.project;
+        queuedPromptRef.current = null;
+        setPreparedIntentChatProjectId(payload.project.id);
+        useChatStore.setState({
+          streamingText: '',
+          pendingAssistantMeta: null,
+          aiThinking: true,
+          error: null,
+        });
+        setPendingPreparedIntentStart({ intentId: options.projectIntentId, projectId: payload.project.id });
+      } else if (options.templatePublicationId) {
         const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
         let token = getLatestAccessToken();
         if (!token) {
@@ -1183,33 +1269,22 @@ function WorkspaceApp({
         hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
       });
 
-      await auth.switchProject(newProject.id);
+      if (!options.projectIntentId) {
+        await auth.switchProject(newProject.id);
+      }
       setSidebarState('closed');
       if (options.createEmptyChart) {
         setActiveEmptyProjectModeProjectId(newProject.id);
       } else {
         replaceTasksFromSystem([]);
       }
-      if (options.firstPrompt) {
+      if (options.firstPrompt && !options.projectIntentId) {
         useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt });
-      }
-      if (options.projectIntentId) {
-        const token = localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
-        if (token) {
-          void fetch(`/api/project-intents/${encodeURIComponent(options.projectIntentId)}/consume`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }).catch((consumeError) => {
-            console.error('Failed to consume project creation intent:', consumeError);
-          });
-        }
       }
       setWorkspace({
         kind: 'project',
         projectId: newProject.id,
-        chatOpen: options.firstPrompt ? true : readProjectChatOpenState(),
+        chatOpen: options.firstPrompt || options.projectIntentId ? true : readProjectChatOpenState(),
       });
       setPendingProjectCreation(null);
       setPendingPostAuthAction(null);
@@ -1270,14 +1345,9 @@ function WorkspaceApp({
         return;
       }
 
-      const intent = await response.json() as { text: string };
-
-      if (cancelled) {
-        return;
-      }
+      await response.json();
 
       openCreateProjectModal({
-        firstPrompt: intent.text,
         projectIntentId: projectCreationIntentId,
         groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
         initialProjectName: 'Новый проект',
@@ -1303,6 +1373,44 @@ function WorkspaceApp({
     openCreateProjectModal,
     projectCreationIntentId,
   ]);
+
+  useEffect(() => {
+    if (!pendingPreparedIntentStart || !auth.isAuthenticated || !auth.accessToken || workspace.kind !== 'project') {
+      return;
+    }
+    if (workspace.projectId !== pendingPreparedIntentStart.projectId) {
+      return;
+    }
+    if (!connected || connectedToken !== auth.accessToken) {
+      return;
+    }
+
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    if (!token) {
+      return;
+    }
+
+    const currentIntentStart = pendingPreparedIntentStart;
+    setPendingPreparedIntentStart(null);
+
+    void fetch(`/api/project-intents/${encodeURIComponent(currentIntentStart.intentId)}/start-generation`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };
+          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        }
+      })
+      .catch((startError) => {
+        setPreparedIntentChatProjectId(null);
+        console.error('Failed to start prepared project intent generation:', startError);
+        useChatStore.getState().setError(String(startError));
+      });
+  }, [auth.accessToken, auth.isAuthenticated, connected, connectedToken, pendingPreparedIntentStart, workspace]);
 
   useEffect(() => {
     if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
@@ -2036,10 +2144,16 @@ function WorkspaceApp({
     }
 
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
-    if (!hasQueuedFirstPrompt) {
+    const isPreparedIntentProject = preparedIntentChatProjectId === auth.project.id;
+    if (!hasQueuedFirstPrompt && !isPreparedIntentProject) {
       useChatStore.getState().reset();
     } else {
-      useChatStore.setState({ streamingText: '', error: null });
+      useChatStore.setState((state) => ({
+        ...state,
+        streamingText: '',
+        error: null,
+        aiThinking: isPreparedIntentProject ? true : state.aiThinking,
+      }));
     }
 
     fetch('/api/messages', {
@@ -2058,16 +2172,28 @@ function WorkspaceApp({
         if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
-        useChatStore.getState().replaceMessages(data.map((message) => ({
+        const normalizedMessages = data.map((message) => ({
           id: message.id ?? crypto.randomUUID(),
           role: message.role as 'user' | 'assistant' | 'system',
           content: message.content,
           requestContextId: message.requestContextId ?? null,
           historyGroupId: message.historyGroupId ?? null,
-        })));
+        }));
+        if (isPreparedIntentProject) {
+          useChatStore.setState((state) => ({
+            ...state,
+            messages: normalizedMessages,
+            streamingText: '',
+            pendingAssistantMeta: null,
+            aiThinking: true,
+            error: null,
+          }));
+          return;
+        }
+        useChatStore.getState().replaceMessages(normalizedMessages);
       })
       .catch(() => {});
-  }, [auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, workspace.kind]);
+  }, [auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || !connected || workspace.kind !== 'project') {
