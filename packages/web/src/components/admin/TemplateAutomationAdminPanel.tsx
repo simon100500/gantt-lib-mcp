@@ -712,7 +712,7 @@ export function TemplateAutomationAdminPanel({
       )}
 
       <div className="min-h-[720px]">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-xs uppercase tracking-[0.12em] text-slate-400">
             <span>Каталог</span>
             <span>{filteredEntities.length} записей</span>
@@ -802,14 +802,7 @@ export function TemplateAutomationAdminPanel({
       </div>
 
       {drawerOpen && selectedEntity && (
-        <>
-          <button
-            type="button"
-            aria-label="Закрыть drawer"
-            onClick={() => setDrawerOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-900/20"
-          />
-          <aside className="fixed right-0 top-0 z-50 flex h-dvh w-full max-w-[720px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+          <aside className="fixed inset-y-0 right-0 z-50 flex w-[560px] max-w-[calc(100vw-24px)] flex-col border-l border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
                 <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Редактирование</div>
@@ -824,7 +817,7 @@ export function TemplateAutomationAdminPanel({
               </button>
             </div>
 
-            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
@@ -888,7 +881,7 @@ export function TemplateAutomationAdminPanel({
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-3">
                 <div className="rounded-xl border border-slate-200 p-4">
                   <div className="mb-3 text-sm font-medium text-slate-900">Сводка</div>
                   <div className="space-y-2 text-sm text-slate-600">
@@ -936,7 +929,7 @@ export function TemplateAutomationAdminPanel({
                       </button>
                     </div>
 
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-3">
                       <div>
                         <FieldLabel>Title</FieldLabel>
                         <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
@@ -971,7 +964,7 @@ export function TemplateAutomationAdminPanel({
                           <option value="both">both</option>
                         </select>
                       </div>
-                      <div className="md:col-span-2">
+                      <div>
                         <FieldLabel>Статус проверки</FieldLabel>
                         <select value={draft.verificationStatus} onChange={(event) => setDraft({ ...draft, verificationStatus: event.target.value as TemplatePublicationVerificationStatus })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
                           <option value="unverified">unverified</option>
@@ -1018,7 +1011,7 @@ export function TemplateAutomationAdminPanel({
 
                   <div className="rounded-xl border border-slate-200 p-4">
                     <div className="mb-4 text-sm font-medium text-slate-900">Медиа и ссылки</div>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-3">
                       <div>
                         <FieldLabel>Cover image URL</FieldLabel>
                         <input value={draft.coverImageUrl} onChange={(event) => setDraft({ ...draft, coverImageUrl: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
@@ -1063,7 +1056,6 @@ export function TemplateAutomationAdminPanel({
               </div>
             </div>
           </aside>
-        </>
       )}
     </section>
   );
