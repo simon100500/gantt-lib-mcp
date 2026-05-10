@@ -29,15 +29,21 @@ const rootNodes = childrenByParent.get('__root__') ?? tasks.filter((task) => !ta
 
 <section>
   <h2 class="text-2xl font-bold text-slate-950">{title}</h2>
-  <div class="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm">
-    <div class="grid grid-cols-[minmax(0,1fr)_120px_120px_84px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3">
-      <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Работы</div>
-      <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Старт</div>
-      <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Финиш</div>
-      <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Дней</div>
+  <details class="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 text-left">
+      <span class="text-sm font-semibold text-slate-950">Показать структуру работ</span>
+      <span class="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">{tasks.length} задач</span>
+    </summary>
+    <div class="border-t border-slate-200">
+      <div class="grid grid-cols-[minmax(0,1fr)_84px_120px_120px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Работы</div>
+        <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Дней</div>
+        <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Старт</div>
+        <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Финиш</div>
+      </div>
+      {rootNodes.map((node) => (
+        <WorkBreakdownNode node={node} childrenByParent={childrenByParent} depth={0} />
+      ))}
     </div>
-    {rootNodes.map((node) => (
-      <WorkBreakdownNode node={node} childrenByParent={childrenByParent} depth={0} />
-    ))}
-  </div>
+  </details>
 </section>

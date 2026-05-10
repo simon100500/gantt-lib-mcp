@@ -75,3 +75,50 @@ export function renderSeoMarkdown(markdown: string | null | undefined): string {
 
   return html.join("\n");
 }
+
+export type SeoMarkdownSection = {
+  title: string | null;
+  html: string;
+};
+
+export function splitSeoMarkdownSections(markdown: string | null | undefined): SeoMarkdownSection[] {
+  if (!markdown?.trim()) {
+    return [];
+  }
+
+  const normalized = markdown.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const sections: SeoMarkdownSection[] = [];
+  let currentTitle: string | null = null;
+  let currentLines: string[] = [];
+
+  const flushSection = () => {
+    const content = currentLines.join("\n").trim();
+    if (!currentTitle && !content) {
+      return;
+    }
+
+    const sectionMarkdown = currentTitle
+      ? [`## ${currentTitle}`, content].filter(Boolean).join("\n\n")
+      : content;
+    const html = renderSeoMarkdown(sectionMarkdown);
+    if (html) {
+      sections.push({ title: currentTitle, html });
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line.startsWith("## ")) {
+      flushSection();
+      currentTitle = line.slice(3).trim() || null;
+      currentLines = [];
+      continue;
+    }
+    currentLines.push(rawLine);
+  }
+
+  flushSection();
+
+  return sections;
+}
