@@ -9,7 +9,7 @@ import type {
   TemplatePublicationVisibility,
 } from '../../lib/apiTypes.ts';
 
-type TemplateAdminFilter = 'all' | 'draft' | 'published' | 'queue' | 'failed';
+type TemplateAdminFilter = 'all' | 'draft' | 'in_work' | 'published' | 'failed';
 
 type TemplateAdminEntity =
   | {
@@ -59,12 +59,17 @@ function formatDateTime(value: string | null): string {
   return new Date(value).toLocaleString('ru-RU');
 }
 
+function normalizeText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function statusLabel(status: string): string {
   switch (status) {
     case 'queued': return 'в очереди';
     case 'in_progress': return 'в работе';
     case 'review_required': return 'нужна проверка';
-    case 'ready_to_publish': return 'готово к публикации';
+    case 'ready_to_publish': return 'готово';
     case 'published': return 'опубликовано';
     case 'failed': return 'ошибка';
     case 'draft': return 'черновик';
@@ -84,6 +89,7 @@ function statusTone(status: string): string {
     case 'rejected':
     case 'failed': return 'bg-red-100 text-red-700';
     case 'in_progress': return 'bg-violet-100 text-violet-700';
+    case 'queued': return 'bg-slate-100 text-slate-700';
     default: return 'bg-slate-100 text-slate-700';
   }
 }
@@ -106,11 +112,6 @@ function verificationLabel(value: TemplatePublicationVerificationStatus): string
     case 'editorial': return 'Редакционное';
     default: return value;
   }
-}
-
-function normalizeText(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function toPublicationDraft(publication: TemplatePublicationListItem): PublicationDraft {
@@ -154,21 +155,79 @@ function getPrimaryStatus(item: TemplateAdminEntity): string {
   return item.job.status;
 }
 
+function getPipelineStatus(item: TemplateAdminEntity): string | null {
+  return item.job?.status ?? null;
+}
+
+function getEntityKind(item: TemplateAdminEntity): TemplatePublicationKind {
+  return item.publication?.kind ?? item.job?.kind ?? 'template';
+}
+
+function getEntityCategory(item: TemplateAdminEntity): string {
+  return item.publication?.category ?? item.job?.category ?? 'Без раздела';
+}
+
+function getEntityIndustry(item: TemplateAdminEntity): string {
+  return item.publication?.industry ?? item.job?.industry ?? '—';
+}
+
+function getEntitySlug(item: TemplateAdminEntity): string {
+  return item.publication?.slug ?? item.job?.slug ?? '—';
+}
+
+function getWorkflowLabel(item: TemplateAdminEntity): string {
+  const primaryStatus = getPrimaryStatus(item);
+  if (primaryStatus === 'published') {
+    return 'Опубликовано';
+  }
+  if (primaryStatus === 'draft' || primaryStatus === 'review_required' || primaryStatus === 'ready_to_publish') {
+    return 'В работе';
+  }
+  if (primaryStatus === 'failed' || primaryStatus === 'rejected') {
+    return 'Проблема';
+  }
+  return 'Черновик';
+}
+
 function matchesFilter(item: TemplateAdminEntity, filter: TemplateAdminFilter): boolean {
   const primaryStatus = getPrimaryStatus(item);
-  if (filter === 'all') {
-    return true;
+  const pipelineStatus = getPipelineStatus(item);
+
+  switch (filter) {
+    case 'draft':
+      return primaryStatus === 'draft';
+    case 'in_work':
+      return primaryStatus === 'draft'
+        || primaryStatus === 'archived'
+        || pipelineStatus === 'queued'
+        || pipelineStatus === 'in_progress'
+        || pipelineStatus === 'review_required'
+        || pipelineStatus === 'ready_to_publish'
+        || item.type === 'job';
+    case 'published':
+      return primaryStatus === 'published';
+    case 'failed':
+      return primaryStatus === 'failed' || primaryStatus === 'rejected' || pipelineStatus === 'failed';
+    case 'all':
+    default:
+      return true;
   }
-  if (filter === 'draft') {
-    return primaryStatus === 'draft';
-  }
-  if (filter === 'published') {
-    return primaryStatus === 'published';
-  }
-  if (filter === 'failed') {
-    return primaryStatus === 'failed';
-  }
-  return !item.publication;
+}
+
+function buildCategoryOptions(entities: TemplateAdminEntity[]): string[] {
+  return Array.from(new Set(entities.map((item) => getEntityCategory(item)))).sort((left, right) => left.localeCompare(right, 'ru'));
+}
+
+function buildKindLabel(kind: TemplatePublicationKind): string {
+  return kind === 'block' ? 'Блок' : 'Шаблон';
+}
+
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">
+      {children}
+    </label>
+  );
 }
 
 export function TemplateAutomationAdminPanel({
@@ -191,7 +250,10 @@ export function TemplateAutomationAdminPanel({
   const [createPanelOpen, setCreatePanelOpen] = useState(false);
   const [filter, setFilter] = useState<TemplateAdminFilter>('all');
   const [search, setSearch] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('all');
+  const [kindFilter, setKindFilter] = useState<'all' | TemplatePublicationKind>('all');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState<PublicationDraft | null>(null);
 
   const load = async () => {
@@ -227,6 +289,7 @@ export function TemplateAutomationAdminPanel({
     () => new Map(sources.map((source) => [source.projectId, source])),
     [sources],
   );
+
   const jobByPublicationId = useMemo(
     () => new Map(
       jobs
@@ -237,18 +300,14 @@ export function TemplateAutomationAdminPanel({
   );
 
   const entities = useMemo<TemplateAdminEntity[]>(() => {
-    const publicationEntities: TemplateAdminEntity[] = publications.map((publication) => {
-      const job = jobByPublicationId.get(publication.id) ?? null;
-      const source = sourceByProjectId.get(publication.sourceProjectId) ?? null;
-      return {
-        id: `publication:${publication.id}`,
-        type: 'publication',
-        publication,
-        job,
-        source,
-        sortDate: publication.updatedAt,
-      };
-    });
+    const publicationEntities: TemplateAdminEntity[] = publications.map((publication) => ({
+      id: `publication:${publication.id}`,
+      type: 'publication',
+      publication,
+      job: jobByPublicationId.get(publication.id) ?? null,
+      source: sourceByProjectId.get(publication.sourceProjectId) ?? null,
+      sortDate: publication.updatedAt,
+    }));
 
     const orphanJobEntities: TemplateAdminEntity[] = jobs
       .filter((job) => !job.publicationId)
@@ -268,31 +327,45 @@ export function TemplateAutomationAdminPanel({
   const counts = useMemo(() => ({
     all: entities.length,
     draft: entities.filter((item) => getPrimaryStatus(item) === 'draft').length,
+    inWork: entities.filter((item) => matchesFilter(item, 'in_work')).length,
     published: entities.filter((item) => getPrimaryStatus(item) === 'published').length,
-    queue: entities.filter((item) => !item.publication).length,
-    failed: entities.filter((item) => getPrimaryStatus(item) === 'failed').length,
+    failed: entities.filter((item) => matchesFilter(item, 'failed')).length,
   }), [entities]);
+
+  const sectionOptions = useMemo(() => buildCategoryOptions(entities), [entities]);
 
   const filteredEntities = useMemo(() => {
     const query = search.trim().toLowerCase();
+
     return entities.filter((item) => {
       if (!matchesFilter(item, filter)) {
         return false;
       }
+
+      if (sectionFilter !== 'all' && getEntityCategory(item) !== sectionFilter) {
+        return false;
+      }
+
+      if (kindFilter !== 'all' && getEntityKind(item) !== kindFilter) {
+        return false;
+      }
+
       if (!query) {
         return true;
       }
+
       const haystack = [
         buildEntityTitle(item),
         buildEntityDescription(item),
-        item.publication?.slug ?? '',
-        item.publication?.category ?? item.job?.category ?? '',
-        item.publication?.industry ?? item.job?.industry ?? '',
+        getEntitySlug(item),
+        getEntityCategory(item),
+        getEntityIndustry(item),
         item.source?.projectName ?? '',
       ].join(' ').toLowerCase();
+
       return haystack.includes(query);
     });
-  }, [entities, filter, search]);
+  }, [entities, filter, kindFilter, search, sectionFilter]);
 
   useEffect(() => {
     if (filteredEntities.length === 0) {
@@ -319,6 +392,12 @@ export function TemplateAutomationAdminPanel({
     setDraft(toPublicationDraft(selectedEntity.publication));
   }, [selectedEntity?.id, selectedEntity?.publication]);
 
+  useEffect(() => {
+    if (!selectedEntity) {
+      setDrawerOpen(false);
+    }
+  }, [selectedEntity]);
+
   const submitCreateJob = async () => {
     setSubmitting(true);
     setError(null);
@@ -338,11 +417,14 @@ export function TemplateAutomationAdminPanel({
       if (!response.ok) {
         throw new Error(payload?.error ?? `HTTP ${response.status}`);
       }
+
       setCreateDescription('');
       setCreateCategory('');
       setCreateIndustry('');
       setAutoPublish(false);
+      setCreatePanelOpen(false);
       await load();
+
       if (payload?.publication?.id) {
         setSelectedEntityId(`publication:${payload.publication.id}`);
       } else if (payload?.job?.id) {
@@ -392,6 +474,7 @@ export function TemplateAutomationAdminPanel({
     if (!draft) {
       return;
     }
+
     setSavingPublicationId(publicationId);
     setError(null);
     try {
@@ -494,385 +577,494 @@ export function TemplateAutomationAdminPanel({
   };
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <section className="rounded-2xl border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Шаблоны как CMS</h2>
-            <p className="mt-1 text-sm text-slate-500">Одна запись = одна карточка материала. Генерация и source остаются служебным контекстом внутри этой карточки.</p>
+            <h2 className="text-lg font-semibold text-slate-900">Каталог шаблонов</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">
+              Список материалов, разделы, статус публикации и pipeline отдельно. Редактирование вынесено в правую колонку как обычная CMS-форма.
+            </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Всего</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{counts.all}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Черновики</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{counts.draft}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Опубликовано</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{counts.published}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Очередь</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{counts.queue}</div>
-            </div>
+          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+            <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">Всего: {counts.all}</span>
+            <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">В работе: {counts.inWork}</span>
+            <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">Опубликовано: {counts.published}</span>
+            <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">Ошибки: {counts.failed}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b border-slate-200 px-5 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Поиск по названию, slug, source"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+            />
+            <select
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as TemplateAdminFilter)}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+            >
+              <option value="all">Все статусы</option>
+              <option value="in_work">В работе</option>
+              <option value="draft">Черновики</option>
+              <option value="published">Опубликовано</option>
+              <option value="failed">Ошибки</option>
+            </select>
+            <select
+              value={sectionFilter}
+              onChange={(event) => setSectionFilter(event.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+            >
+              <option value="all">Все разделы</option>
+              {sectionOptions.map((section) => (
+                <option key={section} value={section}>{section}</option>
+              ))}
+            </select>
+            <select
+              value={kindFilter}
+              onChange={(event) => setKindFilter(event.target.value as 'all' | TemplatePublicationKind)}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+            >
+              <option value="all">Все типы</option>
+              <option value="template">Шаблоны</option>
+              <option value="block">Блоки</option>
+            </select>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCreatePanelOpen((current) => !current)}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              {createPanelOpen ? 'Скрыть создание' : 'Новая генерация'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { void load(); }}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              Обновить
+            </button>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-          <button
-            type="button"
-            onClick={() => setCreatePanelOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 text-left"
-          >
-            <div>
-              <div className="text-sm font-semibold text-slate-900">Генерация нового материала</div>
-              <div className="text-sm text-slate-500">Скрытый технический блок: создаёт source-проект и карточку публикации.</div>
-            </div>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
-              {createPanelOpen ? 'Скрыть' : 'Показать'}
-            </span>
-          </button>
-          {createPanelOpen && (
-            <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_220px]">
+        {createPanelOpen && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-medium text-slate-900">Новая запись в pipeline</div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_180px_180px]">
               <textarea
                 value={createDescription}
                 onChange={(event) => setCreateDescription(event.target.value)}
-                placeholder="Опиши материал как для CMS: что это за шаблон, для кого он, какие этапы и ограничения должны быть внутри."
-                className="min-h-32 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-primary"
+                placeholder="Что за график, для какого сценария, что должно попасть в публикацию"
+                className="min-h-24 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
               />
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <select value={createKind} onChange={(event) => setCreateKind(event.target.value as TemplatePublicationKind)} className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-primary">
-                  <option value="template">template</option>
-                  <option value="block">block</option>
+              <div className="space-y-3">
+                <select
+                  value={createKind}
+                  onChange={(event) => setCreateKind(event.target.value as TemplatePublicationKind)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                >
+                  <option value="template">Шаблон</option>
+                  <option value="block">Блок</option>
                 </select>
-                <input value={createCategory} onChange={(event) => setCreateCategory(event.target.value)} placeholder="Категория" className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-primary" />
-                <input value={createIndustry} onChange={(event) => setCreateIndustry(event.target.value)} placeholder="Отрасль" className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-primary" />
+                <input
+                  value={createCategory}
+                  onChange={(event) => setCreateCategory(event.target.value)}
+                  placeholder="Раздел"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                />
+                <input
+                  value={createIndustry}
+                  onChange={(event) => setCreateIndustry(event.target.value)}
+                  placeholder="Отрасль"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary"
+                />
               </div>
-              <div className="flex flex-col gap-3">
-                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+              <div className="flex flex-col justify-between gap-3">
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
                   <input type="checkbox" checked={autoPublish} onChange={(event) => setAutoPublish(event.target.checked)} />
-                  Сразу публиковать
+                  <span>Автопубликация</span>
                 </label>
                 <button
                   type="button"
                   disabled={submitting || !createDescription.trim()}
                   onClick={() => { void submitCreateJob(); }}
-                  className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {submitting ? 'Создание…' : 'Создать материал'}
+                  {submitting ? 'Создание…' : 'Запустить'}
                 </button>
               </div>
-            </div>
-          )}
-        </div>
-
-        {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-        {loading && <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">Загрузка…</div>}
-
-        {!loading && (
-          <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-            <aside className="space-y-4">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 text-sm font-semibold text-slate-900">Материалы</div>
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск по title, slug, category..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-primary"
-                />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {([
-                    ['all', `Все ${counts.all}`],
-                    ['draft', `Черновики ${counts.draft}`],
-                    ['published', `Опубликовано ${counts.published}`],
-                    ['queue', `Очередь ${counts.queue}`],
-                    ['failed', `Ошибки ${counts.failed}`],
-                  ] as Array<[TemplateAdminFilter, string]>).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setFilter(key)}
-                      className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${filter === key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:text-slate-900'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {filteredEntities.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Ничего не найдено.</div>
-                ) : filteredEntities.map((item) => {
-                  const title = buildEntityTitle(item);
-                  const primaryStatus = getPrimaryStatus(item);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelectedEntityId(item.id)}
-                      className={`w-full rounded-3xl border p-4 text-left transition-colors ${selectedEntityId === item.id ? 'border-primary bg-primary/[0.05]' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(primaryStatus)}`}>{statusLabel(primaryStatus)}</span>
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{item.publication ? item.publication.kind : item.job.kind}</span>
-                        </div>
-                      <div className="mt-3 text-sm font-semibold text-slate-900">{title}</div>
-                    </button>
-                  );
-                })}
-              </div>
-
-            </aside>
-
-            <div>
-              {!selectedEntity ? (
-                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-sm text-slate-400">Выбери материал слева.</div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {selectedEntity.publication && (
-                            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(selectedEntity.publication.status)}`}>
-                              {statusLabel(selectedEntity.publication.status)}
-                            </span>
-                          )}
-                          {selectedEntity.job && (
-                            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(selectedEntity.job.status)}`}>
-                              pipeline: {statusLabel(selectedEntity.job.status)}
-                            </span>
-                          )}
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                            {selectedEntity.publication ? selectedEntity.publication.kind : selectedEntity.job.kind}
-                          </span>
-                        </div>
-                        <h3 className="mt-3 text-2xl font-semibold text-slate-900">{buildEntityTitle(selectedEntity)}</h3>
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{buildEntityDescription(selectedEntity)}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedEntity.source?.projectId && (
-                          <button type="button" onClick={() => { void onAssumeProject(selectedEntity.source!.projectId); }} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            Открыть source
-                          </button>
-                        )}
-                        {selectedEntity.publication && (
-                          <button type="button" onClick={() => { void regenerateSeo(selectedEntity.publication!.id); }} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            {savingPublicationId === selectedEntity.publication.id ? 'Обновление SEO…' : 'Обновить SEO'}
-                          </button>
-                        )}
-                        {selectedEntity.publication && selectedEntity.publication.status !== 'published' && (
-                          <button type="button" onClick={() => { void publishPublication(selectedEntity.publication!.id); }} className="rounded-2xl bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90">
-                            Опубликовать
-                          </button>
-                        )}
-                        {!selectedEntity.publication && selectedEntity.job.publicationId && (
-                          <button type="button" onClick={() => { void publishJob(selectedEntity.job.id); }} className="rounded-2xl bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90">
-                            Опубликовать job
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.8fr)]">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                      {selectedEntity.publication && draft ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-semibold text-slate-900">Редактирование полей</div>
-                              <div className="text-sm text-slate-500">Обычная CMS-форма для метаданных, публикации и SEO.</div>
-                            </div>
-                            <button
-                              type="button"
-                              disabled={savingPublicationId === selectedEntity.publication.id || !draft.title.trim() || !draft.slug.trim()}
-                              onClick={() => { void savePublication(selectedEntity.publication!.id); }}
-                              className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {savingPublicationId === selectedEntity.publication.id ? 'Сохранение…' : 'Сохранить'}
-                            </button>
-                          </div>
-
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Title</label>
-                              <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Slug</label>
-                              <input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Category</label>
-                              <input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Industry</label>
-                              <input value={draft.industry} onChange={(event) => setDraft({ ...draft, industry: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Status</label>
-                              <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TemplatePublicationStatus })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary">
-                                <option value="draft">draft</option>
-                                <option value="published">published</option>
-                                <option value="archived">archived</option>
-                                <option value="rejected">rejected</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Visibility</label>
-                              <select value={draft.visibility} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as TemplatePublicationVisibility })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary">
-                                <option value="private">private</option>
-                                <option value="marketplace">marketplace</option>
-                                <option value="site">site</option>
-                                <option value="both">both</option>
-                              </select>
-                            </div>
-                            <div className="md:col-span-2">
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Verification</label>
-                              <select value={draft.verificationStatus} onChange={(event) => setDraft({ ...draft, verificationStatus: event.target.value as TemplatePublicationVerificationStatus })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary">
-                                <option value="unverified">unverified</option>
-                                <option value="reviewed">reviewed</option>
-                                <option value="verified">verified</option>
-                                <option value="editorial">editorial</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Subtitle</label>
-                            <input value={draft.subtitle} onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Summary</label>
-                            <textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} className="min-h-28 w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Tags</label>
-                            <input value={draft.tags} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} placeholder="construction, residential, fit-out" className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                          </div>
-
-                          <div className="grid gap-4">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">SEO title</label>
-                              <input value={draft.seoTitle} onChange={(event) => setDraft({ ...draft, seoTitle: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">SEO description</label>
-                              <textarea value={draft.seoDescription} onChange={(event) => setDraft({ ...draft, seoDescription: event.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">SEO body</label>
-                              <textarea value={draft.seoBody} onChange={(event) => setDraft({ ...draft, seoBody: event.target.value })} className="min-h-40 w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                          </div>
-
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Cover image URL</label>
-                              <input value={draft.coverImageUrl} onChange={(event) => setDraft({ ...draft, coverImageUrl: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Preview image URL</label>
-                              <input value={draft.previewImageUrl} onChange={(event) => setDraft({ ...draft, previewImageUrl: event.target.value })} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-primary" />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="text-sm font-semibold text-slate-900">Публикация ещё не создана</div>
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                            Эта карточка пока существует только как технический job. Когда генерация создаст publication, здесь появится обычная CMS-форма редактирования.
-                          </div>
-                          {selectedEntity.job && selectedEntity.job.publicationId && (
-                            <button type="button" onClick={() => { void publishJob(selectedEntity.job!.id); }} className="rounded-2xl bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90">
-                              Довести до публикации
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                        <div className="text-sm font-semibold text-slate-900">Служебный контекст</div>
-                        <div className="mt-4 space-y-4 text-sm text-slate-600">
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Source project</div>
-                            <div className="mt-1 font-medium text-slate-900">{selectedEntity.source?.projectName ?? 'Не создан'}</div>
-                            <div className="mt-1">{selectedEntity.source?.sourceDescription ?? selectedEntity.job?.sourceDescription ?? '—'}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Pipeline</div>
-                            <div className="mt-1 font-medium text-slate-900">{selectedEntity.job ? statusLabel(selectedEntity.job.status) : 'Связанный job не найден'}</div>
-                            <div className="mt-1">Создано: {formatDateTime(selectedEntity.job?.createdAt ?? selectedEntity.publication?.createdAt ?? null)}</div>
-                            <div className="mt-1">Обновлено: {formatDateTime(selectedEntity.job?.updatedAt ?? selectedEntity.publication?.updatedAt ?? null)}</div>
-                            {selectedEntity.job?.errorMessage && (
-                              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-red-700">{selectedEntity.job.errorMessage}</div>
-                            )}
-                          </div>
-                          {selectedEntity.publication && (
-                            <div>
-                              <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Публикация</div>
-                              <div className="mt-1 font-medium text-slate-900">{visibilityLabel(selectedEntity.publication.visibility)}</div>
-                              <div className="mt-1">{verificationLabel(selectedEntity.publication.verificationStatus)}</div>
-                              <div className="mt-1">{selectedEntity.publication.taskCount} задач в шаблоне</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {selectedEntity.publication && (
-                        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                          <div className="mb-3 text-sm font-semibold text-slate-900">Быстрые действия</div>
-                          <div className="flex flex-col gap-2">
-                            <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}/${selectedEntity.publication.slug}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 hover:bg-slate-100">
-                              Preview material
-                            </a>
-                            <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}`} target="_blank" rel="noreferrer" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 hover:bg-slate-100">
-                              Preview catalog
-                            </a>
-                            {selectedEntity.source?.projectId && (
-                              <button type="button" onClick={() => { void onAssumeProject(selectedEntity.source!.projectId); }} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-100">
-                                Открыть source для ручной правки
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
-                        <div className="mb-3 text-sm font-semibold text-red-900">Удаление</div>
-                        <div className="mb-4 text-sm leading-6 text-red-700">
-                          Это одна запись. Удаление сносит весь связанный хвост целиком.
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm('Удалить запись целиком?')) {
-                                void deleteAllForEntity(selectedEntity);
-                              }
-                            }}
-                            className="rounded-2xl bg-red-600 px-4 py-3 text-left text-sm font-medium text-white hover:bg-red-700"
-                          >
-                            {deletingAction === `all:${selectedEntity.id}` ? 'Удаление…' : 'Удалить запись'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
       </div>
+
+      {error && (
+        <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="min-h-[720px]">
+        <div>
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-xs uppercase tracking-[0.12em] text-slate-400">
+            <span>Каталог</span>
+            <span>{filteredEntities.length} записей</span>
+          </div>
+
+          {loading ? (
+            <div className="px-5 py-8 text-sm text-slate-500">Загрузка каталога…</div>
+          ) : filteredEntities.length === 0 ? (
+            <div className="px-5 py-8 text-sm text-slate-500">Ничего не найдено по текущим фильтрам.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full table-fixed text-sm">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-400">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">Материал</th>
+                    <th className="px-3 py-3 font-medium">Раздел</th>
+                    <th className="px-3 py-3 font-medium">Статус</th>
+                    <th className="px-3 py-3 font-medium">Pipeline</th>
+                    <th className="px-3 py-3 font-medium">Source</th>
+                    <th className="px-5 py-3 text-right font-medium">Обновлено</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEntities.map((item) => {
+                    const primaryStatus = getPrimaryStatus(item);
+                    const pipelineStatus = getPipelineStatus(item);
+                    const isSelected = item.id === selectedEntityId;
+
+                    return (
+                      <tr
+                        key={item.id}
+                        onClick={() => {
+                          setSelectedEntityId(item.id);
+                          setDrawerOpen(true);
+                        }}
+                        className={`cursor-pointer border-t border-slate-100 transition-colors ${isSelected ? 'bg-slate-100/80' : 'hover:bg-slate-50'}`}
+                      >
+                        <td className="px-5 py-4 align-top">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-slate-900">{buildEntityTitle(item)}</span>
+                              <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-500">
+                                {buildKindLabel(getEntityKind(item))}
+                              </span>
+                              <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-500">
+                                {getWorkflowLabel(item)}
+                              </span>
+                            </div>
+                            <div className="mt-1 truncate text-xs text-slate-500">{getEntitySlug(item)}</div>
+                            <div className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">
+                              {buildEntityDescription(item)}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-4 align-top text-xs text-slate-600">
+                          <div>{getEntityCategory(item)}</div>
+                          <div className="mt-1 text-slate-400">{getEntityIndustry(item)}</div>
+                        </td>
+                        <td className="px-3 py-4 align-top">
+                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${statusTone(primaryStatus)}`}>
+                            {statusLabel(primaryStatus)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-4 align-top">
+                          {pipelineStatus ? (
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${statusTone(pipelineStatus)}`}>
+                              {statusLabel(pipelineStatus)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-4 align-top text-xs text-slate-600">
+                          <div className="line-clamp-2">{item.source?.projectName ?? 'Не привязан'}</div>
+                        </td>
+                        <td className="px-5 py-4 text-right align-top text-xs text-slate-500">
+                          {formatDateTime(item.sortDate)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {drawerOpen && selectedEntity && (
+        <>
+          <button
+            type="button"
+            aria-label="Закрыть drawer"
+            onClick={() => setDrawerOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-900/20"
+          />
+          <aside className="fixed right-0 top-0 z-50 flex h-dvh w-full max-w-[720px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Редактирование</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">{buildEntityTitle(selectedEntity)}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(getPrimaryStatus(selectedEntity))}`}>
+                        {statusLabel(getPrimaryStatus(selectedEntity))}
+                      </span>
+                      {selectedEntity.job && (
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(selectedEntity.job.status)}`}>
+                          pipeline: {statusLabel(selectedEntity.job.status)}
+                        </span>
+                      )}
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+                        {buildKindLabel(getEntityKind(selectedEntity))}
+                      </span>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+                        {getEntityCategory(selectedEntity)}
+                      </span>
+                    </div>
+                    <h3 className="mt-3 text-xl font-semibold text-slate-900">{buildEntityTitle(selectedEntity)}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{buildEntityDescription(selectedEntity)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedEntity.source?.projectId && (
+                      <button
+                        type="button"
+                        onClick={() => { void onAssumeProject(selectedEntity.source!.projectId); }}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                      >
+                        Открыть source
+                      </button>
+                    )}
+                    {selectedEntity.publication && (
+                      <button
+                        type="button"
+                        onClick={() => { void regenerateSeo(selectedEntity.publication!.id); }}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                      >
+                        {savingPublicationId === selectedEntity.publication.id ? 'SEO…' : 'Обновить SEO'}
+                      </button>
+                    )}
+                    {selectedEntity.publication && selectedEntity.publication.status !== 'published' && (
+                      <button
+                        type="button"
+                        onClick={() => { void publishPublication(selectedEntity.publication!.id); }}
+                        className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
+                      >
+                        Опубликовать
+                      </button>
+                    )}
+                    {!selectedEntity.publication && selectedEntity.job.publicationId && (
+                      <button
+                        type="button"
+                        onClick={() => { void publishJob(selectedEntity.job.id); }}
+                        className="rounded-xl bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90"
+                      >
+                        Довести до публикации
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <div className="mb-3 text-sm font-medium text-slate-900">Сводка</div>
+                  <div className="space-y-2 text-sm text-slate-600">
+                    <div><span className="text-slate-400">Slug:</span> {getEntitySlug(selectedEntity)}</div>
+                    <div><span className="text-slate-400">Раздел:</span> {getEntityCategory(selectedEntity)}</div>
+                    <div><span className="text-slate-400">Отрасль:</span> {getEntityIndustry(selectedEntity)}</div>
+                    <div><span className="text-slate-400">Source:</span> {selectedEntity.source?.projectName ?? 'Не создан'}</div>
+                    <div><span className="text-slate-400">Обновлено:</span> {formatDateTime(selectedEntity.sortDate)}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <div className="mb-3 text-sm font-medium text-slate-900">Публикация и pipeline</div>
+                  <div className="space-y-2 text-sm text-slate-600">
+                    <div><span className="text-slate-400">Статус:</span> {statusLabel(getPrimaryStatus(selectedEntity))}</div>
+                    <div><span className="text-slate-400">Pipeline:</span> {selectedEntity.job ? statusLabel(selectedEntity.job.status) : '—'}</div>
+                    <div><span className="text-slate-400">Видимость:</span> {selectedEntity.publication ? visibilityLabel(selectedEntity.publication.visibility) : '—'}</div>
+                    <div><span className="text-slate-400">Проверка:</span> {selectedEntity.publication ? verificationLabel(selectedEntity.publication.verificationStatus) : '—'}</div>
+                    <div><span className="text-slate-400">Задач:</span> {selectedEntity.publication?.taskCount ?? '—'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {selectedEntity.job?.errorMessage && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {selectedEntity.job.errorMessage}
+                </div>
+              )}
+
+              {selectedEntity.publication && draft ? (
+                <>
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-slate-900">Контент</div>
+                        <div className="text-sm text-slate-500">Каталогизация и карточка материала.</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={savingPublicationId === selectedEntity.publication.id || !draft.title.trim() || !draft.slug.trim()}
+                        onClick={() => { void savePublication(selectedEntity.publication!.id); }}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingPublicationId === selectedEntity.publication.id ? 'Сохранение…' : 'Сохранить'}
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <FieldLabel>Title</FieldLabel>
+                        <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Slug</FieldLabel>
+                        <input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Раздел</FieldLabel>
+                        <input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Отрасль</FieldLabel>
+                        <input value={draft.industry} onChange={(event) => setDraft({ ...draft, industry: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Статус публикации</FieldLabel>
+                        <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TemplatePublicationStatus })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
+                          <option value="draft">draft</option>
+                          <option value="published">published</option>
+                          <option value="archived">archived</option>
+                          <option value="rejected">rejected</option>
+                        </select>
+                      </div>
+                      <div>
+                        <FieldLabel>Видимость</FieldLabel>
+                        <select value={draft.visibility} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as TemplatePublicationVisibility })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
+                          <option value="private">private</option>
+                          <option value="marketplace">marketplace</option>
+                          <option value="site">site</option>
+                          <option value="both">both</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <FieldLabel>Статус проверки</FieldLabel>
+                        <select value={draft.verificationStatus} onChange={(event) => setDraft({ ...draft, verificationStatus: event.target.value as TemplatePublicationVerificationStatus })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary">
+                          <option value="unverified">unverified</option>
+                          <option value="reviewed">reviewed</option>
+                          <option value="verified">verified</option>
+                          <option value="editorial">editorial</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <FieldLabel>Subtitle</FieldLabel>
+                        <input value={draft.subtitle} onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Summary</FieldLabel>
+                        <textarea value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Tags</FieldLabel>
+                        <input value={draft.tags} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="mb-4 text-sm font-medium text-slate-900">SEO</div>
+                    <div className="space-y-4">
+                      <div>
+                        <FieldLabel>SEO title</FieldLabel>
+                        <input value={draft.seoTitle} onChange={(event) => setDraft({ ...draft, seoTitle: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>SEO description</FieldLabel>
+                        <textarea value={draft.seoDescription} onChange={(event) => setDraft({ ...draft, seoDescription: event.target.value })} className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>SEO body</FieldLabel>
+                        <textarea value={draft.seoBody} onChange={(event) => setDraft({ ...draft, seoBody: event.target.value })} className="min-h-36 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="mb-4 text-sm font-medium text-slate-900">Медиа и ссылки</div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <FieldLabel>Cover image URL</FieldLabel>
+                        <input value={draft.coverImageUrl} onChange={(event) => setDraft({ ...draft, coverImageUrl: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                      <div>
+                        <FieldLabel>Preview image URL</FieldLabel>
+                        <input value={draft.previewImageUrl} onChange={(event) => setDraft({ ...draft, previewImageUrl: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary" />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}/${selectedEntity.publication.slug}`} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50">
+                        Открыть detail page
+                      </a>
+                      <a href={`/${selectedEntity.publication.kind === 'block' ? 'blocks' : 'templates'}`} target="_blank" rel="noreferrer" className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50">
+                        Открыть каталог
+                      </a>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                  Эта запись пока существует как pipeline-job. Когда появится publication, справа откроется полная CMS-форма редактирования.
+                </div>
+              )}
+
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                <div className="mb-2 text-sm font-medium text-red-900">Удаление</div>
+                <div className="mb-4 text-sm text-red-700">
+                  Удаляет запись вместе со связанным job/source хвостом.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Удалить запись целиком?')) {
+                      void deleteAllForEntity(selectedEntity);
+                    }
+                  }}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                >
+                  {deletingAction === `all:${selectedEntity.id}` ? 'Удаление…' : 'Удалить запись'}
+                </button>
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
     </section>
   );
 }
