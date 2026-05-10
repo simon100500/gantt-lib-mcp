@@ -82,6 +82,21 @@ type MetadataDraft = {
   tags: string[];
 };
 
+type PromptTask = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+  type?: 'task' | 'milestone';
+  sortOrder?: number;
+  dependencies?: Array<{
+    taskId: string;
+    type: 'FS' | 'SS' | 'FF' | 'SF';
+    lag: number;
+  }>;
+};
+
 function trimToNull(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -97,6 +112,129 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-')
     .slice(0, 80);
+}
+
+function toSentenceCase(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+function normalizeTemplateSubject(description: string): string {
+  const compact = description.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return 'планирования проекта';
+  }
+
+  const withoutLead = compact
+    .replace(/^создай\s+график\s+/i, '')
+    .replace(/^сделай\s+график\s+/i, '')
+    .replace(/^построй\s+график\s+/i, '')
+    .replace(/^создай\s+план\s+/i, '')
+    .trim();
+
+  const firstPart = withoutLead.split(':')[0]?.trim() ?? withoutLead;
+  const cleaned = firstPart.replace(/[.?!]+$/, '').trim();
+  return cleaned ? cleaned.toLowerCase() : 'планирования проекта';
+}
+
+function summarizeTaskGraph(tasks: PromptTask[]): string {
+  if (tasks.length === 0) {
+    return 'График работ не передан.';
+  }
+
+  const sortedTasks = [...tasks].sort((left, right) => {
+    const leftOrder = left.sortOrder ?? 0;
+    const rightOrder = right.sortOrder ?? 0;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.name.localeCompare(right.name, 'ru');
+  });
+
+  const childrenByParent = new Map<string, PromptTask[]>();
+  for (const task of sortedTasks) {
+    if (!task.parentId) {
+      continue;
+    }
+    const bucket = childrenByParent.get(task.parentId) ?? [];
+    bucket.push(task);
+    childrenByParent.set(task.parentId, bucket);
+  }
+
+  const roots = sortedTasks.filter((task) => !task.parentId);
+  const milestones = sortedTasks.filter((task) => task.type === 'milestone');
+  const lines: string[] = [
+    `Всего задач: ${sortedTasks.length}`,
+    `Корневых этапов: ${roots.length}`,
+    'Структура графика:',
+  ];
+
+  for (const root of roots.slice(0, 12)) {
+    const children = (childrenByParent.get(root.id) ?? []).slice(0, 6);
+    lines.push(`- ${root.name}`);
+    if (children.length > 0) {
+      lines.push(`  Подэтапы: ${children.map((child) => child.name).join('; ')}`);
+    }
+  }
+
+  if (milestones.length > 0) {
+    lines.push(`Контрольные точки: ${milestones.slice(0, 8).map((task) => task.name).join('; ')}`);
+  }
+
+  const dependencyExamples = sortedTasks
+    .flatMap((task) => (task.dependencies ?? []).map((dependency) => ({
+      fromTaskId: dependency.taskId,
+      toTaskName: task.name,
+      type: dependency.type,
+      lag: dependency.lag,
+    })))
+    .slice(0, 12)
+    .map((dependency) => {
+      const source = sortedTasks.find((task) => task.id === dependency.fromTaskId);
+      return source
+        ? `${source.name} -> ${dependency.toTaskName} (${dependency.type}${dependency.lag ? `, lag ${dependency.lag}` : ''})`
+        : null;
+    })
+    .filter((value): value is string => Boolean(value));
+
+  if (dependencyExamples.length > 0) {
+    lines.push(`Примеры зависимостей: ${dependencyExamples.join('; ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+function toPromptTasks(tasks: Array<{
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  parentId?: string;
+  type?: 'task' | 'milestone';
+  sortOrder?: number;
+  dependencies?: Array<{
+    taskId: string;
+    type: 'FS' | 'SS' | 'FF' | 'SF';
+    lag?: number;
+  }>;
+}>): PromptTask[] {
+  return tasks.map((task) => ({
+    id: task.id,
+    name: task.name,
+    startDate: task.startDate,
+    endDate: task.endDate,
+    parentId: task.parentId,
+    type: task.type,
+    sortOrder: task.sortOrder,
+    dependencies: task.dependencies?.map((dependency) => ({
+      taskId: dependency.taskId,
+      type: dependency.type,
+      lag: dependency.lag ?? 0,
+    })),
+  }));
 }
 
 function mapJob(record: TemplateGenerationJobRecord): TemplateGenerationJobItem {
@@ -155,23 +293,27 @@ function fallbackMetadata(input: {
     .split(/[.!?]/)[0]
     ?.trim() ?? 'Шаблон проекта';
   const title = firstSentence.slice(0, 80) || (input.kind === 'block' ? 'Новый блок работ' : 'Новый шаблон проекта');
+  const subject = normalizeTemplateSubject(input.description);
+  const titleText = toSentenceCase(title);
   return {
-    title,
+    title: titleText,
     slug: slugify(title) || `template-${Date.now()}`,
-    summary: `Черновик публикации создан по описанию: ${input.description.trim().slice(0, 220)}`,
+    summary: `Готовый шаблон графика работ для ${subject}. Помогает быстрее собрать этапы реализации, проверить дедлайны и выстроить зависимости задач.`,
     category: trimToNull(input.category) ?? null,
     industry: trimToNull(input.industry) ?? null,
-    seoTitle: title,
-    seoDescription: `Шаблон графика: ${title}`,
+    seoTitle: titleText,
+    seoDescription: `Шаблон графика работ для ${subject}: этапы реализации, дедлайны, зависимости задач и контрольные точки в GetGantt.`,
     seoBody: [
       '## Что это за шаблон',
-      `${title} — черновик публикации, автоматически созданный из админ-пайплайна GetGantt.`,
+      `Это готовый шаблон графика работ для ${subject}. Он помогает быстро разложить проект на понятные этапы реализации, увидеть общую логику работ и заранее зафиксировать ключевые дедлайны.`,
+      `Шаблон удобно использовать как стартовую основу, когда нужно не собирать план с нуля, а сразу перейти к проверке последовательности работ, сроков и критичных участков проекта.`,
       '',
       '## Почему удобно вести такой проект в GetGantt',
-      'Диаграмма Ганта помогает заранее увидеть дедлайны, зависимости задач и контрольные точки, а сам шаблон остается базой для дальнейшей настройки проекта.',
+      'В таких проектах один сдвиг по срокам часто влияет на следующий фронт работ. Диаграмма Ганта помогает видеть весь график на временной шкале, отслеживать дедлайны и быстро замечать участки, где появляются риски.',
+      'В GetGantt удобно связывать зависимости задач и фиксировать контрольные точки, чтобы этапы реализации шли в правильной последовательности, а управление сроками оставалось наглядным.',
       '',
       '## Что дает этот шаблон на старте',
-      'На старте шаблон экономит время на сборку структуры работ и помогает быстрее перейти к проверке сроков, логики этапов и связей между задачами.',
+      'На старте шаблон экономит время на структурирование плана и помогает сразу перейти к настройке сроков, уточнению состава работ и проверке логики проекта. Это делает запуск более быстрым и предсказуемым.',
     ].join('\n\n'),
     tags: [],
   };
@@ -182,6 +324,7 @@ async function generateMetadataDraft(input: {
   kind: TemplatePublicationKind;
   category?: string;
   industry?: string;
+  taskGraphSummary?: string;
 }): Promise<MetadataDraft> {
   const env = resolveModelEnv();
   if (!env.OPENAI_API_KEY) {
@@ -219,6 +362,11 @@ async function generateMetadataDraft(input: {
         '- не пиши общие рекламные штампы;',
         '- не выдумывай факты, которых нет в исходных данных;',
         '- пиши так, будто страница уже устроена в три части: короткое вступление после графика, затем отдельный блок со структурой работ от интерфейса, затем завершающая SEO-секция.',
+        '- если ниже передан реальный график работ, опирайся именно на него, а не на абстрактный тип проекта;',
+        '- называй в тексте реальные блоки работ и реальные переходы между этапами из графика, если они видны во входных данных;',
+        '- не упоминай календарные даты, месяцы, годы, диапазоны дат и конкретный период проекта;',
+        '- не пиши формулировки вида "с ... по ...", даже если они угадываются по графику;',
+        '- считай все сроки в графике относительными: можно говорить о последовательности, длительности, параллельности и этапах, но не о конкретных датах;',
         '',
         'Обязательно естественно используй термины:',
         '- дедлайны',
@@ -242,9 +390,15 @@ async function generateMetadataDraft(input: {
         'Короткий завершающий абзац с акцентом на экономию времени и порядок в проекте.',
         '',
         'Дополнительные указания:',
+        '- не создавай секции "Что входит в график работ";',
+        '- не создавай секции "Для кого подойдет шаблон";',
+        '- в seoBody должны быть только три секции: "Что это за шаблон", "Почему удобно вести такой проект в GetGantt", "Что дает этот шаблон на старте";',
         '- первый раздел должен быть заметно короче остальных и работать как короткая intro-секция;',
         '- после первого раздела на странице идет структура работ, поэтому не дублируй длинным списком этапы внутри seoBody;',
         '- второй и третий разделы должны читаться цельно даже без списка этапов;',
+        '- текст должен быть привязан к конкретному составу графика; упоминай реальные этапы вроде демонтажа, электрики, сантехники, стяжки, штукатурки, плитки, чистовой отделки, мебели только если они реально есть в переданном графике;',
+        '- не называй шаблон "универсальным" и не описывай процесс слишком широко, если график узкий и прикладной;',
+        '- не превращай текст в отчет по графику: нужен живой прикладной SEO-текст, а не перечисление всех операций подряд;',
         '- для строительных шаблонов используй лексику уровня: фундамент, коробка, кровля, инженерные системы, отделка, контрольные точки, закрытие контура, фронт работ;',
         '- если из описания можно понять срок или масштаб, органично упомяни его;',
         '- если это шаблон строительства, ремонта, монтажа или производства, используй профильную лексику уместно;',
@@ -254,6 +408,9 @@ async function generateMetadataDraft(input: {
         `requestedIndustry: ${input.industry ?? ''}`,
         'description:',
         input.description.trim(),
+        '',
+        'Реальный график работ:',
+        input.taskGraphSummary?.trim() || 'График работ не передан.',
       ].join('\n'),
     });
     const parsed = extractJsonObject(response);
@@ -380,7 +537,7 @@ export class TemplateGenerationAdminService {
       },
     }) as TemplateGenerationJobRecord;
 
-    const metadata = await generateMetadataDraft({
+    const initialMetadata = fallbackMetadata({
       description,
       kind: input.kind,
       category: input.category,
@@ -391,8 +548,8 @@ export class TemplateGenerationAdminService {
       where: { id: queuedJob.id },
       data: {
         status: 'in_progress',
-        title: metadata.title,
-        slug: metadata.slug,
+        title: initialMetadata.title,
+        slug: initialMetadata.slug,
         lastRunAt: new Date(),
         errorMessage: null,
       },
@@ -401,7 +558,7 @@ export class TemplateGenerationAdminService {
     try {
       const sourceProject = await projectService.create(
         input.requestedByUserId,
-        `Source — ${metadata.title}`,
+        `Source — ${initialMetadata.title}`,
         input.groupId,
       );
 
@@ -440,6 +597,15 @@ export class TemplateGenerationAdminService {
       if (!generation.ok) {
         throw new Error(generation.assistantResponse);
       }
+
+      const generatedTasks = await taskService.listAll(sourceProject.id);
+      const metadata = await generateMetadataDraft({
+        description,
+        kind: input.kind,
+        category: input.category,
+        industry: input.industry,
+        taskGraphSummary: summarizeTaskGraph(toPromptTasks(generatedTasks)),
+      });
 
       const createdPublication = await templatePublicationService.createFromProject({
         sourceUserId: input.requestedByUserId,
@@ -564,6 +730,7 @@ export class TemplateGenerationAdminService {
       kind: publication.kind,
       category: publication.category ?? undefined,
       industry: publication.industry ?? undefined,
+      taskGraphSummary: summarizeTaskGraph(toPromptTasks(publication.snapshot.tasks)),
     });
     const updated = await templatePublicationService.updatePublication({
       publicationId,
