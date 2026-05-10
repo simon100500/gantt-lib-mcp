@@ -9,6 +9,7 @@ import { LimitReachedModal } from './components/LimitReachedModal.tsx';
 import { OtpModal } from './components/OtpModal.tsx';
 import { PdfHelperModal, isPdfHelperDismissed } from './components/PdfHelperModal.tsx';
 import { PurchasePage } from './components/PurchasePage.tsx';
+import { BlockPublicationIntentPage } from './components/PublicationIntentPages.tsx';
 import { SaveTemplateModal } from './components/SaveTemplateModal.tsx';
 import { ShareLinksManagerModal } from './components/ShareLinksManagerModal.tsx';
 import { BackupRestoreModal, type BackupRestoreSummary } from './components/BackupRestoreModal.tsx';
@@ -27,7 +28,7 @@ import { FinanceWorkspace } from './components/workspace/FinanceWorkspace.tsx';
 import { ResourcePlannerWorkspace } from './components/workspace/ResourcePlannerWorkspace.tsx';
 import { SharedWorkspace } from './components/workspace/SharedWorkspace.tsx';
 import { TemplateWorkspace } from './components/workspace/TemplateWorkspace.tsx';
-import { useAuth, type UseAuthResult } from './hooks/useAuth.ts';
+import { useAuth, type AuthProject, type UseAuthResult } from './hooks/useAuth.ts';
 import { useBatchTaskUpdate } from './hooks/useBatchTaskUpdate.ts';
 import { useAppUpdateCheck } from './hooks/useAppUpdateCheck.ts';
 import { useLocalTasks } from './hooks/useLocalTasks.ts';
@@ -36,7 +37,7 @@ import { useTasks } from './hooks/useTasks.ts';
 import { useTemplateBatchUpdate } from './hooks/useTemplateBatchUpdate.ts';
 import { useTemplates } from './hooks/useTemplates.ts';
 import { useWebSocket, type ServerMessage } from './hooks/useWebSocket.ts';
-import type { AuthSuccessResponse, ProjectLoadResponse } from './lib/apiTypes.ts';
+import type { AuthSuccessResponse, ProjectLoadResponse, TemplatePublicationDetail } from './lib/apiTypes.ts';
 import { PLAN_LABELS, type PlanId } from './lib/billing.ts';
 import { normalizeConstraintDenialPayload, type ConstraintDenialPayload, type ConstraintLimitKey } from './lib/constraintUi.ts';
 import { collectTaskSubtreeIds } from './lib/shareLinkSelection.ts';
@@ -61,7 +62,7 @@ interface RouteState {
 }
 
 type BillingConstraintStatus = UsageStatus | SubscriptionStatus | null;
-const SUPPORTED_APP_PATHS = new Set(['/', '/auth/yandex/callback', '/purchase', '/account', '/admin']);
+const SUPPORTED_APP_PATHS = new Set(['/', '/login', '/auth/yandex/callback', '/purchase', '/account', '/admin']);
 const TRANSIENT_QUERY_PARAMS = new Set(['auth']);
 
 function isConstraintCode(code: string | undefined): code is ConstraintDenialPayload['code'] {
@@ -152,6 +153,51 @@ function normalizePathname(pathname: string): string {
   }
 
   return pathname;
+}
+
+function parseTemplateCreatePath(pathname: string): { publicationId: string } | null {
+  const match = pathname.match(/^\/app\/templates\/([^/]+)\/create$/);
+  if (!match) {
+    return null;
+  }
+
+  const publicationId = match[1] ? decodeURIComponent(match[1]) : '';
+  return publicationId ? { publicationId } : null;
+}
+
+function parseBlockIntentPath(pathname: string): { publicationId: string } | null {
+  const match = pathname.match(/^\/app\/blocks\/([^/]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const publicationId = match[1] ? decodeURIComponent(match[1]) : '';
+  return publicationId ? { publicationId } : null;
+}
+
+function sanitizeNextPath(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin) {
+      return null;
+    }
+
+    if (!url.pathname.startsWith('/')) {
+      return null;
+    }
+
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+function buildLoginRoute(nextPath: string): string {
+  return `/login?next=${encodeURIComponent(nextPath)}`;
 }
 
 function removeTransientSearchParams(search: string): string {
@@ -272,6 +318,7 @@ export default function App() {
     pathname: window.location.pathname,
     search: window.location.search,
   }));
+  const [workspaceTemplateCreateIntentId, setWorkspaceTemplateCreateIntentId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleRouteChange = () => {
@@ -283,6 +330,19 @@ export default function App() {
 
     window.addEventListener('popstate', handleRouteChange);
     return () => window.removeEventListener('popstate', handleRouteChange);
+  }, []);
+
+  const navigate = useCallback((target: string, replace = true) => {
+    const nextUrl = `${window.location.origin}${target}`;
+    if (replace) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    } else {
+      window.history.pushState(window.history.state, '', nextUrl);
+    }
+    setRoute({
+      pathname: window.location.pathname,
+      search: window.location.search,
+    });
   }, []);
 
   useEffect(() => {
@@ -389,10 +449,23 @@ export default function App() {
         console.error('Failed to transfer project name after login:', transferError);
       }
     }
-  }, [auth, localTasks, setShowOtpModal]);
+
+    const nextPath = sanitizeNextPath(new URLSearchParams(route.search).get('next'));
+    if (nextPath) {
+      navigate(nextPath);
+      return;
+    }
+
+    if (normalizePathname(route.pathname) === '/login') {
+      navigate('/');
+    }
+  }, [auth, localTasks, navigate, route.pathname, route.search, setShowOtpModal]);
 
   const normalizedPathname = normalizePathname(route.pathname);
-  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname);
+  const templateCreateRoute = parseTemplateCreatePath(normalizedPathname);
+  const blockIntentRoute = parseBlockIntentPath(normalizedPathname);
+  const isLoginRoute = normalizedPathname === '/login';
+  const isKnownRoute = SUPPORTED_APP_PATHS.has(normalizedPathname) || Boolean(templateCreateRoute) || Boolean(blockIntentRoute);
   const authModalMethod = new URLSearchParams(route.search).get('auth') === 'otp' ? 'otp' : 'yandex';
   const isYandexCallbackRoute = normalizedPathname === '/auth/yandex/callback';
   const isPurchaseRoute = normalizedPathname === '/purchase';
@@ -416,10 +489,55 @@ export default function App() {
     });
   }, [isKnownRoute, route.search]);
 
+  useEffect(() => {
+    if (!isLoginRoute) {
+      return;
+    }
+
+    if (auth.isAuthenticated) {
+      const nextPath = sanitizeNextPath(new URLSearchParams(route.search).get('next'));
+      navigate(nextPath ?? '/');
+      return;
+    }
+
+    setShowOtpModal(true);
+  }, [auth.isAuthenticated, isLoginRoute, navigate, route.search, setShowOtpModal]);
+
+  useEffect(() => {
+    const intentRoute = templateCreateRoute ?? blockIntentRoute;
+    if (!intentRoute || auth.isAuthenticated) {
+      return;
+    }
+
+    navigate(buildLoginRoute(`${route.pathname}${route.search}`));
+  }, [auth.isAuthenticated, blockIntentRoute, navigate, route.pathname, route.search, templateCreateRoute]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !templateCreateRoute) {
+      return;
+    }
+
+    setWorkspaceTemplateCreateIntentId(templateCreateRoute.publicationId);
+    navigate('/');
+  }, [auth.isAuthenticated, navigate, templateCreateRoute]);
+
+  const handleOtpClose = useCallback(() => {
+    setShowOtpModal(false);
+    if (isLoginRoute) {
+      navigate('/');
+    }
+  }, [isLoginRoute, navigate, setShowOtpModal]);
+
   return (
     <>
       {isYandexCallbackRoute ? (
         <YandexCallbackPage />
+      ) : blockIntentRoute ? (
+        <BlockPublicationIntentPage
+          publicationId={blockIntentRoute.publicationId}
+          auth={auth}
+          onLoginRequired={() => setShowOtpModal(true)}
+        />
       ) : isPurchaseRoute ? (
         <PurchasePage
           initialPlan={initialPurchasePlan}
@@ -446,6 +564,8 @@ export default function App() {
           auth={auth}
           localTasks={localTasks}
           onLoginRequired={() => setShowOtpModal(true)}
+          templateCreateIntentId={workspaceTemplateCreateIntentId}
+          onConsumeTemplateCreateIntent={() => setWorkspaceTemplateCreateIntentId(null)}
         />
       )}
 
@@ -453,7 +573,7 @@ export default function App() {
         <OtpModal
           initialMethod={authModalMethod}
           onSuccess={handleAuthSuccess}
-          onClose={() => setShowOtpModal(false)}
+          onClose={handleOtpClose}
         />
       )}
 
@@ -483,15 +603,27 @@ interface WorkspaceAppProps {
   auth: UseAuthResult;
   localTasks: ReturnType<typeof useLocalTasks>;
   onLoginRequired: () => void;
+  templateCreateIntentId: string | null;
+  onConsumeTemplateCreateIntent: () => void;
 }
 
 interface PendingProjectCreation {
   firstPrompt?: string;
   createEmptyChart?: boolean;
   groupId?: string;
+  templatePublicationId?: string;
+  initialProjectName?: string;
+  title?: string;
+  description?: string;
 }
 
-function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) {
+function WorkspaceApp({
+  auth,
+  localTasks,
+  onLoginRequired,
+  templateCreateIntentId,
+  onConsumeTemplateCreateIntent,
+}: WorkspaceAppProps) {
   const sharedProject = useSharedProject();
   const workspace = useUIStore((state) => state.workspace);
   const pendingPostAuthAction = useUIStore((state) => state.pendingPostAuthAction);
@@ -910,13 +1042,81 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     resetWorkspacePresentation();
 
     try {
-      const newProject = await auth.createProject(name.trim(), options.groupId ?? auth.project?.groupId);
+      let newProject: AuthProject | null = null;
+
+      if (options.templatePublicationId) {
+        const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+        let token = getLatestAccessToken();
+        if (!token) {
+          queuedPromptRef.current = null;
+          createEmptyChartAfterActivationRef.current = false;
+          return null;
+        }
+
+        let response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            projectName: name.trim(),
+            groupId: options.groupId ?? auth.project?.groupId,
+          }),
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (!refreshedToken) {
+            queuedPromptRef.current = null;
+            createEmptyChartAfterActivationRef.current = false;
+            return null;
+          }
+          token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+          response = await fetch(`/api/template-publications/${encodeURIComponent(options.templatePublicationId)}/create-project`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              projectName: name.trim(),
+              groupId: options.groupId ?? auth.project?.groupId,
+            }),
+          });
+        }
+
+        if (response.status === 403) {
+          try {
+            const body = await response.json() as Partial<ConstraintDenialPayload>;
+            if (isConstraintCode(body.code)) {
+              await openLimitModal(body);
+              queuedPromptRef.current = null;
+              createEmptyChartAfterActivationRef.current = false;
+              return null;
+            }
+          } catch {
+            // fall through to generic error below
+          }
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json() as { project: AuthProject };
+        newProject = payload.project;
+      } else {
+        newProject = await auth.createProject(name.trim(), options.groupId ?? auth.project?.groupId);
+      }
+
       if (!newProject) {
         queuedPromptRef.current = null;
         createEmptyChartAfterActivationRef.current = false;
         return null;
       }
 
+      await auth.refreshProjects();
       setProjectState(newProject.id, {
         hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
       });
@@ -942,7 +1142,84 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
     } finally {
       activationInFlightRef.current = false;
     }
-  }, [auth, hasShareToken, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setProjectState, setSidebarState, setWorkspace]);
+  }, [auth, hasShareToken, openLimitModal, replaceTasksFromSystem, resetWorkspacePresentation, setPendingPostAuthAction, setProjectState, setSidebarState, setWorkspace]);
+
+  useEffect(() => {
+    if (!templateCreateIntentId || !auth.isAuthenticated || hasShareToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const openTemplateCreateModal = async () => {
+      const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+      let token = getLatestAccessToken();
+      let publication: TemplatePublicationDetail | null = null;
+
+      if (token) {
+        let response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await auth.refreshAccessToken();
+          if (refreshedToken) {
+            token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+            response = await fetch(`/api/template-publications/${encodeURIComponent(templateCreateIntentId)}`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            });
+          }
+        }
+
+        if (response.ok) {
+          publication = await response.json() as TemplatePublicationDetail;
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      const briefParts = [
+        publication?.taskCount ? `${publication.taskCount} задач` : null,
+        publication?.category?.trim() ? publication.category.trim() : null,
+        publication?.industry?.trim() ? publication.industry.trim() : null,
+      ].filter(Boolean);
+
+      openCreateProjectModal({
+        templatePublicationId: templateCreateIntentId,
+        initialProjectName: publication?.title ?? 'Новый проект',
+        groupId: auth.project?.groupId ?? auth.projectGroups[0]?.id,
+        title: publication?.title ? `Новый проект из шаблона «${publication.title}»` : 'Новый проект из шаблона',
+        description: publication
+          ? [
+              publication.summary?.trim() || 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
+              briefParts.length > 0 ? briefParts.join(' • ') : null,
+            ].filter(Boolean).join(' ')
+          : 'Шаблон уже выбран. Укажите название проекта и группу, где он будет создан.',
+      });
+      onConsumeTemplateCreateIntent();
+    };
+
+    void openTemplateCreateModal();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    auth.accessToken,
+    auth.isAuthenticated,
+    auth.project?.groupId,
+    auth.projectGroups,
+    hasShareToken,
+    onConsumeTemplateCreateIntent,
+    openCreateProjectModal,
+    templateCreateIntentId,
+  ]);
 
   const submitChatMessage = useCallback(async (message: string) => {
     if (isScheduleReadOnlyProject) {
@@ -2562,9 +2839,7 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       }}
       onCreateProjectTemplate={handleCreateCurrentProjectTemplate}
       adminTemplateLinks={[
-        { id: 'admin-template-jobs', label: 'Jobs', href: '/admin?section=templates&tab=jobs' },
-        { id: 'admin-template-sources', label: 'Sources', href: '/admin?section=templates&tab=sources' },
-        { id: 'admin-template-publications', label: 'Publications', href: '/admin?section=templates&tab=publications' },
+        { id: 'admin-template-cms', label: 'CMS шаблонов', href: '/admin?section=templates' },
       ]}
       onCreateShareLink={handleCreateShareLink}
       onLoginRequired={onLoginRequired}
@@ -2636,6 +2911,10 @@ function WorkspaceApp({ auth, localTasks, onLoginRequired }: WorkspaceAppProps) 
       <CreateProjectModal
         projectGroups={auth.projectGroups}
         initialGroupId={pendingProjectCreation?.groupId ?? auth.project?.groupId ?? auth.projectGroups[0]?.id}
+        initialName={pendingProjectCreation?.initialProjectName}
+        title={pendingProjectCreation?.templatePublicationId ? pendingProjectCreation.title : undefined}
+        description={pendingProjectCreation?.templatePublicationId ? pendingProjectCreation.description : undefined}
+        submitLabel={pendingProjectCreation?.templatePublicationId ? 'Создать проект' : undefined}
         onSave={async (name, groupId) => {
           return createProjectAndActivate(name, { ...(pendingProjectCreation ?? {}), groupId });
         }}

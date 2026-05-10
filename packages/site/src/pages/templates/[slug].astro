@@ -6,6 +6,7 @@ import {
   fetchSitePublicationDetail,
   fetchSitePublicationList,
 } from "../../lib/publications";
+import { buildAppTemplateCreateUrl } from "../../lib/utils";
 
 export async function getStaticPaths() {
   const publications = await fetchSitePublicationList("template");
@@ -26,8 +27,12 @@ const totalDays = tasks.length
   ? Math.max(
       1,
       Math.round(
-        (Math.max(...tasks.map((task) => parseIsoDate(task.endDate).getTime())) -
-          Math.min(...tasks.map((task) => parseIsoDate(task.startDate).getTime()))) /
+        (Math.max(
+          ...tasks.map((task) => parseIsoDate(task.endDate).getTime()),
+        ) -
+          Math.min(
+            ...tasks.map((task) => parseIsoDate(task.startDate).getTime()),
+          )) /
           MS_PER_DAY,
       ) + 1,
     )
@@ -48,6 +53,9 @@ const previewTasks = tasks.map((task) => ({
       lag: dependency.lag,
     })),
 }));
+const createProjectUrl = publication
+  ? buildAppTemplateCreateUrl(publication.id)
+  : "https://ai.getgantt.ru";
 ---
 
 <Layout
@@ -58,13 +66,11 @@ const previewTasks = tasks.map((task) => ({
     publication?.summary ??
     "Публичный шаблон проекта GetGantt"}
 >
-  <section
-    class="border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.14),_transparent_38%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)]"
-  >
+  <section class="border-b border-slate-200 bg-white">
     <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
       <div class="max-w-4xl">
         <div
-          class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700"
+          class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
         >
           Шаблон графика работ
         </div>
@@ -117,14 +123,27 @@ const previewTasks = tasks.map((task) => ({
         </div>
       </div>
 
-      <div class="mt-6">
+      <div class="mt-6 flex flex-wrap gap-3">
         <a
-          href="https://ai.getgantt.ru"
-          class="inline-flex items-center justify-center rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          href={createProjectUrl}
+          class="inline-flex items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
         >
-          Открыть в GetGantt
+          Редактировать в ГетГант
+        </a>
+        <a
+          href="#"
+          class="inline-flex items-center justify-center rounded-xl border border-primary px-6 py-3 text-sm font-semibold text-primary transition hover:bg-primary/5"
+        >
+          Скачать в Excel
         </a>
       </div>
+      <p class="mt-4 text-sm text-slate-600">
+        Редактирование и адаптация шаблона доступны после входа в GetGantt.
+      </p>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+        Посмотрите структуру и сроки здесь, а настройте шаблон под себя уже в
+        рабочем пространстве.
+      </p>
     </div>
   </section>
 

@@ -532,6 +532,105 @@ export class TemplateGenerationAdminService {
 
     return updated;
   }
+
+  async deleteJob(jobId: string): Promise<{ id: string }> {
+    const prisma = getPrisma();
+    const deleted = await (prisma as any).templateGenerationJob.delete({
+      where: { id: jobId },
+      select: { id: true },
+    }) as { id: string } | null;
+    if (!deleted) {
+      throw new Error('Job not found');
+    }
+    return { id: deleted.id };
+  }
+
+  async deletePublication(publicationId: string): Promise<{ id: string }> {
+    const prisma = getPrisma();
+    const publication = await (prisma as any).templatePublication.findUnique({
+      where: { id: publicationId },
+      select: { id: true },
+    }) as { id: string } | null;
+    if (!publication) {
+      throw new Error('Publication not found');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await (tx as any).templateGenerationJob.updateMany({
+        where: {
+          publicationId,
+          sourceProjectId: { not: null },
+        },
+        data: {
+          publicationId: null,
+          status: 'ready_to_publish',
+        },
+      });
+
+      await (tx as any).templateGenerationJob.updateMany({
+        where: {
+          publicationId,
+          sourceProjectId: null,
+        },
+        data: {
+          publicationId: null,
+          status: 'review_required',
+        },
+      });
+
+      await (tx as any).templatePublication.delete({
+        where: { id: publicationId },
+      });
+    });
+
+    return { id: publicationId };
+  }
+
+  async deleteSource(projectId: string): Promise<{ id: string }> {
+    const prisma = getPrisma();
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true },
+    });
+    if (!project) {
+      throw new Error('Source project not found');
+    }
+
+    const publications = await (prisma as any).templatePublication.findMany({
+      where: { sourceProjectId: projectId },
+      select: { id: true },
+    }) as Array<{ id: string }>;
+    const publicationIds = publications.map((publication) => publication.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (publicationIds.length > 0) {
+        await (tx as any).templateGenerationJob.updateMany({
+          where: { publicationId: { in: publicationIds } },
+          data: {
+            publicationId: null,
+            sourceProjectId: null,
+            status: 'review_required',
+            errorMessage: 'Source project deleted from admin',
+          },
+        });
+      }
+
+      await (tx as any).templateGenerationJob.updateMany({
+        where: { sourceProjectId: projectId },
+        data: {
+          sourceProjectId: null,
+          status: 'review_required',
+          errorMessage: 'Source project deleted from admin',
+        },
+      });
+
+      await tx.project.delete({
+        where: { id: projectId },
+      });
+    });
+
+    return { id: projectId };
+  }
 }
 
 export const templateGenerationAdminService = new TemplateGenerationAdminService();

@@ -2,10 +2,14 @@
 import Layout from "../../layouts/Layout.astro";
 import GanttPreview from "../../components/GanttPreview.tsx";
 import WorkBreakdownAccordion from "../../components/WorkBreakdownAccordion.astro";
-import { fetchSitePublicationDetail, fetchSitePublicationList } from "../../lib/publications";
+import {
+  fetchSitePublicationDetail,
+  fetchSitePublicationList,
+} from "../../lib/publications";
+import { buildAppBlockIntentUrl } from "../../lib/utils";
 
 export async function getStaticPaths() {
-  const publications = await fetchSitePublicationList('block');
+  const publications = await fetchSitePublicationList("block");
   return publications.map((publication) => ({
     params: { slug: publication.slug },
     props: { publication },
@@ -13,8 +17,9 @@ export async function getStaticPaths() {
 }
 
 const { publication: prefetched } = Astro.props;
-const slug = Astro.params.slug ?? '';
-const publication = await fetchSitePublicationDetail('block', slug) ?? prefetched;
+const slug = Astro.params.slug ?? "";
+const publication =
+  (await fetchSitePublicationDetail("block", slug)) ?? prefetched;
 const tasks = publication?.snapshot.tasks ?? [];
 const MS_PER_DAY = 86_400_000;
 const parseIsoDate = (value: string) => new Date(`${value}T00:00:00`);
@@ -22,8 +27,12 @@ const totalDays = tasks.length
   ? Math.max(
       1,
       Math.round(
-        (Math.max(...tasks.map((task) => parseIsoDate(task.endDate).getTime())) -
-          Math.min(...tasks.map((task) => parseIsoDate(task.startDate).getTime()))) /
+        (Math.max(
+          ...tasks.map((task) => parseIsoDate(task.endDate).getTime()),
+        ) -
+          Math.min(
+            ...tasks.map((task) => parseIsoDate(task.startDate).getTime()),
+          )) /
           MS_PER_DAY,
       ) + 1,
     )
@@ -34,7 +43,7 @@ const previewTasks = tasks.map((task) => ({
   startDate: task.startDate,
   endDate: task.endDate,
   parentId: task.parentId,
-  type: 'task' as const,
+  type: "task" as const,
   progress: 0,
   dependencies: (publication?.snapshot.dependencies ?? [])
     .filter((dependency) => dependency.taskId === task.id)
@@ -44,52 +53,116 @@ const previewTasks = tasks.map((task) => ({
       lag: dependency.lag,
     })),
 }));
+const openBlockUrl = publication
+  ? buildAppBlockIntentUrl(publication.id)
+  : "https://ai.getgantt.ru";
 ---
 
 <Layout
   title={publication?.seoTitle ?? publication?.title ?? "Блок работ — GetGantt"}
-  description={publication?.seoDescription ?? publication?.summary ?? "Публичный reusable блок работ GetGantt"}
+  description={publication?.seoDescription ??
+    publication?.summary ??
+    "Публичный reusable блок работ GetGantt"}
 >
-  <section class="border-b border-slate-200 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.16),_transparent_38%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)]">
+  <section class="border-b border-slate-200 bg-white">
     <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
       <div class="max-w-4xl">
-        <div class="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Reusable Block</div>
-        <h1 class="mt-4 text-4xl font-extrabold tracking-tight text-slate-950 lg:text-6xl">{publication?.title ?? "Блок работ"}</h1>
-        {publication?.subtitle && <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">{publication.subtitle}</p>}
-        <p class="mt-6 max-w-3xl text-lg leading-8 text-slate-700">{publication?.summary ?? "Публичный reusable блок работ из publication-базы GetGantt."}</p>
+        <div
+          class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
+        >
+          Reusable Block
+        </div>
+        <h1
+          class="mt-4 text-4xl font-extrabold tracking-tight text-slate-950 lg:text-6xl"
+        >
+          {publication?.title ?? "Блок работ"}
+        </h1>
+        {
+          publication?.subtitle && (
+            <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">
+              {publication.subtitle}
+            </p>
+          )
+        }
+        <p class="mt-6 max-w-3xl text-lg leading-8 text-slate-700">
+          {
+            publication?.summary ??
+              "Публичный reusable блок работ из publication-базы GetGantt."
+          }
+        </p>
       </div>
 
-      <div class="mt-10 grid gap-4 rounded-[2rem] border border-white/80 bg-white/70 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-3">
+      <div
+        class="mt-10 grid gap-4 rounded-[2rem] border border-white/80 bg-white/70 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-3"
+      >
         <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">Категория</div>
-          <div class="mt-2 font-semibold text-slate-900">{publication?.category ?? "Не указана"}</div>
+          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Категория
+          </div>
+          <div class="mt-2 font-semibold text-slate-900">
+            {publication?.category ?? "Не указана"}
+          </div>
         </div>
         <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">Отрасль</div>
-          <div class="mt-2 font-semibold text-slate-900">{publication?.industry ?? "Не указана"}</div>
+          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Отрасль
+          </div>
+          <div class="mt-2 font-semibold text-slate-900">
+            {publication?.industry ?? "Не указана"}
+          </div>
         </div>
         <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">Дней</div>
+          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Дней
+          </div>
           <div class="mt-2 font-semibold text-slate-900">{totalDays}</div>
         </div>
       </div>
 
-      <div class="mt-6">
-        <a href="https://ai.getgantt.ru" class="inline-flex items-center justify-center rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-          Открыть в GetGantt
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a
+          href={openBlockUrl}
+          class="inline-flex items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+        >
+          Редактировать в ГетГант
+        </a>
+        <a
+          href="#"
+          class="inline-flex items-center justify-center rounded-xl border border-primary px-6 py-3 text-sm font-semibold text-primary transition hover:bg-primary/5"
+        >
+          Скачать в Excel
         </a>
       </div>
+      <p class="mt-4 text-sm text-slate-600">
+        Редактирование и адаптация блока доступны после входа в GetGantt.
+      </p>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+        Посмотрите состав и сроки здесь, а используйте и изменяйте блок уже
+        внутри рабочего пространства.
+      </p>
     </div>
   </section>
 
   <section class="w-full px-0 py-8 lg:py-10">
     <div class="mx-auto w-full max-w-[1600px] px-3 sm:px-4 lg:px-6">
-      <GanttPreview client:load initialTasks={previewTasks} title={publication?.title ?? "Блок работ"} fullWidth={true} containerHeight="640px" />
+      <GanttPreview
+        client:load
+        initialTasks={previewTasks}
+        title={publication?.title ?? "Блок работ"}
+        fullWidth={true}
+        containerHeight="640px"
+      />
     </div>
   </section>
 
   <section class="mx-auto max-w-6xl px-4 pb-16 lg:pb-24">
-    {publication?.seoBody && <div class="prose prose-slate max-w-none whitespace-pre-line">{publication.seoBody}</div>}
+    {
+      publication?.seoBody && (
+        <div class="prose prose-slate max-w-none whitespace-pre-line">
+          {publication.seoBody}
+        </div>
+      )
+    }
 
     <div class="mt-12">
       <WorkBreakdownAccordion tasks={tasks} title="Что входит в блок" />

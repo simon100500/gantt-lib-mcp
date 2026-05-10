@@ -202,6 +202,16 @@ export interface TemplatePublicationListItem {
   updatedAt: string;
 }
 
+export interface TemplatePublicationDetail extends TemplatePublicationListItem {
+  snapshot: {
+    tasks: Task[];
+    dependencies: ProjectDependency[];
+    ganttDayMode: 'business' | 'calendar';
+    calendarDays: Array<{ date: string; kind: 'working' | 'non_working' | 'shortened' }>;
+    timelineMarkers: Array<{ date: string; color?: string | null; name?: string | null }>;
+  };
+}
+
 export interface TemplateGenerationJobListItem {
   id: string;
   requestedByUserId: string;

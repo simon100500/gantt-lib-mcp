@@ -146,6 +146,23 @@ export async function registerTemplatePublicationRoutes(fastify: FastifyInstance
     }
   });
 
+  fastify.get('/api/template-publications/:publicationId', { preHandler: [authMiddleware] }, async (req, reply) => {
+    const publicationId = asNonEmptyString((req.params as { publicationId?: string }).publicationId);
+    if (!publicationId) {
+      return reply.status(400).send({ reason: 'validation_error', error: 'publicationId required' });
+    }
+
+    try {
+      const response = await templatePublicationService.getPublication({ publicationId });
+      return reply.send(response);
+    } catch (error) {
+      if (isValidationError(error)) {
+        return reply.status(404).send({ reason: 'not_found', error: error.message });
+      }
+      throw error;
+    }
+  });
+
   fastify.post('/api/template-publications/project', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation] }, async (req, reply) => {
     const body = parsePublicationBody(req.body);
     if (!body.kind || !body.title) {

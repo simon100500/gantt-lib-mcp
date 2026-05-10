@@ -11,13 +11,27 @@ import type { ProjectGroup } from '../types.ts';
 interface CreateProjectModalProps {
   projectGroups: ProjectGroup[];
   initialGroupId?: string;
+  initialName?: string;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
   onSave: (name: string, groupId: string) => Promise<{ id: string; name: string } | null>;
   onCreateGroup: (name: string) => Promise<ProjectGroup | null>;
   onClose: () => void;
 }
 
-export function CreateProjectModal({ projectGroups, initialGroupId, onSave, onCreateGroup, onClose }: CreateProjectModalProps) {
-  const [name, setName] = useState('');
+export function CreateProjectModal({
+  projectGroups,
+  initialGroupId,
+  initialName,
+  title = 'Новый проект',
+  description = 'Выберите группу, в которой будут жить проект и его общие ресурсы.',
+  submitLabel = 'Создать',
+  onSave,
+  onCreateGroup,
+  onClose,
+}: CreateProjectModalProps) {
+  const [name, setName] = useState(initialName ?? '');
   const [selectedGroupId, setSelectedGroupId] = useState(initialGroupId ?? projectGroups[0]?.id ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +42,10 @@ export function CreateProjectModal({ projectGroups, initialGroupId, onSave, onCr
       setSelectedGroupId(initialGroupId ?? projectGroups[0]?.id ?? '');
     }
   }, [initialGroupId, projectGroups, selectedGroupId]);
+
+  useEffect(() => {
+    setName(initialName ?? '');
+  }, [initialName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,9 +93,9 @@ export function CreateProjectModal({ projectGroups, initialGroupId, onSave, onCr
         <CardHeader className="space-y-1 pb-4">
           <CardTitle className="text-xl font-semibold flex items-center gap-2">
             <Plus className="w-5 h-5" />
-            Новый проект
+            {title}
           </CardTitle>
-          <CardDescription>Выберите группу, в которой будут жить проект и его общие ресурсы.</CardDescription>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
@@ -151,7 +169,7 @@ export function CreateProjectModal({ projectGroups, initialGroupId, onSave, onCr
               className="flex-1"
               disabled={loading || projectGroups.length === 0}
             >
-              {loading ? 'Создание...' : 'Создать'}
+              {loading ? 'Создание...' : submitLabel}
             </Button>
           </CardFooter>
         </form>

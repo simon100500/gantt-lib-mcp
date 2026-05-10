@@ -367,6 +367,36 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
     return reply.send({ publication });
   });
 
+  fastify.delete('/api/admin/template-generation/jobs/:id', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const jobId = (req.params as { id?: string }).id?.trim();
+    if (!jobId) {
+      return reply.status(400).send({ error: 'job id is required' });
+    }
+
+    const result = await templateGenerationAdminService.deleteJob(jobId);
+    return reply.send(result);
+  });
+
+  fastify.delete('/api/admin/template-generation/publications/:id', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const publicationId = (req.params as { id?: string }).id?.trim();
+    if (!publicationId) {
+      return reply.status(400).send({ error: 'publication id is required' });
+    }
+
+    const result = await templateGenerationAdminService.deletePublication(publicationId);
+    return reply.send(result);
+  });
+
+  fastify.delete('/api/admin/template-generation/sources/:id', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
+    const projectId = (req.params as { id?: string }).id?.trim();
+    if (!projectId) {
+      return reply.status(400).send({ error: 'source project id is required' });
+    }
+
+    const result = await templateGenerationAdminService.deleteSource(projectId);
+    return reply.send(result);
+  });
+
   fastify.get('/api/admin/users', { preHandler: [authMiddleware, requireAdminAccess] }, async (req, reply) => {
     const { query: rawQuery, page: rawPage, pageSize: rawPageSize } = req.query as {
       query?: string;
@@ -733,6 +763,7 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
         },
         select: {
           id: true,
+          groupId: true,
           name: true,
           status: true,
           ganttDayMode: true,
@@ -775,6 +806,7 @@ export async function registerAdminApiRoutes(fastify: FastifyInstance): Promise<
       refreshToken: currentSession.refreshToken,
       project: {
         id: projectRecord.id,
+        groupId: projectRecord.groupId ?? '',
         name: projectRecord.name,
         status: projectRecord.status,
         ganttDayMode: projectRecord.ganttDayMode,
