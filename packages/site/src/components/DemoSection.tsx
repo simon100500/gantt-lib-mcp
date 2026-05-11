@@ -50,7 +50,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
   return (
     <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-start lg:gap-16">
           <div className="min-w-0 w-full lg:px-0">
             <h1
               className="font-extrabold leading-[1.1] text-foreground animate-fade-up"
@@ -69,7 +69,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
             </p>
           </div>
 
-          <div id="demo" className="relative min-w-0 w-full lg:mt-12 lg:translate-x-6 lg:justify-self-end">
+          <div id="demo" className="relative min-w-0 w-full lg:translate-x-6 lg:justify-self-end lg:self-start">
             <HomepagePromptRedirect apiBaseUrl={apiBaseUrl} />
           </div>
         </div>
