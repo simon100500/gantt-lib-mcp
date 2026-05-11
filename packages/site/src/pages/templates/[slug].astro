@@ -3,6 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import GanttPreview from "../../components/GanttPreview.tsx";
 import { TemplateCustomRequestSection } from "../../components/TemplateCustomRequestSection";
 import WorkBreakdownAccordion from "../../components/WorkBreakdownAccordion.astro";
+import { House } from "lucide-react";
 import {
   fetchSitePublicationDetail,
   fetchSitePublicationList,
@@ -135,46 +136,53 @@ const webPageSchema = {
   schema={[breadcrumbSchema, webPageSchema]}
 >
   <section>
-    <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
+    <div class="mx-auto max-w-6xl px-4 pt-10 pb-16 lg:pt-12 lg:pb-20">
       <nav
         aria-label="Breadcrumb"
-        class="mb-6 flex flex-wrap items-center gap-2 text-sm text-slate-500"
+        class="flex flex-wrap items-center gap-2 text-sm text-slate-500"
       >
-        <a href="/" class="transition hover:text-slate-900">Дом</a>
+        <a
+          href="/"
+          class="inline-flex h-8 w-8 items-center justify-center text-slate-600 transition hover:text-slate-900"
+          aria-label="Дом"
+        >
+          <House className="h-4 w-4" />
+        </a>
         <span aria-hidden="true">></span>
         <a href="/templates" class="transition hover:text-slate-900">Шаблоны</a>
         <span aria-hidden="true">></span>
         <span class="text-slate-900">{publication?.title ?? "Шаблон проекта"}</span>
       </nav>
 
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
-        <div class="max-w-4xl">
-          <div
-            class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
-          >
-            Шаблон графика работ
-          </div>
-          <h1
-            class="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl"
-          >
-            {publication?.title ?? "Шаблон проекта"}
-          </h1>
-          {
-            publication?.subtitle && (
-              <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">
-                {publication.subtitle}
-              </p>
-            )
-          }
-          <p class="mt-6 max-w-3xl text-lg leading-8 text-slate-700">
-            {
-              publication?.summary ??
-                "Публичный шаблон проекта из publication-базы GetGantt."
-            }
-          </p>
+      <div class="mt-10 max-w-4xl">
+        <div
+          class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
+        >
+          Шаблон графика работ
         </div>
+        <h1
+          class="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl"
+        >
+          {publication?.title ?? "Шаблон проекта"}
+        </h1>
+        {
+          publication?.subtitle && (
+            <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">
+              {publication.subtitle}
+            </p>
+          )
+        }
+        <p class:list={[
+          "max-w-3xl text-lg leading-8 text-slate-700",
+          publication?.subtitle ? "mt-5" : "mt-6",
+        ]}>
+          {
+            publication?.summary ??
+              "Публичный шаблон проекта из publication-базы GetGantt."
+          }
+        </p>
 
-        <div class="flex flex-col gap-3 lg:pt-10">
+        <div class="mt-6 flex flex-wrap gap-3">
           <div class="rounded-2xl bg-primary/6 px-4 py-3">
             <div class="text-[11px] uppercase tracking-[0.16em] text-slate-500">
               Задач
