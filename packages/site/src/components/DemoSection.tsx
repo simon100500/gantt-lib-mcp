@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import type { Task } from 'gantt-lib';
 import GanttPreview from './GanttPreview.js';
 import { HomepagePromptRedirect } from './HomepagePromptRedirect.js';
 import { TEMPLATE_HOUSE } from './templates/house.js';
@@ -21,8 +22,9 @@ const DEFAULT_TEMPLATE_INDEX = 0;
 
 export default function DemoSection() {
   const [activeIndex, setActiveIndex] = useState<number>(DEFAULT_TEMPLATE_INDEX);
+  const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
+  const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
   const ganttRef = useRef<HTMLDivElement>(null);
-  const activeTemplate = TEMPLATES[activeIndex] ?? TEMPLATES[DEFAULT_TEMPLATE_INDEX];
 
   function scrollToGantt(duration = 1200) {
     const el = ganttRef.current;
@@ -44,8 +46,8 @@ export default function DemoSection() {
   return (
     <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
-        <div className="mx-auto max-w-3xl">
-          <div className="min-w-0 w-full">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
+          <div className="min-w-0 w-full lg:px-0">
             <h1
               className="font-extrabold leading-[1.1] text-foreground animate-fade-up"
               style={{ fontSize: 'clamp(1.5rem, 8vw, 3.5rem)', animationDelay: '120ms' }}
@@ -61,13 +63,10 @@ export default function DemoSection() {
             >
               Опишите что нужно построить — ИИ создаст план работ с задачами, сроками и зависимостями. Редактируйте текстом или мышкой.
             </p>
+          </div>
 
-            <div
-              className="mt-8 animate-fade-up"
-              style={{ animationDelay: '260ms' }}
-            >
-              <HomepagePromptRedirect />
-            </div>
+          <div id="demo" className="relative min-w-0 w-full lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
+            <HomepagePromptRedirect />
           </div>
         </div>
       </section>
@@ -81,7 +80,7 @@ export default function DemoSection() {
       </div>
 
       <section className="mx-auto mb-6 max-w-7xl px-4 lg:px-6">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           {TEMPLATES.map((template, index) => (
             <button
               key={template.label}
@@ -89,6 +88,8 @@ export default function DemoSection() {
               onClick={() => {
                 if (index !== activeIndex) {
                   setActiveIndex(index);
+                  setActiveTasks(template.tasks);
+                  setActiveTitle(template.title);
                 }
                 scrollToGantt(900);
               }}
@@ -107,8 +108,9 @@ export default function DemoSection() {
       {/* Gantt preview */}
       <div id="gantt-preview" ref={ganttRef}>
         <GanttPreview
-          initialTasks={activeTemplate.tasks}
-          title={activeTemplate.title}
+          key={activeIndex}
+          initialTasks={activeTasks}
+          title={activeTitle}
           showDateHeader={false}
           progressiveReveal={true}
         />
