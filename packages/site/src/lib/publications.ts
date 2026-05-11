@@ -42,17 +42,30 @@ function getApiBaseUrl(): string {
   const envUrl = import.meta.env.SITE_PUBLICATIONS_API_BASE_URL
     ?? import.meta.env.PUBLIC_SITE_PUBLICATIONS_API_BASE_URL;
   const normalized = typeof envUrl === 'string' ? envUrl.trim() : '';
+  if (!normalized) {
+    console.warn(
+      '[site-publications] SITE_PUBLICATIONS_API_BASE_URL is not set. Falling back to http://localhost:3000',
+    );
+  }
   return normalized || 'http://localhost:3000';
 }
 
 async function fetchJson<T>(path: string): Promise<T | null> {
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}${path}`;
   try {
-    const response = await fetch(`${getApiBaseUrl()}${path}`);
+    const response = await fetch(url);
     if (!response.ok) {
+      console.warn(
+        `[site-publications] Request failed: ${url} -> ${response.status} ${response.statusText}`,
+      );
       return null;
     }
     return await response.json() as T;
-  } catch {
+  } catch (error) {
+    console.warn(
+      `[site-publications] Request error: ${url} -> ${error instanceof Error ? error.message : String(error)}`,
+    );
     return null;
   }
 }
