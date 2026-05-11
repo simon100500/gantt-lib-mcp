@@ -405,7 +405,7 @@ function mergeOptimisticChatMessages(
 function getGenerationStageFallbackMessage(stage: ProjectGenerationJobView['stage']): string | null {
   switch (stage) {
     case 'queued':
-      return 'Ставим AI-задачу в очередь';
+      return 'Ручное редактирование пока недоступно';
     case 'interpreting':
       return 'Понимаем запрос';
     case 'planning':
@@ -1171,7 +1171,7 @@ function WorkspaceApp({
       setAiMutationLock({
         active: true,
         stage: activeGenerationJob.previewAvailable ? 'preview' : 'thinking',
-        message: activeGenerationJob.statusMessage ?? 'AI формирует стартовый график и сохраняет его в проект.',
+        message: resolveGenerationLockMessage(activeGenerationJob, 'Ручное редактирование пока недоступно'),
       });
       useChatStore.setState((state) => ({
         ...state,
@@ -1245,7 +1245,7 @@ function WorkspaceApp({
       setAiMutationLock({
         active: true,
         stage: 'preview',
-        message: 'AI формирует стартовый график и сохраняет его в проект.',
+        message: 'Ручное редактирование пока недоступно',
       });
       setPreviewState({
         tasks: normalizedPreviewTasks,

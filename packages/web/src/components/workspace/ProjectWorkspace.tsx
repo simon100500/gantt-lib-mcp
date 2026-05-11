@@ -2662,12 +2662,6 @@ export function ProjectWorkspace({
                   </span>
                 )}
 
-                {previewRendering && (
-                  <span className="font-mono text-[11px] text-amber-600">
-                    Предварительный график до финального сохранения
-                  </span>
-                )}
-
                 {previewFailed && (
                   <span className="font-mono text-[11px] text-red-600">
                     {previewMessage ?? 'Предварительный график не был сохранён'}
