@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { buildSiteUrl } from "../lib/utils";
 
 const faqs = [
   {
@@ -83,6 +84,20 @@ const faqs = [
     a: "Базовая генерация графиков входит в стоимость подписки. Если вам нужно часто перестраивать сложные проекты с помощью ИИ, предусмотрены расширенные лимиты. Простые ручные правки всегда бесплатны.",
   },
 ];
+
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.a,
+    },
+  })),
+  url: buildSiteUrl("/faq"),
+};
 ---
 
 <Layout
@@ -90,6 +105,8 @@ const faqs = [
   description="Ответы на самые частые вопросы о GetGantt: как работает AI, редактирование, зависимости, данные и приватность."
   ogTitle="Частые вопросы — GetGantt"
   ogDescription="Ответы на самые частые вопросы о GetGantt: как работает AI, редактирование, зависимости, данные и приватность."
+  pathname="/faq"
+  schema={faqSchema}
 >
   <section class="bg-background">
     <div class="container mx-auto px-4 py-16 lg:px-6 lg:py-24">

@@ -5,6 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function getSiteOrigin(): string {
+  const envUrl = import.meta.env.PUBLIC_SITE_URL ?? import.meta.env.SITE_URL;
+  const normalized = typeof envUrl === 'string' ? envUrl.trim().replace(/\/+$/, '') : '';
+  return normalized || 'https://getgantt.ru';
+}
+
+export function buildSiteUrl(pathname = '/'): string {
+  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  return `${getSiteOrigin()}${normalizedPath}`;
+}
+
 function getAppOrigin(): string {
   const envUrl = import.meta.env.PUBLIC_APP_URL ?? import.meta.env.SITE_APP_URL;
   const normalized = typeof envUrl === 'string' ? envUrl.trim().replace(/\/+$/, '') : '';

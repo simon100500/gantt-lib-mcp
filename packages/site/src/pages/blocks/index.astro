@@ -1,18 +1,46 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { fetchSitePublicationList } from "../../lib/publications";
+import { buildSiteUrl } from "../../lib/utils";
 
 const publications = await fetchSitePublicationList('block');
+
+const collectionSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Блоки работ GetGantt",
+  url: buildSiteUrl("/blocks"),
+  description:
+    "Каталог готовых блоков работ для вставки в диаграмму Ганта: фундамент, инженерные сети, отделка и другие этапы.",
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: publications.map((publication, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: buildSiteUrl(`/blocks/${publication.slug}`),
+      name: publication.title,
+      description:
+        publication.summary ?? publication.subtitle ?? "Публичный блок работ",
+    })),
+  },
+};
 ---
 
 <Layout
   title="Блоки работ — GetGantt"
   description="Публичный каталог reusable блоков работ GetGantt для SEO и вставки в график."
+  pathname="/blocks"
+  schema={collectionSchema}
 >
   <section class="mx-auto max-w-6xl px-4 py-16">
     <h1 class="text-4xl font-extrabold text-slate-950">Блоки работ</h1>
     <p class="mt-4 max-w-3xl text-lg text-slate-600">
       Переиспользуемые блоки для вставки в существующий график. Источник истины тот же, что и у marketplace: `template_publications`.
+    </p>
+    <p class="mt-4 max-w-4xl text-base leading-7 text-slate-700">
+      Эти страницы подходят для поиска типовых этапов и сравнения наполнения
+      блоков до вставки в проект. На странице каждого блока показываются задачи,
+      длительность и порядок работ.
     </p>
 
     <div class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">

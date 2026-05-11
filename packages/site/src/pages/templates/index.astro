@@ -4,6 +4,7 @@ import {
   fetchSitePublicationDetail,
   fetchSitePublicationList,
 } from "../../lib/publications";
+import { buildSiteUrl } from "../../lib/utils";
 
 const publications = await fetchSitePublicationList("template");
 const MS_PER_DAY = 86_400_000;
@@ -36,17 +37,57 @@ const getPublicationDays = (
     ) + 1,
   );
 };
+
+const collectionSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Шаблоны проектов GetGantt",
+  url: buildSiteUrl("/templates"),
+  description:
+    "Каталог шаблонов графиков работ, ремонтов и строительных проектов для быстрого старта в GetGantt.",
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: publicationDetails.map(({ publication, detail }, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: buildSiteUrl(`/templates/${publication.slug}`),
+      name: publication.title,
+      description:
+        publication.summary ?? publication.subtitle ?? "Публичный шаблон проекта",
+      additionalProperty: [
+        {
+          "@type": "PropertyValue",
+          name: "taskCount",
+          value: publication.taskCount,
+        },
+        {
+          "@type": "PropertyValue",
+          name: "durationDays",
+          value: getPublicationDays(detail),
+        },
+      ],
+    })),
+  },
+};
 ---
 
 <Layout
   title="Шаблоны проектов — GetGantt"
   description="Публичный каталог шаблонов проектов GetGantt для SEO и быстрого старта в продукте."
+  pathname="/templates"
+  schema={collectionSchema}
 >
   <section class="mx-auto max-w-6xl px-4 py-16">
     <h1 class="text-4xl font-extrabold text-slate-950">Шаблоны проектов</h1>
-    <p class="mt-4 text-lg text-slate-600">
+    <p class="mt-4 max-w-4xl text-lg leading-8 text-slate-600">
       Скопируйте шаблон в свой проект в ГетГант и используйте его как готовую
       основу для планирования работ
+    </p>
+    <p class="mt-4 max-w-4xl text-base leading-7 text-slate-700">
+      Здесь собраны шаблоны графиков работ для типовых проектов: от ремонта
+      квартиры до строительства дома. Каждая страница показывает структуру
+      задач, длительность и состав этапов, чтобы вы могли быстро оценить
+      шаблон до копирования в рабочее пространство.
     </p>
 
     <div class="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">

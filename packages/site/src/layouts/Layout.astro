@@ -2,12 +2,19 @@
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import CookieConsent from "../components/CookieConsent.astro";
+import { buildSiteUrl } from "../lib/utils";
 
 interface Props {
   title?: string;
   description?: string;
   ogTitle?: string;
   ogDescription?: string;
+  pathname?: string;
+  canonical?: string;
+  ogImage?: string;
+  ogType?: string;
+  twitterCard?: "summary" | "summary_large_image";
+  schema?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
 const {
@@ -15,10 +22,20 @@ const {
   description = "Вставьте любой документ или напишите своими словами. Получите готовый график с задачами, сроками и командой.",
   ogTitle,
   ogDescription,
+  pathname,
+  canonical,
+  ogImage,
+  ogType = "website",
+  twitterCard = "summary_large_image",
+  schema,
 } = Astro.props;
 
 const resolvedOgTitle = ogTitle ?? title;
 const resolvedOgDescription = ogDescription ?? description;
+const resolvedPathname = pathname ?? Astro.url.pathname;
+const canonicalUrl = canonical ?? buildSiteUrl(resolvedPathname);
+const resolvedOgImage = ogImage ?? buildSiteUrl("/web-app-manifest-512x512.png");
+const schemaList = Array.isArray(schema) ? schema : schema ? [schema] : [];
 ---
 
 <!doctype html>
@@ -33,12 +50,22 @@ const resolvedOgDescription = ogDescription ?? description;
     />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
 
     <!-- Open Graph -->
     <meta property="og:title" content={resolvedOgTitle} />
     <meta property="og:description" content={resolvedOgDescription} />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={ogType} />
     <meta property="og:locale" content="ru_RU" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={resolvedOgImage} />
+    <meta property="og:image:alt" content={resolvedOgTitle} />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content={twitterCard} />
+    <meta name="twitter:title" content={resolvedOgTitle} />
+    <meta name="twitter:description" content={resolvedOgDescription} />
+    <meta name="twitter:image" content={resolvedOgImage} />
 
     <!-- Favicon -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -48,6 +75,11 @@ const resolvedOgDescription = ogDescription ?? description;
 
     <!-- Web Manifest -->
     <link rel="manifest" href="/site.webmanifest" />
+    {
+      schemaList.map((entry) => (
+        <script type="application/ld+json" set:html={JSON.stringify(entry)} />
+      ))
+    }
   </head>
   <body>
     <Header />

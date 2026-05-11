@@ -2,14 +2,63 @@
 import Layout from "../layouts/Layout.astro";
 import DemoSection from "../components/DemoSection";
 import { fetchSitePublicationList } from "../lib/publications";
+import { buildSiteUrl } from "../lib/utils";
 
 const [templates, blocks] = await Promise.all([
   fetchSitePublicationList('template'),
   fetchSitePublicationList('block'),
 ]);
+
+const pageSchema = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "GetGantt",
+    url: buildSiteUrl("/"),
+    logo: buildSiteUrl("/web-app-manifest-512x512.png"),
+    email: "ai@getgantt.ru",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "GetGantt",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description:
+      "Онлайн-сервис для создания диаграмм Ганта из текстового описания проекта с помощью ИИ.",
+    url: buildSiteUrl("/"),
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "RUB",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "Шаблоны и блоки работ GetGantt",
+    url: buildSiteUrl("/"),
+    hasPart: [
+      {
+        "@type": "CollectionPage",
+        name: "Шаблоны проектов",
+        url: buildSiteUrl("/templates"),
+      },
+      {
+        "@type": "CollectionPage",
+        name: "Блоки работ",
+        url: buildSiteUrl("/blocks"),
+      },
+    ],
+  },
+];
 ---
 
-<Layout title="GetGantt — Из текста в Гант за 30 секунд">
+<Layout
+  title="GetGantt — Из текста в Гант за 30 секунд"
+  pathname="/"
+  schema={pageSchema}
+>
   <main>
     <div id="demo-section" class="bg-background pb-24">
       <DemoSection client:load />

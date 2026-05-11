@@ -7,7 +7,11 @@ import {
   fetchSitePublicationDetail,
   fetchSitePublicationList,
 } from "../../lib/publications";
-import { buildAppTemplateCreateUrl, getSiteApiOrigin } from "../../lib/utils";
+import {
+  buildAppTemplateCreateUrl,
+  buildSiteUrl,
+  getSiteApiOrigin,
+} from "../../lib/utils";
 import { splitSeoMarkdownSections } from "../../lib/renderSeoMarkdown";
 
 export async function getStaticPaths() {
@@ -61,6 +65,56 @@ const createProjectUrl = publication
 const apiBaseUrl = getSiteApiOrigin();
 const seoSections = splitSeoMarkdownSections(publication?.seoBody);
 const introSeoHtml = seoSections[0]?.html ?? "";
+const templatePath = `/templates/${slug}`;
+const templateUrl = buildSiteUrl(templatePath);
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "GetGantt",
+      item: buildSiteUrl("/"),
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Шаблоны проектов",
+      item: buildSiteUrl("/templates"),
+    },
+    {
+      "@type": "ListItem",
+      position: 3,
+      name: publication?.title ?? "Шаблон проекта",
+      item: templateUrl,
+    },
+  ],
+};
+const webPageSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: publication?.seoTitle ?? publication?.title ?? "Шаблон проекта — GetGantt",
+  url: templateUrl,
+  description:
+    publication?.seoDescription ??
+    publication?.summary ??
+    "Публичный шаблон проекта GetGantt",
+  isPartOf: {
+    "@type": "WebSite",
+    name: "GetGantt",
+    url: buildSiteUrl("/"),
+  },
+  about: {
+    "@type": "Thing",
+    name: publication?.category ?? "Шаблон графика работ",
+  },
+  mainEntity: {
+    "@type": "ItemList",
+    name: publication?.title ?? "Состав работ",
+    numberOfItems: tasks.length,
+  },
+};
 ---
 
 <Layout
@@ -70,6 +124,8 @@ const introSeoHtml = seoSections[0]?.html ?? "";
   description={publication?.seoDescription ??
     publication?.summary ??
     "Публичный шаблон проекта GetGantt"}
+  pathname={templatePath}
+  schema={[breadcrumbSchema, webPageSchema]}
 >
   <section>
     <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
@@ -99,6 +155,39 @@ const introSeoHtml = seoSections[0]?.html ?? "";
         </p>
       </div>
 
+      <div
+        class="mt-8 grid gap-4 rounded-[2rem] border border-white/80 bg-white/80 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-3"
+      >
+        <div>
+          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Задач
+          </div>
+          <div class="mt-2 font-semibold text-slate-900">
+            {publication?.taskCount ?? tasks.length}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Дней
+          </div>
+          <div class="mt-2 font-semibold text-slate-900">{totalDays}</div>
+        </div>
+        <div>
+          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Категория
+          </div>
+          <div class="mt-2 font-semibold text-slate-900">
+            {publication?.category ?? "Шаблон проекта"}
+          </div>
+        </div>
+      </div>
+
+      <p class="mt-6 max-w-4xl text-base leading-7 text-slate-700">
+        Этот шаблон диаграммы Ганта подходит для быстрого старта: вы сразу
+        видите состав работ, длительность проекта и структуру этапов, а затем
+        можете скопировать шаблон в GetGantt и адаптировать его под свой объект.
+      </p>
+
       <div class="mt-6 flex flex-wrap gap-3">
         <a
           href={createProjectUrl}
@@ -107,10 +196,10 @@ const introSeoHtml = seoSections[0]?.html ?? "";
           Открыть в ГетГант
         </a>
         <a
-          href="#"
+          href="/templates"
           class="inline-flex items-center justify-center rounded-xl border border-primary px-6 py-3 text-sm font-semibold text-primary transition hover:bg-primary/5"
         >
-          Скачать в Excel
+          Все шаблоны
         </a>
       </div>
     </div>
@@ -146,9 +235,9 @@ const introSeoHtml = seoSections[0]?.html ?? "";
       <WorkBreakdownAccordion tasks={tasks} title="Состав работ" />
     </div>
 
-    <div class="mt-12 max-w-4xl">
-      <h2 class="text-2xl font-bold tracking-tight text-slate-950">
-        Как использовать
+      <div class="mt-12 max-w-4xl">
+        <h2 class="text-2xl font-bold tracking-tight text-slate-950">
+          Как использовать
       </h2>
       <div class="mt-4 space-y-4 text-base leading-8 text-slate-700">
         <p>
@@ -160,8 +249,26 @@ const introSeoHtml = seoSections[0]?.html ?? "";
           уточнить зависимости между задачами и адаптировать график под свою
           студию, бригаду и темп ремонта.
         </p>
+        </div>
       </div>
-    </div>
+
+      <div class="mt-12 max-w-4xl">
+        <h2 class="text-2xl font-bold tracking-tight text-slate-950">
+          Что есть в шаблоне
+        </h2>
+        <div class="mt-4 space-y-4 text-base leading-8 text-slate-700">
+          <p>
+            В шаблоне {publication?.taskCount ?? tasks.length} задач и примерная
+            длительность {totalDays} дней. Это удобно для предварительной
+            оценки состава работ и обсуждения плана с заказчиком или бригадой.
+          </p>
+          <p>
+            После копирования в GetGantt вы сможете изменить последовательность
+            этапов, подвинуть сроки, добавить свои работы и пересчитать связи
+            без ручного обновления всего графика.
+          </p>
+        </div>
+      </div>
 
     {
       publication?.tags?.length ? (
