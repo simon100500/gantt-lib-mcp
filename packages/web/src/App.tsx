@@ -1684,6 +1684,9 @@ function WorkspaceApp({
         newProject = payload.project;
         queuedPromptRef.current = null;
         setPreparedIntentChatProjectId(payload.project.id);
+        if (options.firstPrompt?.trim()) {
+          useChatStore.getState().addMessage({ role: 'user', content: options.firstPrompt.trim() });
+        }
         useChatStore.setState({
           streamingText: '',
           pendingAssistantMeta: null,
@@ -1871,7 +1874,7 @@ function WorkspaceApp({
           return;
         }
 
-        const intentPayload = await response.json() as { projectId?: string | null };
+        const intentPayload = await response.json() as { projectId?: string | null; text?: string | null };
         const currentProject = currentProjectSnapshot;
         const shouldArchiveCurrentProject = Boolean(
           currentProject
@@ -1903,6 +1906,7 @@ function WorkspaceApp({
         }
 
         const result = await createProjectAndActivate('Новый проект', {
+          firstPrompt: intentPayload.text?.trim() || undefined,
           projectIntentId: projectCreationIntentId,
           groupId: currentProject?.groupId ?? auth.projectGroups[0]?.id,
         });
@@ -2257,8 +2261,14 @@ function WorkspaceApp({
     if (payload.job) {
       setActiveGenerationJob(payload.job);
     }
+    if (workspace.kind === 'project' && tasks.length === 0) {
+      setActiveEmptyProjectModeProjectId(null);
+      setWorkspace((current) => current.kind === 'project'
+        ? { ...current, chatOpen: false }
+        : current);
+    }
     useChatStore.getState().finishStreaming();
-  }, [activeGenerationJob, auth.accessToken, auth.refreshAccessToken]);
+  }, [activeGenerationJob, auth.accessToken, auth.refreshAccessToken, setWorkspace, tasks.length, workspace.kind]);
 
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
@@ -3065,7 +3075,11 @@ function WorkspaceApp({
     }
   }, [auth.accessToken, auth.project, selectedShareTaskIds, setShareStatus]);
   const currentProjectTaskCount = workspace.kind === 'project'
-    ? (auth.projects.find((project) => project.id === workspace.projectId)?.taskCount ?? auth.project?.taskCount)
+    ? (
+      auth.projects.find((project) => project.id === workspace.projectId)?.taskCount
+      ?? auth.project?.taskCount
+      ?? tasks.length
+    )
     : undefined;
   const hasActiveProjects = auth.projects.some((project) => project.status !== 'archived');
   const currentProjectIsEmpty = workspace.kind === 'project' && currentProjectTaskCount === 0;
