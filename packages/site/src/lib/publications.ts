@@ -39,12 +39,16 @@ export type SitePublicationDetail = SitePublicationItem & {
 };
 
 function getApiBaseUrl(): string {
-  const envUrl = import.meta.env.SITE_PUBLICATIONS_API_BASE_URL
-    ?? import.meta.env.PUBLIC_SITE_PUBLICATIONS_API_BASE_URL;
-  const normalized = typeof envUrl === 'string' ? envUrl.trim() : '';
+  const candidates = [
+    import.meta.env.SITE_PUBLICATIONS_API_BASE_URL,
+    import.meta.env.PUBLIC_SITE_PUBLICATIONS_API_BASE_URL,
+  ];
+  const normalized = candidates
+    .find((value) => typeof value === 'string' && value.trim().length > 0)
+    ?.trim() ?? '';
   if (!normalized) {
     console.warn(
-      '[site-publications] SITE_PUBLICATIONS_API_BASE_URL is not set. Falling back to http://localhost:3000',
+      '[site-publications] SITE/PUBLIC_SITE_PUBLICATIONS_API_BASE_URL is not set. Falling back to http://localhost:3000',
     );
   }
   return normalized || 'http://localhost:3000';

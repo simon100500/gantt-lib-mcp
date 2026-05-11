@@ -6,8 +6,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getSiteOrigin(): string {
-  const envUrl = import.meta.env.PUBLIC_SITE_URL ?? import.meta.env.SITE_URL;
-  const normalized = typeof envUrl === 'string' ? envUrl.trim().replace(/\/+$/, '') : '';
+  const candidates = [import.meta.env.PUBLIC_SITE_URL, import.meta.env.SITE_URL];
+  const normalized = candidates
+    .find((value) => typeof value === 'string' && value.trim().length > 0)
+    ?.trim()
+    .replace(/\/+$/, '') ?? '';
   return normalized || 'https://getgantt.ru';
 }
 
@@ -17,15 +20,23 @@ export function buildSiteUrl(pathname = '/'): string {
 }
 
 function getAppOrigin(): string {
-  const envUrl = import.meta.env.PUBLIC_APP_URL ?? import.meta.env.SITE_APP_URL;
-  const normalized = typeof envUrl === 'string' ? envUrl.trim().replace(/\/+$/, '') : '';
+  const candidates = [import.meta.env.PUBLIC_APP_URL, import.meta.env.SITE_APP_URL];
+  const normalized = candidates
+    .find((value) => typeof value === 'string' && value.trim().length > 0)
+    ?.trim()
+    .replace(/\/+$/, '') ?? '';
   return normalized || 'http://localhost:5173';
 }
 
 export function getSiteApiOrigin(): string {
-  const envUrl = import.meta.env.SITE_PUBLICATIONS_API_BASE_URL
-    ?? import.meta.env.PUBLIC_SITE_PUBLICATIONS_API_BASE_URL;
-  const normalized = typeof envUrl === 'string' ? envUrl.trim().replace(/\/+$/, '') : '';
+  const candidates = [
+    import.meta.env.SITE_PUBLICATIONS_API_BASE_URL,
+    import.meta.env.PUBLIC_SITE_PUBLICATIONS_API_BASE_URL,
+  ];
+  const normalized = candidates
+    .find((value) => typeof value === 'string' && value.trim().length > 0)
+    ?.trim()
+    .replace(/\/+$/, '') ?? '';
   return normalized || 'http://localhost:3000';
 }
 
