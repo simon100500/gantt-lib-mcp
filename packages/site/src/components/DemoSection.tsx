@@ -53,11 +53,11 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-start lg:gap-16">
           <div className="min-w-0 w-full lg:px-0">
             <h1
-              className="font-extrabold leading-[1.1] text-foreground animate-fade-up"
-              style={{ fontSize: 'clamp(1.5rem, 8vw, 3.5rem)', animationDelay: '120ms' }}
+              className="animate-fade-up text-[clamp(1.4rem,3.8vw,2.45rem)] font-extrabold leading-[1.04] text-foreground md:text-[2.65rem] lg:text-[2.8rem] xl:text-[3rem] 2xl:text-[3.2rem]"
+              style={{ animationDelay: '120ms' }}
             >
               Из описания проекта{' '}
-              <span className="text-primary">в&nbsp;диаграмму Ганта</span><br />{' '}
+              <span className="text-primary">в&nbsp;диаграмму Ганта</span>{' '}
               за 30 секунд
             </h1>
 
@@ -69,7 +69,7 @@ export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
             </p>
           </div>
 
-          <div id="demo" className="relative min-w-0 w-full lg:translate-x-6 lg:justify-self-end lg:self-start">
+          <div id="demo" className="relative min-w-0 w-full max-w-[560px] lg:translate-x-6 lg:justify-self-end lg:self-start">
             <HomepagePromptRedirect apiBaseUrl={apiBaseUrl} />
           </div>
         </div>
