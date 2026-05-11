@@ -1827,6 +1827,7 @@ function WorkspaceApp({
 
     const startProjectIntentFlow = async () => {
       try {
+        const currentProjectSnapshot = useAuthStore.getState().project;
         const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
         let token = getLatestAccessToken();
         if (!token) {
@@ -1871,7 +1872,7 @@ function WorkspaceApp({
         }
 
         const intentPayload = await response.json() as { projectId?: string | null };
-        const currentProject = auth.project;
+        const currentProject = currentProjectSnapshot;
         const shouldArchiveCurrentProject = Boolean(
           currentProject
           && currentProject.status === 'active'
@@ -1923,7 +1924,6 @@ function WorkspaceApp({
     auth.accessToken,
     auth.isAuthenticated,
     auth.archiveProject,
-    auth.project,
     auth.projectGroups,
     auth.refreshAccessToken,
     createProjectAndActivate,

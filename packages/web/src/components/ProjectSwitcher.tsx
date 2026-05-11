@@ -652,14 +652,26 @@ export function ProjectSwitcher({
           {effectiveGroups.map((group) => {
             const groupProjects = activeProjectsByGroup.get(group.id) ?? [];
             const open = openGroupIds.has(group.id);
-            if (groupProjects.length === 0 && !group.isDefault) {
+            if (groupProjects.length === 0) {
               return (
-                <ProjectSection key={group.id} title={group.name} icon={<Folder className="h-4 w-4" />} open={open} onToggle={() => toggleGroup(group.id)} group={group} projectCount={0} onCreateProject={onCreateNew} onRenameGroup={onRenameGroup} onDeleteGroup={onDeleteGroup} onManageMembers={setMembersGroupId}>
+                <ProjectSection
+                  key={group.id}
+                  title={group.name}
+                  icon={<Folder className="h-4 w-4" />}
+                  open={open}
+                  onToggle={() => toggleGroup(group.id)}
+                  usageLabel={group.isDefault ? projectsUsageLabel : null}
+                  group={group}
+                  projectCount={0}
+                  onCreateProject={onCreateNew}
+                  onRenameGroup={onRenameGroup}
+                  onDeleteGroup={onDeleteGroup}
+                  onManageMembers={setMembersGroupId}
+                >
                   <div className="px-3 py-2 text-xs text-slate-400">Нет проектов</div>
                 </ProjectSection>
               );
             }
-            if (groupProjects.length === 0) return null;
             return (
               <ProjectSection
                 key={group.id}
