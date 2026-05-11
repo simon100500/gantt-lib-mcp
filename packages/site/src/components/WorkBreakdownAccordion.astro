@@ -30,7 +30,7 @@ const rootNodes = childrenByParent.get('__root__') ?? tasks.filter((task) => !ta
 <section>
   <h2 class="text-2xl font-bold text-slate-950">{title}</h2>
   <div class="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm">
-    <div class="grid grid-cols-[minmax(0,1fr)_84px_120px_120px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3">
+    <div class="hidden gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_84px_120px_120px]">
       <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Работы</div>
       <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Дней</div>
       <div class="text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Старт</div>

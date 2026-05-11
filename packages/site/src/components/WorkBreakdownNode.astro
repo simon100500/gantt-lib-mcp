@@ -16,7 +16,7 @@ interface Props {
 const { node, childrenByParent, depth = 0 } = Astro.props;
 const children = childrenByParent.get(node.id) ?? [];
 const hasChildren = children.length > 0;
-const rowPadding = 16 + depth * 18;
+const rowPadding = 16 + depth * 20 + (hasChildren ? 0 : 14);
 const startDate = new Date(`${node.startDate}T00:00:00`);
 const endDate = new Date(`${node.endDate}T00:00:00`);
 const durationDays = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1);
@@ -37,12 +37,21 @@ const formattedEndDate = dateFormatter.format(endDate);
   details[open] > summary .work-breakdown-chevron {
     transform: rotate(90deg);
   }
+
+  @media (max-width: 639px) {
+    .work-breakdown-meta {
+      border-radius: 0.75rem;
+      background: rgb(248 250 252);
+      padding: 0.45rem 0.75rem;
+      text-align: left;
+    }
+  }
 </style>
 
 {hasChildren ? (
   <details class="group">
     <summary
-      class={`work-breakdown-summary grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_84px_120px_120px] items-center gap-4 border-b border-slate-100 py-2.5 pr-4 text-left transition-colors hover:bg-slate-50 ${depth === 0 ? 'bg-slate-50/70' : 'bg-transparent'}`}
+      class={`work-breakdown-summary grid cursor-pointer list-none gap-2 border-b border-slate-100 py-3 pr-4 text-left transition-colors hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_84px_120px_120px] sm:items-center sm:gap-4 sm:py-2.5 ${depth === 0 ? 'bg-slate-50/70' : 'bg-transparent'}`}
       style={`padding-left:${rowPadding}px;`}
     >
       <div class="relative flex min-w-0 items-center gap-2">
@@ -53,9 +62,16 @@ const formattedEndDate = dateFormatter.format(endDate);
         </span>
         <span class={`${depth === 0 ? 'font-semibold text-slate-950' : 'font-medium text-slate-800'} min-w-0 text-sm`}>{node.name}</span>
       </div>
-      <div class="text-right text-xs font-medium tabular-nums text-slate-700">{durationDays}</div>
-      <div class="text-right text-xs font-medium tabular-nums text-slate-500">{formattedStartDate}</div>
-      <div class="text-right text-xs font-medium tabular-nums text-slate-500">{formattedEndDate}</div>
+      <div class="work-breakdown-meta text-xs tabular-nums text-slate-600 sm:hidden">
+        <span class="font-medium text-slate-700">{durationDays} дн.</span>
+        <span class="mx-2 text-slate-400">•</span>
+        <span>{formattedStartDate}</span>
+        <span class="mx-1 text-slate-400">-</span>
+        <span>{formattedEndDate}</span>
+      </div>
+      <div class="hidden text-right text-xs font-medium tabular-nums text-slate-700 sm:block">{durationDays}</div>
+      <div class="hidden text-right text-xs font-medium tabular-nums text-slate-500 sm:block">{formattedStartDate}</div>
+      <div class="hidden text-right text-xs font-medium tabular-nums text-slate-500 sm:block">{formattedEndDate}</div>
     </summary>
 
     <div>
@@ -66,14 +82,21 @@ const formattedEndDate = dateFormatter.format(endDate);
   </details>
 ) : (
   <div
-    class={`grid grid-cols-[minmax(0,1fr)_84px_120px_120px] items-center gap-4 border-b border-slate-100 py-2.5 pr-4 ${depth === 0 ? 'bg-slate-50/70' : 'bg-transparent'}`}
+    class={`grid gap-2 border-b border-slate-100 py-3 pr-4 sm:grid-cols-[minmax(0,1fr)_84px_120px_120px] sm:items-center sm:gap-4 sm:py-2.5 ${depth === 0 ? 'bg-slate-50/70' : 'bg-transparent'}`}
     style={`padding-left:${rowPadding}px;`}
   >
     <div class="relative min-w-0">
       <span class={`block truncate text-sm ${depth === 0 ? 'font-semibold text-slate-950' : 'text-slate-700'}`}>{node.name}</span>
     </div>
-    <div class="text-right text-xs font-medium tabular-nums text-slate-700">{durationDays}</div>
-    <div class="text-right text-xs tabular-nums text-slate-500">{formattedStartDate}</div>
-    <div class="text-right text-xs tabular-nums text-slate-500">{formattedEndDate}</div>
+    <div class="work-breakdown-meta text-xs tabular-nums text-slate-600 sm:hidden">
+      <span class="font-medium text-slate-700">{durationDays} дн.</span>
+      <span class="mx-2 text-slate-400">•</span>
+      <span>{formattedStartDate}</span>
+      <span class="mx-1 text-slate-400">-</span>
+      <span>{formattedEndDate}</span>
+    </div>
+    <div class="hidden text-right text-xs font-medium tabular-nums text-slate-700 sm:block">{durationDays}</div>
+    <div class="hidden text-right text-xs tabular-nums text-slate-500 sm:block">{formattedStartDate}</div>
+    <div class="hidden text-right text-xs tabular-nums text-slate-500 sm:block">{formattedEndDate}</div>
   </div>
 )}
