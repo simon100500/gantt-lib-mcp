@@ -55,7 +55,7 @@ const previewTasks = tasks.map((task) => ({
   startDate: task.startDate,
   endDate: task.endDate,
   parentId: task.parentId,
-  type: task.type === "milestone" ? "milestone" as const : "task" as const,
+  type: task.type === "milestone" ? ("milestone" as const) : ("task" as const),
   progress: task.progress ?? 0,
   dependencies: (publication?.snapshot.dependencies ?? [])
     .filter((dependency) => dependency.taskId === task.id)
@@ -100,7 +100,8 @@ const breadcrumbSchema = {
 const webPageSchema = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: publication?.seoTitle ?? publication?.title ?? "Шаблон проекта — GetGantt",
+  name:
+    publication?.seoTitle ?? publication?.title ?? "Шаблон проекта — GetGantt",
   url: templateUrl,
   description:
     publication?.seoDescription ??
@@ -135,64 +136,71 @@ const webPageSchema = {
 >
   <section>
     <div class="mx-auto max-w-6xl px-4 py-16 lg:py-20">
-      <div class="max-w-4xl">
-        <div
-          class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
-        >
-          Шаблон графика работ
-        </div>
-        <h1
-          class="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl"
-        >
-          {publication?.title ?? "Шаблон проекта"}
-        </h1>
-        {
-          publication?.subtitle && (
-            <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">
-              {publication.subtitle}
-            </p>
-          )
-        }
-        <p class="mt-6 max-w-3xl text-lg leading-8 text-slate-700">
-          {
-            publication?.summary ??
-              "Публичный шаблон проекта из publication-базы GetGantt."
-          }
-        </p>
-      </div>
-
-      <div
-        class="mt-8 grid gap-4 rounded-[2rem] border border-white/80 bg-white/80 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-3"
+      <nav
+        aria-label="Breadcrumb"
+        class="mb-6 flex flex-wrap items-center gap-2 text-sm text-slate-500"
       >
-        <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
-            Задач
+        <a href="/" class="transition hover:text-slate-900">Дом</a>
+        <span aria-hidden="true">></span>
+        <a href="/templates" class="transition hover:text-slate-900">Шаблоны</a>
+        <span aria-hidden="true">></span>
+        <span class="text-slate-900">{publication?.title ?? "Шаблон проекта"}</span>
+      </nav>
+
+      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
+        <div class="max-w-4xl">
+          <div
+            class="text-sm font-semibold uppercase tracking-[0.18em] text-primary"
+          >
+            Шаблон графика работ
           </div>
-          <div class="mt-2 font-semibold text-slate-900">
-            {publication?.taskCount ?? tasks.length}
-          </div>
+          <h1
+            class="mt-4 text-3xl font-extrabold tracking-tight text-slate-950 lg:text-5xl"
+          >
+            {publication?.title ?? "Шаблон проекта"}
+          </h1>
+          {
+            publication?.subtitle && (
+              <p class="mt-5 max-w-3xl text-xl leading-8 text-slate-600">
+                {publication.subtitle}
+              </p>
+            )
+          }
+          <p class="mt-6 max-w-3xl text-lg leading-8 text-slate-700">
+            {
+              publication?.summary ??
+                "Публичный шаблон проекта из publication-базы GetGantt."
+            }
+          </p>
         </div>
-        <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
-            Дней
+
+        <div class="flex flex-col gap-3 lg:pt-10">
+          <div class="rounded-2xl bg-primary/6 px-4 py-3">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              Задач
+            </div>
+            <div class="mt-1 text-base font-semibold text-slate-900">
+              {publication?.taskCount ?? tasks.length}
+            </div>
           </div>
-          <div class="mt-2 font-semibold text-slate-900">{totalDays}</div>
-        </div>
-        <div>
-          <div class="text-xs uppercase tracking-[0.14em] text-slate-500">
-            Категория
+          <div class="rounded-2xl bg-primary/6 px-4 py-3">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              Дней
+            </div>
+            <div class="mt-1 text-base font-semibold text-slate-900">
+              {totalDays}
+            </div>
           </div>
-          <div class="mt-2 font-semibold text-slate-900">
-            {publication?.category ?? "Шаблон проекта"}
+          <div class="rounded-2xl bg-primary/6 px-4 py-3">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+              Категория
+            </div>
+            <div class="mt-1 text-base font-semibold text-slate-900">
+              {publication?.category ?? "Шаблон проекта"}
+            </div>
           </div>
         </div>
       </div>
-
-      <p class="mt-6 max-w-4xl text-base leading-7 text-slate-700">
-        Этот шаблон диаграммы Ганта подходит для быстрого старта: вы сразу
-        видите состав работ, длительность проекта и структуру этапов, а затем
-        можете скопировать шаблон в GetGantt и адаптировать его под свой объект.
-      </p>
 
       <div class="mt-6 flex flex-wrap gap-3">
         <a
@@ -241,9 +249,9 @@ const webPageSchema = {
       <WorkBreakdownAccordion tasks={tasks} title="Состав работ" />
     </div>
 
-      <div class="mt-12 max-w-4xl">
-        <h2 class="text-2xl font-bold tracking-tight text-slate-950">
-          Как использовать
+    <div class="mt-12 max-w-4xl">
+      <h2 class="text-2xl font-bold tracking-tight text-slate-950">
+        Как использовать
       </h2>
       <div class="mt-4 space-y-4 text-base leading-8 text-slate-700">
         <p>
@@ -255,26 +263,26 @@ const webPageSchema = {
           уточнить зависимости между задачами и адаптировать график под свою
           студию, бригаду и темп ремонта.
         </p>
-        </div>
       </div>
+    </div>
 
-      <div class="mt-12 max-w-4xl">
-        <h2 class="text-2xl font-bold tracking-tight text-slate-950">
-          Что есть в шаблоне
-        </h2>
-        <div class="mt-4 space-y-4 text-base leading-8 text-slate-700">
-          <p>
-            В шаблоне {publication?.taskCount ?? tasks.length} задач и примерная
-            длительность {totalDays} дней. Это удобно для предварительной
-            оценки состава работ и обсуждения плана с заказчиком или бригадой.
-          </p>
-          <p>
-            После копирования в GetGantt вы сможете изменить последовательность
-            этапов, подвинуть сроки, добавить свои работы и пересчитать связи
-            без ручного обновления всего графика.
-          </p>
-        </div>
+    <div class="mt-12 max-w-4xl">
+      <h2 class="text-2xl font-bold tracking-tight text-slate-950">
+        Что есть в шаблоне
+      </h2>
+      <div class="mt-4 space-y-4 text-base leading-8 text-slate-700">
+        <p>
+          В шаблоне {publication?.taskCount ?? tasks.length} задач и примерная длительность
+          {totalDays} дней. Это удобно для предварительной оценки состава работ и
+          обсуждения плана с заказчиком или бригадой.
+        </p>
+        <p>
+          После копирования в GetGantt вы сможете изменить последовательность
+          этапов, подвинуть сроки, добавить свои работы и пересчитать связи без
+          ручного обновления всего графика.
+        </p>
       </div>
+    </div>
 
     {
       publication?.tags?.length ? (
