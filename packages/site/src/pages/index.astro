@@ -1,7 +1,9 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import DemoSection from "../components/DemoSection";
-import { buildSiteUrl } from "../lib/utils";
+import { buildSiteUrl, getSiteApiOrigin } from "../lib/utils";
+
+const apiBaseUrl = getSiteApiOrigin();
 
 const pageSchema = [
   {
@@ -55,7 +57,7 @@ const pageSchema = [
 >
   <main>
     <div id="demo-section" class="bg-background pb-24">
-      <DemoSection client:load />
+      <DemoSection client:load apiBaseUrl={apiBaseUrl} />
     </div>
   </main>
 </Layout>

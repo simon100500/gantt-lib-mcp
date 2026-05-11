@@ -8,6 +8,10 @@ import { TEMPLATE_COMMERCIAL } from './templates/commercial.js';
 import { TEMPLATE_OVERHAUL } from './templates/overhaul.js';
 import { TEMPLATE_RESIDENTIAL } from './templates/residential.js';
 
+interface DemoSectionProps {
+  apiBaseUrl: string;
+}
+
 export const TEMPLATES = [
   TEMPLATE_HOUSE,
   TEMPLATE_APARTMENT,
@@ -20,7 +24,7 @@ const DEFAULT_TEMPLATE_INDEX = 0;
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function DemoSection() {
+export default function DemoSection({ apiBaseUrl }: DemoSectionProps) {
   const [activeIndex, setActiveIndex] = useState<number>(DEFAULT_TEMPLATE_INDEX);
   const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
   const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
@@ -52,8 +56,8 @@ export default function DemoSection() {
               className="font-extrabold leading-[1.1] text-foreground animate-fade-up"
               style={{ fontSize: 'clamp(1.5rem, 8vw, 3.5rem)', animationDelay: '120ms' }}
             >
-              Из описания проекта —{' '}
-              <span className="text-primary">в&nbsp;диаграмму Ганта</span>{' '}
+              Из описания проекта{' '}
+              <span className="text-primary">в&nbsp;диаграмму Ганта</span><br />{' '}
               за 30 секунд
             </h1>
 
@@ -61,12 +65,12 @@ export default function DemoSection() {
               className="mt-6 text-base sm:text-lg leading-7 sm:leading-8 text-secondary-foreground animate-fade-up"
               style={{ animationDelay: '190ms' }}
             >
-              Опишите что нужно построить — ИИ создаст план работ с задачами, сроками и зависимостями. Редактируйте текстом или мышкой.
+              Опишите что нужно построить — ИИ создаст план работ с задачами, сроками и зависимостями
             </p>
           </div>
 
-          <div id="demo" className="relative min-w-0 w-full lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
-            <HomepagePromptRedirect />
+          <div id="demo" className="relative min-w-0 w-full lg:mt-12 lg:translate-x-6 lg:justify-self-end">
+            <HomepagePromptRedirect apiBaseUrl={apiBaseUrl} />
           </div>
         </div>
       </section>
@@ -93,11 +97,10 @@ export default function DemoSection() {
                 }
                 scrollToGantt(900);
               }}
-              className={`rounded-full border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
-                index === activeIndex
-                  ? 'border-primary bg-primary/5 font-medium text-primary'
-                  : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
-              }`}
+              className={`rounded-full border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${index === activeIndex
+                ? 'border-primary bg-primary/5 font-medium text-primary'
+                : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+                }`}
             >
               {template.label}
             </button>

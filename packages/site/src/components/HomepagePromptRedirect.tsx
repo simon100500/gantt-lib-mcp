@@ -1,19 +1,63 @@
-import { useMemo, useState } from 'react';
-import { buildAppNewProjectUrl } from '../lib/utils';
+import { useState } from 'react';
+import { buildAppProjectIntentUrl } from '../lib/utils';
 
+const MIN_TEXT_LENGTH = 10;
+const MAX_TEXT_LENGTH = 4000;
 const PLACEHOLDER = 'Например: нужен график ремонта офиса 250 м2 в 2 этапа, с демонтажом, инженерией, чистовой отделкой и запуском за 90 дней';
 
-export function HomepagePromptRedirect() {
-  const [text, setText] = useState('');
-  const [redirecting, setRedirecting] = useState(false);
-  const appNewProjectUrl = useMemo(() => buildAppNewProjectUrl(), []);
+interface HomepagePromptRedirectProps {
+  apiBaseUrl: string;
+}
 
-  const startRedirect = () => {
-    if (redirecting) {
+export function HomepagePromptRedirect({ apiBaseUrl }: HomepagePromptRedirectProps) {
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startRedirect = async () => {
+    const trimmedText = text.trim();
+    if (loading) {
       return;
     }
-    setRedirecting(true);
-    window.location.assign(appNewProjectUrl);
+    if (trimmedText.length < MIN_TEXT_LENGTH) {
+      setError('Опишите проект, чтобы мы могли подготовить стартовый план.');
+      return;
+    }
+    if (text.length > MAX_TEXT_LENGTH) {
+      setError('Описание получилось слишком длинным. Сократите его и попробуйте ещё раз.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/public/project-intents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: trimmedText,
+          source: 'site_custom_request',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = await response.json() as { intentId?: string };
+      if (!payload.intentId) {
+        throw new Error('intentId missing');
+      }
+
+      window.location.assign(buildAppProjectIntentUrl(payload.intentId));
+    } catch (submitError) {
+      console.error('Failed to create project intent', submitError);
+      setError('Не удалось подготовить запрос. Попробуйте ещё раз.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -22,28 +66,33 @@ export function HomepagePromptRedirect() {
         <textarea
           value={text}
           onChange={(event) => {
-            const nextValue = event.target.value;
-            setText(nextValue);
-            if (nextValue.trim().length > 0) {
-              startRedirect();
+            if (error) {
+              setError(null);
             }
+            setText(event.target.value);
           }}
-          onPaste={() => startRedirect()}
           placeholder={PLACEHOLDER}
-          rows={6}
-          className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+          rows={5}
+          maxLength={MAX_TEXT_LENGTH}
+          disabled={loading}
+          className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm leading-6 text-slate-900 outline-none transition focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
         />
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-500">
-            Начните вводить описание и продолжите работу в сервисе GetGantt.
+        {error ? (
+          <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
           </p>
-          <a
-            href={appNewProjectUrl}
+        ) : null}
+
+        <div className="flex justify-start">
+          <button
+            type="button"
+            onClick={startRedirect}
+            disabled={loading}
             className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
           >
-            Открыть сервис
-          </a>
+            {loading ? 'Подготавливаем...' : 'Создать график'}
+          </button>
         </div>
       </div>
     </div>
