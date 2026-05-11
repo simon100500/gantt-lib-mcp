@@ -1950,8 +1950,12 @@ function WorkspaceApp({
       releaseAiMutationLock();
       throw new Error(`HTTP ${response.status}`);
     }
+    const responsePayload = await response.json() as { job?: ProjectGenerationJobView | null };
+    if (responsePayload.job) {
+      setActiveGenerationJob(responsePayload.job);
+    }
     return true;
-  }, [armAiMutationWatchdog, auth, isScheduleReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setAiMutationLock]);
+  }, [armAiMutationWatchdog, auth, isScheduleReadOnlyProject, openLimitModal, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
 
   const submitSplitTask = useCallback(async (task: Task, payload: SplitTaskSubmitPayload): Promise<StartScreenSendResult> => {
     if (hasShareToken) {

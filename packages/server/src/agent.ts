@@ -16,7 +16,6 @@ import {
   buildSessionStateFromTranscript,
 } from './agent/session-state.js';
 import { completeTextPrompt } from './agent/pi-model.js';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = process.env.GANTT_PROJECT_ROOT ?? join(__dirname, '../../..');
@@ -456,6 +455,21 @@ export async function runAgentWithHistory(
   projectId: string,
   sessionId: string,
   userId?: string,
+  generationJob?: {
+    id: string;
+    markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string): Promise<void>;
+    markPreviewAvailable(): Promise<void>;
+    markSucceeded(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
+    markFailed(input: {
+      statusMessage?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    }): Promise<void>;
+  },
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
@@ -535,6 +549,7 @@ export async function runAgentWithHistory(
       usedModelDecision: routeSelection.usedModelDecision,
       recentConversationSummary,
     });
+    await generationJob?.markRunning('interpreting', 'AI анализирует запрос и контекст проекта');
 
     if (routeSelection.route === 'initial_generation') {
       await writeServerDebugLog('initial_generation_interpretation', {
@@ -584,6 +599,7 @@ export async function runAgentWithHistory(
           debug: (event, payload) => writeServerDebugLog(event, payload),
         },
         broadcastToSession,
+        generationJob,
       });
 
       const transcriptAfterInitialGeneration = await messageService.list(projectId, 24);
@@ -647,6 +663,7 @@ export async function runAgentWithHistory(
         debug: (event, payload) => writeServerDebugLog(event, payload),
       },
     });
+    await generationJob?.markRunning('finalizing', 'Фиксируем результат AI-запроса');
 
     const assistantResponse = sanitizeAssistantResponse(userMessage, piResult.assistantResponse);
     let streamedContent = piResult.streamedContent;
@@ -723,12 +740,21 @@ export async function runAgentWithHistory(
           }
         : undefined,
     });
+    await generationJob?.markSucceeded({
+      requestContextId: runId,
+      historyGroupId: piHistoryGroupId ?? null,
+      statusMessage: 'AI-запрос завершён',
+    });
     await writeServerDebugLog('agent_run_completed', {
       runId,
       projectId,
       sessionId,
     });
   } catch (err) {
+    await generationJob?.markFailed({
+      statusMessage: 'AI-запрос завершился ошибкой.',
+      errorMessage: String(err),
+    });
     const wsModule = broadcastToSession ? null : await getWsModule();
     (broadcastToSession ?? wsModule?.broadcastToSession)?.(sessionId, { type: 'error', message: String(err) });
     await writeServerDebugLog('agent_run_failed', {

@@ -58,6 +58,7 @@ import { runDirectSplitTask } from './split-task.js';
 import { normalizeStoredTaskStatus } from '@gantt/runtime-core/services/task-status';
 import {
   markProjectGenerationJobFailed,
+  markProjectGenerationJobPreviewAvailable,
   markProjectGenerationJobRunning,
   markProjectGenerationJobSucceeded,
   serializeProjectGenerationJob,
@@ -275,8 +276,17 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireCurrentProjectEd
   if (!message) {
     return reply.status(400).send({ error: 'message required' });
   }
+  const runId = randomUUID();
   // Increment AI counter (D-07: 1 message = 1 generation)
   await incrementAiUsage(req.projectAccess?.billingUserId ?? req.user!.userId);
+  const { job } = await startProjectGenerationJob({
+    projectId: req.user!.projectId,
+    userId: req.user!.userId,
+    source: 'chat_request',
+    type: 'chat_request',
+    requestContextId: runId,
+    previewMode: 'ephemeral',
+  });
   await writeServerDebugLog('rest_chat_received', {
     userId: req.user!.userId,
     projectId: req.user!.projectId,
@@ -284,11 +294,29 @@ fastify.post('/api/chat', { preHandler: [authMiddleware, requireCurrentProjectEd
     message,
   });
   // Fire-and-forget — streaming goes via WebSocket
-  runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId, req.user!.userId).catch((err: unknown) => {
+  runAgentWithHistory(message, req.user!.projectId, req.user!.sessionId, req.user!.userId, {
+    id: job.id,
+    async markRunning(stage, statusMessage) {
+      await markProjectGenerationJobRunning(job.id, stage, statusMessage);
+    },
+    async markPreviewAvailable() {
+      await markProjectGenerationJobPreviewAvailable(job.id);
+    },
+    async markSucceeded(input) {
+      await markProjectGenerationJobSucceeded(job.id, input);
+    },
+    async markFailed(input) {
+      await markProjectGenerationJobFailed(job.id, input);
+    },
+  }).catch((err: unknown) => {
+    void markProjectGenerationJobFailed(job.id, {
+      statusMessage: 'AI-запрос завершился ошибкой.',
+      errorMessage: String(err),
+    });
     broadcastToSession(req.user!.sessionId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'agent error');
   });
-  return reply.send({ status: 'processing' });
+  return reply.send({ status: 'processing', runId, job: serializeProjectGenerationJob(job) });
 });
 
 fastify.post('/api/tasks/:taskId/split', { preHandler: [authMiddleware, requireCurrentProjectEditor, requireActiveSubscriptionForMutation, requireAiQueryLimit] }, async (req, reply) => {
@@ -369,13 +397,39 @@ registerWsRoutes(fastify);
 
 // Handle chat messages arriving over WebSocket
 onChatMessage((msg, userId, projectId, sessionId) => {
-  void writeServerDebugLog('ws_chat_received', {
-    userId,
-    projectId,
-    sessionId,
-    message: msg,
-  });
-  runAgentWithHistory(msg, projectId, sessionId, userId).catch((err: unknown) => {
+  void (async () => {
+    const runId = randomUUID();
+    const { job } = await startProjectGenerationJob({
+      projectId,
+      userId,
+      source: 'ws_chat_request',
+      type: 'chat_request',
+      requestContextId: runId,
+      previewMode: 'ephemeral',
+    });
+    await writeServerDebugLog('ws_chat_received', {
+      userId,
+      projectId,
+      sessionId,
+      message: msg,
+      generationJobId: job.id,
+    });
+    await runAgentWithHistory(msg, projectId, sessionId, userId, {
+      id: job.id,
+      async markRunning(stage, statusMessage) {
+        await markProjectGenerationJobRunning(job.id, stage, statusMessage);
+      },
+      async markPreviewAvailable() {
+        await markProjectGenerationJobPreviewAvailable(job.id);
+      },
+      async markSucceeded(input) {
+        await markProjectGenerationJobSucceeded(job.id, input);
+      },
+      async markFailed(input) {
+        await markProjectGenerationJobFailed(job.id, input);
+      },
+    });
+  })().catch((err: unknown) => {
     broadcastToSession(sessionId, { type: 'error', message: String(err) });
     fastify.log.error(err, 'agent error (ws)');
   });
