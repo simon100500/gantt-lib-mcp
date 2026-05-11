@@ -290,3 +290,23 @@ export async function markProjectGenerationJobFailed(
     finishedAt: new Date(),
   });
 }
+
+export async function markProjectGenerationJobCanceled(
+  jobId: string,
+  input?: {
+    requestContextId?: string | null;
+    historyGroupId?: string | null;
+    statusMessage?: string | null;
+  },
+): Promise<ProjectGenerationJobRecord> {
+  return await updateProjectGenerationJob(jobId, {
+    status: 'canceled',
+    stage: 'failed',
+    statusMessage: input?.statusMessage ?? 'Операция отменена пользователем.',
+    requestContextId: input?.requestContextId ?? null,
+    historyGroupId: input?.historyGroupId ?? null,
+    errorCode: null,
+    errorMessage: null,
+    finishedAt: new Date(),
+  });
+}

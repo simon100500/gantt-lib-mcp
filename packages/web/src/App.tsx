@@ -344,8 +344,62 @@ type ProjectGenerationJobView = {
   updatedAt: string;
 };
 
+type NormalizedChatMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  requestContextId: string | null;
+  historyGroupId: string | null;
+};
+
 function isActiveProjectGenerationJob(job: ProjectGenerationJobView | null): boolean {
   return Boolean(job && (job.status === 'queued' || job.status === 'running'));
+}
+
+function isSameChatMessage(left: NormalizedChatMessage, right: NormalizedChatMessage): boolean {
+  if (left.id === right.id) {
+    return true;
+  }
+
+  if (left.requestContextId && right.requestContextId && left.requestContextId === right.requestContextId) {
+    return true;
+  }
+
+  if (left.historyGroupId && right.historyGroupId && left.historyGroupId === right.historyGroupId) {
+    return true;
+  }
+
+  return left.role === right.role && left.content === right.content;
+}
+
+function mergeOptimisticChatMessages(
+  serverMessages: NormalizedChatMessage[],
+  localMessages: NormalizedChatMessage[],
+): NormalizedChatMessage[] {
+  const trailingOptimisticUsers: NormalizedChatMessage[] = [];
+
+  for (let index = localMessages.length - 1; index >= 0; index -= 1) {
+    const message = localMessages[index];
+    if (message.role !== 'user') {
+      break;
+    }
+
+    if (message.requestContextId || message.historyGroupId) {
+      break;
+    }
+
+    if (serverMessages.some((serverMessage) => isSameChatMessage(serverMessage, message))) {
+      break;
+    }
+
+    trailingOptimisticUsers.unshift(message);
+  }
+
+  if (trailingOptimisticUsers.length === 0) {
+    return serverMessages;
+  }
+
+  return [...serverMessages, ...trailingOptimisticUsers];
 }
 
 type StoredGenerationPreview = {
@@ -2045,6 +2099,51 @@ function WorkspaceApp({
     return { accepted: true };
   }, [armAiMutationWatchdog, auth, hasShareToken, isScheduleReadOnlyProject, onLoginRequired, openLimitModal, openProjectChat, proactiveChatDenial, releaseAiMutationLock, setActiveGenerationJob, setAiMutationLock]);
 
+  const handleCancelActiveGeneration = useCallback(async () => {
+    const activeJob = activeGenerationJob;
+    if (!activeJob || !isActiveProjectGenerationJob(activeJob)) {
+      return;
+    }
+
+    const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
+    let token = getLatestAccessToken();
+    if (!token) {
+      return;
+    }
+
+    let response = await fetch(`/api/project-generation-jobs/${encodeURIComponent(activeJob.id)}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.status === 401) {
+      const refreshedToken = await auth.refreshAccessToken();
+      if (!refreshedToken) {
+        return;
+      }
+      token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
+      response = await fetch(`/api/project-generation-jobs/${encodeURIComponent(activeJob.id)}/cancel`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+
+    if (!response.ok) {
+      useChatStore.getState().setError(`Не удалось остановить AI-задачу (HTTP ${response.status}).`);
+      return;
+    }
+
+    const payload = await response.json() as { job?: ProjectGenerationJobView | null };
+    if (payload.job) {
+      setActiveGenerationJob(payload.job);
+    }
+    useChatStore.getState().finishStreaming();
+  }, [activeGenerationJob, auth.accessToken, auth.refreshAccessToken]);
+
   const handleSend = useCallback((text: string): StartScreenSendResult => {
     if (hasShareToken) {
       return { accepted: false };
@@ -2547,7 +2646,9 @@ function WorkspaceApp({
     const hasQueuedFirstPrompt = Boolean(queuedPromptRef.current);
     const isPreparedIntentProject = preparedIntentChatProjectId === auth.project.id
       || (activeGenerationJob?.projectId === auth.project.id && isActiveProjectGenerationJob(activeGenerationJob));
-    if (!hasQueuedFirstPrompt && !isPreparedIntentProject) {
+    const chatState = useChatStore.getState();
+    const hasLocalOptimisticChat = chatState.aiThinking || chatState.streamingText.length > 0 || chatState.messages.length > 0;
+    if (!hasQueuedFirstPrompt && !isPreparedIntentProject && !hasLocalOptimisticChat) {
       useChatStore.getState().reset();
     } else {
       useChatStore.setState((state) => ({
@@ -2574,17 +2675,21 @@ function WorkspaceApp({
         if (createEmptyChartAfterActivationRef.current || hasQueuedFirstPrompt) {
           return;
         }
-        const normalizedMessages = data.map((message) => ({
+        const normalizedMessages: NormalizedChatMessage[] = data.map((message) => ({
           id: message.id ?? crypto.randomUUID(),
           role: message.role as 'user' | 'assistant' | 'system',
           content: message.content,
           requestContextId: message.requestContextId ?? null,
           historyGroupId: message.historyGroupId ?? null,
         }));
+        const mergedMessages = mergeOptimisticChatMessages(
+          normalizedMessages,
+          useChatStore.getState().messages as NormalizedChatMessage[],
+        );
         if (isPreparedIntentProject) {
           useChatStore.setState((state) => ({
             ...state,
-            messages: normalizedMessages,
+            messages: mergedMessages,
             streamingText: '',
             pendingAssistantMeta: null,
             aiThinking: true,
@@ -2592,7 +2697,7 @@ function WorkspaceApp({
           }));
           return;
         }
-        useChatStore.getState().replaceMessages(normalizedMessages);
+        useChatStore.getState().replaceMessages(mergedMessages);
       })
       .catch(() => {});
   }, [activeGenerationJob, auth.accessToken, auth.isAuthenticated, auth.project?.id, hasShareToken, preparedIntentChatProjectId, workspace.kind]);
@@ -3393,6 +3498,7 @@ function WorkspaceApp({
               chatDisabledReason={chatDisabledReason}
               batchUpdate={batchUpdate}
               onSend={handleSend}
+              onStopGeneration={handleCancelActiveGeneration}
               onSplitTask={submitSplitTask}
               onLoginRequired={onLoginRequired}
               onCloseChat={closeProjectChat}

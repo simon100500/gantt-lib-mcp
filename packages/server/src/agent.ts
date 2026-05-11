@@ -37,12 +37,14 @@ type InitialGenerationPlannerQueryInput = {
   model: string;
   stage: 'structure_planning' | 'structure_planning_repair' | 'schedule_metadata' | 'schedule_metadata_repair';
   onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
+  signal?: AbortSignal;
 };
 
 type InitialGenerationRouteDecisionQueryInput = {
   prompt: string;
   model: string;
   stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
+  signal?: AbortSignal;
 };
 
 type NormalizedMutationToolName =
@@ -159,6 +161,7 @@ async function executeInitialGenerationPlannerQuery(
     },
     prompt: input.prompt,
     onTextDelta: input.onTextDelta,
+    signal: input.signal,
   });
 
   return { content };
@@ -179,6 +182,7 @@ async function executeInitialGenerationRouteDecisionQuery(
       OPENAI_MODEL: input.model,
     },
     prompt: input.prompt,
+    signal: input.signal,
   });
 
   return { content };
@@ -459,6 +463,11 @@ export async function runAgentWithHistory(
     id: string;
     markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string): Promise<void>;
     markPreviewAvailable(): Promise<void>;
+    markCanceled(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
     markSucceeded(input?: {
       requestContextId?: string | null;
       historyGroupId?: string | null;
@@ -470,6 +479,7 @@ export async function runAgentWithHistory(
       errorMessage?: string | null;
     }): Promise<void>;
   },
+  signal?: AbortSignal,
 ): Promise<void> {
   let broadcastToSession: WsModule['broadcastToSession'] | undefined;
   try {
@@ -600,6 +610,7 @@ export async function runAgentWithHistory(
         },
         broadcastToSession,
         generationJob,
+        signal,
       });
 
       const transcriptAfterInitialGeneration = await messageService.list(projectId, 24);
@@ -662,6 +673,7 @@ export async function runAgentWithHistory(
       logger: {
         debug: (event, payload) => writeServerDebugLog(event, payload),
       },
+      signal,
     });
     await generationJob?.markRunning('finalizing', 'Фиксируем результат AI-запроса');
 
@@ -751,6 +763,13 @@ export async function runAgentWithHistory(
       sessionId,
     });
   } catch (err) {
+    if (signal?.aborted) {
+      await generationJob?.markCanceled({
+        statusMessage: 'Операция отменена пользователем.',
+      });
+      return;
+    }
+
     await generationJob?.markFailed({
       statusMessage: 'AI-запрос завершился ошибкой.',
       errorMessage: String(err),

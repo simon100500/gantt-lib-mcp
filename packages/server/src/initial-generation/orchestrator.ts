@@ -53,6 +53,7 @@ type PlannerQueryInput = {
   model: string;
   stage: InitialGenerationPlannerStage;
   onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
+  signal?: AbortSignal;
 };
 
 type PlannerQueryResult = string | { content?: string };
@@ -61,6 +62,7 @@ type InterpretationQueryInput = {
   prompt: string;
   model: string;
   stage: 'initial_request_interpretation' | 'initial_request_interpretation_repair';
+  signal?: AbortSignal;
 };
 
 type InterpretationQueryResult = string | { content?: string };
@@ -174,6 +176,11 @@ export type RunInitialGenerationInput = {
     id: string;
     markRunning(stage: 'interpreting' | 'planning' | 'compiling' | 'committing' | 'finalizing', statusMessage: string): Promise<void>;
     markPreviewAvailable(): Promise<void>;
+    markCanceled(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }): Promise<void>;
     markSucceeded(input?: {
       requestContextId?: string | null;
       historyGroupId?: string | null;
@@ -185,6 +192,7 @@ export type RunInitialGenerationInput = {
       errorMessage?: string | null;
     }): Promise<void>;
   };
+  signal?: AbortSignal;
   deps?: Partial<InitialGenerationDeps>;
 };
 
@@ -221,6 +229,12 @@ function buildInitialGenerationSystemMessage(): string {
 }
 
 const ASSISTANT_MESSAGE_SAVE_TIMEOUT_MS = 3000;
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Generation canceled');
+  }
+}
 
 function buildFailureResponse(stage: InitialGenerationFailure['failureStage']): string {
   if (stage === 'compile') {
@@ -946,9 +960,13 @@ export async function runInitialGeneration(
       if (!input.interpretationQuery) {
         throw new Error('model_unavailable');
       }
-      return input.interpretationQuery(queryInput);
+      return input.interpretationQuery({
+        ...queryInput,
+        signal: input.signal,
+      });
     },
   });
+  throwIfAborted(input.signal);
   const interpretation = interpretationResult.interpretation;
   await input.generationJob?.markRunning('interpreting', 'Понимаем запрос и состав проекта');
   const classification = deps.classifyInitialRequest({
@@ -1132,8 +1150,10 @@ export async function runInitialGeneration(
     });
 
     try {
+      throwIfAborted(input.signal);
       const result = await input.plannerQuery({
         ...plannerInput,
+        signal: input.signal,
         onTextDelta: async (delta, fullText) => {
           await plannerInput.onTextDelta?.(delta, fullText);
           const family = plannerInput.stage === 'structure_planning' || plannerInput.stage === 'structure_planning_repair'
@@ -1177,6 +1197,7 @@ export async function runInitialGeneration(
   };
 
   try {
+    throwIfAborted(input.signal);
     await input.generationJob?.markRunning('planning', 'Строим структуру графика');
     const planning = await planInitialProject({
       userMessage: input.userMessage,
@@ -1209,6 +1230,7 @@ export async function runInitialGeneration(
       },
     });
     repairAttempted = planning.repairAttempted;
+    throwIfAborted(input.signal);
 
     await input.logger.debug('structure_plan_output', {
       runId: input.runId,
@@ -1253,6 +1275,7 @@ export async function runInitialGeneration(
     });
 
     await input.generationJob?.markRunning('compiling', 'Рассчитываем календарь и связи');
+    throwIfAborted(input.signal);
     const execution = await executeInitialProjectPlan({
       projectId: input.projectId,
       baseVersion: input.baseVersion,
@@ -1335,6 +1358,7 @@ export async function runInitialGeneration(
 
     const assistantResponse = buildSuccessResponse();
     await input.generationJob?.markRunning('finalizing', 'Сохраняем итоговый график в проект');
+    throwIfAborted(input.signal);
     await saveAssistantMessage(input, assistantResponse, {
       requestContextId: input.runId,
       historyGroupId: checkpointGroupId,
@@ -1368,6 +1392,19 @@ export async function runInitialGeneration(
       tasksAfter,
     };
   } catch (error) {
+    if (input.signal?.aborted) {
+      await input.generationJob?.markCanceled({
+        requestContextId: input.runId,
+        statusMessage: 'Операция отменена пользователем.',
+      });
+      return {
+        ok: false,
+        assistantResponse: '',
+        repairAttempted,
+        failureStage: 'planning',
+      };
+    }
+
     await input.generationJob?.markFailed({
       statusMessage: 'Не удалось подготовить стартовый график',
       errorCode: 'planning_error',

@@ -45,6 +45,7 @@ export async function completeTextPrompt(input: {
   systemPrompt?: string;
   maxTokens?: number;
   onTextDelta?: (delta: string, fullText: string) => Promise<void> | void;
+  signal?: AbortSignal;
 }): Promise<string> {
   const model = buildPiOpenAICompletionsModel(input.env);
   const context: Context = {
@@ -59,6 +60,7 @@ export async function completeTextPrompt(input: {
     const message = await complete(model, context, {
       apiKey: input.env.OPENAI_API_KEY,
       maxTokens: input.maxTokens,
+      signal: input.signal,
     });
 
     const content = extractTextFromAssistantContent(message.content);
@@ -76,6 +78,7 @@ export async function completeTextPrompt(input: {
   const eventStream = stream(model, context, {
     apiKey: input.env.OPENAI_API_KEY,
     maxTokens: input.maxTokens,
+    signal: input.signal,
   });
   let streamedText = '';
   let finalMessage: AssistantMessage | null = null;

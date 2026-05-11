@@ -58,6 +58,7 @@ interface ProjectWorkspaceProps {
   chatDisabledReason?: string | null;
   batchUpdate?: UseBatchTaskUpdateResult;
   onSend?: (text: string) => StartScreenSendResult | Promise<StartScreenSendResult>;
+  onStopGeneration?: () => void | Promise<void>;
   onLoginRequired: () => void;
   onCloseChat?: () => void;
   onToggleChat?: () => void;
@@ -522,6 +523,7 @@ export function ProjectWorkspace({
   chatDisabledReason = null,
   batchUpdate,
   onSend,
+  onStopGeneration,
   onLoginRequired,
   onCloseChat,
   onToggleChat,
@@ -2752,8 +2754,9 @@ export function ProjectWorkspace({
               messages={chatMessages}
               streaming={streaming}
               onSend={onSend}
+              onStop={onStopGeneration}
               onTaskReferenceClick={handleTaskReferenceClick}
-              disabled={aiThinking || effectiveChatDisabled}
+              disabled={effectiveChatDisabled}
               connected={displayConnected}
               usage={chatUsage}
               disabledReason={aiThinking ? null : effectiveChatDisabledReason}

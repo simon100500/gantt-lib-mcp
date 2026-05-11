@@ -11,6 +11,7 @@ import { writeServerDebugLog } from '../debug-log.js';
 import { broadcastToSession } from '../ws.js';
 import { completeTextPrompt } from '../agent/pi-model.js';
 import {
+  markProjectGenerationJobCanceled,
   findActiveProjectGenerationJobForProject,
   findLatestProjectGenerationJobForIntent,
   findLatestProjectGenerationJobForProject,
@@ -22,6 +23,10 @@ import {
   serializeProjectGenerationJob,
   startProjectGenerationJob,
 } from '../services/project-generation-service.js';
+import {
+  registerGenerationJobCancelHandler,
+  unregisterGenerationJobCancelHandler,
+} from '../generation-job-control.js';
 
 const DEFAULT_INTENT_TTL_HOURS = 24;
 const MIN_TEXT_LENGTH = 10;
@@ -90,7 +95,7 @@ function getIntentUserConnectUpdate(userId: string) {
 }
 
 async function executeInitialGenerationPlannerQuery(
-  input: { prompt: string; model: string; onTextDelta?: (delta: string, fullText: string) => Promise<void> | void },
+  input: { prompt: string; model: string; onTextDelta?: (delta: string, fullText: string) => Promise<void> | void; signal?: AbortSignal },
 ): Promise<{ content: string }> {
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '';
   if (!apiKey) {
@@ -105,13 +110,14 @@ async function executeInitialGenerationPlannerQuery(
     },
     prompt: input.prompt,
     onTextDelta: input.onTextDelta,
+    signal: input.signal,
   });
 
   return { content };
 }
 
 async function executeInitialGenerationInterpretationQuery(
-  input: { prompt: string; model: string },
+  input: { prompt: string; model: string; signal?: AbortSignal },
 ): Promise<{ content: string }> {
   return executeInitialGenerationPlannerQuery(input);
 }
@@ -142,6 +148,13 @@ function createProjectGenerationJobTracker(jobId: string) {
     },
     async markPreviewAvailable() {
       await markProjectGenerationJobPreviewAvailable(jobId);
+    },
+    async markCanceled(input?: {
+      requestContextId?: string | null;
+      historyGroupId?: string | null;
+      statusMessage?: string | null;
+    }) {
+      await markProjectGenerationJobCanceled(jobId, input);
     },
     async markSucceeded(input?: {
       requestContextId?: string | null;
@@ -502,6 +515,10 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
     });
 
     const runId = intent.requestContextId;
+    const controller = new AbortController();
+    registerGenerationJobCancelHandler(job.id, () => {
+      controller.abort();
+    });
     void runInitialGeneration({
       projectId: intent.projectId,
       sessionId: req.user!.sessionId,
@@ -529,14 +546,24 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       },
       broadcastToSession,
       generationJob: createProjectGenerationJobTracker(job.id),
+      signal: controller.signal,
     }).catch((error: unknown) => {
-      void markProjectGenerationJobFailed(job.id, {
-        statusMessage: 'Генерация завершилась ошибкой',
-        errorCode: 'unhandled_error',
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      broadcastToSession(req.user!.sessionId, { type: 'error', message: String(error) });
-      fastify.log.error(error, 'project intent initial generation error');
+      if (controller.signal.aborted) {
+        void markProjectGenerationJobCanceled(job.id, {
+          requestContextId: runId,
+          statusMessage: 'Операция отменена пользователем.',
+        });
+      } else {
+        void markProjectGenerationJobFailed(job.id, {
+          statusMessage: 'Генерация завершилась ошибкой',
+          errorCode: 'unhandled_error',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        broadcastToSession(req.user!.sessionId, { type: 'error', message: String(error) });
+        fastify.log.error(error, 'project intent initial generation error');
+      }
+    }).finally(() => {
+      unregisterGenerationJobCancelHandler(job.id);
     });
 
     return reply.send({ ok: true, started: true, job: serializeProjectGenerationJob(job) });

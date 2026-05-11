@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, RotateCcw, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, ArrowUp, ChartNoAxesGantt, GitCommitHorizontal, RotateCcw, Sparkles, Square, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createPhraseIterator } from "@/lib/loadingPhrases";
 import type { SubscriptionStatus, UsageStatus } from "../stores/useBillingStore.ts";
@@ -22,6 +22,7 @@ interface ChatSidebarProps {
   messages: ChatMessage[];
   streaming: string;
   onSend: (text: string) => void;
+  onStop?: () => void | Promise<void>;
   onTaskReferenceClick?: (taskId: string) => void;
   disabled: boolean;
   connected: boolean;
@@ -97,6 +98,7 @@ export function ChatSidebar({
   messages,
   streaming,
   onSend,
+  onStop,
   onTaskReferenceClick,
   disabled,
   connected,
@@ -127,6 +129,7 @@ export function ChatSidebar({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isEmpty = messages.length === 0 && !streaming && !loading;
   const resolvedDisabledReason = disabledReason ?? (disabled ? "Assistant думает…" : null);
+  const composerDisabled = disabled || loading;
 
   function resizeTextarea() {
     if (!inputRef.current) {
@@ -249,7 +252,7 @@ export function ChatSidebar({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = inputValue.trim();
-    if (!text || disabled) return;
+    if (!text || composerDisabled) return;
     if (!isAuthenticated) {
       onLoginRequired?.();
       return;
@@ -565,7 +568,7 @@ export function ChatSidebar({
           onInput={handleTextareaInput}
           onKeyDown={handleKeyDown}
           placeholder={resolvedDisabledReason ?? "Что хотите сделать?"}
-          disabled={disabled}
+          disabled={composerDisabled}
           title={resolvedDisabledReason ?? undefined}
           autoComplete="off"
           spellCheck={false}
@@ -578,11 +581,12 @@ export function ChatSidebar({
           )}
         />
         <button
-          type="submit"
-          disabled={disabled || !inputValue.trim()}
-          title={resolvedDisabledReason ?? undefined}
-          aria-disabled={disabled || !inputValue.trim()}
-          aria-label="Send message"
+          type={loading && onStop ? "button" : "submit"}
+          onClick={loading && onStop ? () => { void onStop(); } : undefined}
+          disabled={loading && onStop ? false : (composerDisabled || !inputValue.trim())}
+          title={loading && onStop ? "Остановить AI-задачу" : (resolvedDisabledReason ?? undefined)}
+          aria-disabled={loading && onStop ? false : (composerDisabled || !inputValue.trim())}
+          aria-label={loading && onStop ? "Stop generation" : "Send message"}
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground",
             "transition-colors hover:bg-primary/90",
@@ -590,7 +594,7 @@ export function ChatSidebar({
             "disabled:cursor-not-allowed disabled:bg-primary/50",
           )}
         >
-          <ArrowUp className="h-4 w-4" />
+          {loading && onStop ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
         </button>
       </form>
     </div>
