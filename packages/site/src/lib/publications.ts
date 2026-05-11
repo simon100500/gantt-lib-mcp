@@ -58,6 +58,7 @@ async function fetchJson<T>(path: string): Promise<T | null> {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path}`;
   try {
+    console.log(`[site-publications] Fetching ${url}`);
     const response = await fetch(url);
     if (!response.ok) {
       console.warn(
@@ -78,7 +79,11 @@ export async function fetchSitePublicationList(kind: 'template' | 'block'): Prom
   const data = await fetchJson<{ publications: SitePublicationItem[] }>(
     `/api/public/template-publications?visibilityTarget=site&kind=${kind}`,
   );
-  return data?.publications ?? [];
+  const publications = data?.publications ?? [];
+  console.log(
+    `[site-publications] Loaded ${publications.length} ${kind} publication(s): ${publications.map((publication) => publication.slug).join(', ') || '(none)'}`,
+  );
+  return publications;
 }
 
 export async function fetchSitePublicationDetail(kind: 'template' | 'block', slug: string): Promise<SitePublicationDetail | null> {
@@ -86,7 +91,13 @@ export async function fetchSitePublicationDetail(kind: 'template' | 'block', slu
     `/api/public/template-publications/${encodeURIComponent(slug)}?visibilityTarget=site`,
   );
   if (!data || data.kind !== kind) {
+    console.warn(
+      `[site-publications] Detail missing or kind mismatch for ${kind}:${slug}`,
+    );
     return null;
   }
+  console.log(
+    `[site-publications] Loaded detail for ${kind}:${slug} with ${data.snapshot.tasks.length} task(s)`,
+  );
   return data;
 }

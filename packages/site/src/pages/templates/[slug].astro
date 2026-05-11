@@ -16,6 +16,9 @@ import { splitSeoMarkdownSections } from "../../lib/renderSeoMarkdown";
 
 export async function getStaticPaths() {
   const publications = await fetchSitePublicationList("template");
+  console.log(
+    `[site-build] getStaticPaths templates -> ${publications.length} slug(s): ${publications.map((publication) => publication.slug).join(", ") || "(none)"}`,
+  );
   return publications.map((publication) => ({
     params: { slug: publication.slug },
     props: { publication },
@@ -26,6 +29,9 @@ const { publication: prefetched } = Astro.props;
 const slug = Astro.params.slug ?? "";
 const publication =
   (await fetchSitePublicationDetail("template", slug)) ?? prefetched;
+console.log(
+  `[site-build] Rendering template page ${slug || "(missing-slug)"} -> ${publication?.id ?? "missing-publication"}`,
+);
 const tasks = publication?.snapshot.tasks ?? [];
 const MS_PER_DAY = 86_400_000;
 const parseIsoDate = (value: string) => new Date(`${value}T00:00:00`);
