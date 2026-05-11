@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import type { Task } from 'gantt-lib';
-import InputDemo from './InputDemo.js';
+import { useState, useRef } from 'react';
 import GanttPreview from './GanttPreview.js';
+import { HomepagePromptRedirect } from './HomepagePromptRedirect.js';
 import { TEMPLATE_HOUSE } from './templates/house.js';
 import { TEMPLATE_APARTMENT } from './templates/apartment.js';
 import { TEMPLATE_COMMERCIAL } from './templates/commercial.js';
@@ -21,14 +20,9 @@ const DEFAULT_TEMPLATE_INDEX = 0;
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function DemoSection() {
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(DEFAULT_TEMPLATE_INDEX);
   const [activeIndex, setActiveIndex] = useState<number>(DEFAULT_TEMPLATE_INDEX);
-  const [activeTasks, setActiveTasks] = useState<Task[] | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].tasks);
-  const [activeTitle, setActiveTitle] = useState<string | undefined>(TEMPLATES[DEFAULT_TEMPLATE_INDEX].title);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [highlightDemo, setHighlightDemo] = useState(false);
   const ganttRef = useRef<HTMLDivElement>(null);
-  const shouldScrollAfterSubmit = useRef(false);
+  const activeTemplate = TEMPLATES[activeIndex] ?? TEMPLATES[DEFAULT_TEMPLATE_INDEX];
 
   function scrollToGantt(duration = 1200) {
     const el = ganttRef.current;
@@ -47,59 +41,11 @@ export default function DemoSection() {
     requestAnimationFrame(step);
   }
 
-  // Smooth-scroll to the chart after the delayed template switch.
-  useEffect(() => {
-    if (!shouldScrollAfterSubmit.current) return;
-    shouldScrollAfterSubmit.current = false;
-    scrollToGantt();
-  }, [activeIndex]);
-
-  // Handle #demo hash — highlight input, scroll only if not visible
-  useEffect(() => {
-    function checkDemo() {
-      if (window.location.hash !== '#demo') return;
-      setTimeout(() => {
-        const el = document.getElementById('demo');
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const isVisible = rect.top >= -50 && rect.bottom <= window.innerHeight + 50;
-          if (!isVisible) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-        setHighlightDemo(true);
-        setTimeout(() => setHighlightDemo(false), 6000);
-      }, 100);
-    }
-
-    checkDemo();
-    window.addEventListener('hashchange', checkDemo);
-    return () => window.removeEventListener('hashchange', checkDemo);
-  }, []);
-
-  function handleSubmit() {
-    if (selectedIndex === null) return;
-    if (selectedIndex === activeIndex) {
-      scrollToGantt();
-      return;
-    }
-    shouldScrollAfterSubmit.current = true;
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setActiveTasks(TEMPLATES[selectedIndex].tasks);
-      setActiveTitle(TEMPLATES[selectedIndex].title);
-      setActiveIndex(selectedIndex);
-      setIsSubmitting(false);
-    }, 700);
-  }
-
-  const selectedPrompt = selectedIndex !== null ? TEMPLATES[selectedIndex].prompt : null;
-
   return (
     <div>
       <section className="relative mx-auto max-w-[1280px] px-4 pb-8 pt-10 md:px-6 md:pt-14 lg:px-8 lg:pt-20">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(460px,560px)] lg:items-center lg:gap-16">
-          <div className="min-w-0 w-full lg:px-0">
+        <div className="mx-auto max-w-3xl">
+          <div className="min-w-0 w-full">
             <h1
               className="font-extrabold leading-[1.1] text-foreground animate-fade-up"
               style={{ fontSize: 'clamp(1.5rem, 8vw, 3.5rem)', animationDelay: '120ms' }}
@@ -117,35 +63,10 @@ export default function DemoSection() {
             </p>
 
             <div
-              className="mt-8 flex flex-wrap gap-3 animate-fade-up"
+              className="mt-8 animate-fade-up"
               style={{ animationDelay: '260ms' }}
             >
-              <a
-                href="https://ai.getgantt.ru"
-                className="inline-flex items-center justify-center rounded-xl bg-primary px-8 py-3.5 text-[15px] font-bold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg hover:-translate-y-0.5"
-              >
-                Начать
-              </a>
-            </div>
-          </div>
-
-          <div id="demo" className="relative min-w-0 w-full lg:-translate-y-8 lg:translate-x-6 lg:justify-self-end">
-            {highlightDemo && (
-              <div className="absolute -top-11 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg">
-                Выберите пример проекта
-                <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-primary" />
-              </div>
-            )}
-            <div className={`relative w-full rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.12)] sm:p-6 transition-shadow duration-500 ${highlightDemo ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
-              <InputDemo
-                chips={TEMPLATES.map(t => ({ label: t.label, prompt: t.prompt }))}
-                selectedIndex={selectedIndex}
-                selectedPrompt={selectedPrompt}
-                onChipSelect={setSelectedIndex}
-                onSubmit={handleSubmit}
-                isSubmitting={isSubmitting}
-                containerClassName="mt-0 max-w-none px-0 md:px-0"
-              />
+              <HomepagePromptRedirect />
             </div>
           </div>
         </div>
@@ -159,11 +80,35 @@ export default function DemoSection() {
         </svg>
       </div>
 
+      <section className="mx-auto mb-6 max-w-7xl px-4 lg:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {TEMPLATES.map((template, index) => (
+            <button
+              key={template.label}
+              type="button"
+              onClick={() => {
+                if (index !== activeIndex) {
+                  setActiveIndex(index);
+                }
+                scrollToGantt(900);
+              }}
+              className={`rounded-full border px-4 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
+                index === activeIndex
+                  ? 'border-primary bg-primary/5 font-medium text-primary'
+                  : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+              }`}
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* Gantt preview */}
       <div id="gantt-preview" ref={ganttRef}>
         <GanttPreview
-          initialTasks={activeTasks}
-          title={activeTitle}
+          initialTasks={activeTemplate.tasks}
+          title={activeTemplate.title}
           showDateHeader={false}
           progressiveReveal={true}
         />

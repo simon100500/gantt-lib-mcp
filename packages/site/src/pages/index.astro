@@ -1,13 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import DemoSection from "../components/DemoSection";
-import { fetchSitePublicationList } from "../lib/publications";
 import { buildSiteUrl } from "../lib/utils";
-
-const [templates, blocks] = await Promise.all([
-  fetchSitePublicationList('template'),
-  fetchSitePublicationList('block'),
-]);
 
 const pageSchema = [
   {
@@ -63,66 +57,5 @@ const pageSchema = [
     <div id="demo-section" class="bg-background pb-24">
       <DemoSection client:load />
     </div>
-
-    <section class="border-t border-border bg-white">
-      <div class="mx-auto max-w-7xl px-4 py-20 lg:px-6">
-        <div class="max-w-3xl">
-          <div class="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Каталог</div>
-          <h2 class="mt-4 text-4xl font-extrabold text-slate-950">Шаблоны и блоки работ</h2>
-          <p class="mt-4 text-lg leading-8 text-slate-600">
-            На сайте теперь есть отдельный раздел с публикациями из единой базы `template_publications`.
-            Это не live-проекты, а зафиксированные snapshot-версии для SEO и marketplace.
-          </p>
-        </div>
-
-        <div class="mt-10 grid gap-6 lg:grid-cols-2">
-          <a href="/templates" class="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-8 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Templates</div>
-            <h3 class="mt-3 text-3xl font-bold text-slate-950">Шаблоны проектов</h3>
-            <p class="mt-4 text-base leading-7 text-slate-600">
-              Полные стартовые структуры проектов для создания нового графика в один клик.
-            </p>
-            <div class="mt-6 text-sm text-slate-500">Опубликовано: {templates.length}</div>
-          </a>
-
-          <a href="/blocks" class="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fff9_100%)] p-8 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Blocks</div>
-            <h3 class="mt-3 text-3xl font-bold text-slate-950">Блоки работ</h3>
-            <p class="mt-4 text-base leading-7 text-slate-600">
-              Переиспользуемые модули задач для вставки в текущий график: инженерка, фундамент, отделка и не только.
-            </p>
-            <div class="mt-6 text-sm text-slate-500">Опубликовано: {blocks.length}</div>
-          </a>
-        </div>
-
-        {(templates.length > 0 || blocks.length > 0) && (
-          <div class="mt-12 grid gap-10 lg:grid-cols-2">
-            <div>
-              <div class="text-sm font-semibold text-slate-900">Свежие шаблоны</div>
-              <div class="mt-4 space-y-3">
-                {templates.slice(0, 3).map((item) => (
-                  <a href={`/templates/${item.slug}`} class="block rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 transition hover:border-slate-300 hover:bg-white">
-                    <div class="font-semibold text-slate-950">{item.title}</div>
-                    <div class="mt-1 text-sm text-slate-600">{item.summary ?? item.subtitle ?? "Публичный шаблон проекта"}</div>
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div class="text-sm font-semibold text-slate-900">Свежие блоки</div>
-              <div class="mt-4 space-y-3">
-                {blocks.slice(0, 3).map((item) => (
-                  <a href={`/blocks/${item.slug}`} class="block rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 transition hover:border-slate-300 hover:bg-white">
-                    <div class="font-semibold text-slate-950">{item.title}</div>
-                    <div class="mt-1 text-sm text-slate-600">{item.summary ?? item.subtitle ?? "Публичный блок работ"}</div>
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
   </main>
 </Layout>

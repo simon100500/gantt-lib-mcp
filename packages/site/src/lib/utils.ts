@@ -28,6 +28,10 @@ function getAppOrigin(): string {
   return normalized || 'http://localhost:5173';
 }
 
+export function buildAppNewProjectUrl(): string {
+  return `${getAppOrigin()}/app/new`;
+}
+
 export function getSiteApiOrigin(): string {
   const candidates = [
     import.meta.env.SITE_PUBLICATIONS_API_BASE_URL,
