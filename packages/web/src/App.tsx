@@ -1656,9 +1656,6 @@ function WorkspaceApp({
       }
 
       await auth.refreshProjects();
-      setProjectState(newProject.id, {
-        hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
-      });
 
       if (!options.projectIntentId) {
         await auth.switchProject(newProject.id);
@@ -2865,11 +2862,12 @@ function WorkspaceApp({
     }
 
     const currentProjectState = getProjectState(workspace.projectId);
-    if (currentProjectState && Array.isArray(currentProjectState.hiddenTaskListColumns)) {
+    if (currentProjectState?.taskListColumnsInitialized) {
       return;
     }
 
     setProjectState(workspace.projectId, {
+      taskListColumnsInitialized: true,
       hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
     });
   }, [currentProjectIsEmpty, getProjectState, setProjectState, workspace]);
