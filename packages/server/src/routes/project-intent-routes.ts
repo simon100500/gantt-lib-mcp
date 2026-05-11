@@ -20,6 +20,7 @@ import {
   markProjectGenerationJobPreviewAvailable,
   markProjectGenerationJobRunning,
   markProjectGenerationJobSucceeded,
+  reconcileProjectGenerationJobState,
   serializeProjectGenerationJob,
   startProjectGenerationJob,
 } from '../services/project-generation-service.js';
@@ -399,7 +400,7 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       return reply.status(404).send({ reason: 'not_found', error: 'Project not found' });
     }
 
-    const job = await findActiveProjectGenerationJobForProject(projectId);
+    const job = await reconcileProjectGenerationJobState(await findActiveProjectGenerationJobForProject(projectId));
     return reply.send({ job: job ? serializeProjectGenerationJob(job) : null });
   });
 
@@ -414,7 +415,7 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       return reply.status(404).send({ reason: 'not_found', error: 'Project not found' });
     }
 
-    const job = await findLatestProjectGenerationJobForProject(projectId);
+    const job = await reconcileProjectGenerationJobState(await findLatestProjectGenerationJobForProject(projectId));
     return reply.send({ job: job ? serializeProjectGenerationJob(job) : null });
   });
 
@@ -424,7 +425,7 @@ export async function registerProjectIntentRoutes(fastify: FastifyInstance): Pro
       return reply.status(400).send({ reason: 'validation_error', error: 'jobId required' });
     }
 
-    const job = await getProjectGenerationJobById(jobId);
+    const job = await reconcileProjectGenerationJobState(await getProjectGenerationJobById(jobId));
     if (!job || !job.projectId) {
       return reply.status(404).send({ reason: 'not_found', error: 'Generation job not found' });
     }

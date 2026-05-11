@@ -138,6 +138,31 @@ export async function findLatestProjectGenerationJobForIntent(intentId: string):
   }) as ProjectGenerationJobRecord | null;
 }
 
+export async function reconcileProjectGenerationJobState(job: ProjectGenerationJobRecord | null): Promise<ProjectGenerationJobRecord | null> {
+  if (!job || job.status !== 'running' || job.stage !== 'finalizing' || !job.projectId) {
+    return job;
+  }
+
+  if (job.type !== 'initial_generation') {
+    return job;
+  }
+
+  const prisma = getPrisma() as any;
+  const taskCount = await prisma.task.count({
+    where: { projectId: job.projectId },
+  });
+
+  if (taskCount === 0) {
+    return job;
+  }
+
+  return await markProjectGenerationJobSucceeded(job.id, {
+    requestContextId: job.requestContextId,
+    historyGroupId: job.historyGroupId,
+    statusMessage: 'График готов',
+  });
+}
+
 export async function startProjectGenerationJob(input: StartProjectGenerationJobInput): Promise<{
   job: ProjectGenerationJobRecord;
   reused: boolean;

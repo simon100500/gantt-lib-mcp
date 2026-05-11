@@ -402,6 +402,36 @@ function mergeOptimisticChatMessages(
   return [...serverMessages, ...trailingOptimisticUsers];
 }
 
+function getGenerationStageFallbackMessage(stage: ProjectGenerationJobView['stage']): string | null {
+  switch (stage) {
+    case 'queued':
+      return 'Ставим AI-задачу в очередь';
+    case 'interpreting':
+      return 'Понимаем запрос';
+    case 'planning':
+      return 'Планируем график';
+    case 'compiling':
+      return 'Собираем график';
+    case 'committing':
+      return 'Сохраняем изменения в проект';
+    case 'finalizing':
+      return 'Фиксируем результат';
+    default:
+      return null;
+  }
+}
+
+function resolveGenerationLockMessage(
+  job: ProjectGenerationJobView | null,
+  currentMessage: string | null,
+): string | null {
+  if (!job) {
+    return currentMessage;
+  }
+
+  return job.statusMessage ?? getGenerationStageFallbackMessage(job.stage) ?? currentMessage;
+}
+
 type StoredGenerationPreview = {
   jobId: string;
   projectId: string;
@@ -1184,6 +1214,29 @@ function WorkspaceApp({
     setAiMutationLock,
   ]);
 
+  useEffect(() => {
+    if (!activeWorkspaceProjectId || generationJobLookupPending || activeProjectGenerationRunning || previewState.active) {
+      return;
+    }
+
+    const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
+    const lockActive = useUIStore.getState().aiMutationLock.active;
+    if (!storedJob && !lockActive) {
+      return;
+    }
+
+    writeStoredGenerationJob(activeWorkspaceProjectId, null);
+    writeStoredGenerationPreview(activeWorkspaceProjectId, null);
+    releaseAiMutationLock();
+    setPreparedIntentChatProjectId(null);
+  }, [
+    activeProjectGenerationRunning,
+    activeWorkspaceProjectId,
+    generationJobLookupPending,
+    previewState.active,
+    releaseAiMutationLock,
+  ]);
+
   const handleWsMessage = useCallback((msg: ServerMessage) => {
     console.log('[WS] message', msg);
     if (msg.type === 'preview_tasks' || msg.type === 'preview_tasks_replace') {
@@ -1419,8 +1472,10 @@ function WorkspaceApp({
         return;
       }
 
-      if (!latestPayload.job || latestPayload.job.status === 'succeeded') {
+      if (!latestPayload.job) {
         setActiveGenerationJob(null);
+      } else if (latestPayload.job.status === 'succeeded' || latestPayload.job.status === 'canceled') {
+        setActiveGenerationJob(latestPayload.job);
       } else {
         setActiveGenerationJob(latestPayload.job);
       }
