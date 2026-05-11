@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 
 import { AccountPage } from './components/AccountPage.tsx';
 import { AdminPage } from './components/AdminPage.tsx';
@@ -810,6 +810,7 @@ function WorkspaceApp({
   const setShowProjectSettingsModal = useUIStore((state) => state.setShowProjectSettingsModal);
   const setValidationErrors = useUIStore((state) => state.setValidationErrors);
   const setShareStatus = useUIStore((state) => state.setShareStatus);
+  const aiMutationLock = useUIStore((state) => state.aiMutationLock);
   const setProjectState = useProjectUIStore((state) => state.setProjectState);
   const getProjectState = useProjectUIStore((state) => state.getProjectState);
   const activeTemplate = useTemplateStore((state) => state.activeTemplate);
@@ -822,6 +823,7 @@ function WorkspaceApp({
   const [pendingPreparedIntentStart, setPendingPreparedIntentStart] = useState<{ intentId: string; projectId: string } | null>(null);
   const [preparedIntentChatProjectId, setPreparedIntentChatProjectId] = useState<string | null>(null);
   const [activeGenerationJob, setActiveGenerationJob] = useState<ProjectGenerationJobView | null>(null);
+  const [generationJobLookupPending, setGenerationJobLookupPending] = useState(false);
   const hasShareToken = Boolean(sharedProject.shareToken);
   const [isExportExcelLoading, setIsExportExcelLoading] = useState(false);
   const [isImportTemplateLoading, setIsImportTemplateLoading] = useState(false);
@@ -991,7 +993,7 @@ function WorkspaceApp({
     && activeGenerationJob.projectId === activeWorkspaceProjectId,
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!activeWorkspaceProjectId) {
       return;
     }
@@ -999,6 +1001,16 @@ function WorkspaceApp({
     const storedJob = readStoredGenerationJob(activeWorkspaceProjectId);
     if (storedJob && isActiveProjectGenerationJob(storedJob)) {
       setActiveGenerationJob((current) => current?.id === storedJob.id ? current : storedJob);
+      setAiMutationLock({
+        active: true,
+        stage: 'thinking',
+        message: storedJob.statusMessage ?? 'Восстанавливаем активную генерацию...',
+      });
+      useChatStore.setState((state) => ({
+        ...state,
+        aiThinking: true,
+        error: null,
+      }));
     }
 
     const storedPreview = readStoredGenerationPreview(activeWorkspaceProjectId);
@@ -1011,7 +1023,7 @@ function WorkspaceApp({
         wave: storedPreview.wave,
       });
     }
-  }, [activeWorkspaceProjectId]);
+  }, [activeWorkspaceProjectId, setAiMutationLock]);
 
   useEffect(() => {
     if (!pendingGanttDayMode) {
@@ -1279,6 +1291,7 @@ function WorkspaceApp({
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.accessToken || hasShareToken || workspace.kind !== 'project') {
       setActiveGenerationJob(null);
+      setGenerationJobLookupPending(false);
       return;
     }
 
@@ -1288,57 +1301,76 @@ function WorkspaceApp({
     const getLatestAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY) || auth.accessToken;
 
     const loadLatestGenerationJob = async () => {
+      setGenerationJobLookupPending(true);
       let token = getLatestAccessToken();
       if (!token) {
+        setGenerationJobLookupPending(false);
         return;
       }
 
-      let response = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
+      let response = await fetch(`/api/project-generation-jobs/active?projectId=${encodeURIComponent(workspace.projectId)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.status === 401) {
         const refreshedToken = await auth.refreshAccessToken();
         if (!refreshedToken) {
+          setGenerationJobLookupPending(false);
           return;
         }
         token = localStorage.getItem(ACCESS_TOKEN_KEY) || refreshedToken;
-        response = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
+        response = await fetch(`/api/project-generation-jobs/active?projectId=${encodeURIComponent(workspace.projectId)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
       }
 
       if (!response.ok || cancelled) {
+        setGenerationJobLookupPending(false);
         return;
       }
 
       const payload = await response.json() as { job: ProjectGenerationJobView | null };
       if (cancelled) {
+        setGenerationJobLookupPending(false);
         return;
       }
 
-      if (!payload.job) {
+      if (payload.job) {
+        setActiveGenerationJob(payload.job);
+        setGenerationJobLookupPending(false);
+
+        if ((payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer === null) {
+          pollTimer = window.setInterval(() => {
+            void loadLatestGenerationJob();
+          }, 2000);
+        }
+
+        if (!(payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer !== null) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        return;
+      }
+
+      const latestResponse = await fetch(`/api/project-generation-jobs/latest?projectId=${encodeURIComponent(workspace.projectId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!latestResponse.ok || cancelled) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+      const latestPayload = await latestResponse.json() as { job: ProjectGenerationJobView | null };
+      if (cancelled) {
+        setGenerationJobLookupPending(false);
+        return;
+      }
+
+      if (!latestPayload.job || latestPayload.job.status === 'succeeded') {
         setActiveGenerationJob(null);
-        return;
+      } else {
+        setActiveGenerationJob(latestPayload.job);
       }
-
-      if (payload.job.status === 'succeeded' && payload.job.projectId === workspace.projectId) {
-        setActiveGenerationJob(null);
-        return;
-      }
-
-      setActiveGenerationJob(payload.job);
-
-      if ((payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer === null) {
-        pollTimer = window.setInterval(() => {
-          void loadLatestGenerationJob();
-        }, 2000);
-      }
-
-      if (!(payload.job.status === 'queued' || payload.job.status === 'running') && pollTimer !== null) {
-        window.clearInterval(pollTimer);
-        pollTimer = null;
-      }
+      setGenerationJobLookupPending(false);
     };
 
     void loadLatestGenerationJob();
@@ -1401,12 +1433,18 @@ function WorkspaceApp({
   }, [setWorkspace]);
 
   const openProjectChat = useCallback(() => {
+    if (auth.project?.taskCount === 0 && workspace.kind === 'project') {
+      setActiveEmptyProjectModeProjectId(workspace.projectId);
+    }
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: true } : current);
-  }, [setWorkspace]);
+  }, [auth.project?.taskCount, setWorkspace, workspace]);
 
   const toggleProjectChat = useCallback(() => {
+    if (auth.project?.taskCount === 0 && workspace.kind === 'project' && !workspace.chatOpen) {
+      setActiveEmptyProjectModeProjectId(workspace.projectId);
+    }
     setWorkspace((current) => current.kind === 'project' ? { ...current, chatOpen: !current.chatOpen } : current);
-  }, [setWorkspace]);
+  }, [auth.project?.taskCount, setWorkspace, workspace]);
 
   const resetWorkspacePresentation = useCallback(() => {
     clearAiDoneGraceTimer();
@@ -2809,22 +2847,33 @@ function WorkspaceApp({
   const showProjectStartScreen = workspace.kind === 'project'
     && !hasShareToken
     && currentProjectIsEmpty
-    && !previewState.active
     && !activeProjectGenerationRunning
+    && !generationJobLookupPending
     && !hasQueuedProjectPrompt
-    && !projectChatOpen
     && activeEmptyProjectModeProjectId !== workspace.projectId;
   const canReturnEmptyProjectToWizard = workspace.kind === 'project'
-    && !hasShareToken
     && currentProjectIsEmpty
-    && !previewState.active
-    && !activeProjectGenerationRunning
-    && !hasQueuedProjectPrompt
-    && activeEmptyProjectModeProjectId === workspace.projectId;
+    && !aiMutationLock.active;
   const shouldRenderStartScreenProjectSettingsModal = showProjectStartScreen
     && showProjectSettingsModal
     && Boolean(auth.project)
     && !hasShareToken;
+
+  useEffect(() => {
+    if (workspace.kind !== 'project' || !currentProjectIsEmpty) {
+      return;
+    }
+
+    const currentProjectState = getProjectState(workspace.projectId);
+    if (currentProjectState && Array.isArray(currentProjectState.hiddenTaskListColumns)) {
+      return;
+    }
+
+    setProjectState(workspace.projectId, {
+      hiddenTaskListColumns: [...DEFAULT_NEW_PROJECT_HIDDEN_TASK_LIST_COLUMNS],
+    });
+  }, [currentProjectIsEmpty, getProjectState, setProjectState, workspace]);
+
   const currentProjectLabel = hasShareToken
     ? (sharedProject.project?.name || 'Shared project')
     : workspace.kind === 'template'
